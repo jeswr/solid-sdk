@@ -33,20 +33,24 @@ function instant(at: Timestamp): number {
   if (!Number.isFinite(value)) throw new RangeError("Invalid timestamp");
   return value;
 }
+const formatters = new Map<string, Intl.DateTimeFormat>();
 function formatter(timeZone: string) {
-  return new Intl.DateTimeFormat("en-GB", {
+  const cached = formatters.get(timeZone);
+  if (cached) return cached;
+  const format = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
+  formatters.set(timeZone, format);
+  return format;
 }
 /** Date-only values remain civil dates; instants are projected into the requested zone. */
 export function calendarDay(at: Timestamp, timeZone: string): string {
   return dayWithFormat(at, formatter(timeZone));
 }
-function dayWithFormat(at: Timestamp, format: Intl.DateTimeFormat): string {
-  const stamp = instant(at);
+function dayWithFormat(at: Timestamp, format: Intl.DateTimeFormat, stamp = instant(at)): string {
   if (typeof at === "string" && civil.test(at)) {
     if (new Date(stamp).toISOString().slice(0, 10) !== at) throw new RangeError("Invalid day");
     return at;
@@ -74,9 +78,12 @@ export function dailySeries(
 ): DailyPoint[] {
   const format = formatter(timeZone);
   const days = new Map<string, number[]>();
-  const valid = points.filter((p) => Number.isFinite(p.value));
-  for (const point of [...valid].sort((a, b) => instant(a.at) - instant(b.at))) {
-    const key = dayWithFormat(point.at, format);
+  const valid = points
+    .filter((p) => Number.isFinite(p.value))
+    .map((point) => ({ ...point, stamp: instant(point.at) }))
+    .sort((a, b) => a.stamp - b.stamp);
+  for (const point of valid) {
+    const key = dayWithFormat(point.at, format, point.stamp);
     const group = days.get(key) ?? [];
     group.push(point.value);
     days.set(key, group);
@@ -107,18 +114,23 @@ export function alignDaily(
   y: readonly Sample[],
   options: AlignmentOptions,
 ): AlignedPoint[] {
-  const { timeZone, lagDays = 0, missing = "omit" } = options;
+  return alignDailyPoints(
+    dailySeries(x, options.timeZone, options.xAggregation ?? "mean"),
+    dailySeries(y, options.timeZone, options.yAggregation ?? "mean"),
+    options,
+  );
+}
+/** Align already aggregated observations; reuse these across candidate pairs and lags. */
+export function alignDailyPoints(
+  x: readonly DailyPoint[],
+  y: readonly DailyPoint[],
+  options: Pick<AlignmentOptions, "lagDays" | "missing"> = {},
+): AlignedPoint[] {
+  const { lagDays = 0, missing = "omit" } = options;
   if (!Number.isInteger(lagDays) || Math.abs(lagDays) > 365)
     throw new RangeError("Lag must be within 365 days");
-  const left = new Map(
-    dailySeries(x, timeZone, options.xAggregation ?? "mean").map((p) => [p.day, p.value]),
-  );
-  const right = new Map(
-    dailySeries(y, timeZone, options.yAggregation ?? "mean").map((p) => [
-      shiftDay(p.day, -lagDays),
-      p.value,
-    ]),
-  );
+  const left = new Map(x.map((p) => [p.day, p.value]));
+  const right = new Map(y.map((p) => [shiftDay(p.day, -lagDays), p.value]));
   const keys = [...new Set([...left.keys(), ...right.keys()])].sort();
   if (!keys.length) return [];
   const result: AlignedPoint[] = [];
@@ -168,10 +180,13 @@ export function hourlyAggregation(
 ): Bucket[] {
   const format = new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", hourCycle: "h23" });
   const groups = Array.from({ length: 24 }, () => [] as number[]);
-  for (const point of [...points].sort((a, b) => instant(a.at) - instant(b.at))) {
+  const ordered = points
+    .map((point) => ({ ...point, stamp: instant(point.at) }))
+    .sort((a, b) => a.stamp - b.stamp);
+  for (const point of ordered) {
     if (!Number.isFinite(point.value) || (typeof point.at === "string" && civil.test(point.at)))
       continue;
-    groups[Number(format.format(instant(point.at)))]?.push(point.value);
+    groups[Number(format.format(point.stamp))]?.push(point.value);
   }
   return groups.map((values, hour) => ({
     id: String(hour),

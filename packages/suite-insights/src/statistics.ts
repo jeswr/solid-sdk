@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+import { pearson as coefficientOf } from "@jeswr/suite-charts/scale";
 export type Strength =
   | "insufficient data"
   | "no variation"
@@ -47,26 +48,23 @@ export function pearson(x: readonly number[], y: readonly number[]): Correlation
   );
   const n = pairs.length;
   if (n < 2) return { coefficient: null, n, strength: "insufficient data" };
-  if (pairs.every(([a]) => a === pairs[0]?.[0]) || pairs.every(([, b]) => b === pairs[0]?.[1]))
-    return { coefficient: null, n, strength: "no variation" };
-  // Scale before centring so very large finite inputs cannot overflow squares.
-  const scaleX = Math.max(...pairs.map(([a]) => Math.abs(a)));
-  const scaleY = Math.max(...pairs.map(([, b]) => Math.abs(b)));
+  // Normalisation keeps the shared coefficient calculation finite for extreme inputs.
+  const scaleX = pairs.reduce((max, [a]) => Math.max(max, Math.abs(a)), 0) || 1;
+  const scaleY = pairs.reduce((max, [, b]) => Math.max(max, Math.abs(b)), 0) || 1;
   const a = pairs.map(([v]) => v / scaleX);
   const b = pairs.map(([, v]) => v / scaleY);
-  const mx = mean(a) as number;
-  const my = mean(b) as number;
-  let xx = 0;
-  let yy = 0;
-  let xy = 0;
-  for (let i = 0; i < n; i++) {
-    const dx = (a[i] as number) - mx;
-    const dy = (b[i] as number) - my;
-    xx += dx * dx;
-    yy += dy * dy;
-    xy += dx * dy;
-  }
-  const coefficient = Math.max(-1, Math.min(1, xy / (Math.sqrt(xx) * Math.sqrt(yy))));
+  const varies = (values: number[]) => {
+    const centre = mean(values) as number;
+    const variance = values.reduce((sum, v) => sum + (v - centre) ** 2 / n, 0);
+    // Relative to squared maximum amplitude, preserving invariance to unit changes.
+    return variance > 1e-12;
+  };
+  if (!varies(a) || !varies(b)) return { coefficient: null, n, strength: "no variation" };
+  // The public analysis API accepts two paired values; scale requires three.
+  const coefficient = coefficientOf(
+    n === 2 ? [...a, ...a] : a,
+    n === 2 ? [...b, ...b] : b,
+  ) as number;
   const magnitude = Math.abs(coefficient);
   return {
     coefficient,

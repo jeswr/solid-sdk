@@ -45,12 +45,13 @@ export function createInsightsStore(
     },
     cancel() {
       generation++;
+      if (snapshot.refreshing) publish({ ...snapshot, refreshing: false });
     },
     async refresh() {
       const captured = ++generation;
       publish({ ...snapshot, refreshing: true });
-      const now = dependencies.now();
       try {
+        const now = dependencies.now();
         await dependencies.seed(session, now);
         const sources = await dependencies.load({ session, now, timeZone });
         if (captured !== generation) return;
@@ -64,7 +65,7 @@ export function createInsightsStore(
         });
       } catch {
         if (captured === generation)
-          publish({ status: "error", sources: [], now, refreshing: false });
+          publish({ ...snapshot, status: "error", sources: [], refreshing: false });
       }
     },
   };

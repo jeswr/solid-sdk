@@ -14,7 +14,13 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock("@/apps/health/lib/data/metrics", () => ({ loadMeasurements: mock.health }));
 vi.mock("@/apps/health/lib/data/store", () => ({ createHealthDataStore: vi.fn() }));
-vi.mock("@/apps/money/lib/data/ledger", () => ({ allTransactions: mock.money }));
+vi.mock("@/apps/money/lib/data/container", async (original) => ({
+  ...(await original<typeof import("../src/apps/money/lib/data/container")>()),
+  storeOf: () => ({
+    accounts: async () => [{ id: "account", balance: { currency: "GBP" } }],
+    transactions: mock.money,
+  }),
+}));
 vi.mock("@/apps/music/lib/model/io", () => ({ loadHistory: mock.music }));
 vi.mock("@/apps/tasks/lib/model/store", () => ({
   TaskStore: class {
@@ -182,6 +188,8 @@ describe("source adapters", () => {
             { at: "2020-01-01", value: 2 },
             { at: "2027-01-01", value: 2 },
             { at: now, value: Number.NaN },
+            { at: "invalid timestamp", value: 3 },
+            { at: "2026-02-30", value: 3 },
           ],
         },
       ]),
@@ -204,6 +212,7 @@ describe("source adapters", () => {
       ["unavailable", 0],
     ]);
     expect(result[0]?.series[0]?.points).toHaveLength(2);
+    expect(result[0]?.droppedPoints).toBe(3);
     expect(JSON.stringify(result)).not.toContain("secret pod URL");
     expect(session.fetch).not.toHaveBeenCalled();
   });

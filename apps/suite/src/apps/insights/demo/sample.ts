@@ -2,18 +2,22 @@
 import { buildScrobble } from "@jeswr/solid-listening";
 import { calendarDay, dailySeries, shiftDay } from "@jeswr/suite-insights";
 import { Store } from "n3";
-import { ensureSample as seedHealth } from "@/apps/health/demo/sample";
-import { writeSamples } from "@/apps/health/lib/data/import";
-import { loadMeasurements } from "@/apps/health/lib/data/metrics";
-import { createHealthDataStore } from "@/apps/health/lib/data/store";
-import type { Measurement } from "@/apps/health/lib/model";
-import { ensureSample as seedMoney } from "@/apps/money/demo/sample";
-import { createAccount } from "@/apps/money/lib/data/accounts";
-import { provision, storeOf } from "@/apps/money/lib/data/container";
-import type { Transaction } from "@/apps/money/lib/model";
-import { ensureSample as seedMusic } from "@/apps/music/demo/sample";
-import { loadMusic, saveMusic } from "@/apps/music/lib/model/io";
 import type { PodSession } from "@/lib/session/pod-session";
+import {
+  createHealthDataStore,
+  loadMeasurements,
+  type Measurement,
+  seedHealth,
+  writeSamples,
+} from "../sources/adapters/health";
+import {
+  createAccount,
+  provision,
+  seedMoney,
+  storeOf,
+  type Transaction,
+} from "../sources/adapters/money";
+import { loadMusic, saveMusic, seedMusic } from "../sources/adapters/music";
 export function sampleDays(now: Date) {
   const last = shiftDay(now.toISOString().slice(0, 10), -1);
   return Array.from({ length: 120 }, (_, i) => {

@@ -98,7 +98,60 @@ describe("Insights state", () => {
     rejectFirst(new Error("late"));
     await pending;
     expect(store.getSnapshot().status).toBe("ready");
+    expect(store.getSnapshot().refreshing).toBe(false);
   });
+  it("clears a cancelled refresh immediately without letting stale completion clear a newer refresh", async () => {
+    let complete!: (sources: Source[]) => void;
+    let finishNewer!: (sources: Source[]) => void;
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockImplementationOnce(
+        () =>
+          new Promise<Source[]>((resolve) => {
+            complete = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<Source[]>((resolve) => {
+            finishNewer = resolve;
+          }),
+      );
+    const store = createInsightsStore(session, "UTC", {
+      load,
+      seed: async () => {},
+      now: () => now,
+    });
+    await store.refresh();
+    const pending = store.refresh();
+    await Promise.resolve();
+    store.cancel();
+    expect(store.getSnapshot().refreshing).toBe(false);
+    const newer = store.refresh();
+    complete([]);
+    await pending;
+    expect(store.getSnapshot().refreshing).toBe(true);
+    finishNewer([]);
+    await newer;
+    expect(store.getSnapshot().refreshing).toBe(false);
+  });
+  it("clears refreshing even if capturing the refresh time fails", async () => {
+    const clock = vi
+      .fn()
+      .mockReturnValueOnce(now)
+      .mockImplementationOnce(() => {
+        throw new Error("clock");
+      });
+    const store = createInsightsStore(session, "UTC", {
+      load: async () => [],
+      seed: async () => {},
+      now: clock,
+    });
+    await store.refresh();
+    expect(store.getSnapshot()).toMatchObject({ status: "error", refreshing: false });
+  });
+
   it("captures demo-seed failures and supports retry", async () => {
     const seed = vi
       .fn()

@@ -5,8 +5,8 @@ import { BarChart3, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { useRoutePathname } from "@/lib/route-params";
-import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
+import { PodSessionProvider } from "@/lib/session/pod-session";
+import { AppFrame, AppHeading, AppSessionGuard, PodSessionGate } from "@/shell/app-frame";
 import { useConnectionState } from "@/shell/sync/connection-state";
 import { InsightsProvider, useInsights } from "../state/insights-context";
 
@@ -91,43 +91,43 @@ function Frame({ children }: { children: ReactNode }) {
         <p className="ins-footnote">
           Patterns describe associations, never cause and effect. Findings need at least 14 paired
           days. Missing days are left out. Confidence describes the amount of data, not statistical
-          certainty; many comparisons and everyday routines can produce chance patterns.
+          certainty; many comparisons and everyday routines can produce chance patterns. Two series
+          that both trend over time can correlate without being related.
         </p>
       </div>
     </AppFrame>
   );
 }
 function SessionGate({ children }: { children: ReactNode }) {
-  const session = usePodSessionState();
-  if (session.status === "loading")
-    return (
-      <div className="ins-page">
-        <LoadingSkeleton preset="grid" label="Opening Insights" />
-      </div>
-    );
-  if (session.status === "signed-out")
-    return (
-      <div className="ins-page">
-        <AppHeading>Insights</AppHeading>
-        <p role="status">Sign in to explore your patterns.</p>
-      </div>
-    );
-  if (session.status === "error")
-    return (
-      <div className="ins-page">
-        <AppHeading>Can't open Insights</AppHeading>
-        <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />
-      </div>
-    );
   return (
-    <InsightsProvider
-      key={`${session.session.webId}\u0000${session.session.storageUrl}`}
-      session={session.session}
+    <PodSessionGate
+      loading={
+        <div className="ins-page">
+          <LoadingSkeleton preset="grid" label="Opening Insights" />
+        </div>
+      }
+      signedOut={
+        <div className="ins-page">
+          <AppHeading>Insights</AppHeading>
+          <p role="status">Sign in to explore your patterns.</p>
+        </div>
+      }
+      error={() => (
+        <div className="ins-page">
+          <AppHeading>Can't open Insights</AppHeading>
+          <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />
+        </div>
+      )}
     >
-      <Frame>{children}</Frame>
-    </InsightsProvider>
+      {(session) => (
+        <InsightsProvider key={`${session.webId}\u0000${session.storageUrl}`} session={session}>
+          <Frame>{children}</Frame>
+        </InsightsProvider>
+      )}
+    </PodSessionGate>
   );
 }
+
 export function InsightsApp({ children }: { children: ReactNode }) {
   return (
     <AppSessionGuard>

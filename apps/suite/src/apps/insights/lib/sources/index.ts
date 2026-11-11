@@ -1,14 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { parseTask } from "@jeswr/solid-task-model";
-import { calendarDay, dailySeries, type Series, shiftDay } from "@jeswr/suite-insights";
-import { discoverCalendars, loadRange } from "@/apps/calendar/state/repository";
-import { loadMeasurements } from "@/apps/health/lib/data/metrics";
-import { createHealthDataStore } from "@/apps/health/lib/data/store";
-import { allTransactions } from "@/apps/money/lib/data/ledger";
-import { loadHistory } from "@/apps/music/lib/model/io";
-import { ModelError } from "@/apps/tasks/lib/model/errors";
-import { TaskStore } from "@/apps/tasks/lib/model/store";
+import { calendarDay, type Series, shiftDay } from "@jeswr/suite-insights";
 import type { PodSession } from "@/lib/session/pod-session";
+import { readCalendarEvents } from "../../sources/adapters/calendar";
+import { readHealthMeasurements } from "../../sources/adapters/health";
+import { readMoneyTransactions } from "../../sources/adapters/money";
+import { readMusicHistory } from "../../sources/adapters/music";
+import { readCompletedTasks } from "../../sources/adapters/tasks";
 
 export interface Source {
   id: string;
@@ -17,6 +14,7 @@ export interface Source {
   days: number;
   series: Series[];
   message?: string;
+  droppedPoints?: number;
 }
 export interface SourceContext {
   session: PodSession;
@@ -38,10 +36,7 @@ export const healthSource: SourceAdapter = {
   id: "health",
   label: "Health",
   async read({ session, now }) {
-    const rows = await loadMeasurements(
-      createHealthDataStore(session.fetch, session.storageUrl, session.webId),
-      bounds(now),
-    );
+    const rows = await readHealthMeasurements(session, bounds(now));
     return (
       [
         ["steps", "Steps", "steps", "sum", 1],
@@ -63,8 +58,8 @@ export const healthSource: SourceAdapter = {
 export const moneySource: SourceAdapter = {
   id: "money",
   label: "Money",
-  async read({ session }) {
-    const rows = (await allTransactions(session)).filter(
+  async read({ session, now }) {
+    const rows = (await readMoneyTransactions(session, bounds(now))).filter(
       (r) => !r.debitAccount && !r.creditAccount,
     );
     const currencies = [...new Set(rows.map((r) => r.currency))].sort();
@@ -84,19 +79,7 @@ export const musicSource: SourceAdapter = {
   id: "music",
   label: "Music",
   async read({ session, now }) {
-    const { start, end } = bounds(now);
-    const months: Date[] = [];
-    for (
-      let at = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-      at <= end;
-      at = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1))
-    )
-      months.push(at);
-    const rows = await loadHistory(
-      session.fetch,
-      new URL("music/", session.storageUrl).href,
-      months,
-    );
+    const rows = await readMusicHistory(session, bounds(now));
     return [
       {
         id: "music.listens",
@@ -112,34 +95,7 @@ export const tasksSource: SourceAdapter = {
   id: "tasks",
   label: "Tasks",
   async read({ session }) {
-    const store = new TaskStore({
-      fetch: session.fetch,
-      storage: session.storageUrl,
-      webId: session.webId,
-    });
-    const projects = await store
-      .listProjects(undefined, { strict: true })
-      .catch((error: unknown) => {
-        if (
-          error instanceof ModelError &&
-          [404, 410].includes(error.status) &&
-          error.url === store.projects
-        )
-          return [];
-        throw error;
-      });
-    const points: Series["points"][number][] = [];
-    const seen = new Set<string>();
-    for (const project of projects) {
-      const container = project.tracker.stateStore;
-      if (!container) continue;
-      for (const item of await store.listTasks(container, { strict: true })) {
-        if (seen.has(item.url)) continue;
-        seen.add(item.url);
-        const task = parseTask(item.url, item.dataset);
-        if (task?.state === "closed" && task.endedAt) points.push({ at: task.endedAt, value: 1 });
-      }
-    }
+    const points = await readCompletedTasks(session);
     return [
       {
         id: "tasks.completed",
@@ -155,18 +111,14 @@ export const calendarSource: SourceAdapter = {
   id: "calendar",
   label: "Calendar",
   async read({ session, now, timeZone }) {
-    const discovery = await discoverCalendars(session);
-    if (discovery.warnings.length) throw new Error("Some calendars could not be read");
-    const { start, end } = bounds(now);
-    const result = await loadRange(session, discovery.calendars, start, end, timeZone);
-    if (result.warnings.length) throw new Error("Some calendar events could not be read");
+    const events = await readCalendarEvents(session, bounds(now), timeZone);
     return [
       {
         id: "calendar.events",
         label: "Calendar events",
         unit: "events",
         aggregation: "sum",
-        points: result.events.map((e) => ({ at: e.data.start, value: 1 })),
+        points: events.map((e) => ({ at: e.data.start, value: 1 })),
       },
     ];
   },
@@ -182,23 +134,33 @@ export async function loadSources(
   const sources = await Promise.all(
     readers.map(async (reader): Promise<Source> => {
       try {
+        let droppedPoints = 0;
+        const days = new Set<string>();
         const series = (await reader.read(context)).map((s) => ({
           ...s,
           points: s.points.filter((p) => {
-            const day = calendarDay(p.at, context.timeZone);
-            return Number.isFinite(p.value) && day >= start && day <= end;
+            let day: string;
+            try {
+              day = calendarDay(p.at, context.timeZone);
+            } catch {
+              droppedPoints++;
+              return false;
+            }
+            if (!Number.isFinite(p.value)) {
+              droppedPoints++;
+              return false;
+            }
+            if (day < start || day > end) return false;
+            days.add(day);
+            return true;
           }),
         }));
-        const days = new Set(
-          series.flatMap((s) =>
-            dailySeries(s.points, context.timeZone, s.aggregation).map((p) => p.day),
-          ),
-        ).size;
         return {
           id: reader.id,
           label: reader.label,
-          status: days ? "found" : "empty",
-          days,
+          status: days.size ? "found" : "empty",
+          days: days.size,
+          droppedPoints,
           series,
         };
       } catch {

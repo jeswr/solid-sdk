@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { type AlignedPoint, alignDaily, type Series } from "./series.js";
+import {
+  type AlignedPoint,
+  alignDaily,
+  alignDailyPoints,
+  type DailyPoint,
+  dailySeries,
+  type Series,
+} from "./series.js";
 import { type Correlation, mean, pearson, robustSummary, spearman } from "./statistics.js";
 export type Confidence = "low" | "moderate" | "high";
 export function laggedCorrelation(x: Series, y: Series, timeZone: string, lagDays = 0) {
@@ -9,6 +16,9 @@ export function laggedCorrelation(x: Series, y: Series, timeZone: string, lagDay
     xAggregation: x.aggregation,
     yAggregation: y.aggregation,
   });
+  return correlations(pairs);
+}
+function correlations(pairs: AlignedPoint[]) {
   const a = pairs.map((p) => p.x as number);
   const b = pairs.map((p) => p.y as number);
   return { pairs, pearson: pearson(a, b), spearman: spearman(a, b) };
@@ -38,12 +48,16 @@ export function insights(
   options: { timeZone: string; lags?: readonly number[]; limit?: number },
 ): Finding[] {
   const findings: Finding[] = [];
+  const daily = series.map((s) => dailySeries(s.points, options.timeZone, s.aggregation));
+  const lags = new Set(options.lags ?? [-1, 0, 1]);
   for (let i = 0; i < series.length; i++) {
     for (let j = i + 1; j < series.length; j++) {
       const x = series[i] as Series;
       const y = series[j] as Series;
-      for (const lagDays of new Set(options.lags ?? [0, 1])) {
-        const result = laggedCorrelation(x, y, options.timeZone, lagDays);
+      for (const lagDays of lags) {
+        const result = correlations(
+          alignDailyPoints(daily[i] as DailyPoint[], daily[j] as DailyPoint[], { lagDays }),
+        );
         const r = result.pearson;
         const rank = result.spearman.coefficient;
         if (
@@ -76,7 +90,7 @@ export function insights(
           rankCorrelation: result.spearman,
           confidence,
           pairs: result.pairs,
-          description: `On days with ${x.label.toLowerCase()} above ${format(threshold)} ${x.unit}, ${y.label.toLowerCase()} ${lagDays === 0 ? "on the same day" : `${Math.abs(lagDays)} day${Math.abs(lagDays) === 1 ? "" : "s"} ${lagDays > 0 ? "later" : "earlier"}`} averaged ${format(Math.abs(diff))} ${y.unit} ${diff < 0 ? "less" : "more"} than on other observed days (n=${r.n}, ${r.strength}).`,
+          description: `On days with ${sentenceLabel(x.label)} above ${format(threshold)} ${x.unit}, ${sentenceLabel(y.label)} ${lagDays === 0 ? "on the same day" : `${Math.abs(lagDays)} day${Math.abs(lagDays) === 1 ? "" : "s"} ${lagDays > 0 ? "later" : "earlier"}`} averaged ${format(Math.abs(diff))} ${y.unit} ${diff < 0 ? "less" : "more"} than on other observed days (n=${r.n}, ${r.strength}).`,
         });
       }
     }
@@ -89,4 +103,9 @@ export function insights(
         a.id.localeCompare(b.id),
     )
     .slice(0, options.limit ?? 6);
+}
+
+/** Sentence-case the first word, preserving initialisms and currency codes. */
+function sentenceLabel(label: string): string {
+  return label.replace(/^([A-Z])(?=[a-z])/u, (letter) => letter.toLowerCase());
 }

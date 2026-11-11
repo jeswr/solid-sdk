@@ -14,7 +14,7 @@ test("demo findings, pair exploration, trends, sources and offline browsing", as
   await expect(page.getByRole("heading", { name: "Connections worth exploring" })).toBeVisible();
   const findings = page.getByRole("region", { name: "Top findings" });
   await expect(findings.locator("article").first()).toBeVisible();
-  await expect(findings.getByRole("img").first()).toBeVisible();
+  await expect(findings.getByRole("figure").first()).toBeVisible();
   const navigation = page.getByRole("navigation", { name: "Insights views" });
   await navigation.getByRole("link", { name: "Explore", exact: true }).click();
   await page.getByRole("combobox", { name: "First series (X)" }).click();
@@ -25,7 +25,7 @@ test("demo findings, pair exploration, trends, sources and offline browsing", as
   await page.getByRole("option", { name: "1 day(s) later", exact: true }).click();
   await expect(page.getByText("X today, Y 1 day(s) later.", { exact: false })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pearson r", exact: true })).toBeVisible();
-  await page.getByText("Show paired data", { exact: true }).click();
+  await page.getByRole("button", { name: "Show table for Steps and Sleep", exact: true }).click();
   await expect(page.getByRole("table")).toBeVisible();
   expect(
     (await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze())
@@ -34,7 +34,10 @@ test("demo findings, pair exploration, trends, sources and offline browsing", as
   await navigation.getByRole("link", { name: "Trends", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Trends", exact: true })).toBeVisible();
   await expect(page.getByText("Weekday pattern", { exact: true }).first()).toBeVisible();
-  await page.getByText("Show rolling averages", { exact: true }).first().click();
+  await page
+    .getByRole("button", { name: "Show table for 30-day rolling average", exact: true })
+    .first()
+    .click();
   await expect(page.getByRole("table").first()).toBeVisible();
   await navigation.getByRole("link", { name: "Sources", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Health", exact: true })).toBeVisible();

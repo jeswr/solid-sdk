@@ -17,12 +17,17 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "pnpm --workspace-root exec tsc -p packages/suite-insights/tsconfig.json",
     "typecheck": "pnpm --workspace-root exec tsc -p packages/suite-insights/tsconfig.json --noEmit",
     "lint": "pnpm --workspace-root exec biome check packages/suite-insights",
     "test": "pnpm --workspace-root exec vitest run --root packages/suite-insights --coverage"
+  },
+  "dependencies": {
+    "@jeswr/suite-charts": "workspace:*"
   }
 }

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@jeswr/suite-ui";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import { availableSeries, weekComparison } from "../lib/presentation";
 import { useInsights } from "../state/insights-context";
@@ -65,8 +65,12 @@ function PairChart({
 }
 export function Overview() {
   const { sources, timeZone, now } = useInsights();
-  const series = availableSeries(sources);
-  const findings = insights(series, { timeZone, limit: 4 });
+  const series = useMemo(() => availableSeries(sources), [sources]);
+  const findings = useMemo(() => insights(series, { timeZone, limit: 4 }), [series, timeZone]);
+  const weeks = useMemo(
+    () => new Map(series.map((s) => [s.id, weekComparison(s, now, timeZone)])),
+    [series, now, timeZone],
+  );
   return (
     <>
       <header>
@@ -86,15 +90,27 @@ export function Overview() {
             </p>
             <div className="ins-stats">
               {series.slice(0, 4).map((s) => {
-                const week = weekComparison(s, now, timeZone);
+                const week = weeks.get(s.id) as ReturnType<typeof weekComparison>;
                 return (
                   <StatTile
                     key={s.id}
                     label={s.label}
                     value={format(week.value)}
                     unit={s.unit}
-                    {...(week.delta === null ? {} : { delta: week.delta })}
-                    description={`${week.days} of ${week.elapsed} days this week · ${week.previousDays} last week`}
+                    {...(week.delta === null
+                      ? {}
+                      : {
+                          delta: {
+                            value: `${format(Math.abs(week.delta))} ${s.unit}`,
+                            direction:
+                              week.delta > 0
+                                ? ("up" as const)
+                                : week.delta < 0
+                                  ? ("down" as const)
+                                  : ("flat" as const),
+                          },
+                        })}
+                    footnote={`${week.days} of ${week.elapsed} days this week · ${week.previousDays} last week`}
                   />
                 );
               })}
@@ -163,14 +179,17 @@ function Choice({
 }
 export function Explore() {
   const { sources, timeZone } = useInsights();
-  const series = availableSeries(sources);
+  const series = useMemo(() => availableSeries(sources), [sources]);
   const [xId, setX] = useState("health.steps");
   const [yId, setY] = useState("health.sleep");
   const [lag, setLag] = useState("0");
   const x = series.find((s) => s.id === xId) ?? series[0];
   const y =
     series.find((s) => s.id === yId && s.id !== x?.id) ?? series.find((s) => s.id !== x?.id);
-  const result = x && y ? laggedCorrelation(x, y, timeZone, Number(lag)) : null;
+  const result = useMemo(
+    () => (x && y ? laggedCorrelation(x, y, timeZone, Number(lag)) : null),
+    [x, y, timeZone, lag],
+  );
   return (
     <>
       <header>
@@ -228,7 +247,20 @@ export function Explore() {
 }
 export function Trends() {
   const { sources, timeZone } = useInsights();
-  const series = availableSeries(sources);
+  const series = useMemo(() => availableSeries(sources), [sources]);
+  const trends = useMemo(
+    () =>
+      series.map((s) => {
+        const daily = dailySeries(s.points, timeZone, s.aggregation);
+        return {
+          s,
+          summary: robustSummary(daily.map((p) => p.value as number)),
+          rolling: rollingAverage(daily, 30),
+          weekdays: weekdayAggregation(daily),
+        };
+      }),
+    [series, timeZone],
+  );
   return (
     <>
       <header>
@@ -242,10 +274,7 @@ export function Trends() {
         <NoSeries />
       ) : (
         <div className="ins-grid">
-          {series.map((s) => {
-            const daily = dailySeries(s.points, timeZone, s.aggregation);
-            const summary = robustSummary(daily.map((p) => p.value as number));
-            const rolling = rollingAverage(daily, 30);
+          {trends.map(({ s, summary, rolling, weekdays }) => {
             return (
               <article className="ins-card" key={s.id}>
                 <h2>{s.label}</h2>
@@ -256,7 +285,7 @@ export function Trends() {
                 <BarChart
                   title="Weekday pattern"
                   description="Mean per observed day; empty weekdays are omitted."
-                  data={weekdayAggregation(daily).flatMap((b) =>
+                  data={weekdays.flatMap((b) =>
                     b.value === null
                       ? []
                       : [{ id: b.id, label: `${b.label} (n=${b.n})`, value: b.value }],
@@ -314,6 +343,12 @@ export function Sources() {
             </p>
             {source.message && (
               <p role={source.status === "error" ? "status" : undefined}>{source.message}</p>
+            )}
+            {!!source.droppedPoints && (
+              <p className="ins-muted">
+                {source.droppedPoints} invalid{" "}
+                {source.droppedPoints === 1 ? "record was" : "records were"} left out.
+              </p>
             )}
             <ul>
               {source.series.map((s) => (

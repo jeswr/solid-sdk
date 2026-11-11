@@ -2466,6 +2466,9 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
+      '@jeswr/suite-charts':
+        specifier: workspace:*
+        version: link:../../packages/suite-charts
       '@jeswr/suite-insights':
         specifier: workspace:*
         version: link:../../packages/suite-insights
@@ -5744,7 +5747,11 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
-  packages/suite-insights: {}
+  packages/suite-insights:
+    dependencies:
+      '@jeswr/suite-charts':
+        specifier: workspace:*
+        version: link:../suite-charts
 
   packages/suite-native:
     dependencies:
