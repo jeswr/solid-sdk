@@ -38,6 +38,14 @@
       "types": "./dist/shape.d.ts",
       "import": "./dist/shape.js"
     },
+    "./netscape": {
+      "types": "./dist/netscape.d.ts",
+      "import": "./dist/netscape.js"
+    },
+    "./pod": {
+      "types": "./dist/pod.d.ts",
+      "import": "./dist/pod.js"
+    },
     "./bookmark.ttl": "./bookmark.ttl",
     "./bookmark.shacl.ttl": "./bookmark.shacl.ttl"
   },
@@ -60,7 +68,9 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"
   },

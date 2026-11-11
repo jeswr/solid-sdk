@@ -48,6 +48,15 @@ comes from SHACL, never facade string matching. Use typed wrapper accessors and 
 runtime; no hand-built triples or LDO. Consult the package-local model-runtime and
 federation-codegen skills before changing generation or guard behavior.
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+The `/netscape` subpath owns inert browser HTML import/export. Keep platform-DOM and
+tokenizer-only paths tested, including entities, malformed nesting, bounds and unsafe URLs.
+`/pod` owns one-resource-per-bookmark CRUD and private Type Index registration. Use
+`createBookmarkRepository` for an injected SDK storage client, or the explicitly Solid
+`createSolidBookmarkRepository` when the session already knows its LDP root. Conditional
+edits mutate the original graph through generated accessors; missing validators require a
+refresh. The W3C `http://www.w3.org/2002/01/bookmark#` ontology is not a supported alias.
+
 The `tsc` build copies the generated JS and precise declarations into `dist/generated/`.
 The mirror must retain `@jeswr/model-runtime` and receive a `--dep-sha` pin for its
 `jeswr/model-runtime` mirror; declarations import runtime types, so it cannot be listed

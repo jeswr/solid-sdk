@@ -2445,6 +2445,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../../packages/rdf-serialize
+      '@jeswr/solid-bookmark':
+        specifier: workspace:*
+        version: link:../../packages/solid-bookmark
       '@jeswr/solid-chat-interop':
         specifier: workspace:*
         version: link:../../packages/solid-chat-interop
@@ -4501,9 +4504,15 @@ importers:
       '@jeswr/model-runtime':
         specifier: workspace:*
         version: link:../model-runtime
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0

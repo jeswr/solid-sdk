@@ -121,6 +121,38 @@ Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this pac
 alongside pins for the package's other workspace runtime dependencies. No runtime is
 declared inlined; the generator is a devDependency and is stripped from mirrors.
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+## Browser bookmark interchange and pod storage
+
+`@jeswr/solid-bookmark/netscape` exports pure `parseNetscapeBookmarks(html)` and
+`serializeNetscapeBookmarks(bookmarks)`. The parser returns `{ bookmarks, skipped }`;
+folders become tags, `TAGS` is merged and deduplicated, and `ADD_DATE` is read as epoch
+seconds. Only HTTP(S) targets survive. Markup is never executed or rendered: a tolerant
+tokenizer retains an inert subset before the platform DOMParser handles it. Without a DOM,
+the tokenizer decodes numeric, core, Latin-1 and common punctuation entities; unknown names
+remain literal. Input is bounded to 10 MB, 100,000 tokens and 128 nesting levels.
+Missing closing tags and malformed optional dates are tolerated. Export escapes all text
+and attributes. `DESCRIPTION`, `NOTES` and `ARCHIVED` are optional extension attributes;
+the standard `DD` description and `TAGS` remain usable in other bookmark managers.
+Tags containing commas cannot round-trip through the Netscape comma-separated `TAGS` field.
+
+`@jeswr/solid-bookmark/pod` exports `createBookmarkRepository({ storage, profile, fetch? })`
+for an injected SDK storage client and `createSolidBookmarkRepository({ fetch, storageRoot,
+profile })` for an explicitly Solid/LDP session that already knows its root. The latter uses
+the public Solid storage backend, including for the demo fixture which lacks discovery headers.
+Initialisation creates/reuses `bookmarks/` and registers its canonical bookmark class in the
+private Type Index. Private registration means unlisted; it does not change access permissions.
+Records contain `{ url, etag, data }`. Edits use generated accessors on the original dataset,
+preserve unrelated RDF and require the observed ETag. Missing or follow-up-only write validators
+require refreshing before another edit or delete. Collections over 5,000 entries fail explicitly;
+untyped, non-RDF and concurrently removed children are skipped, while access failures propagate.
+Import `BookmarkPatch`, `BookmarkRepository` and `StoredBookmark` types from this subpath.
+
+The existing aliases cover `https://w3id.org/jeswr/bookmark#`, not Pod Manager's
+`http://www.w3.org/2002/01/bookmark#` type, `recalls` or `hasTopic` predicates. Those
+W3C resources are skipped rather than rewritten. No ontology, profile, facade or generated
+model change was needed for the Bookmarks app.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-bookmark)

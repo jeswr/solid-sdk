@@ -1,0 +1,85 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+"use client";
+import { createSolidBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { ErrorState, toast } from "@jeswr/suite-ui";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type { PodSession } from "@/lib/session/pod-session";
+import { ensureSample } from "../demo/sample";
+import { createLibraryStore, type LibraryStore } from "./library-store";
+
+const Context = createContext<LibraryStore | null>(null);
+export function BookmarksProvider({
+  session,
+  children,
+}: {
+  session: PodSession;
+  children: ReactNode;
+}) {
+  const [store, setStore] = useState<LibraryStore | null>(null);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries storage discovery.
+  useEffect(() => {
+    let live = true;
+    let opened: LibraryStore | undefined;
+    let off: (() => void) | undefined;
+    setError(false);
+    void Promise.resolve()
+      .then(async () => {
+        const repository = createSolidBookmarkRepository({
+          fetch: session.fetch,
+          storageRoot: session.storageUrl,
+          profile: session.webId,
+        });
+        await ensureSample(session, repository);
+        if (!live) return;
+        opened = createLibraryStore(repository, () =>
+          toast.error(
+            "Couldn't save your bookmark. The failed change was rolled back. Refresh before trying again.",
+          ),
+        );
+        setStore(opened);
+        void opened.load();
+        off = session.subscribe(() => {
+          if (!opened?.getSnapshot().saving) void opened?.load();
+        });
+      })
+      .catch(() => {
+        if (live) setError(true);
+      });
+    return () => {
+      live = false;
+      off?.();
+      opened?.dispose();
+    };
+  }, [session, attempt]);
+  if (error)
+    return (
+      <div className="bkm-page">
+        <ErrorState error="unreachable" actions={{ retry: () => setAttempt((value) => value + 1) }}>
+          <p>Couldn't open your bookmark storage.</p>
+        </ErrorState>
+      </div>
+    );
+  return <Context value={store}>{children}</Context>;
+}
+export function useBookmarks() {
+  return useContext(Context);
+}
+const initial = { items: [], status: "loading" as const, error: null, saving: 0 };
+const noSubscribe = () => () => {};
+export function useBookmarkSnapshot() {
+  const store = useBookmarks();
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    store?.getSnapshot ?? (() => initial),
+    () => initial,
+  );
+}
