@@ -308,12 +308,12 @@ export class TasksCache {
     this.emit();
     void this.start();
   };
-  async refreshProjects(): Promise<void> {
+  async refreshProjects(strict = false): Promise<void> {
     const epoch = this.epoch;
     const generation = ++this.projectRead;
     const failures = new Map<string, unknown>();
     const projects = await this.store
-      .listProjects((url, error) => failures.set(url, error))
+      .listProjects((url, error) => failures.set(url, error), { strict })
       .catch((error: unknown) => {
         this.completedDeletionBlocked = true;
         throw error;
@@ -510,7 +510,7 @@ export class TasksCache {
       } catch (error) {
         // A section/project operation can partially succeed; reconcile its confirmed resources.
         try {
-          await this.refreshProjects();
+          await this.refreshProjects(strictReconciliation);
           for (const project of this.baseline.projects)
             if (this.baseline.tasks[project.url] && !this.baseline.tasks[project.url]?.error)
               await this.readTasks(project, strictReconciliation);
@@ -976,6 +976,7 @@ export class TasksCache {
       () => {},
       [],
       () => {},
+      true,
     );
   }
   deleteTask(

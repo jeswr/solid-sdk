@@ -383,6 +383,8 @@ it.each([
   "task 404",
   "container",
   "tracker",
+  "tracker 404",
+  "tracker 410",
   "projects",
   "confirmation",
 ])("stops every remaining delete after incomplete reconciliation (%s), until Retry revalidates", async (failure) => {
@@ -404,10 +406,16 @@ it.each([
   });
   let reconciling = false;
   let readFailed = false;
+  const retainedProjects: boolean[] = [];
+  const unsubscribe = cache.subscribe(() => {
+    const snapshot = cache.getSnapshot();
+    if (snapshot.tasks[other.url]?.error)
+      retainedProjects.push(snapshot.projects.some((project) => project.url === other.url));
+  });
   const failedRead =
     failure === "container"
       ? other.tracker.stateStore
-      : failure === "tracker"
+      : failure.startsWith("tracker")
         ? other.url
         : failure === "projects"
           ? cache.store.projects
@@ -421,16 +429,23 @@ it.each([
     }
     if (reconciling && !readFailed && request.method === "GET" && request.url === failedRead) {
       readFailed = true;
-      return new Response(null, { status: failure === "task 404" ? 404 : 503 });
+      return new Response(null, {
+        status: failure.endsWith("404") ? 404 : failure.endsWith("410") ? 410 : 503,
+      });
     }
     return undefined;
   };
   await act(() => closing.onAutoClose?.());
   await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+  unsubscribe();
   expect(readFailed).toBe(true);
   expect(
     pod.requests.filter((request) => request.method === "DELETE").map((request) => request.url),
   ).toEqual([failed.url]);
+  if (failure.startsWith("tracker")) {
+    expect(retainedProjects.length).toBeGreaterThan(0);
+    expect(retainedProjects.every(Boolean)).toBe(true);
+  }
   expect([failed, child, ...remaining].every((item) => pod.files.has(item.url))).toBe(true);
   const visible = new Set(cache.getSnapshot().views.map((view) => view.url));
   expect([failed, ...remaining].every((item) => visible.has(item.url))).toBe(true);
