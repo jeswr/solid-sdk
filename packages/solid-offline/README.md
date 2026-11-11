@@ -57,6 +57,9 @@ import '@jeswr/solid-offline/worker';
 - Page client: `createOfflineClient`, `createStatusSurface`, `createWarmController`, `warm`.
 - Invalidation and reconciliation: `handleNotification`, `resyncSweep`.
 - Identity cleanup: `purgeForWebId`; `offline.logout()` purges both Cache API and IndexedDB data.
+- Durable writes: `createOutbox`, `withOutbox`, `Outbox`, `OutboxItem`, `ConflictRecord`, and
+  `QueueingStorageClient` from `@jeswr/solid-offline/outbox`.
+- RDF merge: `mergeRdf` from `@jeswr/solid-offline/merge`.
 - Worker entry: `@jeswr/solid-offline/worker`.
 - React entry: `useOfflineStatus` and `useOfflineResource` from `@jeswr/solid-offline/react`.
 
@@ -83,6 +86,73 @@ conservatively evicts changed bytes instead of inventing cacheable responses.
 React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Write outbox
+
+```ts
+import { createOutbox, withOutbox } from '@jeswr/solid-offline/outbox';
+
+const webId = 'https://alice.example/profile/card#me';
+const outbox = createOutbox({ webId });
+await outbox.ready; // Hydrate the synchronous pending()/conflicts() snapshots.
+const queuedStorage = withOutbox(storage, outbox);
+const offline = createOfflineClient({ storage, webId, outbox });
+await offline.register(); // Replay now, then on window online events.
+
+await queuedStorage.write(documentUrl, bytes, {
+  contentType: 'text/turtle',
+  ifMatch: documentEtag,
+  offline: 'queue',
+});
+const unsubscribe = outbox.on('change', () => renderQueue(outbox.pending()));
+// Later: unsubscribe(); offline.close(); outbox.close();
+```
+
+`write`, `writeRdf`, `create`, and `delete` queue only with `offline: 'queue'`, when the
+browser reports offline or the operation fails with a network error. Other failures still
+throw. A queued write/create returns `{ url, etag: null, created: false, queued: true }`;
+`delete` continues to return void. Calls without the option pass through to storage.
+`patch` and `move` remain unqueueable in v1. Bodies, including streams, are captured before
+an opted-in attempt, so a failed upload cannot consume the only local copy. This buffers
+the complete body in memory. Queued `writeRdf` bodies retain Turtle or expanded, context-free JSON-LD as requested.
+Named graphs require JSON-LD. Serialization validates RDF/JS term fields and does not trust
+private N3 IDs; prefixes are omitted from queued Turtle because they affect only presentation.
+Creates without a name receive a stable `offline-<uuid>` name. Named Solid creates use
+`If-None-Match: *`; LWS retains its server-assigned identifier behavior.
+
+`pending()` includes waiting, replaying, failed and conflicted items, ordered by creation time
+with FIFO ties. `replay(storage, { onProgress, signal })` sends sequentially with the original
+validators. Network failure leaves the current item waiting and stops the pass; other errors
+mark it failed with a readable error. A 412 records a conflict and holds all items for that
+URL while other URLs continue. `retry(id?)` requeues one or all failed items and replays using
+the client supplied by `withOutbox` or the most recent `replay`. Progress is reported per item
+in bytes at start `(0, size)` and successful completion `(size, size)`; streaming upload
+progress is a later improvement. Deletes have size zero.
+
+`conflicts()` returns metadata; `await localBody(conflictId)` retrieves the local bytes without
+putting bodies in snapshots or broadcasts. `resolve(id, 'mine')` HEADs for a current ETag and
+conditionally overwrites (or deletes); an absent ETag or a failed request retains the conflict.
+`'theirs'` discards the local change. `'both'` creates a sibling: binary `photo-conflict-<ms>.jpg`,
+RDF `note (copy).ttl`, preserving the extension. A name collision retains the conflict rather
+than replacing an existing copy. Keep-both does not apply to deletions. Resolution removes
+only the conflicted item; call `replay(storage)` to resume items held behind it.
+
+The queue and its BroadcastChannel use the full WebID in a separate namespace. Reopen the same
+WebID's outbox to recover unsent changes; `await outbox.purge()` explicitly discards them.
+**Logout purges read caches but retains the outbox.** `offline.close()`/`logout()` removes online
+listeners and aborts replay; instantiate/register the next client only for its active session.
+The configured queue's WebID must match `createOfflineClient`'s WebID. `outbox.close()` releases
+its listeners without purging persisted items. Browser Web Locks serialize replay across tabs;
+without Web Locks, only same-realm instances are serialized. Cross-tab changes refresh snapshots
+and emit `change`/`conflict` events without broadcasting bodies, credentials, URLs or ETags.
+Network failures after a server commits a mutation remain ambiguous; the queue does not promise
+exactly-once delivery, especially for LWS creates.
+
+`mergeRdf(base, local, remote)` accepts RDF/JS datasets or quad iterables and returns a deduplicated
+quad array using `(remote − (base − local)) ∪ (local − base)`. It compares all four terms with
+`.equals` and preserves the input terms. It does not detect vocabulary-level conflicts such as
+two values for a functional property. Blank nodes compare by their supplied labels; skolemise
+first if independently parsed documents do not share stable labels.
 
 ## Revalidation status
 
