@@ -982,7 +982,7 @@ describe("Drive malformed snapshots", () => {
     ).result;
     expect(requests).toHaveBeenCalledTimes(7);
     expect(items.mock.calls).toEqual([[1], [FILES.length]]);
-    expect(bytes).toHaveBeenCalledTimes(6);
+    expect(bytes).toHaveBeenCalledTimes(3);
     expect(
       new Set([...requests.mock.contexts, ...items.mock.contexts, ...bytes.mock.contexts]).size,
     ).toBe(1);
@@ -1345,5 +1345,35 @@ describe("Drive staged representations", () => {
     expect(remove.mock.calls.map(([slug]) => slug)).toEqual(
       valid.map((name) => `${path(BINARY.id)}${name}`),
     );
+  });
+});
+
+describe("Drive capped convergence", () => {
+  it("keeps per-file copies outside the JSON run byte cap and converges across request-capped runs", async () => {
+    const { run, pod, metadata } = setup(20_000);
+    const files = Array.from({ length: 3 }, (_, i) => ({
+      ...BINARY,
+      id: `large-${i}`,
+      size: "10000",
+    }));
+    const media = Object.fromEntries(
+      files.map((file) => [mediaUrl(file.id), bytes("x".repeat(10_000))]),
+    );
+    let saved = 0;
+    let complete = false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await run(full(files), { media, limits: { maxRequests: 3, maxBytes: 3000 } }).result;
+        complete = true;
+      } catch (error) {
+        expect(error).toMatchObject({ name: "RunBudgetExceededError", resource: "requests" });
+      }
+      const current = files.filter((file) => pod.bytes(contentUrl(file))).length;
+      expect(current).toBeGreaterThan(saved);
+      saved = current;
+      if (complete) break;
+    }
+    expect(complete).toBe(true);
+    for (const file of files) expect(metadata(file.id).contentSkipped).toBeUndefined();
   });
 });

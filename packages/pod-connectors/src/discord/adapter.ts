@@ -7,7 +7,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { Pagination } from "../core/pagination.js";
 import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
@@ -46,12 +45,11 @@ export const discordAdapter: IntegrationAdapter = {
   fixtures: () => DISCORD_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Fetching your Discord profile…", done: 0, total: 2 });
-    const user =
-      (await getJson<DiscordUser>(ID, ctx.api, `${API}/users/@me`, undefined, budget)) ?? {};
+    const user = (await getJson<DiscordUser>(ID, ctx.api, `${API}/users/@me`, undefined)) ?? {};
 
     budget.items(1);
     const profileDoc = ctx.resolve("social/profile.ttl");
@@ -84,7 +82,6 @@ export const discordAdapter: IntegrationAdapter = {
           ctx.api,
           `${API}/users/@me/guilds?limit=200${after ? `&after=${encodeURIComponent(after)}` : ""}`,
           undefined,
-          budget,
         ),
       );
       budget.items(batch.length);

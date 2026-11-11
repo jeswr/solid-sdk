@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Organisation } from "../core/vocab.js";
@@ -52,9 +51,9 @@ export const slackAdapter: IntegrationAdapter = {
   fixtures: () => SLACK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Identifying your workspace…", done: 0, total: 2 });
-    const auth = await getJson<SlackAuthTest>(ID, ctx.api, `${API}/auth.test`, undefined, budget);
+    const auth = await getJson<SlackAuthTest>(ID, ctx.api, `${API}/auth.test`, undefined);
 
     budget.items(1);
     const doc = ctx.resolve("work/workspace.ttl");
@@ -71,7 +70,6 @@ export const slackAdapter: IntegrationAdapter = {
       ctx.api,
       `${API}/conversations.list?types=public_channel&exclude_archived=true&limit=1000`,
       undefined,
-      budget,
     );
 
     budget.items(list.channels.length);

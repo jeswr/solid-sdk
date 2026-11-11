@@ -38,23 +38,48 @@ its original mixed lookup semantics; never reread the original init after captur
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
-Every network adapter creates one shared-core `RunBudget` per import (20,000 requests,
-2,000,000 records, 512 MiB response bytes by default). Honor `ImportContext.limits`,
-forwarded from `runImport({ limits })`; merge it over existing adapter-factory settings.
-Never reset counters on pagination, retry or expired-cursor fallback. `getJson`/`postJson`
-charge the optional budget's request before dispatch and pass it to `readJson` for streamed
-bytes; do not also charge that request manually. Custom transports (Spotify and Drive)
-charge requests themselves. Count page rows before filtering, deduplication, buffering or
-mapping, including malformed/deleted rows; Gmail's nested history changes and thread
-members count too. Charge Drive download and inspected error-body bytes to that same budget.
-Retain independent per-response/per-file caps. `RunBudgetExceededError` extends
-`IntegrationSyncError`, reports `resource`/`limit` and explains that partial data may have
-been saved while the checkpoint is unchanged. Never catch it as a successful truncated
-snapshot. Budgets validate and snapshot overrides and remain exhausted after failure.
-Keep the README's complete network/file/mail audit current. Cover each network adapter's
-request/item/byte limits, distinct-token endless pagination for paginated adapters, and
-checkpoint retention with fixture-only fakes. Ordinary uploads already have 64 MiB actual
-byte and 100,000-row caps; Garmin must use `fileText` too. Takeout retains its streaming caps.
+The runner owns one shared-core `RunBudget` per import (20,000 requests, 2,000,000 records,
+512 MiB JSON/inspected response bytes and `maxDurationMs: 1_800_000` by default). It wraps
+`ctx.api` so every request is charged and every consumed response chunk is metered. Do not
+create budgets or charge requests/bytes at adapter call sites. Use `ctx.budget.items(n)` for
+all source rows before filtering, deduplication, buffering or mapping, including malformed
+and deleted entries. Gmail counts list rows once, nested history changes and thread members.
+Factory `adapter.limits` and host `runImport({ limits })` merge per key with the smaller
+defined value; undefined cannot erase a bound. Keep direct adapter tests supplied with a
+budget, and use the runner for transport enforcement tests.
+
+Every source request receives the combined run deadline, caller cancellation and a 60-second
+absolute response deadline, which includes headers and the full body. Preserve effective
+Request/init signals, including Drive's per-download controller. Fetches and reader waits
+must reject even if a custom transport ignores its signal. Cap Spotify Retry-After waits to
+`budget.remainingMs`. `RunBudget.request()` and all other charges check the deadline; exhausted
+budgets stay exhausted. Keep independent per-response/per-file caps. `getJson`/`postJson` only
+map HTTP errors and call the shared capped reader. Never let a cancellation failure replace
+a status, byte-limit or deadline error. Drive uses these same JSON/binary body helpers.
+
+Gmail full-sync budget failures flush completed memberships then save a private account-local
+journal with page token, row offset, initial history id and seen-message manifest. Resume after
+completed rows; do not refetch their raw payloads or double-charge list/raw messages. Keep the
+journal until the final sweep and memberships commit. Return its original history id so
+mutations during partial runs replay next time. Bound retained reconciliation identifiers
+across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item- and
+byte-capped runs, incomplete message retries and final removal of vanished mail.
+
+Successful Drive media/export copies consume the independent per-file cap rather than the
+run byte budget, because content is committed per file. The central wrapper exempts only
+successful Drive representation endpoints; JSON and inspected error bodies remain metered.
+Downloads still consume requests and deadlines. Preserve unchanged-representation reuse and
+test that request-capped retries make progress with content larger than the run JSON allowance.
+
+`RunBudgetExceededError` extends `IntegrationSyncError`, reports `resource`/`limit` (including
+`duration`) and explains that partial data may have been saved while the successful checkpoint
+is unchanged. Never catch it as a successful truncated snapshot. Validate and snapshot limits.
+Keep the README audit current. Measure fixture request/byte totals and independently count
+source rows for every adapter; require failures at N-1/M-1/B-1 and success at N/M/B. This must
+detect missing item charges on the last endpoint. Cover stalled headers, bodies and trickles
+per adapter, endless pagination and checkpoint retention with fixture-only fakes. Ordinary
+uploads retain their 64 MiB actual byte / 100,000-row caps; Garmin uses `fileText`. Takeout
+retains its streaming caps.
 
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
@@ -120,7 +145,8 @@ vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identic
 `[A-Za-z0-9_-]{1,256}` and skip invalid ones. File/mbox imports keep Message-ID document ids with
 collision fallback and References/In-Reply-To ancestry. Gmail history deletions resolve slugs
 directly; full syncs list the account's `messages/` container and sweep unseen Gmail message RDF
-documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
+documents. There is no permanent Gmail source index; interrupted full syncs use the temporary journal
+described above. Keep Spam/Trash in the full source listing.
 Resolve In-Reply-To through the writer's run-local Message-ID map, then the optional
 `MailItem.resolveParent(messageId)` hook. Gmail resolves from validated thread metadata via
 `ctx.api`/`getJson`, cached once per thread per run. Omit unresolved parent links for explicit
@@ -169,8 +195,8 @@ Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`
 keep vCard as the write model (V10). Register only the address-book class for `contacts/`.
 Encode email addresses for RFC 6068 with `encodeURIComponent` on either side of the final `@`.
 Buffer every People API page and require the final sync token before applying writes or
-deletions. Use one shared `RunBudget` across all pages and retries, counting every request
-and buffered person. Read 400 error details through the shared byte-capped `readJson` too.
+deletions. Use the runner-owned `RunBudget` across all pages and retries, counting every
+buffered person. Read 400 error details through the shared byte-capped `readJson` too.
 An expired token (410, or 400 with the documented `EXPIRED_SYNC_TOKEN` error
 detail) discards partial increments and retries a full snapshot once. Retain unchanged
 members on increments, remove source deletions with `ctx.remove`, and rewrite `people.ttl`
@@ -189,10 +215,10 @@ keep checksum/copy-state glue in suite-vocab's `NS.POD_DRIVE`
 Capture the start token before full listing, stage every changes page before applying it,
 and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid
 full listing; malformed envelopes, missing arrays, or invalid pagination tokens must fail
-before pruning or checkpoint advancement. Use one shared RunBudget for every source request
-and page's item count, passing it to `readJson` for every JSON response so cumulative response
-bytes are bounded too. Retain the budget across an expired-cursor fallback. Owned binaries require
-a known size under the cap; supported Google Workspace exports have capped PDF/text responses. Read with a byte
+before pruning or checkpoint advancement. Use the runner-owned RunBudget for every source
+request and page's item count; transport accounting bounds cumulative JSON response bytes,
+including an expired-cursor fallback. Owned binaries require a known size under the cap;
+supported Google Workspace exports have capped PDF/text responses. Read with a byte
 cap and cancel oversized responses. Stage create-only `content-<v>[.pdf|.txt]` representations,
 where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else downloaded bytes
 (the first representation for exports). Without source version fields, download on every import. Commit

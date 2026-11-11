@@ -8,7 +8,7 @@
  * import runner.
  */
 import type { DatasetCore } from "@rdfjs/types";
-import type { RunLimits } from "./budget.js";
+import type { RunBudget, RunLimits } from "./budget.js";
 
 /** Catalog tiers (docs/integrations-catalog.md). Only Tier A ships adapters. */
 export type IntegrationTier = "A" | "B" | "C";
@@ -162,7 +162,9 @@ export interface ImportProgress {
 
 /** What the runner hands an adapter's `import()`. */
 export interface ImportContext {
-  /** Per-run source limits; omitted fields use DEFAULT_RUN_LIMITS. Zero disables that resource. */
+  /** Runner-owned shared source budget; adapters charge every returned record with items(). */
+  readonly budget: RunBudget;
+  /** Effective limits; factory and host settings are merged per key using the stricter value. */
   readonly limits?: Partial<RunLimits>;
   /**
    * Fetch against the **source platform**: token-injected when live,
@@ -258,6 +260,8 @@ export interface ConnectorStateOptions {
 }
 
 export interface IntegrationAdapter {
+  /** Optional factory bounds, snapshotted and tightened by host run limits. */
+  readonly limits?: Partial<RunLimits>;
   readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */

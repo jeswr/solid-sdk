@@ -6,7 +6,7 @@
  * unmatched request throws instead of hitting the wire.
  */
 
-import { type RunBudget, readJson } from "./budget.js";
+import { readJson } from "./budget.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
@@ -58,20 +58,18 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
 
 /**
  * `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError); the body is
- * read through the `MAX_JSON_BYTES` cap and charged to the optional per-run budget.
+ * read through the `MAX_JSON_BYTES` cap. The runner meters source traffic centrally.
  */
 export async function getJson<T>(
   adapterId: string,
   api: typeof fetch,
   url: string,
   init?: RequestInit,
-  budget?: RunBudget,
   maxBytes?: number,
 ): Promise<T> {
-  budget?.request();
   const res = await api(url, init);
   if (res.status === 429) {
-    await res.body?.cancel();
+    await res.body?.cancel().catch(() => undefined);
     const retryAfter = res.headers.get("retry-after");
     throw new RateLimitedError(
       adapterId,
@@ -80,13 +78,13 @@ export async function getJson<T>(
     );
   }
   if (!res.ok) {
-    if (!res.bodyUsed) await res.body?.cancel();
+    if (!res.bodyUsed) await res.body?.cancel().catch(() => undefined);
     throw new IntegrationSyncError(adapterId, `The platform answered ${res.status} for ${url}.`, {
       url,
       status: res.status,
     });
   }
-  return (await readJson(res, adapterId, url, maxBytes, budget)) as T;
+  return (await readJson(res, adapterId, url, maxBytes)) as T;
 }
 
 /** `POST` JSON and parse the JSON answer, with the same error mapping. */
@@ -96,17 +94,10 @@ export async function postJson<T>(
   url: string,
   body: unknown,
   headers?: Record<string, string>,
-  budget?: RunBudget,
 ): Promise<T> {
-  return getJson<T>(
-    adapterId,
-    api,
-    url,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    },
-    budget,
-  );
+  return getJson<T>(adapterId, api, url, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 }

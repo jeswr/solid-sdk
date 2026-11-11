@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SocialMediaPosting } from "../core/vocab.js";
@@ -49,14 +48,13 @@ export const xTwitterAdapter: IntegrationAdapter = {
   fixtures: () => X_TWITTER_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your posts…", done: 0, total: 1 });
     const answer = await getJson<XTweetsAnswer>(
       ID,
       ctx.api,
       `${API}/users/me/tweets?max_results=100&tweet.fields=created_at,public_metrics`,
       undefined,
-      budget,
     );
 
     const doc = ctx.resolve("social/posts.ttl");

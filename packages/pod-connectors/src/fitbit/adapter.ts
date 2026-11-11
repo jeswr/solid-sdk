@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
@@ -51,14 +50,13 @@ export const fitbitAdapter: IntegrationAdapter = {
   fixtures: () => FITBIT_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your activity log…", done: 0, total: 1 });
     const answer = await getJson<FitbitActivitiesAnswer>(
       ID,
       ctx.api,
       `${API}/1/user/-/activities/list.json?sort=desc&offset=0&limit=100`,
       undefined,
-      budget,
     );
 
     const doc = ctx.resolve("health/activities.ttl");

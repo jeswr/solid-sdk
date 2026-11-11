@@ -17,7 +17,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, MusicPlaylist } from "../core/vocab.js";
@@ -56,14 +55,13 @@ export const youtubeAdapter: IntegrationAdapter = {
   fixtures: () => YOUTUBE_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your liked videos…", done: 0, total: 2 });
     const liked = await getJson<YTVideosList>(
       ID,
       ctx.api,
       `${API}/videos?part=snippet,contentDetails&myRating=like&maxResults=50`,
       undefined,
-      budget,
     );
 
     const videosDoc = ctx.resolve("media/videos.ttl");
@@ -94,7 +92,6 @@ export const youtubeAdapter: IntegrationAdapter = {
       ctx.api,
       `${API}/playlists?part=snippet,contentDetails&mine=true&maxResults=50`,
       undefined,
-      budget,
     );
 
     const listsDoc = ctx.resolve("media/playlists.ttl");

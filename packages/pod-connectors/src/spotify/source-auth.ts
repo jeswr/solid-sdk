@@ -21,14 +21,16 @@ export function createSpotifySourceAuth(options: {
   const transport = refuseRedirects(options.fetch);
   const auth = () =>
     createSourceAuth("spotify", spotifyAdapter, token, transport, ["https://api.spotify.com"]);
-  async function refresh(): Promise<void> {
+  async function refresh(signal?: AbortSignal | null): Promise<void> {
     if (!token.refreshToken || !options.clientId)
       throw new IntegrationAuthError(
         "spotify",
         "not-configured",
         "Spotify requires reauthorization.",
       );
+    signal?.throwIfAborted();
     const response = await transport(TOKEN_ENDPOINT, {
+      signal,
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
@@ -77,17 +79,26 @@ export function createSpotifySourceAuth(options: {
   }
   return {
     fetch: async (input, init) => {
+      const explicitSignal = init?.signal;
+      const signal =
+        init && "signal" in init
+          ? explicitSignal
+          : input instanceof Request
+            ? input.signal
+            : undefined;
+      signal?.throwIfAborted();
       const usedToken = token;
       const response = await auth().fetch(input, init);
       const method = init?.method ?? (input instanceof Request ? input.method : "GET");
       if (response.status !== 401 || method.toUpperCase() !== "GET") return response;
-      await response.body?.cancel();
+      await response.body?.cancel().catch(() => undefined);
       if (token === usedToken) {
-        refreshing ??= refresh().finally(() => {
+        refreshing ??= refresh(signal).finally(() => {
           refreshing = undefined;
         });
         await refreshing;
       }
+      signal?.throwIfAborted();
       return auth().fetch(input, init);
     },
   };

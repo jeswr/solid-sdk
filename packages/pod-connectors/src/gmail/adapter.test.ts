@@ -878,3 +878,112 @@ describe("Gmail deletion replay", () => {
     noMail(pod);
   });
 });
+
+describe("Gmail capped full-sync convergence", () => {
+  it.each([
+    "requests",
+    "bytes",
+  ])("makes progress on consecutive %s-capped runs and eventually completes", async (resource) => {
+    const { pod, podWriter } = setup();
+    const messages = Array.from({ length: 6 }, (_, i) => ({
+      ...(MESSAGES.m1 as GmailMessage),
+      id: `capped-${i}`,
+      threadId: `capped-${i}`,
+    }));
+    const routes: FixtureRoute[] = [
+      ...base,
+      {
+        url: `${GMAIL_API}/messages`,
+        json: { messages: messages.map(({ id, threadId }) => ({ id, threadId })) },
+      },
+      ...messages.map(fetched),
+    ];
+    const limits = resource === "requests" ? { maxRequests: 5 } : { maxBytes: 2300 };
+    let previous = 0;
+    let complete = false;
+    for (let i = 0; i < 6; i++) {
+      try {
+        const report = await runImport({
+          adapter: gmailAdapter,
+          mode: "live",
+          podWriter,
+          sourceAuth: { fetch: fixtureFetch("gmail", routes) },
+          limits,
+        });
+        expect(report.cursor).toBe("1000");
+        complete = true;
+      } catch (error) {
+        expect(error).toMatchObject({ name: "RunBudgetExceededError", resource });
+      }
+      const saved = messages.filter((m) =>
+        pod.bytes(msg(`gmail-${m.id}`).replace(/\.ttl$/, ".eml")),
+      ).length;
+      expect(saved).toBeGreaterThan(previous);
+      previous = saved;
+      if (complete) break;
+    }
+    expect(complete).toBe(true);
+    expect(previous).toBe(messages.length);
+    expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
+  });
+});
+
+it("resumes Gmail across pages under an item cap, retains the initial history id and sweeps only after completion", async () => {
+  const { pod, podWriter, run } = setup();
+  const initial = await run(GMAIL_FIXTURES).result;
+  const messages = Array.from({ length: 5 }, (_, i) => ({
+    ...(MESSAGES.m1 as GmailMessage),
+    id: `paged-${i}`,
+    threadId: `paged-${i}`,
+  }));
+  let profile = "1000";
+  const source = fixtureFetch("gmail", [...base, ...messages.map(fetched)]);
+  const fetchedIds: string[] = [];
+  const tokens: (string | null)[] = [];
+  const api: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith("/profile"))
+      return Response.json({ emailAddress: "alex@example.test", historyId: profile });
+    if (url.pathname.endsWith("/messages")) {
+      const pageToken = url.searchParams.get("pageToken");
+      tokens.push(pageToken);
+      const rows = pageToken ? messages.slice(3) : messages.slice(0, 3);
+      return Response.json({
+        messages: rows.map(({ id, threadId }) => ({ id, threadId })),
+        ...(!pageToken ? { nextPageToken: "second" } : {}),
+      });
+    }
+    const id = url.pathname.split("/messages/")[1];
+    if (id) fetchedIds.push(id);
+    return source(input, init);
+  };
+  for (let i = 0; i < messages.length; i++) {
+    const onState = vi.fn();
+    const pending = runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: { fetch: api },
+      state: initial.state,
+      cursor: "",
+      onState,
+      limits: { maxItems: 8 },
+    }); // profile + 6 labels + one message
+    if (i < messages.length - 1) {
+      await expect(pending).rejects.toMatchObject({ resource: "items" });
+      expect(onState).toHaveBeenCalledWith({ ...initial.state, lastOutcome: "error" });
+      expect(pod.get(RECEIPT)).toBeDefined();
+    } else {
+      expect((await pending).cursor).toBe("1000");
+      expect(pod.get(RECEIPT)).toBeUndefined();
+    }
+    expect(
+      messages.filter((m) => pod.bytes(msg(`gmail-${m.id}`).replace(/\.ttl$/, ".eml"))),
+    ).toHaveLength(i + 1);
+    profile = "2000";
+  }
+  expect(fetchedIds).toEqual(messages.map((m) => m.id));
+  expect(tokens).toContain("second");
+  expect(pod.urls().some((url) => url.endsWith("_full-sync.ttl"))).toBe(false);
+  expect(members(pod, folder("system:inbox"))).toHaveLength(messages.length);
+});

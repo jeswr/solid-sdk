@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { Pagination } from "../core/pagination.js";
@@ -57,11 +56,11 @@ export const twitchAdapter: IntegrationAdapter = {
   fixtures: () => TWITCH_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Checking who you are on Twitch…", done: 0, total: 2 });
-    const users = await getJson<TwitchUsersAnswer>(ID, ctx.api, `${API}/users`, undefined, budget);
+    const users = await getJson<TwitchUsersAnswer>(ID, ctx.api, `${API}/users`, undefined);
     // `data` can be an empty array; the follows endpoint needs our user id, so
     // a missing id is genuinely fatal (not a per-item skip).
     budget.items(arr(users?.data).length);
@@ -84,7 +83,6 @@ export const twitchAdapter: IntegrationAdapter = {
         ctx.api,
         `${API}/channels/followed?user_id=${encodeURIComponent(myId)}&first=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
         undefined,
-        budget,
       );
       budget.items(arr(page?.data).length);
       follows.push(...arr(page?.data));

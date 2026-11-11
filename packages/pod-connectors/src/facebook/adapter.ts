@@ -13,7 +13,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, SocialMediaPosting } from "../core/vocab.js";
@@ -51,14 +50,13 @@ export const facebookAdapter: IntegrationAdapter = {
   fixtures: () => FACEBOOK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your posts…", done: 0, total: 2 });
     const posts = await getJson<FbPostsAnswer>(
       ID,
       ctx.api,
       `${API}/me/posts?fields=id,message,story,created_time,permalink_url&limit=50`,
       undefined,
-      budget,
     );
 
     const postsDoc = ctx.resolve("social/posts.ttl");
@@ -91,7 +89,6 @@ export const facebookAdapter: IntegrationAdapter = {
       ctx.api,
       `${API}/me/groups?limit=100`,
       undefined,
-      budget,
     );
 
     const groupsDoc = ctx.resolve("social/groups.ttl");

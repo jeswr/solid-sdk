@@ -211,3 +211,20 @@ describe("Spotify PKCE SourceAuth", () => {
     }
   });
 });
+
+it("forwards the effective source signal through token refresh and retry", async () => {
+  const caller = new AbortController();
+  const seen: (AbortSignal | null | undefined)[] = [];
+  const transport = vi.fn<typeof fetch>(async (_input, init) => {
+    seen.push(init?.signal);
+    if (seen.length === 1) return new Response(null, { status: 401 });
+    if (seen.length === 2) return Response.json({ access_token: "fresh" });
+    return Response.json({ ok: true });
+  });
+  const auth = createSpotifySourceAuth({ clientId: "client", token, fetch: transport });
+  await auth.fetch(new Request("https://api.spotify.com/v1/me", { signal: AbortSignal.abort() }), {
+    signal: caller.signal,
+  });
+  expect(seen).toHaveLength(3);
+  for (const signal of seen) expect(signal).toBe(caller.signal);
+});

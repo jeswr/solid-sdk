@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { DatasetCore, NamedNode } from "@rdfjs/types";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { RunBudget } from "../core/budget.js";
 import { fixtureFetch } from "../core/testing.js";
 import type { NormalisedDoc } from "../core/types.js";
 import { googleCalendarAdapter } from "./adapter.js";
@@ -62,6 +63,7 @@ describe("Google Calendar scheduling profile", () => {
     let written: NormalisedDoc | undefined;
     const master = EVENTS.items[0];
     const outcome = await googleCalendarAdapter.import({
+      budget: new RunBudget("fixture"),
       api: fixtureFetch("google-calendar", [
         {
           url: "https://www.googleapis.com/calendar/v3/calendars/primary/events",

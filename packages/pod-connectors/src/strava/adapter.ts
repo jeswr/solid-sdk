@@ -13,7 +13,7 @@
  * public PKCE) — live mode needs the maintainer's token proxy.
  */
 import { DataFactory, Store } from "n3";
-import { RunBudget, type RunLimits } from "../core/budget.js";
+import type { RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
@@ -31,6 +31,7 @@ const RIDE_TYPES = new Set(["Ride", "EBikeRide", "GravelRide", "MountainBikeRide
 /** Create an adapter with host-selected per-run source limits. */
 export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
   return {
+    limits: limits && { ...limits },
     vocabMap,
     metadata: {
       id: ID,
@@ -59,7 +60,7 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => STRAVA_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, { ...limits, ...ctx.limits });
+      const budget = ctx.budget;
       const skipped = new SkipCounter();
 
       ctx.progress({ label: "Fetching your activities…", done: 0, total: 2 });
@@ -74,7 +75,6 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
             ctx.api,
             `${API}/athlete/activities?per_page=100${after}${before === undefined ? "" : `&before=${before}`}`,
             undefined,
-            budget,
           ),
         );
         budget.items(batch.length);

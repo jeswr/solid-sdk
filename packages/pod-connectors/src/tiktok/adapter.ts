@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { postJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
@@ -52,7 +51,7 @@ export const tiktokAdapter: IntegrationAdapter = {
   fixtures: () => TIKTOK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your videos…", done: 0, total: 2 });
     const answer = await postJson<TikTokVideoListAnswer>(
       ID,
@@ -60,7 +59,6 @@ export const tiktokAdapter: IntegrationAdapter = {
       `${API}/video/list/?fields=${VIDEO_FIELDS}`,
       { max_count: 20 },
       undefined,
-      budget,
     );
 
     const mediaDoc = ctx.resolve("media/videos.ttl");

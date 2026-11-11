@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { RunBudget } from "../core/budget.js";
+import { ResponseTooLargeError, readBytes, readJson } from "../core/budget.js";
 import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 
 const ID = "google-drive";
@@ -12,75 +12,32 @@ export function binaryType(contentType: string): string {
     : "application/octet-stream";
 }
 
-/** Accumulate at most cap bytes; cancel and abort at the first oversized chunk. */
-async function readCapped(
-  res: Response,
-  cap: number,
-  controller: AbortController,
-  budget?: RunBudget,
-): Promise<Uint8Array | undefined> {
-  if (!res.body) return new Uint8Array();
-  const reader = res.body.getReader();
-  const cancel = async () => {
-    try {
-      await reader.cancel();
-    } catch {
-      /* A source cancellation failure must not replace the budget failure. */
-    } finally {
-      controller.abort();
-    }
-  };
-  try {
-    const advertised = Number(res.headers.get("content-length"));
-    if (advertised > cap) {
-      await cancel();
-      return undefined;
-    }
-    // One accumulator avoids retaining chunks plus a second concatenation buffer.
-    const bytes = new Uint8Array(cap);
-    let length = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) return bytes.subarray(0, length);
-      budget?.bytes(value.byteLength);
-      if (value.byteLength > cap - length) {
-        await cancel();
-        return undefined;
-      }
-      bytes.set(value, length);
-      length += value.byteLength;
-    }
-  } catch (error) {
-    await cancel();
-    throw error;
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 export type Download = { body: Uint8Array } | { reason: string };
 export async function download(
   api: typeof fetch,
   url: string,
   cap: number,
   exporting: boolean,
-  budget?: RunBudget,
 ): Promise<Download> {
   const controller = new AbortController();
   const res = await api(url, { signal: controller.signal, redirect: "error" });
   if (res.status === 429) {
-    await res.body?.cancel();
+    await res.body?.cancel().catch(() => undefined);
     const retry = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
     throw new RateLimitedError(ID, url, retry || undefined);
   }
   if (!res.ok) {
     // Only this explicit Google export error is a metadata-only success.
     if (exporting && res.status === 403) {
-      const bytes = await readCapped(res, 64 * 1024, controller, budget);
       let error: { error?: { errors?: { reason?: string }[] } } | undefined;
       try {
-        error = JSON.parse(new TextDecoder().decode(bytes));
-      } catch {
+        error = (await readJson(res, ID, url, 64 * 1024)) as typeof error;
+      } catch (cause) {
+        if (
+          !(cause instanceof ResponseTooLargeError) &&
+          !(cause instanceof IntegrationSyncError && cause.cause instanceof SyntaxError)
+        )
+          throw cause;
         /* A malformed error is still a failed request. */
       }
       if (
@@ -88,12 +45,17 @@ export async function download(
         error.error.errors.some((item) => item?.reason === "exportSizeLimitExceeded")
       )
         return { reason: "exportSizeLimitExceeded" };
-    } else await res.body?.cancel();
+    } else await res.body?.cancel().catch(() => undefined);
     throw new IntegrationSyncError(ID, `Drive answered ${res.status} while downloading content.`, {
       url,
       status: res.status,
     });
   }
-  const body = await readCapped(res, cap, controller, budget);
-  return body === undefined ? { reason: "size-cap-exceeded" } : { body };
+  try {
+    return { body: await readBytes(res, ID, url, cap) };
+  } catch (error) {
+    controller.abort();
+    if (error instanceof ResponseTooLargeError) return { reason: "size-cap-exceeded" };
+    throw error;
+  }
 }

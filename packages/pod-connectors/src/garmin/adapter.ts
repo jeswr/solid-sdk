@@ -18,7 +18,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction, TravelAction } from "../core/vocab.js";
@@ -60,14 +59,13 @@ export const garminAdapter: IntegrationAdapter = {
   fixtures: () => GARMIN_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your Garmin activities…", done: 0, total: 2 });
     const list = await getJson<GarminActivitiesAnswer>(
       ID,
       ctx.api,
       `${API}/activity-service/activities?limit=100`,
       undefined,
-      budget,
     );
 
     const exDoc = ctx.resolve("health/activities.ttl");

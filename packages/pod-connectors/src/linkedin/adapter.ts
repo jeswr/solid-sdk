@@ -12,7 +12,6 @@
  */
 
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WorkPosition } from "../core/vocab.js";
@@ -50,15 +49,9 @@ export const linkedinAdapter: IntegrationAdapter = {
   fixtures: () => LINKEDIN_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your work history…", done: 0, total: 1 });
-    const answer = await getJson<LiPositionsAnswer>(
-      ID,
-      ctx.api,
-      `${API}/positions`,
-      undefined,
-      budget,
-    );
+    const answer = await getJson<LiPositionsAnswer>(ID, ctx.api, `${API}/positions`, undefined);
 
     const doc = ctx.resolve("work/positions.ttl");
     const positions = new Store();

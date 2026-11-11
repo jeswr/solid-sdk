@@ -10,7 +10,6 @@
  * a client id.
  */
 import { DataFactory, Store } from "n3";
-import { RunBudget } from "../core/budget.js";
 import { postJson } from "../core/fixture-fetch.js";
 import { copyDataset } from "../core/incremental.js";
 import { Pagination } from "../core/pagination.js";
@@ -52,7 +51,7 @@ export const dropboxAdapter: IntegrationAdapter = {
   fixtures: () => DROPBOX_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
+    const budget = ctx.budget;
     const skipped = new SkipCounter();
     ctx.progress({ label: "Listing your files…", done: 0, total: 2 });
     const first: DropboxListFolderAnswer = ctx.cursor
@@ -62,7 +61,6 @@ export const dropboxAdapter: IntegrationAdapter = {
           `${API}/files/list_folder/continue`,
           { cursor: ctx.cursor },
           undefined,
-          budget,
         )
       : await postJson(
           ID,
@@ -74,7 +72,6 @@ export const dropboxAdapter: IntegrationAdapter = {
             limit: 500,
           },
           undefined,
-          budget,
         );
 
     const doc = ctx.resolve("documents/files.ttl");
@@ -133,7 +130,6 @@ export const dropboxAdapter: IntegrationAdapter = {
           cursor: answer.cursor,
         },
         undefined,
-        budget,
       );
     }
 

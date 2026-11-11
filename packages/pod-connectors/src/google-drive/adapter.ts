@@ -3,8 +3,8 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { RunBudget, readJson } from "../core/budget.js";
-import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
+import { IntegrationSyncError } from "../core/errors.js";
+import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText } from "../core/safe.js";
 import type { BinaryDoc, ImportContext, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SCHEMA } from "../core/vocab.js";
@@ -129,35 +129,16 @@ interface Snapshot {
 }
 class Sync {
   skipped = 0;
-  private readonly budget: RunBudget;
   private readonly api: typeof fetch;
   constructor(
     private readonly ctx: ImportContext,
     private readonly maxBytes: number,
   ) {
-    this.budget = new RunBudget(ID, ctx.limits);
-    this.api = (input, init) => {
-      this.budget.request();
-      return ctx.api(input, init);
-    };
+    this.api = ctx.api;
   }
 
-  private async json(url: string): Promise<unknown> {
-    const res = await this.api(url);
-    if (res.status === 429) {
-      const retryAfter = res.headers.get("retry-after");
-      throw new RateLimitedError(
-        ID,
-        url,
-        retryAfter ? Number.parseInt(retryAfter, 10) || undefined : undefined,
-      );
-    }
-    if (!res.ok)
-      throw new IntegrationSyncError(ID, `The platform answered ${res.status} for ${url}.`, {
-        url,
-        status: res.status,
-      });
-    return readJson(res, ID, url, undefined, this.budget);
+  private json(url: string): Promise<unknown> {
+    return getJson(ID, this.api, url);
   }
 
   async full(): Promise<Snapshot> {
@@ -177,7 +158,7 @@ class Sync {
       });
       if (pageToken) params.set("pageToken", pageToken);
       const listing = page<DriveFileList>(await this.json(`${DRIVE_API}/files?${params}`), "files");
-      this.budget.items(listing.files.length);
+      this.ctx.budget.items(listing.files.length);
       for (const file of listing.files) {
         if (!validId(file?.id)) {
           this.skipped++;
@@ -232,7 +213,7 @@ class Sync {
         await this.json(`${DRIVE_API}/changes?${params}`),
         "changes",
       );
-      this.budget.items(listing.changes.length);
+      this.ctx.budget.items(listing.changes.length);
       for (const change of listing.changes) {
         if (!validId(change?.fileId)) {
           this.skipped++;
@@ -407,7 +388,6 @@ class Sync {
           url,
           exporting ? Math.min(this.maxBytes, 10 * 1024 * 1024) : this.maxBytes,
           exporting,
-          this.budget,
         );
         if ("reason" in result) {
           reason = result.reason;

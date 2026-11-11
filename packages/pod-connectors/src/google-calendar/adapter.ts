@@ -4,7 +4,6 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { RunBudget } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { copyDataset } from "../core/incremental.js";
@@ -45,20 +44,19 @@ export const googleCalendarAdapter: IntegrationAdapter = {
   fixtures: () => GOOGLE_CALENDAR_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Fetching your calendar events…", done: 0 });
     // A lost local snapshot cannot safely consume a delta, even with a host-owned token.
     const existing = await ctx.read(SLUG);
     let syncToken = existing ? ctx.cursor : undefined;
     let batch: Awaited<ReturnType<typeof fetchEvents>>;
     try {
-      batch = await fetchEvents(ctx, budget, syncToken);
+      batch = await fetchEvents(ctx, syncToken);
     } catch (error) {
       if (!syncToken || !(error instanceof IntegrationSyncError) || error.status !== 410)
         throw error;
       // Discard every partial delta page, then retry exactly once without either token.
       syncToken = undefined;
-      batch = await fetchEvents(ctx, budget);
+      batch = await fetchEvents(ctx);
     }
     const doc = ctx.resolve(SLUG);
     const { dataset: events, skipped } = calendarEvents(
@@ -170,7 +168,6 @@ export function calendarEvents(
 
 async function fetchEvents(
   ctx: ImportContext,
-  budget: RunBudget,
   syncToken?: string,
 ): Promise<{ items: GCalEvent[]; cursor: string; timeZone?: string }> {
   const items: GCalEvent[] = [];
@@ -184,10 +181,10 @@ async function fetchEvents(
     url.searchParams.set("maxResults", "250");
     if (syncToken) url.searchParams.set("syncToken", syncToken);
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const list = await getJson<GCalEventsList>(ID, ctx.api, url.href, undefined, budget);
+    const list = await getJson<GCalEventsList>(ID, ctx.api, url.href, undefined);
     if (!list || (list.items !== undefined && !Array.isArray(list.items))) invalidPage();
     timeZone ??= list.timeZone;
-    budget.items(list.items?.length ?? 0);
+    ctx.budget.items(list.items?.length ?? 0);
     items.push(...(list.items ?? []));
     pageToken = list.nextPageToken;
     if (

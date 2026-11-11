@@ -13,10 +13,11 @@
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
-import type { RunLimits } from "./budget.js";
+import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { budgetedFetch } from "./source-budget.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -98,22 +99,49 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   // no source request, Pod read/write, registration or provenance step starts once aborted.
   // Pod I/O is checked at the writer boundary itself, so session-internal reads and writes
   // (including finalisation's provenance read and write) cannot slip past a cancel.
-  const signal = opts.signal;
+  opts.signal?.throwIfAborted();
+  const limits = stricterLimits(adapter.limits, opts.limits);
+  const budget = new RunBudget(id, limits);
+  let timeout: AbortSignal | undefined;
+  const deadline = new AbortController();
+  const expire = () => {
+    if (budget.remainingMs > 0) armDeadline();
+    else deadline.abort(budget.expire());
+  };
+  const armDeadline = () => {
+    // Native timers have a finite range; long host allowances must not expire early.
+    timeout = AbortSignal.timeout(Math.min(Math.ceil(budget.remainingMs), 2_147_483_647));
+    timeout.addEventListener("abort", expire, { once: true });
+  };
+  armDeadline();
+  const signal = AbortSignal.any([...(opts.signal ? [opts.signal] : []), deadline.signal]);
+  const sourceApi = budgetedFetch(api, id, budget, signal);
   const checked = <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
     unlessAborted(signal, step);
   const podWriter = abortablePodWriter(opts.podWriter, signal);
-  signal?.throwIfAborted();
-  const source = adapter.fixtures()[0]?.url;
-  const session = createImportSession(
-    podWriter,
-    id,
-    source ? `${new URL(source).origin}/` : `urn:solid:connector:${encodeURIComponent(id)}:source`,
-    opts,
-    adapter.vocabMap,
-  );
+  let session: ReturnType<typeof createImportSession>;
   try {
+    signal.throwIfAborted();
+    const source = adapter.fixtures()[0]?.url;
+    session = createImportSession(
+      podWriter,
+      id,
+      source
+        ? `${new URL(source).origin}/`
+        : `urn:solid:connector:${encodeURIComponent(id)}:source`,
+      opts,
+      adapter.vocabMap,
+    );
+  } catch (error) {
+    sourceApi.close();
+    timeout?.removeEventListener("abort", expire);
+    throw error;
+  }
+  try {
+    budget.checkTime();
     const outcome = await adapter.import({
-      api: checked(api) as typeof fetch,
+      api: sourceApi.api,
+      budget,
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       read: checked(session.read),
@@ -126,14 +154,16 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       remove: checked(session.remove),
       signal,
       scopes: opts.scopes,
-      limits: opts.limits,
+      limits,
     });
+    budget.checkTime();
     signal?.throwIfAborted();
     const { indexUrl } = await podWriter.registerType(session.registrations());
     signal?.throwIfAborted();
     await session.finish();
     // A cancel during the final provenance write is still a cancel: never report success.
     signal?.throwIfAborted();
+    budget.checkTime();
     const state = session.state(outcome);
     opts.onState?.(state);
     return {
@@ -161,6 +191,9 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
     throw signal?.aborted ? signal.reason : error;
+  } finally {
+    sourceApi.close();
+    timeout?.removeEventListener("abort", expire);
   }
 }
 

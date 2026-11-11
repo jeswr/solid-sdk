@@ -1370,14 +1370,16 @@ describe("CLI import", () => {
           grant_type: "refresh_token",
           refresh_token: "synthetic-source-refresh",
         });
-        expect(init?.signal).toBe(controller.signal);
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        expect(init?.signal?.aborted).toBe(controller.signal.aborted);
         if (cancelRefresh) {
           controller.abort();
           init?.signal?.throwIfAborted();
         }
         return Response.json({ access_token: "synthetic-source-new", expires_in: 3600 });
       }
-      expect(init?.signal).toBe(controller.signal);
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(init?.signal?.aborted).toBe(controller.signal.aborted);
       const bearer = headers.get("authorization");
       credentials.push(bearer);
       if (new URL(String(input)).pathname === "/v1/me/top/tracks" && !expired) {

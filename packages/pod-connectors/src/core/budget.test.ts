@@ -90,7 +90,7 @@ describe("RunBudget", () => {
     1.5,
     Number.MAX_SAFE_INTEGER + 1,
   ])("refuses invalid limits (%s)", (limit) => {
-    for (const key of ["maxRequests", "maxItems", "maxBytes"])
+    for (const key of ["maxRequests", "maxItems", "maxBytes", "maxDurationMs"])
       expect(() => new RunBudget("x", { maxRequests: 2, maxItems: 3, [key]: limit })).toThrow(
         TypeError,
       );
