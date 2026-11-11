@@ -349,3 +349,24 @@ it("reports unrecognised DOCX formatting instead of silently dropping it", async
     { label: expect.stringMatching(/Unsupported DOCX formatting:.*Unsupported style/), count: 1 },
   ]);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("restores a legacy embedded payload exactly when it has no pending suggestions (tabs and line breaks included)", async () => {
+  const original = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Before" },
+          { type: "hardBreak" },
+          { type: "text", text: "after break" },
+        ],
+      },
+      { type: "codeBlock", content: [{ type: "text", text: "code\ttab" }] },
+    ],
+  });
+  const imported = await roundTrip(original.toJSON());
+  expect(imported.json).toEqual(original.toJSON());
+  expect(imported.skipped).toEqual([]);
+});
