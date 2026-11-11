@@ -36,10 +36,13 @@ export function AppSessionGuard({ children }: { children: React.ReactNode }) {
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
-export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: "home" | "drive" }) {
+export function AppFrame({
+  pageTitle,
+  ...props
+}: Omit<SuiteFrameProps, "app"> & { app: "home" | "drive"; pageTitle?: string | undefined }) {
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
-  const title = props.app === "home" ? "Home" : "Drive";
+  const title = pageTitle ?? (props.app === "home" ? "Home" : "Drive");
   return (
     <Suspense>
       <Shell

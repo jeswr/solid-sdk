@@ -18,6 +18,7 @@ import {
   Toaster,
 } from "@jeswr/suite-ui";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
@@ -174,7 +175,7 @@ function Sidebar() {
           </div>
         ))}
       <h3>Shared with me</h3>
-      <p className="cal-muted">No shared calendars yet.</p>
+      <Link href="/shared?app=calendar">View shared calendars</Link>
       <label className="cal-week-preference">
         Week starts on
         <select

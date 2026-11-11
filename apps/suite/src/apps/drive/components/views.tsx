@@ -5,11 +5,13 @@
 
 /** Drive's route bodies: folder, Recent, Starred, Shared, Search, Trash and preview. */
 
+import { visibleSharedItems } from "@jeswr/suite-sdk/shared";
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
 import { notFound, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
+import { useHiddenSharedItems } from "@/lib/shared/hidden";
 import { AppHeading } from "@/shell/app-frame";
 import { usePageRouteParams } from "../../../lib/route-params";
 import {
@@ -299,7 +301,8 @@ export function StarredView() {
 }
 
 export function SharedView() {
-  const { client, prefs, updatePrefs } = useDrive();
+  const { client, prefs, updatePrefs, session } = useDrive();
+  const { hidden } = useHiddenSharedItems(session.webId);
   const saved = useMemo<BrowserItem[]>(
     () =>
       latestShared(prefs.openedShared).map((entry) => {
@@ -356,7 +359,10 @@ export function SharedView() {
     };
   }, [client, urls, version, updatePrefs]);
   const current = snapshot?.client === client && snapshot.urls === urls ? snapshot : undefined;
-  const items = saved.filter(({ url }) => !current?.missing.includes(url));
+  const items = visibleSharedItems(
+    saved.filter(({ url }) => !current?.missing.includes(url)),
+    hidden,
+  );
   return (
     <FileBrowser
       title="Shared with me"

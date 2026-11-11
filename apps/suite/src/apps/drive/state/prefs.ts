@@ -65,9 +65,9 @@ function load(webId: string): DrivePreferences {
 }
 
 export function useDrivePreferences(webId: string) {
-  const [prefs, setPrefs] = useState<DrivePreferences>(DEFAULTS);
+  const [snapshot, setSnapshot] = useState({ webId, prefs: DEFAULTS });
   useEffect(() => {
-    const sync = () => setPrefs(load(webId));
+    const sync = () => setSnapshot({ webId, prefs: load(webId) });
     sync();
     listeners.add(sync);
     const onStorage = (event: StorageEvent) => event.key === keyFor(webId) && sync();
@@ -88,10 +88,10 @@ export function useDrivePreferences(webId: string) {
         // so listeners reloading preferences do not revert it.
         unsaved.set(keyFor(webId), next);
       }
-      setPrefs(next);
+      setSnapshot({ webId, prefs: next });
       for (const listener of listeners) listener();
     },
     [webId],
   );
-  return [prefs, update] as const;
+  return [snapshot.webId === webId ? snapshot.prefs : DEFAULTS, update] as const;
 }

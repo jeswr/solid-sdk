@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { visibleSharedItems } from "@jeswr/suite-sdk/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +36,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
+import { useHiddenSharedItems } from "@/lib/shared/hidden";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
@@ -287,7 +289,8 @@ export function TasksSidebar() {
   const overdue = dueToday.some((task) => isOverdue(task, now));
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
-  const shared = preferences.sharedProjects.filter(
+  const { hidden } = useHiddenSharedItems(preferences.sharedOwner ?? "");
+  const shared = visibleSharedItems(preferences.sharedProjects, hidden).filter(
     (project) => !tasks.cache.isOwnProject(project.url),
   );
   const sharedUrls = new Set(shared.map((project) => project.url));

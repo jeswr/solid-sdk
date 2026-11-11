@@ -7,7 +7,7 @@
  * same list is the drawer below 1024px.
  */
 
-import { Plug, ShieldCheck } from "lucide-react";
+import { Plug, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
@@ -57,6 +57,16 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
       </nav>
       <nav aria-label="Manage">
         <ul>
+          <li>
+            <Link
+              href="/shared"
+              className="hm-nav-item"
+              aria-current={pathname === "/shared" ? "page" : undefined}
+            >
+              <Users aria-hidden="true" size={18} strokeWidth={1.75} />
+              <span className="hm-nav-label">Shared with me</span>
+            </Link>
+          </li>
           <li>
             <Link
               href="/connect"

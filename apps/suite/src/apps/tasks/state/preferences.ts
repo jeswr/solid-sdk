@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { sharedAccountKey, sharedItemsForAccount } from "@jeswr/suite-sdk/shared";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { hideSharedForAccount } from "@/lib/shared/hidden";
 import {
   defaultPreferences,
   type PreferenceAction,
@@ -16,8 +18,7 @@ export type { PreferenceAction, TasksPreferences } from "./preferences-reducer";
 
 const KEY = "suite.tasks.prefs";
 /** Shared with me is per account: another WebID signing in on this browser never sees it. */
-export const sharedProjectsKey = (webId: string) =>
-  `suite.tasks.shared:${encodeURIComponent(webId)}`;
+export const sharedProjectsKey = (webId: string) => sharedAccountKey(webId, "suite.tasks.shared");
 export const favouritesKey = (webId: string) =>
   `suite.tasks.favourites:${encodeURIComponent(webId)}`;
 let identity: string | undefined;
@@ -41,7 +42,12 @@ function readShared(): TasksPreferences["sharedProjects"] {
   try {
     return parseSharedProjects(window.localStorage.getItem(sharedProjectsKey(identity)));
   } catch {
-    return snapshot.sharedOwner === identity ? snapshot.sharedProjects : [];
+    return [
+      ...sharedItemsForAccount(identity, {
+        owner: snapshot.sharedOwner,
+        items: snapshot.sharedProjects,
+      }),
+    ];
   }
 }
 function readFavourites(): string[] {
@@ -110,10 +116,12 @@ export function useTasksPreferences() {
       const favourite = action.type === "favouriteProject";
       if ((shared || favourite) && !identity) return;
       // A menu callback retained across an account switch cannot write to the new account.
-      if (favourite && owner !== identity) return;
+      if ((shared || favourite) && owner !== identity) return;
       const next = preferencesReducer(snapshot, action);
       if (next === snapshot) return;
       snapshot = next;
+      if (action.type === "removeSharedProject" && identity)
+        hideSharedForAccount(identity, action.url);
       try {
         if (shared && identity)
           window.localStorage.setItem(
@@ -135,6 +143,7 @@ export function useTasksPreferences() {
         /* Storage may be full or disabled. */
       }
       emit();
+      if (shared) window.dispatchEvent(new Event("suite-shared-change"));
     },
     [owner],
   );

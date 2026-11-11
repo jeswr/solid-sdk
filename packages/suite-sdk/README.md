@@ -231,3 +231,24 @@ WebID and storage root. Another account's values never hydrate or broadcast into
 store. Create a fresh factory per authenticated session and dispose the old one; this revokes
 retained setters and aborts/fences late operations. Pending durable values remain available only
 to that same WebID/storage session on restart. Construction and speculative renders do no I/O.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Shared items (`./shared`, sst-iool)
+
+`sharedItemsFromInbox` projects only share Announce notifications into `SharedItem` records.
+Sender and role metadata are unverified assertions; no grants or resource reads occur.
+`classifySharedItem({ url, name?, contentType?, rdfTypes? })` chooses docs, sheets, notes,
+tasks, calendar, photos, music or drive, in order of media type, RDF type, extension and path.
+Subtype kinds identify photo albums, music albums/playlists and calendar events.
+`isSuiteDocsDocument` preserves Drive's direct-child native Docs scope.
+`mergeSharedItems(...sources)` deduplicates exact URLs newest first (undated last), fills
+missing metadata and prefers explicit names/apps to inferred values. Inputs are never mutated.
+`latestSharedEntries` is Drive's generic latest-opened deduper.
+
+Storage belongs to callers: `sharedAccountKey` keeps Tasks' encoded WebID key convention,
+`parseSharedEntries` validates stored lists, and `sharedItemsForAccount` prevents fallback
+memory from crossing accounts. `hideSharedItem`, `removeSharedItem`, `visibleSharedItems`
+and `isSharedUrlEntry` implement local removals without changing resource permissions or
+inbox contents. Persist hidden URL entries separately for each WebID; reject stale callbacks
+on session replacement. No helper performs I/O.
