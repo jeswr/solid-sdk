@@ -236,6 +236,14 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     failures.push("model SDKs are gateway-only");
   if (ctx.project === "agent-model-gateway" && name === agent("audit"))
     failures.push("gateway must not import agent-audit");
+  if (
+    !manifest &&
+    !ctx.test &&
+    (ctx.ui || ctx.path.startsWith("apps/suite/src/")) &&
+    name === agent("audit") &&
+    target !== "@jeswr/agent-audit/verify"
+  )
+    failures.push("agent UI audit imports must use the browser-safe verify subpath");
   // Package self-imports and Node builtins are not cross-layer dependencies.
   const external =
     !target.startsWith(".") &&
@@ -288,8 +296,6 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
         send
       )
         failures.push("agent UI dependency is outside DESIGN §2.2");
-      if (name === agent("audit") && target !== "@jeswr/agent-audit/verify")
-        failures.push("agent UI audit imports must use the browser-safe verify subpath");
       if (
         name === agent("mandate") &&
         !typeOnly &&

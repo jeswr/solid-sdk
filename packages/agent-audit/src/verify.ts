@@ -10,6 +10,7 @@ import {
   MAX_AUDIT_SEQ,
 } from "./records.js";
 
+export { type AuditProjectionNode, writeEntryGraph, writeHeadGraph } from "./prov.js";
 export {
   type AuditRecord,
   type AuditTerms,
@@ -43,7 +44,14 @@ export function parseAuditHead(seq: string, hash: string): AuditHead {
     seq: /^[1-9]\d*$/.test(seq) ? Number(seq) : NaN,
     hash,
   });
-  if (!parsed.success) throw new Error("Invalid audit head: Audit range exceeds bound");
+  if (!parsed.success) {
+    const badHash = parsed.error.issues.some((issue) => issue.path[0] === "hash");
+    throw new Error(
+      badHash
+        ? "Invalid audit head: Invalid hash"
+        : "Invalid audit head: Audit range exceeds bound",
+    );
+  }
   return parsed.data;
 }
 
@@ -66,23 +74,35 @@ export const CHAIN_SCOPE =
   "Integrity of retained entries only; unrecorded events and tail truncation cannot be detected without an independently trusted head.";
 /** Checkpoints attest retention, not independent proof of the deleted prefix. */
 export function verifyLedger(input: readonly LedgerEntry[]): LedgerCheck {
-  return checkChain(input, false);
+  return checkChain(input, false).result;
 }
 
-function checkChain(input: readonly LedgerEntry[], range: boolean): LedgerCheck {
-  const fail = (problem: string, firstBadSeq?: number): LedgerCheck => ({
-    ok: false,
-    entries: input.length,
-    problem,
-    firstBadSeq,
-    scope: CHAIN_SCOPE,
+interface ChainCheck {
+  readonly result: LedgerCheck;
+  readonly entries: readonly LedgerEntry[];
+}
+function checkChain(input: readonly LedgerEntry[], range: boolean): ChainCheck {
+  const fail = (problem: string, firstBadSeq?: number): ChainCheck => ({
+    result: {
+      ok: false,
+      entries: input.length,
+      problem,
+      firstBadSeq,
+      scope: CHAIN_SCOPE,
+    },
+    entries: [],
   });
   const entries: LedgerEntry[] = [];
   for (const value of input) {
     try {
       entries.push(parseAuditEntry(value));
     } catch {
-      const seq = value && Object.getOwnPropertyDescriptor(value, "seq")?.value;
+      let seq: unknown;
+      try {
+        seq = value && Object.getOwnPropertyDescriptor(value, "seq")?.value;
+      } catch {
+        // A hostile Proxy may also reject the diagnostic read; the entry still fails closed.
+      }
       return fail("malformed entry", typeof seq === "number" ? seq : undefined);
     }
   }
@@ -111,7 +131,10 @@ function checkChain(input: readonly LedgerEntry[], range: boolean): LedgerCheck 
     if (digestOf({ seq, at, prev, record }) !== e.hash) return fail("hash mismatch", e.seq);
     prev = e.hash;
   }
-  return { ok: true, entries: entries.length, prunedThroughSeq, scope: CHAIN_SCOPE };
+  return {
+    result: { ok: true, entries: entries.length, prunedThroughSeq, scope: CHAIN_SCOPE },
+    entries,
+  };
 }
 
 export const AUDIT_SCOPE =
@@ -144,9 +167,9 @@ export function verifyRange(
   if (head && !auditHeadSchema.safeParse(head).success) return fail("Malformed head");
   if (through !== undefined && !auditHeadSchema.shape.seq.safeParse(through).success)
     return fail("Invalid range endpoint");
-  const chain = checkChain(entries, true);
+  const { result: chain, entries: parsedEntries } = checkChain(entries, true);
   if (!chain.ok) return fail(RANGE_PROBLEMS[chain.problem as string] as string, chain.firstBadSeq);
-  const last = entries.at(-1);
+  const last = parsedEntries.at(-1);
   if (through !== undefined && (!last || last.seq < through))
     return fail(`Record ${through} is missing`, through);
   if (head && last && (last.seq > head.seq || (last.seq === head.seq && last.hash !== head.hash)))

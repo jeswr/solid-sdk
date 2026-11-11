@@ -86,6 +86,41 @@ describe("verifyRange", () => {
       problem: "Malformed record",
     });
   });
+  it.each([
+    "matching",
+    "different hash",
+    "missing endpoint",
+  ] as const)("compares the %s head against the validated snapshot of a changing Proxy", (scenario) => {
+    const entry = seal(1, AT, GENESIS, RECORD);
+    const head = {
+      seq: scenario === "missing endpoint" ? 2 : 1,
+      hash: scenario === "matching" ? entry.hash : digestOf("other head"),
+    };
+    const reads = { seq: 0, hash: 0 };
+    const read = (key: "seq" | "hash") => {
+      reads[key]++;
+      if (reads[key] === 1) return entry[key];
+      return scenario === "matching" ? (key === "seq" ? 2 : digestOf("changed")) : head[key];
+    };
+    const changing = new Proxy(entry, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        return key === "seq" || key === "hash" ? { ...descriptor, value: read(key) } : descriptor;
+      },
+      get(target, key) {
+        return key === "seq" || key === "hash" ? read(key) : Reflect.get(target, key);
+      },
+    });
+    expect(verifyRange([changing], head)).toMatchObject(
+      scenario === "matching"
+        ? { ok: true }
+        : {
+            ok: false,
+            problem: scenario === "different hash" ? "Head mismatch" : "Record 2 is missing",
+          },
+    );
+    expect(reads).toEqual({ seq: 1, hash: 1 });
+  });
   it("never passes the latest range without a published head", () => {
     const last = entries.at(-1) as AuditEntry;
     // Deleting the newest record and chain.ttl together must not read as "Records check out".
@@ -105,7 +140,19 @@ describe("verifyRange", () => {
     const large = activityFixture();
     expect(large).toHaveLength(5000);
     expect(verifyRange(large, large.at(-1)).ok).toBe(true);
+  }, 30_000);
+});
+
+it.each([
+  ["verifyLedger", verifyLedger],
+  ["verifyRange", verifyRange],
+] as const)("%s fails closed when a Proxy's descriptor trap throws", (_, verify) => {
+  const entry = new Proxy(seal(1, AT, GENESIS, RECORD), {
+    getOwnPropertyDescriptor() {
+      throw new Error("hostile descriptor");
+    },
   });
+  expect(verify([entry])).toMatchObject({ ok: false, firstBadSeq: undefined });
 });
 
 it("keeps full-ledger checkpoint admission distinct from an explicitly scoped range", () => {
@@ -163,10 +210,12 @@ it("validates published heads and explicit range endpoints before returning a ve
   const head = entries[1] as AuditEntry;
   expect(parseAuditHead("200000", head.hash)).toEqual({ seq: 200000, hash: head.hash });
   for (const seq of ["0", "01", "-1", "1.0", "200001", "9007199254740992", "x"]) {
-    expect(() => parseAuditHead(seq, head.hash)).toThrow();
+    expect(() => parseAuditHead(seq, head.hash)).toThrow(
+      "Invalid audit head: Audit range exceeds bound",
+    );
     expect(verifyRange(entries, { seq: Number(seq), hash: head.hash }).ok).toBe(false);
   }
-  expect(() => parseAuditHead("1", "invalid")).toThrow();
+  expect(() => parseAuditHead("1", "invalid")).toThrow("Invalid audit head: Invalid hash");
   expect(verifyRange(entries, { seq: 2, hash: "invalid" })).toMatchObject({
     ok: false,
     problem: "Malformed head",

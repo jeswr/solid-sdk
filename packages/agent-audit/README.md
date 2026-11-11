@@ -170,6 +170,9 @@ The subpath exports the shared record schemas and types, `ENTRY_KINDS`, `GENESIS
 `MAX_AUDIT_SEQ`, `checkedRecord`, `seal`, `parseAuditEntry`, `auditHeadSchema`,
 `parseAuditHead`, `verifyLedger`, `verifyRange`, `verifyLatestRange`, and their
 result types and scope strings (`CHAIN_SCOPE`, `AUDIT_SCOPE`, `HEAD_MISSING`).
+It also exports `writeEntryGraph`, `writeHeadGraph` and `AuditProjectionNode`:
+callers supply wrapper-backed nodes to write the same entry, decision and head
+projections as the daemon, without importing parsers, storage or Node modules.
 `parseAuditEntry` enforces strict fields, canonical JSON and the 64 KiB UTF-8
 record limit on already-fetched values. Heads require a canonical positive
 sequence text bounded at 200,000 and a SHA-256 digest.
@@ -183,7 +186,8 @@ head. A supplied head requires its sequence to be present unless an explicit
 historical `through` endpoint is passed. Entries past the head and a different
 hash at the head fail. These functions check consistency, never authority or
 independently trusted completeness; keep the scope text beside a verdict.
-The caller still validates the exact PROV projection against each parsed record.
+The caller still validates the exact PROV projection against each parsed record,
+using the shared projection writers.
 
 The suite adapter now accepts the package's existing `conversation` / `tool-call`
 kinds, task/conversation/model-call instrumentation and `terms.proposalDigest`.

@@ -3,11 +3,11 @@
 import {
   type LedgerEntry as AuditEntry,
   type AuditHead,
-  type AuditRecord,
   parseAuditEntry,
   parseAuditHead,
+  writeEntryGraph,
+  writeHeadGraph,
 } from "@jeswr/agent-audit/verify";
-import { canonicalJson } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
@@ -45,10 +45,10 @@ class AuditNode extends TermWrapper {
       throw new Error("Invalid audit field");
     return value.value;
   }
-  iri(predicate: string, value: string) {
+  setIri(predicate: string, value: string) {
     this.values(predicate).add(DataFactory.namedNode(value));
   }
-  literal(predicate: string, value: string, datatype = "http://www.w3.org/2001/XMLSchema#string") {
+  setText(predicate: string, value: string, datatype = "http://www.w3.org/2001/XMLSchema#string") {
     this.values(predicate).add(DataFactory.literal(value, DataFactory.namedNode(datatype)));
   }
 }
@@ -81,67 +81,18 @@ export async function auditFromTurtle(body: string, url: string): Promise<AuditE
     throw new Error("Audit projection disagrees with the record");
   return entry;
 }
-/** Mirrors the daemon's entryGraph: the entire projection is covered, including #entry. */
+/** Use the daemon's exact projection, including the generated entry entity. */
 function entryGraph(url: string, entry: AuditEntry): Store {
   const store = new Store();
-  const n = node(store, url);
-  const entity = node(store, new URL("#entry", url).href);
-  n.iri(`${RDF}type`, `${PROV}Activity`);
-  entity.iri(`${RDF}type`, `${PROV}Entity`);
-  n.iri(`${PROV}generated`, entity.value);
-  n.literal(`${AGENT}seq`, String(entry.seq), "http://www.w3.org/2001/XMLSchema#integer");
-  n.literal(`${PROV}startedAtTime`, entry.at, "http://www.w3.org/2001/XMLSchema#dateTime");
-  n.literal(`${AGENT}ledgerHash`, entry.hash);
-  n.literal(`${AGENT}prevHash`, entry.prev);
-  n.literal(`${AGENT}record`, canonicalJson(entry.record), `${RDF}JSON`);
-  if (entry.record.type !== "ledger-checkpoint") {
-    const r = entry.record;
-    n.iri(`${PROV}wasAssociatedWith`, r.agent);
-    entity.iri(`${PROV}wasAttributedTo`, r.owner);
-    n.iri(`${PROV}generated`, r.id);
-    if (r.taskId !== undefined) n.literal(`${AGENT}taskId`, r.taskId);
-    if (r.conversation !== undefined) n.iri(`${AGENT}conversation`, r.conversation);
-    for (const id of [
-      r.proposal,
-      r.mandate,
-      r.approval,
-      r.decisionRecord,
-      r.transmission,
-      r.receipt,
-      r.modelCall,
-    ])
-      if (id !== undefined) n.iri(`${PROV}used`, id);
-    if (r.type === "decision") writeDecisionRecord(n, r, entry.at);
-  }
+  writeEntryGraph(node(store, url), node(store, new URL("#entry", url).href), entry);
   return store;
-}
-// Daemon agent-audit/decision-record.ts (local history 9a43f587), also called by entryGraph.
-function writeDecisionRecord(n: AuditNode, record: AuditRecord, at: string): void {
-  n.iri(`${RDF}type`, `${AGENT}DecisionRecord`);
-  n.literal(`${AGENT}evaluatedAt`, at, "http://www.w3.org/2001/XMLSchema#dateTime");
-  n.iri(`${AGENT}rootPrincipal`, record.owner);
-  n.iri(`${AGENT}leafAssignee`, record.agent);
-  if (record.decision !== undefined) n.literal(`${AGENT}decision`, record.decision);
-  if (record.reason !== undefined) n.literal(`${AGENT}reason`, record.reason);
-  if (record.termsDigest !== undefined) n.literal(`${AGENT}termsDigest`, record.termsDigest);
-  if (record.mandate !== undefined) n.iri(`${AGENT}chainPolicy`, record.mandate);
-  if (record.terms !== undefined) {
-    n.iri(`${AGENT}requestAction`, record.terms.action);
-    n.iri(`${AGENT}requestTarget`, record.terms.target);
-    if (record.terms.purpose !== undefined) n.iri(`${AGENT}requestPurpose`, record.terms.purpose);
-  }
 }
 export function auditToTurtle(url: string, entry: AuditEntry): Promise<string> {
   return write(entryGraph(url, entry));
 }
 function headGraph(url: string, head: AuditHead): Store {
   const store = new Store();
-  const n = node(store, url);
-  n.iri(`${RDF}type`, `${AGENT}AuditChain`);
-  n.iri(`${RDF}type`, `${PROV}Collection`);
-  n.literal(`${AGENT}seq`, String(head.seq), "http://www.w3.org/2001/XMLSchema#integer");
-  n.literal(`${AGENT}ledgerHash`, head.hash);
-  n.iri(`${PROV}hadMember`, new URL(`${head.seq}.ttl#entry`, url).href);
+  writeHeadGraph(node(store, url), head.seq, head.hash);
   return store;
 }
 export function auditHeadToTurtle(url: string, head: AuditHead): Promise<string> {

@@ -15,6 +15,9 @@ A-045 task statistics (verify retained evidence before exporting body-free count
 `verifyLedger`, `verifyRange` and `verifyLatestRange`, plus kinds, bounds and scope
 constants. Keep its entire runtime import graph free of Node builtins, fs,
 process and Buffer; use `TextEncoder` for the 64 KiB UTF-8 record bound.
+`writeEntryGraph` and `writeHeadGraph` share the daemon's exact PROV projection
+through caller-supplied `AuditProjectionNode` wrappers, without importing RDF
+parsers or n3. Reuse these writers in browser adapters; never copy the projection.
 Node consumers must reuse it. Never duplicate validation in an app adapter.
 Full retained ledgers require genesis or a matching checkpoint; explicit fetched
 ranges verify only their supplied prefix. Latest nonempty ranges require a

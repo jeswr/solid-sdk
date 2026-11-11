@@ -1263,3 +1263,33 @@ it("permits only the browser audit verifier in the agent data adapter", () => {
     ).join("\n"),
   ).toContain("outside DESIGN");
 });
+
+it.each([
+  "apps/suite/src/lib/audit.ts",
+  "apps/suite/src/shell/audit.ts",
+  "apps/suite/src/app/agent/activity/page.tsx",
+  "apps/suite/src/apps/home/lib/audit.ts",
+])("permits only the browser audit verifier throughout suite source: %s", (path) => {
+  expect(scan(path, 'import "@jeswr/agent-audit/verify";')).toEqual([]);
+  for (const target of [
+    "@jeswr/agent-audit",
+    "@jeswr/agent-audit/testing",
+    "@jeswr/agent-audit/verify/internal",
+  ])
+    for (const source of [
+      `import "${target}";`,
+      `export * from "${target}";`,
+      `import type { LedgerEntry } from "${target}";`,
+      `const audit = import("${target}");`,
+    ])
+      expect(scan(path, source).join("\n")).toContain("browser-safe verify subpath");
+});
+
+it.each([
+  "apps/suite/test/audit.test.ts",
+  "apps/suite/src/lib/audit.test.ts",
+  "apps/suite/src/lib/tests/audit.ts",
+])("allows Node audit helpers in suite tests: %s", (path) => {
+  expect(scan(path, 'import "@jeswr/agent-audit";')).toEqual([]);
+  expect(scan(path, 'import "@jeswr/agent-audit/testing";')).toEqual([]);
+});
