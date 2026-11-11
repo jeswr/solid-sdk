@@ -4,7 +4,10 @@
 # ingredients/instructions to plain repeated strings plus private ordered copies (no RDF lists),
 # nutrition to one NutritionInformation node with optional text calories. Ratings
 # are personal 0-5 values, never aggregateRating. Plans have one recipe IRI per day.
-@prefix schema: <https://schema.org/> .
+# Optional schema:startDate is an xsd:date; the facade restricts it to an ISO-week Monday.
+# Private copies require ^\\d{6}: plus contiguous positions and a 2,000-item cap in
+# the facade: closed admission rejects this sh:pattern (unknown closed guard).
+@prefix schema: <http://schema.org/> .
 @prefix recipe: <https://jeswr.org/ns/recipe#> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -36,6 +39,7 @@ recipe:RecipeShape a sh:NodeShape ; sh:targetClass schema:Recipe ;
  sh:property [ sh:path schema:nutrition ; sh:name "nutrition" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:node recipe:NutritionShape ] .
 recipe:NutritionShape a sh:NodeShape ; sh:targetClass schema:NutritionInformation ; sh:property [ sh:path schema:calories ; sh:name "calories" ; sh:datatype xsd:string ; sh:maxCount 1 ] .
 recipe:MealPlanShape a sh:NodeShape ; sh:targetClass recipe:MealPlan ; sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern "\\S" ] ;
+ sh:property [ sh:path schema:startDate ; sh:name "startDate" ; sh:datatype xsd:date ; sh:maxCount 1 ] ;
  sh:property [ sh:path recipe:monday ; sh:name "monday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
  sh:property [ sh:path recipe:tuesday ; sh:name "tuesday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
  sh:property [ sh:path recipe:wednesday ; sh:name "wednesday" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;

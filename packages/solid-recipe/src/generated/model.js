@@ -10,7 +10,7 @@ const manifest = {
     "major": 0
   },
   "prefixes": {
-    "schema": "https://schema.org/",
+    "schema": "http://schema.org/",
     "recipe": "https://jeswr.org/ns/recipe#",
     "dct": "http://purl.org/dc/terms/",
     "xsd": "http://www.w3.org/2001/XMLSchema#"
@@ -25,6 +25,26 @@ const manifest = {
         "convention": "hash-it"
       },
       "fields": [
+        {
+          "name": "name",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "startDate",
+          "predicate": "http://schema.org/startDate",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
         {
           "name": "friday",
           "predicate": "https://jeswr.org/ns/recipe#friday",
@@ -94,18 +114,6 @@ const manifest = {
             "iriScheme": "http-https",
             "iriPattern": "http-https"
           }
-        },
-        {
-          "name": "name",
-          "predicate": "https://schema.org/name",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "nonBlank": true
-          }
         }
       ]
     },
@@ -117,7 +125,7 @@ const manifest = {
         {
           "name": "recipe",
           "typeIris": [
-            "https://schema.org/Recipe"
+            "http://schema.org/Recipe"
           ],
           "fragment": "it",
           "fields": [
@@ -136,6 +144,142 @@ const manifest = {
               "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
               "maxCount": 1,
               "guards": {}
+            },
+            {
+              "name": "author",
+              "predicate": "http://schema.org/author",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "cookTime",
+              "predicate": "http://schema.org/cookTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "description",
+              "predicate": "http://schema.org/description",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "image",
+              "predicate": "http://schema.org/image",
+              "kind": "iri",
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https",
+                "iriPattern": "http-https"
+              }
+            },
+            {
+              "name": "keywords",
+              "predicate": "http://schema.org/keywords",
+              "kind": "literal",
+              "collection": "set",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "guards": {
+                "trim": true,
+                "dropBlank": true,
+                "sortOnRead": true
+              }
+            },
+            {
+              "name": "name",
+              "predicate": "http://schema.org/name",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "requiredFailClosed": true,
+                "nonBlank": true
+              }
+            },
+            {
+              "name": "nutrition",
+              "predicate": "http://schema.org/nutrition",
+              "kind": "nested",
+              "node": "nutrition"
+            },
+            {
+              "name": "prepTime",
+              "predicate": "http://schema.org/prepTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "category",
+              "predicate": "http://schema.org/recipeCategory",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "cuisine",
+              "predicate": "http://schema.org/recipeCuisine",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "ingredients",
+              "predicate": "http://schema.org/recipeIngredient",
+              "kind": "literal",
+              "collection": "set",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "guards": {}
+            },
+            {
+              "name": "instructions",
+              "predicate": "http://schema.org/recipeInstructions",
+              "kind": "literal",
+              "collection": "set",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "guards": {}
+            },
+            {
+              "name": "recipeYield",
+              "predicate": "http://schema.org/recipeYield",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "personalReview",
+              "predicate": "http://schema.org/review",
+              "kind": "nested",
+              "node": "review"
+            },
+            {
+              "name": "totalTime",
+              "predicate": "http://schema.org/totalTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "url",
+              "predicate": "http://schema.org/url",
+              "kind": "iri",
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https",
+                "iriPattern": "http-https"
+              }
             },
             {
               "name": "favourite",
@@ -162,151 +306,19 @@ const manifest = {
               "collection": "set",
               "datatype": "http://www.w3.org/2001/XMLSchema#string",
               "guards": {}
-            },
-            {
-              "name": "author",
-              "predicate": "https://schema.org/author",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "cookTime",
-              "predicate": "https://schema.org/cookTime",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "description",
-              "predicate": "https://schema.org/description",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "image",
-              "predicate": "https://schema.org/image",
-              "kind": "iri",
-              "maxCount": 1,
-              "guards": {
-                "iriScheme": "http-https",
-                "iriPattern": "http-https"
-              }
-            },
-            {
-              "name": "keywords",
-              "predicate": "https://schema.org/keywords",
-              "kind": "literal",
-              "collection": "set",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "guards": {}
-            },
-            {
-              "name": "name",
-              "predicate": "https://schema.org/name",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "minCount": 1,
-              "maxCount": 1,
-              "guards": {
-                "requiredFailClosed": true,
-                "nonBlank": true
-              }
-            },
-            {
-              "name": "nutrition",
-              "predicate": "https://schema.org/nutrition",
-              "kind": "nested",
-              "node": "nutrition"
-            },
-            {
-              "name": "prepTime",
-              "predicate": "https://schema.org/prepTime",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "category",
-              "predicate": "https://schema.org/recipeCategory",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "cuisine",
-              "predicate": "https://schema.org/recipeCuisine",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "ingredients",
-              "predicate": "https://schema.org/recipeIngredient",
-              "kind": "literal",
-              "collection": "set",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "guards": {}
-            },
-            {
-              "name": "instructions",
-              "predicate": "https://schema.org/recipeInstructions",
-              "kind": "literal",
-              "collection": "set",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "guards": {}
-            },
-            {
-              "name": "recipeYield",
-              "predicate": "https://schema.org/recipeYield",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#string",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "personalReview",
-              "predicate": "https://schema.org/review",
-              "kind": "nested",
-              "node": "review"
-            },
-            {
-              "name": "totalTime",
-              "predicate": "https://schema.org/totalTime",
-              "kind": "literal",
-              "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-              "maxCount": 1,
-              "guards": {}
-            },
-            {
-              "name": "url",
-              "predicate": "https://schema.org/url",
-              "kind": "iri",
-              "maxCount": 1,
-              "guards": {
-                "iriScheme": "http-https",
-                "iriPattern": "http-https"
-              }
             }
           ]
         },
         {
           "name": "nutrition",
           "typeIris": [
-            "https://schema.org/NutritionInformation"
+            "http://schema.org/NutritionInformation"
           ],
           "fragment": "nutrition",
           "fields": [
             {
               "name": "calories",
-              "predicate": "https://schema.org/calories",
+              "predicate": "http://schema.org/calories",
               "kind": "literal",
               "datatype": "http://www.w3.org/2001/XMLSchema#string",
               "maxCount": 1,
@@ -317,13 +329,13 @@ const manifest = {
         {
           "name": "review",
           "typeIris": [
-            "https://schema.org/Review"
+            "http://schema.org/Review"
           ],
           "fragment": "review",
           "fields": [
             {
               "name": "personalRating",
-              "predicate": "https://schema.org/reviewRating",
+              "predicate": "http://schema.org/reviewRating",
               "kind": "nested",
               "node": "rating"
             }
@@ -332,13 +344,13 @@ const manifest = {
         {
           "name": "rating",
           "typeIris": [
-            "https://schema.org/Rating"
+            "http://schema.org/Rating"
           ],
           "fragment": "rating",
           "fields": [
             {
               "name": "rating",
-              "predicate": "https://schema.org/ratingValue",
+              "predicate": "http://schema.org/ratingValue",
               "kind": "literal",
               "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
               "maxCount": 1,
@@ -370,7 +382,7 @@ const nodeViewsManifest = {
     "major": 0
   },
   "prefixes": {
-    "schema": "https://schema.org/",
+    "schema": "http://schema.org/",
     "recipe": "https://jeswr.org/ns/recipe#",
     "dct": "http://purl.org/dc/terms/",
     "xsd": "http://www.w3.org/2001/XMLSchema#"
@@ -379,7 +391,7 @@ const nodeViewsManifest = {
     {
       "name": "RecipeRecipeNode",
       "typeIris": [
-        "https://schema.org/Recipe"
+        "http://schema.org/Recipe"
       ],
       "subject": {
         "convention": "hash-it"
@@ -400,6 +412,142 @@ const nodeViewsManifest = {
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
           "maxCount": 1,
           "guards": {}
+        },
+        {
+          "name": "author",
+          "predicate": "http://schema.org/author",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "cookTime",
+          "predicate": "http://schema.org/cookTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "http://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "image",
+          "predicate": "http://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "keywords",
+          "predicate": "http://schema.org/keywords",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {
+            "trim": true,
+            "dropBlank": true,
+            "sortOnRead": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "http://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "nutrition",
+          "predicate": "http://schema.org/nutrition",
+          "kind": "iri",
+          "guards": {}
+        },
+        {
+          "name": "prepTime",
+          "predicate": "http://schema.org/prepTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "category",
+          "predicate": "http://schema.org/recipeCategory",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "cuisine",
+          "predicate": "http://schema.org/recipeCuisine",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "ingredients",
+          "predicate": "http://schema.org/recipeIngredient",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {}
+        },
+        {
+          "name": "instructions",
+          "predicate": "http://schema.org/recipeInstructions",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {}
+        },
+        {
+          "name": "recipeYield",
+          "predicate": "http://schema.org/recipeYield",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "personalReview",
+          "predicate": "http://schema.org/review",
+          "kind": "iri",
+          "guards": {}
+        },
+        {
+          "name": "totalTime",
+          "predicate": "http://schema.org/totalTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "url",
+          "predicate": "http://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
         },
         {
           "name": "favourite",
@@ -426,145 +574,13 @@ const nodeViewsManifest = {
           "collection": "set",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "guards": {}
-        },
-        {
-          "name": "author",
-          "predicate": "https://schema.org/author",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "cookTime",
-          "predicate": "https://schema.org/cookTime",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "description",
-          "predicate": "https://schema.org/description",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "image",
-          "predicate": "https://schema.org/image",
-          "kind": "iri",
-          "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https",
-            "iriPattern": "http-https"
-          }
-        },
-        {
-          "name": "keywords",
-          "predicate": "https://schema.org/keywords",
-          "kind": "literal",
-          "collection": "set",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "guards": {}
-        },
-        {
-          "name": "name",
-          "predicate": "https://schema.org/name",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "nonBlank": true
-          }
-        },
-        {
-          "name": "nutrition",
-          "predicate": "https://schema.org/nutrition",
-          "kind": "iri",
-          "guards": {}
-        },
-        {
-          "name": "prepTime",
-          "predicate": "https://schema.org/prepTime",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "category",
-          "predicate": "https://schema.org/recipeCategory",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "cuisine",
-          "predicate": "https://schema.org/recipeCuisine",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "ingredients",
-          "predicate": "https://schema.org/recipeIngredient",
-          "kind": "literal",
-          "collection": "set",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "guards": {}
-        },
-        {
-          "name": "instructions",
-          "predicate": "https://schema.org/recipeInstructions",
-          "kind": "literal",
-          "collection": "set",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "guards": {}
-        },
-        {
-          "name": "recipeYield",
-          "predicate": "https://schema.org/recipeYield",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "personalReview",
-          "predicate": "https://schema.org/review",
-          "kind": "iri",
-          "guards": {}
-        },
-        {
-          "name": "totalTime",
-          "predicate": "https://schema.org/totalTime",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "url",
-          "predicate": "https://schema.org/url",
-          "kind": "iri",
-          "maxCount": 1,
-          "guards": {
-            "iriScheme": "http-https",
-            "iriPattern": "http-https"
-          }
         }
       ]
     },
     {
       "name": "RecipeNutritionNode",
       "typeIris": [
-        "https://schema.org/NutritionInformation"
+        "http://schema.org/NutritionInformation"
       ],
       "subject": {
         "convention": "hash-it"
@@ -572,7 +588,7 @@ const nodeViewsManifest = {
       "fields": [
         {
           "name": "calories",
-          "predicate": "https://schema.org/calories",
+          "predicate": "http://schema.org/calories",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -583,7 +599,7 @@ const nodeViewsManifest = {
     {
       "name": "RecipeReviewNode",
       "typeIris": [
-        "https://schema.org/Review"
+        "http://schema.org/Review"
       ],
       "subject": {
         "convention": "hash-it"
@@ -591,7 +607,7 @@ const nodeViewsManifest = {
       "fields": [
         {
           "name": "personalRating",
-          "predicate": "https://schema.org/reviewRating",
+          "predicate": "http://schema.org/reviewRating",
           "kind": "iri",
           "guards": {}
         }
@@ -600,7 +616,7 @@ const nodeViewsManifest = {
     {
       "name": "RecipeRatingNode",
       "typeIris": [
-        "https://schema.org/Rating"
+        "http://schema.org/Rating"
       ],
       "subject": {
         "convention": "hash-it"
@@ -608,7 +624,7 @@ const nodeViewsManifest = {
       "fields": [
         {
           "name": "rating",
-          "predicate": "https://schema.org/ratingValue",
+          "predicate": "http://schema.org/ratingValue",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
           "maxCount": 1,
@@ -627,22 +643,22 @@ const nodeViewIndex = {
     "recipe": {
       "entity": "RecipeRecipeNode",
       "fragment": "it",
-      "typeIri": "https://schema.org/Recipe"
+      "typeIri": "http://schema.org/Recipe"
     },
     "nutrition": {
       "entity": "RecipeNutritionNode",
       "fragment": "nutrition",
-      "typeIri": "https://schema.org/NutritionInformation"
+      "typeIri": "http://schema.org/NutritionInformation"
     },
     "review": {
       "entity": "RecipeReviewNode",
       "fragment": "review",
-      "typeIri": "https://schema.org/Review"
+      "typeIri": "http://schema.org/Review"
     },
     "rating": {
       "entity": "RecipeRatingNode",
       "fragment": "rating",
-      "typeIri": "https://schema.org/Rating"
+      "typeIri": "http://schema.org/Rating"
     }
   }
 };

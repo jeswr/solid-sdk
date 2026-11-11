@@ -85,13 +85,60 @@ describe("clean schema.org values and private ordering", () => {
     });
   });
 
-  it("sorts mixed private copies with a consistent total order, including duplicate keys", () => {
-    const values = ["000002:C", "z", "000001:B", "000001:A", "a"];
-    const expected = ["A", "B", "C", "a", "z"];
-    expect(decodeOrdered(values)).toEqual(expected);
-    expect(decodeOrdered([...values].reverse())).toEqual(expected);
-    expect(decodeOrdered([...values.slice(2), ...values.slice(0, 2)])).toEqual(expected);
-    expect(decodeOrdered(["000001:same", "000001:same"])).toEqual(["same", "same"]);
+  it.each([
+    ["unprefixed values", ["First", "Second"]],
+    ["mixed values", ["000000:First", "Second"]],
+    ["duplicate positions", ["000000:First", "000000:Second"]],
+    ["repeated identical positions", ["000000:First", "000000:First", "000001:Second"]],
+    ["missing zero", ["000001:First", "000002:Second"]],
+    ["gaps", ["000000:First", "000002:Second"]],
+    ["short positions", ["00000:First", "000001:Second"]],
+    ["long positions", ["0000000:First", "000001:Second"]],
+    ["missing colon", ["000000First", "000001:Second"]],
+    ["empty lines", ["", "000001:Second"]],
+  ])("rejects private copies with %s", (_reason, values) => {
+    expect(decodeOrdered(values)).toBeUndefined();
+    expect(decodeOrdered([...values].reverse())).toBeUndefined();
+  });
+
+  describe.each([
+    ["ingredients", "orderedIngredients"],
+    ["instructions", "orderedInstructions"],
+  ] as const)("validating private %s", (standard, ordered) => {
+    it.each([
+      ["unprefixed", ["Second", "First"]],
+      ["mixed", ["000000:Second", "First"]],
+      ["duplicate", ["000000:Second", "000000:First"]],
+      ["nonzero start", ["000001:Second", "000002:First"]],
+      ["gapped", ["000000:Second", "000002:First"]],
+      [
+        "overlong",
+        Array.from(
+          { length: 2001 },
+          (_, index) => `${String(index).padStart(6, "0")}:${index % 2 ? "First" : "Second"}`,
+        ),
+      ],
+    ])("falls back to standard order for a %s private sequence with matching text", async (_reason, lines) => {
+      const ttl = await entities.Recipe.serialize(url, {
+        name: "Soup",
+        [standard]: ["First", "Second"],
+        [ordered]: lines,
+      });
+      expect((await parseRecipe(url, ttl))?.[standard]).toEqual(["First", "Second"]);
+    });
+  });
+
+  it("accepts only bounded contiguous positions, keeping duplicates and text intact", () => {
+    expect(decodeOrdered([])).toEqual([]);
+    expect(decodeOrdered(["000002:First", "000000:First", "000001:Second\nline"])).toEqual([
+      "First",
+      "Second\nline",
+      "First",
+    ]);
+    const lines = Array.from({ length: 2000 }, (_, index) => `line ${index}`);
+    expect(decodeOrdered(encodeOrdered(lines).reverse())).toEqual(lines);
+    expect(decodeOrdered([...encodeOrdered(lines), "002000:excess"])).toBeUndefined();
+    expect(() => encodeOrdered([...lines, "excess"])).toThrow("2,000");
   });
 });
 

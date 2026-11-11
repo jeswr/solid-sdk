@@ -1,7 +1,7 @@
 {
   "shapesBase": "https://jeswr.org/ns/recipe/shapes#",
   "prefixes": {
-    "schema": "https://schema.org/",
+    "schema": "http://schema.org/",
     "recipe": "https://jeswr.org/ns/recipe#",
     "dct": "http://purl.org/dc/terms/",
     "xsd": "http://www.w3.org/2001/XMLSchema#"
@@ -13,7 +13,7 @@
       "root": "recipe",
       "nodes": {
         "recipe": {
-          "targetClass": "https://schema.org/Recipe",
+          "targetClass": "http://schema.org/Recipe",
           "fragment": "it",
           "fields": {
             "name": {},
@@ -27,7 +27,11 @@
             "totalTime": {},
             "category": {},
             "cuisine": {},
-            "keywords": {},
+            "keywords": {
+              "trim": true,
+              "dropBlank": true,
+              "sortOnRead": true
+            },
             "ingredients": {},
             "instructions": {},
             "favourite": {
@@ -45,14 +49,14 @@
           }
         },
         "nutrition": {
-          "targetClass": "https://schema.org/NutritionInformation",
+          "targetClass": "http://schema.org/NutritionInformation",
           "fragment": "nutrition",
           "fields": {
             "calories": {}
           }
         },
         "review": {
-          "targetClass": "https://schema.org/Review",
+          "targetClass": "http://schema.org/Review",
           "fragment": "review",
           "fields": {},
           "links": {
@@ -60,7 +64,7 @@
           }
         },
         "rating": {
-          "targetClass": "https://schema.org/Rating",
+          "targetClass": "http://schema.org/Rating",
           "fragment": "rating",
           "fields": {
             "rating": {}

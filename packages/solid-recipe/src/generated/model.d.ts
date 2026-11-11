@@ -6,6 +6,8 @@ import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
 export interface MealPlanData {
+  "name": string;
+  "startDate"?: Date;
   "friday"?: string;
   "monday"?: string;
   "saturday"?: string;
@@ -13,10 +15,11 @@ export interface MealPlanData {
   "thursday"?: string;
   "tuesday"?: string;
   "wednesday"?: string;
-  "name": string;
 }
 
 export interface MealPlanWrapper extends EntityWrapper {
+  "name"?: string;
+  "startDate"?: Date;
   "friday"?: string;
   "monday"?: string;
   "saturday"?: string;
@@ -24,7 +27,6 @@ export interface MealPlanWrapper extends EntityWrapper {
   "thursday"?: string;
   "tuesday"?: string;
   "wednesday"?: string;
-  "name"?: string;
 }
 
 export interface MealPlanEntity {
@@ -50,9 +52,6 @@ export interface MealPlanEntity {
 export interface RecipeData {
   "created"?: Date;
   "modified"?: Date;
-  "favourite"?: boolean;
-  "orderedIngredients"?: string[];
-  "orderedInstructions"?: string[];
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;
@@ -67,6 +66,9 @@ export interface RecipeData {
   "recipeYield"?: string;
   "totalTime"?: string;
   "url"?: string;
+  "favourite"?: boolean;
+  "orderedIngredients"?: string[];
+  "orderedInstructions"?: string[];
   "calories"?: string;
   "rating"?: number;
 }
@@ -74,9 +76,6 @@ export interface RecipeData {
 export interface RecipeWrapper extends EntityWrapper {
   "created"?: Date;
   "modified"?: Date;
-  "favourite"?: boolean;
-  readonly "orderedIngredients": Set<string>;
-  readonly "orderedInstructions": Set<string>;
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;
@@ -91,6 +90,9 @@ export interface RecipeWrapper extends EntityWrapper {
   "recipeYield"?: string;
   "totalTime"?: string;
   "url"?: string;
+  "favourite"?: boolean;
+  readonly "orderedIngredients": Set<string>;
+  readonly "orderedInstructions": Set<string>;
 }
 
 export interface RecipeEntity {
@@ -129,9 +131,6 @@ export interface CompositeNodeHandle<W extends EntityWrapper> {
 export interface RecipeRecipeNodeWrapper extends EntityWrapper {
   "created"?: Date;
   "modified"?: Date;
-  "favourite"?: boolean;
-  readonly "orderedIngredients": Set<string>;
-  readonly "orderedInstructions": Set<string>;
   "author"?: string;
   "cookTime"?: string;
   "description"?: string;
@@ -148,6 +147,9 @@ export interface RecipeRecipeNodeWrapper extends EntityWrapper {
   "personalReview"?: string;
   "totalTime"?: string;
   "url"?: string;
+  "favourite"?: boolean;
+  readonly "orderedIngredients": Set<string>;
+  readonly "orderedInstructions": Set<string>;
 }
 
 export interface RecipeNutritionNodeWrapper extends EntityWrapper {

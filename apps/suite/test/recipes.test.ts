@@ -333,6 +333,10 @@ describe("recipe demo seed", () => {
     const result = await store.list();
     expect(result.recipes).toHaveLength(SAMPLE_RECIPES.length);
     expect(result.plans).toHaveLength(1);
+    expect(result.plans[0]?.data).toMatchObject({
+      name: "2026-11-09",
+      startDate: new Date("2026-11-09T00:00:00Z"),
+    });
     const live = { ...session, mode: "solid" } as PodSession;
     const list = vi.spyOn(store, "list");
     await ensureSample(live, store);

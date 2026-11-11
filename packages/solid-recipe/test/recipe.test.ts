@@ -92,14 +92,14 @@ describe("generated model facade", () => {
       }),
     ).toThrow();
   });
-  it("rejects missing names and preserves plain external strings", () => {
+  it("rejects missing names and invalid private copies", () => {
     expect(() => validateRecipe({ ...basic, name: " " })).toThrow();
     expect(decodeOrdered(["000002:third", "000000:first", "000001:second"])).toEqual([
       "first",
       "second",
       "third",
     ]);
-    expect(decodeOrdered(["a", "b", "123:literal"])).toEqual(["a", "b", "123:literal"]);
+    expect(decodeOrdered(["a", "b", "123:literal"])).toBeUndefined();
     expect(encodeOrdered(["000001:text", "x", "x"])).toEqual([
       "000000:000001:text",
       "000001:x",
@@ -123,7 +123,7 @@ describe("generated model facade", () => {
         "https://pod.example/plan",
         await serializeMealPlan("https://pod.example/plan", data),
       ),
-    ).toEqual(data);
+    ).toEqual({ ...data, startDate: new Date("2026-11-09T00:00:00Z") });
   });
 });
 describe("ingredient scaling", () => {

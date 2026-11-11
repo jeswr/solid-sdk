@@ -1,103 +1,126 @@
 @prefix dct: <http://purl.org/dc/terms/>.
 @prefix recipe: <https://jeswr.org/ns/recipe#>.
-@prefix schema: <https://schema.org/>.
+@prefix schema: <http://schema.org/>.
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix shapes: <https://jeswr.org/ns/recipe/shapes#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
 recipe:MealPlanShape a sh:NodeShape;
-    sh:property shapes:014c6e3c5ab1d808f5adf0526508f76b5e70715b7a904f9cea161dfbe136e49a-MealPlan-saturday, shapes:4302928370a05430098eae968f879fb0e984f35fb3bdaa28626b23e1876df770-MealPlan-friday, shapes:99b8a0a2bb96cd9e88ea5dcb0c2a2e30f3563565fa234a4e52a498e80019f8ff-MealPlan-tuesday, shapes:b687e851805d2f78b409035a25aa07b37ca78b72094518d4925d9b5c5b6be878-MealPlan-monday, shapes:b6bcd7d40835f708a5daa30645f1bc41a7d6182d4dd32f1ee9b85007ef2ddf93-MealPlan-thursday, shapes:dca3ac6be9c2b92974df84139f9b6e9425f37012f5de38cb1ad8bbb6e10aa582-MealPlan-wednesday, shapes:f87fa8421ff58691f19de874c813648286ef9d03394b97cdab12898ca27fc0ed-MealPlan-name, shapes:fbe90cd7d1e055c69a01b1a080174586276d10acb2ed9f697876dc5a7edd8415-MealPlan-sunday;
+    sh:property shapes:014c6e3c5ab1d808f5adf0526508f76b5e70715b7a904f9cea161dfbe136e49a-MealPlan-saturday, shapes:4302928370a05430098eae968f879fb0e984f35fb3bdaa28626b23e1876df770-MealPlan-friday, shapes:99b8a0a2bb96cd9e88ea5dcb0c2a2e30f3563565fa234a4e52a498e80019f8ff-MealPlan-tuesday, shapes:ac9e65197a6155df2340b1cdb5a96d69d5df9184222b5d6b34ab4b7449193bcd-MealPlan-name, shapes:b687e851805d2f78b409035a25aa07b37ca78b72094518d4925d9b5c5b6be878-MealPlan-monday, shapes:b6bcd7d40835f708a5daa30645f1bc41a7d6182d4dd32f1ee9b85007ef2ddf93-MealPlan-thursday, shapes:dca3ac6be9c2b92974df84139f9b6e9425f37012f5de38cb1ad8bbb6e10aa582-MealPlan-wednesday, shapes:dd573ffe138220291bf1d4d1c3cf6b74f3dde2c1c5c2affc61fcbf449887a3d3-MealPlan-startDate, shapes:fbe90cd7d1e055c69a01b1a080174586276d10acb2ed9f697876dc5a7edd8415-MealPlan-sunday;
     sh:targetClass recipe:MealPlan.
 recipe:NutritionShape a sh:NodeShape;
-    sh:property shapes:0cdf13b19338892aa1aff81e735c0383a27f635807e646104ab432ba00aed212-NutritionInformation-calories;
+    sh:property shapes:b7b366f63822d09a896b69f19867daa12b0012af00e2e578dec0ec6c9754623d-NutritionInformation-calories;
     sh:targetClass schema:NutritionInformation.
 recipe:RatingShape a sh:NodeShape;
-    sh:property shapes:33ceff6efc14a579ee74e31ed5e535f7342322933bbe26e9de3291c8d28896fa-Rating-ratingValue;
+    sh:property shapes:855c82235bf029f7a77f0ad4b3d0d89a79bf44efaeb8b57eb5b990792bf808c6-Rating-ratingValue;
     sh:targetClass schema:Rating.
 recipe:RecipeShape a sh:NodeShape;
-    sh:property shapes:015a21fae6e5f9600dad524028c5f2c7f89578ae0be19b42b079069fdb12e82f-Recipe-recipeYield, shapes:296e2c420f77b35c836b510b0b3f8d04728fdd70aa02841f6252b21ce5b0318c-Recipe-url, shapes:345d1fa62949ecff7c53041f7e73a4661af91c4796527a310bc1015921aca59b-Recipe-modified, shapes:35bd361fa2796bd44d077e3bb2b36982101282383daa235d2468bff61aaa0798-Recipe-cookTime, shapes:3bcc63bddef07b319b6aec8cbc4d6cbe9f4129ad638c7fd2a2ec93ed8f55879e-Recipe-recipeCategory, shapes:3c330ca321006e2c870ddebe323f2818f0d5473927d22d028ae36faede013d59-Recipe-favourite, shapes:4118ecc2206b0f07018a6a1c51bedabdf7b5dcde568370b656ae2f58a21ec50a-Recipe-totalTime, shapes:59fa90b40801f36d7913adeca8c0915d39c8f29fae6a818cef2b6622f4d95995-Recipe-author, shapes:6425b6aa4fc14bca2a495a060b34bc1e97cac77982bb648e0953d2c69f3a07aa-Recipe-keywords, shapes:854aa02e70a001bb4723653748ff0243d895c1c41b1304ee7a8b6ad60ae2feac-Recipe-review, shapes:afabaf6bb5df6fbf8981d766ec64a450b5a8e3c7ddb6e086729249e28a06a823-Recipe-created, shapes:b11af7c6b941bc63b3601c9347857575b3082b63f383d9392c30114d4ed9fa45-Recipe-recipeIngredient, shapes:b793cedd9204009727a8962faa62313dee3c4fbbda081e42f56971109e1f8744-Recipe-nutrition, shapes:c17a025ba47a69a835dfe8c9a69cba19d0ff885e5bd7370dcb2d7dbc8ea5a56a-Recipe-recipeCuisine, shapes:d153d44eefde87f757787115ca75cbb58d149266e843ff97361a1baedcbcf937-Recipe-orderedInstruction, shapes:e4521c9eb17a9e88ba0bb7127db9e81b04df072e3e9ff4eb120a191e3d26ecf7-Recipe-prepTime, shapes:eca815de5e7103ceaa269c1acc73a76eace00033ead984abde336c795aa3c14e-Recipe-orderedIngredient, shapes:edcf1bf7ea9bfa2e1dfbc663a2a5d7b9a255698036a9609bfe23abaf8c32acfe-Recipe-recipeInstructions, shapes:f04c94a356e847dbf2ac9ee2aa61041747e9968bdc55d47903808ddc9fdf8314-Recipe-image, shapes:f4c889cb78a5c515dba66a0c8139efea9b3fa1f588f5fdb6560984437e145ee1-Recipe-description, shapes:f50a54782040af2e2ef457b062227741ea9a83c53a80db2d9b7aac7afd6ca360-Recipe-name;
+    sh:property shapes:1107afe1cf11b38f9470b2223887759eaa9c41320d20328f1fe09b278df3d6b5-Recipe-orderedInstruction, shapes:1bfbddf26689ed4586f43542c811e79788828ae478939f36ceb51221b7151091-Recipe-recipeIngredient, shapes:2014407882c7ef9ce6a64aa3ce42c688c3282557cc2d598a91176203c20c90c8-Recipe-created, shapes:2c72d966bf07b815513fb5501e90e8f270f8a9193b0c14b66eeecfadcf2fc727-Recipe-nutrition, shapes:3aa68f1cdf3741806374e1e09ff1730289e66d73a2245213ec4ce6adae896043-Recipe-cookTime, shapes:4fee0dae353ad6e70f5bb65650c7e582ce314006ad558a1884ec6e8317910e71-Recipe-favourite, shapes:540b7c89fd09f1e68a83ccba209a36687c95599d0471e9df1f59c3fb215f2705-Recipe-totalTime, shapes:5582044e3241a27af4f1aef0eebb5a7e8d97ac788df361e508747993c6a30b5a-Recipe-orderedIngredient, shapes:5a815ec676abdb305d3e57948840a7a1a9bf27d15284d4657dd7f5d0376e9d25-Recipe-review, shapes:6d281ad26ba42d5fbb291661fc98c42a264a4519abefbb85f760f5a1f43a08db-Recipe-description, shapes:6f143b59f54d7dcf3f56d5e45fc0eda356f4694d70107edab945532041844ae3-Recipe-author, shapes:705aef209db4c18c0c2289cc5f22de42e0c3d50d5e6baeeff405bb227f50810c-Recipe-url, shapes:8a132aee11822e376da8249eed742be810c564628801a4dda70449e78cfe081f-Recipe-recipeCategory, shapes:8bf170c411215d3076b47fced21bfe914cc9ec6405ea06df83f00f930baa05bf-Recipe-name, shapes:8f9ad91a2e583bfcc4c46bead17c8c192e84b620f0d382925e2dd82b44384ec7-Recipe-prepTime, shapes:9ea132ed4ac8308121a1fbd44dceac365ca0fd2a352f609d6e6b596093fd081f-Recipe-recipeYield, shapes:a403e627443b3dcb27065df4c249bab649bf50da0e759a40059f7c748444d76f-Recipe-recipeInstructions, shapes:b2a97bc6125ae72eb94248a6890213d0396d451ac5fbb91e90fee524394ba4f2-Recipe-image, shapes:c76f7ac80d3d9e8c102f02f7220484f54d73ecd23b2928ea290ee5fee65c1869-Recipe-modified, shapes:ea8f8296e8d40815b548fc062afc452bd60c80ebabd54edcca7884eeb7919429-Recipe-recipeCuisine, shapes:f5a3a064acecabee93977152eb23f39def3946007a6c196a1d651aeb2f7c6ce7-Recipe-keywords;
     sh:targetClass schema:Recipe.
 recipe:ReviewShape a sh:NodeShape;
-    sh:property shapes:31f7a13bea2982d3382c9322ee4f1afbe402b9ed413b97563422efa75b371335-Review-reviewRating;
+    sh:property shapes:d1fe62739298763a9a643bc53907f668cdc25b86a43940fad4efdf9fdaa74a12-Review-reviewRating;
     sh:targetClass schema:Review.
 shapes:014c6e3c5ab1d808f5adf0526508f76b5e70715b7a904f9cea161dfbe136e49a-MealPlan-saturday sh:maxCount 1;
     sh:name "saturday";
     sh:nodeKind sh:IRI;
     sh:path recipe:saturday;
     sh:pattern "^https?://".
-shapes:015a21fae6e5f9600dad524028c5f2c7f89578ae0be19b42b079069fdb12e82f-Recipe-recipeYield sh:datatype xsd:string;
+shapes:1107afe1cf11b38f9470b2223887759eaa9c41320d20328f1fe09b278df3d6b5-Recipe-orderedInstruction sh:datatype xsd:string;
+    sh:name "orderedInstructions";
+    sh:path recipe:orderedInstruction.
+shapes:1bfbddf26689ed4586f43542c811e79788828ae478939f36ceb51221b7151091-Recipe-recipeIngredient sh:datatype xsd:string;
+    sh:name "ingredients";
+    sh:path schema:recipeIngredient.
+shapes:2014407882c7ef9ce6a64aa3ce42c688c3282557cc2d598a91176203c20c90c8-Recipe-created sh:datatype xsd:dateTime;
     sh:maxCount 1;
-    sh:name "recipeYield";
-    sh:path schema:recipeYield.
-shapes:0cdf13b19338892aa1aff81e735c0383a27f635807e646104ab432ba00aed212-NutritionInformation-calories sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:name "calories";
-    sh:path schema:calories.
-shapes:296e2c420f77b35c836b510b0b3f8d04728fdd70aa02841f6252b21ce5b0318c-Recipe-url sh:maxCount 1;
-    sh:name "url";
+    sh:name "created";
+    sh:path dct:created.
+shapes:2c72d966bf07b815513fb5501e90e8f270f8a9193b0c14b66eeecfadcf2fc727-Recipe-nutrition sh:maxCount 1;
+    sh:name "nutrition";
+    sh:node recipe:NutritionShape;
     sh:nodeKind sh:IRI;
-    sh:path schema:url;
-    sh:pattern "^https?://".
-shapes:31f7a13bea2982d3382c9322ee4f1afbe402b9ed413b97563422efa75b371335-Review-reviewRating sh:maxCount 1;
-    sh:name "personalRating";
-    sh:node recipe:RatingShape;
-    sh:nodeKind sh:IRI;
-    sh:path schema:reviewRating.
-shapes:33ceff6efc14a579ee74e31ed5e535f7342322933bbe26e9de3291c8d28896fa-Rating-ratingValue sh:datatype xsd:decimal;
-    sh:maxCount 1;
-    sh:maxInclusive 5;
-    sh:minInclusive 0;
-    sh:name "rating";
-    sh:path schema:ratingValue.
-shapes:345d1fa62949ecff7c53041f7e73a4661af91c4796527a310bc1015921aca59b-Recipe-modified sh:datatype xsd:dateTime;
-    sh:maxCount 1;
-    sh:name "modified";
-    sh:path dct:modified.
-shapes:35bd361fa2796bd44d077e3bb2b36982101282383daa235d2468bff61aaa0798-Recipe-cookTime sh:datatype xsd:duration;
+    sh:path schema:nutrition.
+shapes:3aa68f1cdf3741806374e1e09ff1730289e66d73a2245213ec4ce6adae896043-Recipe-cookTime sh:datatype xsd:duration;
     sh:maxCount 1;
     sh:name "cookTime";
     sh:path schema:cookTime.
-shapes:3bcc63bddef07b319b6aec8cbc4d6cbe9f4129ad638c7fd2a2ec93ed8f55879e-Recipe-recipeCategory sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:name "category";
-    sh:path schema:recipeCategory.
-shapes:3c330ca321006e2c870ddebe323f2818f0d5473927d22d028ae36faede013d59-Recipe-favourite sh:datatype xsd:boolean;
-    sh:maxCount 1;
-    sh:name "favourite";
-    sh:path recipe:favourite.
-shapes:4118ecc2206b0f07018a6a1c51bedabdf7b5dcde568370b656ae2f58a21ec50a-Recipe-totalTime sh:datatype xsd:duration;
-    sh:maxCount 1;
-    sh:name "totalTime";
-    sh:path schema:totalTime.
 shapes:4302928370a05430098eae968f879fb0e984f35fb3bdaa28626b23e1876df770-MealPlan-friday sh:maxCount 1;
     sh:name "friday";
     sh:nodeKind sh:IRI;
     sh:path recipe:friday;
     sh:pattern "^https?://".
-shapes:59fa90b40801f36d7913adeca8c0915d39c8f29fae6a818cef2b6622f4d95995-Recipe-author sh:datatype xsd:string;
+shapes:4fee0dae353ad6e70f5bb65650c7e582ce314006ad558a1884ec6e8317910e71-Recipe-favourite sh:datatype xsd:boolean;
     sh:maxCount 1;
-    sh:name "author";
-    sh:path schema:author.
-shapes:6425b6aa4fc14bca2a495a060b34bc1e97cac77982bb648e0953d2c69f3a07aa-Recipe-keywords sh:datatype xsd:string;
-    sh:name "keywords";
-    sh:path schema:keywords.
-shapes:854aa02e70a001bb4723653748ff0243d895c1c41b1304ee7a8b6ad60ae2feac-Recipe-review sh:maxCount 1;
+    sh:name "favourite";
+    sh:path recipe:favourite.
+shapes:540b7c89fd09f1e68a83ccba209a36687c95599d0471e9df1f59c3fb215f2705-Recipe-totalTime sh:datatype xsd:duration;
+    sh:maxCount 1;
+    sh:name "totalTime";
+    sh:path schema:totalTime.
+shapes:5582044e3241a27af4f1aef0eebb5a7e8d97ac788df361e508747993c6a30b5a-Recipe-orderedIngredient sh:datatype xsd:string;
+    sh:name "orderedIngredients";
+    sh:path recipe:orderedIngredient.
+shapes:5a815ec676abdb305d3e57948840a7a1a9bf27d15284d4657dd7f5d0376e9d25-Recipe-review sh:maxCount 1;
     sh:name "personalReview";
     sh:node recipe:ReviewShape;
     sh:nodeKind sh:IRI;
     sh:path schema:review.
+shapes:6d281ad26ba42d5fbb291661fc98c42a264a4519abefbb85f760f5a1f43a08db-Recipe-description sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "description";
+    sh:path schema:description.
+shapes:6f143b59f54d7dcf3f56d5e45fc0eda356f4694d70107edab945532041844ae3-Recipe-author sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "author";
+    sh:path schema:author.
+shapes:705aef209db4c18c0c2289cc5f22de42e0c3d50d5e6baeeff405bb227f50810c-Recipe-url sh:maxCount 1;
+    sh:name "url";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:pattern "^https?://".
+shapes:855c82235bf029f7a77f0ad4b3d0d89a79bf44efaeb8b57eb5b990792bf808c6-Rating-ratingValue sh:datatype xsd:decimal;
+    sh:maxCount 1;
+    sh:maxInclusive 5;
+    sh:minInclusive 0;
+    sh:name "rating";
+    sh:path schema:ratingValue.
+shapes:8a132aee11822e376da8249eed742be810c564628801a4dda70449e78cfe081f-Recipe-recipeCategory sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "category";
+    sh:path schema:recipeCategory.
+shapes:8bf170c411215d3076b47fced21bfe914cc9ec6405ea06df83f00f930baa05bf-Recipe-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:pattern "\\S".
+shapes:8f9ad91a2e583bfcc4c46bead17c8c192e84b620f0d382925e2dd82b44384ec7-Recipe-prepTime sh:datatype xsd:duration;
+    sh:maxCount 1;
+    sh:name "prepTime";
+    sh:path schema:prepTime.
 shapes:99b8a0a2bb96cd9e88ea5dcb0c2a2e30f3563565fa234a4e52a498e80019f8ff-MealPlan-tuesday sh:maxCount 1;
     sh:name "tuesday";
     sh:nodeKind sh:IRI;
     sh:path recipe:tuesday;
     sh:pattern "^https?://".
-shapes:afabaf6bb5df6fbf8981d766ec64a450b5a8e3c7ddb6e086729249e28a06a823-Recipe-created sh:datatype xsd:dateTime;
+shapes:9ea132ed4ac8308121a1fbd44dceac365ca0fd2a352f609d6e6b596093fd081f-Recipe-recipeYield sh:datatype xsd:string;
     sh:maxCount 1;
-    sh:name "created";
-    sh:path dct:created.
-shapes:b11af7c6b941bc63b3601c9347857575b3082b63f383d9392c30114d4ed9fa45-Recipe-recipeIngredient sh:datatype xsd:string;
-    sh:name "ingredients";
-    sh:path schema:recipeIngredient.
+    sh:name "recipeYield";
+    sh:path schema:recipeYield.
+shapes:a403e627443b3dcb27065df4c249bab649bf50da0e759a40059f7c748444d76f-Recipe-recipeInstructions sh:datatype xsd:string;
+    sh:name "instructions";
+    sh:path schema:recipeInstructions.
+shapes:ac9e65197a6155df2340b1cdb5a96d69d5df9184222b5d6b34ab4b7449193bcd-MealPlan-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:pattern "\\S".
+shapes:b2a97bc6125ae72eb94248a6890213d0396d451ac5fbb91e90fee524394ba4f2-Recipe-image sh:maxCount 1;
+    sh:name "image";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
+    sh:pattern "^https?://".
 shapes:b687e851805d2f78b409035a25aa07b37ca78b72094518d4925d9b5c5b6be878-MealPlan-monday sh:maxCount 1;
     sh:name "monday";
     sh:nodeKind sh:IRI;
@@ -108,54 +131,35 @@ shapes:b6bcd7d40835f708a5daa30645f1bc41a7d6182d4dd32f1ee9b85007ef2ddf93-MealPlan
     sh:nodeKind sh:IRI;
     sh:path recipe:thursday;
     sh:pattern "^https?://".
-shapes:b793cedd9204009727a8962faa62313dee3c4fbbda081e42f56971109e1f8744-Recipe-nutrition sh:maxCount 1;
-    sh:name "nutrition";
-    sh:node recipe:NutritionShape;
-    sh:nodeKind sh:IRI;
-    sh:path schema:nutrition.
-shapes:c17a025ba47a69a835dfe8c9a69cba19d0ff885e5bd7370dcb2d7dbc8ea5a56a-Recipe-recipeCuisine sh:datatype xsd:string;
+shapes:b7b366f63822d09a896b69f19867daa12b0012af00e2e578dec0ec6c9754623d-NutritionInformation-calories sh:datatype xsd:string;
     sh:maxCount 1;
-    sh:name "cuisine";
-    sh:path schema:recipeCuisine.
-shapes:d153d44eefde87f757787115ca75cbb58d149266e843ff97361a1baedcbcf937-Recipe-orderedInstruction sh:datatype xsd:string;
-    sh:name "orderedInstructions";
-    sh:path recipe:orderedInstruction.
+    sh:name "calories";
+    sh:path schema:calories.
+shapes:c76f7ac80d3d9e8c102f02f7220484f54d73ecd23b2928ea290ee5fee65c1869-Recipe-modified sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:name "modified";
+    sh:path dct:modified.
+shapes:d1fe62739298763a9a643bc53907f668cdc25b86a43940fad4efdf9fdaa74a12-Review-reviewRating sh:maxCount 1;
+    sh:name "personalRating";
+    sh:node recipe:RatingShape;
+    sh:nodeKind sh:IRI;
+    sh:path schema:reviewRating.
 shapes:dca3ac6be9c2b92974df84139f9b6e9425f37012f5de38cb1ad8bbb6e10aa582-MealPlan-wednesday sh:maxCount 1;
     sh:name "wednesday";
     sh:nodeKind sh:IRI;
     sh:path recipe:wednesday;
     sh:pattern "^https?://".
-shapes:e4521c9eb17a9e88ba0bb7127db9e81b04df072e3e9ff4eb120a191e3d26ecf7-Recipe-prepTime sh:datatype xsd:duration;
+shapes:dd573ffe138220291bf1d4d1c3cf6b74f3dde2c1c5c2affc61fcbf449887a3d3-MealPlan-startDate sh:datatype xsd:date;
     sh:maxCount 1;
-    sh:name "prepTime";
-    sh:path schema:prepTime.
-shapes:eca815de5e7103ceaa269c1acc73a76eace00033ead984abde336c795aa3c14e-Recipe-orderedIngredient sh:datatype xsd:string;
-    sh:name "orderedIngredients";
-    sh:path recipe:orderedIngredient.
-shapes:edcf1bf7ea9bfa2e1dfbc663a2a5d7b9a255698036a9609bfe23abaf8c32acfe-Recipe-recipeInstructions sh:datatype xsd:string;
-    sh:name "instructions";
-    sh:path schema:recipeInstructions.
-shapes:f04c94a356e847dbf2ac9ee2aa61041747e9968bdc55d47903808ddc9fdf8314-Recipe-image sh:maxCount 1;
-    sh:name "image";
-    sh:nodeKind sh:IRI;
-    sh:path schema:image;
-    sh:pattern "^https?://".
-shapes:f4c889cb78a5c515dba66a0c8139efea9b3fa1f588f5fdb6560984437e145ee1-Recipe-description sh:datatype xsd:string;
+    sh:name "startDate";
+    sh:path schema:startDate.
+shapes:ea8f8296e8d40815b548fc062afc452bd60c80ebabd54edcca7884eeb7919429-Recipe-recipeCuisine sh:datatype xsd:string;
     sh:maxCount 1;
-    sh:name "description";
-    sh:path schema:description.
-shapes:f50a54782040af2e2ef457b062227741ea9a83c53a80db2d9b7aac7afd6ca360-Recipe-name sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:name "name";
-    sh:path schema:name;
-    sh:pattern "\\S".
-shapes:f87fa8421ff58691f19de874c813648286ef9d03394b97cdab12898ca27fc0ed-MealPlan-name sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:name "name";
-    sh:path schema:name;
-    sh:pattern "\\S".
+    sh:name "cuisine";
+    sh:path schema:recipeCuisine.
+shapes:f5a3a064acecabee93977152eb23f39def3946007a6c196a1d651aeb2f7c6ce7-Recipe-keywords sh:datatype xsd:string;
+    sh:name "keywords";
+    sh:path schema:keywords.
 shapes:fbe90cd7d1e055c69a01b1a080174586276d10acb2ed9f697876dc5a7edd8415-MealPlan-sunday sh:maxCount 1;
     sh:name "sunday";
     sh:nodeKind sh:IRI;

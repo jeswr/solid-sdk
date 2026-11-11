@@ -2,6 +2,7 @@
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
+import { entities } from "../src/generated/model.js";
 import { recipeSubject, serializeMealPlan } from "../src/model.js";
 import { recipeStore } from "../src/store.js";
 
@@ -16,6 +17,42 @@ async function setup(protocol: "solid" | "lws" = "solid") {
 }
 
 describe.each(["solid", "lws"] as const)("partial recipe listings on %s", (protocol) => {
+  it("lists HTTP recipes and name-only plans, then saves an explicit dated plan", async () => {
+    const { store, storage, good, container, planContainer } = await setup(protocol);
+    const resource = await storage.create(container, null, { contentType: "text/turtle" });
+    const current = await storage.read(resource.url);
+    await storage.write(
+      resource.url,
+      await entities.Recipe.serialize(resource.url, { ...data, name: "Old soup" }),
+      {
+        contentType: "text/turtle",
+        ifMatch: current.etag as string,
+      },
+    );
+    const planResource = await storage.create(planContainer, null, { contentType: "text/turtle" });
+    const planVersion = await storage.read(planResource.url);
+    await storage.write(
+      planResource.url,
+      await entities.MealPlan.serialize(planResource.url, {
+        name: "2026-11-09",
+        monday: recipeSubject(good.url),
+      }),
+      { contentType: "text/turtle", ifMatch: planVersion.etag as string },
+    );
+    const listed = await store.list();
+    expect(listed.skipped).toEqual([]);
+    expect(listed.recipes.map((record) => record.data.name).sort()).toEqual(["Old soup", "Soup"]);
+    const plan = listed.plans[0];
+    if (!plan) throw new Error("Expected the legacy plan");
+    expect(plan.data.startDate).toEqual(new Date("2026-11-09T00:00:00Z"));
+    const saved = await store.savePlan(
+      { ...plan.data, tuesday: recipeSubject(resource.url) },
+      plan,
+    );
+    expect(saved.data).toEqual({ ...plan.data, tuesday: recipeSubject(resource.url) });
+    expect(await (await storage.read(saved.url)).text()).toContain("startDate");
+  });
+
   it.each([
     ["broken.ttl", "this is not Turtle {", "text/turtle"],
     ["photo.txt", "Not a recipe", "text/plain"],

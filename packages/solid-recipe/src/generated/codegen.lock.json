@@ -6,8 +6,8 @@
   },
   "adapter": "owl-rdfs-v1",
   "inputs": {
-    "ontology.ttl": "daf231173961dee66d2767bb8e767dc9b3395bc2eada2821f30216429646cb29",
-    "shapes.shacl.ttl": "707352f79212cefb2eaf522a6983547dc213da3db11e77a51c7a742193f369b6",
-    "codegen.config.json": "695adb5333cdf191e2456703f6fef9c9e7c7402ac0604944f95c46bcfbd0a24a"
+    "ontology.ttl": "132169101b6d2a812519f64b4cc648b2bdafd7733bff5d71f7549b226a26ad6e",
+    "shapes.shacl.ttl": "1068165f7b92a477885b2531abaa62b525f05ecbdd777bd4d0af75840d7da164",
+    "codegen.config.json": "4ddff7b41604e4c37947085f14b7656c93865889b005ab1d4dd85ae4ad905375"
   }
 }

@@ -3,6 +3,7 @@ import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import {
+  DAYS,
   MEAL_PLAN_CLASS,
   type MealPlanData,
   parseMealPlan,
@@ -150,8 +151,8 @@ export function recipeStore(
       return { url: record.url, etag: current.etag, data: parsed };
     },
     async savePlan(data, previous) {
-      for (const [key, value] of Object.entries(data)) {
-        if (key !== "name" && value && !knownRecipes.has(String(value)))
+      for (const day of DAYS) {
+        if (data[day] && !knownRecipes.has(data[day]))
           throw new TypeError("Choose a recipe from your recipe box");
       }
       let url: string;

@@ -85,7 +85,7 @@ it("opens storage, creates recipes/ once and reports Type Index failures without
   };
   const first = await openRecipeStore(input);
   expect(first.container).toBe("https://pod.example/recipes/");
-  expect(wiring.register).toHaveBeenCalledWith("https://schema.org/Recipe", {
+  expect(wiring.register).toHaveBeenCalledWith("http://schema.org/Recipe", {
     container: first.container,
   });
   expect(wiring.register).toHaveBeenCalledWith("https://jeswr.org/ns/recipe#MealPlan", {

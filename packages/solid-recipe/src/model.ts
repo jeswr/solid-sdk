@@ -1,11 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import {
-  entities,
-  type RecipeData as GeneratedRecipe,
-  type MealPlanData,
-} from "./generated/model.js";
 
-export const RECIPE_CLASS = "https://schema.org/Recipe";
+import { entities, type RecipeData as GeneratedRecipe } from "./generated/model.js";
+
+export { type MealPlanData, parseMealPlan, serializeMealPlan } from "./meal-plan.js";
+
+export const RECIPE_CLASS = "http://schema.org/Recipe";
 export const MEAL_PLAN_CLASS = "https://jeswr.org/ns/recipe#MealPlan";
 export const DAYS = [
   "monday",
@@ -17,7 +16,6 @@ export const DAYS = [
   "sunday",
 ] as const;
 export type Day = (typeof DAYS)[number];
-export type { MealPlanData };
 
 type OptionalRecipeFields = Omit<
   GeneratedRecipe,
@@ -33,23 +31,26 @@ export type RecipeData = {
 
 /** RDF sets do not preserve order or duplicates. Prefix each literal before generation. */
 export function encodeOrdered(lines: readonly string[]): string[] {
-  if (lines.length > 999999) throw new TypeError("Too many recipe lines");
+  if (lines.length > 2000) throw new TypeError("Too many recipe lines (maximum 2,000)");
   return lines.map((line, index) => `${String(index).padStart(6, "0")}:${line}`);
 }
 
-/** Decode only the private ordered-copy predicates, never external schema.org text. */
-export function decodeOrdered(lines: readonly string[]): string[] {
-  if (!lines.some((line) => /^\d{6}:/.test(line))) return [...lines];
-  return [...lines]
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((line) => line.replace(/^\d{6}:/, ""));
+/** Invalid private copies return undefined; callers must use the standard text instead. */
+export function decodeOrdered(lines: readonly string[]): string[] | undefined {
+  // The generator rejects this prefix pattern; contiguity and the read cap are domain policy.
+  if (lines.length > 2000 || lines.some((line) => !/^\d{6}:/.test(line))) return undefined;
+  const sorted = [...lines].sort();
+  if (sorted.some((line, index) => !line.startsWith(`${String(index).padStart(6, "0")}:`)))
+    return undefined;
+  return sorted.map((line) => line.slice(7));
 }
 
 /** Trust private ordering only while it agrees with schema.org-only writers. */
 function reconcileOrdered(standard: string[] = [], ordered: string[] = []): string[] {
   const decoded = decodeOrdered(ordered);
   const standardValues = new Set(standard);
-  return new Set(decoded).size === standardValues.size &&
+  return decoded &&
+    new Set(decoded).size === standardValues.size &&
     decoded.every((line) => standardValues.has(line))
     ? decoded
     : standard;
@@ -103,5 +104,3 @@ export async function parseRecipe(
     : undefined;
 }
 export const recipeSubject = entities.Recipe.subject;
-export const serializeMealPlan = entities.MealPlan.serialize;
-export const parseMealPlan = entities.MealPlan.parseDocument;
