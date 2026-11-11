@@ -297,15 +297,32 @@ it("retains drafts after failures, rejects empty/double submissions and refreshe
     expect((button("Refresh comments") as HTMLButtonElement).disabled).toBe(false),
   );
 });
-it("reports load failures and permits retrying a failed load", async () => {
-  const list = vi.spyOn(store, "list").mockRejectedValueOnce(new Error("Can't load"));
-  const view = render(<CellComments store={store} engine={engine} webId={webId} local />);
+it.each([
+  new Error("Can't load"),
+  "offline",
+])("releases editing after a load failure (%s) and permits retrying", async (cause) => {
+  const list = vi.spyOn(store, "list").mockRejectedValueOnce(cause);
+  const onLoadingChange = vi.fn();
+  const view = render(
+    <CellComments
+      store={store}
+      engine={engine}
+      webId={webId}
+      local
+      onLoadingChange={onLoadingChange}
+    />,
+  );
   fireEvent.click(button("Comments (0 on this sheet)"));
-  await screen.findByText("Can't load");
-  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(true);
-  fireEvent.click(button("Refresh comments"));
+  await screen.findByText(cause instanceof Error ? cause.message : "Couldn't load comments.");
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
+  expect(onLoadingChange).toHaveBeenLastCalledWith(false);
+  expect((button("Comment") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.keyDown(window, { key: "m", ctrlKey: true, altKey: true });
+  expect(screen.queryByRole("textbox")).toBeNull();
+  fireEvent.click(button("Retry"));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
+  expect((button("Comment") as HTMLButtonElement).disabled).toBe(false);
   let finish: (rows: []) => void = () => {};
   list.mockImplementationOnce(
     () =>
@@ -320,6 +337,36 @@ it("reports load failures and permits retrying a failed load", async () => {
   const late = render(<CellComments store={store} engine={engine} webId={webId} local />);
   late.unmount();
   await act(async () => {});
+});
+
+it.each([
+  "list",
+  "permissions",
+] as const)("disables comment actions after rejected %s refreshes while registered anchors keep following edits", async (method) => {
+  await seed();
+  await mount();
+  fireEvent.click(button("Comments (1 on this sheet)"));
+  fireEvent.click(button("Edit"));
+  fireEvent.change(screen.getByLabelText("Edit comment"), { target: { value: "Draft edit" } });
+  const edit = vi.spyOn(store, "edit");
+  vi.spyOn(store, method).mockRejectedValueOnce(new Error("Comments unavailable"));
+  fireEvent.focus(window);
+  await screen.findByText("Comments unavailable");
+  expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
+  for (const name of ["Comment", "Reply", "Edit", "Delete", "Resolve", "Send"])
+    expect((button(name) as HTMLButtonElement).disabled, name).toBe(true);
+  fireEvent.submit(screen.getByRole("textbox").closest("form") as HTMLFormElement);
+  expect(edit).not.toHaveBeenCalled();
+  await act(async () =>
+    structure({ sheet: "stable", axis: "row", kind: "insert", index: 1, count: 1 }),
+  );
+  expect(button("Renamed sheet!B4")).toBeTruthy();
+  fireEvent.click(button("Retry"));
+  await waitFor(() => expect((button("Comment") as HTMLButtonElement).disabled).toBe(false));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(button("Renamed sheet!B4")).toBeTruthy();
+  for (const name of ["Comment", "Reply", "Edit", "Delete", "Resolve", "Send"])
+    expect((button(name) as HTMLButtonElement).disabled, name).toBe(false);
 });
 it("renders session-bound comments and uses the anonymous read transport for public views", async () => {
   sessionState.current = { status: "loading" };
@@ -463,15 +510,21 @@ it("isolates late loads and errors across WebID changes even when the store is r
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-it("keeps editing locked when a superseded list finishes before the current list", async () => {
+it.each([
+  "resolve",
+  "reject",
+] as const)("keeps editing locked when a superseded list settles (%s) before the current list", async (outcome) => {
   await seed();
   const list = vi.spyOn(store, "list");
   let first: () => void = () => {};
   let second: () => void = () => {};
   list.mockImplementationOnce(
     () =>
-      new Promise((resolve) => {
-        first = () => resolve([{ root, replies: [] }]);
+      new Promise((resolve, reject) => {
+        first = () =>
+          outcome === "resolve"
+            ? resolve([{ root, replies: [] }])
+            : reject(new Error("Superseded load"));
       }),
   );
   render(<CellComments store={store} engine={engine} webId={webId} local />);
@@ -482,9 +535,11 @@ it("keeps editing locked when a superseded list finishes before the current list
       }),
   );
   fireEvent.focus(window);
+  fireEvent.click(button("Comments (0 on this sheet)"));
   await act(async () => first());
   expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(true);
   expect(engine.snapshot().commentAnchors).toBeUndefined();
+  expect(screen.queryByRole("alert")).toBeNull();
   await act(async () => second());
   expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
   expect(engine.snapshot().commentAnchors).toEqual({
@@ -566,7 +621,7 @@ it("clears a persisted draft before a failed refresh and retries only the refres
   expect(screen.getByRole("status").textContent).toBe("Comment sent.");
   expect(screen.queryByRole("textbox")).toBeNull();
   expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
-  fireEvent.click(button("Refresh comments"));
+  fireEvent.click(button("Retry"));
   await screen.findByText("Sent once");
   expect(create).toHaveBeenCalledTimes(1);
   expect(list).toHaveBeenCalledTimes(2);

@@ -104,6 +104,7 @@ export function CellComments({
   }>();
   const [text, setText] = useState("");
   const [error, setError] = useState<string>();
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each identity change starts a new asynchronous lifetime
   const lifetime = useMemo(
@@ -119,17 +120,28 @@ export function CellComments({
   const toggle = useRef<HTMLButtonElement>(null);
   const refresh = async () => {
     const revision = ++lifetime.revision;
+    setLoaded(false);
     engine?.setCommentsLoading?.(true);
     onLoadingChange?.(true);
-    const [rows, access] = await Promise.all([store.list(), store.permissions()]);
-    if (isCurrent() && revision === lifetime.revision) {
-      engine?.registerCommentAnchors?.(
-        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
-      );
-      engine?.setCommentsLoading?.(false);
-      onLoadingChange?.(false);
-      setThreads(rows);
-      setPermissions(local ? access : { append: false, write: false });
+    try {
+      const [rows, access] = await Promise.all([store.list(), store.permissions()]);
+      if (isCurrent() && revision === lifetime.revision) {
+        engine?.registerCommentAnchors?.(
+          Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
+        );
+        setThreads(rows);
+        setPermissions(local ? access : { append: false, write: false });
+        setLoaded(true);
+        setError(undefined);
+      }
+    } catch (cause) {
+      if (isCurrent() && revision === lifetime.revision)
+        setError(cause instanceof Error ? cause.message : "Couldn't load comments.");
+    } finally {
+      if (isCurrent() && revision === lifetime.revision) {
+        engine?.setCommentsLoading?.(false);
+        onLoadingChange?.(false);
+      }
     }
   };
   // Store identity fences account/navigation changes; controls refresh on demand too.
@@ -144,9 +156,7 @@ export function CellComments({
     setBusy(false);
     setPermissions({ append: false, write: false });
     const load = () => {
-      void refresh().catch((cause: Error) => {
-        if (isCurrent()) setError(cause.message);
-      });
+      void refresh();
     };
     load();
     window.addEventListener("focus", load);
@@ -169,13 +179,13 @@ export function CellComments({
   useEffect(() => {
     if (composer) input.current?.focus();
   }, [composer]);
+  const loadReason = !loaded ? "Refresh comments before making changes." : undefined;
   const reason = !navigator.onLine
     ? "Reconnect to comment."
-    : !permissions.append
-      ? "You need Append access to the comments container."
-      : undefined;
+    : (loadReason ??
+      (!permissions.append ? "You need Append access to the comments container." : undefined));
   const start = (kind: "add" | "reply" | "edit", entry?: CellComment) => {
-    if (lifetime.locked) return;
+    if (lifetime.locked || !loaded) return;
     if (
       (kind === "edit"
         ? !navigator.onLine || !local || !entry?.writable || entry.creator !== webId
@@ -244,7 +254,12 @@ export function CellComments({
     composer?.kind === "add" &&
     (composerAnchor?.deleted || !sheets?.[composerAnchor?.sheetId as string]);
   const composerReason =
-    composer?.kind === "edit" ? (!navigator.onLine ? "Reconnect to comment." : undefined) : reason;
+    loadReason ??
+    (composer?.kind === "edit"
+      ? !navigator.onLine
+        ? "Reconnect to comment."
+        : undefined
+      : reason);
   return (
     <>
       <div className="sht-comment-tools" role="toolbar" aria-label="Cell comments">
@@ -282,7 +297,7 @@ export function CellComments({
             </Button>
           </div>
           <Button variant="ghost" disabled={busy} onClick={() => void run()}>
-            Refresh comments
+            {error && !loaded ? "Retry" : "Refresh comments"}
           </Button>
           {sent && <p role="status">Comment sent.</p>}
           {error && <p role="alert">{error}</p>}
@@ -305,14 +320,14 @@ export function CellComments({
                     <div className="sht-comment-tools">
                       <Button
                         variant="ghost"
-                        disabled={busy}
+                        disabled={busy || !loaded}
                         onClick={() => start("edit", comment)}
                       >
                         Edit
                       </Button>
                       <Button
                         variant="ghost"
-                        disabled={busy}
+                        disabled={busy || !loaded}
                         onClick={() => void run(() => store.delete(comment, webId))}
                       >
                         Delete
@@ -355,7 +370,7 @@ export function CellComments({
                     </CommentHint>
                     <Button
                       variant="ghost"
-                      disabled={busy || !local || !root.writable}
+                      disabled={busy || !loaded || !local || !root.writable}
                       title={
                         !local || !root.writable
                           ? "You need Write access to resolve comments."

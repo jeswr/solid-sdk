@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ISheetDataValidationRule, IWorkbookData } from "@univerjs/core";
+import { act, createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 
@@ -46,7 +47,7 @@ const headless = await vi.hoisted(async () => {
 
 // Replace only the browser preset bootstrap. The app's mountUniver, snapshot(),
 // load(), real facade, resource models and command bus run unchanged.
-// No DOM, canvas or browser globals are stubbed.
+// The engine needs no DOM or canvas. Failure regressions mount the panel in a temporary DOM.
 vi.mock("@univerjs/core", () => headless.core);
 vi.mock("@univerjs/sheets", () => headless.sheets);
 vi.mock("@univerjs/presets", () => ({
@@ -68,8 +69,158 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
 vi.mock("@univerjs/preset-sheets-core/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-data-validation/locales/en-US", () => ({ default: {} }));
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({ default: {} }));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "loading" }),
+}));
 
+import { CellComments } from "../src/apps/sheets/components/cell-comments";
+import { currentCommentAnchor } from "../src/apps/sheets/lib/comments/anchors";
+import { CellCommentStore } from "../src/apps/sheets/lib/comments/store";
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
+import { harness, WEBID } from "./sheets-workbook-helpers";
+
+it.each([
+  "list",
+  "permissions",
+] as const)("recovers native editing, undo/redo and CSV import after rejected comments %s", async (method) => {
+  const pod = await harness();
+  const anchor = { sheetId: "data", cell: "B2", deleted: false };
+  const book = await pod.service.create({ title: "Failed comments" });
+  const store = new CellCommentStore(book.container, pod.fetch);
+  const root = await store.create("Existing comment", WEBID, anchor);
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "failed-comments",
+      name: "Failed comments",
+      sheetOrder: ["data"],
+      sheets: {
+        data: {
+          id: "data",
+          name: "Data",
+          rowCount: 10,
+          columnCount: 4,
+          cellData: { 1: { 1: { v: "Original", t: 1 } } },
+        },
+      },
+      commentAnchors: { version: 1, anchors: { [root.url]: { sheetId: "data", cell: "B2" } } },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("failed-comments");
+  const commands = injector?.get(headless.core.ICommandService);
+  const execute = async (id: string, params?: object) => {
+    let result: boolean | undefined;
+    await act(async () => {
+      result = await commands?.executeCommand(id, params);
+    });
+    return result;
+  };
+  const { createRequire } = await import("node:module");
+  const { JSDOM } = createRequire(
+    new URL("../../../packages/suite-ui/package.json", import.meta.url),
+  )("jsdom");
+  const { window: dom } = new JSDOM("<!doctype html><html><body></body></html>");
+  for (const key of [
+    "window",
+    "document",
+    "navigator",
+    "HTMLElement",
+    "Element",
+    "Node",
+    "MutationObserver",
+    "getComputedStyle",
+  ])
+    vi.stubGlobal(key, key === "window" ? dom : dom[key]);
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { createRoot } = await import("react-dom/client");
+  const host = document.createElement("div");
+  document.body.append(host);
+  const panel = createRoot(host);
+  const click = async (button: HTMLButtonElement) => {
+    await act(async () => {
+      button.click();
+    });
+  };
+  const loading = vi.fn();
+  await act(async () => {
+    panel.render(
+      createElement(CellComments, {
+        store,
+        engine,
+        webId: WEBID,
+        local: true,
+        onLoadingChange: loading,
+      }),
+    );
+  });
+  try {
+    await vi.waitFor(() => expect(loading).toHaveBeenLastCalledWith(false));
+    const toggle = host.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (!toggle) throw new Error("Missing comments toggle");
+    await click(toggle);
+    vi.spyOn(store, method).mockRejectedValueOnce(new Error("Comments unavailable"));
+    // The other request never settles: rejection must release both loading flags at once.
+    vi.spyOn(store, method === "list" ? "permissions" : "list").mockReturnValueOnce(
+      new Promise<never>(() => {}),
+    );
+    await act(async () => {
+      window.dispatchEvent(new window.Event("focus"));
+    });
+    expect(host.querySelector('[role="alert"]')?.textContent).toBe("Comments unavailable");
+    expect(loading).toHaveBeenLastCalledWith(false);
+    const buttons = [...host.querySelectorAll<HTMLButtonElement>("button")];
+    for (const name of ["Comment", "Reply", "Edit", "Delete", "Resolve"])
+      expect(buttons.find((button) => button.textContent === name)?.disabled, name).toBe(true);
+    const params = { unitId: "failed-comments", subUnitId: "data" };
+    const value = () =>
+      (engine.snapshot() as unknown as IWorkbookData).sheets.data?.cellData?.[1]?.[1]?.v;
+    expect(
+      await execute("sheet.command.set-range-values", {
+        ...params,
+        range: { startRow: 1, endRow: 1, startColumn: 1, endColumn: 1 },
+        value: { v: "Edited" },
+      }),
+    ).toBe(true);
+    expect(value()).toBe("Edited");
+    expect(await execute("univer.command.undo")).toBe(true);
+    expect(value()).toBe("Original");
+    expect(await execute("univer.command.redo")).toBe(true);
+    expect(value()).toBe("Edited");
+    expect(
+      await execute("sheet.command.insert-row", {
+        ...params,
+        range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 3 },
+        direction: headless.core.Direction.UP,
+      }),
+    ).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    expect(await execute("univer.command.undo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B2");
+    expect(await execute("univer.command.redo")).toBe(true);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    await act(async () => {
+      expect(engine.importCsv("Label\nImported", { mode: "new-sheet", name: "Imported" })).toEqual({
+        status: "imported",
+      });
+    });
+    const retry = buttons.find((button) => button.textContent === "Retry");
+    if (!retry) throw new Error("Missing Retry button");
+    await click(retry);
+    await vi.waitFor(() => expect(host.querySelector('[role="alert"]')).toBeNull());
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe("B3");
+    expect(buttons.find((button) => button.textContent === "Reply")?.disabled).toBe(false);
+  } finally {
+    await act(async () => {
+      panel.unmount();
+    });
+    dom.close();
+    engine.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
+});
 
 it.each([
   "undo",

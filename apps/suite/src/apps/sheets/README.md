@@ -95,8 +95,10 @@ all anchors and open drafts, including those created after the command. Only
 reversing the command that deleted a cell revives its anchors; an unrelated
 insertion leaves them deleted. Editing stays locked from engine mount until the
 initial comment list has loaded and missing anchors are registered. Refreshes
-also hold editing until registration completes; a failed load keeps the lock
-until a successful retry. This lock cannot override view-only access. These anchors
+also hold editing until registration completes. A failed load releases editing,
+CSV import and undo/redo, shows an error with Retry, and disables comment actions
+until a load succeeds. Registered anchors continue following edits. This lock cannot
+override view-only access. These anchors
 commit atomically with the guarded workbook snapshot; reloading a winning revision
 discards the losing client's transformations. Moving anchors never writes comment RDF.
 Deleted anchors and missing sheets display “Cell deleted”. Open drafts follow the

@@ -106,6 +106,30 @@ it("disables CSV import during the initial comment load", async () => {
   await ui.unmount();
 });
 
+it.each([
+  "list",
+  "permissions",
+] as const)("releases CSV import after a rejected comments %s load", async (method) => {
+  const comments = deferred<never>();
+  vi.spyOn(CellCommentStore.prototype, method).mockReturnValue(comments.promise);
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Failed comments", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  await key(button("File"), "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (element) => element.textContent === "Import CSV",
+  );
+  if (!item) throw new Error("Missing CSV import item");
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => comments.reject(new Error("Comments unavailable")));
+  expect(item.getAttribute("aria-disabled")).toBeNull();
+  await click(item);
+  expect(document.querySelector("fieldset")?.disabled).toBe(false);
+  expect(button("Choose CSV file").disabled).toBe(false);
+  await ui.unmount();
+});
+
 it("preserves a chosen CSV and retries when comments start loading during the file read", async () => {
   const service = mocks.service as WorkbookService;
   const book = await service.create({ title: "Refresh", snapshot: snapshot() });
