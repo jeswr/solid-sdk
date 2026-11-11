@@ -94,3 +94,18 @@ production deployment remain with the portfolio maintainer.
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Environment sector
+
+`sectors/environment/` reuses SOSA observations, sensors, hosting platforms and features
+of interest with QUDT quantity values and units. Its closed `envr:` property inventory
+covers indoor air readings and numeric fan/filter telemetry; those individuals are
+provisional pending maintainer review. Rooms are FeaturesOfInterest, distinct from
+sensor hosting platforms. CO2 uses the authorized generic `DimensionlessRatio` fallback.
+Text-valued purifier modes are omitted. The generated client model is
+[`@jeswr/solid-environment`](../solid-environment/README.md).
+The regular sector build publishes Turtle, SHACL, a JSON-LD context and term-table HTML;
+the offline fixture gate covers every environment NodeShape with positive/negative data.

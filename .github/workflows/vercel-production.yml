@@ -69,6 +69,17 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN"
+      # apps/suite/next.config.ts refuses demo fixtures in deployment builds. The Vercel project
+      # still sets NEXT_PUBLIC_DEV_FIXTURES=1 (for the /dev/components gallery), which failed every
+      # production build from 4 Nov and left production on a stale build. Drop it from the pulled
+      # environment so the guard holds and production tracks main.
+      - name: Remove demo fixtures from the deployment environment
+        if: steps.plan.outputs.deploy == 'true'
+        run: |
+          env_file=.vercel/.env.production.local
+          test -f "$env_file"
+          sed -i '/^NEXT_PUBLIC_DEV_FIXTURES=/d' "$env_file"
+          if grep -q '^NEXT_PUBLIC_DEV_FIXTURES=' "$env_file"; then exit 1; fi
       # Builds on the runner, so the token is not in the environment of repository build code.
       - name: Build
         if: steps.plan.outputs.deploy == 'true'

@@ -37,6 +37,59 @@ async function setup() {
 }
 
 it.each([
+  null,
+  "viewer",
+] as const)("refuses narrowOnly person grants after the current role changes to %s", async (role) => {
+  const { note, session, adapter, calls } = await setup();
+  const other = new VerifiedWacSharingAdapter(session);
+  await other.load(note.url, signal());
+  await other.setPerson(note.url, BOB, role);
+  calls.length = 0;
+
+  await expect(
+    adapter.setPerson(note.url, BOB, "editor", { narrowOnly: true }),
+  ).rejects.toMatchObject({ code: "would-grant" });
+  expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  expect(
+    (await other.load(note.url, signal())).people.find((person) => person.webId === BOB)?.role,
+  ).toBe(role ?? undefined);
+});
+
+it.each([
+  { mode: "restricted" },
+  { mode: "link", role: "viewer" },
+] as const)("refuses narrowOnly general grants after access changes to %j", async (general) => {
+  const { note, session, adapter, calls } = await setup();
+  const other = new VerifiedWacSharingAdapter(session);
+  await other.load(note.url, signal());
+  await other.setGeneral(note.url, general);
+  calls.length = 0;
+
+  await expect(
+    adapter.setGeneral(note.url, { mode: "link", role: "editor" }, { narrowOnly: true }),
+  ).rejects.toMatchObject({ code: "would-grant" });
+  expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  expect((await other.load(note.url, signal())).general).toEqual(general);
+});
+
+it.each(["person", "general"] as const)("allows a narrowOnly %s downgrade", async (kind) => {
+  const { note, image, access, adapter, calls } = await setup();
+  if (kind === "person") await adapter.setPerson(note.url, BOB, "viewer", { narrowOnly: true });
+  else await adapter.setGeneral(note.url, { mode: "link", role: "viewer" }, { narrowOnly: true });
+
+  expect(calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+    `${note.url}.acl`,
+    `${image}.acl`,
+  ]);
+  for (const url of [note.url, image]) {
+    const saved = await access.load(url, signal());
+    if (kind === "person") expect(saved.people).toContainEqual({ webId: BOB, role: "viewer" });
+    else expect(saved.general).toEqual({ mode: "link", role: "viewer" });
+  }
+  expect((await adapter.load(note.url, signal())).updateWarning).toBeUndefined();
+});
+
+it.each([
   "person",
   "general",
 ] as const)("refuses a note downgrade that would grant %s access on the reloaded policy", async (kind) => {
@@ -179,13 +232,15 @@ it.each([
 it.each([
   "person",
   "general",
-] as const)("reports an error and leaves images unchanged when the %s setter rejects before commit", async (kind) => {
-  const { note, image, adapter, access, calls, setHook } = await setup();
-  setHook((call) =>
-    call.method === "PUT" && call.url === `${note.url}.acl`
-      ? new Response(null, { status: 503 })
-      : undefined,
-  );
+] as const)("retains pending images when an ambiguous %s PUT commits after an unchanged reconciliation read", async (kind) => {
+  const { note, image, adapter, access, calls, setHook, pod } = await setup();
+  let pending: { url: string; init: RequestInit } | undefined;
+  setHook((call) => {
+    if (call.method === "PUT" && call.url === `${note.url}.acl`) {
+      pending = call;
+      return new Response(null, { status: 503 });
+    }
+  });
   const change =
     kind === "person"
       ? adapter.setPerson(note.url, BOB, null)
@@ -197,6 +252,33 @@ it.each([
     role: "editor",
   });
   expect((await access.load(image, signal())).general.role).toBe("editor");
+  const unchanged = await adapter.load(note.url, signal());
+  expect(unchanged.people).toContainEqual({ webId: BOB, role: "editor" });
+  expect(unchanged.general.role).toBe("editor");
+  expect(unchanged.updateWarning).toContain(image);
+
+  // The failed request reaches storage only after recovery read the old policy.
+  if (!pending) throw new Error("Expected a pending note ACL write");
+  expect((await pod.fetch(pending.url, pending.init)).ok).toBe(true);
+  const committed = await adapter.load(note.url, signal());
+  if (kind === "person")
+    expect(committed.people.some((person) => person.webId === BOB)).toBe(false);
+  else expect(committed.general.mode).toBe("restricted");
+  expect(committed.updateWarning).toContain(image);
+  expect((await access.load(image, signal())).people).toContainEqual({
+    webId: BOB,
+    role: "editor",
+  });
+  expect((await access.load(image, signal())).general.role).toBe("editor");
+
+  // A successful retry for the same audience reconciles the pending images.
+  setHook(() => undefined);
+  if (kind === "person") await adapter.setPerson(note.url, BOB, null);
+  else await adapter.setGeneral(note.url, { mode: "restricted" });
+  const reconciled = await access.load(image, signal());
+  if (kind === "person")
+    expect(reconciled.people.some((person) => person.webId === BOB)).toBe(false);
+  else expect(reconciled.general.mode).toBe("restricted");
   expect((await adapter.load(note.url, signal())).updateWarning).toBeUndefined();
 });
 

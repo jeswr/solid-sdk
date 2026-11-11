@@ -22,7 +22,8 @@ vi.mock("@jeswr/app-shell", async (importOriginal) => ({
   useSolidExtensionPresent: () => extensionPresent,
 }));
 
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
   useSession: () => ({
     webId: "https://alice.example/profile/card#me",
     session: {
