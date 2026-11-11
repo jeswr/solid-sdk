@@ -1,13 +1,16 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
 import { applySharing, loadSharing } from "../src/apps/drive/lib/sharing/adapter";
+import { createHealthStore } from "../src/apps/health/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { legacyDemoHealthPod } from "./demo-health-fixture";
 
 // Reuse the workspace's installed IndexedDB fixture; no added dependency.
 const { IDBFactory, IDBObjectStore } = createRequire(
@@ -63,6 +66,27 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.resetModules();
   TestChannel.peers.clear();
+});
+
+it("durably upgrades saved demo Health privacy while preserving existing edits", async () => {
+  storage();
+  const legacy = await legacyDemoHealthPod(Date.UTC(2026, 10, 1));
+  await legacy.fetch(`${DEMO_ROOT}drive/keep.txt`, { method: "PUT", body: "Keep this edit" });
+  await stored({ revision: "before-health-upgrade", snapshot: legacy.snapshot() });
+  const firstTab = await tab();
+  const secondTab = await tab();
+  const [demo, concurrent] = await Promise.all([firstTab.getDemoPod(), secondTab.getDemoPod()]);
+  expect(await (await concurrent.fetch(`${DEMO_ROOT}health/.acl`)).text()).not.toContain(
+    "maracoach",
+  );
+  await createHealthStore(demo.fetch, DEMO_ROOT, DEMO_WEBID).initialize();
+  const reloaded = await (await tab()).getDemoPod();
+  await createHealthStore(reloaded.fetch, DEMO_ROOT, DEMO_WEBID).initialize();
+  expect(await (await reloaded.fetch(`${DEMO_ROOT}drive/keep.txt`)).text()).toBe("Keep this edit");
+  expect(await (await reloaded.fetch(`${DEMO_ROOT}health/.acl`)).text()).not.toContain("maracoach");
+  expect(await (await reloaded.fetch(`${DEMO_ROOT}health/activity.ttl.acl`)).text()).toContain(
+    "maracoach",
+  );
 });
 
 it.each([
