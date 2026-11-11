@@ -6,8 +6,13 @@ import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { sanitizeMessageHtml } from "../mime";
 import {
   archive,
+  createDraft,
+  type Draft,
+  type DraftInput,
+  discardDraft,
   documentOf,
   importMbox,
+  isAppDraft,
   loadFolders,
   loadThread,
   loadThreads,
@@ -17,9 +22,12 @@ import {
   mailDocument,
   mailRoot,
   persistImportedMail,
+  readDraft,
+  type SavedDraft,
   setLabel,
   setRead,
   setStarred,
+  updateDraft,
 } from "../model";
 import { mailAddressName, mailAttachments, privateMailIndex } from "../model/client-support";
 import { type QuotedText, QuoteError, splitQuotedText } from "../quotes";
@@ -228,6 +236,9 @@ export class MailClient {
         ...(message.encoding === undefined ? {} : { originalUrl: message.encoding }),
         read: message.isRead,
         starred: [...message.folderIris].some((f) => folderKey(f) === "starred"),
+        draft:
+          isAppDraft(this.rootOf(message.value), message.value) &&
+          [...message.folderIris].some((f) => folderKey(f) === "drafts"),
         labels: [...message.folderIris],
         attachments: await mailAttachments(this.store, message.value),
       });
@@ -274,6 +285,39 @@ export class MailClient {
     if (this.rootOf(iri) !== this.rootOf(folderIri))
       throw new TypeError("Labels must belong to the same account");
     await setLabel(this.store, iri, folderIri, on);
+  }
+  /**
+   * Saves a new draft (no `draft`) or rewrites the version the caller read (its ETag); returns
+   * the draft and its new validator. A newer version saved elsewhere fails with `conflict`.
+   */
+  async saveDraft(account: string, input: DraftInput, draft?: SavedDraft): Promise<SavedDraft> {
+    const root = this.root(account);
+    if (draft === undefined)
+      return createDraft(this.store, root, this.webId, input, crypto.randomUUID(), new Date());
+    if (this.rootOf(draft.iri) !== root)
+      throw new TypeError("Drafts must belong to the same account");
+    return updateDraft(this.store, root, draft, input, new Date());
+  }
+  async draft(iri: string): Promise<Draft> {
+    return readDraft(this.store, this.rootOf(iri), iri);
+  }
+  async discardDraft(draft: SavedDraft): Promise<void> {
+    await discardDraft(this.store, this.rootOf(draft.iri), draft, async (url, etag) => {
+      const response = await this.binaryFetch(url, {
+        method: "DELETE",
+        ...(etag ? { headers: { "if-match": etag } } : {}),
+      });
+      // Already gone is the goal state.
+      if (!response.ok && response.status !== 404)
+        throw new MailError(
+          response.status === 401 || response.status === 403
+            ? "forbidden"
+            : response.status === 412
+              ? "conflict"
+              : "http",
+          response.status,
+        );
+    });
   }
   async createLabel(account: string, title: string): Promise<string> {
     const name = title.trim();
