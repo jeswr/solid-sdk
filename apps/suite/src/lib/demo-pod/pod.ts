@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
-// AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * An in-browser demo pod: a `fetch` implementation that behaves like a small
  * Solid (LDP) server over an in-memory resource map, so the suite's real data
@@ -410,7 +410,9 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       };
       return respond(200, headers, head ? undefined : await listing(url));
     }
-    return respond(404);
+    // Clients need the authoritative ACL location even before a resource exists,
+    // so they can check its own policy before following private inheritance.
+    return respond(404, { link: linkHeader(url) });
   };
 
   // The demo server can expose an atomic receipt that standard LDP lacks.
@@ -433,12 +435,18 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     }
     const at = now();
     if (isContainerUrl(url)) {
-      if (containers.has(url)) return respond(205, parentValidators(url));
+      if (containers.has(url))
+        return respond(205, { link: linkHeader(url), ...parentValidators(url) });
       if (resources.has(url.slice(0, -1))) return respond(409);
       ensureContainer(url, at);
       const receipt = parentValidators(url);
       notify(url);
-      return respond(201, { location: url, etag: containerEtag(url), ...receipt });
+      return respond(201, {
+        location: url,
+        etag: containerEtag(url),
+        link: linkHeader(url),
+        ...receipt,
+      });
     }
     if (containers.has(`${url}/`)) return respond(409);
     const existed = resources.has(url);
