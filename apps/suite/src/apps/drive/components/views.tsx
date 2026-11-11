@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
 import { AppHeading } from "@/shell/app-frame";
 import { usePageRouteParams } from "../../../lib/route-params";
+import { workbookHref } from "../../sheets/lib/routes";
 import {
   type DriveClient,
   DriveError,
@@ -21,7 +22,6 @@ import {
   nameOf,
   parentOf,
 } from "../lib/client/client";
-import { sheetsHref } from "../lib/open-with/sheets";
 import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
@@ -482,8 +482,8 @@ function ResolvedPreviewRouteView({ url }: { url: string }) {
 
 function WorkbookRedirect({ url }: { url: string }) {
   const router = useRouter();
-  useEffect(() => router.replace(sheetsHref(url)), [router, url]);
-  return <a href={sheetsHref(url)}>Open spreadsheet in Sheets</a>;
+  useEffect(() => router.replace(workbookHref(url)), [router, url]);
+  return <a href={workbookHref(url)}>Open spreadsheet in Sheets</a>;
 }
 
 export function TrashView() {

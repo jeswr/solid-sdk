@@ -9,9 +9,8 @@ import {
   SHEETS_FOREIGN_REASON,
   SHEETS_READ_ONLY_REASON,
   SHEETS_TOO_LARGE_REASON,
-  sheetsHref,
 } from "../src/apps/drive/lib/open-with/sheets";
-import { decodeRef } from "../src/lib/refs";
+import { encodeRef } from "../src/lib/refs";
 
 const ROOT = "https://pod.test/alice/";
 const csv: DriveItem = { url: `${ROOT}drive/Budget.CSV`, name: "Budget.CSV", kind: "file" };
@@ -38,9 +37,8 @@ describe("Open with Sheets", () => {
     const book = { ...csv, kind: "folder" as const, workbook: true as const };
     expect(state(book, { offlineReason: "Offline", sheetsWritable: false })).toEqual({
       kind: "open",
-      href: sheetsHref(book.url),
+      href: `/sheets/s/${encodeRef(book.url)}`,
     });
-    expect(decodeRef(sheetsHref(book.url).slice("/sheets/".length))).toBe(book.url);
     expect(state(csv, { offlineReason: "Offline", sheetsWritable: false })).toEqual({
       kind: "convert",
       disabledReason: "Offline",

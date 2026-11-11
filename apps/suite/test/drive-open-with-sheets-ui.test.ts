@@ -63,20 +63,22 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({
   useFolder: mocks.folders,
 }));
 vi.mock("../src/lib/route-params", () => ({
-  usePageRouteParams: () => ({ ref: sheetsHref(BOOK.url).slice("/sheets/".length) }),
+  usePageRouteParams: () => ({ ref: encodeRef(BOOK.url) }),
 }));
 
+import { ResourceWriteError } from "../src/apps/docs/lib/model/errors";
 import { FileBrowser } from "../src/apps/drive/components/file-browser";
 import { ItemIcon } from "../src/apps/drive/components/item-icon";
 import { type MenuEntry, useItemMenu } from "../src/apps/drive/components/item-menu";
 import { PreviewDialog } from "../src/apps/drive/components/preview";
 import { FolderRefView } from "../src/apps/drive/components/views";
-import { SHEETS_READ_ONLY_REASON, sheetsHref } from "../src/apps/drive/lib/open-with/sheets";
+import { SHEETS_READ_ONLY_REASON } from "../src/apps/drive/lib/open-with/sheets";
 import {
   type OpenWithSheetsControl,
   useOpenWithSheets,
 } from "../src/apps/drive/state/open-with-sheets";
 import { DriveUiProvider, useDriveActions, useDriveUi } from "../src/apps/drive/state/ui";
+import { encodeRef } from "../src/lib/refs";
 
 let control: OpenWithSheetsControl | undefined;
 function Hook({ item }: { item: DriveItem | undefined }) {
@@ -112,7 +114,7 @@ describe("Drive Sheets conversion control", () => {
     }
     await mount(h(Hook, { item: BOOK }));
     await act(() => control?.run());
-    expect(mocks.router.push).toHaveBeenCalledWith(sheetsHref(BOOK.url));
+    expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
@@ -136,7 +138,7 @@ describe("Drive Sheets conversion control", () => {
     expect(mocks.toast.loading).toHaveBeenCalledWith("Opening Budget.csv with Sheets…");
     expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading");
     expect(invalidate).toHaveBeenCalledWith(BOOK.url);
-    expect(mocks.router.push).toHaveBeenCalledWith(sheetsHref(BOOK.url));
+    expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
   });
 
   it("disables offline and read-only conversions and rechecks Write at activation", async () => {
@@ -163,19 +165,22 @@ describe("Drive Sheets conversion control", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it("reports importer failures with a fallback for non-errors and clears progress", async () => {
+  it.each([
+    [new Error("Invalid CSV"), "Invalid CSV"],
+    [new Error(""), "Your file wasn't changed. Check your connection and try again."],
+    [
+      new TypeError("Failed to fetch"),
+      "Your file wasn't changed. Check your connection and try again.",
+    ],
+    ["offline", "Your file wasn't changed. Check your connection and try again."],
+  ])("reports importer failures and clears progress (%s)", async (error, description) => {
     await mount(h(Hook, { item: CSV }));
-    for (const error of [new Error("Invalid CSV"), new Error(""), "offline"]) {
-      mocks.create.mockRejectedValueOnce(error);
-      await act(() => control?.run());
-      expect(mocks.toast.error).toHaveBeenLastCalledWith("Couldn't open Budget.csv with Sheets", {
-        description:
-          error instanceof Error && error.message
-            ? error.message
-            : "Your file wasn't changed. Check your connection and try again.",
-      });
-      expect(control?.pending).toBe(false);
-    }
+    mocks.create.mockRejectedValueOnce(error);
+    await act(() => control?.run());
+    expect(mocks.toast.error).toHaveBeenLastCalledWith("Couldn't open Budget.csv with Sheets", {
+      description,
+    });
+    expect(control?.pending).toBe(false);
     expect(mocks.router.push).not.toHaveBeenCalled();
   });
 
@@ -190,16 +195,19 @@ describe("Drive Sheets conversion control", () => {
     await act(() => response.resolve(new Response(null)));
   });
 
-  it("explains a Write refusal from the service even when the permission probe was unknown", async () => {
+  it("uses the Docs fallback for storage failures without exposing resource URLs", async () => {
     await mount(h(Hook, { item: CSV }));
-    for (const error of [{ status: 401 }, { status: 403 }, { status: 500 }, null]) {
+    for (const error of [
+      ...[401, 403, 500].map((status) => new ResourceWriteError(`${ROOT}sheets/private/`, status)),
+      { status: 401 },
+      { status: 403 },
+      { status: 500 },
+      null,
+    ]) {
       mocks.create.mockRejectedValueOnce(error);
       await act(() => control?.run());
       expect(mocks.toast.error).toHaveBeenLastCalledWith("Couldn't open Budget.csv with Sheets", {
-        description:
-          error?.status === 401 || error?.status === 403
-            ? SHEETS_READ_ONLY_REASON
-            : "Your file wasn't changed. Check your connection and try again.",
+        description: "Your file wasn't changed. Check your connection and try again.",
       });
     }
   });
@@ -210,11 +218,27 @@ function Menu({ item }: { item: DriveItem }) {
   entries = useItemMenu(useDriveActions(), [item], [item]);
   return null;
 }
-function Preview() {
+function Preview({ item = CSV }: { item?: DriveItem }) {
   const ui = useDriveUi();
-  return h("button", { onClick: () => ui.setPreview({ items: [CSV], index: 0 }) }, "Preview CSV");
+  return h("button", { onClick: () => ui.setPreview({ items: [item], index: 0 }) }, "Preview item");
 }
 describe("Drive Sheets menu, preview and workbook presentation", () => {
+  it("opens a workbook from the preview without converting or probing Write access", async () => {
+    client.stat.mockResolvedValue(BOOK);
+    const preview = await mount(
+      h(DriveUiProvider, null, h(Preview, { item: BOOK }), h(PreviewDialog)),
+    );
+    await click(preview.host.querySelector("button") as Element);
+    const button = [...document.querySelectorAll("button")].find((element) =>
+      element.textContent?.includes("Open with Sheets"),
+    );
+    expect(button).toBeDefined();
+    await click(button as Element);
+    expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   it("offers Sheets from the item menu and the preview", async () => {
     const menu = await mount(h(DriveUiProvider, null, h(Menu, { item: CSV })));
     const submenu = entries.find((entry) => entry !== "separator" && entry.id === "open-with");
@@ -226,7 +250,7 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
     ).toEqual(["Sheets"]);
     if (submenu && submenu !== "separator" && "submenu" in submenu)
       await act(() => submenu.submenu[0]?.onSelect());
-    expect(mocks.router.push).toHaveBeenCalledWith(sheetsHref(BOOK.url));
+    expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
     await menu.unmount();
     const preview = await mount(h(DriveUiProvider, null, h(Preview), h(PreviewDialog)));
     await click(preview.host.querySelector("button") as Element);
@@ -248,7 +272,7 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
     expect(document.querySelector('[data-glyph="table-2"]')).not.toBeNull();
     const open = entries.find((entry) => entry !== "separator" && entry.id === "open");
     if (open && open !== "separator" && "onSelect" in open) await act(() => open.onSelect());
-    expect(mocks.router.push).toHaveBeenCalledWith(sheetsHref(BOOK.url));
+    expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
   });
 
   it("prevents workbook rename/move shortcuts and drag actions in the browser", async () => {
@@ -284,8 +308,10 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
   it("opens an existing Drive folder link in Sheets after validating the workbook metadata", async () => {
     client.stat.mockResolvedValue(BOOK);
     const view = await mount(h(DriveUiProvider, null, h(FolderRefView)));
-    expect(mocks.router.replace).toHaveBeenCalledWith(sheetsHref(BOOK.url));
-    expect(view.host.querySelector("a")?.getAttribute("href")).toBe(sheetsHref(BOOK.url));
+    expect(mocks.router.replace).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
+    expect(view.host.querySelector("a")?.getAttribute("href")).toBe(
+      `/sheets/s/${encodeRef(BOOK.url)}`,
+    );
     expect(mocks.folders).not.toHaveBeenCalled();
   });
 

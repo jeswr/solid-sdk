@@ -20,7 +20,6 @@ import {
   IconButton,
   Skeleton,
 } from "@jeswr/suite-ui";
-import { OnlineGate } from "@jeswr/suite-ui/sync";
 import type { Quad } from "@rdfjs/types";
 import {
   ArrowLeft,
@@ -56,6 +55,7 @@ import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
 import { NativePdfHandoff } from "./native-pdf";
+import { OpenWithButton } from "./open-with-button";
 import { ProtectionBanner } from "./protection-banner";
 
 const TEXT_LIMIT = 1024 * 1024;
@@ -349,60 +349,6 @@ export function PreviewBody({
   }
 }
 
-/** Google Drive's "Open with Docs": opens a Docs document or converts the file into one. */
-function OpenWithDocsButton({ item }: { item: DriveItem }) {
-  const control = useOpenWithDocs(item);
-  if (!control) return null;
-  const reason = control.kind === "convert" ? control.disabledReason : undefined;
-  const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      className="drv-open-with"
-      disabled={reason !== undefined || control.pending}
-      aria-busy={control.pending || undefined}
-      onClick={() => void control.run()}
-    >
-      <FileText aria-hidden="true" size={16} />
-      <span>Open with Docs</span>
-    </Button>
-  );
-  return reason ? (
-    <OnlineGate online={false} reason={reason}>
-      {button}
-    </OnlineGate>
-  ) : (
-    button
-  );
-}
-
-/** Google Drive's "Open with Sheets": opens a Docs document or converts the file into one. */
-function OpenWithSheetsButton({ item }: { item: DriveItem }) {
-  const control = useOpenWithSheets(item);
-  if (!control) return null;
-  const reason = control.kind === "convert" ? control.disabledReason : undefined;
-  const button = (
-    <Button
-      variant="outline"
-      size="sm"
-      className="drv-open-with"
-      disabled={reason !== undefined || control.pending}
-      aria-busy={control.pending || undefined}
-      onClick={() => void control.run()}
-    >
-      <Table2 aria-hidden="true" size={16} />
-      <span>Open with Sheets</span>
-    </Button>
-  );
-  return reason ? (
-    <OnlineGate online={false} reason={reason}>
-      {button}
-    </OnlineGate>
-  ) : (
-    button
-  );
-}
-
 function PreviewHeader({
   item,
   leading,
@@ -419,14 +365,24 @@ function PreviewHeader({
   const actions = useDriveActions();
   const ui = useDriveUi();
   const starred = actions.starred.has(item.url);
+  const docs = useOpenWithDocs(item);
+  const sheets = useOpenWithSheets(item);
   return (
     <header className="drv-preview-header">
       {leading}
       <ItemIcon item={item} size={24} />
       <span className="drv-preview-title">{item.name}</span>
       <div className="drv-preview-actions">
-        <OpenWithDocsButton item={item} />
-        <OpenWithSheetsButton item={item} />
+        <OpenWithButton
+          control={docs}
+          name="Docs"
+          icon={<FileText aria-hidden="true" size={16} />}
+        />
+        <OpenWithButton
+          control={sheets}
+          name="Sheets"
+          icon={<Table2 aria-hidden="true" size={16} />}
+        />
         <IconButton label="Download" variant="ghost" onClick={() => void actions.download(item)}>
           <Download aria-hidden="true" size={18} />
         </IconButton>

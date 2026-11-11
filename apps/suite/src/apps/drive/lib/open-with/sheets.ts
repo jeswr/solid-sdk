@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
-import { encodeRef } from "@/lib/refs";
 import { MAX_IMPORT_BYTES } from "../../../docs/lib/convert/import-file";
 import type { WorkbookService } from "../../../sheets/lib/contract";
+import { workbookHref } from "../../../sheets/lib/routes";
 import type { DriveItem } from "../client/client";
 import { isOwnStorage } from "../client/ownership";
 import { canWriteFromWacAllow } from "./docs";
@@ -10,10 +10,6 @@ import { canWriteFromWacAllow } from "./docs";
 export const SHEETS_READ_ONLY_REASON = "You can't create spreadsheets in your Sheets folder";
 export const SHEETS_TOO_LARGE_REASON = "Sheets can open files of 50 MB or less";
 export const SHEETS_FOREIGN_REASON = "Only files in your pod can be opened with Sheets";
-
-export function sheetsHref(container: string): string {
-  return `/sheets/${encodeRef(container)}`;
-}
 
 export interface SheetsSession {
   readonly storageUrl: string;
@@ -33,7 +29,7 @@ export function openWithSheetsState(
     sheetsWritable?: boolean | undefined;
   },
 ): OpenWithSheetsState | undefined {
-  if (item.workbook) return { kind: "open", href: sheetsHref(item.url) };
+  if (item.workbook) return { kind: "open", href: workbookHref(item.url) };
   if (
     item.kind !== "file" ||
     (!/\.csv$/i.test(item.name) &&
@@ -51,7 +47,9 @@ export function openWithSheetsState(
 }
 
 /** Unknown permissions allow an attempt; only a confirmed refusal disables importing. */
-export async function probeSheetsWritable(session: SheetsSession): Promise<boolean | undefined> {
+export async function probeSheetsWritable(
+  session: Pick<SheetsSession, "storageUrl" | "fetch">,
+): Promise<boolean | undefined> {
   const http = createPodScopedFetch(session.storageUrl, { fetch: refuseRedirects(session.fetch) });
   const head = (url: string) =>
     http(url, { method: "HEAD", headers: { "cache-control": "no-cache" } });

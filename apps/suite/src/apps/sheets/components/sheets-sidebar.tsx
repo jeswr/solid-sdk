@@ -5,11 +5,11 @@ import { Plus, Table2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
-import { encodeRef } from "@/lib/refs";
+import { workbookHref } from "../lib/routes";
 import { LIMITS, XlsxImportError } from "../lib/xlsx/common";
 import { useWorkbookService } from "../state/service";
 
-export const workbookHref = (container: string) => `/sheets/s/${encodeRef(container)}`;
+export { workbookHref } from "../lib/routes";
 
 export function SheetsSidebar() {
   const service = useWorkbookService();

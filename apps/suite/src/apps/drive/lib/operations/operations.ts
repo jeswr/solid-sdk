@@ -1386,7 +1386,12 @@ async function restoreEntriesUnlocked(
       const occupied = status !== "partial" && (await exists(client, entry.original));
       // Workbook RDF contains absolute internal links. Restoring to a different slug
       // would leave them pointing at the occupied workbook, so retain the trash copy.
-      if (occupied && entry.original.startsWith(new URL("sheets/", client.storageUrl).href))
+      // Recorded restores instead resume through the identity/content checks below.
+      if (
+        restoredLocation === undefined &&
+        occupied &&
+        entry.original.startsWith(new URL("sheets/", client.storageUrl).href)
+      )
         throw new DriveError("conflict", 409, entry.original);
       const folder = entry.original.endsWith("/");
       const merge =

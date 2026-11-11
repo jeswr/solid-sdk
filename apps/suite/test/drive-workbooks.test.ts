@@ -3,15 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { createSolidDriveClient, type DriveItem } from "../src/apps/drive/lib/client/client";
 import { withWorkbook } from "../src/apps/drive/lib/client/workbook";
 import { hrefFor } from "../src/apps/drive/lib/files/urls";
-import { sheetsHref } from "../src/apps/drive/lib/open-with/sheets";
 import {
   deleteForever,
+  listTrash,
   recentFiles,
   restoreItems,
   searchByName,
   trashItems,
 } from "../src/apps/drive/lib/operations/operations";
 import { friendlyType, toListEntry, viewItems } from "../src/apps/drive/lib/view/view";
+import { encodeRef } from "../src/lib/refs";
 import { harness, POD, ROOT } from "./sheets-workbook-helpers";
 
 describe("Sheets containers in Drive", () => {
@@ -33,7 +34,7 @@ describe("Sheets containers in Drive", () => {
       name: "Quarterly Budget",
       workbook: true,
     });
-    expect(hrefFor(item)).toBe(sheetsHref(book.container));
+    expect(hrefFor(item)).toBe(`/sheets/s/${encodeRef(book.container)}`);
     expect(friendlyType(item)).toBe("Spreadsheet");
     expect(toListEntry(item)).toMatchObject({ kind: "resource", contentType: "text/csv" });
     expect(viewItems(items, { types: ["data"] })).toEqual(items);
@@ -108,6 +109,40 @@ describe("Sheets containers in Drive", () => {
     expect(collision.failed).toMatchObject([{ error: { kind: "conflict", status: 409 } }]);
     expect(h.pod.has(`${second.done[0]?.url}workbook.json`)).toBe(true);
     expect((await h.service.open(book.container)).metadata.title).toBe("Plan / 2026");
+  });
+
+  it("resumes a workbook restore after its trash container DELETE is refused once", async () => {
+    const h = await harness();
+    const book = await h.service.createFromCsv({ title: "Budget", csv: "Amount\n42" });
+    const client = createSolidDriveClient({ storageUrl: POD, fetch: h.fetch });
+    const driveRoot = `${POD}drive/`;
+    const trashed = await trashItems(client, driveRoot, [await client.stat(book.container)]);
+    expect(trashed.failed).toEqual([]);
+    const entry = trashed.done[0];
+    if (!entry) throw new Error("Expected a trashed workbook");
+    let refused = false;
+    h.setHook((call) => {
+      if (call.url === entry.url && call.method === "DELETE" && !refused) {
+        refused = true;
+        return new Response(null, { status: 403 });
+      }
+      return undefined;
+    });
+    const first = await restoreItems(client, driveRoot, [entry]);
+    expect(refused).toBe(true);
+    expect(first.failed).toHaveLength(1);
+    expect(h.pod.has(book.container)).toBe(true);
+    expect(h.pod.has(entry.url)).toBe(true);
+    const restoredBook = await h.service.open(book.container);
+    const remaining = await listTrash(client, driveRoot);
+    expect(remaining).toHaveLength(1);
+    expect(await restoreItems(client, driveRoot, remaining)).toEqual({
+      done: [{ entry: remaining[0], url: book.container, renamed: false }],
+      failed: [],
+    });
+    expect(await h.service.open(book.container)).toEqual(restoredBook);
+    expect(h.pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, driveRoot)).toEqual([]);
   });
 
   it("uses Sheets metadata admission, isolates unreadable folders, and never probes outside Sheets", async () => {
