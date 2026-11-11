@@ -18,8 +18,12 @@ Share dialog. Saving sharing changes grants read-only access to only those liste
 images; opening the dialog and ordinary note saves never grant collaborator or
 public image access. Images added later need the owner to open Share again and
 save sharing changes or choose Share listed images for the existing audience.
-Images can appear in several notes, so existing image grants are additive and
-never removed or downgraded when a collaborator is removed or the note is restricted.
+Images can appear in several notes. Grants are additive, but removing a collaborator,
+lowering a role or restricting general access also narrows access to the listed images.
+These revocations save the note first and continue across image failures, reporting
+images that could not be updated. An unreadable image policy never blocks opening
+Share or revoking note access. It disables granting controls until all listed image
+policies can be verified; additions, role upgrades and opening general access fail closed.
 Other images, including Docs assets, are not granted access by Notes sharing.
 
 Labels and reminders remain in the note's RDF. On a shared note, collaborators

@@ -14,6 +14,10 @@ export interface SharingState {
   general: { mode: "restricted" | "link" | "signed-in"; role?: "viewer" | "commenter" | "editor" };
   canManage: boolean;
   readOnly?: "forbidden" | "offline";
+  /** Revocations remain available when an adapter cannot safely grant access. */
+  grantDisabledReason?: string;
+  /** A successful change may leave related resources needing attention. */
+  updateWarning?: string;
   /** Access is available even while the application's derived member list needs repair. */
   warning?: "members-sync";
 }
@@ -44,7 +48,13 @@ export interface SharingAdapter {
   supportsCommenter?: boolean;
   supportsGeneralCommenter?: boolean;
 }
-export type ShareErrorCode = "forbidden" | "network" | "conflict" | "unsupported" | "members-sync";
+export type ShareErrorCode =
+  | "forbidden"
+  | "network"
+  | "conflict"
+  | "unsupported"
+  | "members-sync"
+  | "images-unavailable";
 export class ShareError extends Error {
   constructor(public readonly code: ShareErrorCode) {
     super(
@@ -52,6 +62,7 @@ export class ShareError extends Error {
         forbidden: "You can't change who has access to this",
         network: "Can't reach your storage. Try again.",
         "members-sync": "Access was saved, but the project's member list wasn't updated.",
+        "images-unavailable": "Image access couldn't be checked. Try again before granting access.",
         conflict: "Sharing changed somewhere else. Review the updated access and try again.",
         unsupported: "Not available on this storage",
       }[code],

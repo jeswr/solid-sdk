@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { shareRoleRank } from "../../../shell/lib/share-options";
 import {
   ShareError,
   type ShareRole,
@@ -12,11 +13,12 @@ import { isDirectChild } from "../../docs/lib/model/layout";
 import type { SharingSession } from "../../drive/lib/sharing/adapter";
 import { noteImages, notesMediaContainer } from "./images";
 
-/** Images can belong to several notes. Their existing access is never removed or downgraded. */
+/** Grants require every image policy; revocations narrow each manageable resource independently. */
 export class NoteSharingAdapter implements SharingAdapter {
   readonly supportsCommenter = false;
   readonly supportsGeneralCommenter = false;
   private loaded = false;
+  private readonly failedImages = new Map<string, Set<string>>();
   readonly images: readonly string[];
   private readonly containers: string[];
   constructor(
@@ -43,18 +45,51 @@ export class NoteSharingAdapter implements SharingAdapter {
     )
       throw new ShareError("unsupported");
   }
-  async load(url: string, signal: AbortSignal) {
+  private async loadNote(url: string, signal: AbortSignal) {
     this.loaded = false;
     this.assertTarget(url);
     const state = await this.access.load(url, signal);
     if (!state.canManage || state.readOnly) throw new ShareError("forbidden");
-    // Preflight every image before allowing any collaborator changes.
-    for (const image of this.images) {
-      const access = await this.access.load(image, signal);
-      if (!access.canManage || access.readOnly) throw new ShareError("forbidden");
-    }
     this.loaded = true;
     return state;
+  }
+  private async imagePolicy(image: string, signal: AbortSignal) {
+    const state = await this.access.load(image, signal);
+    if (!state.canManage || state.readOnly) throw new ShareError("forbidden");
+    return state;
+  }
+  private async imagePolicies(signal: AbortSignal) {
+    const policies = new Map<string, SharingState>();
+    try {
+      for (const image of this.images) policies.set(image, await this.imagePolicy(image, signal));
+    } catch {
+      signal.throwIfAborted();
+      throw new ShareError("images-unavailable");
+    }
+    return policies;
+  }
+  async load(url: string, signal: AbortSignal): Promise<SharingState> {
+    const state = await this.loadNote(url, signal);
+    let grantDisabledReason: string | undefined;
+    try {
+      await this.imagePolicies(signal);
+    } catch {
+      signal.throwIfAborted();
+      grantDisabledReason =
+        "Image access couldn't be checked. You can still remove or reduce access.";
+    }
+    const failedImages = [
+      ...new Set([...this.failedImages.values()].flatMap((images) => [...images])),
+    ];
+    return {
+      ...state,
+      ...(grantDisabledReason ? { grantDisabledReason } : {}),
+      ...(failedImages.length
+        ? {
+            updateWarning: `Note access was updated. Image access couldn't be updated: ${failedImages.join(", ")}`,
+          }
+        : {}),
+    };
   }
   private writable(url: string) {
     this.assertTarget(url);
@@ -62,12 +97,11 @@ export class NoteSharingAdapter implements SharingAdapter {
   }
   /** Explicit Share action for the immutable image list shown in this dialog. */
   async shareImages(signal: AbortSignal) {
-    await this.grantImages(await this.load(this.note.url, signal));
+    await this.grantImages(await this.loadNote(this.note.url, signal), signal);
   }
-  private async grantImages(state: SharingState) {
-    for (const image of this.images) {
-      const current = await this.access.load(image, new AbortController().signal);
-      if (!current.canManage || current.readOnly) throw new ShareError("forbidden");
+  private async grantImages(state: SharingState, signal: AbortSignal) {
+    // Verify the entire list before granting access to any image or the note.
+    for (const [image, current] of await this.imagePolicies(signal)) {
       for (const person of state.people)
         if (
           (person.role === "viewer" || person.role === "editor") &&
@@ -78,6 +112,21 @@ export class NoteSharingAdapter implements SharingAdapter {
         await this.access.setGeneral(image, { mode: "link", role: "viewer" });
     }
   }
+  private async revokeImages(
+    key: string,
+    update: (image: string, state: SharingState) => Promise<void>,
+  ) {
+    const failed = new Set<string>();
+    for (const image of this.images) {
+      try {
+        await update(image, await this.imagePolicy(image, new AbortController().signal));
+      } catch {
+        failed.add(image);
+      }
+    }
+    if (failed.size) this.failedImages.set(key, failed);
+    else this.failedImages.delete(key);
+  }
   async setPerson(
     url: string,
     webId: string,
@@ -87,15 +136,27 @@ export class NoteSharingAdapter implements SharingAdapter {
     this.writable(url);
     if ((role !== null && role !== "viewer" && role !== "editor") || opts?.expires || opts?.purpose)
       throw new ShareError("unsupported");
-    const state = await this.load(url, new AbortController().signal);
-    await this.grantImages({
-      ...state,
-      people: [
-        ...state.people.filter((person) => person.webId !== webId),
-        ...(role ? [{ webId, role }] : []),
-      ],
-    });
-    await this.access.setPerson(url, webId, role);
+    const signal = new AbortController().signal;
+    const state = await this.loadNote(url, signal);
+    const person = state.people.find((person) => person.webId === webId);
+    if (person?.role === "owner" || person?.inherited) throw new ShareError("forbidden");
+    if (role && (!person || shareRoleRank[role] > shareRoleRank[person.role])) {
+      await this.grantImages(
+        {
+          ...state,
+          people: [...state.people.filter((person) => person.webId !== webId), { webId, role }],
+        },
+        signal,
+      );
+      await this.access.setPerson(url, webId, role);
+    } else {
+      await this.access.setPerson(url, webId, role);
+      await this.revokeImages(`person:${webId}`, async (image, current) => {
+        const existing = current.people.find((person) => person.webId === webId);
+        if (existing && (role === null || shareRoleRank[role] < shareRoleRank[existing.role]))
+          await this.access.setPerson(image, webId, role);
+      });
+    }
   }
   async setGeneral(url: string, general: SharingState["general"]) {
     this.writable(url);
@@ -104,9 +165,28 @@ export class NoteSharingAdapter implements SharingAdapter {
       (general.role !== undefined && !["viewer", "editor"].includes(general.role))
     )
       throw new ShareError("unsupported");
-    const state = await this.load(url, new AbortController().signal);
-    await this.grantImages({ ...state, general });
-    await this.access.setGeneral(url, general);
+    const signal = new AbortController().signal;
+    const state = await this.loadNote(url, signal);
+    if (
+      general.mode === "link" &&
+      (state.general.mode !== "link" ||
+        shareRoleRank[general.role ?? "viewer"] > shareRoleRank[state.general.role ?? "viewer"])
+    ) {
+      await this.grantImages({ ...state, general }, signal);
+      await this.access.setGeneral(url, general);
+    } else {
+      await this.access.setGeneral(url, general);
+      await this.revokeImages("general", async (image, current) => {
+        if (
+          current.general.mode !== "restricted" &&
+          (general.mode === "restricted" ||
+            (current.general.mode === "link" &&
+              shareRoleRank[general.role ?? "viewer"] <
+                shareRoleRank[current.general.role ?? "viewer"]))
+        )
+          await this.access.setGeneral(image, general);
+      });
+    }
   }
 }
 

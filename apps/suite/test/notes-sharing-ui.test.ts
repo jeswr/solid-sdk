@@ -121,7 +121,9 @@ it("uses the shell dialog with a memory adapter, WebID grants and an explicit im
   await mount(h(ShareNote, { note, session, adapter, onClose: close }));
   await loaded();
   expect(document.body.textContent).toContain("Images may also appear in other notes");
-  expect(document.body.textContent).toContain("leaves image access in place");
+  expect(document.body.textContent).toContain(
+    "Removing or reducing access also updates these images",
+  );
   const input = document.querySelector<HTMLInputElement>(
     'input[role="combobox"]',
   ) as HTMLInputElement;
@@ -229,6 +231,110 @@ it("lists only the owner's Notes images and shares them only after the owner's e
   expect((await adapter.load(docs, new AbortController().signal)).people).not.toContainEqual(
     expect.objectContaining({ webId: bob }),
   );
+});
+it("opens with grants disabled after an image read failure and still saves revocations", async () => {
+  const adapter = memory();
+  const bob = "https://pod.example/bob/#me";
+  const image = `${session.storageUrl}notes/media/unreadable.png`;
+  await adapter.setPerson(note.url, bob, "editor");
+  await adapter.setGeneral(note.url, { mode: "link", role: "editor" });
+  const original = adapter.load.bind(adapter);
+  vi.spyOn(adapter, "load").mockImplementation(async (url, signal) => {
+    if (url === image) throw new Error("Image policy unavailable");
+    return original(url, signal);
+  });
+  const changes = vi.spyOn(adapter, "setPerson");
+  await mount(
+    h(ShareNote, {
+      note: { ...note, body: `<img src="${image}">` },
+      session,
+      adapter,
+      onClose: vi.fn(),
+    }),
+  );
+  await loaded();
+  expect(document.body.textContent).toContain("Image access couldn't be checked");
+  expect(
+    document.querySelector<HTMLFieldSetElement>('section[aria-label="Add people"] fieldset')
+      ?.disabled,
+  ).toBe(true);
+  expect(
+    document.querySelector<HTMLButtonElement>(
+      'section[aria-label="Add people"] button[role="combobox"]',
+    )?.disabled,
+  ).toBe(true);
+  expect(button("Add").disabled).toBe(true);
+  expect(button("Share listed images").disabled).toBe(true);
+  expect(button("Copy link").disabled).toBe(false);
+  expect(changes).not.toHaveBeenCalled();
+  async function open(label: string) {
+    const element = [...document.querySelectorAll("label")].find(
+      (item) => item.textContent === label,
+    );
+    const control = document.getElementById(element?.htmlFor ?? "") as HTMLButtonElement;
+    expect(control.disabled).toBe(false);
+    await act(() =>
+      control.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })),
+    );
+  }
+  function option(label: string) {
+    const item = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (item) => item.getAttribute("aria-label") === label || item.textContent === label,
+    );
+    expect(item, label).toBeTruthy();
+    return item as HTMLElement;
+  }
+  await open(`Role for ${bob}`);
+  expect(option("Viewer").getAttribute("aria-disabled")).not.toBe("true");
+  await click(option("Viewer"));
+  await vi.waitFor(async () =>
+    expect((await original(note.url, new AbortController().signal)).people).toContainEqual({
+      webId: bob,
+      role: "viewer",
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(image),
+  );
+  await open(`Role for ${bob}`);
+  expect(option("Editor").getAttribute("aria-disabled")).toBe("true");
+  await click(option("Remove access"));
+  await vi.waitFor(() => expect(document.querySelector(`li[aria-label="${bob}"]`)).toBeNull());
+  expect(document.body.textContent).not.toContain("Undo");
+  await open("General access role");
+  await click(option("Viewer"));
+  await vi.waitFor(async () =>
+    expect((await original(note.url, new AbortController().signal)).general).toEqual({
+      mode: "link",
+      role: "viewer",
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(
+      document.querySelector('section[aria-label="General access"]')?.textContent,
+    ).not.toContain("Saving"),
+  );
+  await open("General access role");
+  expect(option("Editor").getAttribute("aria-disabled")).toBe("true");
+  await act(() =>
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    ),
+  );
+  await open("General access");
+  await click(option("Restricted"));
+  await vi.waitFor(async () =>
+    expect((await original(note.url, new AbortController().signal)).general.mode).toBe(
+      "restricted",
+    ),
+  );
+  await vi.waitFor(() =>
+    expect(
+      document.querySelector('section[aria-label="General access"]')?.textContent,
+    ).not.toContain("Saving"),
+  );
+  await open("General access");
+  expect(option("Anyone with the link").getAttribute("aria-disabled")).toBe("true");
 });
 it("renders public shared notes through the anonymous read path without an editor writer", async () => {
   const url = "https://pod.example/bob/notes/shared.ttl";

@@ -43,8 +43,9 @@ export function ShareNote({
           </ul>
           <p>
             Images added later need you to open Share again. Use Share listed images to give
-            existing readers access. Images may also appear in other notes. Removing a collaborator
-            or restricting this note leaves image access in place.
+            existing readers access. Images may also appear in other notes. Removing or reducing
+            access also updates these images where possible. Any images that couldn't be updated are
+            reported separately.
           </p>
           <p>
             Collaborators can see and edit this note's labels and reminders. Pin and colour stay

@@ -38,6 +38,7 @@ import {
   generalAccessOptions,
   grantExpires,
   shareRoleOptions,
+  shareRoleRank,
   shareSubtitle,
 } from "../lib/share-options";
 import { RequiresOnline, useNeedsConnection } from "../sync/requires-online";
@@ -186,7 +187,9 @@ function SharingContent({
   }, [adapter, url, attempt]);
   const readOnly = !online || state?.readOnly || !state?.canManage;
   const disabled = !!readOnly || !!saving;
-  const warning = state?.warning ? new ShareError(state.warning).message : "";
+  const grantsDisabled = disabled || !!state?.grantDisabledReason;
+  const warning =
+    state?.updateWarning || (state?.warning ? new ShareError(state.warning).message : "");
   const roles = shareRoleOptions(kind, caps, !!state?.canManage, adapter.supportsCommenter);
   const generalAllowed = generalAccessOptions(caps).some(
     (option) => option.value === state?.general.mode && !option.disabled,
@@ -194,7 +197,11 @@ function SharingContent({
   const Title = mobile ? SheetTitle : DialogTitle;
   const Description = mobile ? SheetDescription : DialogDescription;
 
-  async function act(row: string, write: () => Promise<void>, success?: () => void) {
+  async function act(
+    row: string,
+    write: () => Promise<void>,
+    success?: (loaded: SharingState) => void,
+  ) {
     if (
       busy.current ||
       !alive.current ||
@@ -216,7 +223,7 @@ function SharingContent({
       setState(loaded);
       if (loaded.readOnly)
         throw new ShareError(loaded.readOnly === "forbidden" ? "forbidden" : "network");
-      success?.();
+      success?.(loaded);
     } catch (cause) {
       if (!active()) return;
       setError(cause instanceof ShareError ? cause.message : "Couldn't change sharing. Try again.");
@@ -243,25 +250,27 @@ function SharingContent({
     void act(
       person.webId,
       () => adapter.setPerson(url, person.webId, null),
-      () => {
+      (loaded) => {
         toasts.current.push(
           toast(`Removed access for ${person.name ?? person.webId}`, {
             duration: 8000,
-            action: {
-              label: "Undo",
-              onClick: () => {
-                // Undo must not overwrite a newer role, owner grant or inherited permission.
-                if (current.current?.people.some((entry) => entry.webId === person.webId)) return;
-                void act(person.webId, () =>
-                  adapter.setPerson(
-                    url,
-                    person.webId,
-                    previousRole,
-                    person.expires ? { expires: person.expires } : {},
-                  ),
-                );
+            ...(!loaded.grantDisabledReason && {
+              action: {
+                label: "Undo",
+                onClick: () => {
+                  // Undo must not overwrite a newer role, owner grant or inherited permission.
+                  if (current.current?.people.some((entry) => entry.webId === person.webId)) return;
+                  void act(person.webId, () =>
+                    adapter.setPerson(
+                      url,
+                      person.webId,
+                      previousRole,
+                      person.expires ? { expires: person.expires } : {},
+                    ),
+                  );
+                },
               },
-            },
+            }),
           }),
         );
       },
@@ -339,8 +348,9 @@ function SharingContent({
               <p role="status">You can't change who has access to this</p>
             )
           )}
+          {state.grantDisabledReason && <p role="status">{state.grantDisabledReason}</p>}
           <section aria-label="Add people" className={styles.section}>
-            <fieldset disabled={disabled} className={styles.section}>
+            <fieldset disabled={grantsDisabled} className={styles.section}>
               <legend className="sr-only">Add people</legend>
               <PeoplePicker
                 contacts={{
@@ -360,7 +370,7 @@ function SharingContent({
                 value={roles.includes(role) ? role : "viewer"}
                 roles={roles}
                 onChange={setRole}
-                disabled={disabled}
+                disabled={grantsDisabled}
               />
               {caps.notifyAgents && (
                 <>
@@ -385,7 +395,7 @@ function SharingContent({
                 </>
               )}
               <RequiresOnline>
-                <Button disabled={disabled || !selected.length} onClick={() => void add()}>
+                <Button disabled={grantsDisabled || !selected.length} onClick={() => void add()}>
                   Add
                 </Button>
               </RequiresOnline>
@@ -504,6 +514,18 @@ function SharingContent({
                         label={`Role for ${person.name ?? person.webId}`}
                         value={person.role}
                         roles={roles}
+                        options={Object.fromEntries(
+                          roles
+                            .filter(
+                              (role) =>
+                                !!state.grantDisabledReason &&
+                                shareRoleRank[role] > shareRoleRank[person.role],
+                            )
+                            .map((role) => [
+                              role,
+                              { disabled: true, reason: state.grantDisabledReason },
+                            ]),
+                        )}
                         disabled={disabled || !!person.inherited}
                         onChange={(next) => {
                           if (roles.includes(next))
@@ -547,7 +569,16 @@ function SharingContent({
                 {/* A disabled option says why in the note under the field: a tooltip
                     wrapper inside the listbox breaks its required-children structure. */}
                 {generalAccessOptions(caps).map((option) => (
-                  <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                  <SelectItem
+                    key={option.value}
+                    value={option.value}
+                    disabled={
+                      option.disabled ||
+                      (!!state.grantDisabledReason &&
+                        option.value !== "restricted" &&
+                        option.value !== state.general.mode)
+                    }
+                  >
                     {option.label}
                   </SelectItem>
                 ))}
@@ -567,6 +598,15 @@ function SharingContent({
                     (entry !== "commenter" || adapter.supportsGeneralCommenter !== false),
                 )}
                 value={state.general.role ?? "viewer"}
+                options={Object.fromEntries(
+                  roles
+                    .filter(
+                      (role) =>
+                        !!state.grantDisabledReason &&
+                        shareRoleRank[role] > shareRoleRank[state.general.role ?? "viewer"],
+                    )
+                    .map((role) => [role, { disabled: true, reason: state.grantDisabledReason }]),
+                )}
                 disabled={disabled || !generalAllowed}
                 onChange={(next) => {
                   if (next !== "manager" && generalAllowed && roles.includes(next))
@@ -605,7 +645,10 @@ function SharingContent({
       )}
       {notice && <div className="text-sm text-muted-foreground">{notice}</div>}
       {additionalAction && (
-        <Button disabled={disabled} onClick={() => void act("additional", additionalAction.run)}>
+        <Button
+          disabled={grantsDisabled}
+          onClick={() => void act("additional", additionalAction.run)}
+        >
           {additionalAction.label}
         </Button>
       )}

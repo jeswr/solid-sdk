@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ShareCapabilities, ShareKind, ShareRole, SharingState } from "../share/types";
 
+export const shareRoleRank = { viewer: 0, commenter: 1, editor: 2, manager: 3, owner: 4 } as const;
+
 export function shareSubtitle(state: SharingState): string {
   if (state.general.mode === "link")
     return state.general.role === "editor"

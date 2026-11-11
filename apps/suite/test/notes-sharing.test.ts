@@ -7,7 +7,7 @@ import { createNotesStore } from "../src/apps/notes/lib/model/store";
 import { discoverNoteShares, NoteSharingAdapter } from "../src/apps/notes/lib/sharing";
 import { SheetResource } from "../src/apps/sheets/lib/model";
 import { MemorySharingAdapter } from "../src/shell/share/memory-adapter";
-import type { SharingState } from "../src/shell/share/types";
+import { ShareError, type SharingState } from "../src/shell/share/types";
 import { act, deferred } from "./drive-ui-dom";
 import { harness, POD, WEBID } from "./sheets-workbook-helpers";
 
@@ -105,7 +105,7 @@ describe("Notes WAC sharing", () => {
   });
 });
 
-it("grants images read access only, preserving other notes' grants on downgrades and removal", async () => {
+it("grants images read access only and narrows their access on downgrades and removal", async () => {
   const image = `${POD}notes/media/shared.png`;
   const { note, session } = await setup(`<p><img src="${image}"><img src="${image}"></p>`);
   const memory = new MemorySharingAdapter(state, 0);
@@ -118,17 +118,22 @@ it("grants images read access only, preserving other notes' grants on downgrades
   });
   await memory.setPerson(image, BOB, "editor");
   await adapter.setPerson(note.url, BOB, "viewer");
-  await adapter.setPerson(note.url, BOB, null);
   expect((await memory.load(image, signal())).people).toContainEqual({
     webId: BOB,
-    role: "editor",
+    role: "viewer",
   });
+  await adapter.setPerson(note.url, BOB, null);
+  expect((await memory.load(image, signal())).people).not.toContainEqual(
+    expect.objectContaining({ webId: BOB }),
+  );
   await adapter.setGeneral(note.url, { mode: "link" });
   expect((await memory.load(image, signal())).general).toEqual({ mode: "link", role: "viewer" });
   await memory.setGeneral(image, { mode: "link", role: "editor" });
   await adapter.setGeneral(note.url, { mode: "link", role: "editor" });
+  await adapter.setGeneral(note.url, { mode: "link", role: "viewer" });
+  expect((await memory.load(image, signal())).general).toEqual({ mode: "link", role: "viewer" });
   await adapter.setGeneral(note.url, { mode: "restricted" });
-  expect((await memory.load(image, signal())).general).toEqual({ mode: "link", role: "editor" });
+  expect((await memory.load(image, signal())).general).toEqual({ mode: "restricted" });
   expect(adapter.supportsCommenter).toBe(false);
   expect(adapter.supportsGeneralCommenter).toBe(false);
 });
@@ -143,14 +148,20 @@ it("preflights listed images and excludes assets outside Notes media", async () 
     ...(url === image ? { canManage: false } : {}),
   }));
   const adapter = new NoteSharingAdapter(note, session, memory);
-  await expect(adapter.load(note.url, signal())).rejects.toMatchObject({ code: "forbidden" });
+  await expect(adapter.load(note.url, signal())).resolves.toMatchObject({
+    canManage: true,
+    grantDisabledReason: expect.stringContaining("Image access couldn't be checked"),
+  });
   load.mockImplementation(async (url, signal) => ({
     ...(await originalLoad(url, signal)),
     ...(url === image ? { readOnly: "offline" as const } : {}),
   }));
-  await expect(adapter.load(note.url, signal())).rejects.toMatchObject({ code: "forbidden" });
+  await expect(adapter.load(note.url, signal())).resolves.toMatchObject({
+    canManage: true,
+    grantDisabledReason: expect.any(String),
+  });
   await expect(adapter.setPerson(note.url, BOB, "viewer")).rejects.toMatchObject({
-    code: "unsupported",
+    code: "images-unavailable",
   });
   const unsupported = new NoteSharingAdapter(
     { ...note, body: `<img src="${POD}docs/a/assets/image.png">` },
@@ -326,13 +337,213 @@ it.each([
   let imageReads = 0;
   vi.spyOn(memory, "load").mockImplementation(async (url, signal) => ({
     ...(await original(url, signal)),
-    ...(url === image && ++imageReads >= 3 ? denied : {}),
+    ...(url === image && ++imageReads >= 2 ? denied : {}),
   }));
   const setPerson = vi.spyOn(memory, "setPerson");
   const adapter = new NoteSharingAdapter(note, session, memory);
   await adapter.load(note.url, signal());
   await expect(adapter.setPerson(note.url, BOB, "viewer")).rejects.toMatchObject({
-    code: "forbidden",
+    code: "images-unavailable",
   });
   expect(setPerson).not.toHaveBeenCalled();
+});
+
+it.each([
+  "remove",
+  "lower person",
+  "restrict",
+  "lower public",
+] as const)("saves the note and readable images when another image policy fails: %s", async (change) => {
+  const unreadable = `${POD}notes/media/unreadable.png`;
+  const readable = `${POD}notes/media/readable.png`;
+  const { note, session } = await setup(`<img src="${unreadable}"><img src="${readable}">`);
+  const memory = new MemorySharingAdapter(state, 0);
+  for (const url of [note.url, unreadable, readable]) {
+    await memory.setPerson(url, BOB, "editor");
+    await memory.setGeneral(url, { mode: "link", role: "editor" });
+  }
+  const original = memory.load.bind(memory);
+  const load = vi.spyOn(memory, "load").mockImplementation(async (url, signal) => {
+    if (url === unreadable) throw new ShareError("network");
+    return original(url, signal);
+  });
+  const adapter = new NoteSharingAdapter(note, session, memory);
+  expect((await adapter.load(note.url, signal())).grantDisabledReason).toBeTruthy();
+  const person = change === "remove" || change === "lower person";
+  if (person)
+    await expect(
+      adapter.setPerson(note.url, BOB, change === "remove" ? null : "viewer"),
+    ).resolves.toBeUndefined();
+  else
+    await expect(
+      adapter.setGeneral(
+        note.url,
+        change === "restrict" ? { mode: "restricted" } : { mode: "link", role: "viewer" },
+      ),
+    ).resolves.toBeUndefined();
+  for (const url of [note.url, readable]) {
+    const saved = await original(url, signal());
+    if (person)
+      expect(saved.people.find((entry) => entry.webId === BOB)?.role).toBe(
+        change === "remove" ? undefined : "viewer",
+      );
+    else
+      expect(saved.general).toEqual(
+        change === "restrict" ? { mode: "restricted" } : { mode: "link", role: "viewer" },
+      );
+    expect(saved.people).toContainEqual({ webId: WEBID, role: "owner" });
+  }
+  const result = await adapter.load(note.url, signal());
+  expect(result.updateWarning).toContain(unreadable);
+  expect(result.updateWarning).not.toContain(readable);
+  expect((await original(unreadable, signal())).people).toContainEqual({
+    webId: BOB,
+    role: "editor",
+  });
+  load.mockImplementation(original);
+  // Retrying the revocation also repairs the missed image and clears its warning.
+  if (person) await adapter.setPerson(note.url, BOB, null);
+  else await adapter.setGeneral(note.url, { mode: "restricted" });
+  expect((await adapter.load(note.url, signal())).updateWarning).toBeUndefined();
+});
+
+it.each([
+  "add",
+  "raise person",
+  "open",
+  "raise public",
+  "share images",
+] as const)("refuses widening any resource when an image policy fails: %s", async (change) => {
+  const first = `${POD}notes/media/first.png`;
+  const unreadable = `${POD}notes/media/second.png`;
+  const { note, session } = await setup(`<img src="${first}"><img src="${unreadable}">`);
+  const memory = new MemorySharingAdapter(state, 0);
+  if (change !== "add") await memory.setPerson(note.url, BOB, "viewer");
+  if (change === "raise public") await memory.setGeneral(note.url, { mode: "link" });
+  const adapter = new NoteSharingAdapter(note, session, memory);
+  await adapter.load(note.url, signal());
+  const original = memory.load.bind(memory);
+  vi.spyOn(memory, "load").mockImplementation(async (url, signal) => {
+    if (url === unreadable) throw new ShareError("network");
+    return original(url, signal);
+  });
+  const setPerson = vi.spyOn(memory, "setPerson");
+  const setGeneral = vi.spyOn(memory, "setGeneral");
+  const work =
+    change === "add" || change === "raise person"
+      ? adapter.setPerson(note.url, BOB, "editor")
+      : change === "share images"
+        ? adapter.shareImages(signal())
+        : adapter.setGeneral(note.url, { mode: "link", role: "editor" });
+  await expect(work).rejects.toMatchObject({ code: "images-unavailable" });
+  expect(setPerson).not.toHaveBeenCalled();
+  expect(setGeneral).not.toHaveBeenCalled();
+});
+
+it("keeps revocations conditional and reports an unreadable real image ACL", async () => {
+  const image = `${POD}notes/media/photo.png`;
+  const { note, session, calls, pod, setHook } = await setup(`<img src="${image}">`);
+  await pod.fetch(image, {
+    method: "PUT",
+    body: "image",
+    headers: { "content-type": "image/png" },
+  });
+  const adapter = new NoteSharingAdapter(note, session);
+  await adapter.load(note.url, signal());
+  await adapter.setPerson(note.url, BOB, "editor");
+  await adapter.setGeneral(note.url, { mode: "link", role: "editor" });
+  setHook((call) =>
+    call.method === "GET" && call.url === `${image}.acl`
+      ? new Response(null, { status: 503 })
+      : undefined,
+  );
+  calls.length = 0;
+  await adapter.setPerson(note.url, BOB, null);
+  await adapter.setGeneral(note.url, { mode: "restricted" });
+  const saved = await adapter.load(note.url, signal());
+  expect(saved.people).toEqual([{ webId: WEBID, role: "owner" }]);
+  expect(saved.general.mode).toBe("restricted");
+  expect(saved.updateWarning).toContain(image);
+  const writes = calls.filter((call) => call.method === "PUT");
+  expect(writes).toHaveLength(2);
+  for (const write of writes) {
+    expect(write.url).toBe(`${note.url}.acl`);
+    expect(write.headers.get("if-match")).toMatch(/^".+"$/);
+  }
+  calls.length = 0;
+  await expect(adapter.setPerson(note.url, BOB, "viewer")).rejects.toMatchObject({
+    code: "images-unavailable",
+  });
+  expect(calls.some((call) => call.method === "PUT")).toBe(false);
+});
+
+it("does not widen private images during a downgrade or touch images after a refused note revocation", async () => {
+  const image = `${POD}notes/media/private.png`;
+  const { note, session } = await setup(`<img src="${image}">`);
+  const memory = new MemorySharingAdapter(state, 0);
+  await memory.setPerson(note.url, BOB, "editor");
+  await memory.setGeneral(note.url, { mode: "link", role: "editor" });
+  const adapter = new NoteSharingAdapter(note, session, memory);
+  await adapter.load(note.url, signal());
+  const person = vi.spyOn(memory, "setPerson");
+  const general = vi.spyOn(memory, "setGeneral");
+  await adapter.setPerson(note.url, BOB, "viewer");
+  await adapter.setGeneral(note.url, { mode: "link", role: "viewer" });
+  expect(person).toHaveBeenCalledExactlyOnceWith(note.url, BOB, "viewer");
+  expect(general).toHaveBeenCalledExactlyOnceWith(note.url, { mode: "link", role: "viewer" });
+  person.mockRejectedValueOnce(new ShareError("conflict"));
+  const load = vi.spyOn(memory, "load");
+  await expect(adapter.setPerson(note.url, BOB, null)).rejects.toMatchObject({ code: "conflict" });
+  expect(load.mock.calls.map(([url]) => url)).toEqual([note.url]);
+});
+
+it("reports an image write failure and continues updating later images", async () => {
+  const first = `${POD}notes/media/first.png`;
+  const second = `${POD}notes/media/second.png`;
+  const { note, session } = await setup(`<img src="${first}"><img src="${second}">`);
+  const memory = new MemorySharingAdapter(state, 0);
+  for (const url of [note.url, first, second]) await memory.setPerson(url, BOB, "viewer");
+  const adapter = new NoteSharingAdapter(note, session, memory);
+  await adapter.load(note.url, signal());
+  const original = memory.setPerson.bind(memory);
+  vi.spyOn(memory, "setPerson").mockImplementation(async (url, ...args) => {
+    if (url === first) throw new ShareError("conflict");
+    return original(url, ...args);
+  });
+  await adapter.setPerson(note.url, BOB, null);
+  expect((await adapter.load(note.url, signal())).updateWarning).toContain(first);
+  expect((await memory.load(second, signal())).people).toEqual(state.people);
+  // A successful change to another audience must not hide a failed person revocation.
+  await adapter.setGeneral(note.url, { mode: "restricted" });
+  expect((await adapter.load(note.url, signal())).updateWarning).toContain(first);
+});
+
+it("preserves owner and inherited rows and honours cancellation during image preflight", async () => {
+  const image = `${POD}notes/media/photo.png`;
+  const { note, session } = await setup(`<img src="${image}">`);
+  const memory = new MemorySharingAdapter(
+    {
+      ...state,
+      people: [
+        ...state.people,
+        { webId: BOB, role: "viewer", inherited: { from: POD, fromName: "Pod" } },
+      ],
+    },
+    0,
+  );
+  const adapter = new NoteSharingAdapter(note, session, memory);
+  await adapter.load(note.url, signal());
+  await expect(adapter.setPerson(note.url, WEBID, null)).rejects.toMatchObject({
+    code: "forbidden",
+  });
+  await expect(adapter.setPerson(note.url, BOB, null)).rejects.toMatchObject({ code: "forbidden" });
+  const original = memory.load.bind(memory);
+  const controller = new AbortController();
+  vi.spyOn(memory, "load").mockImplementation(async (url, signal) => {
+    if (url === image) controller.abort();
+    return original(url, signal);
+  });
+  await expect(adapter.load(note.url, controller.signal)).rejects.toMatchObject({
+    name: "AbortError",
+  });
 });
