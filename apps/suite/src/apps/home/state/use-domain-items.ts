@@ -259,6 +259,7 @@ function createDomainStore(session: HomeSession) {
                     item,
                     await typedViewData(item.dataset, item.subject, {
                       storage: session.storageUrl,
+                      includeRawData: false,
                     }),
                   ),
                 ] as const,

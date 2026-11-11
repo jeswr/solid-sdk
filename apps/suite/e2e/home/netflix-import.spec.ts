@@ -29,6 +29,10 @@ test("Netflix imports both CSV rows into Home Media without duplicates after re-
       expect(href).toBeTruthy();
       if (run === 0) hrefs.push(href as string);
       else expect(href).toBe(hrefs[index]);
+      await card.getByRole("button", { name: `More actions for ${title}`, exact: true }).click();
+      // These cards share a document: deleting either card must never delete the sibling.
+      await expect(page.getByRole("menuitem", { name: "Delete", exact: true })).toHaveCount(0);
+      await page.keyboard.press("Escape");
     }
     expect(new Set(hrefs).size).toBe(2);
   }
@@ -36,8 +40,33 @@ test("Netflix imports both CSV rows into Home Media without duplicates after re-
   for (const title of titles) {
     await page.getByRole("link", { name: title, exact: true }).click();
     await expect(page.getByRole("heading", { level: 2, name: title, exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "More item actions", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Delete", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await page.goto("/home/media");
   }
+  // A full navigation creates a fresh session: wait for its cache before going offline.
+  for (const title of titles)
+    await expect(page.getByRole("listitem", { name: title, exact: true })).toBeVisible();
+  // Keep the app assets available while signalling that the pod is offline.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    window.dispatchEvent(new Event("offline"));
+  });
+  for (const title of titles) {
+    await page.getByRole("link", { name: title, exact: true }).click();
+    await expect(page.getByRole("heading", { level: 2, name: title, exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("status").filter({ hasText: /^Showing saved copies as of/ }),
+    ).toBeVisible();
+    await page.locator(".hm-item-back").click();
+    for (const sibling of titles)
+      await expect(page.getByRole("listitem", { name: sibling, exact: true })).toBeVisible();
+  }
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+    window.dispatchEvent(new Event("online"));
+  });
   await page.reload();
   for (const title of titles)
     await expect(page.getByRole("listitem", { name: title, exact: true })).toBeVisible();

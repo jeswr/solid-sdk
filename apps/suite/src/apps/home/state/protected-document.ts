@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import { classifySubject } from "../lib/model/classify";
 import type { DomainItem } from "../lib/model/discovery";
 import { inStorage, readResource, subjectOf } from "../lib/model/rdf";
 import type { HomeSession } from "./use-domain-items";
@@ -36,7 +38,7 @@ const WELL_KNOWN = [
 ];
 
 /**
- * Whole-document deletion is never offered for account infrastructure. The WebID
+ * Whole-document deletion is never offered for shared records or account infrastructure. The WebID
  * profile backs both the Identity and Contact details cards: their fields are
  * removed through the edit form, never by deleting the profile document.
  */
@@ -48,6 +50,17 @@ export function protectedDocument(item: DomainItem, storage: string, webId?: str
   for (const quad of item.dataset) {
     if (INFRASTRUCTURE_PREDICATES.has(quad.predicate.value)) return true;
     if (quad.predicate.value === `${NS.RDF}type` && INFRASTRUCTURE_TYPES.has(quad.object.value))
+      return true;
+    // DELETE removes every subject. A sibling record must survive an action on this card.
+    // File cards carry their container's dataset rather than the file's own contents.
+    if (
+      item.dataType?.id !== "files" &&
+      quad.predicate.value === `${NS.RDF}type` &&
+      quad.subject.termType === "NamedNode" &&
+      quad.subject.value.split("#")[0] === item.url &&
+      !quad.subject.equals(item.subject) &&
+      classifySubject(subjectOf(item.dataset, quad.subject), webId).dataType
+    )
       return true;
   }
   return false;

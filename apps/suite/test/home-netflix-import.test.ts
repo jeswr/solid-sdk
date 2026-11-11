@@ -6,12 +6,50 @@ import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { createImportWriter } from "../src/apps/home/components/connect/import-service";
+import * as rdf from "../src/apps/home/lib/model/rdf";
 import { readResource, subjectOf } from "../src/apps/home/lib/model/rdf";
 import { domainStore, type HomeSession } from "../src/apps/home/state/use-domain-items";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+it("refreshes a 200-record Netflix history without serializing the shared dataset for cards", async () => {
+  vi.stubGlobal("navigator", { onLine: true });
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+  const session: HomeSession = {
+    mode: "demo",
+    webId: DEMO_WEBID,
+    displayName: "Alice Wilder",
+    storageUrl: DEMO_ROOT,
+    fetch: pod.fetch,
+    subscribe: pod.subscribe,
+    reset: async () => {},
+  };
+  const adapter = fileAdapterById("netflix");
+  if (!adapter) throw new Error("Netflix adapter missing");
+  const csv = [
+    "Title,Date",
+    ...Array.from({ length: 200 }, (_, index) => `Film ${index},10/25/26`),
+  ].join("\n");
+  await runFileImport({
+    adapter,
+    file: memoryFile("NetflixViewingHistory.csv", csv, "text/csv"),
+    podWriter: createImportWriter(session, "netflix", new AbortController().signal),
+  });
+  const serialize = vi.spyOn(rdf, "serializeTurtle");
+  const store = domainStore(session);
+  await store.refresh();
+  const snapshot = store.getSnapshot();
+  const items = snapshot.items.filter((item) => item.url.endsWith("/viewing-history.ttl"));
+  expect(items).toHaveLength(200);
+  expect(items.every((item) => snapshot.views.has(item))).toBe(true);
+  expect(new Set(items.map((item) => item.title)).size).toBe(200);
+  expect(serialize).not.toHaveBeenCalled();
+});
 
 it("imports two distinct Netflix viewings and keeps both Home cards through re-import and refresh", async () => {
   vi.stubGlobal("navigator", { onLine: true });
