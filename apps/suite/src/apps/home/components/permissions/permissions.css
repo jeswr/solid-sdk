@@ -242,3 +242,24 @@
     margin-left: auto;
   }
 }
+.hm-signing-keys h3 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.hm-signing-list {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  list-style: none;
+  padding: 0;
+}
+.hm-signing-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.hm-signing-impact {
+  display: grid;
+  gap: var(--space-2);
+}

@@ -284,6 +284,27 @@ describe("Today", () => {
 });
 
 describe("Upcoming", () => {
+  it("starts each day cell's accessible name with its visible weekday and date", async () => {
+    const inbox = cache.getSnapshot().projects[0] as StoredProject;
+    await cache.createTask(inbox, { title: "Monday task", allDay: "2026-11-02" });
+    const { host } = await mount(h("main", null, h(UpcomingView)));
+    const cells = [...host.querySelectorAll(".tsk-day-cell")];
+    expect(cells).toHaveLength(7);
+    for (const cell of cells) {
+      const label = cell.querySelector(".tsk-day-label")?.textContent?.trim() ?? "";
+      expect(label).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}$/);
+      expect(cell.textContent?.startsWith(label)).toBe(true);
+      expect(cell.getAttribute("aria-label")?.startsWith(label)).toBe(true);
+    }
+    const monday = host.querySelector('[data-day-key="2026-11-02"].tsk-day-cell');
+    expect(monday?.querySelector(".tsk-day-label")?.textContent).toBe("Mon 2");
+    expect(monday?.querySelector(".tsk-day-count")?.textContent).toBe("1");
+    expect(monday?.getAttribute("aria-label")).toBe("Mon 2 Nov, 1 task");
+    expect(
+      host.querySelector('.tsk-day-cell[data-day-key="2026-11-03"]')?.getAttribute("aria-label"),
+    ).toBe("Tue 3 Nov, 0 tasks");
+  });
+
   it("renders default locale preferences when both week-info APIs are missing", async () => {
     const method = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "getWeekInfo");
     const property = Object.getOwnPropertyDescriptor(Intl.Locale.prototype, "weekInfo");
