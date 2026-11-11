@@ -5,74 +5,28 @@ import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
-export interface PlaceData {
-  "created"?: Date;
-  "modified"?: Date;
-  "address"?: string;
-  "category": "home" | "work" | "food" | "shop" | "travel" | "outdoors" | "culture" | "health" | "other";
-  "notes"?: string;
-  "externalId"?: string;
-  "latitude": number;
-  "longitude": number;
-  "name": string;
-  "saved": boolean;
-}
-
-export interface PlaceWrapper extends EntityWrapper {
-  "created"?: Date;
-  "modified"?: Date;
-  "address"?: string;
-  "category"?: "home" | "work" | "food" | "shop" | "travel" | "outdoors" | "culture" | "health" | "other";
-  "notes"?: string;
-  "externalId"?: string;
-  "latitude"?: number;
-  "longitude"?: number;
-  "name"?: string;
-  "saved"?: boolean;
-}
-
-export interface PlaceEntity {
-  readonly name: "Place";
-  readonly typeIri: string;
-  readonly Wrapper: new (
-    term: string | Term,
-    dataset: DatasetCore,
-    factory: DataFactory,
-  ) => PlaceWrapper;
-  subject(resourceUrl: string): string;
-  build(resourceUrl: string, data: PlaceData): Store;
-  parse(resourceUrl: string, dataset: DatasetCore): PlaceData | undefined;
-  serialize(resourceUrl: string, data: PlaceData): Promise<string>;
-  storeToTurtle(store: Store): Promise<string>;
-  parseDocument(
-    resourceUrl: string,
-    body: string,
-    contentType?: string | null,
-  ): Promise<PlaceData | undefined>;
-}
-
 export interface JourneyData {
   "source": "google-timeline" | "manual" | "photo" | "check-in";
-  "distance": number;
-  "endTime": Date;
-  "startTime": Date;
   "activityType": "walking" | "cycling" | "running" | "driving" | "train" | "bus" | "flight" | "ferry" | "other";
   "endLatitude": number;
   "endLongitude": number;
   "startLatitude": number;
   "startLongitude": number;
+  "distance": number;
+  "endTime": Date;
+  "startTime": Date;
 }
 
 export interface JourneyWrapper extends EntityWrapper {
   "source"?: "google-timeline" | "manual" | "photo" | "check-in";
-  "distance"?: number;
-  "endTime"?: Date;
-  "startTime"?: Date;
   "activityType"?: "walking" | "cycling" | "running" | "driving" | "train" | "bus" | "flight" | "ferry" | "other";
   "endLatitude"?: number;
   "endLongitude"?: number;
   "startLatitude"?: number;
   "startLongitude"?: number;
+  "distance"?: number;
+  "endTime"?: Date;
+  "startTime"?: Date;
 }
 
 export interface JourneyEntity {
@@ -97,20 +51,20 @@ export interface JourneyEntity {
 
 export interface VisitData {
   "source": "google-timeline" | "manual" | "photo" | "check-in";
+  "confidence"?: number;
   "notes"?: string;
   "endTime": Date;
   "place": string;
   "startTime": Date;
-  "confidence"?: number;
 }
 
 export interface VisitWrapper extends EntityWrapper {
   "source"?: "google-timeline" | "manual" | "photo" | "check-in";
+  "confidence"?: number;
   "notes"?: string;
   "endTime"?: Date;
   "place"?: string;
   "startTime"?: Date;
-  "confidence"?: number;
 }
 
 export interface VisitEntity {
@@ -133,15 +87,61 @@ export interface VisitEntity {
   ): Promise<VisitData | undefined>;
 }
 
+export interface PlaceData {
+  "created"?: Date;
+  "modified"?: Date;
+  "saved": boolean;
+  "address"?: string;
+  "category": "home" | "work" | "food" | "shop" | "travel" | "outdoors" | "culture" | "health" | "other";
+  "notes"?: string;
+  "externalId"?: string;
+  "latitude": number;
+  "longitude": number;
+  "name": string;
+}
+
+export interface PlaceWrapper extends EntityWrapper {
+  "created"?: Date;
+  "modified"?: Date;
+  "saved"?: boolean;
+  "address"?: string;
+  "category"?: "home" | "work" | "food" | "shop" | "travel" | "outdoors" | "culture" | "health" | "other";
+  "notes"?: string;
+  "externalId"?: string;
+  "latitude"?: number;
+  "longitude"?: number;
+  "name"?: string;
+}
+
+export interface PlaceEntity {
+  readonly name: "Place";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => PlaceWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: PlaceData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): PlaceData | undefined;
+  serialize(resourceUrl: string, data: PlaceData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<PlaceData | undefined>;
+}
+
 export declare const nodes: Readonly<Record<string, never>>;
 
 export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;
   readonly entities: {
-  readonly Place: PlaceEntity;
   readonly Journey: JourneyEntity;
   readonly Visit: VisitEntity;
+  readonly Place: PlaceEntity;
   };
 }
 

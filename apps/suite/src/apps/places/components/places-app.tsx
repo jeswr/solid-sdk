@@ -143,6 +143,26 @@ function Connected({ controller, session }: { controller: PlacesController; sess
                 Owner only
               </span>
             </header>
+            {!!state.snapshot.skipped && (
+              <p role="status" className="pl-notice">
+                {state.snapshot.skipped} records could not be opened safely and were skipped. Check
+                your connection or storage permissions, then reload to try again.
+              </p>
+            )}
+            {view !== "import" &&
+              (state.import.stage === "saving" || state.import.stage === "reading") && (
+                <div role="status" className="pl-notice">
+                  {state.import.stage === "reading"
+                    ? `Reading ${state.import.filename}…`
+                    : `Saving ${state.import.progress.done} of ${state.import.progress.total} records…`}
+                  <Button variant="outline" onClick={() => setView("import")}>
+                    View import
+                  </Button>
+                  <Button variant="outline" onClick={() => controller.cancelImport()}>
+                    Cancel {state.import.stage === "reading" ? "reading" : "import"}
+                  </Button>
+                </div>
+              )}
             {view === "timeline" && <TimelineView snapshot={state.snapshot} select={setSelected} />}
             {view === "places" && (
               <>

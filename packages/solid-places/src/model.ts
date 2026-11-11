@@ -3,13 +3,15 @@ import { entities, type JourneyData, type PlaceData, type VisitData } from "./ge
 
 export type { JourneyData, PlaceData, VisitData };
 export { entities };
-export const PLACE_CLASS = "http://schema.org/Place";
+export const PLACE_CLASS = "https://schema.org/Place";
 export interface RecordValue<T> {
   url: string;
   etag: string | null;
   data: T;
 }
 export interface PlacesSnapshot {
+  /** Unreadable, invalid or non-private files omitted by the last load. */
+  skipped?: number;
   places: RecordValue<PlaceData>[];
   visits: RecordValue<VisitData>[];
   journeys: RecordValue<JourneyData>[];

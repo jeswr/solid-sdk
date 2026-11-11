@@ -270,7 +270,18 @@ export function parseGoogleTimeline(json: string): TimelineImport {
         skipped++;
         continue;
       }
-      const name = text(candidate.placeName ?? place.name) ?? "Unnamed place";
+      const semanticType = text(candidate.semanticType)?.toUpperCase();
+      const category =
+        semanticType === "HOME" ? "home" : semanticType === "WORK" ? "work" : "other";
+      const name =
+        text(candidate.placeName ?? place.name) ??
+        (segment.visit
+          ? category === "home"
+            ? "Home"
+            : category === "work"
+              ? "Work"
+              : `Place near ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`
+          : "Unnamed place");
       const externalId = text(candidate.placeId ?? place.placeId);
       const id = externalId
         ? key(["google", externalId])
@@ -282,7 +293,7 @@ export function parseGoogleTimeline(json: string): TimelineImport {
             name,
             latitude: coords[0],
             longitude: coords[1],
-            category: "other",
+            category,
             saved: false,
             ...(externalId ? { externalId } : {}),
             ...(text(place.address, 1000) ? { address: text(place.address, 1000) } : {}),
@@ -290,9 +301,17 @@ export function parseGoogleTimeline(json: string): TimelineImport {
             modified: span.startTime,
           },
         });
-      const confidence = numeric(
-        candidate.probability ?? visit.probability ?? oldVisit.visitConfidence,
+      const rawConfidence = numeric(
+        segment.placeVisit
+          ? oldVisit.visitConfidence
+          : (candidate.probability ?? visit.probability),
       );
+      const confidence =
+        rawConfidence === undefined
+          ? undefined
+          : segment.placeVisit
+            ? rawConfidence / 100
+            : rawConfidence;
       const visitId = key(["visit", id, span.startTime.toISOString(), span.endTime.toISOString()]);
       visits.set(visitId, {
         id: visitId,
@@ -303,7 +322,11 @@ export function parseGoogleTimeline(json: string): TimelineImport {
           ...(confidence !== undefined && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
         },
       });
-    } else if (!addJourney(segment, activity, span)) skipped++;
+    } else if (
+      !(segment.activity || segment.activitySegment) ||
+      !addJourney(segment, activity, span)
+    )
+      skipped++;
   }
   return {
     places: [...places.values()],

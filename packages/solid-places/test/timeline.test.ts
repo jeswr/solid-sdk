@@ -91,7 +91,7 @@ describe("Google Timeline exports", () => {
     );
     expect(result.places[0]?.data.address).toBe("Fictional square");
     expect(result.places[0]?.data.latitude).toBe(50.1);
-    expect(result.visits[0]?.data.confidence).toBeUndefined();
+    expect(result.visits[0]?.data.confidence).toBe(0.02);
     expect(result.journeys[0]?.data.activityType).toBe("train");
   });
   it("reads timestamp-based old durations and unnamed places", () => {
@@ -110,11 +110,24 @@ describe("Google Timeline exports", () => {
     expect(result.places[0]?.data.name).toBe("Unnamed place");
     expect(result.visits).toHaveLength(1);
   });
-  it("reads timelinePath alone and ignores invalid intermediate points", () => {
+  it("skips raw timelinePath traces overlapping visits and activities", () => {
+    const trace = {
+      startTime,
+      endTime,
+      timelinePath: [{ point: "geo:50,-1" }, { point: "geo:50.02,-1" }],
+    };
+    const result = parse([modernVisit(), modernActivity(), trace]);
+    expect(result.journeys).toHaveLength(1);
+    expect(result.journeys[0]?.data.activityType).toBe("walking");
+    expect(result.journeys[0]?.data.distance).toBe(1500);
+    expect(result.skipped).toBe(1);
+  });
+  it("uses timelinePath only on an activity, ignoring invalid intermediate points", () => {
     const result = parse([
       {
         startTime,
         endTime,
+        activity: { topCandidate: { type: "WALKING" } },
         timelinePath: [
           { point: "geo:50,-1" },
           { point: "oops" },
@@ -124,11 +137,52 @@ describe("Google Timeline exports", () => {
       },
     ]);
     expect(result.journeys[0]?.data).toMatchObject({
-      activityType: "other",
+      activityType: "walking",
       startLatitude: 50,
       endLatitude: 50.02,
     });
     expect(result.journeys[0]!.data.distance).toBeGreaterThan(haversine([50, -1], [50.02, -1]));
+  });
+  it.each([
+    ["HOME", "Home", "home"],
+    ["WORK", "Work", "work"],
+    ["UNKNOWN", "Place near 50.10000, -1.20000", "other"],
+  ])("names unnamed modern %s visits", (semanticType, name, category) => {
+    const row = modernVisit();
+    const candidate = { ...row.visit.topCandidate, placeName: undefined, semanticType };
+    expect(parse([{ ...row, visit: { topCandidate: candidate } }]).places[0]?.data).toMatchObject({
+      name,
+      category,
+    });
+  });
+  it.each([
+    0,
+    1,
+    50,
+    100,
+    -1,
+    101,
+    "bad",
+    null,
+  ])("normalises old visitConfidence %s as a percentage", (visitConfidence) => {
+    const result = parseGoogleTimeline(
+      JSON.stringify({
+        timelineObjects: [
+          {
+            placeVisit: {
+              duration: { startTimestamp: startTime, endTimestamp: endTime },
+              location: { latitudeE7: 0, longitudeE7: 0 },
+              visitConfidence,
+            },
+          },
+        ],
+      }),
+    );
+    expect(result.visits[0]?.data.confidence).toBe(
+      typeof visitConfidence === "number" && visitConfidence >= 0 && visitConfidence <= 100
+        ? visitConfidence / 100
+        : undefined,
+    );
   });
   it("uses haversine when a supplied distance is negative, nonnumeric or oversized", () => {
     for (const distanceMeters of [-1, "oops", 1e12, null]) {
@@ -210,7 +264,14 @@ describe("Google Timeline exports", () => {
     );
     expect(() => parse(Array(IMPORT_LIMITS.records + 1).fill(null))).toThrow(RangeError);
     expect(() =>
-      parse([{ startTime, endTime, timelinePath: Array(IMPORT_LIMITS.points + 1).fill(null) }]),
+      parse([
+        {
+          startTime,
+          endTime,
+          activity: {},
+          timelinePath: Array(IMPORT_LIMITS.points + 1).fill(null),
+        },
+      ]),
     ).toThrow(RangeError);
   });
 });
@@ -293,4 +354,12 @@ it("treats prototype property names as unknown modes and preserves confidence bo
       probability >= 0 && probability <= 1 ? probability : undefined,
     );
   }
+});
+
+it("accepts activity.type in exports without a top candidate", () => {
+  const row = modernActivity();
+  expect(
+    parse([{ ...row, activity: { ...row.activity, topCandidate: undefined, type: "WALKING" } }])
+      .journeys[0]?.data.activityType,
+  ).toBe("walking");
 });

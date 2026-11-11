@@ -4,6 +4,7 @@ import {
   CATEGORIES,
   dayBounds,
   entities,
+  localDay,
   mapLinks,
   type PlaceData,
   type PlacesSnapshot,
@@ -13,6 +14,7 @@ import {
   type RecordValue,
   timelineForDay,
 } from "@jeswr/solid-places";
+import { isNativeApp } from "@jeswr/suite-native";
 import {
   Button,
   EmptyState,
@@ -29,13 +31,12 @@ import { ArrowUpRight, Bike, Footprints, MapPin, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const time = (date: Date) =>
-  date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const date = (value: Date) =>
   value.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
-    timeZone: "UTC",
   });
 const distance = (metres: number) =>
   metres >= 1000
@@ -44,23 +45,25 @@ const distance = (metres: number) =>
 function recentDay(snapshot: PlacesSnapshot) {
   let latest = "";
   for (const { data } of [...snapshot.visits, ...snapshot.journeys]) {
-    const day = data.startTime.toISOString().slice(0, 10);
+    const day = localDay(data.startTime);
     if (day > latest) latest = day;
   }
-  return latest || new Date().toISOString().slice(0, 10);
+  return latest || localDay(new Date());
 }
 function Category({
   value,
   change,
   label,
+  id,
 }: {
   value: string;
   change: (value: string) => void;
   label: string;
+  id?: string;
 }) {
   return (
     <Select value={value} onValueChange={change}>
-      <SelectTrigger aria-label={label}>
+      <SelectTrigger id={id} aria-label={label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -104,7 +107,8 @@ export function TimelineView({
           />
         </label>
         <p className="pl-muted">
-          Times shown in UTC · {rows.filter((row) => row.kind === "visit").length} visits
+          Times shown in your local time zone · {rows.filter((row) => row.kind === "visit").length}{" "}
+          visits
         </p>
       </div>
       {rows.length === 0 ? (
@@ -224,7 +228,7 @@ export function PlacesList({
               <article key={place.url} className="pl-place-card">
                 <div className="pl-card-icon">
                   <MapPin size={24} aria-hidden="true" />
-                  {place.data.saved && <Star size={14} aria-label="Saved" />}
+                  {place.data.saved && <Star size={14} role="img" aria-label="Saved" />}
                 </div>
                 <p className="pl-eyebrow">{place.data.category}</p>
                 <h3>
@@ -296,11 +300,12 @@ export function PlaceDetail({
           onChange={(event) => setName(event.target.value)}
           disabled={offline}
         />
-        <Label>Category</Label>
+        <Label htmlFor="pl-place-category">Category</Label>
         <Category
           value={category}
           change={(value) => setCategory(value as PlaceData["category"])}
           label="Place category"
+          id="pl-place-category"
         />
         <Label htmlFor="pl-place-notes">Notes</Label>
         <Textarea
@@ -319,16 +324,18 @@ export function PlaceDetail({
         <p className="pl-muted" id="pl-map-notice">
           OpenStreetMap will see this place’s coordinates when you show the map or open the link.
         </p>
-        <Button
-          variant="outline"
-          aria-pressed={map}
-          aria-describedby="pl-map-notice"
-          disabled={offline && !map}
-          onClick={() => setMap((value) => !value)}
-        >
-          {map ? "Hide map" : "Show on map"}
-        </Button>
-        {map && (
+        {!isNativeApp() && (
+          <Button
+            variant="outline"
+            aria-pressed={map}
+            aria-describedby="pl-map-notice"
+            disabled={offline && !map}
+            onClick={() => setMap((value) => !value)}
+          >
+            {map ? "Hide map" : "Show on map"}
+          </Button>
+        )}
+        {!isNativeApp() && map && (
           <iframe
             title={`Map of ${place.data.name}`}
             src={links.embed}
@@ -350,7 +357,7 @@ export function PlaceDetail({
             <li key={url}>
               <strong>{date(data.startTime)}</strong>
               <p>
-                {time(data.startTime)}–{time(data.endTime)} UTC ·{" "}
+                {time(data.startTime)}–{time(data.endTime)} ·{" "}
                 {Math.round((+data.endTime - +data.startTime) / 60000)} min
               </p>
             </li>
@@ -438,7 +445,8 @@ export function StatsView({ snapshot }: { snapshot: PlacesSnapshot }) {
             </ul>
           )}
           <p className="pl-muted">
-            UTC periods. Distance across a period boundary is estimated from elapsed time.
+            Periods use your local time zone. Distance across a period boundary is estimated from
+            elapsed time.
           </p>
         </>
       )}

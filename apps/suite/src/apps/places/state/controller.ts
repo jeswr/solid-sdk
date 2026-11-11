@@ -7,6 +7,7 @@ import type {
   TimelineImport,
 } from "@jeswr/solid-places";
 import { sampleWeek } from "../demo/sample";
+import { readTimeline } from "../lib/import-worker";
 
 const empty = (): PlacesSnapshot => ({ places: [], visits: [], journeys: [] });
 export interface PlacesState {
@@ -14,6 +15,13 @@ export interface PlacesState {
   snapshot: PlacesSnapshot;
   saving: number;
   error: string | null;
+  import: {
+    preview: TimelineImport | null;
+    stage: "idle" | "reading" | "saving" | "done";
+    progress: { done: number; total: number };
+    error: string;
+    filename: string;
+  };
 }
 /** One serialized mutation queue; confirmed values plus pending patches govern rollback. */
 export function placesController(
@@ -21,7 +29,20 @@ export function placesController(
   demo: boolean,
   failed: (message: string) => void,
 ) {
-  let state: PlacesState = { status: "loading", snapshot: empty(), saving: 0, error: null };
+  let state: PlacesState = {
+    status: "loading",
+    snapshot: empty(),
+    saving: 0,
+    error: null,
+    import: {
+      preview: null,
+      stage: "idle",
+      progress: { done: 0, total: 0 },
+      error: "",
+      filename: "",
+    },
+  };
+  let operation: AbortController | undefined;
   const listeners = new Set<() => void>();
   let alive = true;
   let generation = 0;
@@ -117,21 +138,72 @@ export function placesController(
         publish({ snapshot: visible(), saving: Math.max(0, state.saving - 1) });
       });
   }
-  async function importTimeline(
-    input: TimelineImport,
-    progress: (done: number, total: number) => void,
-    signal: AbortSignal,
-  ) {
+  const publishImport = (next: Partial<PlacesState["import"]>) =>
+    publish({ import: { ...state.import, ...next } });
+  async function readFile(file: File) {
+    if (!alive || state.import.stage === "saving") return;
+    operation?.abort();
+    const active = new AbortController();
+    operation = active;
+    publishImport({ preview: null, stage: "reading", error: "", filename: file.name });
+    try {
+      const preview = await readTimeline(file, active.signal);
+      if (operation === active && !active.signal.aborted) publishImport({ preview, stage: "idle" });
+    } catch (reason) {
+      if (operation === active)
+        publishImport({
+          stage: "idle",
+          error: active.signal.aborted
+            ? "Reading cancelled."
+            : reason instanceof Error
+              ? reason.message
+              : "Could not read this file.",
+        });
+    }
+  }
+  async function importTimeline(input: TimelineImport) {
+    if (!alive || state.import.stage === "saving" || state.import.stage === "reading") return;
+    const active = new AbortController();
+    operation = active;
     ++generation;
     publish({ saving: state.saving + 1 });
-    // Imports are queued with edits, but render progress without taking over the page.
-    const task = queue.then(() => repository.importTimeline(input, progress, signal));
+    publishImport({
+      stage: "saving",
+      error: "",
+      progress: {
+        done: 0,
+        total: input.places.length + input.visits.length + input.journeys.length,
+      },
+    });
+    // Account-owned work survives view unmounts. Only explicit cancel or disposal aborts.
+    const task = queue.then(() => {
+      active.signal.throwIfAborted();
+      return repository.importTimeline(
+        input,
+        (done, total) => {
+          if (!active.signal.aborted) publishImport({ progress: { done, total } });
+        },
+        active.signal,
+      );
+    });
     queue = task.catch(() => {});
     try {
       await task;
+      active.signal.throwIfAborted();
+      publishImport({ stage: "done" });
+    } catch (reason) {
+      publishImport({
+        stage: "idle",
+        error: active.signal.aborted
+          ? "Import cancelled. Records already saved are kept; re-importing this file will skip them."
+          : "The import stopped. Records already saved are kept. Reconnect or check your private storage, then retry.",
+      });
+      if (alive && !active.signal.aborted)
+        failed("Some history could not be saved. You can safely retry this file.");
+      throw reason;
     } finally {
       publish({ saving: Math.max(0, state.saving - 1) });
-      await refresh();
+      if (alive) await refresh();
     }
   }
   return {
@@ -146,8 +218,11 @@ export function placesController(
     refresh,
     save,
     importTimeline,
+    readFile,
+    cancelImport: () => operation?.abort(),
     dispose: () => {
       alive = false;
+      operation?.abort();
       generation++;
       listeners.clear();
     },

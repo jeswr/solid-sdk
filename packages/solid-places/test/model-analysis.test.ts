@@ -154,3 +154,54 @@ it("keeps the latest visit independent of input order and includes instantaneous
     ),
   ).toHaveLength(1);
 });
+
+it("writes only canonical HTTPS schema.org terms", async () => {
+  const body = await serializeRecord("Place", url, place);
+  expect(entities.Place.typeIri).toBe("https://schema.org/Place");
+  expect(body).toContain("https://schema.org/");
+  expect(body).not.toContain("http://schema.org/");
+});
+it("groups browser-local days and periods across UTC boundaries and DST", () => {
+  const previous = process.env.TZ;
+  process.env.TZ = "America/Los_Angeles";
+  try {
+    const local = {
+      ...snapshot,
+      visits: [
+        {
+          ...snapshot.visits[0]!,
+          data: {
+            ...visit,
+            startTime: new Date("2026-11-01T01:00:00Z"),
+            endTime: new Date("2026-11-01T02:00:00Z"),
+          },
+        },
+      ],
+      journeys: [],
+    };
+    expect([...groupByDay(local).keys()]).toEqual(["2026-10-31"]);
+    expect(timelineForDay(local, "2026-10-31")).toHaveLength(1);
+    expect(timelineForDay(local, "2026-11-01")).toHaveLength(0);
+    expect(periodStats(local, periodBounds("2026-10")).visits).toBe(1);
+    expect(dayBounds("2026-11-01").start.toISOString()).toBe("2026-11-01T07:00:00.000Z");
+    expect(+dayBounds("2026-11-01").end - +dayBounds("2026-11-01").start).toBe(25 * 3600000);
+    expect(+dayBounds("2026-03-08").end - +dayBounds("2026-03-08").start).toBe(23 * 3600000);
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
+it("reads supported legacy schema.org aliases through the generated model and writes HTTPS", async () => {
+  const legacy = (await serializeRecord("Place", url, place)).replaceAll(
+    "https://schema.org/",
+    "http://schema.org/",
+  );
+  expect(await entities.Place.parseDocument(url, legacy)).toEqual(place);
+  // Shared-predicate read aliases cannot be admitted by this generator version.
+  const oldVisit = (await serializeRecord("Visit", url, visit)).replaceAll(
+    "https://schema.org/",
+    "http://schema.org/",
+  );
+  expect(await entities.Visit.parseDocument(url, oldVisit)).toBeUndefined();
+});

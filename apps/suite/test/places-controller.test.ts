@@ -30,7 +30,7 @@ function setup(demo = false) {
       data: { ...before.data, ...patch },
       etag: '"2"',
     })),
-    importTimeline: vi.fn(async () => {}),
+    importTimeline: vi.fn<PlacesRepository["importTimeline"]>(async () => {}),
   } satisfies PlacesRepository;
   const failed = vi.fn();
   const controller = placesController(repo, demo, failed);
@@ -131,15 +131,16 @@ it("does not resurrect two failed edits or write no-ops", async () => {
 it("imports with progress and reconciles partial failures", async () => {
   const { controller, repo } = setup();
   await controller.open();
-  const progress = vi.fn();
-  const signal = new AbortController().signal;
-  await controller.importTimeline(sampleWeek(), progress, signal);
-  expect(repo.importTimeline).toHaveBeenLastCalledWith(sampleWeek(), progress, signal);
+  await controller.importTimeline(sampleWeek());
+  expect(repo.importTimeline).toHaveBeenLastCalledWith(
+    sampleWeek(),
+    expect.any(Function),
+    expect.any(AbortSignal),
+  );
+  expect(controller.getSnapshot().import.stage).toBe("done");
   expect(repo.load).toHaveBeenCalledTimes(2);
   repo.importTimeline.mockRejectedValueOnce(new Error("Partial"));
-  await expect(controller.importTimeline(sampleWeek(), progress, signal)).rejects.toThrow(
-    "Partial",
-  );
+  await expect(controller.importTimeline(sampleWeek())).rejects.toThrow("Partial");
   expect(controller.getSnapshot().saving).toBe(0);
   expect(repo.load).toHaveBeenCalledTimes(3);
 });
@@ -202,4 +203,59 @@ it("suppresses late save errors after the selected account closes", async () => 
   delayed.reject(new Error("Late failure"));
   await pending;
   expect(failed).not.toHaveBeenCalled();
+});
+it("keeps account-owned imports and progress when subscribers leave and return", async () => {
+  const { controller, repo } = setup();
+  await controller.open();
+  const done = deferred<void>();
+  let active!: AbortSignal;
+  vi.mocked(repo.importTimeline).mockImplementationOnce(async (_input, progress, signal) => {
+    active = signal!;
+    progress!(2, 26);
+    await done.promise;
+  });
+  const unsubscribe = controller.subscribe(vi.fn());
+  const importing = controller.importTimeline(sampleWeek());
+  await Promise.resolve();
+  unsubscribe();
+  expect(active.aborted).toBe(false);
+  expect(controller.getSnapshot().import).toMatchObject({
+    stage: "saving",
+    progress: { done: 2, total: 26 },
+  });
+  const changed = vi.fn();
+  controller.subscribe(changed);
+  done.resolve();
+  await importing;
+  expect(controller.getSnapshot().import.stage).toBe("done");
+  expect(changed).toHaveBeenCalled();
+});
+it.each([
+  "cancel",
+  "dispose",
+])("only explicit %s aborts an import, keeping partial records resumable", async (action) => {
+  const { controller, repo } = setup();
+  await controller.open();
+  let active!: AbortSignal;
+  const done = deferred<void>();
+  vi.mocked(repo.importTimeline).mockImplementationOnce(async (_input, _progress, signal) => {
+    active = signal!;
+    await done.promise;
+    active.throwIfAborted();
+  });
+  const importing = controller.importTimeline(sampleWeek());
+  await Promise.resolve();
+  if (action === "cancel") controller.cancelImport();
+  else controller.dispose();
+  expect(active.aborted).toBe(true);
+  done.resolve();
+  await expect(importing).rejects.toMatchObject({ name: "AbortError" });
+  if (action === "cancel")
+    expect(controller.getSnapshot().import.error).toContain("already saved are kept");
+});
+it("retains skipped-record counts from the repository", async () => {
+  const { controller, repo } = setup();
+  repo.load.mockResolvedValueOnce({ ...initial(), skipped: 3 });
+  await controller.open();
+  expect(controller.getSnapshot().snapshot.skipped).toBe(3);
 });

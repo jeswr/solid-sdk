@@ -1,13 +1,13 @@
 {
   "shapesBase": "https://jeswr.org/ns/places/shapes#",
   "prefixes": {
-    "schema": "http://schema.org/",
+    "schema": "https://schema.org/",
     "places": "https://jeswr.org/ns/places#",
     "dct": "http://purl.org/dc/terms/"
   },
   "entities": [
     {
-      "targetClass": "http://schema.org/Place",
+      "targetClass": "https://schema.org/Place",
       "name": "Place",
       "subject": {
         "convention": "hash-it"

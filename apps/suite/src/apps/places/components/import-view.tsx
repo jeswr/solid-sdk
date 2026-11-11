@@ -1,10 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import type { TimelineImport } from "@jeswr/solid-places";
 import { Button, EmptyState, Input, Label, toast } from "@jeswr/suite-ui";
 import { FileUp, ShieldCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { readTimeline } from "../lib/import-worker";
+import { useSyncExternalStore } from "react";
 import type { PlacesController } from "../state/controller";
 export function ImportView({
   controller,
@@ -13,66 +11,19 @@ export function ImportView({
   controller: PlacesController;
   offline: boolean;
 }) {
-  const [preview, setPreview] = useState<TimelineImport | null>(null);
-  const [stage, setStage] = useState<"idle" | "reading" | "saving" | "done">("idle");
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [error, setError] = useState("");
-  const [filename, setFilename] = useState("");
-  const operation = useRef<AbortController | null>(null);
-  useEffect(() => () => operation.current?.abort(), []);
-  const read = async (file: File) => {
-    operation.current?.abort();
-    const active = new AbortController();
-    operation.current = active;
-    setPreview(null);
-    setError("");
-    setStage("reading");
-    setFilename(file.name);
-    try {
-      const parsed = await readTimeline(file, active.signal);
-      if (operation.current === active && !active.signal.aborted) {
-        setPreview(parsed);
-        setStage("idle");
-      }
-    } catch (reason) {
-      if (operation.current !== active) return;
-      setStage("idle");
-      setError(
-        active.signal.aborted
-          ? "Reading cancelled."
-          : reason instanceof Error
-            ? reason.message
-            : "Could not read this file.",
-      );
-    }
-  };
+  const state = useSyncExternalStore(
+    controller.subscribe,
+    controller.getSnapshot,
+    controller.getSnapshot,
+  );
+  const { preview, stage, progress, error, filename } = state.import;
   const importPreview = async () => {
     if (!preview || offline) return;
-    const active = new AbortController();
-    operation.current = active;
-    setStage("saving");
-    setError("");
     try {
-      await controller.importTimeline(
-        preview,
-        (done, total) => {
-          if (!active.signal.aborted) setProgress({ done, total });
-        },
-        active.signal,
-      );
-      if (!active.signal.aborted) {
-        setStage("done");
-        toast.success("Your history is home in your pod.");
-      }
+      await controller.importTimeline(preview);
+      toast.success("Your history is home in your pod.");
     } catch {
-      if (!active.signal.aborted)
-        toast.error("Some history could not be saved. You can safely retry this file.");
-      setStage("idle");
-      setError(
-        active.signal.aborted
-          ? "Import cancelled. Records already saved are kept; re-importing this file will skip them."
-          : "The import stopped. Records already saved are kept. Reconnect or check your private storage, then retry.",
-      );
+      /* The controller retains the resumable failure notice across views. */
     }
   };
   const busy = stage === "reading" || stage === "saving";
@@ -97,7 +48,7 @@ export function ImportView({
           disabled={busy}
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file) void read(file);
+            if (file) void controller.readFile(file);
             event.target.value = "";
           }}
         />
@@ -116,7 +67,7 @@ export function ImportView({
               : ""}
       </div>
       {busy && (
-        <Button variant="outline" onClick={() => operation.current?.abort()}>
+        <Button variant="outline" onClick={() => controller.cancelImport()}>
           Cancel {stage === "reading" ? "reading" : "import"}
         </Button>
       )}

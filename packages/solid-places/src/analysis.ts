@@ -4,18 +4,20 @@ export type Period = { start: Date; end: Date };
 export function periodBounds(value: string): Period {
   if (!/^\d{4}(?:-(?:0[1-9]|1[0-2]))?$/.test(value) || Number(value.slice(0, 4)) < 100)
     throw new TypeError("Choose a valid month or year");
-  const start = new Date(`${value.length === 4 ? `${value}-01` : value}-01T00:00:00Z`);
+  const start = new Date(`${value.length === 4 ? `${value}-01` : value}-01T00:00:00`);
   const end = new Date(start);
-  if (value.length === 4) end.setUTCFullYear(end.getUTCFullYear() + 1);
-  else end.setUTCMonth(end.getUTCMonth() + 1);
+  if (value.length === 4) end.setFullYear(end.getFullYear() + 1);
+  else end.setMonth(end.getMonth() + 1);
   return { start, end };
 }
 export function dayBounds(day: string): Period {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new TypeError("Choose a valid date");
-  const start = new Date(`${day}T00:00:00Z`);
-  if (!Number.isFinite(start.getTime()) || start.toISOString().slice(0, 10) !== day)
+  const start = new Date(`${day}T00:00:00`);
+  if (!Number.isFinite(start.getTime()) || localDay(start) !== day)
     throw new TypeError("Choose a valid date");
-  return { start, end: new Date(start.getTime() + 86_400_000) };
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
 }
 function overlaps(start: Date, end: Date, period: Period) {
   return (
@@ -36,7 +38,19 @@ export function timelineForDay(snapshot: PlacesSnapshot, day: string) {
         a.data.startTime.getTime() - b.data.startTime.getTime() || a.url.localeCompare(b.url),
     );
 }
-/** UTC day keys, sorted, without expanding untrusted multi-year spans into days. */
+/** ISO calendar day in the browser's local zone; storage remains UTC. */
+export function localDay(at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    calendar: "iso8601",
+    numberingSystem: "latn",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(at);
+  const part = (type: string) => parts.find((item) => item.type === type)!.value;
+  return `${part("year").padStart(4, "0")}-${part("month")}-${part("day")}`;
+}
+/** Local day keys, sorted, without expanding untrusted multi-year spans into days. */
 export function groupByDay(snapshot: PlacesSnapshot) {
   const groups = new Map<string, ReturnType<typeof timelineForDay>>();
   const rows = [
@@ -44,7 +58,7 @@ export function groupByDay(snapshot: PlacesSnapshot) {
     ...snapshot.journeys.map((record) => ({ kind: "journey" as const, ...record })),
   ].sort((a, b) => a.data.startTime.getTime() - b.data.startTime.getTime());
   for (const row of rows) {
-    const day = row.data.startTime.toISOString().slice(0, 10);
+    const day = localDay(row.data.startTime);
     let group = groups.get(day);
     if (!group) {
       group = [];

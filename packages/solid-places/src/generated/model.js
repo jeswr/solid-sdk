@@ -10,133 +10,11 @@ const manifest = {
     "major": 0
   },
   "prefixes": {
-    "schema": "http://schema.org/",
+    "schema": "https://schema.org/",
     "places": "https://jeswr.org/ns/places#",
     "dct": "http://purl.org/dc/terms/"
   },
   "entities": [
-    {
-      "name": "Place",
-      "typeIris": [
-        "http://schema.org/Place"
-      ],
-      "subject": {
-        "convention": "hash-it"
-      },
-      "fields": [
-        {
-          "name": "created",
-          "predicate": "http://purl.org/dc/terms/created",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "modified",
-          "predicate": "http://purl.org/dc/terms/modified",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "address",
-          "predicate": "http://schema.org/address",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "category",
-          "predicate": "http://schema.org/category",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "minCount": 1,
-          "maxCount": 1,
-          "in": [
-            "home",
-            "work",
-            "food",
-            "shop",
-            "travel",
-            "outdoors",
-            "culture",
-            "health",
-            "other"
-          ],
-          "guards": {
-            "requiredFailClosed": true
-          }
-        },
-        {
-          "name": "notes",
-          "predicate": "http://schema.org/description",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "externalId",
-          "predicate": "http://schema.org/identifier",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "maxCount": 1,
-          "guards": {}
-        },
-        {
-          "name": "latitude",
-          "predicate": "http://schema.org/latitude",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#double",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "minInclusive": -90,
-            "maxInclusive": 90
-          }
-        },
-        {
-          "name": "longitude",
-          "predicate": "http://schema.org/longitude",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#double",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "minInclusive": -180,
-            "maxInclusive": 180
-          }
-        },
-        {
-          "name": "name",
-          "predicate": "http://schema.org/name",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "minLength": 1
-          }
-        },
-        {
-          "name": "saved",
-          "predicate": "https://jeswr.org/ns/places#saved",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true
-          }
-        }
-      ]
-    },
     {
       "name": "Journey",
       "typeIris": [
@@ -159,40 +37,6 @@ const manifest = {
             "photo",
             "check-in"
           ],
-          "guards": {
-            "requiredFailClosed": true
-          }
-        },
-        {
-          "name": "distance",
-          "predicate": "http://schema.org/distance",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#double",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true,
-            "minInclusive": 0
-          }
-        },
-        {
-          "name": "endTime",
-          "predicate": "http://schema.org/endTime",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "minCount": 1,
-          "maxCount": 1,
-          "guards": {
-            "requiredFailClosed": true
-          }
-        },
-        {
-          "name": "startTime",
-          "predicate": "http://schema.org/startTime",
-          "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
-          "minCount": 1,
-          "maxCount": 1,
           "guards": {
             "requiredFailClosed": true
           }
@@ -270,6 +114,43 @@ const manifest = {
             "minInclusive": -180,
             "maxInclusive": 180
           }
+        },
+        {
+          "name": "distance",
+          "predicate": "https://schema.org/distance",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/distance"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "endTime",
+          "predicate": "https://schema.org/endTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "startTime",
+          "predicate": "https://schema.org/startTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
         }
       ]
     },
@@ -300,8 +181,19 @@ const manifest = {
           }
         },
         {
+          "name": "confidence",
+          "predicate": "https://jeswr.org/ns/places#confidence",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0,
+            "maxInclusive": 1
+          }
+        },
+        {
           "name": "notes",
-          "predicate": "http://schema.org/description",
+          "predicate": "https://schema.org/description",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
@@ -309,7 +201,7 @@ const manifest = {
         },
         {
           "name": "endTime",
-          "predicate": "http://schema.org/endTime",
+          "predicate": "https://schema.org/endTime",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
           "minCount": 1,
@@ -320,8 +212,11 @@ const manifest = {
         },
         {
           "name": "place",
-          "predicate": "http://schema.org/location",
+          "predicate": "https://schema.org/location",
           "kind": "iri",
+          "aliasPredicates": [
+            "http://schema.org/location"
+          ],
           "minCount": 1,
           "maxCount": 1,
           "guards": {
@@ -332,7 +227,7 @@ const manifest = {
         },
         {
           "name": "startTime",
-          "predicate": "http://schema.org/startTime",
+          "predicate": "https://schema.org/startTime",
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
           "minCount": 1,
@@ -340,16 +235,148 @@ const manifest = {
           "guards": {
             "requiredFailClosed": true
           }
+        }
+      ]
+    },
+    {
+      "name": "Place",
+      "typeIris": [
+        "https://schema.org/Place"
+      ],
+      "aliasTypeIris": [
+        "http://schema.org/Place"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
         },
         {
-          "name": "confidence",
-          "predicate": "https://jeswr.org/ns/places#confidence",
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "saved",
+          "predicate": "https://jeswr.org/ns/places#saved",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "minCount": 1,
           "maxCount": 1,
           "guards": {
-            "minInclusive": 0,
-            "maxInclusive": 1
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "address",
+          "predicate": "https://schema.org/address",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/address"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "category",
+          "predicate": "https://schema.org/category",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/category"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "home",
+            "work",
+            "food",
+            "shop",
+            "travel",
+            "outdoors",
+            "culture",
+            "health",
+            "other"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "notes",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "externalId",
+          "predicate": "https://schema.org/identifier",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/identifier"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "latitude",
+          "predicate": "https://schema.org/latitude",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/latitude"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": -90,
+            "maxInclusive": 90
+          }
+        },
+        {
+          "name": "longitude",
+          "predicate": "https://schema.org/longitude",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/longitude"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": -180,
+            "maxInclusive": 180
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/name"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minLength": 1
           }
         }
       ]

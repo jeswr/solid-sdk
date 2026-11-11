@@ -37,6 +37,7 @@ it("opens the real in-browser pod and persists a fictional week through the prod
     displayName: "Fictional traveller",
     reset: async () => {},
   });
+  await repo.initialize();
   const controller = placesController(repo, true, vi.fn());
   await controller.open();
   expect(controller.getSnapshot().error).toBeNull();
