@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { ShareError, type ShareRole, type SharingAdapter, type SharingState } from "./types";
+import { shareRoleRank } from "@jeswr/suite-ui/sharing";
+import {
+  ShareError,
+  type ShareRole,
+  type ShareWriteOptions,
+  type SharingAdapter,
+  type SharingState,
+} from "./types";
 
 /** Fictional storage, scoped per URL; deterministic delay and one-shot failures for fixtures. */
 export class MemorySharingAdapter implements SharingAdapter {
@@ -52,12 +59,14 @@ export class MemorySharingAdapter implements SharingAdapter {
     url: string,
     webId: string,
     role: ShareRole | null,
-    opts?: { expires?: Date; purpose?: string },
+    opts?: ShareWriteOptions & { expires?: Date; purpose?: string },
   ) {
     await this.wait();
     const state = this.writable(url);
     const person = state.people.find((entry) => entry.webId === webId);
     if (person?.role === "owner" || person?.inherited) throw new ShareError("forbidden");
+    if (opts?.narrowOnly && role && (!person || shareRoleRank[role] > shareRoleRank[person.role]))
+      throw new ShareError("would-grant");
     state.people = state.people.filter((entry) => entry.webId !== webId);
     if (role === null) this.purposes.get(url)?.delete(webId);
     if (role && opts?.purpose) {
@@ -71,9 +80,17 @@ export class MemorySharingAdapter implements SharingAdapter {
       state.people.push(next);
     }
   }
-  async setGeneral(url: string, general: SharingState["general"]) {
+  async setGeneral(url: string, general: SharingState["general"], opts?: ShareWriteOptions) {
     await this.wait();
-    this.writable(url).general = structuredClone(general);
+    const state = this.writable(url);
+    if (
+      opts?.narrowOnly &&
+      general.mode !== "restricted" &&
+      (general.mode !== state.general.mode ||
+        shareRoleRank[general.role ?? "viewer"] > shareRoleRank[state.general.role ?? "viewer"])
+    )
+      throw new ShareError("would-grant");
+    state.general = structuredClone(general);
   }
   async notify(url: string, webIds: string[], message?: string) {
     await this.wait();

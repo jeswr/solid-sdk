@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
@@ -152,4 +153,23 @@ it("Load latest discards the retained conflict and prevents another local write"
   expect(listener).toHaveBeenCalledExactlyOnceWith(note.url, remote);
   expect(await pending.retry()).toEqual([]);
   expect(pending.all()).toEqual([]);
+});
+
+it("stops draining when Write is revoked during a save and retains the newer local draft", async () => {
+  const { pending } = fixture();
+  const first = deferred<StoredNote>();
+  const save = vi.fn(() => first.promise);
+  pending.change(note, draft, save);
+  const saving = pending.flush(note, save);
+  const latest = { ...draft, body: "Edited while saving" };
+  pending.change(note, latest, save);
+  pending.bind({ ...note, readOnly: true }, save);
+  first.resolve({ ...note, ...draft, etag: '"v2"' });
+  await expect(saving).rejects.toMatchObject({ status: 403 });
+  expect(save).toHaveBeenCalledOnce();
+  expect(pending.get(note.url)).toMatchObject({ draft: latest, status: "read-only" });
+  pending.change(note, { ...draft, title: "Must not replace local changes" }, save);
+  pending.resolve({ ...note, etag: '"remote"' }, false);
+  expect(pending.get(note.url)).toMatchObject({ draft: latest, status: "read-only" });
+  expect(await pending.retry()).toEqual([]);
 });

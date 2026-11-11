@@ -4,13 +4,13 @@
 import { Button, ErrorState, Skeleton } from "@jeswr/suite-ui";
 import { Search, StickyNote } from "lucide-react";
 import { useEffect, useState } from "react";
-import { NoteConflictError } from "../lib/model/errors";
 import { selectNotes } from "../lib/model/query";
-import type { StoredNote } from "../lib/model/store";
+import type { NoteFailure, StoredNote } from "../lib/model/store";
 import { useNotesContext } from "../state/notes-context";
 import { CaptureBar } from "./capture-bar";
 import { ConfirmDialog } from "./controls";
 import { NoteCard } from "./note-card";
+import { NoteFailures } from "./note-failures";
 
 export function NotesGrid({
   view = "active",
@@ -36,6 +36,7 @@ export function NotesGrid({
     };
   }, [hasReminders]);
   const [emptying, setEmptying] = useState<StoredNote[]>();
+  const [failures, setFailures] = useState<NoteFailure[]>([]);
   const location = view === "archived" || view === "trashed" ? view : "active";
   const resource = location === "archived" ? archived : location === "trashed" ? trashed : active;
   const searching = view === "search";
@@ -105,6 +106,7 @@ export function NotesGrid({
           )}
         </div>
       )}
+      <NoteFailures failures={failures} />
       {loading ? (
         <div className="notes-grid" role="status" aria-label="Loading notes" aria-busy="true">
           {[0, 1, 2, 3, 4, 5].map((index) => (
@@ -150,14 +152,14 @@ export function NotesGrid({
             const results = await Promise.allSettled(
               emptying.map((note) => store.deleteForever(note.url, note.etag)),
             );
-            await refresh();
-            const conflict = results.find(
-              (result) =>
-                result.status === "rejected" && result.reason instanceof NoteConflictError,
+            setFailures(
+              results.flatMap((result, index) =>
+                result.status === "rejected"
+                  ? [{ url: (emptying[index] as StoredNote).url, error: result.reason }]
+                  : [],
+              ),
             );
-            if (conflict?.status === "rejected") throw conflict.reason;
-            if (results.some((result) => result.status === "rejected"))
-              throw new Error("Some notes could not be deleted");
+            await refresh();
           }}
         />
       )}
