@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { createPodClient, type PodClientOptions } from "@jeswr/storage-client";
+import { createPodClient } from "@jeswr/storage-client";
 import { createChangeNormalizer } from "../normalise.js";
 import { isOnline, platform, runCleanups, systemTimers } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { EventSourceLike, NotificationsDependencies, WebSocketLike } from "../types.js";
 import { channelUrl, validateChannelUrl } from "./channel-url.js";
+import { discoveryCache } from "./discovery.js";
 import { readJsonLines } from "./json-lines.js";
+import { lwsSubscriptionBody, lwsSubscriptionService } from "./lws-subscription.js";
 import { registerRelay } from "./relay-registration.js";
 
 /** Dependencies and scoped topics for the push adapters. */
@@ -19,27 +21,6 @@ export interface PushChannelOptions extends NotificationsDependencies {
 export function reconnectDelay(attempt: number, random: () => number): number {
   const ceiling = Math.min(60_000, 1_000 * 2 ** Math.min(attempt, 6));
   return Math.max(1_000, random() * ceiling);
-}
-
-// Each discovery gets a fresh cache, shared only between createPodClient's resolve/probe
-// calls. Reconnect must not reuse a still-fresh description from a previous channel.
-function discoveryCache(): NonNullable<PodClientOptions["capabilities"]> {
-  type Cache = NonNullable<PodClientOptions["capabilities"]>;
-  const records = new Map<string, Awaited<ReturnType<Cache["get"]>>>();
-  let prefix: { root: string; id: string } | undefined;
-  return {
-    get: async (id) => records.get(id),
-    set: async (id, value) => {
-      records.set(id, value);
-    },
-    delete: async (id) => {
-      records.delete(id);
-    },
-    rememberPrefix: async (root, id) => {
-      prefix = { root, id };
-    },
-    lookupPrefix: async (url) => (url.startsWith(prefix?.root ?? "\0") ? prefix?.id : undefined),
-  };
 }
 
 /** Shared one-shot channel lifecycle. A failed member reconnects the whole subscription. */
@@ -185,8 +166,14 @@ export function createPushChannel(
       // The feature endpoint belongs to the preferred channel, which may be WebSocket.
       // SSE adapters must resolve their own service again on every discovery.
       const serviceEndpoint = eventStream
-        ? pod.description.services.find((service) => {
-            if (protocol === "solid") {
+        ? protocol === "lws"
+          ? lwsSubscriptionService(
+              pod.description,
+              transport === "webhook-relay"
+                ? "https://www.w3.org/ns/lws#WebhookSubscription"
+                : "https://jeswr.org/ns/solid-sd#SseSubscription",
+            )?.endpoint
+          : pod.description.services.find((service) => {
               const channels = [
                 service.extra["http://www.w3.org/ns/solid/notifications#channelType"],
               ].flat();
@@ -197,26 +184,7 @@ export function createPushChannel(
                 ) ||
                   channels.includes("https://jeswr.org/ns/solid-sd#StreamingHttpChannel"))
               );
-            }
-            return (
-              service.type.includes("https://www.w3.org/ns/lws#NotificationService") &&
-              new URL(service.endpoint).origin === new URL(storage.root).origin &&
-              [
-                "subscriptionType",
-                "ssd:subscriptionType",
-                "https://jeswr.org/ns/solid-sd#subscriptionType",
-                "https://www.w3.org/ns/lws#subscriptionType",
-              ].some((key) =>
-                [service.extra[key]]
-                  .flat()
-                  .includes(
-                    transport === "webhook-relay"
-                      ? "https://www.w3.org/ns/lws#WebhookSubscription"
-                      : "https://jeswr.org/ns/solid-sd#SseSubscription",
-                  ),
-              )
-            );
-          })?.endpoint
+            })?.endpoint
         : live.detail.endpoint;
       const endpoint =
         transport === "legacy-ws"
@@ -258,15 +226,14 @@ export function createPushChannel(
       for (const topics of groups) {
         const body =
           protocol === "lws"
-            ? {
-                "@context": ["https://www.w3.org/ns/lws/v1"],
-                type: relay
+            ? lwsSubscriptionBody(
+                topics,
+                relay
                   ? "WebhookSubscription"
                   : `https://jeswr.org/ns/solid-sd#${transport === "sse" ? "Sse" : "WebSocket"}Subscription`,
-                ...(relay ? { inbox: relay.inbox } : {}),
-                topic: topics,
-                expires: new Date(now() + 86_400_000).toISOString(),
-              }
+                now() + 86_400_000,
+                relay?.inbox,
+              )
             : {
                 "@context": ["https://www.w3.org/ns/solid/notifications-context/v1"],
                 type: `http://www.w3.org/ns/solid/notifications#${transport === "sse" ? "StreamingHTTP" : "WebSocket"}Channel2023`,

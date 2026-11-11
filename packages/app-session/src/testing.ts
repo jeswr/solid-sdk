@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
@@ -34,8 +35,11 @@ export function fakePodAuth() {
     for (const handler of listeners.get(type) ?? [])
       handler({ type, identity: value, timestamp: Date.now() });
   };
+  const podFetch = vi.fn<typeof fetch>(async () => new Response("private files"));
   const auth = {
-    fetch: vi.fn<typeof fetch>(async () => new Response("private files")),
+    fetch: podFetch,
+    // Account-pinned reads share the fetch mock so existing assertions keep covering them.
+    fetchFor: vi.fn<PodAuth["fetchFor"]>(() => podFetch),
     restore: vi.fn<PodAuth["restore"]>(async () => null),
     remembered: vi.fn<PodAuth["remembered"]>(async () => []),
     login: vi.fn<PodAuth["login"]>(async () => {

@@ -3,7 +3,7 @@
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
-import { secureUrl, validateOptions } from "./options.js";
+import { accountMatches, extraResourceOrigins, secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
 import type {
@@ -20,6 +20,8 @@ export type {
   AuthEvent,
   AuthEventType,
   CidSubject,
+  FetchAccount,
+  FetchForOptions,
   Identity,
   KvStore,
   LoginHint,
@@ -132,6 +134,36 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   };
   const api: PodAuth = {
     fetch: providers.manager.fetch as typeof fetch,
+    fetchFor: (account, fetchOptions) => {
+      const origins = extraResourceOrigins(fetchOptions);
+      if (!accountMatches(account, current)) throw new Error("Account session is unavailable");
+      const selected = snapshot()!;
+      const started = epoch;
+      const lifetime = providers.fence.signal;
+      const assertSession = () => {
+        if (
+          started !== epoch ||
+          !accountMatches(selected, current) ||
+          (origins.length > 0 && current?.protocol !== "solid-oidc")
+        )
+          throw new Error("Account session is unavailable");
+        lifetime.throwIfAborted();
+      };
+      const scoped = origins.length
+        ? providers.fetchFor(origins, selected, assertSession)
+        : providers.manager.fetch;
+      return async (input, init) => {
+        const body = init?.body;
+        const request = new Request(input, init);
+        // Durable generation reads detect another realm's logout even before its broadcast arrives.
+        await readIdentity();
+        assertSession();
+        return await scoped(
+          new Request(request, { signal: AbortSignal.any([request.signal, lifetime]) }),
+          body instanceof Blob ? { body } : undefined,
+        );
+      };
+    },
     identity: readIdentity,
     remembered: async () => {
       const account = await providers.persistence.active();

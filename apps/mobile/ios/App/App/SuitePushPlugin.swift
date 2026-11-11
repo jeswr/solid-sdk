@@ -14,6 +14,7 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "enable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setTopicMap", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "silence", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "scheduleRenewalReminder", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "sign", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "activate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "disable", returnType: CAPPluginReturnPromise),
@@ -101,8 +102,21 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
     }
     @objc func silence(_ call: CAPPluginCall) {
         guard let id = call.getString("registrationId") else { call.reject("registrationId is required", "INVALID_ARGUMENT"); return }
-        do { try PushStore.shared().silence(id); call.resolve() }
+        do {
+            try PushStore.shared().silence(id)
+            if try !PushStore.shared().hasAnyActive() { try SuitePushCoordinator.shared.cancelRenewalReminder() }
+            call.resolve()
+        }
         catch { call.reject("Cannot silence registration", "INVALID_ARGUMENT") }
+    }
+    @objc func scheduleRenewalReminder(_ call: CAPPluginCall) {
+        do {
+            guard Set(call.options.keys) == ["expiresAt"] else { throw PushCrypto.Failure.invalid }
+            let expiry = try PushPolicy.renewalExpiry(call.options["expiresAt"], now: Date().timeIntervalSince1970 * 1000)
+            try SuitePushCoordinator.shared.scheduleRenewalReminder(expiry) { error in
+                if error == nil { call.resolve() } else { call.reject("Cannot schedule renewal reminder", "push-unavailable") }
+            }
+        } catch { call.reject("Invalid or unavailable renewal reminder", "INVALID_ARGUMENT") }
     }
     @objc func sign(_ call: CAPPluginCall) {
         guard let method = call.getString("method"), let url = call.getString("url"),
@@ -143,6 +157,7 @@ public class SuitePushPlugin: CAPPlugin, CAPBridgedPlugin {
         let work = {
             do {
                 let cancelled = try self.enablement.disable { try PushStore.shared().silenceAll() }
+                try SuitePushCoordinator.shared.cancelRenewalReminder()
                 cancelled?.reject("Push was disabled", "disabled")
                 SuitePushCoordinator.shared.cancelRegistration()
                 self.activation?.reject("Push was disabled", "disabled"); self.activation = nil; self.installation = nil

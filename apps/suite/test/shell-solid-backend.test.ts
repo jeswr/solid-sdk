@@ -58,6 +58,7 @@ function harness(options: SolidBackendOptions = {}) {
     for (const listener of listeners.get(type) ?? [])
       listener({ type, identity: null, timestamp: 0 });
   };
+  const resourceFetch = vi.fn<typeof fetch>(async () => new Response("private content"));
   const auth = {
     login: vi.fn<PodAuth["login"]>(async () => {
       identity = alice;
@@ -72,7 +73,8 @@ function harness(options: SolidBackendOptions = {}) {
       identity = null;
       emit("logout");
     }),
-    fetch: vi.fn<typeof fetch>(async () => new Response("private content")),
+    fetch: resourceFetch,
+    fetchFor: vi.fn<PodAuth["fetchFor"]>(() => resourceFetch),
     on: vi.fn<PodAuth["on"]>((type, listener) => {
       const handlers = listeners.get(type) ?? new Set();
       listeners.set(type, handlers);
@@ -207,6 +209,7 @@ describe("native Solid shell over pod-auth", () => {
       redirectUri: MOBILE_REDIRECT_URI,
       allowInsecureLoopback: false,
       nativeRedirect: true,
+      boundary: { storageEndpoints: ["/.notifications/"] },
     });
     expect(CLIENT_ID_URL).toBe(
       "https://solid-suite.vercel.app/.well-known/solid-client-id-mobile.jsonld",
@@ -396,6 +399,25 @@ describe("native Solid shell over pod-auth", () => {
     expect(h.loadPlugin).not.toHaveBeenCalled();
     expect(h.createDriver).not.toHaveBeenCalled();
   });
+});
+
+it("obtains a relay-scoped account fetch without reading credentials or widening a live handle", async () => {
+  const h = harness();
+  const account = await h.backend.signIn({ issuer: alice.issuer });
+  const relayFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+  h.auth.fetchFor.mockReturnValue(relayFetch);
+  const origins = ["https://relay.example"];
+  const fetch = h.backend.fetchFor(account, { extraResourceOrigins: origins });
+  origins.push("https://evil.example");
+  await fetch("https://relay.example/push/registrations/id", { method: "PUT" });
+  expect(h.auth.fetchFor).toHaveBeenCalledExactlyOnceWith(
+    { webId: account.webId, issuer: alice.issuer },
+    { extraResourceOrigins: ["https://relay.example"] },
+  );
+  expect(h.auth.fetch).not.toHaveBeenCalled();
+  await h.backend.signOut(account);
+  await expect(fetch("https://relay.example/push/registrations/id")).rejects.toThrow("Sign in");
+  expect(relayFetch).toHaveBeenCalledTimes(1);
 });
 afterEach(() => {
   vi.unstubAllGlobals();

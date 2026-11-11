@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import type { FetchForOptions } from "@jeswr/pod-auth";
 export interface SuiteAccount {
   id: string;
   webId: string;
@@ -19,7 +21,7 @@ export interface SessionBackend {
   restore(): Promise<SuiteAccount | null>;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signOut(account: SuiteAccount): Promise<void>;
-  fetchFor(account: SuiteAccount): typeof fetch;
+  fetchFor(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
   onExpired(cb: () => void): () => void;
 }
 const signInMessages = {

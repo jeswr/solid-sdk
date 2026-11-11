@@ -3,6 +3,7 @@ name: pod-auth
 description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/pod-auth`
@@ -94,6 +95,19 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 
 ## Preserve the credential boundary
 
+- `auth.fetchFor({ webId, issuer }, { extraResourceOrigins: [BUILD_TIME_ORIGIN] })` pins a fetch
+  to the current session for explicit non-pod resource servers. Require canonical HTTPS origins
+  (no trailing slash, userinfo, path, query, fragment, wildcard host or URL normalization).
+  Exclude the selected issuer's advertised token and registration endpoints even on other
+  origins or with query parameters; protocol transport alone owns those endpoints. Never derive them
+  from pod data or a challenge. Extra resources reuse the same in-memory Solid grant, context,
+  DPoP key, generation fence and refresh lock; they refuse redirects, omit cookies, and cannot
+  start UI or exchange LWS/UMA credentials. Their origin boundary is separate from `auth.fetch`
+  and `Identity.storages`. Normal pod requests keep normal provider routing. Handles fail after
+  logout/relogin, cross-realm supersession or a transition to LWS; recreate after restore.
+  Reject extra origins for every LWS session, including human sessions with an underlying Solid
+  grant, and for agents. P2-PUSH-RELAY §3 P2 defers LWS-only relay authentication to MOB-P2g.
+
 - Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
   Construct auth after installing the intended pristine transport in tests. Protocol discovery,
   registration, token and refresh HTTP must never recurse through a credential-attaching wrapper.
@@ -108,7 +122,7 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   `boundary.storageEndpoints` names exact (or trailing-`/` prefix) paths on each verified storage's
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
-- `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
+- `auth.fetch` and `auth.fetchFor` buffer bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
   16 MiB) reject after being read. A `Blob`/`File` body is replayed as it is and never buffered,
   so upload files as a `File` instead of raising the limit. Node agents
   (`forClientCredentials`, `forCid`) keep the default.

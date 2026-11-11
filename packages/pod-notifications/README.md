@@ -178,3 +178,34 @@ registrations expire with the ID token, capped at 24 hours. Relay registration 4
 with `forbidden`. A configured relay without `getIdToken` can be inspected through `plan()`
 but cannot connect; the subscription enters degraded retry state. The relay URL must be
 an HTTPS origin, or loopback HTTP with the development opt-in at both storage and relay.
+
+<!-- // AUTHORED-BY Codex GPT-6 -->
+## Device webhook subscriptions
+
+`createWebhookSubscriptions(accountFetch, clock?)` manages pod subscriptions without opening a
+live stream. It lives here because discovery and Solid/LWS subscription protocols are notification
+SDK responsibilities; it shares isolated discovery caches, LWS service selection and request bodies
+with the live adapters. It has no native or relay-auth dependency. The application selects the
+account fetch and topics, and retains labels, routes and retry metadata.
+
+```ts
+import { createWebhookSubscriptions } from '@jeswr/pod-notifications';
+
+const subscriptions = createWebhookSubscriptions(accountPodFetch);
+const topics = await subscriptions.subscribe({
+  protocol: 'solid', storage: storageId, inbox: relayInbox,
+  topics: [inboxContainer], requestedExpiresAt: Date.now() + 7 * 86_400_000, signal,
+});
+// Persist topics, including the actual expiresAt, channel and optional sender.
+await subscriptions.remove({ protocol: 'solid', storage: storageId, topics, signal });
+```
+
+Solid creates one WebhookChannel2023 per topic; LWS batches topics into one WebhookSubscription.
+The adapter pins discovery to the expected protocol/storage, scopes topics to the storage root,
+restricts service and deletion URLs to the storage origin and advertised service path, refuses
+redirects and cookies, caps responses at 64 KiB and setup/cleanup at ten seconds. Solid RDF uses direct
+`@rdfjs/wrapper` vocabulary accessors and `n3.Writer`, with no handwritten model class; only the
+bundled W3C notification context is allowed. Server expiry and topic/inbox binding are validated.
+Failed setup attempts roll back validated channels. Removal validates the entire batch before
+DELETE, accepts 404/410, skips expired channels, and rejects failures so callers retain metadata
+for retries. The caller owns renewal and bounded cleanup signals.

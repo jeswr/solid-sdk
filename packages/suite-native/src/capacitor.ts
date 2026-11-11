@@ -1,7 +1,9 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { registerPlugin } from "@capacitor/core";
 import type { AuthSessionPlugin } from "./auth-session.js";
 import type { PdfPreviewPlugin } from "./pdf-preview.js";
+import type { NativePushPlugin } from "./push.js";
 import type { SecureStorePlugin } from "./secure-store.js";
 import type { SharePlugin } from "./share.js";
 import type { ShareIntakePlugin } from "./share-intake.js";
@@ -16,3 +18,5 @@ export const filesPlugin = registerPlugin<PdfPreviewPlugin>("SuiteFiles");
 export const secureStorePlugin = registerPlugin<SecureStorePlugin>("SuiteSecureStore");
 /** The `@capacitor/share` native plugin, registered by name so the suite needs no extra package. */
 export const sharePlugin = registerPlugin<SharePlugin>("Share");
+
+export const pushPlugin = registerPlugin<NativePushPlugin>("SuitePush");

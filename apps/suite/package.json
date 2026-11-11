@@ -1,4 +1,5 @@
 {
+  "$comment": "// AUTHORED-BY Codex GPT-6",
   "name": "@jeswr/app-suite",
   "version": "0.1.0",
   "private": true,
@@ -37,6 +38,7 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",

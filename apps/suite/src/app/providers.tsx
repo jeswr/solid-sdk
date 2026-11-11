@@ -10,6 +10,7 @@ import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
 import type { SuiteEnv } from "@/shell/lib/env";
 import { NotificationsProvider } from "@/shell/notifications/provider";
+import { NativePushProvider } from "@/shell/push/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
@@ -37,20 +38,22 @@ export function Providers({
       <ServiceWorkerRegistration />
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
-          <Suspense>
-            <NativeShareLaunch />
-          </Suspense>
-          {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
-          <OutboxSessionProvider>
-            <PreferencesProvider>
-              <AppearanceEffect />
-              <ShellSearchProvider>
-                <NotificationsProvider>
-                  <WalkthroughProvider>{children}</WalkthroughProvider>
-                </NotificationsProvider>
-              </ShellSearchProvider>
-            </PreferencesProvider>
-          </OutboxSessionProvider>
+          <NativePushProvider>
+            <Suspense>
+              <NativeShareLaunch />
+            </Suspense>
+            {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
+            <OutboxSessionProvider>
+              <PreferencesProvider>
+                <AppearanceEffect />
+                <ShellSearchProvider>
+                  <NotificationsProvider>
+                    <WalkthroughProvider>{children}</WalkthroughProvider>
+                  </NotificationsProvider>
+                </ShellSearchProvider>
+              </PreferencesProvider>
+            </OutboxSessionProvider>
+          </NativePushProvider>
         </AccountsProvider>
       </SuiteEnvironmentContext.Provider>
     </ThemeProvider>

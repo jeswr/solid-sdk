@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -107,6 +108,7 @@ it("bakes native target, local app origin, public URL and an https Client ID URL
     appBaseUrl: "https://localhost",
     publicSuiteUrl: "https://solid-suite.vercel.app",
     clientIdUrl: "https://solid-suite.vercel.app/.well-known/solid-client-id-mobile.jsonld",
+    pushRelayUrl: null,
   });
   expect(
     nativeSettings({

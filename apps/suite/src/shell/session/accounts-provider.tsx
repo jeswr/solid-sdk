@@ -1,7 +1,9 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
+import type { FetchForOptions } from "@jeswr/pod-auth";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { purgeNativePodCache } from "@/lib/session/native-pod-cache";
 import {
@@ -17,6 +19,7 @@ import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
 import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
+import { beforeSignOut } from "./sign-out-cleanup";
 import { SolidBackend } from "./solid-backend";
 import {
   type SessionBackend,
@@ -33,6 +36,9 @@ export interface AccountsContextValue {
   accounts: SuiteAccount[];
   /** Checks the live session, including changes React has not committed yet. */
   isActiveAccount(id: string, sessionVersion?: number): boolean;
+  isSignedInAccount?(id: string): boolean;
+  /** Account-bound fetch; optional only for older preview adapters. */
+  fetchFor?(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
   /** Live transition counter, including switches that React batches into one render. */
   sessionVersion?: number;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
@@ -66,6 +72,7 @@ export function AccountsProvider({
   const current = useRef(state);
   const currentStatus = useRef(status);
   const sessions = useRef(new Map<string, SessionBackend>());
+  const retiring = useRef(new Set<string>());
   const generation = useRef(0);
   const signInAttempt = useRef(0);
   const sessionVersion = useRef(0);
@@ -73,6 +80,7 @@ export function AccountsProvider({
     (id: string, expected?: number) =>
       current.current.activeId === id &&
       currentStatus.current === "ready" &&
+      !retiring.current.has(id) &&
       (expected === undefined || expected === sessionVersion.current),
     [],
   );
@@ -177,6 +185,7 @@ export function AccountsProvider({
     hint: SignInHint,
     options?: SignInOptions,
   ) => {
+    if (retiring.current.size > 0) throw new SignInError("in-progress");
     const revision = generation.current;
     const attempt = ++signInAttempt.current;
     const backend = backends.find((item) => item.kind === kind);
@@ -197,6 +206,14 @@ export function AccountsProvider({
     const account = current.current.accounts.find((item) => item.id === id);
     if (!account) return;
     const backend = sessions.current.get(id) ?? backends.find((item) => item.kind === account.kind);
+    retiring.current.add(id);
+    const failures: unknown[] = [];
+    try {
+      const cleanup = beforeSignOut(account);
+      if (cleanup) await cleanup;
+    } catch (error) {
+      failures.push(error);
+    }
     sessions.current.delete(id);
     try {
       clearRecentItems(localStorage, id);
@@ -205,12 +222,17 @@ export function AccountsProvider({
     }
     // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
-    const results = await Promise.allSettled([
-      purgeNativePodCache(account.webId),
-      backend?.signOut(account),
-    ]);
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
+    try {
+      const results = await Promise.allSettled([
+        purgeNativePodCache(account.webId),
+        backend?.signOut(account),
+      ]);
+      for (const result of results) if (result.status === "rejected") failures.push(result.reason);
+    } finally {
+      retiring.current.delete(id);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Sign-out cleanup failed");
   };
   const signOutAll = async () => {
     ++generation.current;
@@ -218,6 +240,11 @@ export function AccountsProvider({
       account,
       backend: sessions.current.get(account.id) ?? backends.find((b) => b.kind === account.kind),
     }));
+    for (const { account } of previous) retiring.current.add(account.id);
+    const cleanups = previous
+      .map(({ account }) => beforeSignOut(account))
+      .filter((value) => value !== undefined);
+    const cleanupResults = cleanups.length ? await Promise.allSettled(cleanups) : [];
     sessions.current.clear();
     try {
       clearRecentItems(localStorage);
@@ -231,8 +258,12 @@ export function AccountsProvider({
         backend?.signOut(account),
       ]),
     );
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
+    retiring.current.clear();
+    const failures = [...cleanupResults, ...results]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Sign-out cleanup failed");
   };
   const active = state.accounts.find((a) => a.id === state.activeId) ?? null;
   const reauth = () => {
@@ -246,7 +277,12 @@ export function AccountsProvider({
   const authenticatedFetch: typeof fetch = async (input, init) => {
     const account = current.current.accounts.find((a) => a.id === current.current.activeId);
     const backend = account && sessions.current.get(account.id);
-    if (!account || !backend || currentStatus.current !== "ready")
+    if (
+      !account ||
+      !backend ||
+      currentStatus.current !== "ready" ||
+      retiring.current.has(account.id)
+    )
       throw new Error("Sign in to continue");
     return backend.fetchFor(account)(input, init);
   };
@@ -257,6 +293,14 @@ export function AccountsProvider({
         active,
         accounts: state.accounts,
         isActiveAccount,
+        isSignedInAccount: (id) => sessions.current.has(id) && !retiring.current.has(id),
+        fetchFor: (account, options) => {
+          const backend = sessions.current.get(account.id);
+          // Match authenticatedFetch: no new account-bound fetch while an account is retiring.
+          if (!backend || currentStatus.current !== "ready" || retiring.current.has(account.id))
+            throw new Error("Sign in to continue");
+          return backend.fetchFor(account, options);
+        },
         sessionVersion: sessionVersion.current,
         signIn,
         signInDemo,

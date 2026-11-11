@@ -1709,6 +1709,9 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3.3.1
         version: 3.3.6
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../packages/app-session
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
@@ -2418,6 +2421,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../../packages/rdf-engine
@@ -4041,13 +4047,28 @@ importers:
 
   packages/pod-notifications:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

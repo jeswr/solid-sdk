@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Adapted from solid-auth-core/test/react.test.tsx (AUTHORED-BY Claude Fable 5).
 import { webcrypto } from "node:crypto";
 import { act, createElement, StrictMode, useEffect } from "react";
@@ -29,6 +30,7 @@ class FakeAuth implements PodAuth {
   deferred = Promise.withResolvers<Identity | null>();
   listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
   fetch = vi.fn(async () => new Response("authenticated")) as typeof fetch;
+  fetchFor = vi.fn(() => this.fetch);
   restore = vi.fn(() => this.deferred.promise);
   identity = async () => this.current;
   remembered = async () => [];

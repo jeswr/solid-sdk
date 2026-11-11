@@ -7,6 +7,8 @@ import UserNotifications
 /// Installed at application launch (before the WebView) and restored after Capacitor installs its router.
 final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
     static let shared = SuitePushCoordinator()
+    private static let renewalId = "suite-push-renewal"
+    private let renewalLock = NSRecursiveLock()
     let challenges = PushActivation()
     var onChallenge: (() -> Void)?
     private let registration = PushTokenRegistration(recordToken: { token in
@@ -28,6 +30,39 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
         registration.clear(); UIApplication.shared.unregisterForRemoteNotifications()
     }
     func cancelRegistration() { registration.cancel() }
+    func cancelRenewalReminder() throws {
+        renewalLock.lock(); defer { renewalLock.unlock() }
+        try PushStore.shared().setRenewalExpiry(nil)
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: [Self.renewalId])
+        center.removeDeliveredNotifications(withIdentifiers: [Self.renewalId])
+    }
+    func scheduleRenewalReminder(_ expiry: Double?, completion: @escaping (Error?) -> Void) throws {
+        renewalLock.lock(); defer { renewalLock.unlock() }
+        try cancelRenewalReminder()
+        guard let expiry = expiry else { completion(nil); return }
+        let now = Date().timeIntervalSince1970 * 1000
+        let trigger = PushPolicy.renewalTrigger(expiry, now: now)
+        guard trigger < expiry else { completion(nil); return }
+        try PushStore.shared().setRenewalExpiry(expiry)
+        let content = UNMutableNotificationContent()
+        content.title = "Solid Suite"; content.body = PushPolicy.renewal
+        content.userInfo = ["suitePushRenewalExpiry": expiry]
+        let request = UNNotificationRequest(identifier: Self.renewalId, content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: max(1, (trigger - now) / 1000), repeats: false))
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: completion)
+    }
+    private func presentRenewal(_ notification: UNNotification, completion: PushCompletion<UNNotificationPresentationOptions>) -> Bool {
+        guard notification.request.identifier == Self.renewalId,
+              !(notification.request.trigger is UNPushNotificationTrigger),
+              let number = notification.request.content.userInfo["suitePushRenewalExpiry"] as? NSNumber else { return false }
+        let expiry = number.doubleValue
+        guard expiry.isFinite, expiry.rounded(.towardZero) == expiry else { return false }
+        return (try? PushStore.shared().withRenewalReminder(expiry, now: Date().timeIntervalSince1970 * 1000) {
+            let content = notification.request.content
+            completion.finish(content.title == "Solid Suite" && content.body == PushPolicy.renewal ? [.banner, .list, .sound] : [])
+        }) ?? false
+    }
     func background(_ info: [AnyHashable: Any], completion: @escaping (UIBackgroundFetchResult) -> Void) {
         // Only authenticated, encrypted challenges use the background path. No local alert is ever scheduled.
         guard let encoded = info["p"] as? String else { completion(.noData); return }
@@ -44,6 +79,12 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
         }
     }
     func tap(_ response: UNNotificationResponse) {
+        // A late tap remains a generic launch even after the subscription expired or signed out.
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier,
+           response.notification.request.identifier == Self.renewalId,
+           response.notification.request.trigger is UNTimeIntervalNotificationTrigger {
+            try? PushStore.shared().launchNotifications(); return
+        }
         guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
               let encoded = response.notification.request.content.userInfo["p"] as? String else { return }
         // Ignore forged plaintext tap metadata. Re-decrypt p and resolve the route from the current local map.
@@ -61,6 +102,7 @@ final class SuitePushCoordinator: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         let completion = PushCompletion<UNNotificationPresentationOptions>(placeholder: [], callback: completionHandler)
+        if presentRenewal(notification, completion: completion) { return }
         let info = notification.request.content.userInfo
         let remote = notification.request.trigger is UNPushNotificationTrigger
         let token = info[PushReceiver.presentationKey] as? String

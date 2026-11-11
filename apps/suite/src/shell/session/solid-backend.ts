@@ -5,6 +5,7 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
   createPodAuth,
+  type FetchForOptions,
   type Identity,
   IssuerNotAuthorizedError,
   type PodAuth,
@@ -115,6 +116,9 @@ export class SolidBackend implements SessionBackend {
       allowInsecureLoopback: this.#insecure,
       // The scheme callback is accepted only with pod-auth's explicit native opt-in.
       ...(this.#native ? { nativeRedirect: true as const } : {}),
+      // CSS's standard subscription service is outside the pod folder. Pin its path in
+      // application policy; service descriptions cannot grant sibling paths or origins.
+      ...(this.#native ? { boundary: { storageEndpoints: ["/.notifications/"] } } : {}),
       ui: {
         getWebId: async () => {
           throw new SignInError("invalid-url");
@@ -386,7 +390,7 @@ export class SolidBackend implements SessionBackend {
     await core.logout();
   }
 
-  fetchFor(account: SuiteAccount): typeof fetch {
+  fetchFor(account: SuiteAccount, options?: FetchForOptions): typeof fetch {
     const version = this.#sessionVersion;
     const usable = () =>
       !this.#expired &&
@@ -395,6 +399,9 @@ export class SolidBackend implements SessionBackend {
       this.#account.issuer === account.issuer &&
       account.kind === "solid" &&
       version === this.#sessionVersion;
+    // Snapshot the build-selected origins; callers cannot mutate a handle's grants later.
+    const origins = options?.extraResourceOrigins && [...options.extraResourceOrigins];
+    let scoped: typeof fetch | undefined;
     return async (input, init) => {
       if (!usable()) throw new Error("Sign in to continue");
       const core = this.#core();
@@ -404,7 +411,12 @@ export class SolidBackend implements SessionBackend {
         throw new Error("Sign in to continue");
       }
       if (!usable()) throw new Error("Sign in to continue");
-      const response = await core.fetch(input, init);
+      if (origins)
+        scoped ??= core.fetchFor(
+          { webId: account.webId, issuer: identity.issuer },
+          { extraResourceOrigins: origins },
+        );
+      const response = await (scoped ?? core.fetch)(input, init);
       if (!usable()) throw new Error("Sign in to continue");
       return response;
     };

@@ -113,3 +113,65 @@ pnpm --filter @jeswr/suite-native run build
 pnpm --filter @jeswr/suite-native run typecheck
 pnpm --filter @jeswr/suite-native run test   # 100% coverage thresholds
 ```
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Native push notifications (`./push`, MOB-P2d)
+
+`@jeswr/suite-native/push` is a pure, injectable API: it never imports Capacitor, reads a token,
+fetches pod contents, or logs push data. Load the binding only after checking `isNativeApp()`:
+
+```ts
+import { createPush, createPushRegistrar } from '@jeswr/suite-native/push';
+
+const { pushPlugin } = await import('@jeswr/suite-native/capacitor');
+const push = createPush(pushPlugin);
+```
+
+`createPush` validates the native `status`, `enable`, `setTopicMap`, `silence`, `sign`, `activate`,
+`disable`, `consumeLaunchRoute` and `scheduleRenewalReminder` methods. `consumeLaunchRoute()` unwraps
+Capacitor's `{ launchRoute }` envelope. Keys must be public P-256 keys, byte strings canonical
+base64url; routes are exactly `/notifications` or `/chat/<base64url-id>`. Native errors become a
+fixed message without native details. `disable()` silences all registrations; only
+`disable({ deleteLocalData: true })` deletes keys and the OS token after confirmed remote cleanup.
+
+`createPushRegistrar({ relayUrl, fetch, fetchFor?, cleanupFetch?, push, store, subscriptions, clock? })`
+owns the installation and registration lifecycle. `relayUrl` is an explicit HTTPS origin fixed by
+the signed build. `fetch` comes from
+`podAuth.fetchFor(account, { extraResourceOrigins: [RELAY_ORIGIN] })`; with multiple accounts,
+`fetchFor(accountId)` returns each account's own bounded fetch. `cleanupFetch` is a pristine,
+credential-free transport (default `globalThis.fetch`), used only for DELETE with a native device
+proof. Authentication, refresh, access tokens and DPoP keys stay inside pod-auth.
+
+- `enable({ accountId, webId, protocol, storage, topics })` creates or updates the installation,
+  waits for its encrypted challenge and activates it, creates a registration with empty topics,
+  subscribes at the pod, binds the returned channels at the relay and installs the local topic map.
+  The bootstrap PUT is necessary because the relay returns the secret inbox URL on creation only.
+- Each topic has `{ index, kind: 'inbox' | 'chat', topic, label, route, enabled }`. Labels/routes
+  stay local. At most four account/storage registrations share one installation; each has at most
+  sixteen topics. LWS storage subscriptions still require a Solid-OIDC account for relay auth.
+- `renew(accountId)` refreshes the relay and OS token on launch/resume; it asks the pod for seven
+  days when less than two days remain. It stores the expiry the pod actually returned, and schedules
+  the native availability reminder from the earliest active expiry. Expired relay installations
+  are recreated; lost inbox responses are recovered through `rotate-inbox`.
+- `remove(accountId)` aborts that account's in-flight work, silences its native registrations first,
+  then attempts pod cleanup and proof-only relay cleanup within ten seconds per operation. Other
+  accounts retain their maps. Failed cleanup remains durable for `retryCleanup()` on a later launch.
+  Keys/maps are retained until every remote deletion succeeds. A last-registration DELETE may
+  already have removed the installation atomically, so a later installation DELETE's 404 is success.
+- `snapshot()` returns a detached `PushRegistrarState` containing public account mapping,
+  registration IDs, secret inbox URLs, channel expiries, superseded channels awaiting cleanup and
+  removal flags. Treat it as sensitive metadata; persist through `store.load()/save(state)` in
+  app-private storage. Never store it in pod data or logs. Device keys and push tokens are absent.
+
+The app supplies `subscriptions.subscribe({ accountId, webId, protocol, storage, inbox, topics,
+requestedExpiresAt, signal })`, returning `BoundPushTopic[]` (`index`, `kind`, `topic`, `channel`,
+optional `sender`, actual epoch-millisecond `expiresAt`), and
+`subscriptions.remove({ accountId, protocol, storage, topics, signal })`. The adapter uses the
+account's authenticated pod fetch and owns discovery, scope checking, seven-day requests, and
+cleanup if subscription creation fails part-way through. Solid uses one WebhookChannel2023 per
+topic; LWS batches all topics in one WebhookSubscription. It must honor cancellation and delete
+only the channels it created. Preserve a single registrar instance per installation/relay.
+
+Settings must say **“Notifications pause if you don't open Solid Suite for a week”**. Launch routes
+must resolve registration-to-account before navigation; signed-out/unknown registrations open only
+`/notifications`. No production relay is configured by this package.

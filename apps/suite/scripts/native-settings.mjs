@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { clientIdDocumentUrl, publicBaseUrl } from "../src/lib/public-url.ts";
+import { pushRelayUrl } from "../src/shell/push/config.ts";
 
 export function nativeSettings(env) {
   const publicSuiteUrl = publicBaseUrl(
@@ -19,5 +20,11 @@ export function nativeSettings(env) {
   }
   if (!["https://localhost", "capacitor://localhost"].includes(appBaseUrl))
     throw new Error("Native APP_BASE_URL must be a bundled local origin");
-  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl };
+  return {
+    target: "native",
+    appBaseUrl,
+    publicSuiteUrl,
+    clientIdUrl,
+    pushRelayUrl: pushRelayUrl(env.NEXT_PUBLIC_PUSH_RELAY_URL ?? env.PUSH_RELAY_URL ?? ""),
+  };
 }

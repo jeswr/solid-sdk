@@ -45,8 +45,8 @@ export interface PodAuthOptions {
   allowInsecureLoopback?: boolean;
   clock?: () => number;
   /**
-   * Largest request body `auth.fetch` buffers so it can replay a request after a 401 challenge
-   * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
+   * Largest body `auth.fetch` or `auth.fetchFor` buffers for replay after a 401 (default 16 MiB).
+   * Larger buffered bodies reject. Blob/File bodies supplied in init replay without buffering or this cap.
    */
   maxReplayBodyBytes?: number;
 }
@@ -88,9 +88,30 @@ export interface LoginOptions {
   signal?: AbortSignal;
 }
 
+/** Public identity selector; no credentials cross this surface. */
+export interface FetchAccount {
+  webId: string | null;
+  issuer: string;
+}
+
+export interface FetchForOptions {
+  /**
+   * Explicit canonical HTTPS origins (no wildcards), trusted by the application rather than pod data.
+   * OIDC token/registration endpoints are excluded even on admitted origins.
+   */
+  extraResourceOrigins?: readonly string[];
+}
+
 /** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
+  /**
+   * Pin a fetch to the current account/session. Extra resource origins receive only this session's
+   * Solid-OIDC DPoP credentials; they never broaden `fetch`, grant storage access, run LWS/UMA
+   * exchange or start sign-in. LWS sessions and agents reject extra origins. Redirects from extra
+   * resources are refused. Handles expire on logout or a transition from Solid-OIDC to LWS.
+   */
+  fetchFor(account: FetchAccount, options?: FetchForOptions): typeof fetch;
   /**
    * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
    * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored
