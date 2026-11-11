@@ -410,8 +410,7 @@ describe("Drive error handling and foreign server responses", () => {
       return new Response(method === "HEAD" ? null : new Uint8Array([0, 255]), {
         headers: {
           "x-solid-demo-access-control": "none",
-          // sst-2vvz: only the source is versioned; reading a copy back offers no validator.
-          ...(versioned && String(input) === `${DRIVE}file` ? { etag: '"source"' } : {}),
+          ...(versioned ? { etag: '"source"' } : {}),
         },
       });
     });

@@ -474,13 +474,7 @@ it("a missing write validator never authorizes unconditional rollback after acce
   const f = await wacPod();
   const to = `${PRIVATE}no-validator`;
   let changed = false;
-  let readBack = false;
   f.after(async (url, method, response) => {
-    // sst-2vvz: the read-back of the written file offers no strong validator either.
-    if (readBack && url === to && method === "GET") {
-      readBack = false;
-      response.headers.delete("etag");
-    }
     if (
       !changed &&
       url === to &&
@@ -490,7 +484,6 @@ it("a missing write validator never authorizes unconditional rollback after acce
     ) {
       changed = true;
       f.policies.set(`${to}.policy`, await aclBody(to, true));
-      readBack = true;
       response.headers.delete("etag");
     }
     return response;

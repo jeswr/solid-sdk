@@ -322,20 +322,11 @@ it.each([
       return new Response(null, { status: 503 });
     return undefined;
   });
-  let readBack = false;
   f.after(async (url, method, response) => {
-    // sst-2vvz: the read-back of the written file offers no strong validator either.
-    if (readBack && url === TARGET && method === "GET") {
-      readBack = false;
-      const headers = new Headers(response.headers);
-      headers.delete("etag");
-      return new Response(response.body, { status: response.status, headers });
-    }
     if (url === policyArchiveOf(snapshot.url) && method === "GET") archiveRead = true;
     if (url === TARGET && method === "PUT" && response.ok) {
       written = (await (await f.pod.fetch(TARGET)).text()).includes("Private plan");
       if (written && mode === "missing-payload-validator") {
-        readBack = true;
         const headers = new Headers(response.headers);
         headers.delete("etag");
         return new Response(response.body, { status: response.status, headers });
@@ -363,7 +354,6 @@ it.each([
       return new Response(response.body, { status: response.status, headers });
     }
     if (mode === "missing-placeholder-validator" && url === TARGET && method === "PUT") {
-      readBack = true;
       const headers = new Headers(response.headers);
       headers.delete("etag");
       return new Response(response.body, { status: response.status, headers });

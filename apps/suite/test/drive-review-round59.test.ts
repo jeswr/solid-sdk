@@ -231,13 +231,7 @@ it.each([
   let uploaded = false;
   let backupWritten = false;
   let verificationRefused = false;
-  let readBack: string | undefined;
   f.after(async (target, method, response) => {
-    // sst-2vvz: the read-back of the written file offers no strong validator either.
-    if (target === readBack && method === "GET") {
-      readBack = undefined;
-      response.headers.delete("etag");
-    }
     if (target === url && method === "PUT" && response.ok) uploaded = true;
     if (
       target.includes("/.drive-recovery-") &&
@@ -247,7 +241,6 @@ it.each([
       (await (await f.pod.fetch(target)).text()) === "secret contents"
     ) {
       backupWritten = true;
-      readBack = target;
       response.headers.delete("etag");
     }
     return response;

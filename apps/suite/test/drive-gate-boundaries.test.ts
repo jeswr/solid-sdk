@@ -58,9 +58,7 @@ it("owner-only creation keeps an empty protected placeholder when its PUT has no
   const url = `${PRIVATE}index`;
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   f.after(async (target, method, response) => {
-    // No validator from the PUT or from reading the placeholder back (sst-2vvz).
-    if (target === url && (method === "PUT" || method === "GET") && response.ok)
-      response.headers.delete("etag");
+    if (target === url && method === "PUT" && response.ok) response.headers.delete("etag");
     return response;
   });
   await expect(
