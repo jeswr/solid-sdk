@@ -28,6 +28,8 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
   resource boundary. Discovery/exchange use `fetch`; profiles use `profileFetch` separately.
   `lws: true` requires `trustAuthorizationServer`; reject missing policies before discovery.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
+- Revalidate the captured fence generation after credential-store reads. `OidcSession.identity()` reports
+  `undefined` when logout supersedes a pending read, while unrelated store errors still propagate.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
 - RFC 9728 LWS discovery is supported; legacy `as_uri`/`realm` challenges are behind
   `legacyLwsChallenge` (default true). Validate PRM origin/resource, StorageRoot and AS metadata before
