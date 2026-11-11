@@ -139,7 +139,7 @@ it("offers deletion in Completed only when filtered to a project, and explains a
   );
 });
 
-it("deletes every completed resource beyond pagination, including descendants and recurrence history, with one Undo", async () => {
+it("deletes completed resources beyond pagination with one Undo while retaining recurrence history", async () => {
   const parent = await create("Parent");
   const child = await create("Child", { title: "Child", parent: parent.task.id });
   const grandchild = await create("Grandchild", { title: "Grandchild", parent: child.task.id });
@@ -158,14 +158,15 @@ it("deletes every completed resource beyond pagination, including descendants an
   await click(button("Home", host));
   await confirm();
   expect(success).toHaveBeenCalledOnce();
-  expect(success.mock.calls[0]?.[0]).toBe("Deleted 52 tasks");
+  expect(success.mock.calls[0]?.[0]).toBe("Deleted 51 tasks");
+  expect(notice().description).toBe("Kept 1 items needed by repeating tasks");
   expect(notice().duration).toBe(8000);
   expect(
     cache
       .getSnapshot()
       .views.map((task) => task.title)
       .sort(),
-  ).toEqual(["Other project", "Recurring"]);
+  ).toEqual(["Other project", "Recurring", "Recurring"]);
   expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
   await act(() => notice().action?.onClick());
   expect(cache.getSnapshot().views).toEqual(before);
@@ -378,6 +379,73 @@ it("keeps the subtree if its refresh fails and refreshes again on Retry", async 
 });
 
 it.each([
+  "task 503",
+  "task 404",
+  "container",
+  "tracker",
+  "projects",
+  "confirmation",
+])("stops every remaining delete after incomplete reconciliation (%s), until Retry revalidates", async (failure) => {
+  const failed = await create("Failed");
+  const parent = await create("Parent");
+  const other = cache.getSnapshot().projects[0] as StoredProject;
+  const child = (await cache.createTask(other, {
+    title: "Child",
+    state: "closed",
+    endedAt: now,
+    parent: parent.task.id,
+  })) as StoredTask;
+  const remaining = [parent];
+  for (let index = 0; index < 5; index++) remaining.push(await create(`Done ${index}`));
+  deleteCompletedTasks(project, api());
+  const closing = notice();
+  await cache.store.updateTask(child, (task) => {
+    task.state = "open";
+  });
+  let reconciling = false;
+  let readFailed = false;
+  const failedRead =
+    failure === "container"
+      ? other.tracker.stateStore
+      : failure === "tracker"
+        ? other.url
+        : failure === "projects"
+          ? cache.store.projects
+          : failure === "confirmation"
+            ? failed.url
+            : child.url;
+  pod.intercept = (request) => {
+    if (request.method === "DELETE" && request.url === failed.url) {
+      reconciling = true;
+      return new Response(null, { status: 503 });
+    }
+    if (reconciling && !readFailed && request.method === "GET" && request.url === failedRead) {
+      readFailed = true;
+      return new Response(null, { status: failure === "task 404" ? 404 : 503 });
+    }
+    return undefined;
+  };
+  await act(() => closing.onAutoClose?.());
+  await vi.waitFor(() => expect(error).toHaveBeenCalledOnce());
+  expect(readFailed).toBe(true);
+  expect(
+    pod.requests.filter((request) => request.method === "DELETE").map((request) => request.url),
+  ).toEqual([failed.url]);
+  expect([failed, child, ...remaining].every((item) => pod.files.has(item.url))).toBe(true);
+  const visible = new Set(cache.getSnapshot().views.map((view) => view.url));
+  expect([failed, ...remaining].every((item) => visible.has(item.url))).toBe(true);
+  expect(error.mock.calls[0]?.[0]).toBe("Deleted 0 of 7 — 7 failed");
+  pod.intercept = undefined;
+  await act(() => notice(error).action?.onClick());
+  await vi.waitFor(() =>
+    expect(success).toHaveBeenLastCalledWith("Deleted 6 tasks", expect.anything()),
+  );
+  expect(pod.files.has(parent.url)).toBe(true);
+  expect((await cache.store.readTask(child.url)).task.parent).toBe(parent.task.id);
+  expect(remaining.slice(1).every((item) => !pod.files.has(item.url))).toBe(true);
+});
+
+it.each([
   "count",
   "until",
 ])("retains history for an open %s-bounded series through pending deletion, Undo, and reload", async (bound) => {
@@ -417,15 +485,16 @@ it.each([
     .tasks[project.url]?.items.find((item) => item.url === recurring.url) as StoredTask;
   expect((await cache.completeTask(current, now))?.kind).toBe("close");
   expect((await cache.store.readTask(recurring.url)).task.state).toBe("closed");
-  expect(deleteCompletedTasks(project, api())).toBe(2);
+  expect(deleteCompletedTasks(project, api())).toBe(1);
+  expect(notice().description).toBe("Kept 1 items needed by repeating tasks");
   await act(() => notice().onAutoClose?.());
   await vi.waitFor(() =>
-    expect(success).toHaveBeenLastCalledWith("Deleted 2 tasks", expect.anything()),
+    expect(success).toHaveBeenLastCalledWith("Deleted 1 task", expect.anything()),
   );
-  expect(cache.getSnapshot().views).toEqual([]);
+  expect(cache.getSnapshot().views.map((view) => view.url)).toEqual([history?.url]);
 });
 
-it("rechecks recurrence bounds changed remotely during Undo", async () => {
+it("counts unbounded history when COUNT is added and the task completes during Undo", async () => {
   const recurring = await create("Repeating", {
     title: "Repeating",
     state: "open",
@@ -433,21 +502,23 @@ it("rechecks recurrence bounds changed remotely during Undo", async () => {
     recurrence: { frequency: "DAILY" },
   });
   await cache.completeTask(recurring, now);
+  const history = cache.getSnapshot().views.find((view) => view.derivedFrom === recurring.task.id);
+  await create("Done");
   expect(deleteCompletedTasks(project, api())).toBe(1);
   const closing = notice();
-  await cache.store.updateTask(await cache.store.readTask(recurring.url), (task) => {
+  expect(notice().description).toBe("Kept 1 items needed by repeating tasks");
+  expect(cache.getSnapshot().views.some((view) => view.url === history?.url)).toBe(true);
+  const current = await cache.updateTask(await cache.store.readTask(recurring.url), (task) => {
     task.recurrence = { frequency: "DAILY", count: 2 };
   });
+  expect((await cache.completeTask(current as StoredTask, now))?.kind).toBe("close");
+  expect((await cache.store.readTask(recurring.url)).task.state).toBe("closed");
   await act(() => closing.onAutoClose?.());
   await vi.waitFor(() =>
-    expect(success).toHaveBeenLastCalledWith("Deleted 0 tasks", expect.anything()),
+    expect(success).toHaveBeenLastCalledWith("Deleted 1 task", expect.anything()),
   );
   expect(notice().description).toContain("Kept 1 items needed by repeating tasks");
-  expect(pod.requests.filter((request) => request.method === "DELETE")).toEqual([]);
-  const current = cache
-    .getSnapshot()
-    .tasks[project.url]?.items.find((item) => item.url === recurring.url) as StoredTask;
-  expect((await cache.completeTask(current, now))?.kind).toBe("close");
+  expect(pod.files.has(history?.url as string)).toBe(true);
 });
 
 it.each([

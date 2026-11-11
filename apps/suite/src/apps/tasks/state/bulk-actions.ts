@@ -300,7 +300,7 @@ export function deleteTasks(
   return scheduled.length;
 }
 
-/** Clear completed resources, retaining ancestry and history still needed by bounded series. */
+/** Clear completed resources, retaining ancestry and all recurring-task history. */
 export function deleteCompletedTasks(project: StoredProject, tasks: BulkTasks): number {
   const views = tasks.cache.getSnapshot().views;
   const completed = views.filter(

@@ -36,19 +36,22 @@ it("has nothing to preserve for empty lists or completed-only trees", () => {
   expect(completedParentsToKeep([{ id: "done", state: "closed" }]).openSubtasks.size).toBe(0);
 });
 
-it("retains only closed history belonging to open bounded series within the candidates", () => {
+it("retains all closed recurrence history, including finished, unbounded, and missing series", () => {
   const tasks = [
-    { id: "bounded", state: "open" as const, bounded: true },
-    { id: "unbounded", state: "open" as const, bounded: false },
-    { id: "finished", state: "closed" as const, bounded: true },
-    { id: "history", state: "closed" as const, bounded: false, derivedFrom: "bounded" },
-    { id: "other-project", state: "closed" as const, bounded: false, derivedFrom: "bounded" },
-    { id: "reopened", state: "open" as const, bounded: false, derivedFrom: "bounded" },
-    { id: "unbounded-history", state: "closed" as const, bounded: false, derivedFrom: "unbounded" },
-    { id: "finished-history", state: "closed" as const, bounded: false, derivedFrom: "finished" },
-    { id: "orphan", state: "closed" as const, bounded: false, derivedFrom: "missing" },
+    { id: "series", state: "open" as const },
+    { id: "finished", state: "closed" as const },
+    { id: "history", state: "closed" as const, derivedFrom: "series" },
+    { id: "other-project", state: "closed" as const, derivedFrom: "series" },
+    { id: "reopened", state: "open" as const, derivedFrom: "series" },
+    { id: "finished-history", state: "closed" as const, derivedFrom: "finished" },
+    { id: "orphan", state: "closed" as const, derivedFrom: "missing" },
   ];
-  expect([...completedHistoryToKeep(tasks)]).toEqual(["history", "other-project"]);
+  expect([...completedHistoryToKeep(tasks)]).toEqual([
+    "history",
+    "other-project",
+    "finished-history",
+    "orphan",
+  ]);
   expect([...completedHistoryToKeep(tasks, new Set(["history"]))]).toEqual(["history"]);
   expect(completedHistoryToKeep([]).size).toBe(0);
 });

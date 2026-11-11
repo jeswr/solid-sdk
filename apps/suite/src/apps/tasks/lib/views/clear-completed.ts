@@ -28,22 +28,16 @@ export function completedParentsToKeep(
   return { parents, openSubtasks };
 }
 
-/** Bounded open series still use their closed copies to count consumed occurrences. */
+/** Keep all recurrence copies: even an unbounded or finished series may be edited later. */
 export function completedHistoryToKeep(
-  tasks: readonly (Pick<TaskView, "id" | "state" | "derivedFrom"> & { bounded: boolean })[],
+  tasks: readonly Pick<TaskView, "id" | "state" | "derivedFrom">[],
   candidates?: ReadonlySet<string>,
 ): Set<string> {
-  const bounded = new Set(
-    tasks.filter((task) => task.state === "open" && task.bounded).map((task) => task.id),
-  );
   return new Set(
     tasks
       .filter(
         (task) =>
-          task.state === "closed" &&
-          task.derivedFrom &&
-          bounded.has(task.derivedFrom) &&
-          (!candidates || candidates.has(task.id)),
+          task.state === "closed" && task.derivedFrom && (!candidates || candidates.has(task.id)),
       )
       .map((task) => task.id),
   );
