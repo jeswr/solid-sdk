@@ -150,6 +150,12 @@ function installSolidInjection(): void {
   // never a cross-origin proxy and native CORS / credentials / header semantics are preserved.
   const nativeFetch = window.fetch;
   const PRISTINE_FETCH = nativeFetch.bind(window);
+  // The native Request credentials getter, captured before page scripts run: an own or
+  // prototype `credentials` property cannot disguise a Request's real mode (sst-5mya).
+  const REQUEST_CREDENTIALS = Object.getOwnPropertyDescriptor(
+    Request.prototype,
+    'credentials',
+  )?.get;
 
   /**
    * Duck-type a `URL`-like input rather than `instanceof URL`. `instanceof` is CROSS-REALM
@@ -260,6 +266,32 @@ function installSolidInjection(): void {
   }
 
   /**
+   * Read every RequestInit member exactly once into a plain object. Web IDL dictionaries include
+   * inherited and non-enumerable members too, so read by name rather than spreading.
+   */
+  function snapshotInit(init: RequestInit): RequestInit {
+    return Object.fromEntries(
+      [
+        'method',
+        'headers',
+        'body',
+        'mode',
+        'credentials',
+        'cache',
+        'redirect',
+        'referrer',
+        'referrerPolicy',
+        'integrity',
+        'keepalive',
+        'signal',
+        'duplex',
+        'priority',
+        'window',
+      ].map((key) => [key, Reflect.get(init, key)]),
+    ) as RequestInit;
+  }
+
+  /**
    * Route a fetch through the gated SW path. `autoDivert` marks a request that came from the
    * best-effort global-fetch patch (NOT an explicit `window.solid.fetch` call) so the SW can
    * native-passthrough a non-pod / un-granted request instead of hard-failing the page (High #1).
@@ -277,28 +309,7 @@ function installSolidInjection(): void {
       return PRISTINE_FETCH(input, init);
 
     // Snapshot mutable fields synchronously, BEFORE Blob/Request body reads yield.
-    // Web IDL dictionaries include inherited and non-enumerable members too.
-    const snapInit = init
-      ? (Object.fromEntries(
-          [
-            'method',
-            'headers',
-            'body',
-            'mode',
-            'credentials',
-            'cache',
-            'redirect',
-            'referrer',
-            'referrerPolicy',
-            'integrity',
-            'keepalive',
-            'signal',
-            'duplex',
-            'priority',
-            'window',
-          ].map((key) => [key, Reflect.get(init, key)]),
-        ) as RequestInit)
-      : undefined;
+    const snapInit = init ? snapshotInit(init) : undefined;
     if (snapInit?.headers !== undefined) snapInit.headers = new Headers(snapInit.headers);
     // An explicit null signal clears the Request signal; undefined inherits it.
     const signal = snapInit?.signal === undefined ? request?.signal : snapInit.signal;
@@ -585,32 +596,45 @@ function installSolidInjection(): void {
     }
   }
 
+  /** A real Request's own credentials mode, via the native getter; undefined for anything else. */
+  function requestCredentials(input: RequestInfo | URL): string | undefined {
+    if (typeof input !== 'object' || input === null || !REQUEST_CREDENTIALS) return undefined;
+    try {
+      return REQUEST_CREDENTIALS.call(input) as string;
+    } catch {
+      return undefined; // Not a Request: native fetch stringifies it as a URL.
+    }
+  }
+
   /**
    * A caller that asks for `credentials: 'omit'` (in `init`, or on a `Request` when `init` does
    * not override it) has opted out of identity, so the patch must never route it into
    * authenticated egress (sst-5mya). Apps use this for public reads, and the extension's account
-   * may not be the app's active account. Read once, so a getter cannot answer differently later.
+   * may not be the app's active account.
+   *
+   * `init` is read exactly once into a plain snapshot whose `credentials` is normalised as Web IDL
+   * would (String()), and that snapshot is what either path receives, so a getter or Proxy cannot
+   * answer 'omit' to this check and something else to fetch. An invalid mode stays in the
+   * snapshot for native fetch to reject; a throwing getter rejects with its first error.
    */
-  function omitsCredentials(input: RequestInfo | URL, init?: RequestInit): boolean {
-    try {
-      const fromInit = init ? Reflect.get(init, 'credentials') : undefined;
-      if (fromInit !== undefined) return fromInit === 'omit';
-      return (
-        typeof input === 'object' &&
-        !urlLike(input) &&
-        Reflect.get(input as Request, 'credentials') === 'omit'
-      );
-    } catch {
-      // An init or Request whose getter throws is left to native fetch, which reports it.
-      return true;
-    }
-  }
-
   const patchedFetch: typeof fetch = (input, init) => {
-    if (!omitsCredentials(input, init) && shouldDivert(input)) {
-      return solidFetch(input, init, true);
+    let snapshot: RequestInit | undefined;
+    let omit: boolean;
+    try {
+      snapshot = init === undefined || init === null ? undefined : snapshotInit(init);
+      if (snapshot?.credentials !== undefined) {
+        snapshot.credentials = String(snapshot.credentials) as RequestCredentials;
+        omit = snapshot.credentials === 'omit';
+      } else {
+        omit = requestCredentials(input) === 'omit';
+      }
+    } catch (error) {
+      return Promise.reject(error);
     }
-    return PRISTINE_FETCH(input as RequestInfo, init);
+    if (!omit && shouldDivert(input)) {
+      return solidFetch(input, snapshot, true);
+    }
+    return PRISTINE_FETCH(input as RequestInfo, snapshot);
   };
 
   window.addEventListener('solid-extension:grant-patch', () =>
