@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { extractMediaType, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import {
   assertWithinPodScope,
   isWithinPodScope,
@@ -6,11 +7,27 @@ import {
   snapshotFetchInput,
 } from "@jeswr/guarded-fetch";
 import { forClientCredentials, type PodAuth } from "@jeswr/pod-auth/node";
-import { abortableFetch } from "../core/abort.js";
 import { freshRdf } from "../pod/rdf-read.js";
 import { validatedTypeIndexTarget } from "../pod/type-index-write.js";
 import type { NodeConfig } from "./config.js";
 import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
+
+const RDF_MEDIA_TYPES = new Set<string>(SUPPORTED_RDF_MEDIA_TYPES);
+
+/** Cancel only this caller's wait, leaving shared initialization available to other callers. */
+async function waitForAgent(pending: Promise<PodAuth>, signal: AbortSignal): Promise<PodAuth> {
+  signal.throwIfAborted();
+  let abort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    return await Promise.race([pending, aborted]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
 
 /** Buffer a replayable body for nonce retries, observing the effective caller signal. */
 async function readRequestBody(
@@ -28,9 +45,13 @@ async function readRequestBody(
       void reader.cancel(signal.reason).catch(() => {});
     };
     signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) abort();
   });
   try {
+    if (signal.aborted) {
+      abort();
+      // Observe this rejection before the loop's synchronous abort check can throw.
+      await aborted;
+    }
     const chunks: Uint8Array[] = [];
     let size = 0;
     for (;;) {
@@ -170,13 +191,13 @@ export async function createClientCredentialsFetch(
       headers.delete("content-length");
       return Response.json(json, { status: response.status, headers });
     };
-    const login = (boundary: string[], signal?: AbortSignal) =>
+    const login = (boundary: string[]) =>
       forClientCredentials({
         issuer: config.oidcIssuer,
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         boundary,
-        fetch: signal ? abortableFetch(guarded, signal) : guarded,
+        fetch: guarded,
       });
     const auth = await login([config.podRoot, config.profileDocumentUrl]);
     return async (input, init) => {
@@ -199,19 +220,30 @@ export async function createClientCredentialsFetch(
       // separate memory-only agent, never the other storage's root or issuer origin.
       let selected = auth;
       if (url === selectedIndex && !isWithinPodScope(config.podRoot, url)) {
-        indexAuth ??= login([url], request.signal);
-        selected = await indexAuth;
+        if (!indexAuth) {
+          const pending = login([url]);
+          indexAuth = pending;
+          void pending.catch(() => {
+            if (indexAuth === pending) indexAuth = undefined;
+          });
+        }
+        selected = await waitForAgent(indexAuth, request.signal);
       }
       request.signal.throwIfAborted();
       assertDestination(url);
       const headers = new Headers(request.headers);
       headers.delete("authorization");
       headers.delete("dpop");
-      // Immutable binary bodies replay without pod-auth buffering them again.
+      // Serialized RDF and binary Blobs are immutable and can replay without the body buffer.
       const suppliedBody = snapshot.init?.body;
+      const body =
+        typeof suppliedBody === "string" &&
+        RDF_MEDIA_TYPES.has(extractMediaType(request.headers.get("content-type")) ?? "")
+          ? new Blob([suppliedBody])
+          : suppliedBody;
       const response = await selected.fetch(request, {
         headers,
-        ...(suppliedBody instanceof Blob ? { body: suppliedBody } : {}),
+        ...(body instanceof Blob ? { body } : {}),
       });
       if (profileRead && response.ok) {
         const { dataset } = await freshRdf(url, async () => response.clone());

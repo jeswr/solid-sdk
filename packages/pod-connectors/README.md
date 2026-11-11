@@ -310,8 +310,12 @@ Pod login uses `forClientCredentials` from `@jeswr/pod-auth/node` for CSS client
 DPoP, bounded nonce retries and memory-only tokens. Its fetch feeds storage-client's Solid
 backend and `createStoragePodWriter`. The small `node/pod-auth.ts` adapter retains the config's
 explicit token URL and grants a separate static agent boundary to a validated cross-storage
-Type Index document. It never grants that storage's entire root. It refuses redirects and
-preserves each request's cancellation through discovery, token refresh and nonce retries. Source login displays a browser URL, binds only `127.0.0.1` on an
+Type Index document. It never grants that storage's entire root. Shared agent initialization has no
+caller signal; cancelling one caller leaves other callers able to proceed, and rejected
+initialization can retry. Serialized RDF strings travel as immutable Blobs for creates and
+updates, preserving their preconditions without imposing the ordinary replay-size cap. The
+transport refuses redirects and preserves each request's cancellation through discovery, token
+refresh and nonce retries. Source login displays a browser URL, binds only `127.0.0.1` on an
 OS-assigned port by default, and uses state plus S256 PKCE. Set `connectors[id].callbackPort`
 to an integer from **1024 to 65535** for a fixed loopback callback. Twitch requires this
 setting with either a local secret or a token proxy; omitting it fails with a configuration

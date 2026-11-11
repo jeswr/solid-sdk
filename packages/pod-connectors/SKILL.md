@@ -150,6 +150,10 @@ credentials. Separate immutable agent boundaries handle external index documents
 supplies local DPoP challenges for explicitly authorised requests so the engine authenticates
 before any Pod operation; it never implements proofs, token caching or refresh itself.
 Preserve transport separation, nonce retries, memory-only credentials and redirect refusal.
+Keep cached index agents independent of caller signals; cancel individual waits and requests,
+and evict rejected initialization promises only when they are still the cached promise.
+Suppress stale profile results by epoch. Preserve serialized RDF strings as immutable Blobs
+for both creates and updates so imports keep their adapter-specific size limits.
 Preserve the effective request signal in the exported Pod fetch, including refresh and
 nonce retry transports; reject already-aborted requests before sending. Use per-request
 transport closures so concurrent callers keep separate signals, and compose any internal
