@@ -1,0 +1,41 @@
+{
+  "name": "@jeswr/solid-journal",
+  "version": "0.1.0",
+  "description": "Generated private journal entries, pod persistence and journal statistics.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "../../node_modules/.bin/tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/journal.ontology.ttl --shapes codegen/journal.shapes.ttl --config codegen.config.json --out src/generated",
+    "lint": "../../node_modules/.bin/biome check src scripts test *.json",
+    "typecheck": "../../node_modules/.bin/tsc --noEmit",
+    "test": "../../node_modules/.bin/vitest run"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

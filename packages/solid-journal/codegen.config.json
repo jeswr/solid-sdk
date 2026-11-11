@@ -1,0 +1,27 @@
+{
+  "shapesBase": "https://jeswr.org/ns/journal/shapes#",
+  "prefixes": {
+    "journal": "https://jeswr.org/ns/journal#",
+    "schema": "http://schema.org/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://jeswr.org/ns/journal#Entry",
+      "name": "Entry",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "tags": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        },
+        "images": {
+          "iriScheme": "http-https"
+        }
+      }
+    }
+  ]
+}

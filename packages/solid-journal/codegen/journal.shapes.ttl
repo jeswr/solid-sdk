@@ -1,0 +1,22 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix journal: <https://jeswr.org/ns/journal#> .
+@prefix schema: <http://schema.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+# No personal-journal shape exists in the health/social sectors. Their medical
+# records and social posts are different concepts; diet:mood is a symptom type,
+# not a mood rating. This new Entry profile reuses CreativeWork properties.
+# Narrowings: locationCreated is a name literal; image is an HTTP(S) IRI;
+# articleBody is required, nonblank Markdown; mood is a five-value literal enum.
+[] a sh:NodeShape ; sh:targetClass journal:Entry ;
+ sh:property [ sh:path schema:dateCreated ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ] ;
+ sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:headline ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:articleBody ; sh:name "text" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:severity sh:Violation ; sh:pattern "\\S" ] ;
+ sh:property [ sh:path schema:keywords ; sh:name "tags" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path journal:mood ; sh:name "mood" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:in ("awful" "bad" "okay" "good" "great") ] ;
+ sh:property [ sh:path schema:locationCreated ; sh:name "location" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path journal:weather ; sh:name "weather" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:image ; sh:name "images" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ] .
