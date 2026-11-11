@@ -65,6 +65,10 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
 - `setMetadata` takes the metadata document's ETag from `storage.metadata(url)`, rather than
   the content ETag. A write result may have `etag: null` if a committed mutation omitted it
   and its follow-up HEAD failed; read again before the next conditional mutation.
+  `etagSource` says where a write result's ETag came from: `"response"` is the mutation's own
+  validator; `"follow-up"` came from a later HEAD and may already be another writer's version.
+  Use only a `"response"` ETag as `ifMatch` when a follow-up write or delete must not clobber
+  a concurrent update.
 - With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
   a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
   identifier. Without a name, both use POST. Always use the returned `url`, including after
@@ -264,7 +268,7 @@ Rules the memory backend enforces, and the real backends must match:
   rather than labelling graph blocks as Turtle.
   `where` is `unsupported` in memory. JSON Patch applies to JSON resources only.
 - Solid moves are copy+delete emulation (new URL, capped at 2 000 resources) and drop ACLs.
-  ACL-preserving moves belong to pod-access (SDK-APP-04). LWS moves need
+  ACL-preserving moves use `movePreservingAccess` from `@jeswr/pod-access/roles` (SDK-APP-04). LWS moves need
   MoveResource (`unsupported` with `feature: 'move'` otherwise), and the server picks the name.
 - LWS `setMetadata` refuses the server-managed rels `linkset`, `type` and `up`. Solid rels that are
   not IRIs map to `http://www.iana.org/assignments/relation/<rel>`.

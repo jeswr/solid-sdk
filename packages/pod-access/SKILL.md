@@ -229,8 +229,8 @@ preflight/results and conditional conflict contract, with no automatic 412 retry
 expiry/purpose before any I/O. Test snapshots after JSON round trips, stale own/source validators,
 absence races, preservation of unrelated RDF, creation/replacement preconditions and replay no-ops.
 
-`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` and
-`movePreservingAccess` are outside this layer. The root remains the migrator's offline API;
+`notify`/`message` only record a no-op delivery hook (SDK-APP-07). `decide()` lives in `./requests-solid`.
+`movePreservingAccess` is exported from `./roles` (see README.md). The root remains the migrator's offline API;
 its security and proof semantics must remain unchanged. `@jeswr/fetch-rdf` is an existing
 workspace runtime dependency for role HTTP parsing. Keep exactOptionalPropertyTypes enabled.
 
@@ -282,3 +282,43 @@ and own-ACR `accessControl` management. Member `memberAccess` and own-ACR
 shared with own-ACR management. Never rewrite descendant access
 documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
 and ETag races; preserve 100% coverage.
+
+`movePreservingAccess(storage, from, destinationContainer, options)` extends the role mutation
+options with `name?`, `acceptReset?`, and `signal?`. Native moves bypass access. Emulated Solid
+moves snapshot own roles across at most 2,000 resources including the root, refuse lossy source
+policies, preflight destination expressibility and lockout, then use `setGrants` with
+`ownOnly: true` (no WAC ancestor materialisation). Inherited access follows destination ancestors
+and is not reported as dropped. Folder roles require equal direct/member scopes; separate
+comments-container moves refuse. No auxiliary access or describedby documents are role targets.
+Unsupported destination grants require `acceptReset` and return `preserved: false` with original
+URL/grant/reason entries in `dropped`; warn only on that result. `reapplied` contains destination
+resource URLs. Reapplication failure/abort moves back and restores the snapshot without the
+caller signal. Typed StorageError conflicts expose `step: reapply | rollback-failed`, `from`,
+`to` and last known `url`; rollback failures retain both causes. Never retry or widen a grant.
+
+
+`movePreservingAccess` emulation stages inside pod-access, never through `storage.move`:
+preflight destination caller Control even for an empty own selection, and lockout-check every
+planned own ACL/ACR. Snapshot resource and own-document ETags, endpoint and presence/absence;
+require strong validators. Create exact-name empty placeholders top-down, install own grants
+with `ownOnly: true`, read back and verify own rows/document presence, then stream content
+with the placeholder ETag. Verify parents before creating children. Preserve inheritance for
+items without own documents; preserve the presence of empty own ACP documents too. Re-read source validators before each access application and
+across the whole source before any deletion; any change is conflict, including ACL appearance
+or disappearance. Verify destination access and caller management before deleting sources.
+
+Mirror storage-client's private container-RDF allow-list and 2,000-entry cap through public
+storage APIs; exclude auxiliary access/metadata documents and drop describedby metadata.
+Refuse names public decoded-name `create` cannot reproduce exactly. Read one resource stream
+at a time. Delete sources bottom-up with snapshot resource ETags; after child deletions change
+a container ETag, require verified-empty server-managed RDF and its fresh strong validator.
+Delete listed source access documents after their protected data; refuse incompatible placements.
+Before deletion, failure/cancellation leaves sources untouched and conditionally cleans up
+copies bottom-up, ignoring the caller signal (`step: reapply`); cleanup failures are
+`rollback-failed` with both roots and all causes. Content-bearing residuals have verified own
+access (or source-equivalent inheritance); an access-installation failure may leave an empty
+placeholder. Once deletion begins, stop on failure with `step: source-delete`, retaining the
+whole verified destination and any remaining source items. Never recreate data or move it back.
+Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
+lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
+and final-check races; never promise transactional visibility.
