@@ -16,7 +16,7 @@ design + inventory + phasing lives in:
 [`decisions/0001-monorepo-architecture.md`](decisions/0001-monorepo-architecture.md)
 (imported from `prod-solid-server/decisions/0022`, the ADR of record).
 
-**Current state:** 72 workspace packages and 17 applications are present. The original
+**Current state:** 73 workspace packages and 17 applications are present. The original
 forty packages and thirteen applications were imported with full history; later workspace
 additions are inventoried in `suite.json`. Maintainer-directed packages include
 `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and the shared security-critical LDP listing

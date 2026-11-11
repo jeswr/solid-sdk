@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -61,7 +62,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | implemented: generated Task + RecurrenceRule composite and Calendar behind facades; sector ratchet still open (normative) | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
-| P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
+| P2 form runtime and generated RDFa forms (unify `solid-components`) | runtime implemented; component adoption later | `packages/shacl-forms`: browser SHACL interpreter sharing model-runtime guards; direct paths, four-level nesting, no maxLength | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
 | P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | later | model packages | sst-ild.4.7 |

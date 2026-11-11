@@ -97,6 +97,7 @@
     "@jeswr/pod-type-index",
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
+    "@jeswr/shacl-forms",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
     "@jeswr/solid-environment"

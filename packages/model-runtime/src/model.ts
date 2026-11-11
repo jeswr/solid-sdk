@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -222,7 +223,7 @@ function sameValueZero(a: unknown, b: unknown): boolean {
  * `minLength` and the singleton `nonBlank` (whitespace-only) drop. Applied on every
  * read, write, and set-member boundary regardless of the value's provenance.
  */
-function applyScalarGuards(field: ManifestField, value: unknown): unknown {
+export function applyScalarGuards(field: ManifestField, value: unknown): unknown {
   if (field.in !== undefined && !field.in.some((member) => sameValueZero(member, value)))
     return undefined;
   const g = field.guards;
@@ -1304,6 +1305,19 @@ function hasDatasetClass(
     }
   }
   return false;
+}
+
+/**
+ * Check SHACL class membership through the data graph's bounded, cycle-safe
+ * rdf:type / rdfs:subClassOf walk. Runtime schema interpreters may reuse this
+ * without access to the internal migration budget context.
+ */
+export function hasDatasetClassForSchema(
+  doc: TermWrapper,
+  subject: string,
+  required: readonly string[],
+): boolean {
+  return hasDatasetClass(doc, subject, required);
 }
 
 interface NestedTargetResolution {

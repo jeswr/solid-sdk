@@ -6,6 +6,8 @@ description: Use when loading a generated domain model (model.js from @jeswr/fed
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+
 # Generated-model runtime
 
 `@jeswr/model-runtime` lives in `packages/model-runtime` and is security-critical. It is the
@@ -155,6 +157,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 
 `defineModel`, `validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
+`applyScalarGuards` (scalar constraints only; pair with datatype mappers),
+`hasDatasetClass(doc, subject, requiredClasses)` (bounded data-graph class membership),
 `tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter
 behaviour stays byte-identical.
