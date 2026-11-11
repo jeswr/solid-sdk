@@ -4,7 +4,7 @@ import { DropdownMenuItem } from "@jeswr/suite-ui";
 import type { ComponentProps } from "react";
 import { expect, it, vi } from "vitest";
 import { DataMenus } from "../src/apps/sheets/components/sheet-data-menus";
-import type { SheetEngine } from "../src/apps/sheets/lib/contract";
+import type { SheetEngine, SortResult } from "../src/apps/sheets/lib/contract";
 import { act, click, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("@jeswr/suite-ui", async (original) => {
@@ -69,7 +69,7 @@ function fixture() {
     setDark: vi.fn(),
     setReadOnly: vi.fn(),
     dispose: vi.fn(),
-    sortRange: vi.fn(() => true),
+    sortRange: vi.fn((): SortResult => ({ status: "sorted" })),
     findReplace: vi.fn(async () => {}),
     hasFilter: () => filtered,
     toggleFilter: vi.fn(async () => {
@@ -155,7 +155,7 @@ it("validates sort input and respects a lock that arrives while the dialog is op
   expect(document.querySelector('[role="alert"]')?.textContent).toContain("enter a column");
   await fill("sht-sort-column", "A");
   if (!f.engine.sortRange) throw new Error("Missing sort method");
-  vi.mocked(f.engine.sortRange).mockReturnValue(false);
+  vi.mocked(f.engine.sortRange).mockReturnValue({ status: "blocked", reason: "Invalid range" });
   await submit();
   expect(document.querySelector('[role="alert"]')).not.toBeNull();
   await ui.render(h(DataMenus, { engine: f.engine, locked: true }));
@@ -172,6 +172,28 @@ it("validates sort input and respects a lock that arrives while the dialog is op
   await key(button("Edit"), "ArrowDown");
   expect(item("Find and replace").getAttribute("aria-disabled")).toBeNull();
   await locked.unmount();
+});
+
+it("keeps the sort dialog open and shows the engine's validation reason, then allows retry", async () => {
+  const f = fixture();
+  if (!f.engine.sortRange) throw new Error("Missing sort method");
+  vi.mocked(f.engine.sortRange).mockReturnValueOnce({
+    status: "blocked",
+    reason: "Merged cells must be the same size to sort this range.",
+  });
+  const ui = await mount(h(DataMenus, { engine: f.engine, locked: false }));
+  await open();
+  await click(item("Sort range"));
+  await submit();
+  expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+    "Merged cells must be the same size to sort this range.",
+  );
+  expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+  expect(button("Sort").disabled).toBe(false);
+  await submit();
+  expect(f.engine.sortRange).toHaveBeenCalledTimes(2);
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await ui.unmount();
 });
 
 it("handles Ctrl/Cmd+H and grid Find while preserving browser Find elsewhere and cleaning up", async () => {

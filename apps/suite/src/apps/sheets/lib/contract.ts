@@ -190,13 +190,15 @@ export type CsvImportResult =
   | { status: "imported" }
   | { status: "blocked"; reason: "comments-loading" | "read-only" };
 
+export type SortResult = { status: "sorted" } | { status: "blocked"; reason: string };
+
 export interface SheetEngine {
   sortRange?(options: {
     scope: "range" | "sheet";
     column: number;
     ascending: boolean;
     header: boolean;
-  }): boolean;
+  }): SortResult;
   hasFilter?(): boolean;
   toggleFilter?(): Promise<boolean>;
   clearFilter?(): Promise<boolean>;

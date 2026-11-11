@@ -113,9 +113,15 @@ export function DataMenus({ engine, locked }: { engine: SheetEngine | null; lock
               if (locked) return;
               try {
                 const index = columnToIndex(column.toUpperCase());
-                if (!engine?.sortRange?.({ scope, column: index - 1, ascending, header }))
-                  throw new Error("Invalid range");
-                setSorting(false);
+                const result = engine?.sortRange?.({
+                  scope,
+                  column: index - 1,
+                  ascending,
+                  header,
+                });
+                if (!result) throw new Error("Sort unavailable");
+                if (result.status === "blocked") setError(result.reason);
+                else setSorting(false);
               } catch {
                 setError("Select a range with data and enter a column within it.");
               }

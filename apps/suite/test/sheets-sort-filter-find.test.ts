@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import type { IWorkbookData } from "@univerjs/core";
+import type { FormulaDataModel } from "@univerjs/preset-sheets-core";
 import type { IFindQuery, IFindReplaceService } from "@univerjs/preset-sheets-find-replace";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,6 +19,7 @@ const headless = await vi.hoisted(async () => {
   const formula = fromCore("@univerjs/engine-formula");
   fromCore("@univerjs/engine-formula/facade");
   const sheetsFormula = fromCore("@univerjs/sheets-formula");
+  const sheetsUI = fromCore("@univerjs/sheets-ui");
   const sort = fromSort("@univerjs/sheets-sort");
   const filter = fromFilter("@univerjs/sheets-filter");
   fromFilter("@univerjs/sheets-filter/facade");
@@ -26,6 +29,7 @@ const headless = await vi.hoisted(async () => {
   const render = fromFind("@univerjs/engine-render");
   const { BehaviorSubject } = fromFind("rxjs");
   const create = () => {
+    const scrollToRange = vi.fn(() => true);
     const univer = new core.Univer({
       locale: core.LocaleType.EN_US,
       locales: { [core.LocaleType.EN_US]: {} },
@@ -47,6 +51,7 @@ const headless = await vi.hoisted(async () => {
               // biome-ignore lint/style/useNamingConvention: Univer observable
               currentSkeleton$: new BehaviorSubject(null),
               getCurrentSkeleton: () => null,
+              scrollToRange,
             }),
           }),
         },
@@ -57,11 +62,7 @@ const headless = await vi.hoisted(async () => {
     };
     const commands = injector.get(core.ICommandService);
     commands.registerCommand(filter.SmartToggleSheetsFilterCommand);
-    commands.registerCommand({
-      id: "sheet.command.scroll-to-cell",
-      type: core.CommandType.OPERATION,
-      handler: () => true,
-    });
+    commands.registerCommand(sheetsUI.ScrollToCellCommand);
     for (const command of [find.OpenReplaceDialogOperation, find.ReplaceCurrentMatchCommand])
       commands.registerCommand(command);
     const api = FUniver.newAPI(univer);
@@ -72,11 +73,12 @@ const headless = await vi.hoisted(async () => {
       controller.dispose();
       dispose();
     };
-    return { univer, univerAPI: api };
+    return { univer, univerAPI: api, scrollToRange };
   };
   return {
     core,
     sheets,
+    formula,
     sort,
     filter,
     find,
@@ -170,6 +172,62 @@ async function find(f: Awaited<ReturnType<typeof mount>>, query: Partial<IFindQu
 }
 
 describe("real Univer data tools", () => {
+  it.each([
+    "range",
+    "sheet",
+  ] as const)("sorts %s data below a merged header and preserves the merge through undo/redo", async (scope) => {
+    const data = snapshot("Names,\nZoe,3\nAmy,1\nBob,2");
+    const merge = { startRow: 0, endRow: 0, startColumn: 0, endColumn: 1 };
+    const sheet = (data as unknown as IWorkbookData).sheets.data;
+    if (!sheet) throw new Error("Missing data sheet");
+    sheet.mergeData = [merge];
+    const f = await mount(data);
+    try {
+      expect(f.engine.sortRange?.({ scope, column: 0, ascending: true, header: true })).toEqual({
+        status: "sorted",
+      });
+      const sorted = "Names,\r\nAmy,1\r\nBob,2\r\nZoe,3\r\n";
+      expect(f.engine.exportCsv()).toBe(sorted);
+      expect(f.sheet().getRange("A1:B1").isMerged()).toBe(true);
+      expect(await f.current.univerAPI.undo()).toBe(true);
+      expect(f.engine.exportCsv()).toBe("Names,\r\nZoe,3\r\nAmy,1\r\nBob,2\r\n");
+      expect(await f.current.univerAPI.redo()).toBe(true);
+      expect(f.engine.exportCsv()).toBe(sorted);
+      expect(f.sheet().getRange("A1:B1").isMerged()).toBe(true);
+    } finally {
+      f.engine.dispose();
+    }
+  });
+
+  it.each([
+    { startRow: 0, header: false },
+    { startRow: 1, header: true },
+    { startRow: 1, header: false },
+  ])("refuses nonuniform merged cells in the data (%j) before dispatching sort", async ({
+    startRow,
+    header,
+  }) => {
+    const data = snapshot("Name,Score\nZoe,3\nAmy,1\nBob,2");
+    const sheet = (data as unknown as IWorkbookData).sheets.data;
+    if (!sheet) throw new Error("Missing data sheet");
+    sheet.mergeData = [{ startRow, endRow: startRow, startColumn: 0, endColumn: 1 }];
+    const f = await mount(data);
+    const dispatched = vi.fn();
+    const subscription = f.commands.onCommandExecuted(dispatched);
+    try {
+      const before = f.engine.snapshot();
+      expect(f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header })).toEqual({
+        status: "blocked",
+        reason: "Merged cells must be the same size to sort this range.",
+      });
+      expect(dispatched).not.toHaveBeenCalled();
+      expect(f.engine.snapshot()).toEqual(before);
+    } finally {
+      subscription.dispose();
+      f.engine.dispose();
+    }
+  });
+
   it("sorts ranges and sheets with headers without shifting comments, drafts or charts, including undo/redo", async () => {
     const chart = {
       id: "chart",
@@ -197,7 +255,7 @@ describe("real Univer data tools", () => {
     try {
       expect(
         f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
-      ).toBe(true);
+      ).toEqual({ status: "sorted" });
       expect(f.engine.exportCsv()).toBe("Name,Score\r\nAmy,1\r\nBob,2\r\nZoe,3\r\n");
       assertAnchors();
       await Promise.resolve();
@@ -208,12 +266,12 @@ describe("real Univer data tools", () => {
       assertAnchors();
       expect(
         f.engine.sortRange?.({ scope: "sheet", column: 1, ascending: false, header: true }),
-      ).toBe(true);
+      ).toEqual({ status: "sorted" });
       expect(f.engine.exportCsv()).toBe("Name,Score\r\nZoe,3\r\nBob,2\r\nAmy,1\r\n");
       assertAnchors();
       expect(
         f.engine.sortRange?.({ scope: "sheet", column: 0, ascending: true, header: false }),
-      ).toBe(true);
+      ).toEqual({ status: "sorted" });
       expect(f.sheet().getRange("A1").getValue()).toBe("Amy");
     } finally {
       draft?.dispose();
@@ -323,9 +381,15 @@ it.each([
     // The native single-replacement path uses set-range-values directly.
     finder.moveToNextMatch({ noFocus: true });
     expect(await finder.replace("Dog")).toBe(false);
-    expect(f.engine.sortRange?.({ scope: "sheet", column: 0, ascending: true, header: true })).toBe(
-      false,
-    );
+    expect(
+      f.engine.sortRange?.({ scope: "sheet", column: 0, ascending: true, header: true }),
+    ).toEqual({
+      status: "blocked",
+      reason:
+        lock === "view-only"
+          ? "This spreadsheet is view only."
+          : "Wait for comments to finish loading before sorting.",
+    });
     expect(
       await f.commands.executeCommand(headless.sort.SortRangeCommand.id, {
         unitId: "original",
@@ -357,6 +421,56 @@ it.each([
       const unlocked = await find(f, { matchesTheWholeCell: true });
       expect(await unlocked.replaceAll("Dog")).toEqual({ success: 2, failure: 0 });
     }
+  } finally {
+    f.engine.dispose();
+  }
+});
+
+it("navigates Find matches across worksheets and changes selection while comments load, but blocks edits and history", async () => {
+  const data = snapshot("Word\nCat\ncat", true);
+  const other = (data as unknown as IWorkbookData).sheets.other;
+  if (!other) throw new Error("Missing other sheet");
+  other.cellData = { 1: { 0: { v: "cat", t: headless.core.CellValueType.STRING } } };
+  const f = await mount(data, { commentsLoading: true });
+  try {
+    const before = f.engine.exportCsv();
+    const finder = await find(f, {
+      findScope: headless.find.FindScope.UNIT,
+      matchesTheWholeCell: true,
+    });
+    expect(finder.getMatches()).toHaveLength(3);
+    const range = { startRow: 1, endRow: 1, startColumn: 0, endColumn: 0 };
+    finder.moveToNextMatch({ ignoreSelection: true });
+    expect(f.current.scrollToRange).toHaveBeenLastCalledWith(range, undefined, undefined);
+    finder.moveToNextMatch();
+    expect(f.current.scrollToRange).toHaveBeenLastCalledWith(
+      { ...range, startRow: 2, endRow: 2 },
+      undefined,
+      undefined,
+    );
+    finder.moveToNextMatch();
+    await vi.waitFor(() => expect(f.engine.activeSheet().id).toBe("other"));
+    expect(f.current.scrollToRange).toHaveBeenLastCalledWith(range, undefined, undefined);
+    expect(f.current.scrollToRange).toHaveBeenCalledTimes(3);
+    expect(
+      await f.commands.executeCommand(headless.sheets.SelectRangeCommand.id, {
+        unitId: "original",
+        subUnit: "other",
+        range,
+      }),
+    ).toBe(true);
+    expect(f.engine.selection?.()).toEqual({ sheetId: "other", range: "A2" });
+    expect(
+      await f.commands.executeCommand(headless.sheets.SetRangeValuesCommand.id, {
+        unitId: "original",
+        subUnitId: "data",
+        range,
+        value: { 1: { 0: { v: "Changed" } } },
+      }),
+    ).toBe(false);
+    expect(await f.current.univerAPI.undo()).toBe(false);
+    expect(await f.current.univerAPI.redo()).toBe(false);
+    expect(f.engine.exportCsv("data")).toBe(before);
   } finally {
     f.engine.dispose();
   }
@@ -435,15 +549,85 @@ it("opens the native find dialog and rejects invalid sort columns and header-onl
     expect(service.revealed).toBe(true);
     expect(service.replaceRevealed).toBe(true);
     for (const column of [-1, 2, Number.NaN, 0.5]) {
-      expect(f.engine.sortRange?.({ scope: "range", column, ascending: true, header: true })).toBe(
-        false,
-      );
+      expect(
+        f.engine.sortRange?.({ scope: "range", column, ascending: true, header: true }),
+      ).toEqual({
+        status: "blocked",
+        reason: "Select a range with data and enter a column within it.",
+      });
     }
     f.sheet().setActiveRange(f.sheet().getRange("A1:B1"));
-    expect(f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true })).toBe(
-      false,
-    );
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Select a range with data and enter a column within it.",
+    });
   } finally {
+    f.engine.dispose();
+  }
+});
+
+it("applies Univer's native single-row, empty-range and array-formula sort validation", async () => {
+  const data = snapshot("Name,Score\nZoe,3\nAmy,1\nBob,2");
+  const sheet = (data as unknown as IWorkbookData).sheets.data;
+  if (!sheet) throw new Error("Missing data sheet");
+  sheet.rowCount = 12;
+  const f = await mount(data);
+  try {
+    f.sheet().setActiveRange(f.sheet().getRange("A1:B2"));
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Select at least two data rows to sort.",
+    });
+    f.sheet().setActiveRange(f.sheet().getRange("A10:B12"));
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: false }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Select a range with data to sort.",
+    });
+    f.sheet().setActiveRange(f.sheet().getRange("A1:B4"));
+    f.current.univer
+      .__getInjector()
+      .get<FormulaDataModel>(headless.formula.FormulaDataModel)
+      .setArrayFormulaRange({
+        original: { data: { 1: { 1: { startRow: 1, endRow: 3, startColumn: 1, endColumn: 1 } } } },
+      });
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Ranges containing array formulas cannot be sorted.",
+    });
+  } finally {
+    f.engine.dispose();
+  }
+});
+
+it("reports missing selections and sort commands refused after validation", async () => {
+  const f = await mount();
+  const guard = f.commands.beforeCommandExecuted((command) => {
+    if (command.id === headless.sort.SortRangeCommand.id) throw new headless.core.CanceledError();
+  });
+  try {
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Couldn't sort this range.",
+    });
+    f.current.univer.__getInjector().get(headless.sheets.SheetsSelectionsService).setSelections([]);
+    expect(
+      f.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: false }),
+    ).toEqual({
+      status: "blocked",
+      reason: "Select a range with data and enter a column within it.",
+    });
+  } finally {
+    guard.dispose();
     f.engine.dispose();
   }
 });

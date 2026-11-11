@@ -19,7 +19,12 @@ import {
   UniverSheetsFindReplacePreset,
 } from "@univerjs/preset-sheets-find-replace";
 import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
-import { SortRangeCommand, SortType, UniverSheetsSortPreset } from "@univerjs/preset-sheets-sort";
+import {
+  SheetsSortService,
+  SortRangeCommand,
+  SortType,
+  UniverSheetsSortPreset,
+} from "@univerjs/preset-sheets-sort";
 import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-US";
 import {
   CommandType,
@@ -66,6 +71,20 @@ const FILTER_COMMANDS = new Set([
   "sheet.command.re-calc-filter",
 ]);
 const isFilterCommand = (id: string) => FILTER_COMMANDS.has(id);
+
+// Univer also uses COMMAND for navigation that does not edit cells or history.
+const NAVIGATION_COMMANDS = new Set([
+  "sheet.command.scroll-to-cell",
+  "sheet.command.set-worksheet-activate",
+  "sheet.command.select-range",
+  "sheet.command.move-selection",
+  "sheet.command.move-selection-enter-tab",
+  "sheet.command.expand-selection",
+  "sheet.command.select-all",
+  "sheet.command.set-scroll-relative",
+  "sheet.command.scroll-view",
+  "sheet.command.scroll-view-reset",
+]);
 
 interface StructuralOperation {
   chartSources?: {
@@ -186,10 +205,11 @@ export const mountUniver: MountEngine = async (container, options) => {
   const commands = injector.get(ICommandService);
   // setEditable does not guard native history replay. Cancel user commands before
   // they can mutate the workbook or consume undo/redo history while anchors load.
-  // Operations (navigation) and background calculation mutations can still run.
+  // Navigation operations/commands and background calculation mutations can still run.
   const loadingGuard = commands.beforeCommandExecuted((command) => {
     if (command.type !== CommandType.COMMAND) return;
-    if (commentsLoading && !isFilterCommand(command.id)) throw new CanceledError();
+    if (commentsLoading && !isFilterCommand(command.id) && !NAVIGATION_COMMANDS.has(command.id))
+      throw new CanceledError();
     if (
       readOnly &&
       (/^sheet\.command\.(sort-|reorder-range|replace)/.test(command.id) ||
@@ -393,7 +413,9 @@ export const mountUniver: MountEngine = async (container, options) => {
   };
   return {
     sortRange(config) {
-      if (readOnly || commentsLoading) return false;
+      if (readOnly) return { status: "blocked", reason: "This spreadsheet is view only." };
+      if (commentsLoading)
+        return { status: "blocked", reason: "Wait for comments to finish loading before sorting." };
       const sheet = workbook.getActiveSheet();
       const range =
         config.scope === "sheet"
@@ -406,16 +428,40 @@ export const mountUniver: MountEngine = async (container, options) => {
         config.column > range.endColumn ||
         range.endRow < range.startRow + Number(config.header)
       )
-        return false;
-      return commands.syncExecuteCommand(SortRangeCommand.id, {
+        return {
+          status: "blocked",
+          reason: "Select a range with data and enter a column within it.",
+        };
+      // Validate and dispatch only the data rows. Passing the merged header to
+      // SortRangeCommand makes its merge handling skip the unmerged data rows.
+      const location = {
         unitId: workbook.getId(),
         subUnitId: sheet.getSheetId(),
-        range,
-        hasTitle: config.header,
+        range: { ...range, startRow: range.startRow + Number(config.header) },
+      };
+      // Match the four checks performed by Univer's native sort UI.
+      const sort = injector.get(SheetsSortService);
+      if (!sort.singleCheck(location))
+        return { status: "blocked", reason: "Select at least two data rows to sort." };
+      if (!sort.mergeCheck(location))
+        return {
+          status: "blocked",
+          reason: "Merged cells must be the same size to sort this range.",
+        };
+      if (!sort.formulaCheck(location))
+        return { status: "blocked", reason: "Ranges containing array formulas cannot be sorted." };
+      if (!sort.emptyCheck(location))
+        return { status: "blocked", reason: "Select a range with data to sort." };
+      const sorted = commands.syncExecuteCommand(SortRangeCommand.id, {
+        ...location,
+        hasTitle: false,
         orderRules: [
           { colIndex: config.column, type: config.ascending ? SortType.ASC : SortType.DESC },
         ],
       });
+      return sorted
+        ? { status: "sorted" }
+        : { status: "blocked", reason: "Couldn't sort this range." };
     },
     hasFilter: () => workbook.getActiveSheet().getFilter() !== null,
     async toggleFilter() {
