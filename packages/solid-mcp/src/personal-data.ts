@@ -100,3 +100,29 @@ export function requireGenericPodAccess(
     throw new Error(PERSONAL_DATA_DENIED);
   }
 }
+
+/** Current private discovery controls generic mutations too: models cannot replace the
+ * context, its ACL, an ancestor, or the pointers that select it. Values never enter errors.
+ */
+export function requireContextMutationAccess(
+  pod: PodPort,
+  url: string,
+  protectedUrls: readonly string[],
+): void {
+  try {
+    const target = new URL(url, pod.root);
+    for (const protectedUrl of protectedUrls) {
+      const protectedTarget = new URL(protectedUrl);
+      if (target.origin !== protectedTarget.origin) continue;
+      const prefixes = pathAliases(protectedTarget);
+      if (
+        pathAliases(target).some((path) =>
+          prefixes.some((prefix) => within(path, prefix) || prefix.startsWith(`${path}/`)),
+        )
+      )
+        throw new Error();
+    }
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
+}

@@ -39,12 +39,18 @@ export interface PodReadOptions {
 
 /** Server metadata for an exact resource, including a not-yet-created resource. */
 export interface PodHeadResult {
+  /** Malformed/ambiguous or unsupported access-control links; trust checks must deny. */
+  aclError?: boolean;
+  /** Raw effective WAC-Allow evidence, including public permissions. */
+  wacAllow?: string;
   /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
   acl?: string;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
 export interface PodReadResult {
+  /** Raw effective WAC-Allow evidence, including public permissions. */
+  wacAllow?: string;
   /** Unmodified response bytes. */
   body: Uint8Array;
   /** Bare media type; an empty string means the server omitted it. */
@@ -156,11 +162,15 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
         throw new Error("WAC ACL discovery failed");
+      const evidence = response.headers.has("wac-allow")
+        ? { wacAllow: response.headers.get("wac-allow") as string }
+        : {};
       try {
-        return { acl: new URL(wacAclLink(response.headers.get("link") ?? ""), target).href };
+        const acl = wacAclLink(response.headers.get("link") ?? "", true);
+        return { ...evidence, ...(acl ? { acl: new URL(acl, target).href } : {}) };
       } catch {
-        // ACP, absent, malformed or ambiguous WAC links cannot protect audit data.
-        return {};
+        // Expose malformed/ambiguous access-control evidence so trust checks cannot treat it as absent.
+        return { ...evidence, aclError: true };
       }
     },
     async read(url, options: PodReadOptions = {}) {
@@ -211,6 +221,9 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
         throw new Error(`failed to read ${target}: HTTP ${response.status} ${response.statusText}`);
       }
       return {
+        ...(response.headers.has("wac-allow")
+          ? { wacAllow: response.headers.get("wac-allow") as string }
+          : {}),
         body: new Uint8Array(await response.arrayBuffer()),
         contentType: ((response.headers.get("content-type") ?? "").split(";").shift() ?? "")
           .trim()

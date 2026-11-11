@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** biome-ignore-all lint/style/noNonNullAssertion: fixtures guarantee nanopubs and enumerated targets. */
 import { parseRdf } from "@jeswr/fetch-rdf";
@@ -11,7 +12,7 @@ import {
   NanopubStore,
   type PodPort,
 } from "../src/index.js";
-import { NS, RdfNode } from "../src/rdf.js";
+import { NS, putGraph, RdfNode } from "../src/rdf.js";
 import { createMemoryPodPort, exampleBuildOptions } from "../src/testing.js";
 
 const options = exampleBuildOptions();
@@ -280,4 +281,63 @@ it.each([
   pod.read = async (url) => ({ ...(await memory.read(url)), etag });
   await expect(store.put(await medicalFact())).rejects.toThrow("strong ETag");
   expect(write).not.toHaveBeenCalled();
+});
+
+it("builds and verifies owner-only ACLs with explicit inherited scope", async () => {
+  const { ownerOnlyWacAcl, validateOwnerOnlyWacAcl } = await import("../src/index.js");
+  const target = `${ROOT}context/`;
+  const dataset = ownerOnlyWacAcl(target, options.owner, policy(target), true);
+  expect(() => validateOwnerOnlyWacAcl(dataset, target, options.owner)).not.toThrow();
+  expect(() => validateOwnerOnlyWacAcl(dataset, target, options.owner, true)).not.toThrow();
+  const node = new RdfNode(`${policy(target)}#owner`, dataset);
+  node.terms(`${ACL}default`).clear();
+  expect(() => validateOwnerOnlyWacAcl(dataset, target, options.owner, true)).toThrow(
+    "WAC protection unavailable",
+  );
+  node.link(`${ACL}defaultForNew`, target);
+  expect(() => validateOwnerOnlyWacAcl(dataset, target, options.owner, true)).not.toThrow();
+});
+
+it.each([
+  "stranger",
+  "public",
+  "authenticated",
+  "group",
+  "origin",
+  "no owner",
+  "read only",
+  "access only",
+  "default only",
+])("checks effective %s mutation authority without reading external audiences", async (kind) => {
+  const { ownerOnlyWacAcl, validateOwnerOnlyWacAcl } = await import("../src/index.js");
+  const target = `${ROOT}context/`;
+  const dataset = ownerOnlyWacAcl(target, options.owner, policy(target), true);
+  const node = new RdfNode(`${policy(target)}#owner`, dataset);
+  if (kind === "stranger") node.link(`${ACL}agent`, "https://outside.example/PRIVATE");
+  if (kind === "public") node.link(`${ACL}agentClass`, "http://xmlns.com/foaf/0.1/Agent");
+  if (kind === "authenticated") node.link(`${ACL}agentClass`, `${ACL}AuthenticatedAgent`);
+  if (kind === "group") node.link(`${ACL}agentGroup`, `${ROOT}group`);
+  if (kind === "origin") node.link(`${ACL}origin`, "https://outside.example/PRIVATE");
+  if (kind === "no owner") node.terms(`${ACL}agent`).clear();
+  if (kind === "read only") {
+    node.terms(`${ACL}mode`).clear();
+    node.link(`${ACL}mode`, `${ACL}Read`);
+    node.link(`${ACL}agent`, "https://outside.example/PRIVATE");
+  }
+  if (kind === "access only") node.terms(`${ACL}default`).clear();
+  if (kind === "default only") node.terms(`${ACL}accessTo`).clear();
+  const check = () =>
+    validateOwnerOnlyWacAcl(dataset, target, kind === "no owner" ? "" : options.owner);
+  if (["read only", "access only"].includes(kind)) expect(check).not.toThrow();
+  else expect(check).toThrow("WAC protection unavailable");
+});
+
+it("rejects named-graph ACL evidence", async () => {
+  const { ownerOnlyWacAcl, validateOwnerOnlyWacAcl } = await import("../src/index.js");
+  const dataset = new Store();
+  const target = `${ROOT}context/`;
+  putGraph(dataset, "urn:example:graph", ownerOnlyWacAcl(target, options.owner, policy(target)));
+  expect(() => validateOwnerOnlyWacAcl(dataset, target, options.owner)).toThrow(
+    "WAC protection unavailable",
+  );
 });

@@ -33,7 +33,14 @@ refused, so mint a slug for the address entity. Each field is read once into a s
 swap values after the check. Refusals never echo the value. Ask the user for the
 full number each time a form needs it. The template does not scan other templates
 or Turtle bodies; run `containsCardNumber` on untrusted text (percent-decoded
-first) before storing it. `findCardNumbers` returns UTF-16 spans for redaction.
+first) before storing it. `findCardNumbers` returns original UTF-16 spans, including astral decimal digits,
+for every Luhn-valid 13–19 digit window starting with 2–6 at every offset. It covers up to 19 digits
+after a match and merges overlapping/adjacent spans. All Unicode decimal scripts
+and the existing NFKC digit forms remain supported. Separators are only ASCII space,
+hyphen, NBSP (U+00A0), thin space (U+2009), narrow no-break space (U+202F), en/em dash
+(U+2013/U+2014). Dots and all other punctuation/whitespace end a digit run. Use
+`redactCardNumbers(text, marker = CARD_REDACTION)` for `{text, count}`; solid-mcp
+uses this same detector. Never add a second detector in a consumer.
 
 Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It
 requires an ODRL permit for every category and denies uncategorized data and
@@ -70,3 +77,11 @@ New templates write canonical `https://jeswr.org/ns/sectors/health#` and
 reference parser's implicit legacy prefixes unchanged: they are hash inputs.
 For new Turtle bodies, declare canonical prefixes explicitly. Read legacy and
 mixed graphs without rewriting the terms or their content-derived identifiers.
+
+
+Reuse `ownerOnlyWacAcl(target, owner, aclUrl, inherit?)` when provisioning owner-only
+WAC rules outside NanopubStore. Discover first, validate existing ACL dedication,
+serialize with the Writer and persist conditionally. For read trust checks use
+`validateOwnerOnlyWacAcl(dataset, target, owner, inherited?)`: mutations by other
+agents, classes, groups or origins deny; read-only grants are allowed. Inherited
+checks consider default/defaultForNew; unknown and named-graph ACLs deny.

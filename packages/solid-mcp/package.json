@@ -61,10 +61,13 @@
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pkg-memory": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dpop": "workspace:*",
     "@jeswr/solid-memory": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
@@ -98,6 +101,9 @@
     "inlined": [
       "@jeswr/mcp-oauth",
       "@jeswr/pkg-memory",
+      "@jeswr/pod-type-index",
+      "@jeswr/storage-capabilities",
+      "@jeswr/suite-vocab",
       "@jeswr/storage-client"
     ]
   },

@@ -104,3 +104,15 @@ export async function loadCliConfig(
   }
   return { podRoot, webId, readOnly, clientId, clientSecret, oidcIssuer, tokenUrl };
 }
+
+/** Parse the owner-facing subcommand before loading credentials or opening stdio. */
+export function parseCliArguments(args: readonly string[]): {
+  command: "serve" | "context-init";
+  initialText?: string;
+} {
+  if (args[0] !== "context-init") return { command: "serve" };
+  if (args.length === 1) return { command: "context-init" };
+  if (args.length === 3 && args[1] === "--initial-text")
+    return { command: "context-init", initialText: args[2] };
+  throw new Error("Usage: solid-mcp context-init [--initial-text TEXT]");
+}

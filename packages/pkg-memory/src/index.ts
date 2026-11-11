@@ -3,7 +3,7 @@
 /** PKG nanopublication model, fact templates, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
-export { containsCardNumber, findCardNumbers } from "./cards.js";
+export { CARD_REDACTION, containsCardNumber, findCardNumbers, redactCardNumbers } from "./cards.js";
 export {
   UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
@@ -45,4 +45,9 @@ export { NanopubStore } from "./store.js";
 export type { Fact, PaymentCardBrand, TemporalValue } from "./templates.js";
 export { createFactAssertion, PAYMENT_CARD_BRANDS } from "./templates.js";
 export type { WacDiscoveryOptions } from "./wac.js";
-export { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";
+export {
+  discoverWacAcl,
+  ownerOnlyWacAcl,
+  validateDedicatedWacAcl,
+  validateOwnerOnlyWacAcl,
+} from "./wac.js";

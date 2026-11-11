@@ -171,6 +171,7 @@ describe("stdio executable", () => {
         contentType: "text/plain",
         text: "hello fixture",
         redactedCardNumbers: 0,
+        aclVerified: false,
       });
       // The CLI has no trusted MCP client identity, so personal tools must refuse access.
       for (const request of [

@@ -15,7 +15,12 @@ import { DataFactory, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
-import { PERSONAL_DATA_DENIED, requireGenericPodAccess } from "./personal-data.js";
+import { contextTypeIndex, SHARED_CONTEXT_PATH } from "./context-discovery.js";
+import {
+  PERSONAL_DATA_DENIED,
+  requireContextMutationAccess,
+  requireGenericPodAccess,
+} from "./personal-data.js";
 import type { PodChild, SearchMatch } from "./pod.js";
 import {
   podReadMode,
@@ -78,6 +83,8 @@ export class PodOutput {
   constructor(
     private readonly pod: PodPort,
     private readonly personal = false,
+    // Structured writers own their target layout; generic model mutations must discover context.
+    private readonly contextGuard = true,
   ) {}
 
   private target(url: string, mutation = false): string {
@@ -228,13 +235,36 @@ export class PodOutput {
     return children;
   }
 
+  private async contextMutation(url: string): Promise<void> {
+    if (this.personal || !this.contextGuard || !this.pod.webId) return;
+    try {
+      await withPodReadLimits(async () => {
+        const index = contextTypeIndex(this.pod);
+        const context =
+          (await index.discover()) ?? new URL(SHARED_CONTEXT_PATH, this.pod.root).href;
+        const protectedUrls = [...index.protectedUrls(), context];
+        for (const target of [...protectedUrls]) {
+          const metadata = await this.pod.head?.(target);
+          if (metadata?.aclError) throw new Error(PERSONAL_DATA_DENIED);
+          if (metadata?.acl)
+            protectedUrls.push(requirePodScopedUrl({ podRoot: this.pod.root }, metadata.acl));
+        }
+        requireContextMutationAccess(this.pod, url, protectedUrls);
+      });
+    } catch {
+      throw new Error(PERSONAL_DATA_DENIED);
+    }
+  }
+
   async write(url: string, body: Uint8Array, contentType: string, cond: PodConditions) {
     const target = this.target(url, true);
+    await this.contextMutation(target);
     return this.operation(() => this.pod.write(target, body, contentType, cond));
   }
 
   async delete(url: string, cond?: PodConditions): Promise<void> {
     const target = this.target(url, true);
+    await this.contextMutation(target);
     return this.operation(() => this.pod.delete(target, cond));
   }
 

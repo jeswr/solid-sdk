@@ -110,7 +110,14 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
       return portOperation(() =>
-        new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
+        // ChatWriter owns these create-only conversation/ACL targets; it never accepts a
+        // model-supplied resource URL. Retain pod scope and the personal-data boundary.
+        new PodOutput(pod ?? createFetchPodPort(config), false, false).write(
+          target,
+          body,
+          contentType,
+          cond,
+        ),
       );
     },
   };

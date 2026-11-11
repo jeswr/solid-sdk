@@ -5108,6 +5108,9 @@ importers:
       '@jeswr/pkg-memory':
         specifier: workspace:*
         version: link:../pkg-memory
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -5120,9 +5123,15 @@ importers:
       '@jeswr/solid-memory':
         specifier: workspace:*
         version: link:../solid-memory
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
