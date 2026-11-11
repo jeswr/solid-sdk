@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import { collection, metadataOf } from "../lib/collections";
 import { archiveKey, deviceState } from "../lib/device-state";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
-import { archivedMessages, triageLabel } from "../lib/inbox";
+import { archiveView, triageLabel } from "../lib/inbox";
 import { resourceSlug } from "../lib/paths";
 import {
   type InboxMessage,
@@ -107,10 +107,8 @@ export function InboxScreen({ binding }: { binding?: string }) {
         ),
       );
   }, [messages, session.webId]);
-  const signedArchive =
-    archived.status === "ready"
-      ? archivedMessages(loadedRecords(archived.data), session.webId, Date.now())
-      : new Set<string>();
+  const archiveState = archiveView(archived, session.webId, Date.now());
+  const signedArchive = "targets" in archiveState ? archiveState.targets : new Set<string>();
   useEffect(() => {
     if (!allowed) setSelected(undefined);
   }, [allowed]);
@@ -126,21 +124,24 @@ export function InboxScreen({ binding }: { binding?: string }) {
       }
     });
   const rowsQuery =
-    messages.status === "ready"
-      ? {
-          ...messages,
-          data: collection(
-            messages.data.filter(
-              (row) =>
-                !("record" in row) ||
-                (!hidden.has(row.record.id) &&
-                  !signedArchive.has(row.record.id) &&
-                  allowedIds.has(new URL(row.record.id).pathname.split("/").at(-2) ?? "")),
+    // Until the archive is known, showing messages would briefly resurface archived ones.
+    archiveState.status === "loading" && messages.status === "ready"
+      ? ({ status: "loading", reload: messages.reload } as const)
+      : messages.status === "ready"
+        ? {
+            ...messages,
+            data: collection(
+              messages.data.filter(
+                (row) =>
+                  !("record" in row) ||
+                  (!hidden.has(row.record.id) &&
+                    !signedArchive.has(row.record.id) &&
+                    allowedIds.has(new URL(row.record.id).pathname.split("/").at(-2) ?? "")),
+              ),
+              metadataOf(messages.data),
             ),
-            metadataOf(messages.data),
-          ),
-        }
-      : messages;
+          }
+        : messages;
   return (
     <Screen title="Inbox">
       <QueryRows query={accounts} empty="No readable accounts yet">
@@ -166,6 +167,22 @@ export function InboxScreen({ binding }: { binding?: string }) {
         }}
       </QueryRows>
       {archiveError && <p role="status">Couldn't archive this message. Try again.</p>}
+      {archiveState.status === "error" && (
+        <p role="alert" className="agent-banner">
+          Couldn't load your archived messages, so some may show here.{" "}
+          <Button variant="outline" size="sm" onClick={archived.reload}>
+            Retry
+          </Button>
+        </p>
+      )}
+      {archiveState.status === "partial" && (
+        <p role="status" className="agent-banner">
+          Some archived messages couldn't be checked, so they may show here.{" "}
+          <Button variant="outline" size="sm" onClick={archived.reload}>
+            Retry
+          </Button>
+        </p>
+      )}
       <div ref={list}>
         <h2 ref={heading} tabIndex={-1}>
           Messages

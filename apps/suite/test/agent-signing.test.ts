@@ -8,7 +8,8 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { createWebIdKeyResolver } from "@jeswr/solid-vc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentClient, isLoaded } from "../src/apps/agent/lib/client";
-import { archivedMessages } from "../src/apps/agent/lib/inbox";
+import { collection } from "../src/apps/agent/lib/collections";
+import { archivedMessages, archiveView } from "../src/apps/agent/lib/inbox";
 import {
   listApprovalKeys,
   revocationImpact,
@@ -519,6 +520,40 @@ describe("signed approvals and controls", () => {
       { ...row, expires: new Date(at).toISOString() },
     ])
       expect(archivedMessages([control], DEMO_WEBID, at).size).toBe(0);
+  });
+  it("never presents a loading, failed or partial archive read as an empty archive", async () => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const target = `${client.paths.inbox}gmail/gmail/message-1.ttl`;
+    await createAgentSigner(session, client, () => now).signControl("Archive", { target });
+    const rows = await readControl(
+      client,
+      createAgentVerifier(session, () => now),
+      client.paths.archive,
+    );
+    const at = now.getTime();
+    expect(archiveView({ status: "loading" }, DEMO_WEBID, at)).toEqual({ status: "loading" });
+    expect(archiveView({ status: "error" }, DEMO_WEBID, at)).toEqual({ status: "error" });
+    expect(archiveView({ status: "ready", data: rows }, DEMO_WEBID, at)).toEqual({
+      status: "ready",
+      targets: new Set([target]),
+    });
+    // A truncated listing keeps what it did verify but says it is partial.
+    expect(
+      archiveView(
+        { status: "ready", data: collection([...rows], { complete: false }) },
+        DEMO_WEBID,
+        at,
+      ),
+    ).toEqual({ status: "partial", targets: new Set([target]) });
+    // So does an archive document that couldn't be read.
+    expect(
+      archiveView(
+        { status: "ready", data: [...rows, { url: `${client.paths.archive}bad.trig`, error: 1 }] },
+        DEMO_WEBID,
+        at,
+      ),
+    ).toEqual({ status: "partial", targets: new Set([target]) });
   });
   it("keeps malformed claims as error rows and unsigned records unchecked", async () => {
     const { client, session } = await fixture();
