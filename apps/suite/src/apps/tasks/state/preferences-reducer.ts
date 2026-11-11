@@ -5,7 +5,9 @@ import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
   /** Projects shared with `sharedOwner`; stored per WebID, never in the browser-wide record. */
   sharedProjects: { url: string; title: string }[];
-  /** The WebID `sharedProjects` belongs to; undefined while signed out. */
+  /** Favourite tracker document URLs, stored per account alongside shared projects. */
+  favourites: string[];
+  /** The WebID the account preferences belong to; undefined while signed out. */
   sharedOwner?: string | undefined;
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
@@ -16,6 +18,7 @@ export interface TasksPreferences {
 }
 export const defaultPreferences: TasksPreferences = {
   sharedProjects: [],
+  favourites: [],
   viewMode: {},
   sort: {},
   collapsedSections: [],
@@ -26,6 +29,7 @@ export const defaultPreferences: TasksPreferences = {
 export type PreferenceAction =
   | { type: "sharedProject"; url: string; title: string }
   | { type: "removeSharedProject"; url: string }
+  | { type: "favouriteProject"; url: string; value: boolean }
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
@@ -37,6 +41,16 @@ export function preferencesReducer(
   action: PreferenceAction,
 ): TasksPreferences {
   switch (action.type) {
+    case "favouriteProject": {
+      if (!isSharedTrackerUrl(action.url)) return state;
+      if (state.favourites.includes(action.url) === action.value) return state;
+      return {
+        ...state,
+        favourites: action.value
+          ? [...state.favourites, action.url]
+          : state.favourites.filter((url) => url !== action.url),
+      };
+    }
     case "sharedProject": {
       if (!validSharedProject(action)) return state;
       const previous = state.sharedProjects.find((project) => project.url === action.url);
@@ -92,8 +106,9 @@ export function parsePreferences(raw: string | null): TasksPreferences {
         ? (data.sidebar as Record<string, unknown>)
         : {};
     return {
-      // Shared projects are per account (parseSharedProjects); a browser-wide list is ignored.
+      // Account lists are read separately; browser-wide lists are ignored.
       sharedProjects: [],
+      favourites: [],
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
       collapsedSections: Array.isArray(data.collapsedSections)
@@ -109,6 +124,24 @@ export function parsePreferences(raw: string | null): TasksPreferences {
     };
   } catch {
     return defaultPreferences;
+  }
+}
+
+/** One account's favourite tracker URLs; malformed entries and duplicates are ignored. */
+export function parseFavourites(raw: string | null): string[] {
+  try {
+    const value: unknown = JSON.parse(raw ?? "null");
+    return Array.isArray(value)
+      ? [
+          ...new Set(
+            value.filter(
+              (url): url is string => typeof url === "string" && isSharedTrackerUrl(url),
+            ),
+          ),
+        ]
+      : [];
+  } catch {
+    return [];
   }
 }
 

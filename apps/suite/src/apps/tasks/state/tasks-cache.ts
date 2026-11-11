@@ -12,6 +12,7 @@ import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { runBulk } from "../lib/views/bulk";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
@@ -1810,6 +1811,13 @@ export class TasksCache {
     this.updateProject(project, (tracker) => {
       tracker.title = title.trim();
     });
+  setProjectColor = (project: StoredProject, color: string | undefined) => {
+    const selected = projectColour(color);
+    if (color !== undefined && !selected) throw new TypeError("Unknown project colour.");
+    return this.updateProject(project, (tracker) => {
+      tracker.color = selected?.hex;
+    });
+  };
   archiveProject = (project: StoredProject) => {
     const archivedAt = new Date();
     return this.updateProject(project, (tracker) => {
