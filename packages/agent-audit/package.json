@@ -16,6 +16,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./verify": {
+      "types": "./dist/verify.d.ts",
+      "default": "./dist/verify.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
