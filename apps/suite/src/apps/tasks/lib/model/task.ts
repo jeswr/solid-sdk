@@ -44,10 +44,18 @@ export interface TaskDetails extends Omit<TaskData, "rank" | "priority"> {
   reminders?: Reminder[] | undefined;
   /** Durable identities of committed recurring completions; retained across later edits. */
   completionOperations?: string[] | undefined;
+  /** Original calendar UID, retained for project-local re-import deduplication. */
+  calendarUid?: string | undefined;
 }
 export class TaskItem extends Task {
   private get extra() {
     return node(this.id, this.dataset);
+  }
+  get calendarUid(): string | undefined {
+    return this.extra.text(`${NS.DCT}identifier`);
+  }
+  set calendarUid(value: string | undefined) {
+    this.extra.setText(`${NS.DCT}identifier`, value);
   }
   get allDay(): string | undefined {
     for (const predicate of aliases(`${SCHED}dueTime`))
@@ -152,6 +160,9 @@ export function createTask(url: string, data: TaskDetails): Store {
   const task = new TaskItem(`${url}#it`, dataset, DataFactory);
   task.rank = rank;
   task.priority = priority;
+  task.calendarUid = data.calendarUid;
+  // The shared builder treats an empty description as absent; exchange preserves it.
+  task.description = data.description;
   for (const type of data.categoryTypes ?? []) task.types.add(type);
   task.allDay = data.allDay;
   task.recurrence = data.recurrence;
@@ -175,6 +186,7 @@ export function taskDetails(url: string, dataset: DatasetCore): TaskDetails | un
     recurrence: task.recurrence,
     reminders: task.reminders,
     completionOperations: [...task.completionOperations],
+    calendarUid: task.calendarUid,
   };
 }
 /** Pure §5.5 plan. The store/hook applies both conditional writes and retains its undo snapshot. */
@@ -209,6 +221,7 @@ export function planCompletion(
     endedAt: now,
     modified: now,
     clonedFrom: originalId,
+    calendarUid: undefined,
     recurrence: undefined,
     reminders: [],
     completionOperations: [],

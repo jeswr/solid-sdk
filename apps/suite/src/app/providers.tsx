@@ -11,6 +11,7 @@ import { NotificationsProvider } from "@/shell/notifications/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
+import { OutboxSessionProvider } from "@/shell/sync/outbox-session";
 import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
 
 function ThemeAttribute() {
@@ -34,12 +35,14 @@ export function Providers({
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
           {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
-          <PreferencesProvider>
-            <AppearanceEffect />
-            <ShellSearchProvider>
-              <NotificationsProvider>{children}</NotificationsProvider>
-            </ShellSearchProvider>
-          </PreferencesProvider>
+          <OutboxSessionProvider>
+            <PreferencesProvider>
+              <AppearanceEffect />
+              <ShellSearchProvider>
+                <NotificationsProvider>{children}</NotificationsProvider>
+              </ShellSearchProvider>
+            </PreferencesProvider>
+          </OutboxSessionProvider>
         </AccountsProvider>
       </SuiteEnvironmentContext.Provider>
     </ThemeProvider>

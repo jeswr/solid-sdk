@@ -7,19 +7,8 @@
  * previews retain the extension/demo adapter; a shell session never falls back to demo.
  */
 
-import {
-  createContext,
-  type ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useOptionalAccounts } from "@/shell/session/accounts-context";
-import type { AccountsContextValue } from "@/shell/session/accounts-provider";
 import { getDemoPod, resetDemoPod } from "../demo-pod/browser";
 import { DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../demo-pod/seed";
 import { boundedRead } from "./bounded-read";
@@ -39,22 +28,11 @@ import {
   type SolidExtensionState,
   subscribeSolidExtension,
 } from "./extension-session";
+import { SessionContext, ShellPodSessionProvider } from "./shell-pod-session";
+import type { DemoPodSession, ExtensionPodSession, SessionResult } from "./types";
 
-import type {
-  DemoPodSession,
-  ExtensionPodSession,
-  PodSession,
-  SessionResult,
-  SessionState,
-} from "./types";
-
+export { usePodSessionState } from "./shell-pod-session";
 export type { DemoPodSession, ExtensionPodSession, PodSession } from "./types";
-
-const SessionContext = createContext<SessionState>({
-  status: "loading",
-  extension: ABSENT,
-  connectExtension: async () => {},
-});
 
 async function openDemoSession(): Promise<DemoPodSession> {
   const pod = await getDemoPod();
@@ -79,108 +57,6 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
   ) : (
     <InterimPodSessionProvider>{children}</InterimPodSessionProvider>
   );
-}
-
-const publicFetch: typeof fetch = (input, init) =>
-  globalThis.fetch(input, { ...init, credentials: "omit" });
-
-function ShellPodSessionProvider({
-  accounts,
-  children,
-}: {
-  accounts: AccountsContextValue;
-  children: ReactNode;
-}) {
-  const latest = useRef(accounts);
-  latest.current = accounts;
-  const account = accounts.active;
-  const mounted = useRef(true);
-  // Restore liveness before descendants start passive reads during Strict Mode's
-  // effect replay. Cleanup still fences requests after a real unmount.
-  useLayoutEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  const binding = useRef({ account, version: 0 });
-  if (binding.current.account !== account)
-    binding.current = { account, version: binding.current.version + 1 };
-  const session = useMemo<PodSession | undefined>(() => {
-    if (!account) return undefined;
-    const version = binding.current.version;
-    const usable = () =>
-      mounted.current &&
-      binding.current.version === version &&
-      latest.current.status === "ready" &&
-      latest.current.active === account;
-    const fetch: typeof globalThis.fetch = async (input, init) => {
-      if (!usable()) throw new Error("Sign in to continue");
-      const response = await latest.current.fetch(input, init);
-      if (!usable()) throw new Error("Sign in to continue");
-      return response;
-    };
-    const subscribe = (listener: (url: string) => void) => {
-      let stopped = false;
-      let stopDemo = () => {};
-      if (account.kind === "demo")
-        void getDemoPod()
-          .then((pod) => {
-            if (!stopped && usable())
-              stopDemo = pod.subscribe((url) => {
-                if (usable()) listener(url);
-              });
-          })
-          .catch(() => {
-            /* Opening errors surface through the session's fetch. */
-          });
-      const onFocus = () => {
-        if (usable()) listener(account.storageUrl);
-      };
-      window.addEventListener("focus", onFocus);
-      return () => {
-        stopped = true;
-        stopDemo();
-        window.removeEventListener("focus", onFocus);
-      };
-    };
-    const common = {
-      webId: account.webId,
-      displayName: account.name,
-      storageUrl: account.storageUrl,
-      fetch,
-      subscribe,
-    };
-    if (account.kind === "demo")
-      return {
-        ...common,
-        mode: "demo",
-        reset: async () => {
-          if (usable()) {
-            await resetDemoPod();
-            if (usable()) location.reload();
-          }
-        },
-      };
-    if (account.kind === "extension")
-      return {
-        ...common,
-        mode: "extension",
-        publicFetch,
-        disconnect: () => latest.current.signOut(account.id),
-      };
-    return { ...common, mode: "solid", publicFetch };
-  }, [account]);
-  const state: SessionState = {
-    ...(accounts.status === "loading"
-      ? { status: "loading" as const }
-      : accounts.status !== "signed-out" && session
-        ? { status: "ready" as const, session }
-        : { status: "signed-out" as const }),
-    extension: ABSENT,
-    connectExtension: async () => {},
-  };
-  return <SessionContext value={state}>{children}</SessionContext>;
 }
 
 function InterimPodSessionProvider({ children }: { children: ReactNode }) {
@@ -491,8 +367,4 @@ function InterimPodSessionProvider({ children }: { children: ReactNode }) {
       {children}
     </SessionContext>
   );
-}
-
-export function usePodSessionState(): SessionState {
-  return useContext(SessionContext);
 }
