@@ -5,40 +5,76 @@ import { dirname, join } from "node:path";
 import ts from "typescript";
 
 const excludedDirectories = new Set([
-  "node_modules",
   "dist",
   "out",
   "build",
   "coverage",
-  ".next",
-  ".turbo",
-  ".git",
-  "__tests__",
   "test",
   "tests",
   "e2e",
   "fixtures",
+  "fixture",
 ]);
+const sourceExtensions = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+
+// Compare Unicode code points, independently of the machine's locale.
+export function compareText(a, b) {
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const left = a.codePointAt(i);
+    const right = b.codePointAt(j);
+    if (left !== right) return left < right ? -1 : 1;
+    i += left > 0xffff ? 2 : 1;
+    j += right > 0xffff ? 2 : 1;
+  }
+  return i < a.length ? 1 : j < b.length ? -1 : 0;
+}
+
+export function projectForPath(path) {
+  const parts = path.split("/");
+  return parts.slice(0, path.startsWith("apps/suite/src/apps/") ? 5 : 2).join("/");
+}
 
 export function sourceFiles(root, includePackages = false) {
   // Reading root first prevents a mistyped --root from passing vacuously.
   readdirSync(root);
   const files = [];
-  function walk(directory, project, insideSource = false) {
-    for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
+  let skippedSrcPaths = 0;
+  function walk(directory, project, insideSource = false, insideScripts = false) {
+    const entries = readdirSync(join(root, directory), { withFileTypes: true }).sort((a, b) =>
+      compareText(a.name, b.name),
+    );
+    for (const entry of entries) {
       const path = `${directory}/${entry.name}`;
       if (entry.isDirectory()) {
-        if (excludedDirectories.has(entry.name)) continue;
-        if (entry.name === "generated" && directory.endsWith("/src")) continue;
-        walk(path, project, insideSource || entry.name === "src");
+        if (
+          ["node_modules", ".git", ".next", ".turbo", "__tests__", "__fixtures__"].includes(
+            entry.name,
+          ) ||
+          (!insideSource && excludedDirectories.has(entry.name)) ||
+          (entry.name === "generated" && directory.endsWith("/src"))
+        ) {
+          if (insideSource) skippedSrcPaths++;
+          continue;
+        }
+        walk(
+          path,
+          project,
+          insideSource || entry.name === "src",
+          insideScripts ||
+            (directory === project && project.startsWith("apps/") && entry.name === "scripts"),
+        );
       } else if (
         entry.isFile() &&
-        insideSource &&
-        /\.(?:ts|tsx|js|mjs)$/.test(entry.name) &&
-        !/\.(?:test|spec)\./.test(entry.name) &&
-        !entry.name.endsWith(".d.ts")
+        (insideSource || insideScripts) &&
+        sourceExtensions.test(entry.name)
       ) {
-        files.push({ path, project });
+        if (/\.(?:test|spec)\./.test(entry.name) || /\.d\.(?:[cm]?ts)$/.test(entry.name)) {
+          if (insideSource) skippedSrcPaths++;
+          continue;
+        }
+        files.push({ path, project: projectForPath(path) });
       }
     }
   }
@@ -54,7 +90,7 @@ export function sourceFiles(root, includePackages = false) {
       if (entry.isDirectory()) walk(`${kind}/${entry.name}`, `${kind}/${entry.name}`);
     }
   }
-  return files.sort((a, b) => a.path.localeCompare(b.path, "en"));
+  return { files: files.sort((a, b) => compareText(a.path, b.path)), skippedSrcPaths };
 }
 
 export function parseSource(root, path) {
@@ -72,8 +108,13 @@ export function parseSource(root, path) {
 export function* sourceTokens(source, { skipDeclarations = false } = {}) {
   const skipped = new Map();
   const literals = new Map();
+  const jsxWhitespace = new Map();
   function visit(node) {
     const start = node.getStart(source);
+    if (ts.isJsxText(node) && node.containsOnlyTriviaWhiteSpaces) {
+      jsxWhitespace.set(node.pos, node.end);
+      return;
+    }
     if (
       skipDeclarations &&
       (ts.isImportDeclaration(node) ||
@@ -108,7 +149,10 @@ export function* sourceTokens(source, { skipDeclarations = false } = {}) {
   while (scanner.getTextPos() < source.text.length) {
     let start = scanner.getTextPos();
     let kind;
-    if (literals.has(start)) {
+    if (jsxWhitespace.has(start)) {
+      scanner.setTextPos(jsxWhitespace.get(start));
+      continue;
+    } else if (literals.has(start)) {
       scanner.setTextPos(literals.get(start));
       kind = ts.SyntaxKind.StringLiteral;
     } else {

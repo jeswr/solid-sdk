@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import ts from "typescript";
 import {
+  compareText,
   isRecord,
   parseSource,
+  projectForPath,
   readBaseline,
   sourceFiles,
   sourceTokens,
@@ -17,17 +19,69 @@ import {
 const baselineName = "app-duplication-baseline.json";
 const hint = "move shared logic into a packages/* library (AGENTS.md)";
 const digest = (text) => createHash("sha256").update(text).digest("hex");
+const shrinkNote = "baseline can shrink: run --update-baseline";
+// Enum values may change between TypeScript releases. Use canonical token names
+// for fingerprints and stable name-derived codes for rolling candidate hashes.
+const tokenNames = new Map();
+const tokenCodes = new Map();
+function tokenCode(kind) {
+  const name =
+    kind === ts.SyntaxKind.Identifier
+      ? "Identifier"
+      : kind === ts.SyntaxKind.StringLiteral
+        ? "Literal"
+        : `Token:${ts.tokenToString(kind) ?? ts.SyntaxKind[kind]}`;
+  if (tokenCodes.has(name)) return tokenCodes.get(name);
+  let code = 2166136261;
+  for (const char of name) code = Math.imul(code ^ char.codePointAt(0), 16777619) >>> 0;
+  if (tokenNames.has(code)) throw new Error("Token-name hash collision");
+  tokenNames.set(code, name);
+  tokenCodes.set(name, code);
+  return code;
+}
+const controlKinds = new Set([
+  ts.SyntaxKind.IfKeyword,
+  ts.SyntaxKind.ElseKeyword,
+  ts.SyntaxKind.ForKeyword,
+  ts.SyntaxKind.WhileKeyword,
+  ts.SyntaxKind.DoKeyword,
+  ts.SyntaxKind.SwitchKeyword,
+  ts.SyntaxKind.CaseKeyword,
+  ts.SyntaxKind.ReturnKeyword,
+  ts.SyntaxKind.ThrowKeyword,
+  ts.SyntaxKind.TryKeyword,
+  ts.SyntaxKind.CatchKeyword,
+  ts.SyntaxKind.AwaitKeyword,
+  ts.SyntaxKind.YieldKeyword,
+  ts.SyntaxKind.EqualsGreaterThanToken,
+]);
 
 // Erased declarations are barriers: windows never join unrelated code across one.
 export function tokenSegments(source) {
   const segments = [];
   let codes = [];
   let lines = [];
+  let meaningful = [];
+  let logic = [];
+  const calls = new Set();
+  function collectCalls(node) {
+    if (ts.isCallExpression(node) || ts.isNewExpression(node))
+      calls.add(node.expression.getStart(source));
+    ts.forEachChild(node, collectCalls);
+  }
+  collectCalls(source);
   function flush() {
     if (codes.length)
-      segments.push({ codes: Uint16Array.from(codes), lines: Uint32Array.from(lines) });
+      segments.push({
+        codes: Uint32Array.from(codes),
+        lines: Uint32Array.from(lines),
+        meaningful,
+        logic,
+      });
     codes = [];
     lines = [];
+    meaningful = [];
+    logic = [];
   }
   for (const { kind: scannedKind, start, end } of sourceTokens(source, {
     skipDeclarations: true,
@@ -41,6 +95,11 @@ export function tokenSegments(source) {
       scannedKind <= ts.SyntaxKind.LastTriviaToken
     )
       continue;
+    if (
+      scannedKind === ts.SyntaxKind.OpenParenToken ||
+      scannedKind === ts.SyntaxKind.CloseParenToken
+    )
+      continue;
     let kind = scannedKind;
     if (kind === ts.SyntaxKind.Identifier || kind === ts.SyntaxKind.PrivateIdentifier) {
       kind = ts.SyntaxKind.Identifier;
@@ -51,7 +110,14 @@ export function tokenSegments(source) {
     ) {
       kind = ts.SyntaxKind.StringLiteral;
     }
-    codes.push(kind);
+    codes.push(tokenCode(kind));
+    meaningful.push(
+      Number(
+        kind === ts.SyntaxKind.Identifier ||
+          (kind >= ts.SyntaxKind.FirstKeyword && kind <= ts.SyntaxKind.LastKeyword),
+      ),
+    );
+    logic.push(Number(controlKinds.has(kind) || calls.has(start)));
     // End line matters for multiline literals; no source text is stored in baselines.
     lines.push(
       source.getLineAndCharacterOfPosition(start).line + 1,
@@ -70,7 +136,7 @@ function windowSize(value) {
 
 export function scanAppDuplication(root, window = 120) {
   window = windowSize(window);
-  const files = sourceFiles(root, true);
+  const { files, skippedSrcPaths } = sourceFiles(root, true);
   const segments = [];
   let nextPosition = 0;
   for (const file of files) {
@@ -107,14 +173,21 @@ export function scanAppDuplication(root, window = 120) {
     const { codes } = segment;
     let hash1 = 0;
     let hash2 = 0;
+    let meaningfulCount = 0;
+    let logicCount = 0;
     for (let i = 0; i < codes.length; i++) {
+      meaningfulCount += segment.meaningful[i];
+      logicCount += segment.logic[i];
       if (i >= window) {
+        meaningfulCount -= segment.meaningful[i - window];
+        logicCount -= segment.logic[i - window];
         hash1 = (hash1 - Math.imul(codes[i - window] + 1, power1)) | 0;
         hash2 = (hash2 - Math.imul(codes[i - window] + 1, power2)) | 0;
       }
       hash1 = (Math.imul(hash1, base1) + codes[i] + 1) | 0;
       hash2 = (Math.imul(hash2, base2) + codes[i] + 1) | 0;
       if (i + 1 < window) continue;
+      if (meaningfulCount * 4 < window || !logicCount) continue;
       const key = (hash1 >>> 0) * 0x200000 + (hash2 & 0x1fffff);
       const position = segment.base + i + 1 - window;
       const previous = hashes.get(key);
@@ -202,7 +275,9 @@ export function scanAppDuplication(root, window = 120) {
         else merged.push({ ...interval });
       }
       for (const { start, end } of merged) {
-        anchor ??= segment.codes.subarray(start, start + window).join(",");
+        anchor ??= Array.from(segment.codes.subarray(start, start + window), (code) =>
+          tokenNames.get(code),
+        );
         locations.push({
           file: segment.path,
           startLine: segment.lines[start * 2],
@@ -211,11 +286,11 @@ export function scanAppDuplication(root, window = 120) {
         });
       }
     }
-    locations.sort((a, b) => a.file.localeCompare(b.file, "en") || a.startLine - b.startLine);
-    const projects = [
-      ...new Set(locations.map((location) => location.file.split("/").slice(0, 2).join("/"))),
-    ].sort();
-    const fingerprint = digest(JSON.stringify([window, anchor, projects]));
+    locations.sort((a, b) => compareText(a.file, b.file) || a.startLine - b.startLine);
+    const projects = [...new Set(locations.map((location) => projectForPath(location.file)))].sort(
+      compareText,
+    );
+    const fingerprint = digest(JSON.stringify([window, anchor]));
     clusters.push({
       fingerprint,
       tokens: Math.max(...locations.map((location) => location.tokens)),
@@ -223,39 +298,31 @@ export function scanAppDuplication(root, window = 120) {
       locations,
     });
   }
-  clusters.sort((a, b) => a.fingerprint.localeCompare(b.fingerprint, "en"));
-  return { files: files.length, window, clusters };
+  clusters.sort((a, b) => compareText(a.fingerprint, b.fingerprint));
+  return { files: files.length, skippedSrcPaths, window, clusters };
 }
 
-// Ignore line movement caused by comments/formatting, but ratchet occurrence
-// counts and token lengths per file as well as cluster membership.
+// Ratchet occurrence counts per path. Token lengths and line ranges are reporting
+// details: reflow and harmless parentheses must not change the footprint.
 function footprint(cluster) {
   const files = {};
-  for (const { file, tokens } of cluster.locations) {
-    files[file] ??= [];
-    files[file].push(tokens);
+  for (const { file } of cluster.locations) {
+    files[file] = (files[file] ?? 0) + 1;
   }
-  return JSON.stringify(
-    Object.fromEntries(
-      Object.entries(files)
-        .sort()
-        .map(([file, sizes]) => [file, sizes.sort((a, b) => a - b)]),
-    ),
-  );
+  return files;
 }
 
-export function checkAppDuplication(root, { updateBaseline = false, window = 120 } = {}) {
-  const result = { ...scanAppDuplication(root, window), problems: [] };
+export function checkAppDuplication(
+  root,
+  { updateBaseline = false, acceptNew = false, window = 120 } = {},
+) {
+  const result = { ...scanAppDuplication(root, window), problems: [], notes: [] };
   const current = Object.fromEntries(
     result.clusters.map(({ fingerprint, tokens, locations }) => [
       fingerprint,
       { tokens, locations },
     ]),
   );
-  if (updateBaseline) {
-    writeBaseline(root, baselineName, { window: result.window, clusters: current });
-    return result;
-  }
   const baseline = readBaseline(root, baselineName) ?? { window: result.window, clusters: {} };
   if (
     !isRecord(baseline) ||
@@ -282,23 +349,35 @@ export function checkAppDuplication(root, { updateBaseline = false, window = 120
         ),
     )
   ) {
-    throw new Error(
-      `Invalid or incompatible scripts/${baselineName}; run pnpm run check:app-duplication --update-baseline with the same --window`,
-    );
+    throw new Error(`Invalid or incompatible scripts/${baselineName}; use the same --window`);
   }
   for (const cluster of result.clusters) {
     const previous = baseline.clusters[cluster.fingerprint];
-    if (!previous || footprint(previous) !== footprint(cluster)) {
-      result.problems.push(
-        `Duplicate cluster ${cluster.fingerprint} (${cluster.tokens} tokens): ${previous ? "changed occurrences; run pnpm run check:app-duplication --update-baseline after reductions" : "new cluster"}\n${cluster.locations.map((location) => `  ${location.file}:${location.startLine}-${location.endLine}`).join("\n")}\n  ${hint}`,
-      );
+    const before = previous ? footprint(previous) : {};
+    const now = footprint(cluster);
+    for (const file of Object.keys(now).sort(compareText)) {
+      if (now[file] <= (before[file] ?? 0)) continue;
+      const increase = `${cluster.fingerprint} ${file}: ${now[file]} > baseline ${before[file] ?? 0}`;
+      if (updateBaseline && acceptNew) result.notes.push(`Accepted increase: ${increase}`);
+      else
+        result.problems.push(
+          `Duplicate cluster ${cluster.fingerprint} (${cluster.tokens} tokens): ${previous ? "changed occurrences" : "new cluster"}; ${increase}; accepting new debt requires --update-baseline --accept-new\n${cluster.locations.map((location) => `  ${location.file}:${location.startLine}-${location.endLine}`).join("\n")}\n  ${hint}`,
+        );
+    }
+    for (const file of Object.keys(before).sort(compareText)) {
+      if ((now[file] ?? 0) < before[file])
+        result.notes.push(
+          `Duplicate cluster ${cluster.fingerprint} ${file}: ${before[file]} -> ${now[file] ?? 0}; ${shrinkNote}`,
+        );
     }
   }
-  for (const fingerprint of Object.keys(baseline.clusters)) {
+  for (const fingerprint of Object.keys(baseline.clusters).sort(compareText)) {
     if (!current[fingerprint])
-      result.problems.push(
-        `Stale duplicate cluster ${fingerprint}; run pnpm run check:app-duplication --update-baseline`,
-      );
+      result.notes.push(`Removed duplicate cluster ${fingerprint}; ${shrinkNote}`);
+  }
+  if (updateBaseline && !result.problems.length) {
+    writeBaseline(root, baselineName, { window: result.window, clusters: current });
+    result.updated = true;
   }
   return result;
 }
@@ -310,15 +389,21 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         root: { type: "string" },
         window: { type: "string", default: "120" },
         "update-baseline": { type: "boolean", default: false },
+        "accept-new": { type: "boolean", default: false },
       },
     });
     const result = checkAppDuplication(
       resolve(values.root ?? fileURLToPath(new URL("..", import.meta.url))),
-      { window: values.window, updateBaseline: values["update-baseline"] },
+      {
+        window: values.window,
+        updateBaseline: values["update-baseline"],
+        acceptNew: values["accept-new"],
+      },
     );
     for (const problem of result.problems) console.error(problem);
+    for (const note of result.notes) console.log(note);
     console.log(
-      `App duplication: ${result.files} files scanned, ${result.clusters.length} clusters (window ${result.window}).${values["update-baseline"] ? " Baseline updated." : ""}`,
+      `App duplication: ${result.files} files scanned, ${result.clusters.length} clusters (window ${result.window}), ${result.skippedSrcPaths} skipped src/ paths.${result.updated ? " Baseline updated." : ""}`,
     );
     if (result.problems.length) process.exitCode = 1;
   } catch (error) {

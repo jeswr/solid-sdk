@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import ts from "typescript";
 import {
+  compareText,
   isRecord,
   parseSource,
   readBaseline,
@@ -14,10 +15,14 @@ import {
 } from "./code-quality.mjs";
 
 const baselineName = "rdf-discipline-baseline.json";
-const rules = new Set(["rdf-factory", "rdf-store-mutation", "rdf-literal"]);
+const allowRule = "rdf-discipline-allow";
+// Accept the retired mutation rule in old baselines so it can shrink away.
+const rules = ["rdf-factory", "rdf-literal", allowRule, "rdf-store-mutation"].sort(compareText);
 const factoryModules = new Set(["n3", "@rdfjs/data-model", "rdf-data-factory"]);
 const factoryMethods = new Set(["quad", "triple"]);
-const mutationMethods = new Set(["addQuad", "addQuads", "removeQuad"]);
+const factoryConstructors = new Set(["Quad", "Triple"]);
+const interpolation = "\uFFFC";
+const shrinkNote = "baseline can shrink: run --update-baseline";
 
 function memberName(node) {
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
@@ -26,15 +31,15 @@ function memberName(node) {
   }
 }
 
-// Read actual comment trivia from the parsed tree. A string, regex, JSX text or
-// template containing "// rdf-discipline-allow:" cannot manufacture an escape.
+// Read actual comment trivia, never text inside a string, regex, JSX or template.
 function allowances(source) {
   const allowed = new Set();
   const problems = [];
   for (const token of sourceTokens(source)) {
     if (token.kind !== ts.SyntaxKind.SingleLineCommentTrivia) continue;
-    const text = source.text.slice(token.start, token.end);
-    const match = /^\/\/\s*rdf-discipline-allow:\s*(.*)$/.exec(text);
+    const match = /^\/\/\s*rdf-discipline-allow:\s*(.*)$/.exec(
+      source.text.slice(token.start, token.end),
+    );
     if (!match) continue;
     const line = source.getLineAndCharacterOfPosition(token.start).line + 1;
     if (match[1].trim()) allowed.add(line);
@@ -44,31 +49,59 @@ function allowances(source) {
   return { allowed, problems };
 }
 
-function literalText(node) {
-  if (ts.isStringLiteralLike(node))
-    return { text: node.text, template: ts.isNoSubstitutionTemplateLiteral(node) };
-  if (ts.isTemplateExpression(node)) {
-    // Inspect only literal parts, never interpolation source code. The marker
-    // preserves the requested <${...}> < pattern across template spans.
-    return {
-      text:
-        node.head.text + node.templateSpans.map((span) => `\uFFFC${span.literal.text}`).join(""),
-      template: true,
-    };
+// Fold only visible string-building syntax. Unknown values become opaque markers;
+// their source text cannot accidentally manufacture an RDF match.
+function literalText(node, folded) {
+  let text;
+  if (ts.isParenthesizedExpression(node)) text = literalText(node.expression, folded);
+  else if (ts.isStringLiteralLike(node)) text = node.text;
+  else if (ts.isTemplateExpression(node)) {
+    text =
+      node.head.text +
+      node.templateSpans.map((span) => `${interpolation}${span.literal.text}`).join("");
+  } else if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = literalText(node.left, folded);
+    const right = literalText(node.right, folded);
+    if (left !== undefined || right !== undefined) {
+      text = (left ?? interpolation) + (right ?? interpolation);
+    }
+  } else if (ts.isCallExpression(node) && memberName(node.expression) === "join") {
+    let receiver = node.expression.expression;
+    while (ts.isParenthesizedExpression(receiver)) receiver = receiver.expression;
+    const separator = node.arguments.length ? literalText(node.arguments[0], folded) : ",";
+    if (ts.isArrayLiteralExpression(receiver) && separator !== undefined) {
+      text = receiver.elements
+        .map((element) => literalText(element, folded) ?? interpolation)
+        .join(separator);
+    }
   }
+  if (text !== undefined) folded.add(node);
+  return text;
 }
 
-function buildsRdf({ text, template }) {
+function isFactoryRequire(node) {
   return (
-    /\b(?:INSERT|DELETE)\s+DATA\b/i.test(text) ||
-    (/\b(?:DELETE|INSERT)\s*\{/i.test(text) && /\bWHERE\b/i.test(text)) ||
-    /@prefix\b/i.test(text) ||
-    (template && /<\uFFFC>\s*<|>\s*<https?:|>\s+a\s+</i.test(text))
+    node &&
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "require" &&
+    node.arguments.length === 1 &&
+    ts.isStringLiteralLike(node.arguments[0]) &&
+    factoryModules.has(node.arguments[0].text)
+  );
+}
+
+function buildsRdf(text) {
+  return (
+    /\b(?:INSERT|DELETE)(?:\s+DATA)?\s*\{/.test(text) ||
+    /(?:@prefix|\bPREFIX)\s+(?:[A-Za-z][\w-]*)?:\s*<[^<>\s]+>/.test(text) ||
+    /<(?:[A-Za-z][A-Za-z0-9+.-]*:\/\/[^<>\s]+|\uFFFC|\$\{[^}]+\})>\s+(?:<|a\s)/.test(text) ||
+    /<[^<>\s]+>\s+(?:a\s+)?<[A-Za-z][A-Za-z0-9+.-]*:\/\/[^<>\s]+>/.test(text)
   );
 }
 
 export function scanRdfDiscipline(root) {
-  const files = sourceFiles(root);
+  const { files, skippedSrcPaths } = sourceFiles(root);
   const violations = [];
   const problems = [];
   const counts = {};
@@ -76,20 +109,40 @@ export function scanRdfDiscipline(root) {
   for (const { path } of files) {
     const source = parseSource(root, path);
     const escapes = allowances(source);
+    const used = new Set();
     allowed += escapes.allowed.size;
     problems.push(...escapes.problems);
-    // Imported aliases and destructured aliases retain the factory operation.
+    if (escapes.allowed.size) counts[path] = { [allowRule]: escapes.allowed.size };
     const factoryCalls = new Set();
+    const constructors = new Set();
+    const namespaces = new Set();
+    const folded = new Set();
     function collect(node) {
       if (ts.isImportDeclaration(node) && factoryModules.has(node.moduleSpecifier.text)) {
-        const bindings = node.importClause?.namedBindings;
+        const clause = node.importClause;
+        if (clause?.name) namespaces.add(clause.name.text);
+        const bindings = clause?.namedBindings;
+        if (bindings && ts.isNamespaceImport(bindings)) namespaces.add(bindings.name.text);
         if (bindings && ts.isNamedImports(bindings)) {
           for (const entry of bindings.elements) {
-            if (factoryMethods.has((entry.propertyName ?? entry.name).text))
-              factoryCalls.add(entry.name.text);
+            const name = (entry.propertyName ?? entry.name).text;
+            if (factoryMethods.has(name)) factoryCalls.add(entry.name.text);
+            if (factoryConstructors.has(name)) constructors.add(entry.name.text);
           }
         }
       }
+      if (
+        ts.isImportEqualsDeclaration(node) &&
+        ts.isExternalModuleReference(node.moduleReference) &&
+        factoryModules.has(node.moduleReference.expression?.text)
+      )
+        namespaces.add(node.name.text);
+      if (
+        ts.isVariableDeclaration(node) &&
+        isFactoryRequire(node.initializer) &&
+        ts.isIdentifier(node.name)
+      )
+        namespaces.add(node.name.text);
       if (
         ts.isBindingElement(node) &&
         ts.isIdentifier(node.name) &&
@@ -97,49 +150,74 @@ export function scanRdfDiscipline(root) {
       ) {
         factoryCalls.add(node.name.text);
       }
+      if (
+        ts.isBindingElement(node) &&
+        ts.isIdentifier(node.name) &&
+        factoryConstructors.has((node.propertyName ?? node.name).text) &&
+        ts.isVariableDeclaration(node.parent.parent)
+      ) {
+        const initializer = node.parent.parent.initializer;
+        if (
+          isFactoryRequire(initializer) ||
+          (initializer && ts.isIdentifier(initializer) && namespaces.has(initializer.text))
+        )
+          constructors.add(node.name.text);
+      }
       ts.forEachChild(node, collect);
     }
     collect(source);
     function report(node, rule) {
       const line = source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-      if (escapes.allowed.has(line)) return;
+      if (escapes.allowed.has(line)) {
+        used.add(line);
+        return;
+      }
       violations.push({ path, line, rule });
       counts[path] ??= {};
       counts[path][rule] = (counts[path][rule] ?? 0) + 1;
     }
     function visit(node) {
-      if (ts.isCallExpression(node)) {
-        const name = memberName(node.expression);
-        const location = ts.isPropertyAccessExpression(node.expression)
-          ? node.expression.name
-          : ts.isElementAccessExpression(node.expression)
-            ? node.expression.argumentExpression
-            : node.expression;
+      if (ts.isCallExpression(node) || ts.isNewExpression(node)) {
+        const expression = node.expression;
+        const name = memberName(expression);
+        const location = ts.isPropertyAccessExpression(expression)
+          ? expression.name
+          : ts.isElementAccessExpression(expression)
+            ? expression.argumentExpression
+            : expression;
         if (
-          factoryMethods.has(name) ||
-          (ts.isIdentifier(node.expression) && factoryCalls.has(node.expression.text))
+          ts.isCallExpression(node)
+            ? factoryMethods.has(name) ||
+              (ts.isIdentifier(expression) && factoryCalls.has(expression.text))
+            : (ts.isIdentifier(expression) && constructors.has(expression.text)) ||
+              (factoryConstructors.has(name) &&
+                ts.isIdentifier(expression.expression) &&
+                namespaces.has(expression.expression.text))
         ) {
           report(location, "rdf-factory");
         }
-        if (mutationMethods.has(name)) report(location, "rdf-store-mutation");
+        // Store/Writer methods accepting existing quads are legitimate operations.
+        // Inline construction is covered by rdf-factory / rdf-literal below.
       }
-      const literal = literalText(node);
-      if (literal && buildsRdf(literal)) report(node, "rdf-literal");
+      const text = folded.has(node) ? undefined : literalText(node, folded);
+      if (text !== undefined && buildsRdf(text)) report(node, "rdf-literal");
       ts.forEachChild(node, visit);
     }
     visit(source);
+    for (const line of escapes.allowed) {
+      if (!used.has(line))
+        problems.push(`${path}:${line} unused rdf-discipline-allow (no violation on this line)`);
+    }
   }
   for (const path of Object.keys(counts))
-    counts[path] = Object.fromEntries(Object.entries(counts[path]).sort());
-  return { files: files.length, violations, counts, allowed, problems };
+    counts[path] = Object.fromEntries(
+      Object.entries(counts[path]).sort(([a], [b]) => compareText(a, b)),
+    );
+  return { files: files.length, skippedSrcPaths, violations, counts, allowed, problems, notes: [] };
 }
 
-export function checkRdfDiscipline(root, updateBaseline = false) {
+export function checkRdfDiscipline(root, { updateBaseline = false, acceptNew = false } = {}) {
   const result = scanRdfDiscipline(root);
-  if (updateBaseline) {
-    if (!result.problems.length) writeBaseline(root, baselineName, result.counts);
-    return result;
-  }
   const baseline = readBaseline(root, baselineName) ?? {};
   if (
     !isRecord(baseline) ||
@@ -148,30 +226,58 @@ export function checkRdfDiscipline(root, updateBaseline = false) {
         !isRecord(entry) ||
         !Object.keys(entry).length ||
         Object.entries(entry).some(
-          ([rule, count]) => !rules.has(rule) || !Number.isSafeInteger(count) || count <= 0,
+          ([rule, count]) => !rules.includes(rule) || !Number.isSafeInteger(count) || count <= 0,
         ),
     )
   ) {
-    throw new Error(
-      `Invalid scripts/${baselineName}; run pnpm run check:rdf-discipline --update-baseline`,
-    );
+    throw new Error(`Invalid scripts/${baselineName}`);
   }
-  for (const path of new Set([...Object.keys(baseline), ...Object.keys(result.counts)])) {
+  // Pair whole, equal rule-count vectors one-to-one. A source path must lose all
+  // its debt before it can donate a move allowance; copying never qualifies.
+  const moved = new Map();
+  const donors = Object.keys(baseline)
+    .filter((path) => !result.counts[path])
+    .sort(compareText);
+  for (const path of Object.keys(result.counts)
+    .filter((path) => !baseline[path])
+    .sort(compareText)) {
+    const index = donors.findIndex((old) =>
+      rules.every((rule) => (baseline[old][rule] ?? 0) === (result.counts[path][rule] ?? 0)),
+    );
+    if (index >= 0) {
+      const [old] = donors.splice(index, 1);
+      moved.set(path, old);
+      result.notes.push(`RDF baseline moved: ${old} -> ${path}; ${shrinkNote}`);
+    }
+  }
+  const movedFrom = new Set(moved.values());
+  const accepted = [];
+  const paths = [...new Set([...Object.keys(baseline), ...Object.keys(result.counts)])].sort(
+    compareText,
+  );
+  for (const path of paths) {
+    if (movedFrom.has(path)) continue;
     for (const rule of rules) {
-      const before = baseline[path]?.[rule] ?? 0;
+      const before = baseline[moved.get(path) ?? path]?.[rule] ?? 0;
       const now = result.counts[path]?.[rule] ?? 0;
       if (now > before) {
-        for (const violation of result.violations.filter(
-          (v) => v.path === path && v.rule === rule,
-        )) {
-          result.problems.push(`${path}:${violation.line} ${rule} (${now} > baseline ${before})`);
+        const increase = `${path} ${rule} (${now} > baseline ${before})`;
+        if (updateBaseline && acceptNew) accepted.push(`Accepted increase: ${increase}`);
+        else {
+          const lines = result.violations.filter((v) => v.path === path && v.rule === rule);
+          result.problems.push(
+            `${increase}${lines.length ? ` at line(s) ${lines.map((v) => v.line).join(", ")}` : ""}; accepting new debt requires --update-baseline --accept-new`,
+          );
         }
       } else if (now < before) {
-        result.problems.push(
-          `${path} ${rule}: stale baseline (${before} -> ${now}); run pnpm run check:rdf-discipline --update-baseline`,
-        );
+        result.notes.push(`${path} ${rule}: ${before} -> ${now}; ${shrinkNote}`);
       }
     }
+  }
+  if (updateBaseline && !result.problems.length) {
+    writeBaseline(root, baselineName, result.counts);
+    result.notes.push(...accepted);
+    result.updated = true;
   }
   return result;
 }
@@ -179,15 +285,20 @@ export function checkRdfDiscipline(root, updateBaseline = false) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const { values } = parseArgs({
-      options: { root: { type: "string" }, "update-baseline": { type: "boolean", default: false } },
+      options: {
+        root: { type: "string" },
+        "update-baseline": { type: "boolean", default: false },
+        "accept-new": { type: "boolean", default: false },
+      },
     });
     const result = checkRdfDiscipline(
       resolve(values.root ?? fileURLToPath(new URL("..", import.meta.url))),
-      values["update-baseline"],
+      { updateBaseline: values["update-baseline"], acceptNew: values["accept-new"] },
     );
     for (const problem of result.problems) console.error(problem);
+    for (const note of result.notes) console.log(note);
     console.log(
-      `RDF discipline: ${result.files} files scanned, ${result.violations.length} violations in ${Object.keys(result.counts).length} files, ${result.allowed} allow-comment(s).${values["update-baseline"] && !result.problems.length ? " Baseline updated." : ""}`,
+      `RDF discipline: ${result.files} files scanned, ${result.violations.length} violations in ${Object.keys(result.counts).length} baseline files, ${result.allowed} allow-comment(s), ${result.skippedSrcPaths} skipped src/ paths.${result.updated ? " Baseline updated." : ""}`,
     );
     if (result.problems.length) process.exitCode = 1;
   } catch (error) {

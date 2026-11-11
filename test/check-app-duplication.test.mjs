@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   mkdirSync,
@@ -39,8 +40,11 @@ function workspace(files = {}) {
   return root;
 }
 const scan = (root) => scanAppDuplication(root, 40);
-const check = (root, updateBaseline = false) =>
-  checkAppDuplication(root, { window: 40, updateBaseline });
+const check = (root, updateBaseline = false, acceptNew = false) =>
+  checkAppDuplication(root, { window: 40, updateBaseline, acceptNew });
+const accept = (root) => check(root, true, true);
+const baselinePath = "scripts/app-duplication-baseline.json";
+const snapshot = (root) => readFileSync(join(root, baselinePath), "utf8");
 function run(root, ...args) {
   const logs = workspace();
   const out = openSync(join(logs, "stdout"), "w");
@@ -134,56 +138,89 @@ const message = "a short string";`;
     expect(scan(root).clusters.length).toBeGreaterThan(0);
   });
 
-  it("shares exclusions across app and package source trees", () => {
-    const excluded = [
+  it("shares extensions and exclusions across apps and libraries and scans app scripts", () => {
+    const included = [
+      ...["jsx", "cjs", "mts", "cts"].map((ext) => `apps/second/src/main.${ext}`),
+      "apps/second/scripts/seed.ts",
+      ...["test", "tests", "fixtures", "fixture", "e2e", "build", "out", "dist"].map(
+        (dir) => `packages/library/src/${dir}/x.ts`,
+      ),
+    ];
+    const excludedSrc = [
       "x.test.ts",
       "x.spec.tsx",
       "__tests__/x.ts",
-      "test/x.js",
-      "e2e/x.mjs",
-      "fixtures/x.ts",
+      "__fixtures__/x.ts",
       "generated/x.ts",
       "x.d.ts",
+      "x.d.mts",
+      "x.d.cts",
       "node_modules/x.ts",
     ];
     const root = workspace({
       [first]: logic,
+      ...Object.fromEntries(included.map((file) => [file, logic])),
       ...Object.fromEntries(
         ["apps/second", "packages/library"].flatMap((project) =>
-          excluded.map((file) => [`${project}/src/${file}`, logic]),
+          [
+            ...excludedSrc.map((file) => `${project}/src/${file}`),
+            ...["test", "fixtures", "build", "out"].map((dir) => `${project}/${dir}/src/x.ts`),
+          ].map((file) => [file, logic]),
         ),
       ),
-      "apps/second/main.ts": logic,
-      "apps/second/test/src/main.ts": logic,
+      "apps/second/other.ts": logic,
+      "apps/second/scripts/x.spec.mts": logic,
+      "packages/library/scripts/outside.ts": logic,
     });
-    expect(scan(root)).toMatchObject({ files: 1, clusters: [] });
+    expect(scan(root)).toMatchObject({
+      files: 1 + included.length,
+      skippedSrcPaths: 2 * excludedSrc.length,
+    });
+    expect(run(root).stdout).toContain(`${2 * excludedSrc.length} skipped src/ paths`);
   });
 
-  it("round-trips the CLI baseline; rejects new clusters and requires shrinking after removal", () => {
+  it("treats suite sub-apps as independent projects, including copies within the suite", () => {
+    const drive = "apps/suite/src/apps/drive/lib/main.ts";
+    const mail = "apps/suite/src/apps/mail/lib/main.ts";
+    const root = workspace({ [drive]: logic, [mail]: logic });
+    expect(scan(root).clusters).toHaveLength(1);
+    expect(scan(root).clusters[0].projects).toEqual([
+      "apps/suite/src/apps/drive",
+      "apps/suite/src/apps/mail",
+    ]);
+    expect(
+      scan(workspace({ [drive]: logic, "apps/suite/src/apps/drive/other.ts": logic })).clusters,
+    ).toEqual([]);
+  });
+
+  it("refuses new clusters on update unless explicitly accepted, then permits removed clusters", () => {
     const root = workspace({ [first]: logic, [second]: logic });
     expect(run(root).status).toBe(1);
-    expect(run(root, "--update-baseline").status).toBe(0);
+    const refusal = run(root, "--update-baseline");
+    expect(refusal.status).toBe(1);
+    expect(refusal.stdout).not.toContain("Baseline updated");
+    expect(() => snapshot(root)).toThrow();
+    const accepted = run(root, "--update-baseline", "--accept-new");
+    expect(accepted.status).toBe(0);
+    expect(accepted.stdout.match(/Accepted increase:/g)).toHaveLength(2);
     expect(run(root).status).toBe(0);
-    const baseline = JSON.parse(
-      readFileSync(join(root, "scripts/app-duplication-baseline.json"), "utf8"),
-    );
-    expect(baseline.window).toBe(40);
-    expect(Object.keys(baseline.clusters)).toHaveLength(1);
+    const before = snapshot(root);
+    expect(JSON.parse(before).window).toBe(40);
+    expect(Object.keys(JSON.parse(before).clusters)).toHaveLength(1);
     put(root, second, "return true;");
-    expect(run(root).stderr).toContain("Stale duplicate cluster");
+    const reduced = run(root);
+    expect(reduced.status).toBe(0);
+    expect(reduced.stdout).toContain("baseline can shrink: run --update-baseline");
+    expect(snapshot(root)).toBe(before);
     expect(run(root, "--update-baseline").status).toBe(0);
-    expect(check(root).problems).toEqual([]);
-    expect(
-      JSON.parse(readFileSync(join(root, "scripts/app-duplication-baseline.json"), "utf8"))
-        .clusters,
-    ).toEqual({});
+    expect(JSON.parse(snapshot(root)).clusters).toEqual({});
     put(root, second, logic);
     expect(check(root).problems.join("\n")).toContain("new cluster");
   }, 15000);
 
   it("keeps fingerprints stable across comments, whitespace and renamed identifiers", () => {
     const root = workspace({ [first]: logic, [second]: logic });
-    check(root, true);
+    accept(root);
     put(
       root,
       first,
@@ -194,7 +231,7 @@ const message = "a short string";`;
 
   it("rejects new files and repeated copies within an existing cluster", () => {
     const root = workspace({ [first]: logic, [second]: logic });
-    check(root, true);
+    accept(root);
     put(root, "apps/first/src/copy.ts", logic);
     expect(check(root).problems.join("\n")).toContain("changed occurrences");
     rmSync(join(root, "apps/first/src/copy.ts"));
@@ -202,35 +239,136 @@ const message = "a short string";`;
     expect(check(root).problems.length).toBeGreaterThan(0);
   });
 
-  it("requires a baseline update when occurrences shrink but a cluster remains", () => {
-    const copy = "apps/first/src/copy.ts";
+  it("passes occurrence and project reductions while a cluster remains", () => {
+    const copy = "apps/third/src/copy.ts";
     const root = workspace({ [first]: logic, [second]: logic, [copy]: logic });
-    check(root, true);
+    accept(root);
+    const fingerprint = scan(root).clusters[0].fingerprint;
+    const before = snapshot(root);
     rmSync(join(root, copy));
-    expect(check(root).problems.join("\n")).toContain("--update-baseline");
-    check(root, true);
+    expect(scan(root).clusters[0].fingerprint).toBe(fingerprint);
     expect(check(root).problems).toEqual([]);
+    expect(check(root).notes.join("\n")).toContain("baseline can shrink: run --update-baseline");
+    expect(snapshot(root)).toBe(before);
+    expect(check(root, true).problems).toEqual([]);
+    expect(snapshot(root)).not.toBe(before);
   });
 
-  it("rejects growth and shrinkage of a known fragment even with the same fingerprint", () => {
+  it("compares footprints by counts instead of exact token lengths", () => {
     const root = workspace({ [first]: logic, [second]: logic });
-    check(root, true);
+    accept(root);
     const original = scan(root).clusters[0].fingerprint;
     const extension = `${logic}\nthrow new Error("shared failure");`;
     put(root, first, extension);
     put(root, second, extension);
     expect(scan(root).clusters[0].fingerprint).toBe(original);
-    expect(check(root).problems.join("\n")).toContain("changed occurrences");
-    check(root, true);
+    expect(check(root).problems).toEqual([]);
+    expect(check(root, true).problems).toEqual([]);
     put(root, first, logic);
     put(root, second, logic);
-    expect(check(root).problems.join("\n")).toContain("--update-baseline");
+    expect(check(root).problems).toEqual([]);
+  });
+
+  it("requires acceptance for new paths and extra locations and preserves the baseline on refusal", () => {
+    const root = workspace({ [first]: logic, [second]: logic });
+    accept(root);
+    const before = snapshot(root);
+    const copy = "apps/first/src/copy.ts";
+    put(root, copy, logic);
+    expect(run(root, "--update-baseline").status).toBe(1);
+    expect(snapshot(root)).toBe(before);
+    const acceptedPath = run(root, "--update-baseline", "--accept-new");
+    expect(acceptedPath.status).toBe(0);
+    expect(acceptedPath.stdout).toContain(`${copy}: 1 > baseline 0`);
+    put(root, second, `${logic}\n${logic}`);
+    const refusal = check(root, true);
+    expect(refusal.problems.length).toBeGreaterThan(0);
+    const accepted = run(root, "--update-baseline", "--accept-new");
+    expect(accepted.status).toBe(0);
+    expect(accepted.stdout).toContain("Accepted increase:");
+    expect(check(root).problems).toEqual([]);
+  });
+
+  it("ignores parentheses and whitespace-only JSX during reflow", () => {
+    const one = "apps/first/src/view.jsx";
+    const two = "apps/second/src/view.jsx";
+    const view = `export function View(items) { return <div><span>{items.map(item => <b>{item.name}</b>)}</span><span>{items.filter(item => item.ready).map(item => <i>{item.title}</i>)}</span></div>; }`;
+    const root = workspace({ [one]: view, [two]: view });
+    accept(root);
+    expect(scan(root).clusters).toHaveLength(1);
+    const fingerprint = scan(root).clusters[0].fingerprint;
+    put(
+      root,
+      two,
+      view
+        .replaceAll("return <", "return (<")
+        .replace("</div>;", "</div>);")
+        .replaceAll("><", ">\n    <"),
+    );
+    expect(scan(root).clusters[0].fingerprint).toBe(fingerprint);
+    expect(check(root).problems).toEqual([]);
+    put(root, one, view.replaceAll("item.name", "((item.name))").replaceAll("><", ">\n<"));
+    expect(check(root).problems).toEqual([]);
+  });
+
+  it.each([
+    `export const mime = {${Array.from({ length: 80 }, (_, i) => `"type${i}": "application/type${i}"`).join(",")}};`,
+    `const vocab = [${Array.from({ length: 80 }, (_, i) => `"https://example.test/term${i}"`).join(",")}];`,
+    `const data = [${Array.from({ length: 80 }, (_, i) => `[${i}, ${i + 1}, ${i + 2}]`).join(",")}];`,
+    `const vocab = {${Array.from({ length: 80 }, (_, i) => `term${i}: "https://example.test/term${i}"`).join(",")}};`,
+    `const data = [${Array.from({ length: 80 }, (_, i) => `["type", "value", ${i}, call()]`).join(",")}];`,
+  ])("skips data-heavy windows and vocab lists", (data) => {
+    expect(scan(workspace({ [first]: data, [second]: data })).clusters).toEqual([]);
+  });
+
+  it("fingerprints canonical token names independently of TypeScript enum values", () => {
+    const snippet =
+      'export function execute(input) { if (input.ready) return input.run(input.value); throw new Error("failed"); }';
+    const root = workspace({ [first]: snippet, [second]: snippet });
+    const anchor = [
+      "Token:export",
+      "Token:function",
+      "Identifier",
+      "Identifier",
+      "Token:{",
+      "Token:if",
+      "Identifier",
+      "Token:.",
+      "Identifier",
+      "Token:return",
+      "Identifier",
+      "Token:.",
+    ];
+    const expected = createHash("sha256")
+      .update(JSON.stringify([12, anchor]))
+      .digest("hex");
+    expect(scanAppDuplication(root, 12).clusters.map((cluster) => cluster.fingerprint)).toContain(
+      expected,
+    );
+  });
+
+  it("orders projects, locations and baselines by code point, independently of locale", () => {
+    const root = workspace(
+      Object.fromEntries(
+        ["ä", "Z", "a", "𐀀", "\uE000"].map((name) => [`apps/${name}/src/x.ts`, logic]),
+      ),
+    );
+    const cluster = scan(root).clusters[0];
+    const projects = ["Z", "a", "ä", "\uE000", "𐀀"].map((name) => `apps/${name}`);
+    expect(cluster.projects).toEqual(projects);
+    expect(cluster.locations.map((location) => location.file)).toEqual(
+      projects.map((project) => `${project}/src/x.ts`),
+    );
+    expect(accept(root).notes.map((note) => note.split(" ")[3].slice(0, -1))).toEqual(
+      cluster.locations.map((location) => location.file),
+    );
   });
 
   it("fails malformed baselines, incompatible window sizes and missing roots", () => {
     const root = workspace({ "scripts/app-duplication-baseline.json": "[]" });
     expect(() => check(root)).toThrow(/Invalid/);
-    check(root, true);
+    expect(() => accept(root)).toThrow(/Invalid/);
+    put(root, baselinePath, '{"window":40,"clusters":{}}');
     expect(() => checkAppDuplication(root, { window: 120 })).toThrow(/incompatible/);
     expect(() => scanAppDuplication(root, 0)).toThrow(/integer/);
     expect(run(join(root, "missing")).status).toBe(1);
