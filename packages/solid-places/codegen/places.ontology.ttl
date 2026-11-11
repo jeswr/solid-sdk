@@ -1,0 +1,36 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <https://schema.org/> .
+@prefix places: <https://jeswr.org/ns/places#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+<https://jeswr.org/ns/places> a owl:Ontology ; rdfs:label "Private places" ; rdfs:comment "Places history profile." .
+schema:Place a owl:Class ; rdfs:subClassOf core:Place ; rdfs:label "Place" ; skos:definition "A private place record." .
+places:Visit a owl:Class ; rdfs:subClassOf core:Activity ; rdfs:label "Visit" ; skos:definition "A private visit record." .
+places:Journey a owl:Class ; rdfs:subClassOf core:Activity ; rdfs:label "Journey" ; skos:definition "A private journey record." .
+schema:name a owl:DatatypeProperty ; rdfs:label "name" ; skos:definition "The name of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:string .
+schema:address a owl:DatatypeProperty ; rdfs:label "address" ; skos:definition "The address of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:string .
+schema:latitude a owl:DatatypeProperty ; rdfs:label "latitude" ; skos:definition "The latitude of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:double .
+schema:longitude a owl:DatatypeProperty ; rdfs:label "longitude" ; skos:definition "The longitude of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:double .
+schema:category a owl:DatatypeProperty ; rdfs:label "category" ; skos:definition "The category of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:string .
+schema:description a owl:DatatypeProperty ; rdfs:label "notes" ; skos:definition "The notes of a places record." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+places:saved a owl:DatatypeProperty ; rdfs:label "saved" ; skos:definition "The saved of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:boolean .
+schema:identifier a owl:DatatypeProperty ; rdfs:label "externalId" ; skos:definition "The externalId of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:string .
+dct:created a owl:DatatypeProperty ; rdfs:label "created" ; skos:definition "The created of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:dateTime .
+dct:modified a owl:DatatypeProperty ; rdfs:label "modified" ; skos:definition "The modified of a places record." ; rdfs:domain schema:Place ; rdfs:range xsd:dateTime .
+schema:location a owl:ObjectProperty ; rdfs:label "place" ; skos:definition "The place of a places record." ; rdfs:domain places:Visit ; rdfs:range schema:Place .
+schema:startTime a owl:DatatypeProperty ; rdfs:label "startTime" ; skos:definition "The startTime of a places record." ; rdfs:domain core:Activity ; rdfs:range xsd:dateTime .
+schema:endTime a owl:DatatypeProperty ; rdfs:label "endTime" ; skos:definition "The endTime of a places record." ; rdfs:domain core:Activity ; rdfs:range xsd:dateTime .
+places:confidence a owl:DatatypeProperty ; rdfs:label "confidence" ; skos:definition "The confidence of a places record." ; rdfs:domain places:Visit ; rdfs:range xsd:decimal .
+dct:source a owl:DatatypeProperty ; rdfs:label "source" ; skos:definition "The source of a places record." ; rdfs:domain core:Activity ; rdfs:range xsd:string .
+places:startLatitude a owl:DatatypeProperty ; rdfs:label "startLatitude" ; skos:definition "The startLatitude of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:double .
+places:startLongitude a owl:DatatypeProperty ; rdfs:label "startLongitude" ; skos:definition "The startLongitude of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:double .
+places:endLatitude a owl:DatatypeProperty ; rdfs:label "endLatitude" ; skos:definition "The endLatitude of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:double .
+places:endLongitude a owl:DatatypeProperty ; rdfs:label "endLongitude" ; skos:definition "The endLongitude of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:double .
+places:activityType a owl:DatatypeProperty ; rdfs:label "activityType" ; skos:definition "The activityType of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:string .
+schema:distance a owl:DatatypeProperty ; rdfs:label "distance" ; skos:definition "The distance of a places record." ; rdfs:domain places:Journey ; rdfs:range xsd:double .
