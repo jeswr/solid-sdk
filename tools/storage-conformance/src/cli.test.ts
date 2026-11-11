@@ -28,7 +28,8 @@ test("CLI expands memory and persists green reports with a zero exit", async () 
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-});
+  // Runs three full memory targets (now 40+ cases each); 5 s is too tight under CI coverage load.
+}, 30_000);
 
 test("CLI writes a green LWS report for all supported groups", async () => {
   const directory = await mkdtemp(join(tmpdir(), "storage-cli-lws-"));
