@@ -91,8 +91,9 @@ function hasEffectiveEnvProxy(url: URL): boolean {
   const env = process.env ?? {};
   const enabled =
     env.NODE_USE_ENV_PROXY === "1" ||
-    /(?:^|\s|")--use-env-proxy(?=\s|$|")/.test(env.NODE_OPTIONS ?? "") ||
-    process.execArgv?.includes("--use-env-proxy");
+    // Node enables the env proxy for the bare flag and for any `=value` form (even `=false`).
+    /(?:^|\s|")--use-env-proxy(?:=[^\s"]*)?(?=\s|$|")/.test(env.NODE_OPTIONS ?? "") ||
+    process.execArgv?.some((arg) => /^--use-env-proxy(?:=.*)?$/.test(arg));
   if (!enabled) return false;
   const httpProxy = env.http_proxy ?? env.HTTP_PROXY;
   const proxy =

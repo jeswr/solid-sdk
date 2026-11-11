@@ -432,14 +432,20 @@ for (const [entry, factory] of Object.entries({
     "env",
     "options",
     "argv",
+    "options=value",
+    "argv=value",
   ])("refuses an effective proxy activated through %s before opening a socket", async (activation) => {
     vi.stubEnv("HTTP_PROXY", "http://secret:credential@proxy.invalid:8080");
     if (activation === "env") vi.stubEnv("NODE_USE_ENV_PROXY", "1");
     else if (activation === "options") vi.stubEnv("NODE_OPTIONS", "--use-env-proxy");
+    else if (activation === "options=value")
+      vi.stubEnv("NODE_OPTIONS", "--max-old-space-size=64 --use-env-proxy=1");
     else
       vi.stubGlobal(
         "process",
-        Object.assign(Object.create(process), { execArgv: ["--use-env-proxy"] }),
+        Object.assign(Object.create(process), {
+          execArgv: [activation === "argv" ? "--use-env-proxy" : "--use-env-proxy=true"],
+        }),
       );
     const count = transport.mock.calls.length;
     const error = await factory()("https://pod.example/item").catch((e: unknown) => e);
