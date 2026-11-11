@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -26,6 +27,7 @@ import {
 } from "react";
 import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
 import { encodeRef } from "@/lib/refs";
+import { useOutboxSession } from "@/shell/sync/outbox-context";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
 import {
@@ -479,6 +481,7 @@ export function useDriveActions() {
     [setDetailsItems],
   );
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
+  const storage = useOutboxSession()?.storage;
   const router = useRouter();
 
   const starred = useMemo(() => new Set(prefs.starred), [prefs.starred]);
@@ -745,16 +748,32 @@ export function useDriveActions() {
     async (parent: string, name: string) => {
       if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
-        const url = await createFolder(client, parent, name);
-        invalidate(url);
-        toast.success(`Created ${nameOf(url)}`);
+        let queued = false;
+        const url = await createFolder(
+          client,
+          parent,
+          name,
+          storage
+            ? {
+                storage,
+                onQueued: () => {
+                  queued = true;
+                },
+              }
+            : undefined,
+        );
+        if (queued) toast.success("Saved on this device. It will sync when you're back online.");
+        else {
+          invalidate(url);
+          toast.success(`Created ${nameOf(url)}`);
+        }
         return url;
       } catch (error) {
         reportFailure(error, "Couldn't create the folder", client, invalidate);
         return undefined;
       }
     },
-    [client, invalidate, session.storageUrl],
+    [client, invalidate, session.storageUrl, storage],
   );
 
   const restore = useCallback(

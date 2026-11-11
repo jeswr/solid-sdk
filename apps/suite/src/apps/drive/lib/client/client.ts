@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The Drive screens' storage seam. Screens and operations only see
  * {@link DriveClient}; this module implements it over Solid LDP with an
@@ -11,6 +12,7 @@
 
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
+import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { resolveContentType } from "../files/resolve-content-type";
@@ -60,6 +62,13 @@ import { sourceOperation } from "./source-operations";
 export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
 export { DriveDeletePendingError } from "./deletion";
+
+const unansweredNetworkFailures = new WeakSet<Error>();
+
+/** Only a transport failure before this guarded operation received any HTTP answer. */
+export function isUnansweredNetworkFailure(error: unknown): boolean {
+  return error instanceof Error && unansweredNetworkFailures.has(error);
+}
 
 /** Resolve historical ancestor requirements, falling back to verified owner-only access. */
 export interface AncestorPolicy {
@@ -148,6 +157,8 @@ export interface DriveClient {
   readVersion(url: string): Promise<{
     body: Blob;
     etag?: string;
+    /** The GET's effective user write permission, when advertised. */
+    writable?: boolean;
     readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
@@ -516,10 +527,22 @@ export function createSolidDriveClient(options: {
   onProtectionChange?: (url: string) => void;
 }): DriveClient {
   const { storageUrl } = options;
-  const http = options.fetch;
+  const transport = options.fetch;
+  let answered = 0;
+  const networkErrors = new WeakSet<TypeError>();
+  const http: typeof transport = async (...args) => {
+    try {
+      const response = await transport(...args);
+      answered += 1;
+      return response;
+    } catch (error) {
+      if (error instanceof TypeError) networkErrors.add(error);
+      throw error;
+    }
+  };
   const access = accessControl(http, storageUrl);
-  const ledger = protectionLedger(http);
-  const deletion = deletionControl(http, errorFor);
+  const ledger = protectionLedger(transport);
+  const deletion = deletionControl(http, errorFor, transport);
   const protection = async (url: string): Promise<{ protectionRequired?: true }> =>
     (await ledger.get(url)) ? { protectionRequired: true } : {};
   let owner = options.webId;
@@ -701,6 +724,8 @@ export function createSolidDriveClient(options: {
     return {
       body,
       ...(etag ? { etag } : {}),
+      writable:
+        parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
       verifyHeaders: access.captureEndpoint(url, response.headers),
     };
   };
@@ -1451,6 +1476,7 @@ export function createSolidDriveClient(options: {
   const provision = ancestorGuard({
     storageUrl,
     http,
+    ledgerIdentity: transport,
     access,
     readRdf,
     putFolder: (url) =>
@@ -2970,9 +2996,20 @@ export function createSolidDriveClient(options: {
       );
     },
     async createFolder(url, policy) {
-      requirePolicy(policy, ["inherit-verified", "archived", "owner-only"]);
-      await prepareContentTargets([url]);
-      await createFolder(url, policy);
+      const before = answered;
+      try {
+        requirePolicy(policy, ["inherit-verified", "archived", "owner-only"]);
+        await prepareContentTargets([url]);
+        await createFolder(url, policy);
+      } catch (error) {
+        // Discovery wraps transport errors as access errors. Preserve that error
+        // for callers without an outbox, but remember evidence for queue fallback.
+        const cause = error instanceof DriveAccessError ? error.cause : error;
+        // Concurrent answers conservatively prevent fallback as well.
+        if (answered === before && cause instanceof TypeError && networkErrors.has(cause))
+          unansweredNetworkFailures.add(error as Error);
+        throw error;
+      }
     },
     mergeContainer(from, to, policy, opts) {
       return sourceOperation(

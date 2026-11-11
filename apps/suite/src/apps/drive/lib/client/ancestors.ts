@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
@@ -81,6 +82,8 @@ function parent(url: string): string {
 export function ancestorGuard(options: {
   storageUrl: string;
   http: typeof globalThis.fetch;
+  /** Keep transport instrumentation from changing the non-browser ledger's scope. */
+  ledgerIdentity?: typeof globalThis.fetch;
   access: ReturnType<typeof accessControl>;
   readRdf: (url: string) => Promise<{ dataset: Store } | undefined>;
   putFolder: (url: string) => Promise<Response>;
@@ -95,7 +98,7 @@ export function ancestorGuard(options: {
   onProtectionChange?: (url: string) => void;
 }) {
   const { http, storageUrl, access } = options;
-  const ledger = protectionLedger(http);
+  const ledger = protectionLedger(options.ledgerIdentity ?? http);
   const requirementFor = async (
     policy: OwnAccess,
     from: string,
