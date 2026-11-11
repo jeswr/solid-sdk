@@ -14,7 +14,7 @@ import {
   REQUESTER,
 } from "../../test/requests/fixtures.js";
 import { ACP, RDF } from "../rdf.js";
-import { grantsWithRoles } from "../roles/client.js";
+import { grantsWithRoles, readGrants } from "../roles/client.js";
 import { readAccessDocuments } from "../roles/http.js";
 import { properties } from "../roles/rdf.js";
 import {
@@ -378,6 +378,46 @@ describe("ACP approval and sealed owner records", () => {
     expect(writes(pod)).toEqual([]);
   });
 
+  it("keeps the public roles API's refusal on a missing folder", async () => {
+    const pod = await acpPod();
+    await expect(readGrants(RECORDS, { fetch: pod.fetch, root: POD })).rejects.toThrow("404");
+    expect(pod.calls.map(({ method, url }) => [method, url])).toEqual([["HEAD", RECORDS]]);
+  });
+
+  it("refuses a missing ancestor after an existing resource, even with a public member policy", async () => {
+    const pod = await acpPod();
+    await seedRecords(pod);
+    const settings = `${POD}settings/`;
+    pod.seed(
+      `${settings}.acr`,
+      await turtle(acr(settings, `${settings}.acr`, `${ACP}PublicAgent`)),
+    );
+    intercept(pod, (method, url) =>
+      method === "HEAD" && url === settings ? new Response(null, { status: 404 }) : undefined,
+    );
+    await expect(
+      readAccessDocuments(RECORDS, {
+        fetch: pod.fetch,
+        root: POD,
+        requireAncestorAccess: true,
+      }),
+    ).rejects.toThrow(`server's parent access rules can't be checked at ${settings}`);
+    for (const operation of [previewDecision, decide])
+      await expect(operation({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow(
+        "404",
+      );
+    expect(writes(pod)).toEqual([]);
+  });
+
+  it("never skips a missing non-container in strict discovery", async () => {
+    const pod = await acpPod();
+    const missing = `${POD}missing.ttl`;
+    await expect(
+      readAccessDocuments(missing, { fetch: pod.fetch, root: POD, requireAncestorAccess: true }),
+    ).rejects.toThrow(`server's parent access rules can't be checked at ${missing}`);
+    expect(pod.calls.map(({ method, url }) => [method, url])).toEqual([["HEAD", missing]]);
+  });
+
   it("allows direct public listing access on ancestors but refuses inherited access", async () => {
     for (const member of [false, true]) {
       const pod = await acpPod();
@@ -426,6 +466,76 @@ describe("ACP approval and sealed owner records", () => {
           expect(values(await parseRdf(pod.body(ACR) as string, "text/turtle"), ACR, KEY)).toEqual(
             [],
           );
+        }
+      }
+    }
+  });
+
+  it("refuses ancestor Control with mixed, client-only, issuer-only and anyOf matchers", async () => {
+    for (const ancestor of [POD, `${POD}settings/`]) {
+      for (const self of [false, true]) {
+        for (const shape of ["mixed", "client", "issuer", "anyOf"] as const) {
+          const pod = await acpPod();
+          await seedRecords(pod);
+          const url = `${ancestor}.acr`;
+          const data = acr(ancestor);
+          const root = self ? `${url}#self` : url;
+          if (self) properties(nn(root), data).add(`${ACP}resource`, url);
+          const policy = addPolicy(data, url, "controller", OWNER, [ACL.Control]);
+          const matcher = properties(nn(`${url}#controller-matcher`), data);
+          if (shape === "mixed") matcher.add(`${ACP}agent`, REQUESTER);
+          if (shape === "client" || shape === "issuer") {
+            matcher.values(`${ACP}agent`).clear();
+            matcher.add(ACP + shape, "https://app.example/");
+          }
+          if (shape === "anyOf") {
+            policy.values(`${ACP}allOf`).clear();
+            policy.add(`${ACP}anyOf`, matcher.value);
+            policy.add(`${ACP}anyOf`, `${url}#other-matcher`);
+            properties(nn(`${url}#other-matcher`), data).add(`${ACP}agent`, REQUESTER);
+          }
+          bind(data, url, "controller", policy, false, root);
+          pod.seed(url, await turtle(data));
+          for (const operation of [previewDecision, decide])
+            await expect(
+              operation({ id: REQUEST }, { approve: true }, options(pod)),
+            ).rejects.toThrow("folder is shared");
+          expect(writes(pod)).toEqual([]);
+        }
+      }
+    }
+  });
+
+  it("requires owner-only ACR-self Write and Append on every ancestor", async () => {
+    for (const ancestor of [POD, `${POD}settings/`]) {
+      for (const modes of [[ACL.Read, ACL.Write], [ACL.Append]]) {
+        for (const agent of [REQUESTER, OWNER]) {
+          const pod = await acpPod();
+          await seedRecords(pod);
+          const url = `${ancestor}.acr`;
+          const data = acr(ancestor);
+          const root = `${url}#self`;
+          properties(nn(root), data).add(`${ACP}resource`, url);
+          bind(data, url, "writer", addPolicy(data, url, "writer", agent, modes), false, root);
+          pod.seed(url, await turtle(data));
+          if (agent === OWNER) {
+            const expected = await previewDecision(
+              { id: REQUEST },
+              { approve: true },
+              options(pod),
+            );
+            expect(writes(pod)).toEqual([]);
+            expect(
+              (await decide({ id: REQUEST }, { approve: true }, { ...options(pod), expected }))
+                .status,
+            ).toBe("approved");
+          } else {
+            for (const operation of [previewDecision, decide])
+              await expect(
+                operation({ id: REQUEST }, { approve: true }, options(pod)),
+              ).rejects.toThrow("folder is shared");
+            expect(writes(pod)).toEqual([]);
+          }
         }
       }
     }
@@ -489,22 +599,26 @@ describe("ACP approval and sealed owner records", () => {
     }
   });
 
-  it("walks existing ACP ancestors when records, settings, or both folders are missing", async () => {
+  it("skips only the initial missing folders before the first existing ACP ancestor", async () => {
     const settings = `${POD}settings/`;
-    for (const [missingRecords, missingSettings] of [
-      [true, false],
-      [false, true],
-      [true, true],
-    ]) {
+    for (const missingSettings of [false, true]) {
       const pod = await acpPod();
-      if (!missingRecords) await seedRecords(pod);
       if (missingSettings)
         intercept(pod, (method, url) =>
-          method === "HEAD" && url === settings ? new Response(null, { status: 404 }) : undefined,
+          method === "HEAD" && url === settings && !pod.has(RECORDS)
+            ? new Response(null, { status: 404 })
+            : undefined,
         );
+      const snapshot = await readAccessDocuments(RECORDS, {
+        fetch: pod.fetch,
+        root: POD,
+        requireAncestorAccess: true,
+      });
+      expect(snapshot.model).toBe("acp");
+      expect(snapshot.ownUrl).toBe("");
       const expected = await previewDecision({ id: REQUEST }, { approve: true }, options(pod));
       expect(writes(pod)).toEqual([]);
-      expect(pod.has(RECORDS)).toBe(!missingRecords);
+      expect(pod.has(RECORDS)).toBe(false);
       expect(
         (await decide({ id: REQUEST }, { approve: true }, { ...options(pod), expected })).status,
       ).toBe("approved");
@@ -763,6 +877,24 @@ describe("ACP approval and sealed owner records", () => {
 });
 
 describe("ACP graph boundaries and discovery races", () => {
+  it("refuses direct ACR creation for an absent folder without a read-only request", async () => {
+    const pod = await acpPod();
+    await expect(
+      acpRecords(RECORDS, POD, OWNER, pod.fetch, ACR, {
+        unverified: MARK,
+        recordsKey: KEY,
+        assertEmpty: async () => {
+          throw new Error("An absent folder cannot be listed");
+        },
+        notPrivate: "not private",
+        missingKey: "missing key",
+        absent: true,
+      }),
+    ).rejects.toThrow("folder must exist");
+    expect(pod.calls).toEqual([]);
+    expect(pod.has(ACR)).toBe(false);
+  });
+
   it("accepts owner-only alternatives, narrowing exclusions and private ACR-self controls", async () => {
     const pod = await acpPod();
     const dataset = acr(RECORDS);

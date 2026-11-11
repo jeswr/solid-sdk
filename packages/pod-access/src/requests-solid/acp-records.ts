@@ -55,15 +55,20 @@ function verify(document: AccessDocument, owner: string, container: string) {
         !agents.length || agents.some((agent) => agent === owner || agent.startsWith(ACP)),
     };
   }
-  function policy(term: Term, relevant: boolean) {
+  function policy(term: Term, relevant: boolean, acrSelf: boolean) {
     const p = node(term, ["allow", "deny", "allOf", "anyOf", "noneOf"], "Policy");
     const allow = p.iris(`${ACP}allow`);
     const deny = p.iris(`${ACP}deny`);
     for (const mode of [...allow, ...deny])
       if (!CSS_MODES.includes(mode)) throw new UnsupportedAccessModelError("acp");
-    // CSS Control lets its holder rewrite this ACR, including its member policies. This
-    // applies to ancestor resource and ACR-self policies even when their Read does not inherit.
-    const privateAllow = allow.length > 0 && (relevant || allow.includes(ACL.Control));
+    // CSS resource Control and ACR-self Write/Append can change inherited access. Check
+    // these even on ancestors whose own Read does not reach the records folder.
+    const privateAllow = allow.some(
+      (mode) =>
+        relevant ||
+        mode === ACL.Control ||
+        (acrSelf && (mode === ACL.Write || mode === ACL.Append)),
+    );
     const all = p.nodes(`${ACP}allOf`).map((m) => matcher(m as Term, privateAllow));
     const any = p.nodes(`${ACP}anyOf`).map((m) => matcher(m as Term, privateAllow));
     const none = p.nodes(`${ACP}noneOf`).map((m) => matcher(m as Term, false));
@@ -111,9 +116,9 @@ function verify(document: AccessDocument, owner: string, container: string) {
           // ACP §6.1 and CSS resolve direct accessControl only for that resource;
           // descendants collect memberAccessControl from every ancestor. Public Read
           // on an ancestor's listing does not share this folder or reveal its ACR key.
-          // Still validate the closed graph and privacy-check Control in every scope.
+          // Still check controllers and ACR-self writers in every scope.
           const relevant = resource === container || name === "memberAccessControl";
-          const modes = policy(p as Term, relevant);
+          const modes = policy(p as Term, relevant, targets[0] === url);
           if (!relevant) continue;
           if (targets[0] === resource) {
             for (const mode of modes.allow) allowed.add(mode);
@@ -155,6 +160,8 @@ export async function acpRecords(
 ): Promise<string | undefined> {
   const { unverified, recordsKey, assertEmpty, notPrivate, missingKey, peek, readOnly, absent } =
     settings;
+  if (absent && !readOnly)
+    throw new Error("The access records folder must exist before its ACR can be written");
   for (let attempt = 0; attempt < 3; attempt++) {
     const snapshot = await readAccessDocuments(absent ? new URL("..", container).href : container, {
       fetch: fetchFn,

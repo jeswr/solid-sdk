@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
@@ -69,7 +70,7 @@ describe("public export boundary", () => {
     }
   });
 
-  it("keeps reader classes private and exposes only the two request error classes", async () => {
+  it("keeps reader classes private and exposes only the documented request error classes", async () => {
     await checkBuiltExports(`
       assert.equal(typeof access.createAccessClient, "function");
       assert.ok(entries.length > 0);
@@ -77,13 +78,20 @@ describe("public export boundary", () => {
       assert.deepEqual(Object.keys(roles).sort(),
         ["addGrant", "grantsWithRoles", "isRoleError", "modesToRole", "movePreservingAccess", "readGrants", "removeGrant", "rolesToModes", "setGrants"].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
+      const requests = await load("@jeswr/pod-access/requests-solid");
+      assert.deepEqual(Object.keys(requests).sort(), [
+        "ACCM", "ACL", "DCT", "DPV", "FOAF", "LDP", "ODRL", "PIM", "PROV", "RDF", "RDFS", "SOLID", "XSD",
+        "DecisionPreviewConflictError", "MAX_MEMBERS", "MAX_NOTIFICATION_BYTES", "RequestConflictError",
+        "UnsupportedAccessModelError", "accessModel", "accmAliases", "accmTerm", "canonicalizeAccmDataset",
+        "decide", "deriveGrantId", "listRequests", "previewDecision",
+      ].sort());
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);
         assert.equal("PolicyTooComplex" in entry, false);
         assert.equal("copyDataset" in entry, false);
         for (const [name, value] of Object.entries(entry)) {
           if (typeof value !== "function") continue;
-          if (["UnsupportedAccessModelError", "RequestConflictError"].includes(name)) {
+          if (["UnsupportedAccessModelError", "RequestConflictError", "DecisionPreviewConflictError"].includes(name)) {
             assert.ok(value.prototype instanceof Error);
             continue;
           }

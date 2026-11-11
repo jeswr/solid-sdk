@@ -707,8 +707,9 @@ After committing, requester inbox discovery and ActivityStreams `Accept`/`Reject
 effort and happen only when the caller passes an unauthenticated `publicFetch` (forced to
 `credentials: "omit"` and `redirect: "error"`); global fetch is never used, since an application
 may have patched it with authentication. Requester profile and inbox URLs must be public HTTPS:
-loopback, private, link-local and local-name hosts are refused. That check reads only the URL: a
-public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
+IP literals, single-label names, trailing dots, empty labels and local-name hosts (`.local`, `.lan`,
+`.home.arpa`, `.internal`, `.localhost`, `.intranet`, `.corp`, `.home`) are refused. That check reads
+only the URL: a public name can still resolve to a private address. On a server (Node), pass a DNS-checking fetch
 such as `createGuardedFetch()` from `@jeswr/guarded-fetch` as `publicFetch`; in a browser, where
 names cannot be resolved, the URL check is the only guard. Failures and a missing `publicFetch`
 return `notified: false` without rollback.
@@ -789,10 +790,13 @@ Write and Control must cover both folder and members. The folder's own `accessCo
 share the records folder ([ACP resolution](https://solidproject.org/TR/acp#resolved-access-control)).
 Control in any ancestor resource or ACR-self policy must still be owner-only: another controller
 could rewrite that ancestor's ACR to add inherited access to the records folder and its key.
+ACR-self Write and Append must also be owner-only because they can change that ACR's policies.
 
 ACP inheritance is additive, so the proof walks every ancestor through the **origin root**, including
-ancestors above a path-based `storage` root. Missing folders (HEAD 404) are skipped to their nearest
-existing ancestor, including when `settings/` or the records folder has not been created yet.
+ancestors above a path-based `storage` root. Only initial missing folders (HEAD 404) are skipped to
+their nearest existing ancestor, when `settings/` or the records folder has not been created yet.
+After the first existing resource, any ancestor 404 refuses the proof. The public roles API
+continues to refuse missing resources.
 Every existing ancestor must advertise readable access rules; 401/403, server errors or a missing
 access link refuse because the server's parent access rules cannot be checked.
 The owner must be able to read every ancestor's rules. This holds for single-pod servers and

@@ -12,6 +12,7 @@ import {
   isMixedModel,
   isUnsupportedAcpPolicy,
   mismatchedModel,
+  walkResources,
 } from "../roles/http.js";
 import { acpRecords } from "./acp-records.js";
 import { UnsupportedAccessModelError } from "./errors.js";
@@ -263,19 +264,16 @@ async function ownerOnlyContainer(
     const storageDocument = await accessDocument(storage, storage, fetchFn, expected);
     // Preview and decide both check the nearest existing parent, including its model.
     // Missing intermediate folders contribute no own rules; unreadable ones still refuse.
-    let parentResource = scoped(storage, new URL("..", container).href);
-    while (parentResource !== storage) {
-      const parentHead = await fetchFn(parentResource, { method: "HEAD" });
-      if (parentHead.status !== 404) {
-        if (!parentHead.ok) throw new Error(`Access model discovery failed (${parentHead.status})`);
-        break;
-      }
-      parentResource = scoped(storage, new URL("..", parentResource).href);
+    let parent = storageDocument;
+    for await (const { resource, head } of walkResources(new URL("..", container).href, {
+      fetch: fetchFn,
+      root: storage,
+      requireAncestorAccess: true,
+    })) {
+      if (!head.ok) throw new Error(`Access model discovery failed (${head.status})`);
+      if (resource !== storage) parent = await accessDocument(resource, storage, fetchFn, expected);
+      break;
     }
-    const parent =
-      parentResource === storage
-        ? storageDocument
-        : await accessDocument(parentResource, storage, fetchFn, expected);
     if (readOnly) {
       return parent.model === "acp"
         ? acpRecords(container, storage, owner, fetchFn, parent.url, {

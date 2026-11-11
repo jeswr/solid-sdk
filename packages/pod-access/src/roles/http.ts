@@ -172,6 +172,39 @@ export async function readAccessDocuments(
   const snapshot = await discover(resource, options, true);
   return { model: snapshot.model ?? "unknown", ownUrl: snapshot.ownUrl, documents: snapshot.raw };
 }
+/**
+ * Bounded HEAD walk shared with records-folder discovery. Only strict privacy proofs may skip
+ * not-yet-created folders at the start; a missing parent of an existing resource is never skipped.
+ */
+export async function* walkResources(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root"> & { requireAncestorAccess?: boolean },
+) {
+  const root = options.root ?? `${new URL(resource).origin}/`;
+  scoped(root, root);
+  scoped(resource, root);
+  let current = resource;
+  let found = false;
+  for (let depth = 0; ; depth++) {
+    if (depth === 64)
+      throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
+    const head = await request(current, options, { method: "HEAD" });
+    if (
+      !(
+        options.requireAncestorAccess &&
+        !found &&
+        head.status === 404 &&
+        current.endsWith("/") &&
+        current !== root
+      )
+    ) {
+      found = true;
+      yield { resource: current, head };
+    }
+    if (current === root) break;
+    current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
+  }
+}
 async function discover(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root" | "implementation"> & {
@@ -182,25 +215,13 @@ async function discover(
   Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined; raw: AccessDocument[] }
 > {
   const root = options.root ?? `${new URL(resource).origin}/`;
-  scoped(root, root);
-  scoped(resource, root);
   const documents: Document[] = [];
   const raw: AccessDocument[] = [];
   let ownUrl = "";
   let resourceEtag: string | null = null;
   let own: Document | undefined;
   let model: "wac" | "acp" | undefined;
-  let current = resource;
-  for (let depth = 0; ; depth++) {
-    if (depth === 64)
-      throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
-    const head = await request(current, options, { method: "HEAD" });
-    // A not-yet-created container has no rules of its own. Continue from its parent;
-    // other failures (and a missing root) must still refuse discovery.
-    if (head.status === 404 && current.endsWith("/") && current !== root) {
-      current = scoped(new URL("..", current).href, root);
-      continue;
-    }
+  for await (const { resource: current, head } of walkResources(resource, options)) {
     const strictAncestor = options.requireAncestorAccess;
     const parentRefusal = () =>
       roleError(
@@ -320,8 +341,6 @@ async function discover(
       }
       if (exists && decides && model === "wac") break;
     }
-    if (current === root) break;
-    current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
   }
   return { resource, resourceEtag, ownUrl, own, model, documents, raw };
 }

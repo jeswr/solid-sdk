@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {
@@ -5,7 +6,6 @@ import {
   classifyIpLiteral,
   DEFAULT_HOSTNAME_DENYLIST,
   isDeniedHostname,
-  isPublicAddress,
   isWithinPodScope,
   normalizeHostForClassification,
 } from "@jeswr/guarded-fetch";
@@ -40,7 +40,12 @@ const LOCAL_NAMES: readonly string[] = Object.freeze([
   "localhost",
   ".localhost",
   ".local",
+  ".lan",
   ".home.arpa",
+  ".internal",
+  ".intranet",
+  ".corp",
+  ".home",
 ]);
 
 /**
@@ -54,9 +59,10 @@ export function publicHttpsUrl(url: string): string {
   if (parsed.protocol !== "https:") throw new TypeError("Requester URLs must use HTTPS");
   const host = normalizeHostForClassification(parsed.hostname);
   const local =
-    classifyIpLiteral(host) === 0
-      ? isDeniedHostname(host, LOCAL_NAMES)
-      : !isPublicAddress(host, false);
+    classifyIpLiteral(host) !== 0 ||
+    !host.includes(".") ||
+    host.split(".").some((label) => label.length === 0) ||
+    isDeniedHostname(host, LOCAL_NAMES);
   if (local) throw new TypeError("Requester URL is not on the public web");
   return url;
 }

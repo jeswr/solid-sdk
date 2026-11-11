@@ -18,7 +18,7 @@ import {
 import { serialize } from "../rdf.js";
 import { appendAcp } from "../roles/rdf.js";
 import { applyGrant, roleFor } from "./acl.js";
-import { httpUrl, put, read, transport } from "./http.js";
+import { httpUrl, publicHttpsUrl, put, read, transport } from "./http.js";
 import { project } from "./inbox.js";
 import {
   ACCM,
@@ -49,6 +49,36 @@ const reg = (location: string, predicate = "instance") =>
   `${PREFIXES}[] a solid:TypeRegistration; solid:forClass <${CONTACTS_CLASS}>; solid:${predicate} <${location}>.`;
 
 describe("protocol and RDF boundaries", () => {
+  it.each([
+    "https://router/p",
+    "https://nas.lan/p",
+    "https://pod.example./p",
+    "https://pod..example/p",
+    "https://.example/p",
+    "https://printer.local/p",
+    "https://nas.home.arpa/p",
+    "https://nas.internal/p",
+    "https://nas.localhost/p",
+    "https://nas.intranet/p",
+    "https://nas.corp/p",
+    "https://nas.home/p",
+    "https://localhost/p",
+    "https://127.0.0.1/p",
+    "https://[::1]/p",
+    "https://8.8.8.8/p",
+    "https://[2606:4700:4700::1111]/p",
+  ])("refuses a requester URL outside the public hostname boundary: %s", (url) => {
+    expect(() => publicHttpsUrl(url)).toThrow("not on the public web");
+  });
+
+  it.each([
+    "https://app.example/p",
+    "https://router.example/p",
+    "https://nas.lan.example/p",
+  ])("accepts a public HTTPS hostname: %s", (url) => {
+    expect(publicHttpsUrl(url)).toBe(url);
+  });
+
   it("refuses userinfo, redirects, transport errors and RDF IRI/datatype injection", async () => {
     expect(() => httpUrl("https://user:secret@pod.example/")).toThrow("credentials");
     await expect(transport(async () => new Response(null, { status: 302 }))(POD)).rejects.toThrow(

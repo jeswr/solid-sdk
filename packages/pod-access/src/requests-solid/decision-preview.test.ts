@@ -362,7 +362,9 @@ describe("decision previews and bound consent", () => {
     const pod = buildPod();
     const settings = `${POD}settings/`;
     pod.intercept = (method, url) =>
-      method === "HEAD" && url === settings ? new Response(null, { status: 404 }) : undefined;
+      method === "HEAD" && url === settings && !pod.has(RECORDS)
+        ? new Response(null, { status: 404 })
+        : undefined;
     const decision = { approve: false };
     const expected = await previewDecision({ id: REQUEST }, decision, opts(pod));
     expect(writes(pod)).toEqual([]);

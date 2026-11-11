@@ -187,8 +187,10 @@ the folder's own accessControl/memberAccessControl and ACR access, plus every an
 memberAccessControl. Ancestor own-resource accessControl does not reach descendants: public Read,
 Append and Write are safe. Still privacy-check Control in every ancestor direct and ACR-self
 policy: non-owner Control can rewrite the ACR to add inherited access to the records and key.
-Skip nonexistent folders (HEAD 404) to the nearest existing ancestor; preview and decide both
-check this parent when the records folder is missing, including WAC. Require every existing
+Privacy-check ACR-self Write and Append too, because they can change the ACR's access policies.
+Skip only initial nonexistent folders (HEAD 404) to the nearest existing ancestor; a 404 after
+any existing resource refuses. Public roles APIs still refuse missing resources. Preview and decide
+both check this parent when the records folder is missing, including WAC. Require every existing
 ancestor to advertise readable rules; missing links, 401/403 and server errors refuse with an
 explanation that the server's parent access rules cannot be checked. Owners
 must be able to read every ancestor's access rules. This holds on single-pod servers and subdomain
