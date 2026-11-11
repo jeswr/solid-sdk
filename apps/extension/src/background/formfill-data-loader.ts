@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Parser, type Quad, Writer } from 'n3';
+// AUTHORED-BY Codex GPT-6
+import { parseRdfSync, type Quad } from '@jeswr/fetch-rdf';
+import { Writer } from 'n3';
 import type { ResolveFetch } from './core/class-resolve';
 import { type FormFillData, readFormFillData } from './core/formfill-data';
 import { isValidClientIdUrl } from './core/origin-policy';
+import { BUFFERED_RDF_LIMITS } from './core/rdf-limits';
 
 const VCARD = 'http://www.w3.org/2006/vcard/ns#';
 const LINKS = new Set([
@@ -30,10 +33,13 @@ export async function loadFormFillData(
   if (!isValidClientIdUrl(webId)) throw new Error('Profile address is unavailable.');
   const publicDocument = await fetchDocument(webId, false);
   if (!publicDocument.ok) throw new Error('Could not load your profile.');
-  const quads: Quad[] = new Parser({
+  const quads: Quad[] = [];
+  parseRdfSync(publicDocument.text, {
+    ...BUFFERED_RDF_LIMITS,
     baseIRI: publicDocument.url.split('#')[0],
     format: 'text/turtle',
-  }).parse(publicDocument.text);
+    onQuad: (quad) => quads.push(quad),
+  });
   const links = new Set<string>();
   for (const q of quads) {
     if (
@@ -53,11 +59,12 @@ export async function loadFormFillData(
   for (const url of [...links].slice(0, 8)) {
     const document = await fetchDocument(url, true);
     if (document.ok)
-      quads.push(
-        ...new Parser({ baseIRI: document.url.split('#')[0], format: 'text/turtle' }).parse(
-          document.text,
-        ),
-      );
+      parseRdfSync(document.text, {
+        ...BUFFERED_RDF_LIMITS,
+        baseIRI: document.url.split('#')[0],
+        format: 'text/turtle',
+        onQuad: (quad) => quads.push(quad),
+      });
   }
   const turtle = await new Promise<string>((resolve, reject) => {
     const writer = new Writer();

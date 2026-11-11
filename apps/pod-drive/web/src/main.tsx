@@ -2,11 +2,13 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Client entry: the session provider lazily creates one shared pod-auth core.
+
+import { SessionProvider } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { SessionProvider } from "./auth/SessionProvider";
+import { getPodAuth } from "./auth/pod-auth";
 import "./styles.css";
 
 const rootEl = document.getElementById("root");
@@ -21,7 +23,16 @@ createRoot(rootEl).render(
         both the app-shell components' `dark:` utilities and the host chrome (whose
         --bg/--ink/… aliases map onto the OKLCH tokens in styles.css). */}
     <ThemeProvider storageKey="pod-drive:app-shell-theme">
-      <SessionProvider>
+      <SessionProvider
+        getPodAuth={getPodAuth}
+        appName="Drive"
+        dev={import.meta.env.DEV}
+        legacyCredentials={{
+          indexedDb: ["pod-drive:sessions"],
+          localStorage: ["pod-drive:remembered-account"],
+          sessionStorage: ["pod-drive:autologin-attempted", "pod-drive:pss.autologin.flow"],
+        }}
+      >
         <App />
       </SessionProvider>
     </ThemeProvider>
