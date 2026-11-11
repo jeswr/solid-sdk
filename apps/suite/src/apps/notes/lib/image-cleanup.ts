@@ -5,8 +5,9 @@ import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { parseContainerMembers } from "@jeswr/ldp-container";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { parseDocument } from "../../docs/lib/model/document";
 import { ResourceDeleteError } from "../../docs/lib/model/errors";
-import { isDirectChild } from "../../docs/lib/model/layout";
+import { DOCS_SLUG, isDirectChild, LEGACY_DOCS_SLUG } from "../../docs/lib/model/layout";
 import { deleteRdf, readRdf } from "../../docs/lib/model/rdf-io";
 import { NS } from "../../docs/lib/model/vocab";
 import { noteImageSource, notesMediaContainer } from "./images";
@@ -37,15 +38,22 @@ function mediaFile(url: string, podRoot: string): boolean {
   );
 }
 
+/** Any document whose current or restorable HTML may reference Notes media. */
+export interface ImageReferencingDocument {
+  readonly url: string;
+  readonly body: string;
+  readonly revisions: readonly { readonly body: string }[];
+}
+
 /**
- * Deterministic planning over complete Notes documents, including restorable revisions.
- * Only Notes documents are scanned. Copy note to Docs (NOT-09) must copy images into
- * the Docs media folder rather than referencing notes/media.
+ * Deterministic planning over complete Notes and Docs documents, including restorable
+ * revisions. Docs are scanned because "Open in Docs" has created Docs whose HTML still
+ * references notes/media images.
  */
 export function planUnusedNoteImages(
   podRoot: string,
   files: readonly string[],
-  notes: readonly (Note | undefined)[],
+  notes: readonly (ImageReferencingDocument | undefined)[],
 ): string[] {
   // noteImages() returns [] without a DOM. That fallback is unsafe for deletion.
   if (typeof window === "undefined") throw new Error("Image cleanup needs a browser");
@@ -109,13 +117,24 @@ export class NoteImageCleanup {
     }
   }
 
-  private async notes(isOnline: () => boolean = () => true): Promise<Note[]> {
-    const notes: Note[] = [];
-    for (const path of ["notes/", "notes/archive/", "notes/.trash/"]) {
+  private async notes(isOnline: () => boolean = () => true): Promise<ImageReferencingDocument[]> {
+    const notes: ImageReferencingDocument[] = [];
+    // Docs converted from notes may still point at notes/media, so they are read too.
+    const folders = [
+      ...["notes/", "notes/archive/", "notes/.trash/"].map((path) => ({ path, doc: false })),
+      ...[DOCS_SLUG, LEGACY_DOCS_SLUG].map((path) => ({ path, doc: true })),
+    ];
+    for (const { path, doc } of folders) {
       if (!isOnline()) throw new Error("You're offline. Image cleanup stopped.");
       for (const url of await this.files(new URL(path, this.podRoot).href)) {
         if (!isOnline()) throw new Error("You're offline. Image cleanup stopped.");
-        // Unlike the normal UI list, never swallow a failed/malformed note read.
+        // Unlike the normal UI lists, never swallow a failed/malformed read.
+        if (doc) {
+          const document = parseDocument(url, (await readRdf(url, this.http)).dataset);
+          // RDF that is not a document has no HTML body to reference an image from.
+          if (document) notes.push({ url, body: document.body, revisions: document.revisions });
+          continue;
+        }
         const note = await this.options.readNote(url);
         if (!note) throw new Error("A note could not be read. Image cleanup stopped.");
         notes.push(note);

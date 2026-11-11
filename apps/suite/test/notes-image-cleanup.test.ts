@@ -3,6 +3,7 @@
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
+import { buildDocument } from "../src/apps/docs/lib/model/document";
 import { serializeTurtle, writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { NoteImageCleanup, planUnusedNoteImages } from "../src/apps/notes/lib/image-cleanup";
 import { buildNote, type Note, parseNote } from "../src/apps/notes/lib/model/note";
@@ -125,7 +126,7 @@ it("dry-runs count/size without mutations, then conditionally deletes an unrefer
       },
     ],
   ]);
-  expect(http.mock.calls.filter(([url]) => String(url).endsWith("/"))).toHaveLength(3);
+  expect(http.mock.calls.filter(([url]) => String(url).endsWith("/"))).toHaveLength(5);
   for (const [, init] of http.mock.calls) expect(init?.redirect).toBe("manual");
 });
 
@@ -334,9 +335,9 @@ it("rescans every note once before the batch and only deletes images from the pl
   expect(await store.imageCleanup.delete(plan)).toEqual({ deleted: 2, kept: 0, failed: 0 });
   expect(deletes(http).map(([url]) => url)).toEqual(plan.images.map((image) => image.url));
   const reads = http.mock.calls.filter(([, init]) => init?.method !== "DELETE");
-  expect(reads).toHaveLength(6);
+  expect(reads).toHaveLength(8);
   expect(reads.filter(([url]) => !String(url).endsWith("/"))).toEqual(noteReads);
-  expect(http.mock.calls.slice(0, 6)).toEqual(reads);
+  expect(http.mock.calls.slice(0, 8)).toEqual(reads);
   for (const [url, init] of deletes(http)) {
     expect(init?.headers).toEqual({
       "if-match": plan.images.find((image) => image.url === url)?.etag,
@@ -496,4 +497,40 @@ it("propagates failed note reads instead of turning them into an empty reference
     },
   });
   await expect(cleanup.scan()).rejects.toThrow("Offline");
+});
+
+it("keeps images that Docs converted from notes still reference, and fails closed on unreadable Docs", async () => {
+  const { store, pod, override } = await fixture();
+  const kept = `${MEDIA}in-doc.png`;
+  const revised = `${MEDIA}in-doc-revision.png`;
+  await pod.fetch(kept, { method: "PUT", headers: { "content-type": "image/png" }, body: "px" });
+  await pod.fetch(revised, { method: "PUT", headers: { "content-type": "image/png" }, body: "px" });
+  const doc = `${POD}docs/from-note.ttl`;
+  await writeRdf(
+    doc,
+    buildDocument(doc, {
+      title: "From a note",
+      body: `<p><img src="${kept}"></p>`,
+      priorRevisions: [
+        {
+          id: `${doc}#rev-1`,
+          body: `<img src="${revised}">`,
+          format: "text/html",
+          generatedAt: new Date(0).toISOString(),
+        },
+      ],
+    }),
+    { createOnly: true, fetchImpl: pod.fetch },
+  );
+  await pod.fetch(`${POD}docs/notes.txt`, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: "<#a> <#b> <#c> .",
+  });
+  const plan = await store.imageCleanup.scan();
+  expect(plan.images.map((image) => image.url)).toEqual([IMAGE]);
+  override.mockImplementation(async (url) =>
+    url === doc ? new Response(null, { status: 403 }) : undefined,
+  );
+  await expect(store.imageCleanup.scan()).rejects.toThrow();
 });
