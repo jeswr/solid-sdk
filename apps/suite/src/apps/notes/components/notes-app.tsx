@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
+import { IconButton, LoadingSkeleton, Toaster, toast } from "@jeswr/suite-ui";
 import { Grid2X2, List } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { decodeRef } from "@/lib/refs";
@@ -14,14 +14,14 @@ import { NotesProvider, useNotesContext } from "../state/notes-context";
 import { useNoteReminders } from "../state/reminders";
 import { NoteDialog } from "./note-dialog";
 import { NotesGrid } from "./notes-grid";
+import { NotesLoadError, NotesMissingState } from "./notes-states";
 import { NotesSidebar } from "./sidebar";
 
 const purged = new Set<string>();
 function NotesRoutes() {
   const pathname = useRoutePathname();
   const query = useSearchParams().get("q") ?? "";
-  const { notes, active, archived, trashed } = useNotesContext();
-  const router = useRouter();
+  const { notes, active, archived, trashed, refresh } = useNotesContext();
   const reference = pathname.startsWith("/notes/n/")
     ? pathname.slice("/notes/n/".length)
     : undefined;
@@ -48,12 +48,18 @@ function NotesRoutes() {
     !active.error &&
     !archived.error &&
     !trashed.error;
-  useEffect(() => {
-    if (reference && (invalid || (ready && !selected))) {
-      toast.error("This note isn't here any more");
-      router.replace("/notes");
-    }
-  }, [reference, invalid, ready, selected, router]);
+  if (reference && (invalid || (ready && !selected))) return <NotesMissingState />;
+  if (reference && !selected)
+    return (
+      <div className="notes-workspace">
+        <h1>Note</h1>
+        {active.error || archived.error || trashed.error ? (
+          <NotesLoadError retry={() => void refresh()} />
+        ) : (
+          <LoadingSkeleton preset="list" />
+        )}
+      </div>
+    );
   let label: string | undefined;
   if (pathname.startsWith("/notes/label/")) {
     try {
@@ -148,12 +154,9 @@ function SessionGate({ children }: { children: ReactNode }) {
     );
   if (state.status === "error")
     return (
-      <div className="notes-boot" role="alert">
+      <div className="notes-boot">
         <h1>Can't open your Notes</h1>
-        <p>This browser couldn't open the demo pod's storage.</p>
-        <Button variant="outline" onClick={() => location.reload()}>
-          Retry
-        </Button>
+        <NotesLoadError retry={() => location.reload()} />
       </div>
     );
   // Native builds start signed out until native sign-in lands.

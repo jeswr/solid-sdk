@@ -236,16 +236,16 @@ it("waits for a card reminder PUT before opening with the acknowledged ETag", as
   const ui = await mount(h(NoteCard, { note: original }));
   await click(button("Remind me"));
   await click(button("Tomorrow"));
-  expect(button("Open Original").disabled).toBe(true);
-  await click(button("Open Original"));
+  expect(button("Original").disabled).toBe(true);
+  await click(button("Original"));
   expect(mocks.context.openNote).not.toHaveBeenCalled();
   await act(async () => {
     gate.resolve();
     await reminderSave.mock.results[0]?.value;
   });
   await ui.render(h(NoteCard, { note: latest }));
-  expect(button("Open Original").disabled).toBe(false);
-  await click(button("Open Original"));
+  expect(button("Original").disabled).toBe(false);
+  await click(button("Original"));
   expect(mocks.context.openNote).toHaveBeenCalledWith(latest, expect.anything());
   await ui.render(h(NoteDialog, { note: latest }));
   await fill("Note title", "After card reminder");

@@ -53,6 +53,7 @@ import { useNotesContext } from "../state/notes-context";
 import { offerReminderPermission } from "../state/reminders";
 import { useNoteDraft } from "../state/use-note-draft";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
+import { NotesAvailability } from "./notes-states";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 
@@ -315,8 +316,11 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       >
         <DialogTitle className="sr-only">Edit note</DialogTitle>
         <DialogDescription className="sr-only">
-          Your changes save automatically to your pod.
+          {trashed
+            ? "Restore this note to edit it."
+            : "Your changes save automatically to your pod."}
         </DialogDescription>
+        <NotesAvailability trashed={trashed} />
         <Input
           ref={titleInput}
           className="notes-title-input"

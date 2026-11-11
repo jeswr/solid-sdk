@@ -1,0 +1,10 @@
+{
+  "title": "Keep packing list",
+  "textContent": "Pack for the coast",
+  "listContent": [{ "text": "Book", "isChecked": true }, { "text": "Hat", "isChecked": false }],
+  "color": "DEFAULT",
+  "isArchived": false,
+  "isTrashed": false,
+  "isPinned": false,
+  "labels": [{ "name": "Travel" }]
+}

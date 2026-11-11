@@ -64,7 +64,6 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
         className="notes-card-body"
         disabled={busy || pending}
         onClick={(event) => openNote(note, event.currentTarget)}
-        aria-label={`Open ${note.title || "Untitled note"}`}
       >
         {cover && <NoteCover {...cover} fetchImpl={session.fetch} />}
         <h3 id={id}>{note.title || "Untitled note"}</h3>
