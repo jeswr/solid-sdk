@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { recordingStorage } from "../../../test/storage";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { ShareCard } from "./share-card";
 import { DIET_SAFE_FOOD_SHARE } from "./share-card";
 import {
@@ -15,18 +17,6 @@ const OWNER = "https://alice.example/profile/card#me";
 const ULID = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const DIARY_IRI = "https://alice.example/health/diary/meals/2026/07/01BX5ZZKBKACTAV9WEVGEMMVRZ.ttl#it";
 
-/** A recording fetch: HEAD → 404 (create), PUT → 201. */
-function recordingFetch() {
-  const calls: { method: string; url: string; body?: string }[] = [];
-  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = input.toString();
-    const method = (init?.method ?? "GET").toUpperCase();
-    calls.push({ method, url, body: typeof init?.body === "string" ? init.body : undefined });
-    if (method === "HEAD") return new Response(null, { status: 404 });
-    return new Response("", { status: 201 });
-  }) as unknown as typeof globalThis.fetch;
-  return { fetch, calls };
-}
 
 function safeFoodCard(audience: ShareCard["audience"] = "owner-only", author?: string): ShareCard {
   const message: ShareCard["message"] = {
@@ -42,8 +32,8 @@ beforeEach(() => resetCommunityReadyMemo());
 
 describe("ensureCommunityReady", () => {
   it("writes an OWNER-ONLY ACL on the /community/ root BEFORE any share container", async () => {
-    const { fetch, calls } = recordingFetch();
-    await ensureCommunityReady(fetch, ROOT, OWNER);
+    const { storage, calls } = recordingStorage();
+    await ensureCommunityReady(storage, ROOT, OWNER);
 
     const aclPut = calls.find((c) => c.method === "PUT" && c.url.endsWith("/community/.acl"));
     expect(aclPut).toBeTruthy();
@@ -57,24 +47,24 @@ describe("ensureCommunityReady", () => {
   });
 
   it("NEVER issues a write to a diary URL", async () => {
-    const { fetch, calls } = recordingFetch();
-    await ensureCommunityReady(fetch, ROOT, OWNER);
+    const { storage, calls } = recordingStorage();
+    await ensureCommunityReady(storage, ROOT, OWNER);
     expect(calls.every((c) => !c.url.includes("/health/diary/"))).toBe(true);
   });
 
   it("is memoised — a second call issues no further requests", async () => {
-    const { fetch } = recordingFetch();
-    await ensureCommunityReady(fetch, ROOT, OWNER);
-    const n = (fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
-    await ensureCommunityReady(fetch, ROOT, OWNER);
-    expect((fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(n);
+    const { storage, calls } = recordingStorage();
+    await ensureCommunityReady(storage, ROOT, OWNER);
+    const n = calls.length;
+    await ensureCommunityReady(storage, ROOT, OWNER);
+    expect(calls.length).toBe(n);
   });
 });
 
 describe("publishShareCard", () => {
   it("provisions the owner-only ACL first, then PUTs the card under community/shares/", async () => {
-    const { fetch, calls } = recordingFetch();
-    const url = await publishShareCard(fetch, ROOT, OWNER, ULID, safeFoodCard());
+    const { storage, calls } = recordingStorage();
+    const url = await publishShareCard(storage, ROOT, OWNER, ULID, safeFoodCard());
     expect(url).toBe(`https://alice.example/community/shares/${ULID}.ttl`);
 
     const aclIndex = calls.findIndex((c) => c.url.endsWith("/community/.acl") && c.method === "PUT");
@@ -84,8 +74,8 @@ describe("publishShareCard", () => {
   });
 
   it("NEVER writes to a diary URL and the card body carries no diary IRI", async () => {
-    const { fetch, calls } = recordingFetch();
-    await publishShareCard(fetch, ROOT, OWNER, ULID, safeFoodCard());
+    const { storage, calls } = recordingStorage();
+    await publishShareCard(storage, ROOT, OWNER, ULID, safeFoodCard());
     expect(calls.every((c) => !c.url.includes("/health/diary/"))).toBe(true);
     const cardPut = calls.find((c) => c.url.endsWith(`/shares/${ULID}.ttl`) && c.method === "PUT");
     expect(cardPut?.body ?? "").not.toContain("/health/diary/");
@@ -94,25 +84,25 @@ describe("publishShareCard", () => {
   });
 
   it("REFUSES to publish a card carrying provenance.derivedFrom (no writes happen)", async () => {
-    const { fetch, calls } = recordingFetch();
+    const { storage, calls } = recordingStorage();
     const bad = safeFoodCard();
     bad.message.provenance = { derivedFrom: DIARY_IRI };
-    await expect(publishShareCard(fetch, ROOT, OWNER, ULID, bad)).rejects.toThrow();
+    await expect(publishShareCard(storage, ROOT, OWNER, ULID, bad)).rejects.toThrow();
     expect(calls.some((c) => c.method === "PUT" && c.url.includes("/shares/"))).toBe(false);
   });
 
   it("REFUSES to publish ANY public card to the user's own (origin-linkable) pod", async () => {
-    const { fetch, calls } = recordingFetch();
+    const { storage, calls } = recordingStorage();
     // Even with an unlinkable author, the resource IRI on the owner's pod is
     // linkable — same-pod publishing is owner-only/group only (public = 4B-2).
     const pub = safeFoodCard("public", "https://pseudo.example/profile#me");
-    await expect(publishShareCard(fetch, ROOT, OWNER, ULID, pub)).rejects.toThrow(/public/);
+    await expect(publishShareCard(storage, ROOT, OWNER, ULID, pub)).rejects.toThrow(/public/);
     expect(calls.some((c) => c.method === "PUT" && c.url.includes("/shares/"))).toBe(false);
   });
 
   it("rejects an invalid ULID (path-injection guard)", async () => {
-    const { fetch } = recordingFetch();
-    await expect(publishShareCard(fetch, ROOT, OWNER, "../evil", safeFoodCard())).rejects.toThrow();
+    const { storage } = recordingStorage();
+    await expect(publishShareCard(storage, ROOT, OWNER, "../evil", safeFoodCard())).rejects.toThrow();
   });
 });
 
@@ -130,8 +120,8 @@ describe("provenance sidecar — separate, owner-only, diary-IRIs-only", () => {
   });
 
   it("writes the sidecar to a DISTINCT .provenance.ttl resource, not the card", async () => {
-    const { fetch, calls } = recordingFetch();
-    const url = await writeShareProvenanceSidecar(fetch, ROOT, OWNER, ULID, [DIARY_IRI]);
+    const { storage, calls } = recordingStorage();
+    const url = await writeShareProvenanceSidecar(storage, ROOT, OWNER, ULID, [DIARY_IRI]);
     expect(url).toBe(`https://alice.example/community/shares/${ULID}.provenance.ttl`);
     // It is NOT the card resource.
     expect(url).not.toBe(`https://alice.example/community/shares/${ULID}.ttl`);

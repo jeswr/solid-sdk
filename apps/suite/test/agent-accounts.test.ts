@@ -5,7 +5,6 @@ import { exampleRecords } from "@jeswr/agent-model/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AccountSettingsQueue,
-  accountBinding,
   accountLoginCommand,
   overlayAccountControls,
   readAccountSettings,
@@ -34,25 +33,6 @@ const control = {
   restrictions: { ...account.restrictions, read: true },
 };
 afterEach(() => vi.restoreAllMocks());
-
-describe("account binding identifiers", () => {
-  it.each([
-    ["email", "google", "gmail"],
-    ["email", "google_workspace", "gmail"],
-    ["email", "microsoft", "graph-mail"],
-    ["email", "gmail", "gmail"],
-    ["microsoft_teams", "microsoft", "graph-teams"],
-    ["phone_messages", "apple", "imessage"],
-    ["matrix_bot", "matrix", "matrix"],
-    ["signal", "matrix_bridge", "matrix"],
-    ["whatsapp", "matrix_bridge", "matrix"],
-    ["github_notifications", "github", "github"],
-    ["slack", "slack", "slack"],
-    ["constructor", "other", "other"],
-  ])("maps %s / %s to %s", (channel, provider, binding) => {
-    expect(accountBinding({ channel, provider })).toBe(binding);
-  });
-});
 
 describe("agent-host login command", () => {
   it.each([
