@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import type { Digest } from "@jeswr/suite-sdk/digest";
 import { type Capabilities, useCapabilities } from "@jeswr/suite-ui/sync";
 import {
   createContext,
@@ -13,7 +12,6 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { demoNotificationDate } from "../../lib/demo-pod/seed-notifications";
 import type { AccessDecider, NotificationSource } from "../lib/notifications-model";
 import { startNotificationUpdates } from "../lib/notifications-scheduler";
 import type { Preferences } from "../lib/settings-preferences";
@@ -21,16 +19,18 @@ import { type AccountsContextValue, useAccounts } from "../session/accounts-prov
 import type { SuiteAccount } from "../session/types";
 import { useOptionalPreferences } from "../settings/preferences";
 import { createNotificationsController, type NotificationsController } from "./controller";
+import { demoNotificationDate } from "./demo-digest";
 import { createDemoNotificationSource } from "./demo-source";
 import { accountPreferences, showDesktopNotification } from "./desktop";
 import { immediateDesktopNotification, notifyImmediately } from "./digest";
+import type { StoredDigest } from "./digest-store";
 import { localNotificationSource } from "./local-store";
 import { createPodNotificationSource } from "./pod-source";
 import { createNotificationReadState } from "./read-state";
 import { useDigest } from "./use-digest";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
-const DigestContext = createContext<Digest | null>(null);
+const DigestContext = createContext<StoredDigest | null>(null);
 const emptySources: readonly NotificationSource[] = [];
 
 type AccountPodSource = {
@@ -78,6 +78,7 @@ function PodNotificationSource({
         pod && account
           ? {
               id: `agent:${account.id}`,
+              optional: true,
               async list(signal) {
                 const { createAgentNotificationSource } = await import("./agent-source");
                 signal.throwIfAborted();
@@ -101,6 +102,7 @@ export function NotificationSessionProvider({
   decider,
   liveUpdates = false,
   preferences,
+  digestReady = true,
   children,
 }: {
   accountId: string;
@@ -108,6 +110,7 @@ export function NotificationSessionProvider({
   decider?: AccessDecider | undefined;
   liveUpdates?: boolean;
   preferences?: Preferences | undefined;
+  digestReady?: boolean;
   children: ReactNode;
 }) {
   const saved = useMemo(
@@ -131,7 +134,6 @@ export function NotificationSessionProvider({
       ),
     [sources, decider, accountId],
   );
-  const digest = useDigest(accountId, controller, saved);
   useEffect(() => {
     const stop = startNotificationUpdates(sources, liveUpdates, document, () => {
       void controller.refresh();
@@ -141,6 +143,8 @@ export function NotificationSessionProvider({
       controller.stop();
     };
   }, [controller, liveUpdates, sources]);
+  // Register polling first so a visibility wake cannot supersede the digest's fresh listing.
+  const digest = useDigest(accountId, controller, saved, digestReady);
   return (
     <NotificationsContext.Provider value={controller}>
       <DigestContext.Provider value={digest}>{children}</DigestContext.Provider>
@@ -207,6 +211,7 @@ function AccountNotifications({
         decider={configuration.decider}
         liveUpdates={capabilities.liveUpdates === true}
         preferences={preferences?.preferences}
+        digestReady={accounts.status === "ready" && (demo || podSource !== null)}
       >
         {children}
       </NotificationSessionProvider>

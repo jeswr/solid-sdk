@@ -46,12 +46,35 @@ describe("digest", () => {
       ),
     ).toEqual({
       ...options,
+      digestedIds: [],
       count: 0,
+      unread: 0,
       omitted: 0,
       sections: [],
       agent: { actionsTaken: 0, approvalsWaiting: 0 },
       headline: "You're all caught up",
     });
+  });
+  it("uses receipts instead of creation time for late arrivals and retains bounded delivery history", () => {
+    const previous = Array.from({ length: 500 }, (_, i) => `old-${i}`);
+    const digest = buildDigest(
+      [
+        n("old-499", { time: 99 }),
+        n("late", { time: 1 }),
+        n("undated", { time: -8640000000000000, read: true }),
+        n("future", { time: 101 }),
+        n("invalid", { time: NaN }),
+        n("late", { time: 0 }),
+      ],
+      { since: 90, now: 100, digestedIds: previous },
+    );
+    expect(digest.count).toBe(2);
+    expect(digest.unread).toBe(1);
+    expect(digest.digestedIds).toHaveLength(500);
+    expect(digest.digestedIds.slice(-2)).toEqual(["late", "undated"]);
+    expect(digest.digestedIds).not.toContain("old-0");
+    expect(buildDigest([n("late")], { ...options, digestedIds: digest.digestedIds }).count).toBe(0);
+    expect(buildDigest([n("first", { time: 0 })], { ...options, digestedIds: [] }).count).toBe(1);
   });
   it("groups repeats by app, target and category with stable ordering and names", () => {
     const input = [
@@ -150,6 +173,8 @@ describe("digest", () => {
       options,
     );
     expect(d.count).toBe(10000);
+    expect(d.unread).toBe(10000);
+    expect(d.digestedIds).toHaveLength(500);
     expect(d.omitted).toBe(5000);
     expect(d.sections[0]?.count).toBe(10000);
     expect(d.sections[0]?.items).toHaveLength(50);
@@ -292,7 +317,15 @@ describe("scheduling", () => {
     expect(isDue(at, schedule, new Date("2026-11-11T13:00Z"))).toBe(true);
     expect(isDue(at, schedule, new Date("2026-11-11T12:59Z"))).toBe(false);
     expect(isDue(at, schedule, new Date("2026-11-12T12:00Z"))).toBe(true);
-    expect(isDue(at, schedule, new Date("2026-11-11T11:00Z"))).toBe(false);
+    expect(isDue(at, schedule, new Date("2026-11-11T11:00Z"))).toBe(true);
+    expect(isDue(at, schedule, at)).toBe(false);
+    expect(
+      isDue(
+        new Date("2026-11-12T12:00Z"),
+        { ...schedule, quietHours: { enabled: true, start: "12:00", end: "14:00" } },
+        at,
+      ),
+    ).toBe(false);
     expect(
       isDue(null, { ...schedule, quietHours: { enabled: true, start: "12:00", end: "14:00" } }, at),
     ).toBe(false);

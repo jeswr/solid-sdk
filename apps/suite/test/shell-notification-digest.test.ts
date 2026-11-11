@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { buildDigest } from "@jeswr/suite-sdk/digest";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { h } from "./drive-ui-dom";
+import { deferred, h } from "./drive-ui-dom";
 
 const ui = createRequire(new URL("../../../packages/suite-ui/package.json", import.meta.url));
 const { cleanup, fireEvent, render, screen, within } = ui(
@@ -17,13 +17,13 @@ vi.mock("../src/shell/notifications/desktop", async (original) => ({
   showDesktopNotification: vi.fn(async () => {}),
 }));
 
-import { demoNotificationDate } from "../src/lib/demo-pod/seed-notifications";
 import type { SuiteNotification } from "../src/shell/lib/notifications-model";
 import {
   defaultPreferences,
   mergePreferences,
   parsePreferences,
 } from "../src/shell/lib/settings-preferences";
+import { demoNotificationDate } from "../src/shell/notifications/demo-digest";
 import { showDesktopNotification } from "../src/shell/notifications/desktop";
 import {
   digestNotification,
@@ -179,8 +179,8 @@ it("adapts semantic source metadata and classifies delivery without changing the
 });
 it("stores only valid per-account snapshots and survives unavailable local storage", () => {
   const digest = buildDigest([digestNotification(n("a"))], { since: 0, now: at.getTime() });
-  saveDigest("store-a", digest);
-  expect(readDigest("store-a")).toEqual(digest);
+  const stored = saveDigest("store-a", digest);
+  expect(readDigest("store-a")).toEqual(stored);
   expect(readDigest("store-b")).toBeNull();
   localStorage.setItem(digestKey("invalid"), "{}");
   expect(readDigest("invalid")).toBeNull();
@@ -192,16 +192,208 @@ it("stores only valid per-account snapshots and survives unavailable local stora
     throw new Error("blocked");
   });
   saveDigest("store-fallback", digest);
-  expect(readDigest("store-fallback")).toEqual(digest);
+  expect(readDigest("store-fallback")).toEqual(stored);
   vi.spyOn(localStorage, "getItem").mockImplementation(() => {
     throw new Error("blocked");
   });
-  expect(readDigest("store-fallback")).toEqual(digest);
+  expect(readDigest("store-fallback")).toEqual(stored);
   expect(readDigest("other")).toBeNull();
-  expect(summaryDesktopNotification(digest)).toMatchObject({
+  expect(summaryDesktopNotification(digest, "store-a")).toMatchObject({
+    id: "summary-store-a",
     title: "Your summary is ready",
     href: "/notifications",
   });
+});
+it("keeps the latest failed save ahead of stale storage, bounds receipts and stores only card fields", () => {
+  const first = buildDigest([digestNotification(n("old"))], {
+    since: 0,
+    now: at.getTime() - 3600000,
+  });
+  saveDigest("stale-store", first);
+  const latest = buildDigest(
+    Array.from({ length: 600 }, (_, i) =>
+      digestNotification(n(`large-${i}`, { title: "Same group" })),
+    ),
+    { since: 0, now: at.getTime() },
+  );
+  const set = vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  const stored = saveDigest("stale-store", latest);
+  expect(readDigest("stale-store")).toEqual(stored);
+  expect(stored.digestedIds).toHaveLength(500);
+  expect(stored.sections[0]?.items[0]?.notificationIds).toHaveLength(20);
+  expect(Object.keys(stored).sort()).toEqual([
+    "count",
+    "digestedIds",
+    "headline",
+    "now",
+    "omitted",
+    "sections",
+  ]);
+  expect(Object.keys(stored.sections[0]?.items[0] ?? {}).sort()).toEqual([
+    "id",
+    "notificationIds",
+    "text",
+  ]);
+  expect(summaryDesktopNotification(latest, "stale-store").id).toBe(
+    summaryDesktopNotification(first, "stale-store").id,
+  );
+  expect(summaryDesktopNotification(latest, "another-account").id).not.toBe(
+    summaryDesktopNotification(latest, "stale-store").id,
+  );
+  set.mockRestore();
+  saveDigest("stale-store", latest);
+  expect(JSON.parse(localStorage.getItem(digestKey("stale-store")) ?? "null")).toEqual(stored);
+  const { digestedIds: _ids, ...legacy } = latest;
+  localStorage.setItem(digestKey("legacy"), JSON.stringify(legacy));
+  expect(readDigest("legacy")?.digestedIds).toHaveLength(100);
+  expect(readDigest("legacy")?.sections[0]?.items[0]?.notificationIds).toHaveLength(20);
+});
+it("does not repeat a delivery on timer ticks after a failed save over an existing snapshot", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(at);
+  saveDigest("failed-save", buildDigest([], { since: 0, now: at.getTime() - 3600000 }));
+  vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  render(tree("failed-save", [{ id: "s", list: async () => [n("new")] }]));
+  await act(async () => {});
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+  await act(async () => vi.advanceTimersByTimeAsync(90000));
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+  expect(readDigest("failed-save")?.now).toBe(at.getTime());
+});
+it("refreshes while polling is paused in a hidden tab and includes later-loaded old items by id", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  vi.setSystemTime(at);
+  let items = [n("initial")];
+  const list = vi.fn(async () => items);
+  render(tree("hidden", [{ id: "s", list }]));
+  await act(async () => {});
+  expect(readDigest("hidden")?.digestedIds).toContain("initial");
+  Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+  await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+  // The second item predates the first delivery but was unavailable until this listing.
+  items = [...items, n("late", { createdAt: new Date(at.getTime() - 7200000) })];
+  list.mockClear();
+  vi.setSystemTime(new Date("2026-11-11T12:59:30Z"));
+  await act(async () => vi.advanceTimersByTimeAsync(30000));
+  expect(list).toHaveBeenCalledOnce();
+  expect(readDigest("hidden")?.count).toBe(1);
+  expect(readDigest("hidden")?.headline).toContain("late");
+  expect(readDigest("hidden")?.headline).not.toContain("initial");
+  const card = within(screen.getByRole("region", { name: "Summary" }));
+  expect(card.getByRole("link", { name: "late" }).getAttribute("href")).toBe("#notification-late");
+  fireEvent.click(card.getByRole("button", { name: "Mark all as read" }));
+  await act(async () => {});
+  expect(actions.items.find((item) => item.id === "late")?.read).toBe(true);
+  expect(actions.items.find((item) => item.id === "initial")?.read).toBe(false);
+  expect(showDesktopNotification).toHaveBeenCalledTimes(2);
+});
+it("waits for a successful fresh core listing and fences pending refreshes on unmount", async () => {
+  const late = deferred<SuiteNotification[]>();
+  const list = vi
+    .fn()
+    .mockResolvedValueOnce([n("cached")])
+    .mockReturnValueOnce(late.promise);
+  const view = render(tree("pending", [{ id: "s", list }]));
+  await act(async () => {});
+  expect(list).toHaveBeenCalledTimes(2);
+  expect(readDigest("pending")).toBeNull();
+  expect(showDesktopNotification).not.toHaveBeenCalled();
+  view.unmount();
+  await act(async () => late.resolve([n("stale-session")]));
+  expect(readDigest("pending")).toBeNull();
+  const failed = vi
+    .fn()
+    .mockResolvedValueOnce([n("cached")])
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValue([n("recovered")]);
+  render(tree("refresh-failure", [{ id: "s", list: failed }]));
+  await act(async () => {});
+  expect(readDigest("refresh-failure")).toBeNull();
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(readDigest("refresh-failure")?.headline).toContain("recovered");
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+});
+it("does not deliver a superseded refresh or refresh concurrently on repeated wakes", async () => {
+  const stale = deferred<SuiteNotification[]>();
+  const list = vi
+    .fn()
+    .mockResolvedValueOnce([n("cached")])
+    .mockReturnValueOnce(stale.promise)
+    .mockResolvedValue([n("fresh")]);
+  render(tree("superseded", [{ id: "s", list }]));
+  await act(async () => {});
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(list).toHaveBeenCalledTimes(2);
+  await act(async () => actions.refresh());
+  await act(async () => stale.resolve([n("stale")]));
+  expect(readDigest("superseded")).toBeNull();
+  expect(showDesktopNotification).not.toHaveBeenCalled();
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(readDigest("superseded")?.headline).toContain("fresh");
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+});
+it("ignores optional agent failures and read-save errors when delivering fresh core notifications", async () => {
+  let items = [n("pending-read")];
+  const sources = [
+    {
+      id: "inbox",
+      list: async () => items,
+      markRead: async () => {
+        throw new Error("offline");
+      },
+    },
+    {
+      id: "agent",
+      optional: true,
+      list: async () => {
+        throw new Error("Workspace storage URL mismatch");
+      },
+    },
+  ];
+  render(tree("optional", sources));
+  await act(async () => {});
+  expect(actions.error).toBeNull();
+  expect(readDigest("optional")?.count).toBe(1);
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
+  await act(async () => actions.markRead("pending-read"));
+  expect(actions.error).toContain("Couldn't save");
+  items = [...items, n("unread-later")];
+  vi.setSystemTime(new Date("2026-11-11T13:00Z"));
+  await act(async () => window.dispatchEvent(new Event("focus")));
+  expect(actions.error).toContain("Couldn't save");
+  expect(readDigest("optional")?.headline).toContain("unread-later");
+  expect(showDesktopNotification).toHaveBeenCalledTimes(2);
+});
+it("enabling summaries for read history creates a card without a desktop pop-up", async () => {
+  const sources = [{ id: "s", list: async () => [n("history", { read: true })] }];
+  const view = render(tree("history", sources, defaultPreferences));
+  await act(async () => {});
+  view.rerender(tree("history", sources));
+  await act(async () => {});
+  expect(screen.getByRole("region", { name: "Summary" })).toBeTruthy();
+  expect(readDigest("history")?.count).toBe(1);
+  expect(showDesktopNotification).not.toHaveBeenCalled();
+});
+it("recovers from a future delivery time while retaining the account's existing receipts", async () => {
+  saveDigest(
+    "clock-rollback",
+    buildDigest([digestNotification(n("prior"))], { since: 0, now: at.getTime() + 86400000 }),
+  );
+  render(
+    tree("clock-rollback", [{ id: "s", list: async () => [n("prior"), n("new-after-rollback")] }]),
+  );
+  await act(async () => {});
+  expect(readDigest("clock-rollback")?.now).toBe(at.getTime());
+  expect(readDigest("clock-rollback")?.count).toBe(1);
+  expect(readDigest("clock-rollback")?.headline).toContain("new-after-rollback");
+  expect(showDesktopNotification).toHaveBeenCalledOnce();
 });
 it("delivers one summary, suppresses ordinary pings, allows urgent ones and marks only summary items read", async () => {
   let items = [n("initial")];

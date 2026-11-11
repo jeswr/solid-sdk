@@ -17,6 +17,7 @@ export interface NotificationsSnapshot {
   items: SuiteNotification[];
   unread: number;
   loading: boolean;
+  coreReady: boolean;
   error: string | null;
 }
 /** Account-scoped async boundary: source results and mutations cannot update another account. */
@@ -26,7 +27,14 @@ export function createNotificationsController(
   onNew: (notification: SuiteNotification) => void = () => {},
   readState?: NotificationReadState,
 ) {
-  let snapshot: NotificationsSnapshot = { items: [], unread: 0, loading: true, error: null };
+  let snapshot: NotificationsSnapshot = {
+    items: [],
+    unread: 0,
+    loading: true,
+    coreReady: false,
+    error: null,
+  };
+  let coreReady = false;
   let overlay: NotificationOverlay = { read: readState?.load() ?? new Set(), dismissed: new Set() };
   const outcomes = new Map<string, string>();
   const results = new Map<string, SuiteNotification[]>();
@@ -39,15 +47,16 @@ export function createNotificationsController(
     const items = mergeNotifications([...results.values()], overlay).map((item) =>
       outcomes.has(item.id) ? { ...item, outcome: outcomes.get(item.id) ?? "" } : item,
     );
-    snapshot = { items, unread: unreadCount(items), loading, error };
+    snapshot = { items, unread: unreadCount(items), loading, coreReady, error };
     for (const listener of listeners) listener();
   };
-  /** Resolves true only when this listing finished and was not superseded. */
-  const refresh = async (): Promise<boolean> => {
+  /** Returns the completed listing's revision, or false when superseded. */
+  const refresh = async (): Promise<number | false> => {
     const current = ++revision;
     request?.abort();
     const controller = new AbortController();
     request = controller;
+    coreReady = false;
     publish(true, null);
     const responses = await Promise.allSettled(
       sources.map((source) => source.list(controller.signal)),
@@ -57,8 +66,10 @@ export function createNotificationsController(
     responses.forEach((response, index) => {
       const source = sources[index];
       if (response.status === "fulfilled" && source) results.set(source.id, response.value);
+      else if (source?.optional) results.set(source.id, []);
       else failed = true;
     });
+    coreReady = !failed;
     overlay = { ...overlay, read: reconcileReadIds(overlay.read, [...results.values()]) };
     publish(false, failed ? "Couldn't load all notifications. Try again." : null);
     for (const item of snapshot.items) {
@@ -67,7 +78,7 @@ export function createNotificationsController(
     }
     // A failed initial load must not turn the first successful listing into desktop spam.
     if (!failed) initialized = true;
-    return true;
+    return current;
   };
   const markRead = async (ids: string[]) => {
     overlay = markNotificationsRead(overlay, ids);
@@ -98,9 +109,11 @@ export function createNotificationsController(
     refresh: async () => {
       // A superseded refresh must not retry: its write can announce a change, which starts
       // another refresh that supersedes this one again (a microtask loop that hangs the page).
-      if (!(await refresh())) return;
+      const current = await refresh();
+      if (current === false || current !== revision) return false;
       // Retry pending read writes too, including sources that previously failed.
       if (overlay.read.size) await markRead([...overlay.read]);
+      return current === revision && !request?.signal.aborted;
     },
     markRead: (id: string) => markRead([id]),
     markManyRead: (ids: readonly string[]) => markRead([...ids]),

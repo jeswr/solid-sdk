@@ -91,14 +91,21 @@ it("projects sent activity and pending approvals using the agent's verified queu
   });
   expect(mocks.verify).toHaveBeenCalledWith(expect.objectContaining({ webId: account.webId }));
 });
-it("ignores absent workspaces but surfaces transport and permission errors", async () => {
+it("treats unavailable optional agent workspaces and reads as no agent", async () => {
   const source = createAgentNotificationSource(account, vi.fn());
+  expect(source.optional).toBe(true);
   mocks.audit.mockRejectedValueOnce(new AgentReadError(404));
   expect(await source.list(new AbortController().signal)).toEqual([]);
   mocks.audit.mockRejectedValueOnce(new AgentReadError(403));
-  await expect(source.list(new AbortController().signal)).rejects.toThrow("403");
-  mocks.discover.mockRejectedValueOnce(new Error("offline"));
-  await expect(source.list(new AbortController().signal)).rejects.toThrow("offline");
+  expect(await source.list(new AbortController().signal)).toEqual([]);
+  for (const message of [
+    "offline",
+    "Could not read workspace: 503",
+    "Workspace storage URL mismatch",
+  ]) {
+    mocks.discover.mockRejectedValueOnce(new Error(message));
+    expect(await source.list(new AbortController().signal)).toEqual([]);
+  }
 });
 it("passes the listing signal through fetch and fences ignored cancellation", async () => {
   const fetch = vi.fn(async () => new Response());

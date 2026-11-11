@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { SuiteNotification } from "../../shell/lib/notifications-model";
+import type { SuiteNotification } from "../lib/notifications-model";
 
 /** The shell's demo source uses the same account clock as the in-browser pod. */
 export function seedDigestNotifications(now: Date): SuiteNotification[] {

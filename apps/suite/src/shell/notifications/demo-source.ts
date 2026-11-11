@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { seedDigestNotifications } from "../../lib/demo-pod/seed-notifications";
+
 import type {
   AccessDecider,
   NotificationSource,
   SuiteNotification,
 } from "../lib/notifications-model";
+import { seedDigestNotifications } from "./demo-digest";
 export function demoNotifications(now = new Date()): SuiteNotification[] {
   const earlier = new Date(now);
   earlier.setDate(earlier.getDate() - 1);

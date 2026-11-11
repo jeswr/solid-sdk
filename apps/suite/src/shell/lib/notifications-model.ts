@@ -36,6 +36,8 @@ export interface SuiteNotification {
 }
 export interface NotificationSource {
   id: string;
+  /** Unavailable optional integrations contribute no items and do not block core readiness. */
+  optional?: boolean;
   list(signal: AbortSignal): Promise<SuiteNotification[]>;
   subscribe?(onChange: () => void): () => void;
   markRead?(ids: string[]): Promise<void>;

@@ -254,13 +254,20 @@ counts and `omitted` retain the full eligible population. An explicit async
 `summarise(digest): Promise<string>` option makes the call async and replaces only the headline.
 No model or remote service is called by default. Hook failures propagate.
 
+For delivery, pass `digestedIds` (an empty array for the first delivery) to replace the
+lower timestamp boundary with ID receipts. Late arrivals are then included even when their
+creation time precedes `since`; future and invalid times remain excluded. The returned
+`digestedIds` carries the last 500 distinct receipts across deliveries; persist it per account.
+Older evicted IDs can be included again. `unread` counts all unread eligible records,
+including omitted groups, so delivery adapters can suppress pop-ups for read history.
+
 `nextDigestTime(schedule, now, tz?)` returns the next Date strictly after now, or null for off.
 Schedules use `mode: 'off' | 'hourly' | 'daily' | 'twice-daily'`; daily supplies `time: 'HH:MM'`,
 twice daily supplies `times: [first, second]`. Optional `quietHours: { enabled, start, end }`
 defers slots until quiet hours end; equal start/end disables quiet hours. `tz` is an IANA
 zone (default UTC). Daily folds use the first occurrence; spring gaps shift by the gap's
 duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered: Date | null, schedule, now, tz?)` catches up missed slots;
-a null watermark is due immediately outside quiet hours. Callers own clocks, persistence,
+a null or future watermark is due immediately outside quiet hours. Callers own clocks, persistence,
 account isolation, browser wake-up and desktop delivery.
 
 `inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery

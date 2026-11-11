@@ -115,6 +115,6 @@ export function isDue(
   const { wall } = calendar(tz);
   const current = wall(now.getTime());
   if (quietEnd(current, schedule.quietHours) !== current) return false;
-  if (!lastDelivered) return true;
+  if (!lastDelivered || lastDelivered.getTime() > now.getTime()) return true;
   return (nextDigestTime(schedule, lastDelivered, tz) as Date).getTime() <= now.getTime();
 }

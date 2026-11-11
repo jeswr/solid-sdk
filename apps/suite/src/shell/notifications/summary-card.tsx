@@ -10,9 +10,10 @@ export function SummaryCard() {
   const { items, markRead, markManyRead } = useNotifications();
   const id = useId();
   if (!digest?.count) return null;
-  const included = items.filter(
-    (n) => n.createdAt.getTime() > digest.since && n.createdAt.getTime() <= digest.now,
+  const ids = new Set(
+    digest.sections.flatMap((section) => section.items.flatMap((item) => item.notificationIds)),
   );
+  const included = items.filter((n) => ids.has(n.id));
   if (!included.length) return null;
   const byId = new Map(included.map((n) => [n.id, n]));
   return (

@@ -178,12 +178,18 @@ counts and an English headline. Output is capped at 50 groups / 100 ids per grou
 include all eligible records. `summarise(digest): Promise<string>` is explicit opt-in and
 makes the call async; failures propagate. Never invoke a remote summariser implicitly.
 
+Delivery adapters pass `digestedIds: []` initially, then the prior digest's `digestedIds`.
+When present, receipts replace the lower timestamp boundary so older, late-loaded items are
+included. Invalid/future times remain excluded. Output `digestedIds` retains the last 500
+distinct receipts across deliveries; persist it per account. Evicted IDs can be included again.
+`unread` counts all unread eligible records, including omitted groups, for desktop delivery.
+
 `nextDigestTime(schedule, now, tz = 'UTC')` returns a Date strictly after now, null for off.
 Modes: off, hourly, daily (`time`), twice-daily (`times: [first, second]`). Times use HH:MM.
 Quiet-hour slots defer until the period ends, including midnight wrap; equal endpoints
 mean no quiet interval. IANA zones use Intl: daily folds choose the first occurrence and
 spring gaps shift forward by their duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered, schedule, now, tz?)`
-uses the same slots, catches up missed delivery and treats null as immediately due outside
+uses the same slots, catches up missed delivery and treats null or future delivery times as immediately due outside
 quiet hours. Applications own account lifecycle, durable watermarks, wake-up and delivery.
 Keep all branches covered at 100%; update this skill and README with public API changes.
 

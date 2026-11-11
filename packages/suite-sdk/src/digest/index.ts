@@ -48,7 +48,10 @@ export interface DigestSection {
 export interface Digest {
   since: number;
   now: number;
+  /** Bounded receipt history, including prior deliveries. */
+  digestedIds: string[];
   count: number;
+  unread: number;
   omitted: number;
   headline: string;
   sections: DigestSection[];
@@ -57,6 +60,8 @@ export interface Digest {
 export interface DigestOptions {
   since: number;
   now: number;
+  /** When supplied, receipts replace the lower timestamp boundary, admitting late arrivals. */
+  digestedIds?: readonly string[];
 }
 const compare = (a: DigestNotification, b: DigestNotification) =>
   Number(classifyUrgency(b)) - Number(classifyUrgency(a)) ||
@@ -104,8 +109,14 @@ export function buildDigest(
 ): Digest | Promise<Digest> {
   // Dedupe first, so duplicated transport copies cannot inflate counts. Newest content wins.
   const unique = new Map<string, DigestNotification>();
+  const digested = options.digestedIds && new Set(options.digestedIds);
   for (const n of notifications) {
-    if (!Number.isFinite(n.time) || n.time <= options.since || n.time > options.now) continue;
+    if (
+      !Number.isFinite(n.time) ||
+      n.time > options.now ||
+      (digested ? digested.has(n.id) : n.time <= options.since)
+    )
+      continue;
     const old = unique.get(n.id);
     if (!old || n.time > old.time || (n.time === old.time && compare(n, old) < 0))
       unique.set(n.id, n);
@@ -159,7 +170,11 @@ export function buildDigest(
   const digest: Digest = {
     since: options.since,
     now: options.now,
+    digestedIds: [...new Set([...(options.digestedIds ?? []), ...ordered.map((n) => n.id)])].slice(
+      -500,
+    ),
     count: ordered.length,
+    unread: ordered.filter((n) => !n.read).length,
     omitted: ordered.length - represented,
     sections: visible,
     agent,

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { AgentReadError, createAgentClient } from "../../apps/agent/lib/client";
+import { createAgentClient } from "../../apps/agent/lib/client";
 import { discoverWorkspace, resourceSlug } from "../../apps/agent/lib/paths";
 import { pendingApprovals } from "../../apps/agent/lib/queue";
 import {
@@ -20,6 +20,7 @@ export function createAgentNotificationSource(
 ): NotificationSource {
   return {
     id: `agent:${account.id}`,
+    optional: true,
     async list(signal) {
       const bounded: typeof fetch = (input, init) => {
         signal.throwIfAborted();
@@ -91,10 +92,10 @@ export function createAgentNotificationSource(
             read: false,
           }));
         return [...actions, ...waiting];
-      } catch (error) {
-        // No agent workspace is the normal state for an account that has not set one up.
-        if (error instanceof AgentReadError && error.status === 404) return [];
-        throw error;
+      } catch {
+        signal.throwIfAborted();
+        // Agent discovery and reads are optional; an unavailable workspace is no agent.
+        return [];
       }
     },
   };

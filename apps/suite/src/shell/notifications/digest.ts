@@ -59,9 +59,12 @@ export function notifyImmediately(
     !inQuietHours(preferences.quietHours, now)
   );
 }
-export function summaryDesktopNotification(digest: Digest): SuiteNotification {
+export function summaryDesktopNotification(
+  digest: Pick<Digest, "now">,
+  accountId: string,
+): SuiteNotification {
   return {
-    id: `summary-${digest.now}`,
+    id: `summary-${accountId}`,
     kind: "system",
     title: "Your summary is ready",
     href: "/notifications",
