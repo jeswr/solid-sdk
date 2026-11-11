@@ -1,420 +1,198 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  discoverSubscriptionService,
-  subscribeToResource,
-  WEBSOCKET_CHANNEL_2023,
-  type ResourceChangeNotification,
-} from "./notifications.js";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { FakeEventSource, FakeWebSocket } from "@jeswr/pod-notifications/testing";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { subscribeToResource } from "./notifications";
 
-const TOPIC = "https://pod.example/alice/calendar/";
-const DESCRIPTION_URL = "https://pod.example/.well-known/solid/storage";
-const SERVICE_URL = "https://pod.example/.notifications/WebSocketChannel2023/";
-const CHANNEL_ID = "https://pod.example/.notifications/WebSocketChannel2023/abc-123";
-const RECEIVE_FROM = "wss://pod.example/.notifications/WebSocketChannel2023/abc-123";
-
-/** A storage description (Turtle) advertising a WebSocketChannel2023 service. */
-const STORAGE_DESCRIPTION_TTL = `
-@prefix pim: <http://www.w3.org/ns/pim/space#> .
-@prefix notify: <http://www.w3.org/ns/solid/notifications#> .
-<https://pod.example/> a pim:Storage .
-<${DESCRIPTION_URL}>
-  notify:subscription <${SERVICE_URL}> ;
-  notify:channelType <${WEBSOCKET_CHANNEL_2023}> .
-`;
-
-/** A storage description that offers only a non-WebSocket channel. */
-const STORAGE_DESCRIPTION_NO_WS_TTL = `
-@prefix notify: <http://www.w3.org/ns/solid/notifications#> .
-<${DESCRIPTION_URL}>
-  notify:subscription <${SERVICE_URL}> ;
-  notify:channelType <http://www.w3.org/ns/solid/notifications#WebhookChannel2023> .
-`;
-
-function ttlResponse(body: string, status = 200): Response {
-  return new Response(body, { status, headers: { "content-type": "text/turtle" } });
-}
-
-function subscriptionResponse(): Response {
-  return new Response(
-    JSON.stringify({
-      "@context": "https://www.w3.org/ns/solid/notification/v1",
-      id: CHANNEL_ID,
-      type: "WebSocketChannel2023",
-      topic: TOPIC,
-      receiveFrom: RECEIVE_FROM,
-    }),
-    { status: 200, headers: { "content-type": "application/ld+json" } },
-  );
-}
-
-/**
- * A fetch that answers the happy discovery+subscribe flow:
- *   HEAD topic → Link header; GET description → Turtle; POST service → channel.
- * Records calls so tests can assert request construction + teardown DELETE.
- */
-function makeHappyFetch(opts: { linkHeader?: string; descriptionTtl?: string } = {}) {
-  const calls: { url: string; init?: RequestInit }[] = [];
-  const fetchImpl: typeof fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
-    calls.push({ url, init });
-    const method = init?.method ?? "GET";
-    if (method === "HEAD" && url === TOPIC) {
-      const link =
-        opts.linkHeader ??
-        `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`;
-      return new Response(null, { status: 200, headers: { link } });
+let sequence = 0;
+function lwsServer(transport: "websocket" | "sse" = "websocket") {
+  const root = `https://manager-${++sequence}.example/pod/`;
+  const description = `${root}description`;
+  const sockets: FakeWebSocket[] = [];
+  const sources: FakeEventSource[] = [];
+  let service = `${root}subscribe`;
+  const doFetch = vi.fn<typeof fetch>(async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (init?.method === "POST")
+      return Response.json({
+        receiveFrom:
+          transport === "sse" ? `${root}stream` : root.replace("https:", "wss:") + "socket",
+        subscription: `${root}subscription`,
+      });
+    if (init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (init?.method === "HEAD")
+      return new Response(null, {
+        headers: { link: `<${description}>; rel="https://www.w3.org/ns/lws#storage"` },
+      });
+    if (url === description)
+      return Response.json(
+        {
+          "@context": "https://www.w3.org/ns/lws/v1",
+          id: description,
+          type: "Storage",
+          service: [
+            { type: "StorageRoot", serviceEndpoint: root },
+            {
+              type: "NotificationService",
+              serviceEndpoint: service,
+              subscriptionType: [
+                `https://jeswr.org/ns/solid-sd#${transport === "sse" ? "SseSubscription" : "WebSocketSubscription"}`,
+              ],
+            },
+          ],
+        },
+        { headers: { "content-type": "application/lws+cid" } },
+      );
+    throw new Error(`Unexpected request: ${url}`);
+  });
+  class Socket extends FakeWebSocket {
+    constructor(url: string) {
+      super(url);
+      sockets.push(this);
     }
-    if (method === "GET" && url === DESCRIPTION_URL) {
-      return ttlResponse(opts.descriptionTtl ?? STORAGE_DESCRIPTION_TTL);
+  }
+  class Source extends FakeEventSource {
+    constructor(url: string) {
+      super(url);
+      sources.push(this);
     }
-    if (method === "POST" && url === SERVICE_URL) {
-      return subscriptionResponse();
-    }
-    if (method === "DELETE") {
-      return new Response(null, { status: 205 });
-    }
-    return new Response("not found", { status: 404 });
-  }) as unknown as typeof fetch;
-  return { fetchImpl, calls };
+  }
+  vi.stubGlobal("EventSource", Source);
+  return {
+    root,
+    description,
+    doFetch,
+    sockets,
+    sources,
+    foreignService: () => {
+      service = "https://foreign.example/subscribe";
+    },
+    start: (onChange = vi.fn()) =>
+      subscribeToResource(root, onChange, {
+        fetchImpl: doFetch,
+        webSocketImpl: Socket as unknown as typeof WebSocket,
+      }),
+  };
 }
-
-/** A controllable mock WebSocket exposing the standard `addEventListener` API. */
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  url: string;
-  closed = false;
-  private listeners: Record<string, ((ev: unknown) => void)[]> = {};
-
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-  }
-  addEventListener(type: string, fn: (ev: unknown) => void): void {
-    (this.listeners[type] ??= []).push(fn);
-  }
-  close(): void {
-    this.closed = true;
-  }
-  /** Test helper: deliver a message frame. */
-  emitMessage(data: string): void {
-    for (const fn of this.listeners.message ?? []) fn({ data });
-  }
-  /** Test helper: deliver an error event. */
-  emitError(): void {
-    for (const fn of this.listeners.error ?? []) fn({});
-  }
-}
-
 beforeEach(() => {
-  MockWebSocket.instances = [];
+  vi.useFakeTimers();
 });
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
-describe("discoverSubscriptionService", () => {
-  it("finds the WebSocketChannel2023 service from the storageDescription Link header", async () => {
-    const { fetchImpl } = makeHappyFetch();
-    await expect(discoverSubscriptionService(TOPIC, fetchImpl)).resolves.toBe(SERVICE_URL);
-  });
-
-  it("ignores a service that does not advertise WebSocketChannel2023", async () => {
-    const { fetchImpl } = makeHappyFetch({ descriptionTtl: STORAGE_DESCRIPTION_NO_WS_TTL });
-    await expect(discoverSubscriptionService(TOPIC, fetchImpl)).resolves.toBeUndefined();
-  });
-
-  it("falls back to the well-known storage description when no Link header is present", async () => {
-    // No Link header on HEAD; the well-known fallback URL serves the description.
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "HEAD" && url === TOPIC) return new Response(null, { status: 200 });
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(STORAGE_DESCRIPTION_TTL);
-      return new Response("", { status: 404 });
-    };
-    await expect(discoverSubscriptionService(TOPIC, fetchImpl)).resolves.toBe(SERVICE_URL);
-  });
-
-  it("resolves a relative Link target against the topic URL", async () => {
-    const { fetchImpl } = makeHappyFetch({
-      linkHeader: `</.well-known/solid/storage>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-    });
-    await expect(discoverSubscriptionService(TOPIC, fetchImpl)).resolves.toBe(SERVICE_URL);
-  });
-
-  it("returns undefined (never throws) when discovery fetches all fail", async () => {
-    const fetchImpl: typeof fetch = async () => new Response("", { status: 500 });
-    await expect(discoverSubscriptionService(TOPIC, fetchImpl)).resolves.toBeUndefined();
-  });
-});
-
-describe("subscribeToResource — channel manager", () => {
-  it("subscribes and fires onChange on a notification message", async () => {
-    const { fetchImpl, calls } = makeHappyFetch();
-    const changes: ResourceChangeNotification[] = [];
-    const unsub = await subscribeToResource(TOPIC, (n) => changes.push(n), {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-
-    // The POST body must be the JSON-LD subscription request shape.
-    const post = calls.find((c) => (c.init?.method ?? "GET") === "POST");
-    expect(post?.url).toBe(SERVICE_URL);
-    const body = JSON.parse(post?.init?.body as string);
-    expect(body).toMatchObject({
-      "@context": "https://www.w3.org/ns/solid/notification/v1",
-      type: WEBSOCKET_CHANNEL_2023,
-      topic: TOPIC,
-    });
-
-    // The socket opened on receiveFrom.
-    const ws = MockWebSocket.instances[0];
-    expect(ws.url).toBe(RECEIVE_FROM);
-
-    ws.emitMessage(
-      JSON.stringify({ type: "Update", object: { id: "https://pod.example/alice/calendar/x.ttl" } }),
+it("uses LWS SSE and refreshes after native reconnect without replacing its replay stream", async () => {
+  const f = lwsServer("sse");
+  const changed = vi.fn();
+  const stop = await f.start(changed);
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.sources).toHaveLength(1);
+    const source = f.sources[0];
+    source.open();
+    expect(changed).toHaveBeenCalledTimes(1);
+    source.message(
+      JSON.stringify({
+        type: "Notification",
+        storage: f.description,
+        activity: { type: "Update", object: f.root },
+      }),
+      "revision-1",
     );
-    expect(changes).toEqual([
-      { type: "Update", object: "https://pod.example/alice/calendar/x.ttl" },
+    expect(changed).toHaveBeenCalledTimes(2);
+    expect(source.reconnect()).toEqual({ "Last-Event-ID": "revision-1" });
+    source.open();
+    expect(changed).toHaveBeenCalledTimes(3);
+    expect(f.sources).toHaveLength(1);
+  } finally {
+    stop();
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.sources[0].listenerCount).toBe(0);
+  expect(f.sources[0].readyState).toBe(2);
+  expect(f.doFetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("refreshes on LWS membership/edit events and reconciliation, then DELETEs on unsubscribe", async () => {
+  const f = lwsServer();
+  const changed = vi.fn();
+  const stop = await f.start(changed);
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.sockets).toHaveLength(1);
+    f.sockets[0].open();
+    expect(changed).toHaveBeenCalledTimes(1);
+    f.sockets[0].message(
+      JSON.stringify({
+        type: "Notification",
+        storage: f.description,
+        activity: [
+          { type: "Create", object: { id: `${f.root}one` } },
+          { type: "Update", object: { id: `${f.root}two` } },
+          { type: "Delete", object: { id: `${f.root}three` } },
+        ],
+      }),
+    );
+    expect(changed.mock.calls.slice(1).map(([event]) => [event.type, event.object])).toEqual([
+      ["Create", `${f.root}one`],
+      ["Update", `${f.root}two`],
+      ["Delete", `${f.root}three`],
     ]);
-
-    unsub();
-  });
-
-  it("handles a string-valued notification object", async () => {
-    const { fetchImpl } = makeHappyFetch();
-    const changes: ResourceChangeNotification[] = [];
-    await subscribeToResource(TOPIC, (n) => changes.push(n), {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    MockWebSocket.instances[0].emitMessage(
-      JSON.stringify({ type: "Delete", object: "https://pod.example/alice/calendar/y.ttl" }),
+    f.sockets[0].message(
+      JSON.stringify({
+        type: "Notification",
+        storage: "https://foreign.example/",
+        activity: { type: "Update", object: f.root },
+      }),
     );
-    expect(changes).toEqual([
-      { type: "Delete", object: "https://pod.example/alice/calendar/y.ttl" },
-    ]);
-  });
-
-  it("ignores malformed notification frames without throwing", async () => {
-    const { fetchImpl } = makeHappyFetch();
-    const onChange = vi.fn();
-    await subscribeToResource(TOPIC, onChange, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    const ws = MockWebSocket.instances[0];
-    ws.emitMessage("not json at all");
-    ws.emitMessage(JSON.stringify({ object: "no-type-field" }));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("unsubscribe closes the socket and is idempotent", async () => {
-    const { fetchImpl, calls } = makeHappyFetch();
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    const ws = MockWebSocket.instances[0];
-    expect(ws.closed).toBe(false);
-    unsub();
-    expect(ws.closed).toBe(true);
-    // Best-effort channel DELETE on the channel id.
-    await Promise.resolve();
-    expect(calls.some((c) => (c.init?.method ?? "") === "DELETE" && c.url === CHANNEL_ID)).toBe(
-      true,
-    );
-    // Idempotent: a second call does nothing and does not throw.
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("does not throw when the socket emits an error", async () => {
-    const { fetchImpl } = makeHappyFetch();
-    await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(() => MockWebSocket.instances[0].emitError()).not.toThrow();
-  });
+    expect(changed).toHaveBeenCalledTimes(4);
+    f.sockets[0].error();
+    await vi.advanceTimersByTimeAsync(1_000);
+    f.sockets[1].open();
+    expect(changed).toHaveBeenCalledTimes(5);
+  } finally {
+    stop();
+    stop();
+  }
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.doFetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(2);
+  expect(f.sockets.every((socket) => socket.listenerCount === 0 && socket.readyState === 3)).toBe(
+    true,
+  );
+  expect(vi.getTimerCount()).toBe(0);
 });
 
-describe("subscribeToResource — graceful degradation", () => {
-  it("resolves to a no-op unsubscribe when discovery finds no service", async () => {
-    const fetchImpl: typeof fetch = async () => new Response("", { status: 404 });
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("resolves to a no-op when the subscribe POST fails", async () => {
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "HEAD" && url === TOPIC) {
-        return new Response(null, {
-          status: 200,
-          headers: {
-            link: `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-          },
-        });
-      }
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(STORAGE_DESCRIPTION_TTL);
-      if (method === "POST") return new Response("denied", { status: 403 });
-      return new Response("", { status: 404 });
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("resolves to a no-op when the subscription response has no receiveFrom", async () => {
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "HEAD" && url === TOPIC) {
-        return new Response(null, {
-          status: 200,
-          headers: {
-            link: `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-          },
-        });
-      }
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(STORAGE_DESCRIPTION_TTL);
-      if (method === "POST") {
-        return new Response(JSON.stringify({ id: CHANNEL_ID }), {
-          status: 200,
-          headers: { "content-type": "application/ld+json" },
-        });
-      }
-      return new Response("", { status: 404 });
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("resolves to a no-op when fetch throws outright", async () => {
-    const fetchImpl: typeof fetch = async () => {
-      throw new Error("network down");
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("resolves to a no-op when WebSocket is unavailable (SSR/build)", async () => {
-    const { fetchImpl } = makeHappyFetch();
-    // No webSocketImpl injected and no global WebSocket in the node test env.
-    expect(typeof WebSocket === "undefined" || true).toBe(true);
-    const unsub = await subscribeToResource(TOPIC, () => {}, { fetchImpl });
-    expect(() => unsub()).not.toThrow();
-  });
+it("retains the app's same-origin service restriction", async () => {
+  const f = lwsServer();
+  f.foreignService();
+  const stop = await f.start();
+  try {
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.doFetch.mock.calls.some(([url]) => String(url).includes("foreign.example"))).toBe(
+      false,
+    );
+    expect(f.sockets).toHaveLength(0);
+  } finally {
+    stop();
+  }
+  expect(vi.getTimerCount()).toBe(0);
 });
 
-describe("subscribeToResource — origin validation (defence-in-depth)", () => {
-  it("refuses an off-origin subscription service (never POSTs auth off-pod)", async () => {
-    const EVIL_SERVICE = "https://evil.example/collect";
-    const description = `
-@prefix notify: <http://www.w3.org/ns/solid/notifications#> .
-<${DESCRIPTION_URL}>
-  notify:subscription <${EVIL_SERVICE}> ;
-  notify:channelType <${WEBSOCKET_CHANNEL_2023}> .`;
-    const posted: string[] = [];
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "POST") posted.push(url);
-      if (method === "HEAD" && url === TOPIC) {
-        return new Response(null, {
-          status: 200,
-          headers: {
-            link: `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-          },
-        });
-      }
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(description);
-      return new Response("", { status: 404 });
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(posted).toHaveLength(0); // never POSTed to the evil origin
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(() => unsub()).not.toThrow();
+it("honors cancellation during discovery without leaving transports behind", async () => {
+  const pending = Promise.withResolvers<Response>();
+  const controller = new AbortController();
+  const doFetch = vi.fn<typeof fetch>(() => pending.promise);
+  const changed = vi.fn();
+  const subscribing = subscribeToResource("https://cancel.example/pod/", changed, {
+    fetchImpl: doFetch,
+    signal: controller.signal,
   });
-
-  it("refuses an off-host receiveFrom (never opens a socket off-pod)", async () => {
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "HEAD" && url === TOPIC) {
-        return new Response(null, {
-          status: 200,
-          headers: {
-            link: `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-          },
-        });
-      }
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(STORAGE_DESCRIPTION_TTL);
-      if (method === "POST") {
-        return new Response(
-          JSON.stringify({ id: CHANNEL_ID, receiveFrom: "wss://evil.example/socket" }),
-          { status: 200, headers: { "content-type": "application/ld+json" } },
-        );
-      }
-      return new Response("", { status: 404 });
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(MockWebSocket.instances).toHaveLength(0);
-    expect(() => unsub()).not.toThrow();
-  });
-
-  it("does not DELETE an off-origin channel id on unsubscribe", async () => {
-    const deletes: string[] = [];
-    const fetchImpl: typeof fetch = async (input, init) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
-      if (method === "DELETE") deletes.push(url);
-      if (method === "HEAD" && url === TOPIC) {
-        return new Response(null, {
-          status: 200,
-          headers: {
-            link: `<${DESCRIPTION_URL}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
-          },
-        });
-      }
-      if (method === "GET" && url === DESCRIPTION_URL) return ttlResponse(STORAGE_DESCRIPTION_TTL);
-      if (method === "POST") {
-        // Same-origin receiveFrom (so the socket opens) but an evil channel id.
-        return new Response(
-          JSON.stringify({ id: "https://evil.example/chan", receiveFrom: RECEIVE_FROM }),
-          { status: 200, headers: { "content-type": "application/ld+json" } },
-        );
-      }
-      return new Response("", { status: 404 });
-    };
-    const unsub = await subscribeToResource(TOPIC, () => {}, {
-      fetchImpl,
-      webSocketImpl: MockWebSocket as unknown as typeof WebSocket,
-    });
-    expect(MockWebSocket.instances).toHaveLength(1); // socket DID open (receiveFrom ok)
-    unsub();
-    await Promise.resolve();
-    expect(deletes).toHaveLength(0); // but the off-origin channel id was never DELETEd
-  });
+  controller.abort();
+  pending.resolve(new Response(null, { status: 404 }));
+  const stop = await subscribing;
+  stop();
+  expect(doFetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  expect(changed).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
 });

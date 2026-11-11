@@ -124,6 +124,12 @@ npm run build       # next build
   (parent, blocked-by, blocking).
 - **Real-time live-sync** — changes by collaborators (or another tab) appear
   without a reload (Solid Notifications, with a polling fallback).
+  `@jeswr/pod-notifications` owns discovery, Solid WebSocket/StreamingHTTP, LWS
+  push, legacy NSS, reconnection and cleanup. The board watches membership and
+  each loaded issue's edits; first connection and reconnect resync refresh it too.
+  Polling checks ETags/membership every 25 seconds, with an initial reconciliation.
+  Push remains restricted to the user's own pod roots and service origins;
+  missing roots allow only SDK polling. Discovery failures leave manual refresh available.
 - **Dark mode** (system / light / dark), responsive, overdue highlighting.
 
 ## Roadmap (future)
