@@ -16,12 +16,18 @@ import {
 import { localDayKey } from "../../lib/views/days";
 import { useTasksPreferences } from "../../state/preferences";
 
+const MAX_UPCOMING_RANGE_DAYS = 366;
+
 export function useTaskDateRange(kind: "upcoming" | "completed", now: Date) {
   const pathname = usePathname();
   const params = useSearchParams();
   const { preferences } = useTasksPreferences();
   const fallback = presetRange(kind === "upcoming" ? "next7" : "last7", now, preferences.weekStart);
-  const range = parseDateRange(new URLSearchParams(params.toString()), fallback);
+  const range = parseDateRange(
+    new URLSearchParams(params.toString()),
+    fallback,
+    kind === "upcoming" ? MAX_UPCOMING_RANGE_DAYS : undefined,
+  );
   const change = (next: DateRange) => {
     const query = new URLSearchParams(params.toString());
     query.set("from", next.from);
@@ -44,6 +50,7 @@ export function DateRangeControl({
 }) {
   const { preferences } = useTasksPreferences();
   const options = kind === "upcoming" ? upcomingRanges : completedRanges;
+  const maxDays = kind === "upcoming" ? MAX_UPCOMING_RANGE_DAYS : undefined;
   const [custom, setCustom] = useState(false);
   const [draft, setDraft] = useState(range);
   useEffect(() => setDraft({ from: range.from, to: range.to }), [range.from, range.to]);
@@ -61,7 +68,7 @@ export function DateRangeControl({
           : localDayKey(new Date(value.dateTime));
     const next = { ...draft, [bound]: date };
     setDraft(next);
-    if (validRange(next)) onChange(next);
+    if (validRange(next, maxDays)) onChange(next);
   };
   return (
     <div className="tsk-date-range">
@@ -101,7 +108,13 @@ export function DateRangeControl({
             value={draft.to ? { kind: "date", date: draft.to } : null}
             onChange={(value) => update("to", value)}
           />
-          {!validRange(draft) && <p role="alert">Enter a From date on or before the To date.</p>}
+          {!validRange(draft, maxDays) && (
+            <p role="alert">
+              {validRange(draft)
+                ? "Choose a range of up to a year"
+                : "Enter a From date on or before the To date."}
+            </p>
+          )}
         </>
       )}
     </div>

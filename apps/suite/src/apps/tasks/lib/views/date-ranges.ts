@@ -22,21 +22,28 @@ export function presetRange(preset: RangePreset, now: Date, weekStart: WeekStart
       : addDays(today, preset === "next7" ? 6 : preset === "next30" ? 29 : 0);
   return { from: localDayKey(from), to: localDayKey(to) };
 }
-export function validRange(range: DateRange): boolean {
+export function validRange(range: DateRange, maxDays?: number): boolean {
   try {
-    dateFromDayKey(range.from);
-    dateFromDayKey(range.to);
-    return range.from <= range.to;
+    const from = dateFromDayKey(range.from);
+    const to = dateFromDayKey(range.to);
+    return (
+      range.from <= range.to &&
+      (maxDays === undefined || to.getTime() <= addDays(from, maxDays - 1).getTime())
+    );
   } catch {
     return false;
   }
 }
 /** Both bounds are required, single-valued, real calendar dates and inclusive. */
-export function parseDateRange(params: URLSearchParams, fallback: DateRange): DateRange {
+export function parseDateRange(
+  params: URLSearchParams,
+  fallback: DateRange,
+  maxDays?: number,
+): DateRange {
   const from = params.getAll("from");
   const to = params.getAll("to");
   const range = { from: from[0] ?? "", to: to[0] ?? "" };
-  return from.length === 1 && to.length === 1 && validRange(range) ? range : fallback;
+  return from.length === 1 && to.length === 1 && validRange(range, maxDays) ? range : fallback;
 }
 export function filterDateRange(
   tasks: readonly TaskView[],

@@ -52,6 +52,10 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
 
 import { SortMenu } from "../../src/apps/tasks/components/sort-menu";
 import { CompletedView } from "../../src/apps/tasks/components/views/completed-view";
+import {
+  DateRangeControl,
+  useTaskDateRange,
+} from "../../src/apps/tasks/components/views/date-range-control";
 import { ProjectView } from "../../src/apps/tasks/components/views/project-view";
 import { UpcomingView } from "../../src/apps/tasks/components/views/upcoming-view";
 
@@ -238,4 +242,101 @@ it("filters Completed by completion date, resets pagination on a changed URL ran
   });
   expect(titles(host)).toEqual(["Older"]);
   expect(host.textContent).not.toContain("Show more");
+});
+
+it.each([
+  ["priority", "name"],
+  ["project", "priority"],
+  ["none", "name"],
+])("groups by %s and sorts by %s before paginating Completed", async (groupBy, sort) => {
+  pathname = "/tasks/completed";
+  localStorage.setItem(
+    "suite.tasks.prefs",
+    JSON.stringify({ groupBy: { [pathname]: groupBy }, sort: { [pathname]: sort } }),
+  );
+  projected = [
+    ...Array.from({ length: 50 }, (_, index) =>
+      view(`Zulu ${index}`, { state: "closed", completedAt: now }),
+    ),
+    view("Alpha", {
+      state: "closed",
+      priority: 1,
+      completedAt: new Date("2026-11-02T09:00:00Z"),
+    }),
+    view("Excluded by range", {
+      state: "closed",
+      priority: 1,
+      completedAt: new Date("2026-10-01T09:00:00Z"),
+    }),
+  ];
+  const { host } = await mount(h("main", null, h(CompletedView)));
+  expect(titles(host)).toHaveLength(50);
+  expect(titles(host)[0]).toBe("Alpha");
+  expect(titles(host)).not.toContain("Excluded by range");
+  expect(button("Show more")).toBeDefined();
+  await click(button("Show more"));
+  expect(titles(host)).toHaveLength(51);
+  expect(new Set(titles(host)).size).toBe(51);
+  expect(titles(host)[0]).toBe("Alpha");
+  expect(host.textContent).not.toContain("Show more");
+});
+
+it.each([
+  "from=0001-01-01&to=9999-12-31",
+  "from=2026-01-01&to=2027-01-02",
+  "from=invalid&to=2026-11-04",
+])("falls back silently for an invalid Upcoming URL range: %s", async (query) => {
+  pathname = "/tasks/upcoming";
+  window.history.replaceState(null, "", `${pathname}?${query}`);
+  // Probe the route hook directly so the unbounded regression cannot freeze the test runner.
+  function RangeProbe() {
+    const { range } = useTaskDateRange("upcoming", now);
+    return h("output", null, `${range.from}/${range.to}`);
+  }
+  const { host } = await mount(h(RangeProbe));
+  expect(host.textContent).toBe("2026-11-02/2026-11-08");
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+});
+
+it("validates the Upcoming custom form against the inclusive 366-day cap", async () => {
+  pathname = "/tasks/upcoming";
+  function RangeForm() {
+    const { range, change } = useTaskDateRange("upcoming", now);
+    return h(DateRangeControl, { kind: "upcoming", now, range, onChange: change });
+  }
+  const { host } = await mount(h(RangeForm));
+  await select(host.querySelector("select") as HTMLSelectElement, "custom");
+  const to = host.querySelectorAll<HTMLInputElement>(".suite-date-field input")[1];
+  if (!to) throw new Error("Missing To input");
+  await type(to, "3 November 2027");
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe("Choose a range of up to a year");
+  expect(window.location.search).toBe("");
+  await type(to, "2 November 2027");
+  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(window.location.search).toBe("?from=2026-11-02&to=2027-11-02");
+});
+
+it("hides Upcoming day-jump controls while grouped and restores them via the keyboard menu", async () => {
+  pathname = "/tasks/upcoming";
+  localStorage.setItem(
+    "suite.tasks.prefs",
+    JSON.stringify({ groupBy: { [pathname]: "priority" } }),
+  );
+  const { host } = await mount(
+    h("main", null, h(SortMenu, { viewId: pathname, crossProject: true }), h(UpcomingView)),
+  );
+  expect(host.querySelector(".tsk-week-strip")).toBeNull();
+  expect(host.querySelector('[aria-label="Next week"]')).not.toBeNull();
+  await key(host.querySelector(".tsk-sort") as Element, "Enter");
+  await act(() => button("Group by").focus());
+  await key(button("Group by"), "ArrowRight");
+  await act(() => button("None").focus());
+  await key(button("None"), "Enter");
+  const day = host.querySelector<HTMLButtonElement>(
+    '.tsk-week-strip button[data-day-key="2026-11-03"]',
+  );
+  if (!day) throw new Error("Missing day-jump button");
+  await act(() => day.focus());
+  await click(day);
+  expect(document.activeElement).toBe(host.querySelector('h2[data-day-key="2026-11-03"]'));
 });

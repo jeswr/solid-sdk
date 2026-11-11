@@ -3,45 +3,66 @@
 import { Button, FilterChips } from "@jeswr/suite-ui";
 import { CircleCheck } from "lucide-react";
 import { useState } from "react";
-import { type CompletedGroup, completedGroups } from "../../lib/views/completed";
+import { useRoutePathname } from "@/lib/route-params";
+import { completedGroups } from "../../lib/views/completed";
 import { filterDateRange } from "../../lib/views/date-ranges";
+import { groupTasks } from "../../lib/views/grouping";
+import { compareTasks } from "../../lib/views/project-groups";
 import { useNow } from "../../state/clock";
+import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { DeleteCompletedButton } from "../delete-completed";
 import { CrossProjectView } from "./cross-project-view";
 import { DateRangeControl, useTaskDateRange } from "./date-range-control";
-import { GroupedTasks } from "./grouped-tasks";
 import { ViewGroup } from "./view-group";
 
 export function CompletedView() {
   const tasks = useTasks();
   const now = useNow();
+  const viewId = useRoutePathname();
+  const { preferences } = useTasksPreferences();
+  const mode = preferences.groupBy[viewId] ?? "none";
+  const sort = preferences.sort[viewId];
   const [projectUrl, setProjectUrl] = useState<string>();
   const { range, change } = useTaskDateRange("completed", now);
   const [pagination, setPagination] = useState({ page: 0, from: range.from, to: range.to });
   const page = pagination.from === range.from && pagination.to === range.to ? pagination.page : 0;
   const setPage = (page: number) => setPagination({ page, from: range.from, to: range.to });
-  const ranged = filterDateRange(tasks.views, range, "completed");
+  const ranged = filterDateRange(tasks.views, range, "completed").filter(
+    (task) => !projectUrl || task.projectUrl === projectUrl,
+  );
   const project = tasks.projects.find((item) => item.url === projectUrl);
-  const groups: CompletedGroup[] = [];
-  let hasMore = false;
-  for (let index = 0; index <= page; index++) {
-    const result = completedGroups(
-      ranged,
-      { ...(projectUrl ? { projectUrl } : {}), page: index },
-      now,
-    );
-    hasMore = result.hasMore;
-    for (const group of result.groups) {
-      const previous = groups.at(-1);
-      if (previous && previous.dayKey === group.dayKey) previous.tasks.push(...group.tasks);
-      else groups.push({ ...group, tasks: [...group.tasks] });
-    }
-  }
+  const completionGroups = completedGroups(ranged, {}, now).groups;
+  const allGroups =
+    mode === "none"
+      ? completionGroups.map((group) => ({
+          id: group.dayKey ?? "earlier",
+          title: group.label,
+          tasks: sort ? [...group.tasks].sort(compareTasks(sort)) : group.tasks,
+        }))
+      : groupTasks(
+          completionGroups.flatMap((group) => group.tasks),
+          mode,
+          {
+            now,
+            weekStart: preferences.weekStart,
+            labels: new Map(
+              tasks.projects.flatMap((project) =>
+                project.tracker.labels.map((label) => [label.id, label.name]),
+              ),
+            ),
+          },
+          sort,
+        );
+  let remaining = (page + 1) * 50;
+  const groups = allGroups.flatMap((group) => {
+    const visible = group.tasks.slice(0, remaining);
+    remaining -= visible.length;
+    return visible.length ? [{ ...group, tasks: visible }] : [];
+  });
   const rows = groups.flatMap((group) => group.tasks);
-  const count = ranged.filter(
-    (task) => task.state === "closed" && (!projectUrl || task.projectUrl === projectUrl),
-  ).length;
+  const count = ranged.length;
+  const hasMore = rows.length < count;
   return (
     <CrossProjectView
       title="Completed"
@@ -74,11 +95,19 @@ export function CompletedView() {
         </>
       }
     >
-      <GroupedTasks rows={rows}>
-        {groups.map((group) => (
-          <ViewGroup key={group.dayKey ?? "earlier"} title={group.label} rows={group.tasks} />
-        ))}
-      </GroupedTasks>
+      {mode !== "none" && (
+        <p className="tsk-date-subtitle">
+          Manual reordering is unavailable while tasks are grouped.
+        </p>
+      )}
+      {groups.map((group) => (
+        <ViewGroup
+          key={`${mode}:${group.id}`}
+          title={group.title}
+          rows={group.tasks}
+          collapsible={mode !== "none"}
+        />
+      ))}
       {hasMore && (
         <Button
           type="button"

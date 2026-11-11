@@ -3,11 +3,13 @@
 import { Button, IconButton } from "@jeswr/suite-ui";
 import { CalendarRange, ChevronLeft, ChevronRight } from "lucide-react";
 import { type ComponentProps, useEffect, useRef, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import { filterDateRange, presetRange, rangeDays } from "../../lib/views/date-ranges";
 import { dateFromDayKey, localDayKey, shortDayLabel } from "../../lib/views/days";
 import { compareDue, taskDayKey } from "../../lib/views/today";
 import { shiftWeek, weekStrip } from "../../lib/views/upcoming";
 import { useNow } from "../../state/clock";
+import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
 import { useDropTarget } from "../dnd/use-task-drag";
@@ -52,6 +54,9 @@ function DayCell({
 export function UpcomingView() {
   const tasks = useTasks();
   const now = useNow();
+  const viewId = useRoutePathname();
+  const { preferences } = useTasksPreferences();
+  const grouped = (preferences.groupBy[viewId] ?? "none") !== "none";
   const { range, change, weekStart } = useTaskDateRange("upcoming", now);
   const start = dateFromDayKey(range.from);
   const strip = weekStrip(start, tasks.views, now).filter((day) => day.dayKey <= range.to);
@@ -115,32 +120,34 @@ export function UpcomingView() {
                 <ChevronRight size={18} aria-hidden="true" />
               </IconButton>
             </div>
-            <div className="tsk-week-strip" ref={stripRoot}>
-              {strip.map((day) => (
-                <DayCell
-                  key={day.dayKey}
-                  dayKey={day.dayKey}
-                  className="tsk-day-cell"
-                  data-day-key={day.dayKey}
-                  today={day.isToday}
-                  letter={day.weekdayLetter}
-                  count={day.count}
-                  aria-current={day.isToday ? "date" : undefined}
-                  aria-pressed={selected === day.dayKey}
-                  aria-label={`${shortDayLabel(day.date)}, ${day.count} ${day.count === 1 ? "task" : "tasks"}`}
-                  onClick={() => {
-                    setSelected(day.dayKey);
-                    const heading = root.current?.querySelector<HTMLElement>(
-                      `h2[data-day-key="${day.dayKey}"]`,
-                    );
-                    heading?.scrollIntoView?.({ block: "start", behavior: "instant" });
-                    heading?.focus({ preventScroll: true });
-                  }}
-                >
-                  <strong>{day.dayOfMonth}</strong>
-                </DayCell>
-              ))}
-            </div>
+            {!grouped && (
+              <div className="tsk-week-strip" ref={stripRoot}>
+                {strip.map((day) => (
+                  <DayCell
+                    key={day.dayKey}
+                    dayKey={day.dayKey}
+                    className="tsk-day-cell"
+                    data-day-key={day.dayKey}
+                    today={day.isToday}
+                    letter={day.weekdayLetter}
+                    count={day.count}
+                    aria-current={day.isToday ? "date" : undefined}
+                    aria-pressed={selected === day.dayKey}
+                    aria-label={`${shortDayLabel(day.date)}, ${day.count} ${day.count === 1 ? "task" : "tasks"}`}
+                    onClick={() => {
+                      setSelected(day.dayKey);
+                      const heading = root.current?.querySelector<HTMLElement>(
+                        `h2[data-day-key="${day.dayKey}"]`,
+                      );
+                      heading?.scrollIntoView?.({ block: "start", behavior: "instant" });
+                      heading?.focus({ preventScroll: true });
+                    }}
+                  >
+                    <strong>{day.dayOfMonth}</strong>
+                  </DayCell>
+                ))}
+              </div>
+            )}
           </nav>
         </>
       }

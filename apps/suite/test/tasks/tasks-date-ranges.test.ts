@@ -39,11 +39,28 @@ describe("inclusive calendar ranges", () => {
     expect(parseDateRange(query, fallback)).toEqual({ from: "2028-02-29", to: "2028-02-29" });
     expect(validRange({ from: "2026-12-31", to: "2027-01-02" })).toBe(true);
     expect(validRange({ from: "2026-01-01", to: "bad" })).toBe(false);
+    expect(validRange({ from: "9999-12-31", to: "9999-12-31" }, 366)).toBe(true);
+    expect(validRange({ from: "2026-01-02", to: "2026-01-01" }, 366)).toBe(false);
     expect(rangeDays({ from: "2026-12-31", to: "2027-01-02" })).toEqual([
       "2026-12-31",
       "2027-01-01",
       "2027-01-02",
     ]);
+  });
+  it.each([
+    ["2028-01-01", "2028-12-31", "2029-01-01"],
+    ["2026-03-28", "2027-03-28", "2027-03-29"],
+    ["2026-10-24", "2027-10-24", "2027-10-25"],
+    ["0001-01-01", "0002-01-01", "9999-12-31"],
+  ])("caps bounded ranges at 366 inclusive calendar days from %s", (from, to, tooFar) => {
+    const accepted = { from, to };
+    const rejected = { from, to: tooFar };
+    expect(validRange(accepted, 366)).toBe(true);
+    expect(rangeDays(accepted)).toHaveLength(366);
+    expect(validRange(rejected, 366)).toBe(false);
+    expect(validRange(rejected)).toBe(true);
+    expect(parseDateRange(new URLSearchParams(accepted), fallback, 366)).toEqual(accepted);
+    expect(parseDateRange(new URLSearchParams(rejected), fallback, 366)).toBe(fallback);
   });
   it.each([
     [
