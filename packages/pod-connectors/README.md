@@ -292,13 +292,13 @@ per run (including duplicates), and a declared compression-ratio ceiling of 1,00
 The reader independently rejects directories above 64 MiB or 100,000 entries. Shared JSON
 limits are 1 MiB per token, 4 MiB per record and 64 nesting levels. Entry bytes are bounded
 and CRC-verified before JSON dispatch; wrapper arrays are parsed record by record. DEFLATE
-receives 1 KiB pieces to bound transient expansion. Metric batches flush at 250 observations;
-each monthly metric document has at most one value per day. Activities are retained under
+receives 1 KiB pieces to bound transient expansion. Recognised entries are staged in memory
+(within the caps above) and written once at the end; each monthly metric document has at most one value per day. Activities are retained under
 the run cap and written once to avoid repeated collection growth. Cancellation is checked
 between entries, inflater chunks, records and Pod operations. Corrupt entries are skipped;
 decoder exceptions abort because their unreported work cannot be charged safely. Caps retain
-successful records with warning notes. Valid records before a late JSON error may be kept;
-no destructive reconciliation occurs.
+successful records with warning notes. Rows parsed before a late JSON error in the same entry
+are discarded and counted as skipped; no destructive reconciliation occurs.
 
 `createGarminFileAdapter(partialLimits)` from `./adapters/garmin` can lower these limits;
 `GARMIN_ARCHIVE_LIMITS` and `GarminArchiveLimits` expose the ceilings. Legacy text remains
@@ -822,6 +822,10 @@ Measured values change from `xsd:double` to `xsd:decimal`; existing monthly path
 fragment IDs, codes, units and timezone-bearing `xsd:dateTime` timestamps are retained.
 Recognised entries are parsed before final Pod writes; malformed JSON entries contribute
 no observations, including rows preceding the bad token. A later fatal decoder error
-leaves no earlier data writes. Writer failures during the final flush still propagate.
+leaves no earlier data writes. Writer failures or cancellation during the final flush can
+still leave some documents written; re-running the import converges because ids are stable.
 The shared ZIP validator also rejects encoded separators, absolute/drive paths, decoded
 traversal segments and control characters before adapter dispatch.
+This applies to Google Takeout too: a Takeout file whose name contains a literal `%2f` or
+`%5c` is now skipped as `invalid-entry`. Undecodable escapes such as `100%ab.txt` remain
+accepted, and paths may have 16 components below `Takeout/`.

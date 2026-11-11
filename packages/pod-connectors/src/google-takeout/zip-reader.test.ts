@@ -486,7 +486,7 @@ it.each([
   "/Takeout/a.txt",
   "//server/a.txt",
   "Takeout/../a.txt",
-  "Takeout/%ff.txt",
+  "Takeout/%ff/%2e%2e/a.txt",
   "Takeout/%2e%2e/a.txt",
   "Takeout/.%2E/a.txt",
   "Takeout/./a.txt",
@@ -507,6 +507,17 @@ it.each([
   await readZip(file, { entry, skip }, entries);
   expect(entry).not.toHaveBeenCalled();
   expect(skip).toHaveBeenCalledWith(name, "invalid-entry");
+});
+
+it("accepts undecodable percent escapes and 16 components below Takeout/", async () => {
+  const deep = `Takeout/${Array.from({ length: 16 }, (_, i) => `d${i}`).join("/")}`;
+  const entries = await zipDirectory(
+    memory(zipSync({ "Takeout/100%ab.txt": strToU8("a"), [deep]: strToU8("b") })),
+  );
+  expect(entries.map((entry) => entry.invalid)).toEqual([undefined, undefined]);
+  const tooDeep = `${deep}/x`;
+  const rejected = await zipDirectory(memory(zipSync({ [tooDeep]: strToU8("c") })));
+  expect(rejected[0]?.invalid).toBe("invalid-entry");
 });
 
 it("retains safe Unicode and percent-encoded filenames and directory entries", async () => {

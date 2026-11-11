@@ -270,8 +270,8 @@ Bound entry count, declared/actual inflation, ratio, JSON bytes/tokens/depth/rec
 observations (including duplicate rows). Charge malformed/oversized records to the shared
 run row budget too, so invalid input cannot reset its work allowance at each entry.
 Keep metadata directory validation before dispatch,
-entry CRC validation before JSON parsing, small inflater input pieces and monthly metric
-batches. Catch entry parse failures separately from Pod writes; propagate writer failures
+entry CRC validation before JSON parsing, small inflater input pieces, and staging of
+recognised entries before the single final write. Catch entry parse failures separately from Pod writes; propagate writer failures
 and decoder exceptions. Count cap/FIT skips separately from unrecognised files; group
 vocabulary gaps once per file with distinct affected-day counts, without treating them as
 skipped records. Return static grouped run-report notes without source account paths.

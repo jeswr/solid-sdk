@@ -580,7 +580,9 @@ export async function importGarminArchive(
       await rows.return(undefined);
     }
     // A malformed entry contributes no documents, including rows yielded before
-    // its bad token. Budget truncation remains explicitly reported as before.
+    // its bad token; those discarded rows are reported as skipped too.
+    if (malformed && parsedRows.length)
+      note("records-discarded-with-malformed-entry", parsedRows.length);
     if (!malformed)
       for (const row of parsedRows) {
         ctx.signal?.throwIfAborted();

@@ -126,29 +126,32 @@ async function bytesAt(file: ImportFile, start: number, length: number): Promise
  */
 function safeEntryName(name: string): boolean {
   if (name.length > 4096 || /%2f|%5c/i.test(name)) return false;
+  // ZIP names may contain literal percent signs and non-UTF-8 escapes such as
+  // "100%ab.txt". Decode valid escapes for validation; when the name is not
+  // decodable, still decode encoded dots so "%2e%2e" segments are caught.
+  let decoded: string;
   try {
-    // ZIP names may contain literal percent signs. Decode valid escapes while
-    // preserving those signs, then validate the resulting path as well.
-    const decoded = decodeURIComponent(name.replace(/%(?![0-9a-f]{2})/gi, "%25"));
-    for (const value of [name, decoded]) {
-      if (
-        value.startsWith("/") ||
-        value.includes("\\") ||
-        /^[a-z]:/i.test(value) ||
-        Array.from(value).some(
-          (char) =>
-            char.charCodeAt(0) < 32 || (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159),
-        )
-      )
-        return false;
-      const parts = value.replace(/\/$/, "").split("/");
-      if (parts.length > 16 || parts.some((part) => !part.trim() || part === "." || part === ".."))
-        return false;
-    }
-    return true;
+    decoded = decodeURIComponent(name.replace(/%(?![0-9a-f]{2})/gi, "%25"));
   } catch {
-    return false;
+    decoded = name.replace(/%2e/gi, ".");
   }
+  for (const value of [name, decoded]) {
+    if (
+      value.startsWith("/") ||
+      value.includes("\\") ||
+      /^[a-z]:/i.test(value) ||
+      Array.from(value).some(
+        (char) =>
+          char.charCodeAt(0) < 32 || (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159),
+      )
+    )
+      return false;
+    const parts = value.replace(/\/$/, "").split("/");
+    // 17 = "Takeout/" plus the 16 components Takeout dispatch allows below it.
+    if (parts.length > 17 || parts.some((part) => !part.trim() || part === "." || part === ".."))
+      return false;
+  }
+  return true;
 }
 
 /** Parse central records incrementally; only bounded metadata survives validation. */
