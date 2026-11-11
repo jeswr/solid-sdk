@@ -12,7 +12,7 @@
  * SAI class matching lives in class-resolve-sai.ts; C4 sampling follows discovery.
  * The built-in pim:Storage class instead pins the WebID's advertised pim:storage containers.
  *
- * RDF is parsed with N3.js (the house rule — never regex over Turtle). The pure parse helpers
+ * RDF is parsed with @jeswr/fetch-rdf. The pure parse helpers
  * are unit-testable against fixtures; `resolveClassTargets` takes an injected fetch that
  * distinguishes public discovery from authenticated private-index reads.
  *
@@ -25,7 +25,8 @@
  *     simply contributes nothing) — resolution degrades, never throws the whole grant.
  */
 
-import { DataFactory, Parser, Store } from 'n3';
+import { parseRdfSync } from '@jeswr/fetch-rdf';
+import { DataFactory, type Store } from 'n3';
 import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
 import { safePathUrl, safeTargetUrl } from './class-path';
@@ -38,6 +39,7 @@ import {
   memoiseResolveFetch,
   resolveSaiTargets,
 } from './class-resolve-sai';
+import { BUFFERED_RDF_LIMITS } from './rdf-limits';
 
 const SOLID = 'http://www.w3.org/ns/solid/terms#';
 const PUBLIC_TYPE_INDEX = `${SOLID}publicTypeIndex`;
@@ -75,10 +77,7 @@ export interface ResolveOptions {
 
 function parse(baseUrl: string, turtle: string, budget?: ResolutionBudget): Store {
   if (budget) return budget.parse(baseUrl, turtle);
-  const parser = new Parser({ baseIRI: baseUrl.split('#')[0] });
-  const store = new Store();
-  store.addQuads(parser.parse(turtle));
-  return store;
+  return parseRdfSync(turtle, { ...BUFFERED_RDF_LIMITS, baseIRI: baseUrl.split('#')[0] });
 }
 
 /** Pin only path-safe resources without query/fragment delimiters or credentials. */
