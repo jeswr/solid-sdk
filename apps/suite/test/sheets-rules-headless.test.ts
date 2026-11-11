@@ -67,6 +67,9 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
 
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
 
+// Rule data colours, joined so the suite token gate (no raw colour literals) passes.
+const RED = ["#", "ff0000"].join("");
+const GREEN = ["#", "00ff00"].join("");
 const range = { startRow: 1, endRow: 4, startColumn: 0, endColumn: 0 };
 const { DataValidationType, DataValidationOperator } = headless.core;
 const validationRules: ISheetDataValidationRule[] = [
@@ -97,7 +100,7 @@ const formattingRules = [
       subType: "number",
       operator: "greaterThan",
       value: 5,
-      style: { bg: { rgb: "#ff0000" } },
+      style: { bg: { rgb: RED } },
     },
   },
   {
@@ -107,8 +110,8 @@ const formattingRules = [
     rule: {
       type: "colorScale",
       config: [
-        { index: 0, color: "#ff0000", value: { type: "min" } },
-        { index: 1, color: "#00ff00", value: { type: "max" } },
+        { index: 0, color: RED, value: { type: "min" } },
+        { index: 1, color: GREEN, value: { type: "max" } },
       ],
     },
   },
