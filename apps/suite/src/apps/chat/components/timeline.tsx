@@ -104,10 +104,12 @@ function MessageArticle({
   };
   // Removing the last reaction of an emoji unmounts the focused chip; keep focus in the message.
   useLayoutEffect(() => {
-    if (!message.reactions || !refocus.current) return;
+    // Only the first refresh after a finished write may move focus; a chip that survives that
+    // refresh clears the request, so a later poll never steals focus or scrolls the timeline.
+    if (!message.reactions || !refocus.current || busy.current) return;
+    refocus.current = false;
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
-    refocus.current = false;
     addReaction.current?.focus();
   }, [message.reactions]);
   const { shown, hidden } = visibleReactions(message.reactions);

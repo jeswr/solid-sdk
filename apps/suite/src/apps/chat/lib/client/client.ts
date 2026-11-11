@@ -75,15 +75,22 @@ export interface ChatSearchOptions {
   timeZone: string;
   signal?: AbortSignal | undefined;
 }
+/** A searched room; direct messages carry their members so the UI can name the other person. */
+export interface ChatSearchRoom {
+  url: string;
+  name: string;
+  isDirect: boolean;
+  members: string[];
+}
 export interface ChatSearchResult {
   results: {
-    room: { url: string; name: string };
+    room: ChatSearchRoom;
     message: Message;
     snippet: SearchSnippet;
     score: number;
   }[];
   searchedRooms: number;
-  skipped: { url: string; name: string }[];
+  skipped: ChatSearchRoom[];
   truncated: boolean;
   truncationReasons: ("rooms" | "days" | "results" | "records")[];
   searchedDays: number;
@@ -256,8 +263,18 @@ export class ChatClient {
       ...parsed,
       terms: parsed.terms.map((term) => {
         if (term.type !== "filter" || term.field !== "in") return term;
+        const wanted = term.value.toLowerCase();
+        // A room by its name, or a direct message by the other person's resolved name.
         const room = joined.find(
-          (room) => !("error" in room) && room.name.toLowerCase() === term.value.toLowerCase(),
+          (room) =>
+            !("error" in room) &&
+            (room.name.toLowerCase() === wanted ||
+              (room.isDirect &&
+                room.members.some(
+                  (member) =>
+                    member !== this.webId &&
+                    this.resolvedNames.get(member)?.toLowerCase() === wanted,
+                ))),
         );
         return room ? { ...term, value: room.url } : term;
       }),
@@ -314,11 +331,14 @@ export class ChatClient {
     );
     const snapshot = new Map<
       string,
-      { room: { url: string; name: string }; message: Message; record: SearchMessage }
+      { room: ChatSearchRoom; message: Message; record: SearchMessage }
     >();
     // Merge in listed order, independent of request completion. A nested owning container wins.
     rooms.forEach((room, index) => {
-      const summary = { url: room.url, name: "error" in room ? room.url : room.name };
+      const summary: ChatSearchRoom =
+        "error" in room
+          ? { url: room.url, name: room.url, isDirect: false, members: [] }
+          : { url: room.url, name: room.name, isDirect: room.isDirect, members: room.members };
       if (skipped.has(index)) result.skipped.push(summary);
       for (const message of pages[index]?.messages ?? []) {
         if (message.deleted || message.tombstone || message.deletedAt !== undefined) continue;
