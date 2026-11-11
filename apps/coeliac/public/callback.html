@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- AUTHORED-BY Codex GPT-6 -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -10,7 +11,9 @@
     <!-- The reactive-auth popup posts the authorization-code redirect URL back to
          the opener, which completes the DPoP token exchange, then closes. -->
     <script>
-      opener.postMessage(location.href);
+      if (window.opener) {
+        window.opener.postMessage(location.href, location.origin);
+      }
     </script>
   </body>
 </html>

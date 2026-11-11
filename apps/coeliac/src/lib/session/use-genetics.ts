@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * The genetics actions the UI calls (Phase 3c). PRIVACY-CRITICAL. Two entry paths —
@@ -34,7 +35,7 @@ import { markerFromManual } from "../genetics/interpret";
 import { parseClinicalText, parseConsumerArray } from "../genetics/parse";
 import { readGeneticSummary } from "../genetics/summary";
 import { geneticsSummaryUrl } from "../pod/layout";
-import { NotSignedInError } from "./use-diary-actions";
+import { NoStorageError, NotSignedInError } from "./use-diary-actions";
 import { useSession } from "./context";
 
 /** An interpreted, pre-consent preview of what WOULD be stored (never raw bytes). */
@@ -196,7 +197,8 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       // not even to the local cache. The model's builder enforces the same rule at
       // the write boundary; this is the belt-and-braces UI-side guard.
       if (consentGiven !== true) throw new ConsentRequiredError();
-      if (!store || !storageRoot || !webId) throw new NotSignedInError();
+      if (!store || !webId) throw new NotSignedInError();
+      if (!storageRoot) throw new NoStorageError();
       const record: StoredGeneticSummary = {
         kind: "genetic",
         url: geneticsSummaryUrl(storageRoot),

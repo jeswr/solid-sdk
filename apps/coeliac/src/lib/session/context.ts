@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The session/auth seam as a plain React context (DESIGN §1). Every data view
@@ -8,6 +9,7 @@
  * `SessionProvider`; this module carries no browser-only imports so tests import
  * it freely.
  */
+import { publicFetch } from "@jeswr/app-session";
 import { createContext, useContext } from "react";
 import type { DiaryStore } from "../cache/diary-store";
 
@@ -64,8 +66,8 @@ export interface SessionValue {
 export const anonymousSession: SessionValue = {
   status: "loading",
   webId: null,
-  authedFetch: (...a) => globalThis.fetch(...a),
-  publicFetch: (...a) => globalThis.fetch(...a),
+  authedFetch: publicFetch,
+  publicFetch,
   storageRoot: null,
   store: null,
   purgeWarning: null,

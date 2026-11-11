@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * E2E smoke against a REAL local CSS + the real app (never the live deploy):
@@ -15,7 +16,7 @@ test.describe("app boots against local CSS", () => {
     const doc = await res.json();
     // client_id MUST equal the document's own URL byte-for-byte.
     expect(doc.client_id).toBe(`${baseURL}/clientid.jsonld`);
-    expect(doc.redirect_uris).toContain(`${baseURL}/callback.html`);
+    expect(doc.redirect_uris).toEqual([`${baseURL}/callback.html`]);
     expect(doc.scope).toContain("webid");
     expect(doc.client_name).toBe("Coeliac Diary");
     expect(doc["@context"]).toContain("https://www.w3.org/ns/solid/oidc-context.jsonld");
@@ -29,11 +30,11 @@ test.describe("app boots against local CSS", () => {
 
   test("renders the suite login surface", async ({ page }) => {
     await page.goto("/");
-    // Silent restore resolves to anonymous → the login area with the intro + panel.
+    // Restore resolves to anonymous → the introduction and shared sign-in card.
     await expect(page.getByRole("heading", { name: "Coeliac Diary" })).toBeVisible();
     await expect(page.getByText(/Decision support, not diagnosis/i)).toBeVisible();
-    // The <jeswr-login-panel> WebID entry (Playwright pierces the open shadow root).
-    await expect(page.getByRole("textbox")).toBeVisible();
+    // The shared SignInCard WebID field.
+    await expect(page.getByRole("textbox", { name: "WebID", exact: true })).toBeVisible();
   });
 
   test("local CSS is reachable from the test environment", async ({ request }) => {

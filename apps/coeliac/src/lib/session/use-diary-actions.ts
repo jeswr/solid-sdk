@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6
 "use client";
 /**
  * The logging actions the UI calls — optimistic + non-blocking (UX invariant #2).
@@ -27,11 +28,20 @@ export class NotSignedInError extends Error {
   }
 }
 
+/** Signed in, but the core has no verified location for diary writes. */
+export class NoStorageError extends Error {
+  constructor() {
+    super("You’re signed in, but logging requires a verified pod storage location. Add one to your WebID profile, then sign out and sign in again.");
+    this.name = "NoStorageError";
+  }
+}
+
 export function useDiaryActions() {
   const { store, storageRoot, webId, authedFetch } = useSession();
 
   const requireCtx = useCallback(() => {
-    if (!store || !storageRoot || !webId) throw new NotSignedInError();
+    if (!store || !webId) throw new NotSignedInError();
+    if (!storageRoot) throw new NoStorageError();
     return { store, storageRoot, webId, authedFetch };
   }, [store, storageRoot, webId, authedFetch]);
 

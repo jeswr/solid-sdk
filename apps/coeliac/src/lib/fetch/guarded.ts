@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The foreign-origin fetch boundary. Every request to a THIRD-PARTY origin
@@ -7,7 +8,7 @@
  * cap + timeout (DESIGN §1 / §9).
  *
  * The underlying fetch MUST be the credential-free **pristine** `publicFetch`
- * (captured before reactive-auth patches `globalThis.fetch`) so the user's
+ * (captured by app-session before authentication initializes) so the user's
  * DPoP-bound token can never ride along to a foreign host. `credentials:"omit"`
  * is forced on every request as belt-and-braces.
  *
