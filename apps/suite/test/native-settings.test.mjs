@@ -1,8 +1,29 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, it, vi } from "vitest";
 import { nativeSettings } from "../scripts/native-settings.mjs";
 
 afterEach(() => vi.unstubAllEnvs());
+
+it("keeps push off without a build setting and bakes the explicit relay", () => {
+  expect(nativeSettings({}).pushRelayUrl).toBeNull();
+  expect(nativeSettings({ PUSH_RELAY_URL: "https://relay.example" }).pushRelayUrl).toBe(
+    "https://relay.example",
+  );
+  expect(
+    nativeSettings({ PUSH_RELAY_URL: "https://old.example", NEXT_PUBLIC_PUSH_RELAY_URL: "" })
+      .pushRelayUrl,
+  ).toBeNull();
+  for (const value of [
+    "http://relay.example",
+    "https://relay.example/",
+    "https://relay.example/path",
+    "https://user@relay.example",
+    "https://relay.example?x=1",
+    "https://relay.example#x",
+  ])
+    expect(() => nativeSettings({ NEXT_PUBLIC_PUSH_RELAY_URL: value })).toThrow();
+});
 
 it.each([
   "PUBLIC_SUITE_URL",

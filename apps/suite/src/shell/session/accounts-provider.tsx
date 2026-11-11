@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 
+import type { FetchForOptions } from "@jeswr/pod-auth";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import {
   ACCOUNTS_KEY,
@@ -16,6 +17,7 @@ import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
 import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
+import { beforeSignOut } from "./sign-out-cleanup";
 import { SolidBackend } from "./solid-backend";
 import {
   type SessionBackend,
@@ -32,6 +34,9 @@ export interface AccountsContextValue {
   accounts: SuiteAccount[];
   /** Checks the live session, including changes React has not committed yet. */
   isActiveAccount(id: string): boolean;
+  isSignedInAccount?(id: string): boolean;
+  /** Account-bound fetch; optional only for older preview adapters. */
+  fetchFor?(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
   /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
@@ -63,10 +68,14 @@ export function AccountsProvider({
   const current = useRef(state);
   const currentStatus = useRef(status);
   const sessions = useRef(new Map<string, SessionBackend>());
+  const retiring = useRef(new Set<string>());
   const generation = useRef(0);
   const signInAttempt = useRef(0);
   const isActiveAccount = useCallback(
-    (id: string) => current.current.activeId === id && currentStatus.current === "ready",
+    (id: string) =>
+      current.current.activeId === id &&
+      currentStatus.current === "ready" &&
+      !retiring.current.has(id),
     [],
   );
   const changeStatus = useCallback((value: SessionStatus) => {
@@ -156,6 +165,7 @@ export function AccountsProvider({
     hint: SignInHint,
     options?: SignInOptions,
   ) => {
+    if (retiring.current.size > 0) throw new SignInError("in-progress");
     const revision = generation.current;
     const attempt = ++signInAttempt.current;
     const backend = backends.find((item) => item.kind === kind);
@@ -176,7 +186,16 @@ export function AccountsProvider({
     const account = current.current.accounts.find((item) => item.id === id);
     if (!account) return;
     const backend = sessions.current.get(id) ?? backends.find((item) => item.kind === account.kind);
+    retiring.current.add(id);
+    try {
+      const cleanup = beforeSignOut(account);
+      if (cleanup) await cleanup;
+    } catch (error) {
+      retiring.current.delete(id);
+      throw error;
+    }
     sessions.current.delete(id);
+    retiring.current.delete(id);
     try {
       clearRecentItems(localStorage, id);
     } catch {
@@ -192,7 +211,18 @@ export function AccountsProvider({
       account,
       backend: sessions.current.get(account.id) ?? backends.find((b) => b.kind === account.kind),
     }));
+    for (const { account } of previous) retiring.current.add(account.id);
+    try {
+      const cleanups = previous
+        .map(({ account }) => beforeSignOut(account))
+        .filter((value) => value !== undefined);
+      if (cleanups.length) await Promise.all(cleanups);
+    } catch (error) {
+      retiring.current.clear();
+      throw error;
+    }
     sessions.current.clear();
+    retiring.current.clear();
     try {
       clearRecentItems(localStorage);
     } catch {
@@ -217,7 +247,12 @@ export function AccountsProvider({
   const authenticatedFetch: typeof fetch = async (input, init) => {
     const account = current.current.accounts.find((a) => a.id === current.current.activeId);
     const backend = account && sessions.current.get(account.id);
-    if (!account || !backend || currentStatus.current !== "ready")
+    if (
+      !account ||
+      !backend ||
+      currentStatus.current !== "ready" ||
+      retiring.current.has(account.id)
+    )
       throw new Error("Sign in to continue");
     return backend.fetchFor(account)(input, init);
   };
@@ -228,6 +263,12 @@ export function AccountsProvider({
         active,
         accounts: state.accounts,
         isActiveAccount,
+        isSignedInAccount: (id) => sessions.current.has(id) && !retiring.current.has(id),
+        fetchFor: (account, options) => {
+          const backend = sessions.current.get(account.id);
+          if (!backend) throw new Error("Sign in to continue");
+          return backend.fetchFor(account, options);
+        },
         signIn,
         signInDemo,
         signInWith,

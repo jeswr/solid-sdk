@@ -72,7 +72,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   const [currentRoom, setCurrentRoom] = useState<string>();
   const invalidate = useCallback(() => setRevision((value) => value + 1), []);
   const trackRooms = useCallback((joined: JoinedRoom[]) => {
-    rooms.current = joined.map((room) => room.url);
+    const next = joined.map((room) => room.url);
+    if (JSON.stringify(rooms.current) !== JSON.stringify(next)) {
+      rooms.current = next;
+      window.dispatchEvent(new Event("suite-push-topics-changed"));
+    }
   }, []);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;

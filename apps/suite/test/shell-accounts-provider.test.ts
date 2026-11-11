@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-provider";
+import { onBeforeSignOut } from "../src/shell/session/sign-out-cleanup";
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { OfflineProvider } from "../src/shell/sync/offline-provider";
 import { act, h, mount } from "./drive-ui-dom";
@@ -71,6 +73,46 @@ beforeEach(() => {
   );
 });
 afterEach(() => vi.useRealTimers());
+
+it.each([
+  "signOut",
+  "signOutAll",
+] as const)("silences push before %s revokes credentials and fences sign-in during cleanup", async (action) => {
+  const first = backend(one);
+  const second = backend(two);
+  await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
+  const order: string[] = [];
+  let finish = () => {};
+  const cleanup = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const stop = onBeforeSignOut(async (account) => {
+    order.push(`silence:${account.id}`);
+    await cleanup;
+  });
+  vi.mocked(first.signOut).mockImplementation(async () => {
+    order.push("revoke:one");
+  });
+  let pending = Promise.resolve();
+  try {
+    await act(() => {
+      pending = accounts[action]();
+    });
+    expect(order[0]).toBe("silence:one");
+    expect(first.signOut).not.toHaveBeenCalled();
+    expect(accounts.isActiveAccount("one")).toBe(false);
+    await expect(accounts.signIn({ issuer: "https://id.example" })).rejects.toThrow("in progress");
+    await act(async () => {
+      finish();
+      await pending;
+    });
+    expect(order.indexOf("revoke:one")).toBeGreaterThan(order.indexOf("silence:one"));
+  } finally {
+    stop();
+    finish();
+    await pending;
+  }
+});
 
 it("removes only the signed-out account's history and retains its pending outbox even if logout fails", async () => {
   const first = backend(one);
