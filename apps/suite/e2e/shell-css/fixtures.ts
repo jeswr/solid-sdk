@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import AxeBuilder from "@axe-core/playwright";
-import { test as base, expect, type Locator, type Page } from "@playwright/test";
+import {
+  type APIRequestContext,
+  test as base,
+  expect,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import { encodeRef } from "../../src/lib/refs";
 
 export type AccountName = "alice" | "bob";
 type SignInOptions = { method?: "provider" | "webid"; keyboardOnly?: boolean };
@@ -169,3 +176,19 @@ export const test = base.extend<{ account: AccountName }>({
 });
 
 export { expect };
+
+/**
+ * Cold next-dev route compilation can reload another worker's active OIDC flow, so specs
+ * warm the routes they visit before signing in (browser authentication is not bypassed).
+ */
+export async function warmLiveRoutes(request: APIRequestContext) {
+  expect((await request.get("/missing-shell-page")).status()).toBe(404);
+  for (const path of [
+    "/settings/appearance",
+    "/settings/storage",
+    "/drive/recent",
+    `/drive/p/${encodeRef(new URL("alice/README", cssAccount("alice").issuer).href)}`,
+  ]) {
+    expect((await request.get(path)).status()).toBe(200);
+  }
+}
