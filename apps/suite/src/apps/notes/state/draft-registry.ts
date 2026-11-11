@@ -9,6 +9,7 @@ const optionalText = z.string().optional();
 const stored = draft.extend({
   url: z.url(),
   etag: z.string().nullable(),
+  readOnly: z.boolean().optional(),
   location: z.enum(["active", "archived", "trashed"]),
   previous: z.enum(["active", "archived"]).optional(),
   trashedAt: optionalText,
@@ -33,7 +34,7 @@ const stored = draft.extend({
 const snapshot = z.object({
   note: stored,
   draft,
-  status: z.enum(["saving", "failed", "conflict"]),
+  status: z.enum(["saving", "failed", "conflict", "read-only"]),
 });
 type RegistryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem" | "key" | "length">;
 interface RegistrySeams {

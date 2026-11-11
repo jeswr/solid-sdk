@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** One request-wide deadline and limits, including discovery, body reads and RDF parsing. */
-import { DataFactory, Parser, type Quad, Store } from 'n3';
+import { parseRdfSync, RdfFetchError } from '@jeswr/fetch-rdf';
+import type { Store } from 'n3';
+import { BUFFERED_RDF_LIMITS } from './rdf-limits';
 
 export const RESOLUTION_LIMITS = {
   documents: 128,
@@ -98,28 +100,24 @@ export class ResolutionBudget {
     const key = url.split('#')[0];
     const cached = this.parsed.get(key);
     if (cached?.text === text) return cached.store;
-    let quads = 0;
-    const store = new Store();
-    const parsed = new Parser({
-      baseIRI: url.split('#')[0],
-      factory: {
-        ...DataFactory,
-        quad: (...args: Parameters<typeof DataFactory.quad>) => {
-          if (++quads > RESOLUTION_LIMITS.quads) this.exhaust();
+    let store: Store;
+    try {
+      store = parseRdfSync(text, {
+        ...BUFFERED_RDF_LIMITS,
+        baseIRI: key,
+        signal: this.signal,
+        maxBytes: RESOLUTION_LIMITS.bytes,
+        maxQuads: RESOLUTION_LIMITS.quads,
+        check: () => {
           if (!this.active()) this.signal.throwIfAborted();
-          return DataFactory.quad(
-            args[0] as Quad['subject'],
-            args[1] as Quad['predicate'],
-            args[2] as Quad['object'],
-            args[3] as Quad['graph'],
-          );
         },
-      },
-    }).parse(text);
-    // Store insertion is synchronous too; the parser's factory checks only cover parsing.
-    for (const quad of parsed) {
-      if (!this.active()) this.signal.throwIfAborted();
-      store.addQuad(quad);
+      });
+    } catch (error) {
+      if (error instanceof RdfFetchError && error.code === 'PARSE_LIMIT') {
+        this.exhaust();
+        this.signal.throwIfAborted();
+      }
+      throw error;
     }
     if (!this.active()) this.signal.throwIfAborted();
     this.parsed.set(key, { text, store });
