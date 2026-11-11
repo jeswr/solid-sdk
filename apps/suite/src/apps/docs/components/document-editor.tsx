@@ -34,6 +34,7 @@ import { printDocument } from "../editor/print-document";
 import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
+import { useDocumentComments } from "../hooks/use-document-comments";
 import { useDocumentSharing } from "../hooks/use-document-sharing";
 import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
@@ -238,6 +239,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     },
     [runtime],
   );
+  const comments = useDocumentComments(runtime, editor);
   useEffect(() => {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform));
     // On a phone the outline would take half the screen; it starts hidden there.
@@ -338,6 +340,18 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     }
   };
   handlers.current.key = (event) => {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.altKey &&
+      event.code === "KeyM" &&
+      // Windows reports AltGr as Ctrl+Alt; AltGr+M types a character (µ).
+      !event.getModifierState("AltGraph") &&
+      !history
+    ) {
+      event.preventDefault();
+      comments.add();
+      return true;
+    }
     if (history) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -521,6 +535,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               runtime.readOnly,
               runtime.online,
             )}
+            addComment={comments.add}
+            commentReason={comments.reason}
             share={sharing.open}
             shareDisabledReason={sharing.disabledReason}
             copy={() =>
@@ -588,6 +604,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             toggleOutline={() => setOutline((value) => !value)}
           />
         )}
+        {editor && !history && comments.controls}
         {find && editor && !history && (
           <FindBar
             editor={editor}
@@ -627,6 +644,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           ) : (
             <DocumentSkeleton message="Syncing…" />
           )}
+          {!history && comments.sidebar}
         </div>
         {editor && !runtime.readOnly && !history && (
           <BubbleMenu

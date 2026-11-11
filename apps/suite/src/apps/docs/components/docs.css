@@ -1064,3 +1064,136 @@
     border-top: 1px solid var(--border);
   }
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.docs-comment-anchor {
+  color: var(--foreground);
+  background: color-mix(in oklab, var(--warning) 30%, var(--surface));
+  cursor: pointer;
+  border-bottom: 2px solid var(--warning);
+}
+.docs-comment-anchor-active {
+  background: var(--warning);
+  color: var(--warning-foreground);
+  border-bottom-color: var(--warning-foreground);
+}
+.docs-comments-controls {
+  display: flex;
+  gap: 4px;
+  padding: 4px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.docs-comments-sidebar {
+  width: 320px;
+  flex: none;
+  padding: 16px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 90dvh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.docs-comments-sidebar > header,
+.docs-comment-message > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.docs-comments-sidebar h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.docs-comment-thread {
+  margin-block: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  scroll-margin: 16px;
+  overflow-wrap: anywhere;
+}
+.docs-comment-thread-active {
+  outline: 2px solid var(--warning);
+}
+.docs-comment-message {
+  margin-block: 10px;
+  white-space: pre-wrap;
+}
+.docs-comment-message header {
+  font-size: 12px;
+}
+.docs-comment-message header > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.docs-comment-message time {
+  color: var(--muted-foreground);
+}
+.docs-comment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-block: 8px;
+}
+.docs-comments-sidebar textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.docs-comments-sidebar blockquote,
+.docs-comment-quote {
+  border-left: 3px solid var(--warning);
+  padding-left: 8px;
+  white-space: pre-wrap;
+  height: auto;
+  text-align: left;
+  max-width: 100%;
+}
+.docs-comment-menu {
+  position: relative;
+}
+.docs-comment-menu-items {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  display: grid;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+}
+.docs-comment-resolved {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-block: 12px;
+}
+.docs-comment-orphan {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+@media (max-width: 767px) {
+  .docs-comments-sidebar {
+    position: fixed;
+    z-index: 30;
+    inset: auto 0 0;
+    width: 100%;
+    max-height: 60dvh;
+    box-shadow: var(--shadow-2);
+  }
+}
+@media print {
+  .docs-comments-sidebar,
+  .docs-comments-controls {
+    display: none;
+  }
+  .docs-comment-anchor {
+    background: transparent;
+    border: 0;
+  }
+}

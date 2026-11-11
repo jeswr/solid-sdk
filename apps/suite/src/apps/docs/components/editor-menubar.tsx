@@ -89,6 +89,8 @@ export interface EditorMenubarProps extends Partial<VersionMenuProps> {
   print: () => void;
   download: (format: DownloadFormat) => void;
   help: () => void;
+  addComment?: (() => void) | undefined;
+  commentReason?: string | undefined;
   share: () => void;
   shareDisabledReason: string | undefined;
 }
@@ -107,6 +109,7 @@ export function openMenuAfter(current: string | null, label: string, expanded: b
 export function EditorMenubar(props: EditorMenubarProps) {
   const { editor, actions, mac, readOnly } = props;
   const shareReasonId = useId();
+  const commentReasonId = useId();
   const shareDisabledReason =
     props.shareDisabledReason ?? (readOnly ? "Read-only documents cannot be shared." : undefined);
   const [open, setOpen] = useState<string | null>(null);
@@ -270,7 +273,28 @@ export function EditorMenubar(props: EditorMenubarProps) {
           )}
       </>
     ),
-    Insert: commands(["Insert image", "Insert table", "Link", "Horizontal rule", "Checklist"]),
+    Insert: (
+      <>
+        {commands(["Insert image", "Insert table", "Link", "Horizontal rule", "Checklist"])}
+        {props.addComment && (
+          <>
+            <DropdownMenuItem
+              disabled={!!props.commentReason}
+              title={props.commentReason}
+              aria-describedby={props.commentReason ? commentReasonId : undefined}
+              onSelect={choose(props.addComment)}
+            >
+              Comment <Kbd>{keyboardLabel("Mod+Alt+M", mac)}</Kbd>
+            </DropdownMenuItem>
+            {props.commentReason && (
+              <span id={commentReasonId} className="su-sr-only">
+                {props.commentReason}
+              </span>
+            )}
+          </>
+        )}
+      </>
+    ),
     Format: (
       <>
         {sub(
