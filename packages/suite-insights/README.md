@@ -25,7 +25,8 @@ storage or third-party runtime dependencies. Its shared coefficient helper comes
   and Tukey 1.5-IQR outliers, without deleting observations. `mean` excludes non-finite
   measurements.
 - `insights`: rank pairs by absolute Pearson r times sqrt(n), deterministic ID tie-break,
-  default lags [-1, 0, 1], default limit 6. Emit only n >= 14, |r| and |rho| >= .3 with
+  keeping only the highest-ranked lag per unordered pair before applying the limit.
+  Default lags [-1, 0, 1], default limit 6. Emit only n >= 14, |r| and |rho| >= .3 with
   matching signs and at least seven observations in each median-split group.
   Findings describe the difference in Y between X-above-median and other observed
   days, in the source's declared units. Confidence is **data volume only**: low for

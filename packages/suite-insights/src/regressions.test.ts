@@ -50,6 +50,44 @@ describe("analysis regression coverage", () => {
     expect(forward?.correlation.coefficient).toBeCloseTo(1);
     expect(forward?.correlation.n).toBe(90);
   });
+  it("keeps only the highest-ranked lag per unordered pair before limiting findings", () => {
+    const trend = (id: string, sign = 1): Series => ({
+      ...sequence(id),
+      points: sequence(id).points.map((point, i) => ({ ...point, value: sign * i })),
+    });
+    const input = [trend("Steps"), trend("Sleep", -1), trend("Music")];
+    const result = insights(input, { timeZone: "UTC", limit: 6 });
+    expect(result).toHaveLength(3);
+    expect(new Set(result.map((f) => JSON.stringify([f.xId, f.yId].sort()))).size).toBe(3);
+    expect(result.every((f) => f.lagDays === 0 && f.correlation.n === 90)).toBe(true);
+    expect(insights(input, { timeZone: "UTC", lags: [1, 0, -1], limit: 6 })).toEqual(result);
+    const tied = insights(input.slice(0, 2), { timeZone: "UTC", lags: [1, -1] });
+    expect(tied).toHaveLength(1);
+    expect(tied[0]?.lagDays).toBe(-1);
+    expect(insights(input.slice(0, 2), { timeZone: "UTC", lags: [-1, 1] })).toEqual(tied);
+
+    const x = sequence("Walk"),
+      y = sequence("Rest", 1);
+    const forward = insights([x, y], { timeZone: "UTC" });
+    const reverse = insights([y, x], { timeZone: "UTC" });
+    expect(forward).toHaveLength(1);
+    expect(reverse).toHaveLength(1);
+    expect(forward[0]?.lagDays).toBe(1);
+    expect(reverse[0]?.lagDays).toBe(-1);
+  });
+  it("leaves room for weaker pairs when a strong autocorrelated pair leads every lag", () => {
+    const trend = (id: string, noise = 0): Series => ({
+      ...sequence(id),
+      points: sequence(id).points.map((point, i) => ({ ...point, value: i + (i % 2) * noise })),
+    });
+    const result = insights([trend("Steps"), trend("Sleep"), trend("Music", 30)], {
+      timeZone: "UTC",
+      limit: 2,
+    });
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({ xId: "Steps", yId: "Sleep", lagDays: 0 });
+    expect(result[1]?.yId).toBe("Music");
+  });
   it("sentence-cases labels while preserving currency codes and initialisms", () => {
     const result = insights(
       [{ ...sequence("Spending (GBP)"), unit: "GBP" }, sequence("GBP balance")],

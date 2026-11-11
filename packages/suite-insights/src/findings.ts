@@ -42,7 +42,7 @@ export interface Finding {
   description: string;
   pairs: AlignedPoint[];
 }
-/** Exploratory ranking, not a significance test. Never emits fewer than 14 paired days. */
+/** Exploratory ranking: strongest lag per unordered pair, with at least 14 paired days. */
 export function insights(
   series: readonly Series[],
   options: { timeZone: string; lags?: readonly number[]; limit?: number },
@@ -95,6 +95,7 @@ export function insights(
       }
     }
   }
+  const seenPairs = new Set<string>();
   return findings
     .sort(
       (a, b) =>
@@ -102,6 +103,12 @@ export function insights(
           Math.abs(a.correlation.coefficient as number) * Math.sqrt(a.correlation.n) ||
         a.id.localeCompare(b.id),
     )
+    .filter(({ xId, yId }) => {
+      const pair = JSON.stringify([xId, yId].sort());
+      if (seenPairs.has(pair)) return false;
+      seenPairs.add(pair);
+      return true;
+    })
     .slice(0, options.limit ?? 6);
 }
 

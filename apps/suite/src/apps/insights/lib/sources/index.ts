@@ -26,10 +26,11 @@ export interface SourceAdapter {
   label: string;
   read(context: SourceContext): Promise<Series[]>;
 }
-function bounds(now: Date) {
+function bounds(now: Date, paddingDays = 0) {
   const end = new Date(now);
   const start = new Date(now);
-  start.setUTCDate(start.getUTCDate() - 150);
+  start.setUTCDate(start.getUTCDate() - 150 - paddingDays);
+  end.setUTCDate(end.getUTCDate() + paddingDays);
   return { start, end };
 }
 export const healthSource: SourceAdapter = {
@@ -59,7 +60,9 @@ export const moneySource: SourceAdapter = {
   id: "money",
   label: "Money",
   async read({ session, now }) {
-    const rows = (await readMoneyTransactions(session, bounds(now))).filter(
+    // Civil postings are compared as midnight UTC by Money. Include both local
+    // boundary days here; loadSources trims the padded result to local days.
+    const rows = (await readMoneyTransactions(session, bounds(now, 1))).filter(
       (r) => !r.debitAccount && !r.creditAccount,
     );
     const currencies = [...new Set(rows.map((r) => r.currency))].sort();

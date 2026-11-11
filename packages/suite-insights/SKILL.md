@@ -28,7 +28,8 @@ this package owns finite-pair filtering, relative variance guards and interpreta
 - Missing measurements never imply zero. Input arrays remain untouched. Chronological last
   values and calendar-day lags/windows retain their semantics across DST changes.
 - Positive lag pairs X today with Y later. Discovery defaults to `[-1, 0, 1]` and aggregates
-  each series once for reuse across pairs/lags. Calendar formatters are cached by time zone.
+  each series once for reuse across pairs/lags. Ranked findings keep the highest-scoring
+  lag per unordered pair before applying the limit. Calendar formatters are cached by time zone.
 - Near-constant relative variance yields no coefficient. Scaling measurements into smaller
   units must not change the coefficient. Spearman uses average ranks for ties.
 - A finding requires 14 paired days, consistent Pearson/Spearman signs and magnitudes of .3,

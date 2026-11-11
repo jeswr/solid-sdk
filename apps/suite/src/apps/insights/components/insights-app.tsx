@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { Button, ErrorState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { BarChart3, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -133,7 +133,6 @@ export function InsightsApp({ children }: { children: ReactNode }) {
     <AppSessionGuard>
       <PodSessionProvider>
         <SessionGate>{children}</SessionGate>
-        <Toaster position="bottom-center" />
       </PodSessionProvider>
     </AppSessionGuard>
   );

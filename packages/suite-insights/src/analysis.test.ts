@@ -262,12 +262,15 @@ describe("findings", () => {
     const result = insights(input, { timeZone: "UTC" });
     expect(result.length).toBeGreaterThan(1);
     expect(result.some((f) => f.description.includes("less than"))).toBe(true);
-    expect(result.some((f) => f.description.includes("1 day later"))).toBe(true);
+    expect(result.every((f) => f.lagDays === 0)).toBe(true);
+    expect(insights(input, { timeZone: "UTC", lags: [1] })[0]?.description).toContain(
+      "1 day later",
+    );
     expect(
       insights(input, { timeZone: "UTC", lags: [-2, -1], limit: 1 })[0]?.description,
     ).toContain("earlier");
     expect(
-      insights(input, { timeZone: "UTC", lags: [-2, -1] }).some((f) =>
+      insights(input, { timeZone: "UTC", lags: [-2] }).some((f) =>
         f.description.includes("2 days earlier"),
       ),
     ).toBe(true);

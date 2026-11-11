@@ -1,26 +1,28 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { storeOf } from "@/apps/money/lib/data/container";
-import type { Transaction } from "@/apps/money/lib/model";
+import { monthKeys, runningBalance, type Transaction } from "@/apps/money/lib/model";
 import type { PodSession } from "@/lib/session/pod-session";
 
-/** The ledger's ranged reader requests only month shards overlapping the window. */
+/** Read overlapping month shards once, then apply Money's ledger checks per account. */
 export async function readMoneyTransactions(
   session: PodSession,
   range: { start: Date; end: Date },
 ): Promise<Transaction[]> {
   const store = storeOf(session);
-  const rows: Transaction[] = [];
-  for (const account of await store.accounts()) {
+  const accounts = (await store.accounts()).map((account) => {
     if (!account.balance) throw new Error("This account has no opening balance");
-    rows.push(
-      ...(await store.transactions(
-        account.id,
-        { start: range.start.toISOString(), end: range.end.toISOString() },
-        { amount: "0", currency: account.balance.currency },
-      )),
-    );
+    return { id: account.id, currency: account.balance.currency, rows: [] as Transaction[] };
+  });
+  if (!accounts.length) return [];
+  const byAccount = new Map(accounts.map((account) => [account.id, account]));
+  const window = { start: range.start.toISOString(), end: range.end.toISOString() };
+  for (const month of monthKeys(window)) {
+    const { document } = await store.read(`transactions/${month}.ttl`);
+    for (const row of document.transactions()) byAccount.get(row.account)?.rows.push(row);
   }
-  return rows;
+  return accounts.flatMap((account) =>
+    runningBalance(account.rows, account.id, { amount: "0", currency: account.currency }, window),
+  );
 }
 export { ensureSample as seedMoney } from "@/apps/money/demo/sample";
 export { createAccount } from "@/apps/money/lib/data/accounts";

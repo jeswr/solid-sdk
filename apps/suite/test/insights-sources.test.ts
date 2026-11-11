@@ -14,12 +14,8 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock("@/apps/health/lib/data/metrics", () => ({ loadMeasurements: mock.health }));
 vi.mock("@/apps/health/lib/data/store", () => ({ createHealthDataStore: vi.fn() }));
-vi.mock("@/apps/money/lib/data/container", async (original) => ({
-  ...(await original<typeof import("../src/apps/money/lib/data/container")>()),
-  storeOf: () => ({
-    accounts: async () => [{ id: "account", balance: { currency: "GBP" } }],
-    transactions: mock.money,
-  }),
+vi.mock("@/apps/insights/sources/adapters/money", () => ({
+  readMoneyTransactions: mock.money,
 }));
 vi.mock("@/apps/music/lib/model/io", () => ({ loadHistory: mock.music }));
 vi.mock("@/apps/tasks/lib/model/store", () => ({
