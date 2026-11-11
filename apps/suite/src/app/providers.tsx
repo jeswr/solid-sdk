@@ -12,6 +12,7 @@ import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
 import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
+import { WalkthroughProvider } from "@/welcome/walkthrough-provider";
 
 function ThemeAttribute() {
   const { theme } = useTheme();
@@ -37,7 +38,9 @@ export function Providers({
           <PreferencesProvider>
             <AppearanceEffect />
             <ShellSearchProvider>
-              <NotificationsProvider>{children}</NotificationsProvider>
+              <NotificationsProvider>
+                <WalkthroughProvider>{children}</WalkthroughProvider>
+              </NotificationsProvider>
             </ShellSearchProvider>
           </PreferencesProvider>
         </AccountsProvider>
