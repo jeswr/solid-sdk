@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The pod I/O for the single genetic summary (Phase 3c §5.5). PRIVACY-CRITICAL.
@@ -15,19 +16,19 @@
  * derived summary reaches this module and the pod.
  */
 
-import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   type GeneticSummaryData,
   type GeneticSummaryInput,
   parseGeneticSummary,
   serializeGeneticSummary,
 } from "@jeswr/solid-health-diary";
+import { type PodStorage, resolvePodStorage } from "../pod/client";
 import { geneticsSummaryUrl } from "../pod/layout";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 
 /** The authed context a genetics write/read needs (the suite auth seam). */
 export interface GeneticsContext {
-  authedFetch: typeof globalThis.fetch;
+  storage: PodStorage;
   webId: string;
   storageRoot: string;
 }
@@ -83,8 +84,8 @@ export async function writeGeneticSummary(
       patient: input.patient ?? ctx.webId,
     });
     // Owner-only ACL on the diary root FIRST (fail-closed) — never a briefly-public write.
-    await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
-    await putResource(ctx.authedFetch, url, body);
+    await ensureDiaryReady(ctx.storage, ctx.storageRoot, ctx.webId);
+    await putResource(ctx.storage, url, body);
   });
   return { url };
 }
@@ -100,7 +101,7 @@ export async function readGeneticSummary(
 ): Promise<GeneticSummaryData | undefined> {
   const url = geneticsSummaryUrl(ctx.storageRoot);
   try {
-    const { dataset } = await fetchRdf(url, { fetch: ctx.authedFetch });
+    const { dataset } = await (await resolvePodStorage(ctx.storage)).readRdf(url);
     return parseGeneticSummary(url, dataset);
   } catch {
     return undefined;
