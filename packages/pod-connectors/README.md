@@ -228,6 +228,80 @@ keep working. An unsupported-only archive returns its report even when it writes
 Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
 they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
 
+## Bank statements
+
+`./adapters/bank-statements` exports `bankStatementsFileAdapter` and
+`createBankStatementsFileAdapter(options)`. CSV detection uses normalized headers,
+never the filename: Revolut account statements, Monzo transaction exports and
+Starling GBP statements. Additional columns in the header are allowed. There is
+no generic CSV fallback: unknown headers return an `unsupported` report containing
+a bounded, JSON-escaped header list. Localized or changed bank layouts fail closed.
+The export-screen directions in `fileHint` are guidance; no provider was contacted
+to verify current menus. All tests use synthetic files.
+
+HSBC UK's three-column **headerless** CSV is ambiguous. Hosts must explicitly
+select it and supply a stable account label; the default picker adapter refuses it:
+
+```ts
+import { createBankStatementsFileAdapter } from '@jeswr/pod-connectors/adapters/bank-statements';
+
+const adapter = createBankStatementsFileAdapter({
+  csvFormat: 'hsbc-uk',
+  accountLabel: 'HSBC everyday', // use a different label for a credit card
+  currency: 'GBP', // HSBC UK default; validated against the runtime's ISO 4217 codes
+});
+// Pass adapter, file and the host's PodWriter to runFileImport as usual.
+```
+
+`csvFormat` can also constrain detection to `revolut`, `monzo` or `starling`.
+`accountLabel` distinguishes accounts absent from an export; keep it stable across
+overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
+and Starling default to one account per bank/currency; provide labels when importing
+multiple accounts. OFX uses BANKID/ACCTID when present, otherwise the optional label.
+
+CSV and OFX/QFX share `finance/bank-transactions.ttl` under the connector container,
+the existing `schema:Invoice`/`fin:TransactionRecord` mapping and Invoice Type Index
+registration. Typed `schema:BankAccount` nodes supplement it; each invoice has a
+`podmoney:account` link. Amounts remain signed decimal **strings** on
+`schema:totalPaymentDue`, with currency on `schema:priceCurrency`. Revolut's imported
+amount is `Amount - Fee` using exact decimal arithmetic; Fee is also retained as
+`xsd:decimal` on `schema:feesAndCommissionsSpecification`. Only COMPLETED Revolut
+rows import; other states count in `report.skipped`. No exchange rate is inferred:
+Monzo local amounts/currencies do not replace the account amount/currency.
+
+Dates use strict calendar validation and typed `xsd:date`/`xsd:dateTime` values.
+Revolut uses Completed Date. Zone-free timestamps default to **Europe/London**,
+independent of the host's zone; autumn repeats select the first occurrence and
+spring gaps are skipped. Day-only UK dates remain day-only; US month/day guessing
+is disabled. Currency codes must be uppercase ISO 4217 codes supported by the
+runtime's ICU data (`Intl.supportedValuesOf('currency')`). Invalid amounts,
+currencies, dates and rows count as skips.
+
+SHA-256 identifiers use account identity plus Monzo Transaction ID / OFX FITID
+when available. Otherwise they hash posting date, description, canonical amount,
+currency and balance (when present). There is no row index or filename in the key.
+Merge writes preserve transactions absent from later/overlapping exports. Without
+a native id or balance, identical HSBC rows cannot be distinguished and collapse
+to one record. Previous releases' row-index-derived Invoice IDs are not migrated;
+they cannot always be mapped safely to an account.
+
+Bounds: 64 MiB declared/actual file bytes, 100,000 source rows including skipped
+rows, 1,024 CSV columns, 64 KiB header characters, 4 MiB logical CSV records,
+16 KiB characters per CSV field and 64 digits per amount. The shared OFX scanner
+caps transactions at 64 KiB bytes. Exceeding the row/file cap fails before saving
+transaction data; oversized/malformed records are skipped at safe boundaries.
+Unterminated quoted CSV fails. Formula prefixes remain inert literal data.
+Parsing and validation finish before the first data write, and cancellation closes
+the input reader and prevents subsequent Pod operations through the shared runner.
+
+**Suite Money integration gap in this checkout:** the existing OFX producer writes
+Invoices inside `integrations/bank-statements/`, while Money reads only
+`<storage>/money/accounts/` and `money/transactions/` using a different finance
+transaction model. Money does not discover this connector's Type Index entry.
+This adapter preserves that existing contract and the writer's confinement;
+imports do **not** automatically appear in Money. A host integration/migration is
+required to bridge those models and destinations. No Suite app files are changed.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
@@ -437,8 +511,8 @@ records are discarded through the next safe boundary and counted in
 `report.skipped` and `report.state.counts.skipped`. Unterminated XML markup or
 quoted CSV records fail with an explicit error. A skipped WhatsApp line also
 discards the pending message and continuations until the next timestamp.
-CSV headers are parsed and normalised once per file, including bank column
-aliases, and are limited to 1,024 columns and 65,536 characters.
+CSV headers are parsed and normalised once per file, including known bank header
+signatures, and are limited to 1,024 columns and 65,536 characters.
 CSV data tokenization retains only as many cells as the header contains. Extra
 fields are scanned without retaining their text, and the entire row is skipped
 and counted. WhatsApp constructs each message directly from coalesced slices,

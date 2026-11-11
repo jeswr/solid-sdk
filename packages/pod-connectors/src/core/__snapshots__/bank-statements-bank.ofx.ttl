@@ -1,9 +1,12 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
-<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439-activity> a <https://jeswr.org/ns/core#Activity>.
-<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-synthetic-groceries-f3e94439> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
+<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#account-f0158935a6699c7835f414c289856d33c91ab4f53d43a5e30e2fe143aaa3865f> a <https://schema.org/BankAccount>;
+    <https://schema.org/name> "OFX GBP".
+<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-7b2c8d81cfceb445c4126fc80d86c54a216475f3af76f4db0a83b509dc6933cf-activity> a <https://jeswr.org/ns/core#Activity>.
+<https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#txn-7b2c8d81cfceb445c4126fc80d86c54a216475f3af76f4db0a83b509dc6933cf> a <https://jeswr.org/ns/sectors/finance#TransactionRecord>, <https://schema.org/Invoice>;
     <https://jeswr.org/ns/core#about> <https://pod.test/alice/profile/card#me>;
     <https://jeswr.org/ns/core#subject> <https://pod.test/alice/profile/card#me>;
-    <https://schema.org/dateCreated> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://jeswr.org/ns/pod-money#account> <https://pod.test/alice/integrations/bank-statements/finance/bank-transactions.ttl#account-f0158935a6699c7835f414c289856d33c91ab4f53d43a5e30e2fe143aaa3865f>;
+    <https://schema.org/dateCreated> "2026-01-20"^^<http://www.w3.org/2001/XMLSchema#date>;
     <https://schema.org/name> "Synthetic groceries";
     <https://schema.org/priceCurrency> "GBP";
     <https://schema.org/totalPaymentDue> "-12.50".

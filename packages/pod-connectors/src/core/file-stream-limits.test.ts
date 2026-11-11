@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { amazonOrdersFileAdapter } from "../amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "../apple-health/file-adapter.js";
 import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
+import { REVOLUT_HEADER, REVOLUT_ROWS } from "../bank-statements/fixtures.js";
 import { goodreadsFileAdapter } from "../goodreads/file-adapter.js";
 import { netflixFileAdapter } from "../netflix/file-adapter.js";
 import { uberFileAdapter } from "../uber/file-adapter.js";
@@ -221,8 +222,8 @@ describe("non-JSON allocation limits", () => {
     { adapter: goodreadsFileAdapter, header: "Book Id,Title", row: "100,Synthetic" },
     {
       adapter: bankStatementsFileAdapter,
-      header: "Date,Description,Amount",
-      row: "2026-01-01,Synthetic,-1",
+      header: REVOLUT_HEADER,
+      row: REVOLUT_ROWS[3],
     },
   ])("reports skipped CSV records for $adapter.metadata.id", async ({ adapter, header, row }) => {
     const file = streamed(

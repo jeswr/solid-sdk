@@ -4,7 +4,7 @@ import { fileImport } from "../core/testing.js";
 import { bankStatementsFileAdapter } from "./file-adapter.js";
 import { ofxTransactions } from "./ofx-stream.js";
 
-const START = "<STMTTRN><TRNAMT>-1<NAME>";
+const START = "<STMTTRN><DTPOSTED>20260120<TRNAMT>-1<NAME>";
 const END = "</STMTTRN>";
 const SMALL = `${START}Synthetic transaction${END}`;
 
@@ -14,6 +14,28 @@ async function* chunks(text: string, size: number): AsyncGenerator<string> {
 }
 
 describe("incremental OFX scanner", () => {
+  it.each([
+    1, 7, 65536,
+  ])("retains bounded account/currency context across sections (%i)", async (size) => {
+    const text = `<OFX><STMTRS><CURDEF>GBP<BANKID>synthetic-bank<ACCTID>synthetic-current${SMALL}</STMTRS><CCSTMTRS><CURDEF>EUR<ACCTID>synthetic-card${SMALL}</CCSTMTRS></OFX>`;
+    const result = await Array.fromAsync(ofxTransactions(chunks(text, size), vi.fn()));
+    expect(result).toEqual([
+      { block: SMALL, currency: "GBP", bankId: "synthetic-bank", accountId: "synthetic-current" },
+      { block: SMALL, currency: "EUR", accountId: "synthetic-card" },
+    ]);
+  });
+
+  it("marks overlong metadata invalid even if a later currency is valid", async () => {
+    const text = `<STMTRS><ACCTID>${"x".repeat(257)}<CURDEF>GBP${SMALL}`;
+    const result = await Array.fromAsync(ofxTransactions(chunks(text, 1), vi.fn()));
+    expect(result[0]?.currency).toBe("");
+    const { report } = await fileImport(
+      bankStatementsFileAdapter,
+      new File([text.replace("<STMTRS>", "<OFX><STMTRS>")], "a.ofx"),
+    );
+    expect(report.written).toEqual([]);
+    expect(report.skipped).toBe(1);
+  });
   it("reads a transaction spread across thousands of chunks", async () => {
     const block = `${START}${"x".repeat(60 * 1024)}${END}`;
     const skip = vi.fn();
@@ -85,6 +107,6 @@ describe("incremental OFX scanner", () => {
     const text = `<OFX>${START}${"x".repeat(128 * 1024)}${END}${SMALL}</OFX>`;
     const { report } = await fileImport(bankStatementsFileAdapter, new File([text], "bank.ofx"));
     expect(report.skipped).toBe(1);
-    expect(report.state?.counts).toEqual({ documents: 1, items: 1, skipped: 1 });
+    expect(report.state?.counts).toEqual({ documents: 1, items: 2, skipped: 1 });
   });
 });

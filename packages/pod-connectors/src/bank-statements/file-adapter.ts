@@ -1,33 +1,40 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/**
- * Bank statements → Finance (Tier-C file import).
- *
- * Banks have no common schema, so we support the two near-universal export
- * formats with native parsers (no dependency):
- *
- *   - **CSV** — we detect the date / description / amount columns from a broad
- *     list of header aliases (and a single signed `Amount` column, or separate
- *     `Debit`/`Credit` columns).
- *   - **OFX / QFX** — the SGML-ish `<STMTTRN>…<TRNAMT>…<NAME>…</STMTTRN>` blocks
- *     that Quicken/Money exports use; parsed with a tiny tag reader.
- *
- * Each transaction becomes a `schema:Invoice` in Finance: description as name,
- * signed amount text on `totalPaymentDue` (negative = money out), posting date
- * on `dateCreated`. The file is untrusted — values become inert RDF literals.
- */
+/** Known bank CSV exports and OFX/QFX share the existing Finance Invoice layout. */
 import { DataFactory, Store } from "n3";
-import { parseCsv } from "../core/csv.js";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
-import { recordFragment } from "../core/slug.js";
+import {
+  type FileImportAdapter,
+  type FileImportContext,
+  type ImportFile,
+  MAX_FILE_BYTES,
+  MAX_ROWS,
+} from "../core/file-import.js";
+import { csvRecords, fileText } from "../core/file-stream.js";
 import type { IntegrationMetadata } from "../core/types.js";
-import { CLASSES, Invoice } from "../core/vocab.js";
+import { CLASSES } from "../core/vocab.js";
+import {
+  BankCsvParser,
+  type BankStatementOptions,
+  type Transaction,
+  transactionKey,
+  UnrecognisedBankCsvError,
+  validateBankOptions,
+} from "./csv.js";
 import { ofxTransactions } from "./ofx-stream.js";
+import { bankDate, currencyCode, normaliseAmount } from "./values.js";
+import { BankAccount, BankInvoice } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
-const ID = "bank-statements";
+export {
+  type BankCsvFormat,
+  type BankStatementOptions,
+  parseBankCsv,
+  type Transaction,
+} from "./csv.js";
+export { normaliseAmount } from "./values.js";
 
+const ID = "bank-statements";
+const SLUG = "finance/bank-transactions.ttl";
 const metadata: IntegrationMetadata = {
   id: ID,
   name: "Bank statements",
@@ -35,186 +42,196 @@ const metadata: IntegrationMetadata = {
   authKind: "export-file",
   scopes: [],
   categories: ["finance"],
-  whatYouGet: "Your transactions, saved as records in Finance.",
+  whatYouGet: "Revolut, HSBC UK, Monzo and Starling CSV or OFX/QFX transactions in Finance.",
   requirements: [],
 };
 
-export interface Transaction {
-  readonly date?: Date;
-  readonly description: string;
-  /** Signed amount text ("-12.50" for money out), as it should appear. */
-  readonly amount: string;
-  readonly currency?: string;
+/** HSBC exports contain no bank/account identity; hosts must select it explicitly. */
+export function createBankStatementsFileAdapter(
+  options: BankStatementOptions = {},
+): FileImportAdapter {
+  validateBankOptions(options);
+  const config = { ...options };
+  return {
+    vocabMap,
+    metadata,
+    accept: ".csv,.ofx,.qfx,text/csv,application/x-ofx",
+    fileHint:
+      "Revolut: account → More → Statement → CSV. HSBC UK: online banking → account → transactions → Download → CSV (requires explicit HSBC UK selection and an account label). Monzo: account → statement/export → CSV. Starling: account menu → Statements → custom dates → CSV. OFX/QFX exports are also accepted. Export one account at a time; bank CSV formats are identified by their contents.",
+    async importFile(file: ImportFile, ctx: FileImportContext) {
+      ctx.signal?.throwIfAborted();
+      if (!Number.isSafeInteger(ctx.maxRows) || ctx.maxRows < 0)
+        throw new RangeError("Bank row limit must be a nonnegative safe integer");
+      if (file.size > MAX_FILE_BYTES) throw new Error("Export exceeds the 64 MiB import limit");
+      ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
+      const doc = ctx.resolve(SLUG);
+      const store = new Store();
+      let skipped = 0;
+      let records = 0;
+      const skip = () => {
+        skipped++;
+      };
+      try {
+        for await (const txn of streamBankTransactions(file, config, ctx, skip)) {
+          ctx.signal?.throwIfAborted();
+          // The scanner counts malformed/pending rows too; this also bounds OFX records.
+          if (++records > Math.min(ctx.maxRows, MAX_ROWS))
+            throw new Error("Bank statement row cap exceeded; split the export");
+          const identity = await digest(transactionKey(txn));
+          const inv = new BankInvoice(`${doc}#txn-${identity}`, store, DataFactory).mark();
+          inv.name = txn.description;
+          inv.totalPaymentDue = txn.amount;
+          inv.priceCurrency = txn.currency;
+          inv.postingTime = txn.postingTime;
+          inv.identifier = txn.sourceId;
+          inv.fee = txn.fee;
+          if (txn.accountKey) {
+            const account = new BankAccount(
+              `${doc}#account-${await digest(txn.accountKey)}`,
+              store,
+              DataFactory,
+            ).mark();
+            account.name = txn.accountLabel;
+            inv.account = account.value;
+          }
+        }
+      } catch (error) {
+        if (error instanceof UnrecognisedBankCsvError)
+          return { unsupported: [error.message], skipped };
+        throw error;
+      }
+      if (records) {
+        ctx.signal?.throwIfAborted();
+        ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
+        await ctx.write({
+          slug: SLUG,
+          category: "finance",
+          forClass: CLASSES.Invoice,
+          dataset: store,
+          writeMode: "merge",
+        });
+      }
+      // Return skipped even for pending-only statements (no fabricated empty snapshot).
+      return { skipped };
+    },
+  };
+}
+export const bankStatementsFileAdapter = createBankStatementsFileAdapter();
+
+/** Collision-resistant, filename/row-order-independent source identities. */
+async function digest(value: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export const bankStatementsFileAdapter: FileImportAdapter = {
-  vocabMap,
-  metadata,
-  accept: ".csv,.ofx,.qfx,text/csv,application/x-ofx",
-  fileHint:
-    "Download a statement from your bank as CSV or OFX/QFX (most banks offer 'Export transactions'). Select that file.",
-
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
-    ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
-
-    const doc = ctx.resolve("finance/bank-transactions.ttl");
-    const store = new Store();
-    let i = 0;
-    for await (const txn of streamBankTransactions(file, () => ctx.skip())) {
-      if (i >= ctx.maxRows) break;
-      const key = `${i}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
-      const frag = recordFragment(txn.description || "transaction", key);
-      const inv = new Invoice(`${doc}#txn-${frag}`, store, DataFactory).mark();
-      inv.name = txn.description || "Transaction";
-      inv.totalPaymentDue = txn.amount;
-      if (txn.currency) inv.priceCurrency = txn.currency;
-      if (txn.date) inv.dateCreated = txn.date;
-      i++;
-    }
-
-    ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
-    await ctx.write({
-      slug: "finance/bank-transactions.ttl",
-      category: "finance",
-      forClass: CLASSES.Invoice,
-      dataset: store,
-    });
-  },
-};
-
-/** Sniff a bounded prefix, then parse one CSV row or OFX transaction at a time. */
 async function* streamBankTransactions(
   file: ImportFile,
+  options: BankStatementOptions,
+  ctx: FileImportContext,
   skip: () => void,
 ): AsyncGenerator<Transaction> {
   const source = fileText(file);
   let prefix = "";
   try {
     while (prefix.length < 256) {
+      ctx.signal?.throwIfAborted();
       const next = await source.next();
+      ctx.signal?.throwIfAborted();
       if (next.done) break;
       prefix += next.value;
     }
     async function* chunks(): AsyncGenerator<string> {
       yield prefix;
-      yield* source;
+      for await (const chunk of source) {
+        ctx.signal?.throwIfAborted();
+        yield chunk;
+      }
     }
-    const isOfx =
-      /\.(ofx|qfx)$/i.test(file.name) || /^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix);
-    if (!isOfx) {
-      let parseRow: ReturnType<typeof bankRowParser> | undefined;
-      for await (const row of csvRowsFromChunks(chunks(), skip)) {
-        parseRow ??= bankRowParser(Object.keys(row));
-        const txn = parseRow(row);
+    // Contents win over extension: a renamed CSV must not enter the OFX scanner.
+    if (!/^\s*(?:OFXHEADER|<OFX|<\?xml|<STMTTRN>)/i.test(prefix)) {
+      const parser = new BankCsvParser(options, ctx.maxRows, skip);
+      for await (const record of csvRecords(chunks(), () => parser.skippedRecord())) {
+        ctx.signal?.throwIfAborted();
+        const txn = parser.record(record);
         if (txn) yield txn;
       }
       return;
     }
-    for await (const { block, currency } of ofxTransactions(chunks(), skip)) {
-      for (const txn of parseOfx(block)) yield { ...txn, currency };
+    let rows = 0;
+    const count = () => {
+      if (++rows > Math.min(ctx.maxRows, MAX_ROWS))
+        throw new Error("Bank statement row cap exceeded; split the export");
+    };
+    for await (const { block, currency, accountId, bankId } of ofxTransactions(chunks(), () => {
+      count();
+      skip();
+    })) {
+      ctx.signal?.throwIfAborted();
+      count();
+      const txn = parseOfx(block, 1)[0];
+      const code = currency === undefined ? options.currency : currencyCode(currency);
+      if (
+        !txn ||
+        (currency !== undefined && !code) ||
+        (options.currency !== undefined && code !== options.currency)
+      ) {
+        skip();
+        continue;
+      }
+      yield {
+        ...txn,
+        bank: "ofx",
+        currency: code,
+        accountKey: JSON.stringify([
+          "ofx",
+          bankId ?? "",
+          accountId ?? "",
+          options.accountLabel?.trim() ?? "",
+          code ?? "",
+        ]),
+        accountLabel: options.accountLabel?.trim() ?? `OFX ${code ?? "account"}`,
+      };
     }
   } finally {
     await source.return(undefined);
   }
 }
 
-const DATE_HEADERS = ["date", "transaction date", "posting date", "posted date", "value date"];
-const DESC_HEADERS = [
-  "description",
-  "name",
-  "payee",
-  "memo",
-  "details",
-  "narrative",
-  "transaction",
-];
-const AMOUNT_HEADERS = ["amount", "value"];
-const DEBIT_HEADERS = ["debit", "withdrawal", "paid out", "money out"];
-const CREDIT_HEADERS = ["credit", "deposit", "paid in", "money in"];
-
-/** Parse a generic bank CSV, detecting the relevant columns by header. */
-export function parseBankCsv(text: string, limit = Number.POSITIVE_INFINITY): Transaction[] {
-  const { headers, rows } = parseCsv(text);
-  const parseRow = bankRowParser(headers);
-  const out: Transaction[] = [];
-  for (const row of rows) {
-    if (out.length >= limit) break;
-    const txn = parseRow(row);
-    if (txn) out.push(txn);
-  }
-  return out;
-}
-
-/** Detect and normalise column aliases once per file, for both parsing paths. */
-function bankRowParser(headers: readonly string[]) {
-  const lower = headers.map((h) => h.toLowerCase());
-  const find = (cands: string[]) => {
-    const i = lower.findIndex((h) => cands.includes(h));
-    return i === -1 ? undefined : headers[i];
-  };
-  const dateCol = find(DATE_HEADERS);
-  const descCol = find(DESC_HEADERS);
-  const amountCol = find(AMOUNT_HEADERS);
-  const debitCol = find(DEBIT_HEADERS);
-  const creditCol = find(CREDIT_HEADERS);
-
-  return (row: Record<string, string>): Transaction | undefined => {
-    const amount = resolveAmount(row, amountCol, debitCol, creditCol);
-    if (amount === undefined) return undefined;
-    return {
-      date: dateCol ? parseFlexibleDate(row[dateCol]) : undefined,
-      description: (descCol ? row[descCol] : "") || "Transaction",
-      amount,
-    };
-  };
-}
-
-function resolveAmount(
-  row: Record<string, string>,
-  amountCol: string | undefined,
-  debitCol: string | undefined,
-  creditCol: string | undefined,
-): string | undefined {
-  if (amountCol && row[amountCol]?.trim()) {
-    return normaliseAmount(row[amountCol]);
-  }
-  const debit = debitCol ? cleanNumber(row[debitCol]) : undefined;
-  const credit = creditCol ? cleanNumber(row[creditCol]) : undefined;
-  if (debit !== undefined && debit !== 0) return `-${Math.abs(debit)}`;
-  if (credit !== undefined && credit !== 0) return `${Math.abs(credit)}`;
-  return undefined;
-}
-
-/** Strip currency symbols/commas; keep the sign and decimals as text. */
-export function normaliseAmount(raw: string): string | undefined {
-  const cleaned = raw.replace(/[^0-9.\-()]/g, "").trim();
-  if (!cleaned) return undefined;
-  // Parenthesised negatives: (12.50) → -12.50.
-  const paren = cleaned.match(/^\((.+)\)$/);
-  const body = paren ? `-${paren[1]}` : cleaned;
-  return Number.isFinite(Number(body)) ? body : undefined;
-}
-
-function cleanNumber(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const n = Number(raw.replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(n) ? n : undefined;
-}
-
 /** Parse the OFX/QFX `<STMTTRN>` blocks. */
-export function parseOfx(text: string, limit = Number.POSITIVE_INFINITY): Transaction[] {
+export function parseOfx(text: string, limit = MAX_ROWS): Transaction[] {
+  if (limit !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(limit) || limit < 0))
+    throw new RangeError("Bank row limit must be a nonnegative safe integer");
+  if (text.length > MAX_FILE_BYTES || new TextEncoder().encode(text).byteLength > MAX_FILE_BYTES)
+    throw new Error("OFX export exceeds the import limit");
   const out: Transaction[] = [];
-  const blocks = text.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/gi) ?? [];
-  const currency = tag(text, "CURDEF");
-  for (const block of blocks) {
+  const currencyRaw = tag(text, "CURDEF");
+  const currency = currencyRaw === undefined ? undefined : currencyCode(currencyRaw);
+  if (currencyRaw !== undefined && !currency) return out;
+  let start: number | undefined;
+  let records = 0;
+  // Scan delimiters once: repeated unmatched openings must not trigger regex backtracking.
+  for (const match of text.matchAll(/<STMTTRN>|<\/STMTTRN>/gi)) {
+    if (match[0].toUpperCase() === "<STMTTRN>") {
+      if (++records > MAX_ROWS)
+        throw new Error("Bank statement row cap exceeded; split the export");
+      start = match.index;
+      continue;
+    }
+    if (start === undefined) continue;
     if (out.length >= limit) break;
-    const amount = tag(block, "TRNAMT");
-    if (!amount) continue;
+    const block = text.slice(start, match.index + match[0].length);
+    start = undefined;
+    if (block.length > 64 * 1024) continue;
+    const amount = normaliseAmount(tag(block, "TRNAMT") ?? "");
+    const date = parseOfxDate(tag(block, "DTPOSTED"));
+    if (amount === undefined || !date) continue;
     const name = tag(block, "NAME") ?? tag(block, "MEMO") ?? "Transaction";
     out.push({
-      date: parseOfxDate(tag(block, "DTPOSTED")),
+      date,
+      postingTime: date.toISOString().slice(0, 10),
       description: name,
-      amount: amount.trim(),
+      sourceId: tag(block, "FITID"),
+      amount,
       currency,
     });
   }
@@ -232,30 +249,13 @@ export function parseOfxDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
   const m = raw.trim().match(/^(\d{4})(\d{2})(\d{2})/);
   if (!m) return undefined;
-  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return Number.isNaN(d.getTime()) ? undefined : d;
+  const date = bankDate(`${m[1]}-${m[2]}-${m[3]}`);
+  return date === undefined ? undefined : new Date(date);
 }
 
-/** Parse ISO, `D/M/Y` or `M/D/Y` dates leniently. */
+/** Compatibility helper: strict ISO or UK day/month/year; never guess US dates. */
 export function parseFlexibleDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
-  const trimmed = raw.trim();
-  const iso = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) {
-    const d = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00Z`);
-    return Number.isNaN(d.getTime()) ? undefined : d;
-  }
-  const parts = trimmed.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/);
-  if (parts) {
-    let year = Number(parts[3]);
-    if (year < 100) year += 2000;
-    // Default D/M (most non-US banks); swap when only the second can be a month.
-    let day = Number(parts[1]);
-    let month = Number(parts[2]);
-    if (month > 12 && day <= 12) [day, month] = [month, day];
-    if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
-    const d = new Date(Date.UTC(year, month - 1, day));
-    return Number.isNaN(d.getTime()) ? undefined : d;
-  }
-  return undefined;
+  const date = bankDate(raw) ?? bankDate(raw, true);
+  return date === undefined ? undefined : new Date(date);
 }
