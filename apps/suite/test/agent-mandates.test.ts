@@ -63,10 +63,15 @@ import {
   type EditorValues,
   editorDefaults,
   editorSchema,
+  MEMORY_CATEGORIES,
   mandateBoundaries,
   mandateNamesBinding,
+  memoryCategoryLabel,
+  memoryScope,
   proposalBadge,
   proposalIntent,
+  reissueMandate,
+  removePermission,
   replyTemplate,
   testsTemplate,
 } from "../src/apps/agent/lib/mandate-rules";
@@ -2110,4 +2115,195 @@ describe("UI authority agrees with the shared evaluator on unchanged signed poli
       NOW.getTime() + 7 * DAY,
     ]);
   });
+});
+
+describe("Home permission reductions and signed memory scope", () => {
+  it("distinguishes legacy preferences, explicit OFF, and unknown category labels", async () => {
+    expect(memoryScope(mandate())).toEqual([MEMORY_CATEGORIES[0].id]);
+    expect(memoryScope({ ...mandate(), memoryScope: [] })).toEqual([]);
+    expect(memoryCategoryLabel("https://w3id.org/dpv/pd#Location")).toBe("Other saved information");
+    expect(await describeMandate(mandate(), [], "GBP", NOW)).toContain(
+      "Memory it may use: Preferences",
+    );
+    expect(await describeMandate({ ...mandate(), memoryScope: [] }, [], "GBP", NOW)).toContain(
+      "Memory it may use: none",
+    );
+  });
+  it("removes exactly one permission while retaining limits, bans, expiry and other conditions", async () => {
+    const m = buildEditorMandate(values({ SendMessage: "auto" }), options());
+    const next = await removePermission(m, "autonomous", 0, at("mandates/reduced.trig"), NOW);
+    expect(next.autonomous.permissions).toEqual([]);
+    expect(next.withApproval.permissions).toEqual(m.withApproval.permissions);
+    expect(next.prohibitions).toBe(m.prohibitions);
+    expect(next.limits).toBe(m.limits);
+    expect(next.memoryScope).toBe(m.memoryScope);
+    expect(next.validUntil).toBe(m.validUntil);
+    expect(next.id).not.toBe(m.id);
+    expect(next.validFrom).toBe(NOW.toISOString());
+    expect(m.autonomous.permissions).toHaveLength(1);
+    expect(
+      (await removePermission(m, "withApproval", 0, "urn:next", NOW)).withApproval.permissions,
+    ).toHaveLength(1);
+    await expect(removePermission(m, "autonomous", -1, "urn:next")).rejects.toThrow("changed");
+    await expect(removePermission(m, "autonomous", 0.5, "urn:next")).rejects.toThrow("changed");
+    await expect(
+      removePermission({ ...m, autonomous: { id: "urn:empty" } }, "autonomous", 0, "urn:next"),
+    ).rejects.toThrow("changed");
+    expect(reissueMandate(m, "urn:next").validUntil).toBe(m.validUntil);
+  });
+  it("round-trips memory choices and rule removal through the real signer, pointer and status checks", async () => {
+    const { client, session } = await fixture();
+    const first = buildEditorMandate(
+      values({ memoryScope: [MEMORY_CATEGORIES[1].id], SendMessage: "auto" }),
+      options(),
+    );
+    await activateMandate(client, session, first, NOW);
+    let current = await loadVerifiedMandate(client, session, NOW);
+    expect(current?.memoryScope).toEqual([MEMORY_CATEGORIES[1].id]);
+    if (!current) throw new Error("Missing permissions");
+    const reduced = {
+      ...(await removePermission(
+        current,
+        "autonomous",
+        0,
+        at("mandates/reduced-memory.trig"),
+        NOW,
+      )),
+      memoryScope: [],
+    };
+    await activateMandate(client, session, reduced, NOW, current);
+    current = await loadVerifiedMandate(client, session, NOW);
+    expect(current?.memoryScope).toEqual([]);
+    expect(await proposalBadge(current, proposal(), NOW)).toBe("Ask first");
+    expect(await proposalBadge(current, proposal({ action: `${AGENT}Transfer` }), NOW)).toBe(
+      "Never",
+    );
+    const history = await mandateHistory(client, session, NOW);
+    expect(history).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: reduced.id,
+          signedBy: OWNER,
+          signedAt: NOW.toISOString(),
+          status: "active",
+        }),
+      ]),
+    );
+    const stale = {
+      ...reissueMandate(first, at("mandates/stale-memory.trig"), NOW),
+      memoryScope: [],
+    };
+    await expect(activateMandate(client, session, stale, NOW, first)).rejects.toThrow(
+      "permissions changed",
+    );
+  });
+});
+
+it("describes the zero-cost booking ban only at its exact signed scope", async () => {
+  const m = mandate();
+  expect(await describeMandate(m, [], "GBP", NOW)).toContain(
+    "Never: book anything that costs money",
+  );
+  const base = m.prohibitions[2];
+  if (!base) throw new Error("Missing default ban");
+  expect(await describeMandate(m, [], "GBP", new Date(m.validUntil))).not.toContain(
+    "Never: book anything that costs money",
+  );
+  expect(
+    await describeMandate(
+      {
+        ...m,
+        prohibitions: [
+          {
+            ...base,
+            constraints: [
+              {
+                leftOperand: `${AGENT}costExceeds`,
+                operator: "gt",
+                rightOperand: 0,
+                datatype: "urn:unknown",
+              },
+            ],
+          },
+        ],
+      },
+      [],
+      "GBP",
+      NOW,
+    ),
+  ).not.toContain("Never: book anything that costs money");
+  const { constraints: _constraints, ...withoutConstraints } = base;
+  for (const rule of [
+    { ...base, target: "urn:target" },
+    { ...base, assignee: "urn:other" },
+    withoutConstraints,
+    { ...base, constraints: [] },
+    {
+      ...base,
+      constraints: [{ leftOperand: "urn:unknown", operator: "gt" as const, rightOperand: 0 }],
+    },
+    {
+      ...base,
+      constraints: [
+        { leftOperand: `${AGENT}costExceeds`, operator: "lt" as const, rightOperand: 0 },
+      ],
+    },
+    {
+      ...base,
+      constraints: [
+        { leftOperand: `${AGENT}costExceeds`, operator: "gt" as const, rightOperand: 5 },
+      ],
+    },
+  ])
+    expect(await describeMandate({ ...m, prohibitions: [rule] }, [], "GBP", NOW)).not.toContain(
+      "Never: book anything that costs money",
+    );
+});
+
+it("removal never unblocks unknown policy semantics or leaves overlapping automatic authority", async () => {
+  const source: Mandate = {
+    ...mandate(),
+    autonomous: {
+      id: "urn:auto",
+      permissions: [permission("SendMessage"), permission("SendMessage"), permission("Remember")],
+    },
+  };
+  const reduced = await removePermission(source, "autonomous", 0, "urn:reduced", NOW);
+  expect(await proposalBadge(reduced, proposal(), NOW)).toBe("Ask first");
+  expect(await proposalBadge(reduced, proposal({ action: `${AGENT}Remember` }), NOW)).toBe(
+    "Allowed",
+  );
+  expect(reduced.withApproval.permissions).toHaveLength(2);
+  const approvalRemoved = await removePermission(source, "withApproval", 0, "urn:reduced", NOW);
+  expect(await proposalBadge(approvalRemoved, proposal(), NOW)).toBe("Ask first");
+  const noApproval = await removePermission(
+    { ...source, withApproval: { id: "urn:ask" } },
+    "autonomous",
+    0,
+    "urn:reduced",
+    NOW,
+  );
+  expect(noApproval.withApproval.permissions).toHaveLength(1);
+  for (const rule of [
+    permission("Unknown"),
+    permission("SendMessage", [{ leftOperand: "urn:unknown", operator: "eq", rightOperand: 1 }]),
+  ]) {
+    await expect(
+      removePermission(
+        { ...source, withApproval: { id: "urn:ask", permissions: [rule] } },
+        "withApproval",
+        0,
+        "urn:reduced",
+        NOW,
+      ),
+    ).rejects.toThrow("Edit this rule");
+  }
+  const emptyAuto = await removePermission(
+    { ...mandate(), autonomous: { id: "urn:auto" } },
+    "withApproval",
+    0,
+    "urn:reduced",
+    NOW,
+  );
+  expect(emptyAuto.autonomous.permissions).toEqual([]);
 });

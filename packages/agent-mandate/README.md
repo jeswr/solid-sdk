@@ -19,6 +19,12 @@ Actual accounting and enforcement belong to agent-executor. Set `mandate.currenc
 code, signed into the agreement as `schema:currency`) whenever the mandate has spend limits: the
 executor refuses any action under a spend limit whose currency it cannot authenticate.
 
+`mandate.memoryScope` signs exact DPV personal-data category IRIs (for example
+`https://w3id.org/dpv/pd#Preference`) as `agent:memoryScope` on the agreement. An absent
+scope retains the memory reader's preference default. An empty scope disables personalisation;
+it is encoded as the single IRI `rdf:nil` so it cannot disappear during serialization.
+Malformed scopes fail closed, and changes to the scope invalidate the signature.
+
 `issueMandate(mandate, ed25519Key, { statusListCredential, statusListIndex })` creates a
 `solid-vc` AgentAuthorizationCredential with an embedded ODRL Agreement and
 `eddsa-rdfc-2022` proof by default. A fourth options argument `{ cryptosuite: "ecdsa-rdfc-2019" }`

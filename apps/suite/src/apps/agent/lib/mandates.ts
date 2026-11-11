@@ -457,6 +457,8 @@ export interface MandateHistory {
   validUntil?: string;
   status: "active" | "replaced" | "revoked" | "expired" | "unchecked" | "unreadable";
   key: string;
+  signedBy?: string;
+  signedAt?: string;
 }
 export async function mandateHistory(
   client: AgentClient,
@@ -514,6 +516,8 @@ export async function mandateHistory(
           validFrom: vc.validFrom as string,
           validUntil: vc.validUntil as string,
           key: proof.verificationMethod.split("#").at(-1) as string,
+          signedBy: session.webId,
+          signedAt: proof.created,
           status:
             Date.parse(vc.validUntil as string) <= now.getTime()
               ? "expired"

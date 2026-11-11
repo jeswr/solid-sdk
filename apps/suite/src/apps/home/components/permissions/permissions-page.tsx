@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
@@ -26,6 +27,7 @@ import {
 } from "../../state/permissions";
 import { useRequestCaps, useRequests } from "../../state/requests";
 import { useHomeSession } from "../home-app";
+import { HomeAgentPermissions } from "./home-agent-permissions";
 import { PermissionAccessRow } from "./permission-access";
 import { SigningKeys } from "./signing-keys";
 
@@ -155,6 +157,7 @@ export function PermissionsPage() {
           const rows = visibleRows(binding.rows, kind, search, session.storageUrl);
           return (
             <TabsContent key={kind} value={kind}>
+              {kind === "apps" && <HomeAgentPermissions rules search={search} />}
               {binding.status === "loading" ? (
                 <LoadingSkeleton preset="list" count={5} label="Loading permissions" />
               ) : binding.status === "error" ? (
@@ -178,7 +181,7 @@ export function PermissionsPage() {
                   query={search}
                   onClearFilters={() => setSearch("")}
                 />
-              ) : (
+              ) : kind === "apps" ? null : (
                 <EmptyState
                   title={
                     kind === "people"

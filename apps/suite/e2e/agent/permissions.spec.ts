@@ -66,6 +66,10 @@ test("5: activates the exact default template with a verified owner signature an
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
   await expect(page.getByText("Replaced", { exact: true })).toBeVisible();
   await expect(page.getByText(/Signed by approval key: agent-approval-/)).toBeVisible();
+  await expect(
+    page.getByText(`Signed by Account ID: ${DEMO_WEBID}`, { exact: true }).first(),
+  ).toBeVisible();
+  await expect(page.locator("time")).toHaveCount(2);
   await accessible(page, info, "permission-history");
 });
 test("5: an explicit own-account-only rule produces Never and disables approval", async ({
@@ -221,4 +225,139 @@ test("5 keyboard: review and activate permissions without a pointer", async ({ p
     await loadVerifiedMandate(daemon.client, { fetch: daemon.fetch, webId: DEMO_WEBID }),
   ).toBeDefined();
   await accessible(page, info, "permissions-keyboard-active");
+});
+
+test("Home reviews and signs memory scope and rule removal through the Permission manager", async ({
+  page,
+}, info) => {
+  await open(page);
+  await activate(page);
+  await page.goto("/permissions");
+  await page.getByRole("tab", { name: "Apps", exact: true }).click();
+  const row = page.getByRole("region", { name: "Your agent permissions", exact: true });
+  await expect(row.getByText("Preferences", { exact: true })).toBeVisible();
+  const personalise = row.getByRole("switch", { name: "Personalise", exact: true });
+  await personalise.click();
+  const review = page.getByRole("alertdialog");
+  await expect(review.getByText("Memory it may use: none", { exact: true })).toBeVisible();
+  await review.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(personalise).toBeFocused();
+  await expect(personalise).toBeChecked();
+  await personalise.click();
+  await review.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await expect(row.getByRole("switch", { name: "Personalise", exact: true })).not.toBeChecked();
+  const daemon = daemonDouble(page);
+  await expect
+    .poll(
+      async () =>
+        (await loadVerifiedMandate(daemon.client, { fetch: daemon.fetch, webId: DEMO_WEBID }))
+          ?.memoryScope,
+    )
+    .toEqual([]);
+  await row.getByRole("switch", { name: /Remove permission ask first: send messages/ }).click();
+  await expect(
+    review.getByText("The agent will ask you before doing this", { exact: true }),
+  ).toBeVisible();
+  await review.getByText("Technical details", { exact: true }).click();
+  await expect(review.locator("pre")).toContainText("Agreement");
+  await review.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (await loadVerifiedMandate(daemon.client, { fetch: daemon.fetch, webId: DEMO_WEBID }))
+          ?.withApproval.permissions,
+    )
+    .toEqual([]);
+  await expect(row.getByRole("switch", { name: /Remove permission/ })).toHaveCount(0);
+  await accessible(page, info, "home-agent-rules-reduced");
+  await page.goto("/home");
+  const banner = page.getByRole("region", { name: "Agent personalisation", exact: true });
+  await expect(
+    banner.getByText("Your agent is personalising with: none", { exact: true }),
+  ).toBeVisible();
+  await banner.getByRole("switch", { name: "Personalise", exact: true }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Sign and activate", exact: true })
+    .click();
+  await expect(banner.getByRole("switch", { name: "Personalise", exact: true })).toBeChecked();
+  await expect
+    .poll(
+      async () =>
+        (await loadVerifiedMandate(daemon.client, { fetch: daemon.fetch, webId: DEMO_WEBID }))
+          ?.memoryScope,
+    )
+    .toEqual(["https://w3id.org/dpv/pd#Preference"]);
+  await page.reload();
+  await expect(banner.getByText("Preferences", { exact: true })).toBeVisible();
+  await accessible(page, info, "home-personalise-on");
+});
+
+test("editor previews selected memory, free meetings and autonomous-spend confirmation", async ({
+  page,
+}, info) => {
+  await open(page);
+  await page
+    .getByRole("button", { name: "Schedule meetings autonomously under £0", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await expect(page.getByText(/May book appointments without asking/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Back to edit", exact: true }).click();
+  await page.getByLabel("Daily spend cap", { exact: true }).fill("5");
+  await page.getByLabel("Preferences", { exact: true }).uncheck();
+  await page.getByLabel("Health", { exact: true }).check();
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await expect(page.getByText("Type CONFIRM to allow this", { exact: true }).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign and activate", exact: true })).toHaveCount(0);
+  await page.getByLabel("Type CONFIRM to allow this", { exact: true }).fill("CONFIRM");
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await expect(page.getByText("Memory it may use: Health", { exact: true })).toBeVisible();
+  await expect(page.getByText("Daily limit: £5.00", { exact: true })).toBeVisible();
+  await accessible(page, info, "permissions-memory-and-spend");
+});
+
+test("reply template uses earlier sent email recipients and keeps fresh approval", async ({
+  page,
+}, info) => {
+  await open(page);
+  const daemon = daemonDouble(page);
+  const source = (
+    await daemon.client.read(
+      daemon.client.paths.resolveSlug("proposals", "send-reply"),
+      "action-proposal",
+    )
+  ).record;
+  // The fixture already has a completed transmission pointing at previous-reply.
+  await daemon.propose("previous-reply", source);
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Reply to people I've emailed before (ask first)", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Preview permissions", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review your permissions", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Sign and activate", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Set up this device", exact: true })
+    .click();
+  await expect(page.getByText("Your permissions have been saved.", { exact: true })).toBeVisible();
+  const mandate = await loadVerifiedMandate(daemon.client, {
+    fetch: daemon.fetch,
+    webId: DEMO_WEBID,
+  });
+  expect(mandate?.autonomous.permissions).toEqual([]);
+  expect(mandate?.withApproval.permissions).toEqual([
+    expect.objectContaining({
+      action: "https://jeswr.org/ns/agent#SendMessage",
+      constraints: expect.arrayContaining([
+        expect.objectContaining({
+          leftOperand: "https://jeswr.org/ns/agent#recipientSet",
+          rightOperand: source.intent.recipientHash,
+        }),
+      ]),
+    }),
+  ]);
+  await accessible(page, info, "permissions-reply-template");
 });
