@@ -11,7 +11,9 @@
  * a confidential OAuth client for code→token, so live mode runs through the
  * maintainer's token proxy. Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
+import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
@@ -50,18 +52,33 @@ export const pinterestAdapter: IntegrationAdapter = {
   fixtures: () => PINTEREST_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Fetching your boards…", done: 0, total: 3 });
-    const boards = await getJson<BoardsAnswer>(ID, ctx.api, `${API}/boards?page_size=100`);
+    const boards = await getJson<BoardsAnswer>(
+      ID,
+      ctx.api,
+      `${API}/boards?page_size=100`,
+      undefined,
+      budget,
+    );
+    budget.items(boards.items.length);
     const boardName = new Map(boards.items.map((b) => [b.id, b.name]));
 
     ctx.progress({ label: "Fetching your pins…", done: 1, total: 3 });
-    const pins = await getJson<PinsAnswer>(ID, ctx.api, `${API}/pins?page_size=100`);
+    const pins = await getJson<PinsAnswer>(
+      ID,
+      ctx.api,
+      `${API}/pins?page_size=100`,
+      undefined,
+      budget,
+    );
 
     const mediaDoc = ctx.resolve("media/pins.ttl");
     const socialDoc = ctx.resolve("social/pins.ttl");
     const media = new Store();
     const social = new Store();
 
+    budget.items(pins.items.length);
     for (const p of pins.items) {
       const when = new Date(p.created_at);
       const board = boardName.get(p.board_id);

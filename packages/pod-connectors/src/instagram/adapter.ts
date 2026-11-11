@@ -10,7 +10,9 @@
  * uses a confidential client for code→token, so live mode runs through the
  * maintainer's token proxy. Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
+import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, MediaItem, SocialMediaPosting } from "../core/vocab.js";
@@ -48,11 +50,14 @@ export const instagramAdapter: IntegrationAdapter = {
   fixtures: () => INSTAGRAM_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Fetching your posts…", done: 0, total: 2 });
     const answer = await getJson<IgMediaAnswer>(
       ID,
       ctx.api,
       `${API}/me/media?fields=id,media_type,media_url,permalink,caption,timestamp&limit=50`,
+      undefined,
+      budget,
     );
 
     const mediaDoc = ctx.resolve("media/posts.ttl");
@@ -60,6 +65,7 @@ export const instagramAdapter: IntegrationAdapter = {
     const media = new Store();
     const social = new Store();
 
+    budget.items(answer.data.length);
     for (const m of answer.data) {
       const when = new Date(m.timestamp);
       const isVideo = m.media_type === "VIDEO";

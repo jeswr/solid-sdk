@@ -10,7 +10,9 @@
  * token proxy; Node hosts can supply a local secret. Snapshot semantics (search has
  * page cursors, not change cursors).
  */
+
 import { DataFactory, Store } from "n3";
+import { RunBudget } from "../core/budget.js";
 import { postJson } from "../core/fixture-fetch.js";
 import { Pagination } from "../core/pagination.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
@@ -53,6 +55,7 @@ export const notionAdapter: IntegrationAdapter = {
   fixtures: () => NOTION_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Searching your Notion workspace…", done: 0, total: 2 });
@@ -60,10 +63,18 @@ export const notionAdapter: IntegrationAdapter = {
     const pagination = new Pagination(ID);
     let cursor: string | undefined;
     do {
-      const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
-        page_size: 100,
-        ...(cursor ? { start_cursor: cursor } : {}),
-      });
+      const search = await postJson<NotionSearchAnswer>(
+        ID,
+        ctx.api,
+        `${API}/search`,
+        {
+          page_size: 100,
+          ...(cursor ? { start_cursor: cursor } : {}),
+        },
+        undefined,
+        budget,
+      );
+      budget.items(arr(search?.results).length);
       results.push(...arr(search?.results));
       cursor = search?.has_more ? pagination.next(search.next_cursor) : undefined;
     } while (cursor);

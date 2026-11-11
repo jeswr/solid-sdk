@@ -68,8 +68,10 @@ export async function getJson<T>(
   budget?: RunBudget,
   maxBytes?: number,
 ): Promise<T> {
+  budget?.request();
   const res = await api(url, init);
   if (res.status === 429) {
+    await res.body?.cancel();
     const retryAfter = res.headers.get("retry-after");
     throw new RateLimitedError(
       adapterId,
@@ -78,6 +80,7 @@ export async function getJson<T>(
     );
   }
   if (!res.ok) {
+    if (!res.bodyUsed) await res.body?.cancel();
     throw new IntegrationSyncError(adapterId, `The platform answered ${res.status} for ${url}.`, {
       url,
       status: res.status,
@@ -93,10 +96,17 @@ export async function postJson<T>(
   url: string,
   body: unknown,
   headers?: Record<string, string>,
+  budget?: RunBudget,
 ): Promise<T> {
-  return getJson<T>(adapterId, api, url, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify(body),
-  });
+  return getJson<T>(
+    adapterId,
+    api,
+    url,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    },
+    budget,
+  );
 }

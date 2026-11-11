@@ -10,7 +10,9 @@
  * confidential OAuth client for code→token, so live mode runs through the
  * maintainer's token proxy. Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
+import { RunBudget } from "../core/budget.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Organisation } from "../core/vocab.js";
@@ -50,9 +52,11 @@ export const slackAdapter: IntegrationAdapter = {
   fixtures: () => SLACK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Identifying your workspace…", done: 0, total: 2 });
-    const auth = await getJson<SlackAuthTest>(ID, ctx.api, `${API}/auth.test`);
+    const auth = await getJson<SlackAuthTest>(ID, ctx.api, `${API}/auth.test`, undefined, budget);
 
+    budget.items(1);
     const doc = ctx.resolve("work/workspace.ttl");
     const store = new Store();
 
@@ -66,8 +70,11 @@ export const slackAdapter: IntegrationAdapter = {
       ID,
       ctx.api,
       `${API}/conversations.list?types=public_channel&exclude_archived=true&limit=1000`,
+      undefined,
+      budget,
     );
 
+    budget.items(list.channels.length);
     for (const c of list.channels) {
       const channel = new Organisation(`${doc}#channel-${c.id}`, store, DataFactory).mark();
       channel.name = `#${c.name}`;

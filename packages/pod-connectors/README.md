@@ -65,6 +65,47 @@ Entry points:
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
 moved fixture tests and the environment-read regression test without production traffic.
 
+## Run limits
+
+All 23 network adapters use one `src/core/budget.ts` `RunBudget` per import. Defaults
+are 20,000 source requests, 2,000,000 source records and 512 MiB of cumulative response
+bytes. These retain the existing Spotify/GitHub limits while bounding large account
+imports. Each JSON response also has a 32 MiB cap (Gmail raw-message JSON uses its
+existing larger per-message cap). Bytes are charged as they stream, including Drive
+media/export downloads and inspected Google error details. Requests count before
+dispatch, including retries, profile lookups and expired-cursor fallbacks. Records
+count before deduplication, filtering or buffering: duplicates, tombstones and malformed
+array entries consume capacity too. Gmail also counts labels, history records and their
+nested changes, fetched messages and thread members. Limits apply to source traffic;
+Pod reads, writes and provenance use their existing storage protections.
+
+Pass any subset through `runImport({ ..., limits: { maxRequests: 500, maxItems: 10_000,
+maxBytes: 64 * 1024 * 1024 } })`. Direct adapter callers pass the same `limits` on
+`ImportContext`. Values must be non-negative safe integers; zero allows none of that
+resource, and omitted fields retain defaults. These settings override the corresponding
+`createSpotifyAdapter`, `createGithubAdapter`, `createStravaAdapter` or
+`createRedditAdapter` factory limits for that run. Each run starts with fresh counters.
+Drive's `createGoogleDriveAdapter({ maxBytes })` still controls the separate per-file
+copy cap; use the runner's `limits.maxBytes` for cumulative traffic.
+
+Exhaustion throws `RunBudgetExceededError`, a subtype of `IntegrationSyncError`, exported
+from the package root and `./core/budget`. Its `resource` is `requests`, `items` or `bytes`,
+and `limit` identifies the allowance. Its message states: “Partial data may have been
+saved; the checkpoint is unchanged.” The runner records an error and retains the previous
+successful cursor, counts and sync time. Already committed documents may remain; retry
+with a suitable limit. Buffered snapshots are only replaced after their source traversal
+completes. A budget failure never represents a successful truncated network snapshot.
+
+The complete adapter audit is:
+
+| Source adapters | Traversal and bounds |
+| --- | --- |
+| Spotify, GitHub, Strava, Reddit, Discord, Twitch, Notion, Dropbox, Google Calendar, Google Contacts, Google Drive, Gmail | Paginated; one request/item/byte budget spans all pages and resources, including retries and full-sync fallback. |
+| Facebook, Fitbit, Garmin, Google Photos, Instagram, LinkedIn, Pinterest, Slack, TikTok, X/Twitter, YouTube | Existing first-page imports; all requests, returned records and bytes share the same run budget. Pagination support is unchanged. |
+| Amazon orders, Apple Health, bank statements, ChatGPT, Garmin file import, Goodreads, Netflix, Steam, Uber, WhatsApp | Uploaded-file imports only; 64 MiB declared/actual byte cap and 100,000-record cap. Garmin also reads through the bounded byte reader. |
+| Google Takeout | Uploaded-file import only; legacy JSON has 64 MiB/100,000-record caps. ZIP has separate streaming entry, inflation, product-row and reconciliation-state caps described below. |
+| Mail | Shared writer/parser, with no independent source fetch or pagination; Gmail and Takeout enforce source limits before handing messages to it. |
+
 ## Binary resources
 
 Adapters store non-RDF resources (original files, `.eml` sources, attachments) with
@@ -584,7 +625,7 @@ only after a complete, valid listing. List and changes pages require object enve
 `files`/`changes` arrays and nonempty string pagination tokens when present; malformed pages
 fail before reconciliation or checkpoint advancement. One shared `RunBudget` caps source
 requests (including downloads), listed items, and cumulative JSON response bytes across pagination
-and any full-resync fallback (512 MiB JSON data budget by default).
+and any full-resync fallback (512 MiB of cumulative JSON and downloaded content by default).
 Failed imports preserve the host's previous checkpoint.
 Removed/trashed files first conditionally rewrite metadata with no encoding links and
 `contentSkipped: "pending-deletion"`, retaining the source id and provenance. They then

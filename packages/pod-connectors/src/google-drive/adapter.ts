@@ -129,12 +129,13 @@ interface Snapshot {
 }
 class Sync {
   skipped = 0;
-  private readonly budget = new RunBudget(ID);
+  private readonly budget: RunBudget;
   private readonly api: typeof fetch;
   constructor(
     private readonly ctx: ImportContext,
     private readonly maxBytes: number,
   ) {
+    this.budget = new RunBudget(ID, ctx.limits);
     this.api = (input, init) => {
       this.budget.request();
       return ctx.api(input, init);
@@ -406,6 +407,7 @@ class Sync {
           url,
           exporting ? Math.min(this.maxBytes, 10 * 1024 * 1024) : this.maxBytes,
           exporting,
+          this.budget,
         );
         if ("reason" in result) {
           reason = result.reason;

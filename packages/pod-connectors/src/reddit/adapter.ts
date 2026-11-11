@@ -61,10 +61,9 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => REDDIT_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, limits);
+      const budget = new RunBudget(ID, { ...limits, ...ctx.limits });
       const skipped = new SkipCounter();
       ctx.progress({ label: "Checking who you are on Reddit…", done: 0, total: 3 });
-      budget.request();
       const me = await getJson<RedditMe>(ID, ctx.api, `${API}/api/v1/me`, undefined, budget);
       budget.items(1);
 
@@ -78,7 +77,6 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
       let after: string | undefined;
       let reachedCheckpoint = false;
       do {
-        budget.request();
         const page = await getJson<RedditListing<RedditSavedPost>>(
           ID,
           ctx.api,
@@ -132,7 +130,6 @@ export function createRedditAdapter(limits?: RunLimits): IntegrationAdapter {
       const subsPagination = new Pagination(ID);
       after = undefined;
       do {
-        budget.request();
         const page = await getJson<RedditListing<RedditSubreddit>>(
           ID,
           ctx.api,

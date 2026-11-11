@@ -59,7 +59,7 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => STRAVA_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, limits);
+      const budget = new RunBudget(ID, { ...limits, ...ctx.limits });
       const skipped = new SkipCounter();
 
       ctx.progress({ label: "Fetching your activities…", done: 0, total: 2 });
@@ -68,7 +68,6 @@ export function createStravaAdapter(limits?: RunLimits): IntegrationAdapter {
       const seen = new Set<number>();
       let before: number | undefined;
       for (;;) {
-        budget.request();
         const batch = arr(
           await getJson<StravaActivity[] | null>(
             ID,

@@ -73,7 +73,7 @@ export function createSpotifyAdapter(limits?: RunLimits): IntegrationAdapter {
       });
     },
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget("spotify", limits);
+      const budget = new RunBudget("spotify", { ...limits, ...ctx.limits });
       const documents: NormalisedDoc[] = [];
       const skipped = new SkipCounter();
       const checkpoint = parseCursor(ctx.cursor);

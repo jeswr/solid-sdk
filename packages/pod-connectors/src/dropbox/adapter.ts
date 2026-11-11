@@ -10,6 +10,7 @@
  * a client id.
  */
 import { DataFactory, Store } from "n3";
+import { RunBudget } from "../core/budget.js";
 import { postJson } from "../core/fixture-fetch.js";
 import { copyDataset } from "../core/incremental.js";
 import { Pagination } from "../core/pagination.js";
@@ -51,15 +52,30 @@ export const dropboxAdapter: IntegrationAdapter = {
   fixtures: () => DROPBOX_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     const skipped = new SkipCounter();
     ctx.progress({ label: "Listing your files…", done: 0, total: 2 });
     const first: DropboxListFolderAnswer = ctx.cursor
-      ? await postJson(ID, ctx.api, `${API}/files/list_folder/continue`, { cursor: ctx.cursor })
-      : await postJson(ID, ctx.api, `${API}/files/list_folder`, {
-          path: "",
-          recursive: true,
-          limit: 500,
-        });
+      ? await postJson(
+          ID,
+          ctx.api,
+          `${API}/files/list_folder/continue`,
+          { cursor: ctx.cursor },
+          undefined,
+          budget,
+        )
+      : await postJson(
+          ID,
+          ctx.api,
+          `${API}/files/list_folder`,
+          {
+            path: "",
+            recursive: true,
+            limit: 500,
+          },
+          undefined,
+          budget,
+        );
 
     const doc = ctx.resolve("documents/files.ttl");
     const dataset = ctx.cursor ? copyDataset(await ctx.read("documents/files.ttl")) : new Store();
@@ -69,6 +85,7 @@ export const dropboxAdapter: IntegrationAdapter = {
 
     let answer = first;
     for (;;) {
+      budget.items(arr(answer?.entries).length);
       for (const entry of arr(answer?.entries)) {
         if (!entry) {
           skipped.skip();
@@ -108,9 +125,16 @@ export const dropboxAdapter: IntegrationAdapter = {
       }
       if (!answer.has_more) break;
       pagination.next(answer.cursor);
-      answer = await postJson(ID, ctx.api, `${API}/files/list_folder/continue`, {
-        cursor: answer.cursor,
-      });
+      answer = await postJson(
+        ID,
+        ctx.api,
+        `${API}/files/list_folder/continue`,
+        {
+          cursor: answer.cursor,
+        },
+        undefined,
+        budget,
+      );
     }
 
     ctx.progress({ label: "Saving your file index…", done: 1, total: 2 });

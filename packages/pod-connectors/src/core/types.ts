@@ -8,6 +8,7 @@
  * import runner.
  */
 import type { DatasetCore } from "@rdfjs/types";
+import type { RunLimits } from "./budget.js";
 
 /** Catalog tiers (docs/integrations-catalog.md). Only Tier A ships adapters. */
 export type IntegrationTier = "A" | "B" | "C";
@@ -161,6 +162,8 @@ export interface ImportProgress {
 
 /** What the runner hands an adapter's `import()`. */
 export interface ImportContext {
+  /** Per-run source limits; omitted fields use DEFAULT_RUN_LIMITS. Zero disables that resource. */
+  readonly limits?: Partial<RunLimits>;
   /**
    * Fetch against the **source platform**: token-injected when live,
    * fixture-backed in demo mode and contract tests. Adapters must do all API

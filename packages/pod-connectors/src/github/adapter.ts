@@ -56,11 +56,10 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
     fixtures: () => GITHUB_FIXTURES,
 
     async import(ctx: ImportContext): Promise<ImportOutcome> {
-      const budget = new RunBudget(ID, limits);
+      const budget = new RunBudget(ID, { ...limits, ...ctx.limits });
       const skipped = new SkipCounter();
 
       ctx.progress({ label: "Fetching your GitHub profile…", done: 0, total: 2 });
-      budget.request();
       const user = (await getJson<GitHubUser>(ID, ctx.api, `${API}/user`, undefined, budget)) ?? {};
       budget.items(1);
 
@@ -90,7 +89,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
       const repos: (GitHubRepo | null)[] = [];
       const seen = new Set<number>();
       for (let page = 1; ; page += 1) {
-        budget.request();
         const batch = arr(
           await getJson<GitHubRepo[] | null>(
             ID,
@@ -135,7 +133,6 @@ export function createGithubAdapter(limits?: RunLimits): IntegrationAdapter {
         if (!Number.isSafeInteger(id) || seen.has(id)) continue;
         seen.add(id);
         const url = `${API}/repositories/${id}`;
-        budget.request();
         let repo: GitHubRepo | null;
         try {
           repo = await getJson<GitHubRepo | null>(

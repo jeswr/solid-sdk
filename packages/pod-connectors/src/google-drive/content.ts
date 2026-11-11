@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { RunBudget } from "../core/budget.js";
 import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 
 const ID = "google-drive";
@@ -16,12 +17,15 @@ async function readCapped(
   res: Response,
   cap: number,
   controller: AbortController,
+  budget?: RunBudget,
 ): Promise<Uint8Array | undefined> {
   if (!res.body) return new Uint8Array();
   const reader = res.body.getReader();
   const cancel = async () => {
     try {
       await reader.cancel();
+    } catch {
+      /* A source cancellation failure must not replace the budget failure. */
     } finally {
       controller.abort();
     }
@@ -38,6 +42,7 @@ async function readCapped(
     for (;;) {
       const { value, done } = await reader.read();
       if (done) return bytes.subarray(0, length);
+      budget?.bytes(value.byteLength);
       if (value.byteLength > cap - length) {
         await cancel();
         return undefined;
@@ -45,6 +50,9 @@ async function readCapped(
       bytes.set(value, length);
       length += value.byteLength;
     }
+  } catch (error) {
+    await cancel();
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -56,6 +64,7 @@ export async function download(
   url: string,
   cap: number,
   exporting: boolean,
+  budget?: RunBudget,
 ): Promise<Download> {
   const controller = new AbortController();
   const res = await api(url, { signal: controller.signal, redirect: "error" });
@@ -67,7 +76,7 @@ export async function download(
   if (!res.ok) {
     // Only this explicit Google export error is a metadata-only success.
     if (exporting && res.status === 403) {
-      const bytes = await readCapped(res, 64 * 1024, controller);
+      const bytes = await readCapped(res, 64 * 1024, controller, budget);
       let error: { error?: { errors?: { reason?: string }[] } } | undefined;
       try {
         error = JSON.parse(new TextDecoder().decode(bytes));
@@ -85,6 +94,6 @@ export async function download(
       status: res.status,
     });
   }
-  const body = await readCapped(res, cap, controller);
+  const body = await readCapped(res, cap, controller, budget);
   return body === undefined ? { reason: "size-cap-exceeded" } : { body };
 }

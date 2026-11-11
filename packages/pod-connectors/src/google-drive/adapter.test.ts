@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_RUN_LIMITS, RunBudget } from "../core/budget.js";
+import { RunBudget, type RunLimits } from "../core/budget.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { Provenance } from "../core/provenance.js";
@@ -89,6 +89,7 @@ function setup(maxBytes?: number) {
       state?: ConnectorState;
       cursor?: string;
       onState?: (state: ConnectorState) => void;
+      limits?: Partial<RunLimits>;
     } = {},
   ) => {
     const api = vi.fn(fixtureMediaFetch(routes, opts.media ?? {}));
@@ -102,6 +103,7 @@ function setup(maxBytes?: number) {
         state: opts.state,
         cursor: opts.cursor,
         onState: opts.onState,
+        limits: opts.limits,
       }),
     };
   };
@@ -980,7 +982,7 @@ describe("Drive malformed snapshots", () => {
     ).result;
     expect(requests).toHaveBeenCalledTimes(7);
     expect(items.mock.calls).toEqual([[1], [FILES.length]]);
-    expect(bytes).toHaveBeenCalledTimes(3);
+    expect(bytes).toHaveBeenCalledTimes(6);
     expect(
       new Set([...requests.mock.contexts, ...items.mock.contexts, ...bytes.mock.contexts]).size,
     ).toBe(1);
@@ -1017,38 +1019,33 @@ describe("Drive malformed snapshots", () => {
         ? jsonBytes(changePages[0] as FixtureRoute) + jsonBytes(fullPages[0] as FixtureRoute)
         : Math.max(...routes.map(jsonBytes)) +
           (mode === "full" ? jsonBytes(fullPages[0] as FixtureRoute) : 0);
-    const originalMaxBytes = DEFAULT_RUN_LIMITS.maxBytes;
-    Object.assign(DEFAULT_RUN_LIMITS, { maxBytes });
-    try {
-      const before = pod.get(metaUrl(BINARY.id));
-      const remove = vi.spyOn(podWriter, "remove");
-      const read = vi.spyOn(podWriter, "read");
-      const write = vi.spyOn(podWriter, "write");
-      const binary = vi.spyOn(podWriter, "writeBinary");
-      const onState = vi.fn();
-      const { api, result } = run(routes, {
-        state,
-        cursor: mode === "full" ? "" : state.cursor,
-        onState,
-      });
-      await expect(result).rejects.toThrow("data budget");
-      expect(api.mock.calls).toHaveLength(mode === "full" ? 3 : mode === "changes" ? 2 : 4);
-      expect(remove).not.toHaveBeenCalled();
-      expect(binary).not.toHaveBeenCalled();
-      expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
-      expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
-      expect(pod.get(metaUrl(BINARY.id))).toBe(before);
-      expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
-      expect(onState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cursor: state.cursor,
-          counts: state.counts,
-          lastOutcome: "error",
-        }),
-      );
-    } finally {
-      Object.assign(DEFAULT_RUN_LIMITS, { maxBytes: originalMaxBytes });
-    }
+    const before = pod.get(metaUrl(BINARY.id));
+    const remove = vi.spyOn(podWriter, "remove");
+    const read = vi.spyOn(podWriter, "read");
+    const write = vi.spyOn(podWriter, "write");
+    const binary = vi.spyOn(podWriter, "writeBinary");
+    const onState = vi.fn();
+    const { api, result } = run(routes, {
+      state,
+      cursor: mode === "full" ? "" : state.cursor,
+      onState,
+      limits: { maxBytes },
+    });
+    await expect(result).rejects.toThrow("data budget");
+    expect(api.mock.calls).toHaveLength(mode === "full" ? 3 : mode === "changes" ? 2 : 4);
+    expect(remove).not.toHaveBeenCalled();
+    expect(binary).not.toHaveBeenCalled();
+    expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
+    expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
+    expect(pod.get(metaUrl(BINARY.id))).toBe(before);
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cursor: state.cursor,
+        counts: state.counts,
+        lastOutcome: "error",
+      }),
+    );
   });
 });
 

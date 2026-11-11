@@ -10,7 +10,7 @@
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { ResponseTooLargeError } from "../core/budget.js";
+import { ResponseTooLargeError, RunBudget } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -68,14 +68,22 @@ export const gmailAdapter: IntegrationAdapter = {
   fixtures: () => GMAIL_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Connecting to your mailbox…", done: 0 });
-    const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`);
+    const profile = await getJson<GmailProfile>(
+      ID,
+      ctx.api,
+      `${GMAIL_API}/profile`,
+      undefined,
+      budget,
+    );
     if (typeof profile?.emailAddress !== "string" || typeof profile.historyId !== "string")
       throw new IntegrationSyncError(ID, "Gmail returned an incomplete mailbox profile.");
+    budget.items(1);
     const account = profile.emailAddress;
-    const labels = await labelFolders(ctx);
+    const labels = await labelFolders(ctx, budget);
     const mail = createMailWriter(ctx, account);
-    const sync = new Sync(ctx, mail, labels, account);
+    const sync = new Sync(ctx, mail, labels, account, budget);
 
     let cursor: string | undefined;
     if (ctx.cursor) {
@@ -102,8 +110,12 @@ export const gmailAdapter: IntegrationAdapter = {
 };
 
 /** Label id → folder. System folders are keyed by name, user labels by their stable id. */
-async function labelFolders(ctx: ImportContext): Promise<Map<string, MailFolder>> {
-  const list = await getJson<GmailLabelList>(ID, ctx.api, `${GMAIL_API}/labels`);
+async function labelFolders(
+  ctx: ImportContext,
+  budget: RunBudget,
+): Promise<Map<string, MailFolder>> {
+  const list = await getJson<GmailLabelList>(ID, ctx.api, `${GMAIL_API}/labels`, undefined, budget);
+  budget.items(list?.labels?.length ?? 0);
   const folders = new Map<string, MailFolder>();
   for (const label of list?.labels ?? []) {
     if (!label || !validId(label.id)) continue;
@@ -131,6 +143,7 @@ class Sync {
     private readonly mail: MailWriter,
     private readonly labels: ReadonlyMap<string, MailFolder>,
     private readonly account: string,
+    private readonly budget: RunBudget,
   ) {}
 
   /** Lists every message (Spam and Trash included) and removes stored ones no longer listed. */
@@ -143,7 +156,10 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/messages?${params}`,
+        undefined,
+        this.budget,
       );
+      this.budget.items(page?.messages?.length ?? 0);
       for (const ref of page?.messages ?? []) await this.store(ref?.id);
       pageToken = page?.nextPageToken || undefined;
     } while (pageToken);
@@ -184,8 +200,18 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/history?${params}`,
+        undefined,
+        this.budget,
       );
+      this.budget.items(page?.history?.length ?? 0);
       for (const record of page?.history ?? []) {
+        for (const group of [
+          record?.messagesDeleted,
+          record?.messagesAdded,
+          record?.labelsAdded,
+          record?.labelsRemoved,
+        ])
+          this.budget.items(group?.length ?? 0);
         for (const { message } of record?.messagesDeleted ?? []) {
           if (!validId(message?.id)) continue;
           changed.delete(message.id);
@@ -215,7 +241,7 @@ class Sync {
         this.ctx.api,
         `${GMAIL_API}/messages/${id}?format=raw`,
         undefined,
-        undefined,
+        this.budget,
         MAX_MESSAGE_JSON_BYTES,
       );
     } catch (error) {
@@ -229,6 +255,7 @@ class Sync {
       }
       throw error;
     }
+    this.budget.items(1);
     const labelIds = Array.isArray(message?.labelIds) ? message.labelIds : [];
     if (labelIds.includes("SPAM")) return this.remove(id);
     const source = webUrl(id);
@@ -286,7 +313,10 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/threads/${threadId}?${params}`,
+        undefined,
+        this.budget,
       );
+      this.budget.items(metadata?.messages?.length ?? 0);
       const found = new Map<string, string>();
       if (metadata?.id === threadId && Array.isArray(metadata.messages))
         for (const member of metadata.messages) {

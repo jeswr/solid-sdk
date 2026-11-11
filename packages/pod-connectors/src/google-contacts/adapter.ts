@@ -46,7 +46,7 @@ export const googleContactsAdapter: IntegrationAdapter = {
   oauth: createGoogleOAuthConfig("contacts"),
   fixtures: () => GOOGLE_CONTACTS_FIXTURES,
   async import(ctx: ImportContext): Promise<ImportOutcome> {
-    const budget = new RunBudget(ID);
+    const budget = new RunBudget(ID, ctx.limits);
     ctx.progress({ label: "Fetching your contacts…", done: 0 });
     const existing = await ctx.read(PEOPLE);
     const bookIri = `${ctx.resolve(INDEX)}#this`;
@@ -226,7 +226,6 @@ async function connections(
     });
     if (syncToken) params.set("syncToken", syncToken);
     if (pageToken) params.set("pageToken", pageToken);
-    budget.request();
     // getJson preserves the framework's 401/403/429/5xx errors. Inspect only the 400
     // body for Google's documented google.rpc.ErrorInfo reason; never match error text.
     const page = await getJson<GoogleConnectionsList>(
@@ -252,9 +251,11 @@ async function connections(
               url: PEOPLE_API,
             });
         }
-        return response.ok ? metered(response, budget) : response;
+        return response;
       },
       `${PEOPLE_API}?${params}`,
+      undefined,
+      budget,
     );
     if (
       !page ||
@@ -276,22 +277,4 @@ async function connections(
     seen.add(page.nextPageToken);
     pageToken = page.nextPageToken;
   }
-}
-
-/** Count a response body against the run's data budget as getJson streams it. */
-function metered(response: Response, budget: RunBudget): Response {
-  if (!response.body) return response;
-  const counted = response.body.pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        budget.bytes(chunk.byteLength);
-        controller.enqueue(chunk);
-      },
-    }),
-  );
-  return new Response(counted, {
-    status: response.status,
-    statusText: response.statusText,
-    headers: response.headers,
-  });
 }

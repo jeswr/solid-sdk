@@ -13,6 +13,7 @@
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
+import type { RunLimits } from "./budget.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
@@ -30,6 +31,8 @@ import type {
 export type ImportMode = "live" | "demo";
 
 export interface RunImportOptions extends ConnectorStateOptions {
+  /** Total source requests, records and response bytes; shared across pages, retries and fallbacks. */
+  limits?: Partial<RunLimits>;
   adapter: IntegrationAdapter;
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
@@ -123,6 +126,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       remove: checked(session.remove),
       signal,
       scopes: opts.scopes,
+      limits: opts.limits,
     });
     signal?.throwIfAborted();
     const { indexUrl } = await podWriter.registerType(session.registrations());

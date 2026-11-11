@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Resource bounds for source traffic. Every JSON response is read through a byte cap, and an
  * adapter that follows pagination owns one RunBudget per run, so a source that keeps returning
@@ -29,40 +30,76 @@ export interface RunLimits {
   readonly maxBytes?: number;
 }
 
-export const DEFAULT_RUN_LIMITS: RunLimits = {
+export const DEFAULT_RUN_LIMITS: Readonly<Required<RunLimits>> = Object.freeze({
   maxRequests: 20_000,
   maxItems: 2_000_000,
   maxBytes: 512 * 1024 * 1024,
-};
+});
+
+export type BudgetResource = "requests" | "items" | "bytes";
+
+/** A failed, potentially partial import; the runner retains the previous successful state. */
+export class RunBudgetExceededError extends IntegrationSyncError {
+  constructor(
+    adapterId: string,
+    readonly resource: BudgetResource,
+    readonly limit: number,
+  ) {
+    const label = { requests: "request", items: "item", bytes: "data" }[resource];
+    super(
+      adapterId,
+      `The import exceeded its ${label} budget. Partial data may have been saved; the checkpoint is unchanged.`,
+    );
+    this.name = "RunBudgetExceededError";
+  }
+}
 
 export class RunBudget {
   private requests = 0;
   private itemCount = 0;
   private byteCount = 0;
+  private readonly limits: Required<RunLimits>;
+  private failure?: RunBudgetExceededError;
   constructor(
     private readonly adapterId: string,
-    private readonly limits: RunLimits = DEFAULT_RUN_LIMITS,
-  ) {}
+    limits: Partial<RunLimits> = {},
+  ) {
+    this.limits = {
+      maxRequests: limits.maxRequests ?? DEFAULT_RUN_LIMITS.maxRequests,
+      maxItems: limits.maxItems ?? DEFAULT_RUN_LIMITS.maxItems,
+      maxBytes: limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes,
+    };
+    for (const [key, value] of Object.entries(this.limits))
+      if (!Number.isSafeInteger(value) || value < 0)
+        throw new TypeError(`${key} must be a non-negative safe integer.`);
+  }
+
+  private check(n: number, total: number, resource: BudgetResource, limit: number): void {
+    if (this.failure) throw this.failure;
+    if (!Number.isSafeInteger(n) || n < 0)
+      throw new TypeError("Budget charges must be non-negative safe integers.");
+    if (n > limit - total) {
+      this.failure = new RunBudgetExceededError(this.adapterId, resource, limit);
+      throw this.failure;
+    }
+  }
 
   /** Count one source request; throws once the run exceeds its request budget. */
   request(): void {
-    if (++this.requests > this.limits.maxRequests)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its request budget.");
+    this.check(1, this.requests, "requests", this.limits.maxRequests);
+    this.requests++;
   }
 
   /** Count `n` buffered source items; throws once the run exceeds its item budget. */
   items(n: number): void {
+    this.check(n, this.itemCount, "items", this.limits.maxItems);
     this.itemCount += n;
-    if (this.itemCount > this.limits.maxItems)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its item budget.");
   }
 
   /** Count `n` response bytes read; throws once the run exceeds its byte budget. */
   bytes(n: number): void {
+    this.check(n, this.byteCount, "bytes", this.limits.maxBytes);
     this.byteCount += n;
-    const max = this.limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes ?? Number.POSITIVE_INFINITY;
-    if (this.byteCount > max)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its data budget.");
   }
 }
 
@@ -80,28 +117,27 @@ export async function readJson(
   const tooLarge = () => new ResponseTooLargeError(adapterId, url);
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    await res.body?.cancel();
+    await res.body?.cancel().catch(() => undefined);
     throw tooLarge();
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
   if (res.body) {
     const reader = res.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      try {
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
         budget?.bytes(value.byteLength);
-      } catch (error) {
-        await reader.cancel();
-        throw error;
+        if (size > maxBytes) throw tooLarge();
+        chunks.push(value);
       }
-      if (size > maxBytes) {
-        await reader.cancel();
-        throw tooLarge();
-      }
-      chunks.push(value);
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      reader.releaseLock();
     }
   }
   const bytes = new Uint8Array(size);

@@ -38,6 +38,24 @@ its original mixed lookup semantics; never reread the original init after captur
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
+Every network adapter creates one shared-core `RunBudget` per import (20,000 requests,
+2,000,000 records, 512 MiB response bytes by default). Honor `ImportContext.limits`,
+forwarded from `runImport({ limits })`; merge it over existing adapter-factory settings.
+Never reset counters on pagination, retry or expired-cursor fallback. `getJson`/`postJson`
+charge the optional budget's request before dispatch and pass it to `readJson` for streamed
+bytes; do not also charge that request manually. Custom transports (Spotify and Drive)
+charge requests themselves. Count page rows before filtering, deduplication, buffering or
+mapping, including malformed/deleted rows; Gmail's nested history changes and thread
+members count too. Charge Drive download and inspected error-body bytes to that same budget.
+Retain independent per-response/per-file caps. `RunBudgetExceededError` extends
+`IntegrationSyncError`, reports `resource`/`limit` and explains that partial data may have
+been saved while the checkpoint is unchanged. Never catch it as a successful truncated
+snapshot. Budgets validate and snapshot overrides and remain exhausted after failure.
+Keep the README's complete network/file/mail audit current. Cover each network adapter's
+request/item/byte limits, distinct-token endless pagination for paginated adapters, and
+checkpoint retention with fixture-only fakes. Ordinary uploads already have 64 MiB actual
+byte and 100,000-row caps; Garmin must use `fileText` too. Takeout retains its streaming caps.
+
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
 especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
