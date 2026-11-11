@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { useNotesContext } from "../state/notes-context";
 import { ConfirmDialog } from "./controls";
+import { ImageCleanup } from "./image-cleanup";
 import { KeepImportDialog } from "./keep-import";
 
 function LabelRow({ label }: { label: string }) {
@@ -144,6 +145,7 @@ export function NotesSidebar() {
           <Import size={18} aria-hidden="true" />
           Import from Keep
         </Button>
+        <ImageCleanup />
       </nav>
       {importing && <KeepImportDialog open close={() => setImporting(false)} />}
       <Dialog open={editing} onOpenChange={setEditing}>
