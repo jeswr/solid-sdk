@@ -325,6 +325,14 @@
     "./youtube/*": {
       "types": "./dist/youtube/*.d.ts",
       "default": "./dist/youtube/*.js"
+    },
+    "./adapters/whoop": {
+      "types": "./dist/adapters-whoop.d.ts",
+      "default": "./dist/adapters-whoop.js"
+    },
+    "./whoop/*": {
+      "types": "./dist/whoop/*.d.ts",
+      "default": "./dist/whoop/*.js"
     }
   },
   "files": [

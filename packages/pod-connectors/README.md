@@ -228,6 +228,80 @@ keep working. An unsupported-only archive returns its report even when it writes
 Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
 they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
 
+## WHOOP
+
+`./adapters/whoop` exports `whoopAdapter`, `createWhoopAdapter(limits?)` and
+`whoopFileAdapter`. Both appear under **one** health catalogue id, `whoop`, like Garmin.
+Hosts inject `createRegistry({ whoop: { clientId, tokenProxyUrl } })` and a separate
+`SourceAuth`. Code exchange defaults to the shared confidential-client token proxy;
+a Node host may instead inject its client secret for direct exchange. Client id alone
+keeps the connector in demo mode. Public secretless exchange is not assumed.
+The Tier A OAuth path uses the shared authorization-code/S256 PKCE engine with WHOOP's
+`/oauth/oauth2/auth` and `/oauth/oauth2/token` endpoints. Scopes are `read:recovery`,
+`read:cycles`, `read:sleep`, `read:workout`, `read:profile` and `offline`. Tokens remain
+host-owned and in memory; automatic refresh is not implemented by this adapter.
+Provider behavior is exercised with synthetic v2-shaped fixtures only, without live
+verification of client registration or token exchange.
+
+The file path accepts `my_whoop_data_<date>.zip` from WHOOP → More → App Settings →
+Data Export, or a single `physiological_cycles.csv`, `sleeps.csv` or `workouts.csv`.
+ZIPs use Takeout's streaming, ranged central-directory/CRC/DEFLATE reader; native File/Blob
+or equivalent `stream()` and `slice()` ports are required, with no whole-archive fallback.
+Header matching ignores case, punctuation and whitespace and rejects normalization collisions.
+CSV timestamps require an explicit offset, either in the timestamp or the export's
+Cycle/Sleep/Workout timezone column. Ambiguous local times are skipped instead of assuming
+UTC or the host timezone. Journal entries and unknown archive products are reported as unsupported.
+
+API v2 collections are `cycle`, `recovery`, `activity/sleep` and `activity/workout`.
+Each drains `next_token` (also accepting `nextToken` in fixtures) through the `nextToken`
+query parameter. Tokens are opaque, URL-encoded, capped and checked for cycles. Collection
+envelopes fail closed; malformed individual records are skipped. Recoveries join their
+cycle id to a cycle start time; no time is fabricated for an unmatched recovery.
+Only scored records are imported. The ISO cursor is the newest imported start time.
+With `ctx.scopes`, only granted collections are requested; recovery also requires cycles
+to resolve its timestamp. Withheld collections leave their stored records untouched.
+Subsequent requests use `start` with a seven-day overlap to replay delayed scores/updates.
+WHOOP's start filter is not an updated-since feed: changes to older events, or previously
+unmatched recoveries outside that overlap, require a cursor-free import. Full and incremental
+imports both preserve unrelated historical records; source deletions are not inferred.
+
+The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts.ttl`,
+inside the WHOOP connector container. Observation values, CodeableConcepts, OWL-Time instants,
+QUDT units, UCUM codes and local person subjects follow the Health app's Apple Health model.
+Resting HR and total asleep duration use its existing HeartRateObservation/SleepObservation
+classes and LOINC codes. HRV retains **RMSSD** (never relabelled as Apple's SDNN), skin
+temperature, SpO2, respiratory rate, energy and reported light/deep/REM durations use generic
+health:Observation with source field codes under the WHOOP coding-system URL. Sleep stages
+remain separate reported totals, with no invented stage chronology and no SleepObservation
+subtype that would double-count the total. API kilojoules and CSV dietary calories normalize
+to kJ; workouts also carry schema:ExerciseAction energy/duration/name like Garmin.
+
+The connector's Apple Health adapter currently imports only workouts; the Health app's
+observation reader currently charts six metric kinds. Compatible HR and sleep observations
+use that reader's exact representation, while other WHOOP values are retained as canonical
+observations for readers supporting those codes. Hosts must route/discover the WHOOP container;
+this change does not add metric cards or change the Health app's fixed storage root.
+The health sector has no recovery score, strain or sleep performance terms. These scores
+are omitted and listed in `report.unsupported` for both paths; no new vocabulary IRIs are minted.
+
+API fragments use native WHOOP ids; CSV fragments use `(start instant, record kind)`.
+A later API record removes its matching CSV description and deterministic helper nodes.
+CSV records never replace an API record for that same kind/instant. Duplicate rows and
+reimports are idempotent. Distinct native ids at the same instant remain distinct.
+Monthly shards are selected by UTC start; a provider correction moving an event to another
+month cannot remove its old shard copy without a separate reconciliation inventory.
+All writes use retained ETags and the shared bounded provenance pipeline.
+
+WHOOP limits are 64 MiB per upload, 16 MiB per archive CSV, 100 ZIP entries, 10,000
+source rows and 10,000 normalized records (a physiological row may yield two), and
+500,000 RDF quads per destination. Default API limits are 2,000 requests, 10,000 source
+items and 64 MiB cumulative JSON bytes; `createWhoopAdapter(limits)` accepts tighter host
+budgets. The shared 32 MiB JSON response and 4 MiB logical CSV record limits also apply.
+Source input is staged before data writes; invalid pages, CRCs, limits, HTTP 401/429 and
+cancellation never advance the checkpoint. 429 is surfaced for host scheduling without
+retrying. Synthetic tests cover both orders of CSV/API deduplication, pagination, hostile
+headers/archives/records, budgets, provenance and cancellation. No new dependencies.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
@@ -575,7 +649,7 @@ snapshots cover these paths without Google accounts or production traffic.
 `./adapters/google-drive` exports `googleDriveAdapter` and
 `createGoogleDriveAdapter({ maxBytes })` (default 25 MiB). Drive remains Tier B because
 `drive.readonly` is a restricted Google scope. OAuth uses `createGoogleOAuthConfig('drive')`.
-The catalog has 32 entries: eight Tier A, fourteen Tier B, and ten Tier C.
+The catalog has 34 entries: nine Tier A, fifteen Tier B, and ten Tier C.
 
 A full import captures `changes/startPageToken` before paginating `files.list`; later
 imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from

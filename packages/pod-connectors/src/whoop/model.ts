@@ -1,0 +1,254 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
+import { DataFactory, type Store } from "n3";
+import { IntegrationSyncError } from "../core/errors.js";
+import { copyDataset } from "../core/incremental.js";
+import type { ImportContext } from "../core/types.js";
+import { CLASSES, ExerciseAction, PodThing } from "../core/vocab.js";
+import { HEALTH, HealthNode } from "./vocab.js";
+
+export const API = "https://api.prod.whoop.com/developer/v2";
+export const MAX_RECORDS = 10_000;
+export const MAX_STORED_QUADS = 500_000;
+export const WHOOP_SCHEME = "https://developer.whoop.com";
+export const LOINC = "http://loinc.org";
+export type Kind = "cycle" | "recovery" | "sleep" | "workout";
+
+/** Clinical concepts are source field codes unless the existing app uses LOINC. */
+export const METRICS = {
+  restingHR: ["Resting heart rate", "8867-4", "BEAT-PER-MIN", "/min", HEALTH.HeartRate],
+  hrv: ["Heart rate variability (RMSSD)", "hrv_rmssd_milli", "MilliSEC", "ms"],
+  temperature: ["Skin temperature", "skin_temp_celsius", "DEG_C", "Cel"],
+  oxygen: ["Blood oxygen saturation", "spo2_percentage", "PERCENT", "%"],
+  energy: ["Energy burned", "kilojoule", "KiloJ", "kJ"],
+  sleep: ["Asleep duration", "93832-4", "SEC", "s", HEALTH.Sleep],
+  light: ["Light sleep duration", "total_light_sleep_time_milli", "SEC", "s"],
+  deep: ["Deep sleep duration", "total_slow_wave_sleep_time_milli", "SEC", "s"],
+  rem: ["REM sleep duration", "total_rem_sleep_time_milli", "SEC", "s"],
+  respiratory: ["Respiratory rate", "respiratory_rate", "PER-MIN", "/min"],
+  averageHR: ["Average heart rate", "average_heart_rate", "BEAT-PER-MIN", "/min"],
+  maxHR: ["Maximum heart rate", "max_heart_rate", "BEAT-PER-MIN", "/min"],
+} as const;
+export type Metric = keyof typeof METRICS;
+export interface WhoopRecord {
+  kind: Kind;
+  start: Date;
+  end?: Date;
+  id?: string;
+  updated?: Date;
+  name?: string;
+  values: Partial<Record<Metric, number>>;
+}
+
+export function object(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+export function sourceId(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return String(value);
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : undefined;
+}
+export function number(value: unknown, max = 1_000_000_000, min = 0): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : undefined;
+}
+
+/** Require a real calendar date and explicit offset; never interpret a local time in host TZ. */
+export function timestamp(value: unknown, offset?: string): Date | undefined {
+  if (typeof value !== "string" || value.length > 80) return undefined;
+  let raw = value
+    .trim()
+    .replace(" ", "T")
+    .replace(/\s+([+-]\d{2}:?\d{2})$/, "$1");
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)) {
+    const supplied = offset?.trim().toUpperCase();
+    const zone = supplied === "UTC" || supplied === "GMT" ? "Z" : supplied?.replace(/^UTC/, "");
+    if (!zone || !/^(?:Z|[+-]\d{2}:?\d{2})$/.test(zone)) return undefined;
+    raw += zone;
+  }
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:?\d{2})$/.exec(raw);
+  if (!match) return undefined;
+  const year = Number(match[1]),
+    month = Number(match[2]),
+    day = Number(match[3]);
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (
+    year < 1900 ||
+    year > 2200 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > days ||
+    Number(match[4]) > 23 ||
+    Number(match[5]) > 59 ||
+    Number(match[6]) > 59
+  )
+    return undefined;
+  const date = new Date(raw);
+  return Number.isFinite(date.getTime()) ? date : undefined;
+}
+
+const route = (kind: Kind) => (kind === "sleep" || kind === "workout" ? `activity/${kind}` : kind);
+export const sourceUrl = (kind: Kind) => `${API}/${route(kind)}`;
+
+interface Existing {
+  csvRoot?: string;
+  hasApi: boolean;
+}
+
+/** Stage source input first. Read each destination once, reconcile aliases in linear work,
+ * and conditionally replace it, retaining unrelated records and their provenance. */
+export async function writeRecords(
+  records: readonly WhoopRecord[],
+  ctx: Pick<ImportContext, "resolve" | "read" | "write" | "signal">,
+  source: "api" | "file" = "api",
+): Promise<void> {
+  const shards = new Map<string, WhoopRecord[]>();
+  for (const record of records) {
+    const slug =
+      record.kind === "workout"
+        ? "health/workouts.ttl"
+        : `health/observations/${record.start.toISOString().slice(0, 7)}.ttl`;
+    const group = shards.get(slug) ?? [];
+    group.push(record);
+    shards.set(slug, group);
+  }
+  for (const [slug, incoming] of shards) {
+    ctx.signal?.throwIfAborted();
+    const previous = await ctx.read(slug);
+    if ((previous?.size ?? 0) > MAX_STORED_QUADS)
+      throw new IntegrationSyncError(
+        "whoop",
+        "Stored WHOOP document exceeds the reconciliation limit.",
+      );
+    const dataset = copyDataset(previous);
+    const doc = ctx.resolve(slug);
+    const aliases = new Map<string, Existing>();
+    const carried = new Set<string>();
+    for (const quad of dataset) {
+      carried.add(quad.subject.value);
+      if (quad.predicate.value !== `${NS.RDF}type` || quad.object.value !== CLASSES.Dataset)
+        continue;
+      const node = new HealthNode(quad.subject, dataset, DataFactory);
+      const start = node.startTime;
+      if (node.source !== "WHOOP" || !start || !Number.isFinite(start.getTime())) continue;
+      if (
+        !node.value.startsWith(`${doc}#`) ||
+        !["cycle", "recovery", "sleep", "workout"].includes(node.description ?? "")
+      )
+        continue;
+      const key = `${node.description}|${start.toISOString()}`;
+      const entries = aliases.get(key) ?? { hasApi: false };
+      if (node.identifier) entries.hasApi = true;
+      else entries.csvRoot = node.value;
+      aliases.set(key, entries);
+    }
+    for (const record of incoming) {
+      ctx.signal?.throwIfAborted();
+      const alias = `${record.kind}|${record.start.toISOString()}`;
+      const matches = aliases.get(alias);
+      // CSV cannot distinguish two native events starting at the exact same instant.
+      // Keep the API records instead of overwriting either with an ambiguous row.
+      if (!record.id && matches?.hasApi) continue;
+      const root = `${doc}#${record.kind}-${record.id ?? `csv-${encodeURIComponent(record.start.toISOString())}`}`;
+      const obsolete = new Set([root, ...(matches?.csvRoot ? [matches.csvRoot] : [])]);
+      for (const old of obsolete) {
+        for (const subject of ownedSubjects(old)) {
+          dataset.removeQuads(dataset.getQuads(subject, null, null, null));
+          carried.delete(subject);
+        }
+      }
+      const marker = new HealthNode(root, dataset, DataFactory);
+      marker.types.add(CLASSES.Dataset);
+      marker.description = record.kind;
+      marker.source = "WHOOP";
+      marker.startTime = record.start;
+      marker.endTime = record.end;
+      marker.identifier = record.id;
+      marker.dateModified = record.updated;
+      marker.sourceUrl = source === "api" ? sourceUrl(record.kind) : undefined;
+      for (const [key, value] of Object.entries(record.values)) {
+        const metric = key as Metric;
+        addObservation(dataset, doc, root, record, metric, value, source);
+      }
+      if (record.kind === "workout") {
+        const workout = new ExerciseAction(`${root}/action`, dataset, DataFactory).mark();
+        workout.name = record.name ?? "WHOOP workout";
+        workout.exerciseType = record.name;
+        workout.identifier = record.id;
+        workout.startTime = record.start;
+        if (record.end)
+          workout.duration = `PT${(record.end.getTime() - record.start.getTime()) / 1000}S`;
+        if (record.values.energy !== undefined)
+          workout.calories = `${record.values.energy / 4.184} kcal`;
+        workout.sourceUrl = source === "api" ? sourceUrl(record.kind) : undefined;
+      }
+      aliases.set(alias, record.id ? { hasApi: true } : { hasApi: false, csvRoot: root });
+      if (dataset.size > MAX_STORED_QUADS)
+        throw new IntegrationSyncError("whoop", "WHOOP document exceeds the reconciliation limit.");
+    }
+    const healthRecord = new HealthNode(doc, dataset, DataFactory);
+    healthRecord.types.add(HEALTH.Record);
+    healthRecord.link(HEALTH.subject, `${doc}#subject`);
+    new PodThing(`${doc}#subject`, dataset, DataFactory).types.add(HEALTH.Person);
+    if (dataset.size > MAX_STORED_QUADS)
+      throw new IntegrationSyncError("whoop", "WHOOP document exceeds the reconciliation limit.");
+    await ctx.write({
+      slug,
+      category: "health",
+      forClass: slug === "health/workouts.ttl" ? CLASSES.ExerciseAction : HEALTH.Observation,
+      dataset,
+      writeMode: "replace",
+      sourceUrl: source === "api" ? API : undefined,
+      carriedForward: [...carried],
+    });
+  }
+}
+
+function* ownedSubjects(root: string): Generator<string> {
+  yield root;
+  yield `${root}/action`;
+  for (const metric of Object.keys(METRICS)) {
+    yield `${root}/metric/${metric}`;
+    yield `${root}/metric/${metric}/code`;
+    yield `${root}/metric/${metric}/time`;
+  }
+}
+
+function addObservation(
+  dataset: Store,
+  doc: string,
+  root: string,
+  record: WhoopRecord,
+  metric: Metric,
+  value: number,
+  source: "api" | "file",
+): void {
+  const [name, codeValue, unit, unitCode, subtype] = [...METRICS[metric]];
+  const iri = `${root}/metric/${metric}`;
+  const observation = new HealthNode(iri, dataset, DataFactory);
+  observation.types.add(HEALTH.Observation);
+  if (subtype) observation.types.add(subtype);
+  if (subtype === HEALTH.HeartRate) observation.types.add(HEALTH.VitalSign);
+  observation.name = name;
+  observation.measuredValue = value;
+  observation.source = "WHOOP";
+  observation.sourceUrl = source === "api" ? sourceUrl(record.kind) : undefined;
+  observation.link(HEALTH.patient, `${doc}#subject`);
+  observation.link(HEALTH.hasUnit, `${NS.UNIT}${unit}`);
+  observation.text(HEALTH.unitCode, unitCode);
+  observation.link(HEALTH.hasCode, `${iri}/code`);
+  observation.link(HEALTH.effectiveTime, `${iri}/time`);
+  const code = new HealthNode(`${iri}/code`, dataset, DataFactory);
+  code.types.add(HEALTH.Code);
+  code.text(HEALTH.codeValue, codeValue);
+  code.link(HEALTH.inScheme, subtype ? LOINC : WHOOP_SCHEME);
+  const time = new HealthNode(`${iri}/time`, dataset, DataFactory);
+  time.types.add(HEALTH.Instant);
+  time.dateTime = record.start;
+  // Stage durations are independent reported totals, never fabricated stage intervals.
+  observation.endTime = record.end;
+}

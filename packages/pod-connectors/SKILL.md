@@ -251,3 +251,23 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+## WHOOP hybrid
+
+`./adapters/whoop` exposes the Tier A OAuth adapter/factory and streaming file adapter
+under the single `whoop` catalogue id. Default token exchange uses a proxy; Node hosts
+may inject a secret for direct exchange. Do not assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`
+and the README's WHOOP section before changing it. Reuse the Takeout ZIP reader; keep
+CSV normalized-header collision checks, explicit-offset timestamps, native-id/CSV-start
+reconciliation and API-over-file precedence. Source rows and normalized records are capped
+independently, including duplicate and malformed rows. Stage all source parsing before writes.
+One RunBudget covers every API page; the ISO start cursor replays seven days, not an
+updated-since feed. Never invent a recovery time when its cycle is missing.
+
+Health observations use existing sector terms and the Health app's monthly model; HRV is
+RMSSD, not SDNN. Sleep stage totals are generic observations so total sleep is counted once.
+Workouts retain ExerciseAction. Recovery score, strain and sleep performance have no sector
+term: omit them and surface them through ImportOutcome/ImportReport.unsupported (now supported
+for API adapters too). Keep journal entries unsupported. See the README for current Health UI,
+container discovery and cross-month timestamp-correction limitations. Tests are synthetic only;
+never call WHOOP or add dependencies. Preserve byte/row/record/quad caps and cancellation.

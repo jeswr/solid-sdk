@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { IntegrationError } from "@jeswr/pod-connectors";
 export function connectorErrorCopy(error: unknown, service: string): string {
@@ -61,6 +62,12 @@ const scopeLabels: Readonly<Record<string, string>> = {
   "user:read:follows": "Channels you follow",
   "files.metadata.read": "Your file details",
   "account_info.read": "Your account details",
+  "read:recovery": "Recovery and daily vitals",
+  "read:cycles": "Daily activity and energy",
+  "read:sleep": "Sleep and stages",
+  "read:workout": "Workouts",
+  "read:profile": "Your WHOOP profile",
+  offline: "Keep the connection available",
 };
 export function scopeLabel(scope: string): string {
   return scopeLabels[scope] ?? "Service data";

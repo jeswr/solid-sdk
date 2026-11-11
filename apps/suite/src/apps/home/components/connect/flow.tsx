@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -68,6 +69,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const required = requiredScopesFor(entry.id);
   const selectedScopes = withRequiredScopes(entry.id, selected);
   const [step, setStep] = useState(1);
+  const [fileMode, setFileMode] = useState(false);
   const [phase, setPhase] = useState<
     "idle" | "waiting" | "running" | "done" | "error" | "cancelled"
   >("idle");
@@ -93,7 +95,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const wasOnline = useRef(online);
   const view = useRef(`${step}:${phase}`);
   const mode: ConnectionMode =
-    entry.status === "demo" ? "demo" : entry.tier === "C" ? "file" : "live";
+    fileMode || entry.tier === "C" ? "file" : entry.status === "demo" ? "demo" : "live";
   const destinations = destinationsFor(entry.id);
 
   useEffect(
@@ -336,7 +338,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             <ConnectorLogo entry={entry} />
             <div>
               <AppHeading>Synchronise your {entry.name} data</AppHeading>
-              <StatusBadge status={entry.status} />
+              <StatusBadge status={mode === "file" ? "import" : entry.status} />
             </div>
           </div>
           <div className="hm-connect-columns">
@@ -344,7 +346,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               <ol className="hm-connect-stepper" aria-label="Connection steps">
                 {[
                   "Choose what to sync",
-                  entry.tier === "C" ? "Import a file" : `Sign in to ${entry.name}`,
+                  mode === "file" ? "Import a file" : `Sign in to ${entry.name}`,
                   "Importing",
                 ].map((label, index) => (
                   <li key={label} aria-current={step === index + 1 ? "step" : undefined}>
@@ -475,13 +477,22 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                     Continue
                   </button>
                 </div>
-              ) : entry.tier === "C" && fileAdapter ? (
+              ) : mode === "file" && fileAdapter ? (
                 <div className="hm-connect-result">
                   <h2 ref={panelHeading} tabIndex={-1}>
                     Import a file
                   </h2>
                   {notice && <p>{notice}</p>}
                   <p>{fileAdapter.fileHint}</p>
+                  {entry.tier === "A" && (
+                    <button
+                      type="button"
+                      className="hm-connect-button"
+                      onClick={() => setFileMode(false)}
+                    >
+                      Use {entry.name} connection
+                    </button>
+                  )}
                   <label
                     className="hm-connect-drop"
                     htmlFor="connector-file"
@@ -534,6 +545,16 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       your pod.
                     </p>
                   )}
+                  {fileAdapter && (
+                    <button
+                      type="button"
+                      className="hm-connect-button"
+                      disabled={phase === "waiting"}
+                      onClick={() => setFileMode(true)}
+                    >
+                      Import an export file
+                    </button>
+                  )}
                   {phase === "waiting" ? (
                     <>
                       <p>Waiting for {entry.name}…</p>
@@ -579,7 +600,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               <h3>What you get</h3>
               <p>{entry.whatYouGet}</p>
               <h3>Requirements</h3>
-              {metadata?.requirements.length ? (
+              {mode !== "file" && metadata?.requirements.length ? (
                 <ul>
                   {metadata.requirements.map((requirement) => (
                     <li key={requirement}>{requirement}</li>

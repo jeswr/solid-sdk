@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Public configuration belongs to this host, never to pod-connectors. Keep static
 // property reads: Next replaces NEXT_PUBLIC_* at build time in browser bundles.
@@ -31,6 +32,10 @@ export const registry = createRegistry({
     process.env.NEXT_PUBLIC_CONNECTOR_NOTION_TOKEN_PROXY_URL,
   ),
   dropbox: publicConfig(process.env.NEXT_PUBLIC_CONNECTOR_DROPBOX_CLIENT_ID),
+  whoop: publicConfig(
+    process.env.NEXT_PUBLIC_CONNECTOR_WHOOP_CLIENT_ID,
+    process.env.NEXT_PUBLIC_CONNECTOR_WHOOP_TOKEN_PROXY_URL,
+  ),
 });
 export const entries = catalogue(
   registry,

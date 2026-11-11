@@ -13,15 +13,15 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 33 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 34 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(33);
+    expect(entries).toHaveLength(34);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(33);
+    expect(new Set(ids).size).toBe(34);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
   });
 
-  it("ships the 8 Tier-A adapters from the catalog", () => {
+  it("ships the 9 Tier-A adapters from the catalog", () => {
     expect(ADAPTERS.map((a) => a.metadata.id).sort()).toEqual([
       "discord",
       "dropbox",
@@ -31,6 +31,7 @@ describe("integrations registry", () => {
       "spotify",
       "strava",
       "twitch",
+      "whoop",
     ]);
     for (const a of ADAPTERS) {
       expect(a.metadata.tier).toBe("A");
@@ -105,8 +106,8 @@ describe("integrations registry", () => {
   });
 
   it("ships a working file-import adapter for every Tier-C catalog entry", () => {
-    // All 10 Tier-C entries plus the Tier-B hybrid (Garmin, asserted below).
-    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 1);
+    // All 10 Tier-C entries plus Garmin and WHOOP hybrids.
+    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 2);
     for (const entry of TIER_C) {
       const adapter = fileAdapterById(entry.id);
       expect(adapter, `missing file adapter for ${entry.id}`).toBeDefined();
@@ -153,7 +154,7 @@ describe("integrations registry", () => {
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).
-    const NoExportUrl = ["apple-health", "whatsapp", "bank-statements"];
+    const NoExportUrl = ["apple-health", "whatsapp", "bank-statements", "whoop"];
 
     for (const a of FILE_ADAPTERS) {
       const expected = ExportUrls[a.metadata.id];
@@ -204,6 +205,6 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(33);
+    expect(first.allCatalogEntries()).toHaveLength(34);
   });
 });

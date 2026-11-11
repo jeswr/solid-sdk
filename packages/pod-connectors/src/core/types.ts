@@ -219,6 +219,8 @@ export interface ImportOutcome {
    * the UI. Omitted (undefined) when nothing was skipped.
    */
   readonly skipped?: number;
+  /** Source fields or products without a supported vocabulary mapping. */
+  readonly unsupported?: readonly string[];
 }
 
 /** One recorded fixture route for the typed fake fetch.

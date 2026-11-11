@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The integrations registry — every app in docs/integrations-catalog.md, all
- * 32 visible, each with its honest status:
+ * 34 visible, each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
@@ -33,6 +33,7 @@ import { spotifyAdapter } from "./spotify/adapter.js";
 import { stravaAdapter } from "./strava/adapter.js";
 import { tiktokAdapter } from "./tiktok/adapter.js";
 import { twitchAdapter } from "./twitch/adapter.js";
+import { whoopAdapter } from "./whoop/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
 
@@ -47,7 +48,7 @@ export interface CatalogEntry extends IntegrationMetadata {
 /** What the UI may render for an entry right now. */
 export type IntegrationStatus = "live" | "demo" | "approval-needed" | "export-file";
 
-/** The 8 Tier-A adapters (docs/integrations-catalog.md). */
+/** The 9 Tier-A adapters, including WHOOP's OAuth/file hybrid. */
 export const ADAPTERS: readonly IntegrationAdapter[] = [
   spotifyAdapter,
   githubAdapter,
@@ -57,10 +58,11 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
   twitchAdapter,
   notionAdapter,
   dropboxAdapter,
+  whoopAdapter,
 ];
 
 /**
- * The 14 Tier-B adapters — real OAuth APIs with working fixture-backed
+ * The 15 Tier-B adapters — real OAuth APIs with working fixture-backed
  * imports, but platform app-review gates any **live** user connect. They are
  * full {@link IntegrationAdapter}s (so the demo import is real), yet
  * {@link statusOf} keeps them `"approval-needed"`: even with a client id, the
@@ -208,7 +210,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 32 catalog entries, A → B → C, in display order. */
+/** All catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }
