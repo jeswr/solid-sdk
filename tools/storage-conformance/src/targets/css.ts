@@ -200,6 +200,10 @@ export const cssTarget: ConformanceTarget = {
         webId,
         storage,
         ...session,
+        serviceEndpoints: {
+          trash: `${root}.trash/`,
+          versioning: `${root}.versions/?resource={resource}`,
+        },
         claims: {
           protocol: "solid",
           accessControl: {
@@ -212,6 +216,9 @@ export const cssTarget: ConformanceTarget = {
             evidence: "emulated",
             detail: { native: false, containers: true, preservesIdentifier: false },
           },
+          trash: { state: "unknown", evidence: "target", detail: {} },
+          versioning: { state: "unknown", evidence: "target", detail: {} },
+          typeIndex: { state: "available", evidence: "target", detail: { mode: "client" } },
         },
         async authFetchFor(identity) {
           if (identity === webId) return session.fetch;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,10 +8,14 @@ import { main } from "./cli.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
-test("CLI accepts pnpm's separator, expands memory and writes successful reports", async () => {
+test("CLI expands memory and persists green reports with a zero exit", async () => {
   const directory = await mkdtemp(join(tmpdir(), "storage-cli-"));
   try {
     expect(await main(["--", "--target", "memory", "--output", directory])).toBe(0);
+    for (const target of ["memory-solid", "memory-solid-acp", "memory-lws"]) {
+      const rows = JSON.parse(await readFile(join(directory, "reports", `${target}.json`), "utf8"));
+      expect(rows.filter((row: { status: string }) => row.status === "fail")).toEqual([]);
+    }
     expect(
       JSON.parse(await readFile(join(directory, "reports", "memory-lws.json"), "utf8")),
     ).toContainEqual({
@@ -20,6 +25,15 @@ test("CLI accepts pnpm's separator, expands memory and writes successful reports
       reason: "target-lacks:move",
     });
     expect(await readFile(join(directory, "MATRIX.md"), "utf8")).toContain("memory-solid");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("CLI writes a green LWS report for all supported groups", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "storage-cli-lws-"));
+  try {
+    expect(await main(["--target", "memory-lws", "--output", directory])).toBe(0);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
