@@ -64,7 +64,13 @@ const CHART_REFERENCE_COMMANDS = new Set([
 const RESTORE_CHART_SOURCES = "sheets.mutation.restore-chart-sources";
 interface ChartSources {
   unitId: string;
-  sources: Pick<ChartSpec, "id" | "range">[];
+  redo: boolean;
+  sources: {
+    id: string;
+    sheetId: string;
+    before: ChartSpec["range"];
+    after: ChartSpec["range"];
+  }[];
 }
 
 export const mountUniver: MountEngine = async (container, options) => {
@@ -121,42 +127,66 @@ export const mountUniver: MountEngine = async (container, options) => {
     type: CommandType.MUTATION,
     handler: (_accessor, params: ChartSources) => {
       if (params.unitId !== workbook.getId() || charts === undefined) return false;
-      const sources = new Map(params.sources.map((source) => [source.id, source.range]));
-      // Only restore references. Later title/style edits and explicit chart deletion survive undo.
+      const sources = new Map(params.sources.map((source) => [source.id, source]));
+      // Only restore sources still owned by this history entry. Later chart edits survive.
       charts = withCharts(
         {},
-        readCharts({ charts }).charts.map((chart) =>
-          sources.has(chart.id)
-            ? { ...chart, range: sources.get(chart.id) as ChartSpec["range"] }
-            : chart,
-        ),
+        readCharts({ charts }).charts.map((chart) => {
+          const source = sources.get(chart.id);
+          return source?.sheetId === chart.sheetId &&
+            chart.range === (params.redo ? source.before : source.after)
+            ? { ...chart, range: params.redo ? source.after : source.before }
+            : chart;
+        }),
       ).charts;
       return true;
     },
   });
-  const captureSources = (command: ICommandInfo): IMutationInfo[] => {
+  const sourcesBefore = new WeakMap<object, Map<string, ChartSpec>>();
+  const captureSources = (command: ICommandInfo) => {
     const params = command.params as IInsertRowMutationParams | undefined;
     if (
       !CHART_REFERENCE_COMMANDS.has(command.id) ||
       params?.unitId !== workbook.getId() ||
       charts === undefined
     )
-      return [];
-    const sources = readCharts({ charts })
-      .charts.filter((chart) => chart.sheetId === params.subUnitId)
-      .map(({ id, range }) => ({ id, range }));
-    return sources.length
-      ? [{ id: RESTORE_CHART_SOURCES, params: { unitId: params.unitId, sources } }]
-      : [];
+      return;
+    sourcesBefore.set(
+      params,
+      new Map(
+        readCharts({ charts })
+          .charts.filter((chart) => chart.sheetId === params.subUnitId)
+          .map((chart) => [chart.id, chart]),
+      ),
+    );
   };
   const interceptors = injector.get(SheetInterceptorService);
   // Capture before and after the actual mutations, including filtered row deletions.
   // Univer appends these to the same history entry, after its own cell restoration.
   const chartUndo = interceptors.interceptCommand({
-    getMutations: (command) => ({ undos: captureSources(command), redos: [] }),
+    getMutations: (command) => {
+      captureSources(command);
+      return { undos: [], redos: [] };
+    },
   });
   const chartRedo = interceptors.interceptAfterCommand({
-    getMutations: (command) => ({ undos: [], redos: captureSources(command) }),
+    getMutations: (command) => {
+      const params = command.params as IInsertRowMutationParams;
+      const before = sourcesBefore.get(params);
+      if (!before) return { undos: [], redos: [] };
+      sourcesBefore.delete(params);
+      const sources = readCharts({ charts } as Snapshot).charts.flatMap((chart) => {
+        const previous = before.get(chart.id);
+        return previous && previous.range !== chart.range
+          ? [{ id: chart.id, sheetId: chart.sheetId, before: previous.range, after: chart.range }]
+          : [];
+      });
+      const restore = (redo: boolean): IMutationInfo[] =>
+        sources.length
+          ? [{ id: RESTORE_CHART_SOURCES, params: { unitId: params.unitId, sources, redo } }]
+          : [];
+      return { undos: restore(false), redos: restore(true) };
+    },
   });
   const calculation = univerAPI.getFormula().calculationResultApplied(() => {
     if (!disposed && !loading) for (const listener of valueListeners) listener();
@@ -174,7 +204,13 @@ export const mountUniver: MountEngine = async (container, options) => {
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = CHART_REFERENCE_MUTATIONS.get(event.id);
-    if (edit && charts !== undefined) {
+    // History restores exact sources conditionally; an inverse shift would spoil that comparison.
+    if (
+      edit &&
+      charts !== undefined &&
+      event.params?.trigger !== "univer.command.undo" &&
+      event.params?.trigger !== "univer.command.redo"
+    ) {
       const { subUnitId, range } = event.params as IInsertRowMutationParams;
       const start = edit.axis === "row" ? range.startRow : range.startColumn;
       const end = edit.axis === "row" ? range.endRow : range.endColumn;
