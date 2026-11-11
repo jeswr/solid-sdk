@@ -1,0 +1,53 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/solid-health",
+  "version": "0.1.0",
+  "description": "Generated health-sector write model for device and application observation imports",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-health"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./health.shacl.ttl": "./src/generated/shapes.ttl"
+  },
+  "files": [
+    "dist",
+    "src/generated/shapes.ttl",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/health.ontology.ttl --shapes codegen/health.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "lint": "biome check src/*.ts scripts test codegen/codegen.config.json package.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  }
+}

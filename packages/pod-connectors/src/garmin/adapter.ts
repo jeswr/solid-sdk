@@ -40,7 +40,7 @@ export const garminAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     categories: ["health", "mobility"],
     whatYouGet:
-      "Your Garmin activities — workouts into Health, commutes and journeys into Mobility.",
+      "Your Garmin activities — workouts into Health, commutes and journeys into Mobility. The recommended full account export ZIP also imports daily health summaries and sleep.",
     requirements: [
       "Garmin partner-program (Health/Connect API) approval: Garmin must admit the app to its developer program before it can read a user's activities.",
       "Register at developer.garmin.com and add <app-origin>/oauth-callback.html as the redirect URI.",

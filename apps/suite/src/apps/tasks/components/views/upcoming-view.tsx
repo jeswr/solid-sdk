@@ -15,16 +15,17 @@ import { ViewGroup } from "./view-group";
 
 /**
  * A week-strip cell is also a drop target: dropping a row reschedules it to that day. The
- * weekday letter and task count are decorative overlays beside the button, so the button's
- * visible text (the date) stays within its expanded accessible name (WCAG 2.5.3).
+ * visible weekday and date start the accessible name, so speech input matches what is shown.
+ * The count badge is described by the expanded accessible name (WCAG 2.5.3).
  */
 function DayCell({
   dayKey,
-  letter,
+  weekday,
   count,
   today,
+  children,
   ...props
-}: ComponentProps<"button"> & { dayKey: string; letter: string; count: number; today: boolean }) {
+}: ComponentProps<"button"> & { dayKey: string; weekday: string; count: number; today: boolean }) {
   const drop = useDropTarget(`strip:${dayKey}`, { kind: "day", dayKey });
   return (
     <div className="tsk-day" data-today={today || undefined}>
@@ -34,14 +35,15 @@ function DayCell({
         data-today={today || undefined}
         {...props}
         type="button"
-      />
-      <span className="tsk-day-letter" aria-hidden="true">
-        {letter}
-      </span>
-      <span className="tsk-day-count" aria-hidden="true">
-        <span className="tsk-day-dot" data-empty={!count || undefined} />
-        {count}
-      </span>
+      >
+        <span className="tsk-day-label">
+          {weekday} {children}
+        </span>
+        <span className="tsk-day-count" aria-hidden="true">
+          <span className="tsk-day-dot" data-empty={!count || undefined} />
+          {count}
+        </span>
+      </button>
     </div>
   );
 }
@@ -125,7 +127,7 @@ export function UpcomingView() {
                 className="tsk-day-cell"
                 data-day-key={day.dayKey}
                 today={day.isToday}
-                letter={day.weekdayLetter}
+                weekday={day.date.toLocaleDateString("en-GB", { weekday: "short" })}
                 count={day.count}
                 aria-current={day.isToday ? "date" : undefined}
                 aria-pressed={selected === day.dayKey}

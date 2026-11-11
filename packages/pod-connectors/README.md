@@ -327,6 +327,83 @@ cancellation never advance the checkpoint. 429 is surfaced for host scheduling w
 retrying. Synthetic tests cover both orders of CSV/API deduplication, pagination, hostile
 headers/archives/records, budgets, provenance and cancellation. No new dependencies.
 
+## Garmin account export
+
+The existing `garmin` file adapter accepts the **full account ZIP**, recommended from
+[Garmin Account → Data Management → Export Your Data](https://www.garmin.com/account/datamanagement/).
+Select the downloaded ZIP directly. Activities CSV, GPX and TCX remain supported under
+the same catalog id. No Garmin API credentials or Garmin network requests are needed.
+Entries identify the export regardless of its filename. ZIPs require Takeout's `stream()`
+and reopenable `slice()` ports.
+
+Supported paths tolerate account/email/UserID prefixes and filename date suffixes:
+
+- `DI_CONNECT/DI-Connect-Fitness/*summarizedActivities*.json`: flat arrays, object-wrapped
+  arrays or `[{ summarizedActivitiesExport: [...] }]`. Activity IDs become
+  `health/activities.ttl#activity-<id>` or `mobility/journeys.ttl#journey-<id>`.
+  Runs/indoor cycling are exercise actions; outdoor rides/commutes are travel actions.
+  Archive distance/elevation are converted from cm to m, duration from ms to s and
+  ISO duration text. Summary `calories` appear to use kJ-like units: divide by 4.184
+  and round to one decimal place for kcal. **This conversion is pending verification
+  against a real export.** Pulse/elevation summaries are labelled notes.
+- `DI_CONNECT/DI-Connect-Aggregator/UDSFile_*.json`: steps, distance, resting/minimum/
+  maximum/average pulse, active kcal and floors. Numeric strings and zero counts work;
+  invalid dates and non-finite/negative values are omitted.
+- Wellness `*sleepData*.json`: asleep seconds (deep + light + REM, excluding awake time).
+  The source window, stages, awake seconds and overall score remain labelled notes.
+  Time in bed alone never becomes asleep time.
+- Wellness `*healthStatusData*`/`*hrv*` and Metrics `*MetricsMaxMetData*`: recognizable
+  overnight HRV summaries in ms and running/cycling VO₂max in mL/(kg.min).
+
+Daily measurements use `health/observations/<metric>/<YYYY-MM>.ttl`, deterministic
+metric/day subjects, and existing HealthRecord/Observation/CodeableConcept/OWL-Time terms.
+Steps, pulse and sleep use the Health model's QUDT/UCUM units; other quantities use generic
+observations and source field codes without asserting a concept scheme; running and cycling
+VO₂max have distinct codes. The patient is an unnamed document-local `#subject`, following
+Apple Health; an export does not establish the Pod owner's identity. Effective instants use
+the calendar date (UTC midnight), following Health's current measurement reader. If only a
+timestamp is available, its own offset determines the day. Numeric epochs must be Garmin
+milliseconds between 2000-01-01 and now + one day; seconds, zero and date-like numbers are
+rejected. Reimports merge matching subjects under ETags; overlapping exports preserve older
+dates. File imports have no cursor
+or deletion reconciliation. Raw JSON files are not retained.
+
+The connector Apple Health adapter currently imports workouts only. The suite Health
+model's separate Apple importer supplies the observation mapping used here. **Health charts
+currently read native monthly shards rather than connector metric directories**, and have no
+separate HRV/VO₂max charts. Observations are stored and registered using existing health
+terms; automatic chart discovery needs follow-up app work. This change includes no app edits.
+
+Stress, Body Battery and intensity minutes have no terms in the current health sector.
+They produce vocabulary-gap notes in `report.unsupported`, counted once per file per gap,
+with the number of distinct affected days per file. These notes do not increment
+`report.skipped`. Unknown files and directories are counted as unrecognised in notes;
+malformed/oversized records and omitted supported entries increment `report.skipped`.
+Grouped notes retain no account paths. Uploaded-Files nested ZIPs are counted without opening
+them; their note directs users to the `activity-files` adapter for FIT import. Unknown record
+shapes are reported, not guessed.
+
+Garmin reuses Takeout's ZIP/ZIP64 directory, local-header, overlap, size and CRC validation.
+Defaults: 10,000 dispatched entries, 64 MiB decompressed per entry, 32 MiB JSON per entry,
+512 MiB actual inflation per run, 100,000 records per file, 1,000,000 attempted records
+per run (including malformed/oversized rows), 100,000 observations/activities
+per run (including duplicates), and a declared compression-ratio ceiling of 1,000:1.
+The reader independently rejects directories above 64 MiB or 100,000 entries. Shared JSON
+limits are 1 MiB per token, 4 MiB per record and 64 nesting levels. Entry bytes are bounded
+and CRC-verified before JSON dispatch; wrapper arrays are parsed record by record. DEFLATE
+receives 1 KiB pieces to bound transient expansion. Recognised entries are staged in memory
+(within the caps above) and written once at the end; each monthly metric document has at most one value per day. Activities are retained under
+the run cap and written once to avoid repeated collection growth. Cancellation is checked
+between entries, inflater chunks, records and Pod operations. Corrupt entries are skipped;
+decoder exceptions abort because their unreported work cannot be charged safely. Caps retain
+successful records with warning notes. Rows parsed before a late JSON error in the same entry
+are discarded and counted as skipped; no destructive reconciliation occurs.
+
+`createGarminFileAdapter(partialLimits)` from `./adapters/garmin` can lower these limits;
+`GARMIN_ARCHIVE_LIMITS` and `GarminArchiveLimits` expose the ceilings. Legacy text remains
+capped at 64 MiB despite ZIP's `streaming: true`. Tests use only synthetic archives;
+maintainer validation with real account exports remains necessary.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
@@ -837,3 +914,17 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Garmin archive observations now use the generated `@jeswr/solid-health` write model.
+Measured values change from `xsd:double` to `xsd:decimal`; existing monthly paths,
+fragment IDs, codes, units and timezone-bearing `xsd:dateTime` timestamps are retained.
+Recognised entries are parsed before final Pod writes; malformed JSON entries contribute
+no observations, including rows preceding the bad token. A later fatal decoder error
+leaves no earlier data writes. Writer failures or cancellation during the final flush can
+still leave some documents written; re-running the import converges because ids are stable.
+The shared ZIP validator also rejects encoded separators, absolute/drive paths, decoded
+traversal segments and control characters before adapter dispatch.
+This applies to Google Takeout too: a Takeout file whose name contains a literal `%2f` or
+`%5c` is now skipped as `invalid-entry`. Undecodable escapes such as `100%ab.txt` remain
+accepted, and paths may have 16 components below `Takeout/`.

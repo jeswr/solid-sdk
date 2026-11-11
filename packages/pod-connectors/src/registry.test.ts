@@ -132,6 +132,8 @@ describe("integrations registry", () => {
     expect(file?.accept).toContain(".csv");
     expect(file?.accept).toContain(".gpx");
     expect(file?.accept).toContain(".tcx");
+    expect(file?.accept).toContain(".zip");
+    expect(file?.streaming).toBe(true);
     // Honest guidance: both export options plus the full-archive alternative.
     expect(file?.fileHint).toMatch(/Export CSV/);
     expect(file?.fileHint).toMatch(/GPX or TCX/);
@@ -150,7 +152,7 @@ describe("integrations registry", () => {
       goodreads: "https://www.goodreads.com/review/import",
       steam: "https://help.steampowered.com/en/accountdata",
       chatgpt: "https://chatgpt.com",
-      garmin: "https://connect.garmin.com/modern/activities",
+      garmin: "https://www.garmin.com/account/datamanagement/",
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).

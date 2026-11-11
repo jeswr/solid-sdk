@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { SharingGeneralAccess, SharingGrantRestrictions } from "@jeswr/suite-ui";
+
 export type ShareRole = "viewer" | "commenter" | "editor" | "manager";
 export type ShareKind = "file" | "folder" | "document" | "chatroom";
 export interface SharePerson {
@@ -9,9 +11,9 @@ export interface SharePerson {
   inherited?: { from: string; fromName: string };
   expires?: Date;
 }
-export interface SharingState {
+export interface SharingState extends SharingGrantRestrictions {
   people: SharePerson[];
-  general: { mode: "restricted" | "link" | "signed-in"; role?: "viewer" | "commenter" | "editor" };
+  general: SharingGeneralAccess;
   canManage: boolean;
   readOnly?: "forbidden" | "offline";
   /** Access is available even while the application's derived member list needs repair. */
@@ -32,9 +34,13 @@ export interface SharingAdapter {
     url: string,
     webId: string,
     role: ShareRole | null,
-    opts?: { expires?: Date; purpose?: string },
+    opts?: ShareWriteOptions & { expires?: Date; purpose?: string },
   ): Promise<void>;
-  setGeneral(url: string, general: SharingState["general"]): Promise<void>;
+  setGeneral(
+    url: string,
+    general: SharingState["general"],
+    opts?: ShareWriteOptions,
+  ): Promise<void>;
   notify?(url: string, webIds: string[], message?: string): Promise<void>;
   requestAccess?(
     url: string,
@@ -44,7 +50,18 @@ export interface SharingAdapter {
   supportsCommenter?: boolean;
   supportsGeneralCommenter?: boolean;
 }
-export type ShareErrorCode = "forbidden" | "network" | "conflict" | "unsupported" | "members-sync";
+export interface ShareWriteOptions {
+  /** Refuse unless the resulting policy is a subset of the snapshot used for this write. */
+  narrowOnly?: boolean;
+}
+export type ShareErrorCode =
+  | "forbidden"
+  | "network"
+  | "conflict"
+  | "unsupported"
+  | "members-sync"
+  | "images-unavailable"
+  | "would-grant";
 export class ShareError extends Error {
   constructor(public readonly code: ShareErrorCode) {
     super(
@@ -52,6 +69,8 @@ export class ShareError extends Error {
         forbidden: "You can't change who has access to this",
         network: "Can't reach your storage. Try again.",
         "members-sync": "Access was saved, but the project's member list wasn't updated.",
+        "images-unavailable": "Image access couldn't be checked. Try again before granting access.",
+        "would-grant": "Sharing changed. This would grant access. Review sharing and try again.",
         conflict: "Sharing changed somewhere else. Review the updated access and try again.",
         unsupported: "Not available on this storage",
       }[code],

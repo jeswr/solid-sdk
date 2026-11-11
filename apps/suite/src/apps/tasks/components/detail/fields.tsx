@@ -475,7 +475,7 @@ export function TaskProperties({
         <div className="tsk-detail-stack">
           <Popover>
             <PopoverTrigger asChild>
-              <Button size="sm" variant="ghost" disabled={!view.due}>
+              <Button size="sm" variant="outline" disabled={!view.due}>
                 Add reminder
               </Button>
             </PopoverTrigger>

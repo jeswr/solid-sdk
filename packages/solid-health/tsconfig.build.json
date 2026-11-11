@@ -1,0 +1,13 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src"
+  },
+  "exclude": [
+    "src/**/*.test.ts",
+    "test",
+    "dist",
+    "node_modules"
+  ]
+}

@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 > Experimental — AI-agent-generated. Maintained in `jeswr/solid-sdk`; the standalone repository is a read-only build mirror.
 
@@ -7,7 +8,7 @@
 
 Canonical fetch + parse helpers for Solid RDF resources. Pure ESM, Node ≥24.
 
-Two functions, one error class. `parseRdf` dispatches a body
+`parseRdf` dispatches a body
 (string or `ReadableStream<Uint8Array>`) on its `Content-Type`.
 Stream bodies feed chunks straight into an `N3.Store`; already-buffered
 Turtle, N-Triples, N-Quads and TriG strings use n3's synchronous parser
@@ -82,6 +83,23 @@ the signal to its I/O. Opaque engine/custom-loader work that ignores cancellatio
 may continue internally, but its late result cannot complete the operation.
 
 ### Parse budgets
+
+For callers that must remain synchronous, `parseRdfSync(body, options?)` accepts
+buffered N3-family strings and returns a `Store` immediately. It shares the buffered
+parser with `parseRdf`, with the same structured errors, `baseIRI`, `signal`, and
+byte/quad/term budgets. `ParseRdfSyncOptions.format` restricts the syntax to
+`text/turtle`, `application/n-triples`, `application/n-quads`, or `application/trig`.
+Omitting `format` preserves n3's permissive Turtle/TriG/quad detection. JSON-LD and
+stream bodies require `parseRdf`.
+
+The synchronous option `check: () => void` lets a caller enforce an existing
+deadline: throw to stop parsing. It runs before parsing, during term/quad
+construction, before each store insertion, and before returning. This matters
+when synchronous work prevents an abort timer from firing. Hook failures are
+wrapped as parse errors; an aborted signal still throws its original reason.
+`onQuad` observes validated quads in document order, including duplicates, for
+readers whose preference ties depend on source order. Store iteration can reorder
+them. Discard observations if a later budget check, insertion, or callback fails.
 
 `ParseRdfOptions` and `FetchRdfOptions` accept these finite, nonnegative integer
 limits (`maxContextConcurrency` must be positive). Increase them explicitly for

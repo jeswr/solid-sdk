@@ -1,0 +1,67 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Minimal, verbatim class projection of sectors/health/health.ttl.
+# Referenced superclasses retain sector meaning; unrelated sector classes/properties
+# are omitted, following solid-listening. OWL-Time timestamp range is retained verbatim.
+@prefix health:  <https://jeswr.org/ns/sectors/health#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix time:    <http://www.w3.org/2006/time#> .
+@prefix vann:    <http://purl.org/vocab/vann/> .
+@prefix gufo:    <http://purl.org/nemo/gufo#> .
+@prefix qudt:    <http://qudt.org/schema/qudt/> .
+
+<https://jeswr.org/ns/sectors/health> a owl:Ontology ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/health#" .
+
+health:Observation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:ClinicalEntry, core:Quantity ;
+    rdfs:label "Observation"@en ;
+    skos:definition "A measured or asserted clinical value as a RECORD: a code (what was measured), a value, a unit and an effective time. The data shape behind Apple Health metrics and lab results. As it carries a value+unit it is also a core:Quantity. Aligns to fhir:Observation / snomed:363787002 (Observable entity)."@en ;
+    skos:scopeNote "gufo:SubKind of core:Record (measurement record) AND core:Quantity (its value+unit). Code via health:hasCode; value via health:value (= core:numericValue role); unit via health:hasUnit (QUDT, = core:unit role) + health:unitCode (UCUM); time via health:effectiveTime. Produced by a health:ObservationActivity."@en .
+
+health:CodeableConcept a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf core:Identifier ;
+    rdfs:label "Codeable Concept"@en ;
+    skos:definition "A coded clinical concept drawn from a coding system (SNOMED CT, LOINC, or an Apple Health type). A core:Identifier whose core:inScheme is the coding system; the 'what' of an Observation/Condition. Aligns to fhir:CodeableConcept / fhir:Coding."@en ;
+    skos:scopeNote "gufo:SubKind of core:Identifier. The code value via core:value; the system via core:inScheme."@en .
+
+health:HeartRateObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:VitalSign ;
+    rdfs:label "Heart Rate Observation"@en ;
+    skos:definition "A heart-rate measurement in beats/min. Maps the Apple Health HKQuantityTypeIdentifierHeartRate type and LOINC 8867-4; the value carries unit:BEAT-PER-MIN (QUDT) / UCUM '/min'."@en ;
+    skos:scopeNote "gufo:SubKind of health:VitalSign. Default unit unit:BEAT-PER-MIN via health:hasUnit (see the SHACL profile)."@en .
+
+health:StepCountObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:Observation ;
+    rdfs:label "Step Count Observation"@en ;
+    skos:definition "A count of steps over an interval. Maps the Apple Health HKQuantityTypeIdentifierStepCount type and LOINC 55423-8; a dimensionless count (UCUM '{steps}'). Carries an interval effective time, not an instant."@en ;
+    skos:scopeNote "gufo:SubKind of health:Observation."@en .
+
+health:SleepObservation a owl:Class, gufo:SubKind ;
+    rdfs:subClassOf health:Observation ;
+    rdfs:label "Sleep Observation"@en ;
+    skos:definition "A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'."@en ;
+    skos:scopeNote "gufo:SubKind of health:Observation. Duration unit unit:SEC (the core QUDT slim) via health:hasUnit."@en .
+
+time:inXSDDateTimeStamp
+  rdf:type owl:DatatypeProperty ;
+  rdfs:comment "Position of an instant, expressed using xsd:dateTimeStamp"@en ;
+  rdfs:domain time:Instant ;
+  rdfs:label "in XSD Date-Time-Stamp"@en ;
+  rdfs:range xsd:dateTimeStamp ;
+  skos:definition "Position of an instant, expressed using xsd:dateTimeStamp"@en ;
+.
+
+
+time:Instant
+  rdf:type owl:Class ;
+  rdfs:comment "A temporal entity with zero extent or duration"@en ;
+  rdfs:label "Time instant"@en ;
+  rdfs:subClassOf time:TemporalEntity ;
+  skos:definition "A temporal entity with zero extent or duration"@en ;
+.
