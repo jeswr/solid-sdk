@@ -282,5 +282,5 @@ it("keeps server pages independent of search params for native static export", a
   expect(search).toContain("<Suspense>");
   expect(search).toContain("<ChatSearchRoute />");
   expect(room).not.toContain("searchParams");
-  expect(room).toContain("<RoomRoute reference={ref} />");
+  expect(room).toContain("<RoomPageRoute />");
 });
