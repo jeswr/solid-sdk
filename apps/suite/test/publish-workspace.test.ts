@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import {
   type PageData,
@@ -51,8 +52,8 @@ function fixture() {
   const sites = [site];
   const pages = [first, second];
   const repo: PublishRepository = {
-    listSites: vi.fn(async () => sites),
-    listPages: vi.fn(async () => pages),
+    listSites: vi.fn(async () => ({ items: sites, invalid: [] })),
+    listPages: vi.fn(async () => ({ items: pages, invalid: [] })),
     createSite: vi.fn(async (key, data) => ({
       url: `${root}publish/${key}/site.ttl`,
       data,
@@ -203,6 +204,60 @@ describe("Publish optimistic workspace", () => {
     expect(await saving).toBe(false);
     expect(failure).not.toHaveBeenCalled();
   });
+  it("finishes queued dependent writes after disposal without notifying unmounted listeners", async () => {
+    const { repo, workspace } = fixture();
+    await workspace.load();
+    const slow = deferred<StoredSite>();
+    vi.mocked(repo.createSite).mockImplementationOnce(() => slow.promise);
+    const created = workspace.createSite("new", siteData);
+    const child = workspace.createPage(created.url, "child", pageData);
+    const listener = vi.fn();
+    workspace.subscribe(listener);
+    await Promise.resolve();
+    workspace.dispose();
+    slow.resolve({ url: created.url, etag: '"created"', data: siteData });
+    expect(await created.saved).toBe(true);
+    expect(await child.saved).toBe(true);
+    expect(repo.createPage).toHaveBeenCalledWith(
+      expect.objectContaining({ url: created.url, etag: '"created"' }),
+      "child",
+      pageData,
+    );
+    expect(listener).not.toHaveBeenCalled();
+  });
+  it("keeps unreadable-item diagnostics and specific unsupported-access errors", async () => {
+    const { workspace, repo } = fixture();
+    vi.mocked(repo.listSites).mockResolvedValueOnce({ items: [], invalid: [{ url: "bad-site" }] });
+    await workspace.load();
+    expect(workspace.getSnapshot().invalid).toEqual([{ url: "bad-site" }]);
+    vi.mocked(repo.listSites).mockRejectedValueOnce(
+      new PublicationError("This pod's access control isn't supported by Publish yet."),
+    );
+    await workspace.load();
+    expect(workspace.getSnapshot().error).toContain("isn't supported");
+  });
+  it("never changes post positions when asked to reorder mixed content", async () => {
+    const { workspace, repo, first, second, site } = fixture();
+    const post = {
+      ...first,
+      url: new URL("pages/post.ttl", site.url).href,
+      data: { ...pageData, kind: "post" as const, position: 1 },
+    };
+    vi.mocked(repo.listPages).mockResolvedValueOnce({
+      items: [first, post, second],
+      invalid: [{ url: "bad-page" }],
+    });
+    await workspace.load();
+    expect(workspace.getSnapshot().invalid).toEqual([{ url: "bad-page" }]);
+    await workspace.reorder(site.url, [second.url, post.url, first.url]);
+    expect(vi.mocked(repo.savePage).mock.calls.map((call) => call[1].url)).toEqual([
+      second.url,
+      first.url,
+    ]);
+    expect(
+      workspace.getSnapshot().pages[site.url]?.find((p) => p.url === post.url)?.data.position,
+    ).toBe(1);
+  });
   it("rejects dependant operations after failed creates without leaving false UI state", async () => {
     const { repo, workspace, site, failure } = fixture();
     await workspace.load();
@@ -222,13 +277,13 @@ describe("Publish optimistic workspace", () => {
   });
   it("fences stale loads, retains loaded data on reconnect failures, and disposes safely", async () => {
     const { repo, workspace, site } = fixture();
-    const slow = deferred<StoredSite[]>();
+    const slow = deferred<{ items: StoredSite[]; invalid: { url: string }[] }>();
     vi.mocked(repo.listSites).mockImplementationOnce(() => slow.promise);
     const older = workspace.load();
     await workspace.load();
     const mutation = workspace.settings(site.url, { ...siteData, name: "New" });
     await workspace.load();
-    slow.resolve([{ ...site, data: { ...siteData, name: "Stale" } }]);
+    slow.resolve({ items: [{ ...site, data: { ...siteData, name: "Stale" } }], invalid: [] });
     await older;
     await mutation;
     expect(workspace.getSnapshot().sites[0]?.data.name).toBe("New");
@@ -247,7 +302,7 @@ describe("Publish optimistic workspace", () => {
     vi.mocked(fresh.repo.listSites).mockRejectedValueOnce(new Error("offline"));
     await fresh.workspace.load();
     expect(fresh.workspace.getSnapshot().status).toBe("error");
-    const pending = deferred<StoredSite[]>();
+    const pending = deferred<{ items: StoredSite[]; invalid: { url: string }[] }>();
     vi.mocked(fresh.repo.listSites).mockImplementationOnce(() => pending.promise);
     const reading = fresh.workspace.load();
     fresh.workspace.dispose();

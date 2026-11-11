@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
 import { Button, EmptyState, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
@@ -14,9 +15,11 @@ import "./publish.css";
 function Boot({
   error = false,
   retry = () => location.reload(),
+  message,
 }: {
   error?: boolean;
   retry?: () => void;
+  message?: string | undefined;
 }) {
   return (
     <div className="pub-boot">
@@ -24,8 +27,8 @@ function Boot({
       {error ? (
         <ErrorState error="unreachable" actions={{ retry }}>
           <p>
-            We couldn't confirm private storage for your drafts. Check your connection and pod
-            permissions, then retry.
+            {message ??
+              "We couldn't confirm private storage for your drafts. Check your connection and pod permissions, then retry."}
           </p>
         </ErrorState>
       ) : (
@@ -85,6 +88,13 @@ function Workspace() {
         {connection !== "online" && (
           <p className="pub-notice" role="status">
             You're offline. You can keep writing; reconnect to save or publish.
+          </p>
+        )}
+        {snapshot.invalid.length > 0 && (
+          <p className="pub-muted" role="status">
+            {snapshot.invalid.length}{" "}
+            {snapshot.invalid.length === 1 ? "item couldn't" : "items couldn't"} be read. Your pod
+            data has been left in place.
           </p>
         )}
         {snapshot.error && (
@@ -171,7 +181,7 @@ function Workspace() {
           </>
         )}
         <div className="pub-save-status" role="status" aria-live="polite">
-          {snapshot.pending ? "Saving to your pod…" : ""}
+          {snapshot.pending ? "Saving to your pod… Keep this tab open until saving finishes." : ""}
         </div>
         <SiteDialog
           open={creating}
@@ -200,7 +210,7 @@ function Session() {
     <PublishProvider
       key={`${state.session.mode}:${state.session.webId}`}
       session={state.session}
-      fallback={(error, retry) => <Boot error={error} retry={retry} />}
+      fallback={(error, retry, message) => <Boot error={error} retry={retry} message={message} />}
     >
       <Workspace />
     </PublishProvider>

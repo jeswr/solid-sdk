@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { openPublishRepository } from "@jeswr/solid-publish";
 import { describe, expect, it, vi } from "vitest";
@@ -39,13 +40,13 @@ describe("Publish session and demo seeding", () => {
   it("uses the real shared repository to seed one fictional blog, three posts and About", async () => {
     const { session, pod } = sessionFixture();
     const repo = await connectPublish(session);
-    const sites = await repo.listSites();
+    const { items: sites } = await repo.listSites();
     expect(sites).toHaveLength(1);
     const site = sites[0];
     if (!site) throw new Error("No sample site");
     expect(site.data.author).toBe("Rowan Fern");
     expect(site.data.publicUrl).toBeDefined();
-    const pages = await repo.listPages(site);
+    const { items: pages } = await repo.listPages(site);
     expect(pages.filter((p) => p.data.kind === "post")).toHaveLength(3);
     expect(pages.filter((p) => p.data.kind === "page")).toHaveLength(1);
     expect(pages.filter((p) => p.data.status === "draft")).toHaveLength(1);
@@ -53,11 +54,11 @@ describe("Publish session and demo seeding", () => {
     expect(html.headers.get("content-type")).toContain("text/html");
     expect(await html.text()).toContain("A slower Sunday");
     await Promise.all([ensureSample(session, repo), ensureSample(session, repo)]);
-    expect(await repo.listSites()).toHaveLength(1);
+    expect((await repo.listSites()).items).toHaveLength(1);
     // A new session transport still finds the existing site instead of seeding twice.
     const other = { ...session, fetch: ((input, init) => pod.fetch(input, init)) as typeof fetch };
     await ensureSample(other, repo);
-    expect(await repo.listSites()).toHaveLength(1);
+    expect((await repo.listSites()).items).toHaveLength(1);
     const privateSource = await pod.fetch(`${root}publish/.acl`);
     expect(await privateSource.text()).not.toContain("foaf/0.1/Agent");
   });
@@ -70,6 +71,6 @@ describe("Publish session and demo seeding", () => {
     inspect.mockRejectedValueOnce(new Error("offline"));
     await expect(ensureSample(session, repo)).rejects.toThrow("offline");
     await ensureSample(session, repo);
-    expect(await repo.listSites()).toHaveLength(1);
+    expect((await repo.listSites()).items).toHaveLength(1);
   });
 });

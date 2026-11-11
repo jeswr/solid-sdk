@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // @vitest-environment jsdom
-import type { PublishRepository } from "@jeswr/solid-publish";
+import { PublicationError, type PublishRepository, type StoredSite } from "@jeswr/solid-publish";
 import { toast } from "@jeswr/suite-ui";
 import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -50,8 +51,8 @@ function fallback(error: boolean, retry: () => void) {
 }
 function repository() {
   return {
-    listSites: vi.fn(async () => []),
-    listPages: vi.fn(async () => []),
+    listSites: vi.fn(async () => ({ items: [], invalid: [] })),
+    listPages: vi.fn(async () => ({ items: [], invalid: [] })),
   } as unknown as PublishRepository;
 }
 let host: HTMLDivElement;
@@ -97,6 +98,74 @@ describe("Publish React session context", () => {
     await act(async () => host.querySelector("button")?.click());
     expect(host.textContent).toBe("Robin Fiction:ready");
     expect(connectPublish).toHaveBeenCalledTimes(2);
+  });
+  it("preserves the unsupported-access message at the connection boundary", async () => {
+    vi.mocked(connectPublish).mockRejectedValueOnce(
+      new PublicationError("This pod's access control isn't supported by Publish yet."),
+    );
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={(_error, _retry, message) => <p>{message}</p>}>
+          <Child />
+        </PublishProvider>,
+      ),
+    );
+    expect(host.textContent).toContain("This pod's access control isn't supported by Publish yet.");
+  });
+  it("warns while writes are pending, including after route unmount, and removes the warning on completion", async () => {
+    const repo = repository();
+    let finish!: () => void;
+    repo.createSite = vi.fn(
+      (key, data) =>
+        new Promise<StoredSite>((resolve) => {
+          finish = () =>
+            resolve({ url: `https://pod.example/publish/${key}/site.ttl`, etag: '"1"', data });
+        }),
+    );
+    vi.mocked(connectPublish).mockResolvedValue(repo);
+    let workspace!: ReturnType<typeof usePublish>["workspace"];
+    function Capture() {
+      workspace = usePublish().workspace;
+      return <p>ready</p>;
+    }
+    await act(async () =>
+      root.render(
+        <PublishProvider session={session} fallback={fallback}>
+          <Capture />
+        </PublishProvider>,
+      ),
+    );
+    const now = new Date();
+    let saved!: Promise<boolean>;
+    await act(async () => {
+      saved = workspace.createSite("new", {
+        name: "New",
+        description: "",
+        author: "Writer",
+        theme: "paper",
+        inLanguage: "en",
+        created: now,
+        modified: now,
+      }).saved;
+    });
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const anchor = document.createElement("a");
+    anchor.href = "/elsewhere";
+    document.body.append(anchor);
+    expect(anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))).toBe(
+      false,
+    );
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("still saving"));
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    anchor.remove();
+    confirm.mockRestore();
+    await act(async () => root.render(<p>Another route</p>));
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
+    finish();
+    expect(await saved).toBe(true);
+    expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(true);
   });
   it("never shows a late connection from an earlier account", async () => {
     let finish!: (repo: PublishRepository) => void;

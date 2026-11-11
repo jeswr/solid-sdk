@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import {
   type PageData,
   PublicationError,
@@ -11,6 +12,7 @@ import {
 export interface PublishData {
   sites: StoredSite[];
   pages: Record<string, StoredPage[]>;
+  invalid: { url: string }[];
 }
 export interface PublishSnapshot extends PublishData {
   status: "loading" | "ready" | "error";
@@ -23,7 +25,7 @@ export function createPublishWorkspace(
   root: string,
   failure: (message: string) => void,
 ) {
-  let baseline: PublishData = { sites: [], pages: {} };
+  let baseline: PublishData = { sites: [], pages: {}, invalid: [] };
   let pending: { id: number; preview: Change }[] = [];
   let snapshot: PublishSnapshot = { ...baseline, status: "loading", pending: 0, error: null };
   let generation = 0;
@@ -65,28 +67,56 @@ export function createPublishWorkspace(
     if (pending.length) return;
     const version = ++generation;
     try {
-      const sites = await repository.listSites();
+      const { items: sites, invalid: siteInvalid } = await repository.listSites();
+      const invalid = [...siteInvalid];
       const pages: PublishData["pages"] = {};
-      for (const value of sites) pages[value.url] = await repository.listPages(value);
+      for (const value of sites) {
+        const listing = await repository.listPages(value);
+        pages[value.url] = listing.items;
+        invalid.push(...listing.invalid);
+      }
       if (!active || version !== generation || pending.length) return;
-      baseline = { sites, pages };
+      baseline = { sites, pages, invalid };
       emit("ready", null);
-    } catch {
+    } catch (error) {
       if (active && version === generation)
         emit(
           baseline.sites.length ? "ready" : "error",
-          "Couldn't open Publish. Reconnect or check your pod permissions, then retry.",
+          error instanceof PublicationError
+            ? error.message
+            : "Couldn't open Publish. Reconnect or check your pod permissions, then retry.",
         );
+    }
+  }
+  const navigation = typeof window === "undefined" ? undefined : window;
+  function beforeUnload(event: BeforeUnloadEvent) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+  function beforeNavigate(event: MouseEvent) {
+    const anchor = event.target instanceof Element ? event.target.closest("a[href]") : null;
+    if (anchor && !navigation?.confirm("Changes are still saving to your pod. Leave this page?")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }
+  function guardNavigation(on: boolean) {
+    if (on) {
+      navigation?.addEventListener("beforeunload", beforeUnload);
+      navigation?.document.addEventListener("click", beforeNavigate, true);
+    } else {
+      navigation?.removeEventListener("beforeunload", beforeUnload);
+      navigation?.document.removeEventListener("click", beforeNavigate, true);
     }
   }
   function mutate(preview: Change, persist: () => Promise<void>): Promise<boolean> {
     const id = ++nextId;
     ++generation;
     pending = [...pending, { id, preview }];
+    guardNavigation(true);
     emit("ready", null);
     const task = queue.then(async () => {
       try {
-        if (!active) return false;
         await persist();
         return true;
       } catch (error) {
@@ -101,6 +131,7 @@ export function createPublishWorkspace(
         return false;
       } finally {
         pending = pending.filter((item) => item.id !== id);
+        if (!pending.length) guardNavigation(false);
         emit();
       }
     });
@@ -210,7 +241,11 @@ export function createPublishWorkspace(
       );
     },
     reorder(siteUrl: string, ordered: readonly string[]) {
-      const positions = new Map(ordered.map((url, position) => [url, position]));
+      const pageUrls = new Set(
+        (snapshot.pages[siteUrl] ?? []).filter((p) => p.data.kind === "page").map((p) => p.url),
+      );
+      const pageOrder = ordered.filter((url) => pageUrls.has(url));
+      const positions = new Map(pageOrder.map((url, position) => [url, position]));
       const apply: Change = (value) => ({
         ...value,
         pages: {
@@ -224,7 +259,7 @@ export function createPublishWorkspace(
         },
       });
       return mutate(apply, async () => {
-        for (const url of ordered) {
+        for (const url of pageOrder) {
           const current = page(siteUrl, url);
           const position = positions.get(url) as number;
           if (position !== current.data.position)

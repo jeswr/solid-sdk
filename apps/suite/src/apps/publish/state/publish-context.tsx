@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import type { PublishRepository } from "@jeswr/solid-publish";
+import { PublicationError, type PublishRepository } from "@jeswr/solid-publish";
 import { toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -28,13 +29,13 @@ export function PublishProvider({
 }: {
   session: PodSession;
   children: ReactNode;
-  fallback: (error: boolean, retry: () => void) => ReactNode;
+  fallback: (error: boolean, retry: () => void, message?: string) => ReactNode;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [connection, setConnection] = useState<{
     session: PodSession;
     repository?: PublishRepository;
-    error?: boolean;
+    error?: string;
   }>();
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries a failed connection
   useEffect(() => {
@@ -44,8 +45,15 @@ export function PublishProvider({
       (repository) => {
         if (alive) setConnection({ session, repository });
       },
-      () => {
-        if (alive) setConnection({ session, error: true });
+      (error: unknown) => {
+        if (alive)
+          setConnection({
+            session,
+            error:
+              error instanceof PublicationError
+                ? error.message
+                : "Couldn't open Publish. Check your connection and pod permissions, then retry.",
+          });
       },
     );
     return () => {
@@ -53,7 +61,7 @@ export function PublishProvider({
     };
   }, [session, attempt]);
   if (connection?.session !== session || !connection.repository)
-    return fallback(Boolean(connection?.error), () => setAttempt((n) => n + 1));
+    return fallback(Boolean(connection?.error), () => setAttempt((n) => n + 1), connection?.error);
   return (
     <Connected
       key={`${session.webId}:${attempt}`}

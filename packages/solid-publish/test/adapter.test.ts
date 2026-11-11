@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { StorageClient } from "@jeswr/storage-client";
@@ -30,8 +31,12 @@ describe("storage boundary and private Type Index adapter", () => {
     await expect(adapter.create(root, null, { name: "index.ttl" })).rejects.toThrow(
       /Unsupported Type Index/,
     );
+    await expect(adapter.create(root, null, { kind: "container" })).rejects.toThrow(
+      /Unsupported Type Index/,
+    );
     const made = await adapter.create(root, null, { kind: "container", name: "settings" });
     expect(made.url).toBe(`${root}settings/`);
+    expect(made.etagSource).toBe("follow-up");
     const body = await parseRdf(
       '<https://pod.example/x> <https://example.org/name> "test".',
       "text/turtle",
@@ -48,7 +53,7 @@ describe("storage boundary and private Type Index adapter", () => {
       `${root}outside.ttl`,
       `${root}publish/ghost/site.ttl`,
     ];
-    expect(await repo.listSites()).toEqual([]);
+    expect((await repo.listSites()).items).toEqual([]);
   });
   it("handles a concurrent container creator and refuses unexpected returned locations", async () => {
     const pod = await podFixture();
@@ -67,7 +72,7 @@ describe("storage boundary and private Type Index adapter", () => {
       pod.fetch,
       owner,
     );
-    expect(await raced.listSites()).toEqual([]);
+    expect((await raced.listSites()).items).toEqual([]);
     const wrongContainer = publishRepository(
       pod.wrap({
         create: async (parent, body, options) => ({
@@ -152,7 +157,7 @@ describe("storage boundary and private Type Index adapter", () => {
       ifMatch: current.etag as string,
       contentType: "text/turtle",
     });
-    await expect(repo.listPages(site)).rejects.toThrow(/invalid/);
+    expect(await repo.listPages(site)).toEqual({ items: [], invalid: [{ url: page.url }] });
   });
   it.each([
     undefined,

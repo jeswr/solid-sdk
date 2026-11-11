@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { describe, expect, it } from "vitest";
 import {
@@ -85,6 +86,33 @@ describe("safe standalone output", () => {
       /<script|<iframe|<style|<form|<input|<svg|onerror=|onload=|href="(?:javascript:|data:|\/\/)|src="(?:data:|mailto:|\/\/)/i,
     );
     expect(html).not.toContain("user:secret");
+  });
+  it("allows HTTPS images only in Markdown, metadata and CSP", () => {
+    expect(
+      renderMarkdown(
+        "![insecure](http://images.example/a.jpg) ![secure](https://images.example/b.jpg)",
+        site.publicUrl,
+      ),
+    ).not.toContain('src="http:');
+    expect(renderMarkdown("![secure](https://images.example/b.jpg)", site.publicUrl)).toContain(
+      'src="https://images.example/b.jpg"',
+    );
+    expect(safeContentUrl("http://images.example/a.jpg", true)).toBeUndefined();
+    expect(renderPage(site, { ...post, image: "http://images.example/a.jpg" })).not.toContain(
+      'property="og:image"',
+    );
+    expect(renderMarkdown("![relative](cover.jpg)", "http://pod.example/site/")).not.toContain(
+      'src="cover.jpg"',
+    );
+    expect(
+      renderPage(
+        { ...site, publicUrl: "http://pod.example/site/" },
+        { ...post, image: "cover.jpg" },
+      ),
+    ).not.toContain('property="og:image"');
+    expect(renderPage(site, { ...post, image: "cover.jpg" })).toContain('property="og:image"');
+    expect(CSP).toContain("img-src https:;");
+    expect(CSP).not.toContain("http:");
   });
   it("allows a narrow Markdown/HTML vocabulary and safe links", () => {
     const html = renderMarkdown(

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-publish
 
@@ -35,7 +36,8 @@ scripts, styles, forms, embeds, event handlers and scheme-relative links. Extern
 get `rel="noopener noreferrer"`. All template text and XML fields are escaped;
 XML also removes illegal XML 1.0 code points. An inline stylesheet, semantic landmarks,
 skip link, language, canonical/description/Open Graph metadata and script-src 'none'
-CSP make each HTML file self-contained. Markdown H1s become H2s below the page title.
+CSP make each HTML file self-contained. Images permit HTTPS only; HTTP image sources
+are stripped and blocked by CSP. Markdown H1s become H2s below the page title.
 
 `openPublishRepository(fetch, storageRoot, owner, options?)` discovers a storage through
 the SDK. A caller that already knows the account protocol may supply `{protocol: "solid"}`;
@@ -47,9 +49,18 @@ owner)` accepts an existing SDK storage client for integration and tests.
 Sources live at `publish/<site>/site.ttl` and `publish/<site>/pages/<id>.ttl`. The
 repository uses pod-access roles to install owner-only own permissions on every source
 folder and document before writing source bytes. New files start as empty placeholders.
+Permissions are sealed only on creation;
+listing and ordinary saves preserve any sharing the owner later adds. Publication and
+repair verify raw WAC policies on the source folders and documents and refuse shared,
+unreadable or unverifiable sources without rewriting their ACLs.
 It registers WebSite instances in the private Type Index through pod-type-index; private
 index/preferences creation is sealed before RDF is written. It preserves the public
 profile's audience. Only generated entities read/write the website and page RDF.
+
+`listSites()` and `listPages(site)` return `{ items, invalid }`, where each invalid entry
+contains its source `url`. Malformed, invalid (including abandoned empty creations) or
+unreadable members are omitted from `items` and reported without hiding valid documents.
+Missing members are skipped; container and transient transport failures still surface.
 
 Public output is `public/sites/<site>/index.html`, `<slug>/index.html` and `feed.xml`.
 Publishing requires first-time confirmation, saves the owner-only RDF source, rebuilds
@@ -58,7 +69,10 @@ container and its members via pod-access. It never grants public access to ances
 source RDF. Saving a private draft writes no public bytes. Editing a published page in
 the app stays in a local editor draft until Update. Unpublishing removes its HTML and
 refreshes all remaining public navigation and RSS; removing the last published page
-also removes the index/feed and clears the public URL. It cannot recall reader copies.
+also removes the index/feed, empty slug folders and the site's public grant, and clears
+the public URL. Rebuild/repair removes stale validated slug folders strictly within the
+site's own public container, so interrupted renames and unpublishes can be repaired.
+It cannot recall reader copies.
 
 All writes/deletes use observed strong ETags; stale saves are refused. Saved source
 versions must come from the write response itself: a later HEAD's ETag may belong to

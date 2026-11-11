@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { PageData, PublishRepository, SiteData } from "@jeswr/solid-publish";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -19,7 +20,7 @@ export async function ensureSample(
   await task;
 }
 async function seed(repository: PublishRepository) {
-  if ((await repository.listSites()).length) return;
+  if ((await repository.listSites()).items.length) return;
   const at = new Date("2026-11-08T10:00:00Z");
   const data: SiteData = {
     name: "The little field journal",

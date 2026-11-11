@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
 import {
@@ -211,6 +212,7 @@ export function SiteView({
   const { workspace, repository } = usePublish();
   const [settings, showSettings] = useState(false);
   const [filter, setFilter] = useState<"all" | "draft" | "published">("all");
+  const navigationPages = pages.filter((page) => page.data.kind === "page");
   const visible = pages.filter((page) => filter === "all" || page.data.status === filter);
   function create(kind: PageData["kind"]) {
     const title = kind === "post" ? "Untitled post" : "Untitled page";
@@ -230,10 +232,10 @@ export function SiteView({
     openPage(result.url);
   }
   function move(url: string, direction: number) {
-    const ordered = pages.map((p) => p.url);
+    const ordered = navigationPages.map((p) => p.url);
     const from = ordered.indexOf(url);
     const to = from + direction;
-    if (to < 0 || to >= ordered.length) return;
+    if (from < 0 || to < 0 || to >= ordered.length) return;
     [ordered[from], ordered[to]] = [ordered[to] as string, ordered[from] as string];
     void workspace.reorder(site.url, ordered);
   }
@@ -313,7 +315,7 @@ export function SiteView({
                     <IconButton
                       variant="ghost"
                       label={`Move ${page.data.title} up`}
-                      disabled={pages[0]?.url === page.url}
+                      disabled={navigationPages[0]?.url === page.url}
                       onClick={() => move(page.url, -1)}
                     >
                       <ArrowUp size={16} aria-hidden="true" />
@@ -323,7 +325,7 @@ export function SiteView({
                     <IconButton
                       variant="ghost"
                       label={`Move ${page.data.title} down`}
-                      disabled={pages.at(-1)?.url === page.url}
+                      disabled={navigationPages.at(-1)?.url === page.url}
                       onClick={() => move(page.url, 1)}
                     >
                       <ArrowDown size={16} aria-hidden="true" />

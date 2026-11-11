@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
@@ -6,7 +7,7 @@ import { assertSlug } from "./slugs.js";
 
 export type RenderSite = SiteData & { publicUrl: string };
 export const CSP =
-  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: http:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'";
+  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https:; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'";
 
 export function escapeHtml(value: string): string {
   return value.replace(
@@ -40,6 +41,7 @@ export function safeContentUrl(value: string, image = false): string | undefined
   const scheme = /^([a-z][a-z\d+.-]*):/i.exec(value)?.[1]?.toLowerCase();
   if (!scheme) return value;
   if (scheme === "mailto" && !image) return value;
+  if (image && scheme === "http") return undefined;
   if (scheme !== "http" && scheme !== "https") return undefined;
   try {
     const url = new URL(value);
@@ -49,7 +51,7 @@ export function safeContentUrl(value: string, image = false): string | undefined
   }
 }
 function baseUrl(site: RenderSite): string {
-  const safe = safeContentUrl(site.publicUrl, true);
+  const safe = safeContentUrl(site.publicUrl);
   if (!safe || !/^https?:\/\//.test(safe))
     throw new TypeError("A public HTTP(S) site URL is required.");
   const base = new URL(safe);
@@ -99,7 +101,7 @@ export function renderMarkdown(markdown: string, publicUrl: string): string {
       ol: ["start"],
     },
     allowedSchemes: ["https", "http", "mailto"],
-    allowedSchemesByTag: { img: ["https", "http"] },
+    allowedSchemesByTag: { img: ["https"] },
     allowProtocolRelative: false,
     transformTags: {
       h1: "h2",
@@ -116,7 +118,9 @@ export function renderMarkdown(markdown: string, publicUrl: string): string {
         };
       },
       img: (_tag, attributes) => {
-        const src = safeContentUrl(attributes.src ?? "", true);
+        const candidate = safeContentUrl(attributes.src ?? "", true);
+        const src =
+          candidate && new URL(candidate, publicUrl).protocol === "https:" ? candidate : undefined;
         return {
           tagName: "img",
           attribs: { ...(src ? { src } : {}), alt: attributes.alt ?? "", loading: "lazy" },
@@ -147,7 +151,11 @@ function document(
     .filter((p) => p.kind === "page")
     .map((p) => `<li><a href="${e(pageUrl(site, p))}">${e(p.title)}</a></li>`)
     .join("");
-  const safeImage = image && safeContentUrl(image, true);
+  const candidateImage = image && safeContentUrl(image, true);
+  const safeImage =
+    candidateImage && new URL(candidateImage, url).protocol === "https:"
+      ? candidateImage
+      : undefined;
   return `<!doctype html><html lang="${e(site.inLanguage)}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${e(CSP)}"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${e(title)} · ${e(site.name)}</title><meta name="description" content="${e(description)}"><meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(description)}"><meta property="og:type" content="website"><meta property="og:url" content="${e(url)}"><meta property="og:site_name" content="${e(site.name)}">${safeImage ? `<meta property="og:image" content="${e(new URL(safeImage, url).href)}">` : ""}<link rel="canonical" href="${e(url)}"><link rel="alternate" type="application/rss+xml" title="${e(site.name)}" href="${e(new URL("feed.xml", base).href)}"><style>${STYLE}</style></head><body class="${site.theme === "journal" ? "journal" : site.theme === "garden" ? "garden" : "paper"}"><a class="skip" href="#content">Skip to content</a><header><a href="${e(new URL("index.html", base).href)}">${e(site.name)}</a><p>${e(site.description)}</p><nav aria-label="Site navigation"><ul><li><a href="${e(new URL("index.html", base).href)}">Home</a></li>${navigation}</ul></nav></header><main id="content" tabindex="-1">${content}</main><footer><p>Written by ${e(site.author)}</p><a href="${e(new URL("feed.xml", base).href)}">RSS feed</a></footer></body></html>`;
 }
 export function renderPage(

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { readWac } from "@jeswr/pod-access";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -16,14 +17,14 @@ describe("pod source, Type Index and public artifacts", () => {
   it("opens through shared capability discovery and storage APIs", async () => {
     const pod = await podFixture();
     const repo = await openPublishRepository(pod.fetch, root, owner);
-    expect(await repo.listSites()).toEqual([]);
+    expect((await repo.listSites()).items).toEqual([]);
     const known = await openPublishRepository(pod.fetch, root, owner, { protocol: "solid" });
-    expect(await known.listSites()).toEqual([]);
+    expect((await known.listSites()).items).toEqual([]);
   });
   it("keeps RDF owner-only, registers WebSite privately and publishes only rendered resources", async () => {
     const { storage, repo, site, page, calls } = await prepared();
-    expect((await repo.listSites()).map((s) => s.url)).toEqual([site.url]);
-    expect((await repo.listPages(site)).map((p) => p.url)).toEqual([page.url]);
+    expect((await repo.listSites()).items.map((s) => s.url)).toEqual([site.url]);
+    expect((await repo.listPages(site)).items.map((p) => p.url)).toEqual([page.url]);
     const indexBody = await (await storage.read(`${root}settings/privateTypeIndex.ttl`)).text();
     expect(indexBody).toContain("https://schema.org/WebSite");
     expect(indexBody).toContain(site.url);
@@ -147,7 +148,7 @@ describe("pod source, Type Index and public artifacts", () => {
   it("lists multiple websites in name order", async () => {
     const { repo } = await prepared();
     await repo.createSite("another", { ...siteData, name: "A new site" });
-    expect((await repo.listSites()).map((site) => site.data.name)).toEqual([
+    expect((await repo.listSites()).items.map((site) => site.data.name)).toEqual([
       "A new site",
       "Field notes",
     ]);
@@ -183,7 +184,7 @@ describe("pod source, Type Index and public artifacts", () => {
       ifMatch: version.etag as string,
       contentType: "text/turtle",
     });
-    await expect(repo.listSites()).rejects.toThrow(/invalid/);
+    expect(await repo.listSites()).toEqual({ items: [], invalid: [{ url: site.url }] });
   });
   it("refuses unsupported protocols and unavailable/changed access controls without source content", async () => {
     expect(() =>
@@ -203,7 +204,7 @@ describe("pod source, Type Index and public artifacts", () => {
     pod.intercept((url, init) =>
       init.method === "HEAD" && url === `${root}publish/` ? new Response(null) : undefined,
     );
-    await expect(repo.listSites()).rejects.toMatchObject({ code: "unsupported" });
+    await expect(repo.listSites()).resolves.toMatchObject({ items: [] });
   });
   it("propagates permission and listing errors, refuses missing/weak validators and ignores foreign members", async () => {
     const pod = await podFixture();
@@ -231,14 +232,14 @@ describe("pod source, Type Index and public artifacts", () => {
       owner,
     );
     await expect(weakVersions.listSites()).rejects.toThrow(/safe version/);
-    await expect(repo.listPages(site)).resolves.toEqual([]);
+    await expect(repo.listPages(site)).resolves.toEqual({ items: [], invalid: [] });
     await pod.storage.create(`${root}publish/`, "ignored", {
       name: "not-a-site.txt",
       contentType: "text/plain",
     });
     await pod.storage.create(`${root}publish/`, null, { name: "BadKey", kind: "container" });
     await pod.storage.create(`${root}publish/`, null, { name: "empty", kind: "container" });
-    expect(await repo.listSites()).toHaveLength(1);
+    expect((await repo.listSites()).items).toHaveLength(1);
     const broken = publishRepository(
       pod.wrap({
         head: async () => {
@@ -280,8 +281,8 @@ describe("pod source, Type Index and public artifacts", () => {
     );
     await expect(broken.publish(site, page, pageData, true)).rejects.toThrow(/source was saved/);
     const repo = publishRepository(storage, fetch, owner);
-    const recoveredSite = (await repo.listSites())[0];
-    const recoveredPage = (await repo.listPages(site))[0];
+    const recoveredSite = (await repo.listSites()).items[0];
+    const recoveredPage = (await repo.listPages(site)).items[0];
     expect(recoveredSite).toBeDefined();
     expect(recoveredPage?.data.status).toBe("published");
     const published = await repo.publish(
