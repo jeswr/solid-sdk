@@ -91,6 +91,23 @@ describe("Todoist task create inputs", () => {
     expect(importWarnings(draft)).toEqual([{ code: "DURATION_TEXT", line: 2 }]);
     expect(importProjectDescription(draft)).toBe("");
   });
+  it("keeps an identity the task writer would reject as text, so creation never fails on it", () => {
+    const draft = parse(
+      "TYPE,CONTENT,AUTHOR,RESPONSIBLE\ntask,Title,https://alice.test/?a=1|2#me,https://user:pw@bob.test/#me",
+    );
+    const task = draft.tasks[0];
+    if (!task) throw new Error("Missing draft");
+    const input = importTaskInput(task, project, new Map());
+    expect(input).not.toHaveProperty("creator");
+    expect(input).not.toHaveProperty("assignee");
+    expect(input.description).toBe(
+      "Author: https://alice.test/?a=1|2#me\n\nResponsible: https://user:pw@bob.test/#me",
+    );
+    expect(importWarnings(draft)).toEqual([
+      { code: "UNRESOLVED_AUTHOR", line: 2 },
+      { code: "UNRESOLVED_RESPONSIBLE", line: 2 },
+    ]);
+  });
   it("combines parser warnings with metadata warnings without adding warnings for empty fields", () => {
     const draft = parse(
       "TYPE,CONTENT,DATE\nsection,Empty,\ntask,Title,every third Friday\nnote,Note,",

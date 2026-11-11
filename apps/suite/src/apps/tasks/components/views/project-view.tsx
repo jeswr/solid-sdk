@@ -14,6 +14,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { classifyError } from "../../lib/model/errors";
+import { replaceQuery } from "../../lib/route/replace-query";
 import { projectGroups } from "../../lib/views/project-groups";
 import { focusAddTask } from "../../state/add-focus";
 import { TaskListFocus } from "../../state/list-focus";
@@ -63,9 +64,9 @@ export function ProjectView({
     if (focusAddTask()) {
       const query = new URLSearchParams(params.toString());
       query.delete("add");
-      router.replace(`${pathname}${query.size ? `?${query}` : ""}`, { scroll: false });
+      replaceQuery(pathname, query);
     }
-  }, [add, load?.status, params, pathname, router]);
+  }, [add, load?.status, params, pathname]);
   const groups = projectGroups(
     tasks.views.filter((task) => task.projectUrl === url),
     project?.tracker.sections ?? [],

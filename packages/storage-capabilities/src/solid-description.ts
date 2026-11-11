@@ -2,8 +2,9 @@
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DatasetWrapper, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
+import { ownerIri } from "./http.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
-import { ACQ, DCT, DID, LWS, NOTIFY, SSD } from "./vocab.js";
+import { ACQ, DCT, DID, LWS, NOTIFY, SOLID, SSD } from "./vocab.js";
 
 const SSD_FORMAT = "https://jeswr.org/ns/solid-sd#format";
 
@@ -217,7 +218,7 @@ export function parseSolidDescription(
   dataset: DatasetCore,
   rootUrl: string,
   notificationsOnly = false,
-): Pick<StorageDescription, "services" | "capabilities"> {
+): Pick<StorageDescription, "services" | "capabilities" | "owner"> {
   const root = new DescriptionNode(rootUrl, dataset, DataFactory);
   // One expansion per node across the whole mapping; deriveFeatures resolves `{ "@id" }` refs.
   const visited = new Set<string>();
@@ -253,7 +254,7 @@ export function parseSolidDescription(
     services.push(builder);
   }
   if (notificationsOnly)
-    return { services: services.map((service) => service.build()), capabilities: [] };
+    return { services: services.map((service) => service.build()), capabilities: [], owner: null };
   for (const service of root.nodes(DID.service)) {
     const endpoint = service.iris(DID.serviceEndpoint)[0];
     if (endpoint === undefined) continue;
@@ -300,5 +301,9 @@ export function parseSolidDescription(
     if (duplicate === undefined) services.push(new ServiceBuilder(acq));
     else duplicate.addAcq();
   }
-  return { services: services.map((service) => service.build()), capabilities };
+  return {
+    services: services.map((service) => service.build()),
+    capabilities,
+    owner: ownerIri(root.iris(SOLID.owner)[0]),
+  };
 }

@@ -4,23 +4,70 @@ import { type Capabilities, useCapabilities } from "@jeswr/suite-ui/sync";
 import {
   createContext,
   type ReactNode,
+  type RefObject,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { shouldNotifyDesktop } from "../lib/notifications-delivery";
 import type { AccessDecider, NotificationSource } from "../lib/notifications-model";
 import { startNotificationUpdates } from "../lib/notifications-scheduler";
-import { useAccounts } from "../session/accounts-provider";
+import { type AccountsContextValue, useAccounts } from "../session/accounts-provider";
+import type { SuiteAccount } from "../session/types";
 import { createNotificationsController, type NotificationsController } from "./controller";
 import { createDemoNotificationSource } from "./demo-source";
 import { accountPreferences, showDesktopNotification } from "./desktop";
 import { localNotificationSource } from "./local-store";
+import { createPodNotificationSource } from "./pod-source";
 
 const NotificationsContext = createContext<NotificationsController | null>(null);
 const emptySources: readonly NotificationSource[] = [];
+
+type AccountPodSource = { key: string; source: NotificationSource | null };
+
+/** Only this producer remounts on session changes; editors below the provider keep their state. */
+function PodNotificationSource({
+  account,
+  ready,
+  sessionKey,
+  latest,
+  onSource,
+}: {
+  account: SuiteAccount | null;
+  ready: boolean;
+  sessionKey: string;
+  latest: RefObject<AccountsContextValue>;
+  onSource: (source: AccountPodSource) => void;
+}) {
+  useEffect(() => {
+    let disposed = false;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const usable = () =>
+        !disposed &&
+        account !== null &&
+        latest.current.active === account &&
+        latest.current.status === "ready" &&
+        latest.current.isActiveAccount(account.id);
+      if (!usable()) throw new Error("Sign in to read notifications");
+      const response = await latest.current.fetch(input, init);
+      if (!usable()) throw new Error("Sign in to read notifications");
+      return response;
+    };
+    const pod =
+      ready && account?.webId && account.kind !== "demo"
+        ? createPodNotificationSource({ webId: account.webId, fetch })
+        : undefined;
+    onSource({ key: sessionKey, source: pod ?? null });
+    return () => {
+      disposed = true;
+      pod?.dispose();
+    };
+  }, [account, ready, sessionKey, latest, onSource]);
+  return null;
+}
 
 /** Standalone seam for fixtures and future SDK adapters; remount when the account changes. */
 export function NotificationSessionProvider({
@@ -74,6 +121,18 @@ function AccountNotifications({
   capabilities: Capabilities;
   children: ReactNode;
 }) {
+  const accounts = useAccounts();
+  const latest = useRef(accounts);
+  latest.current = accounts;
+  const sessionKey = JSON.stringify([
+    accounts.active?.id,
+    accounts.active?.webId,
+    accounts.active?.kind,
+    accounts.status,
+  ]);
+  const [pod, setPod] = useState<AccountPodSource>();
+  // Hide the retired source synchronously, before the new producer's effect runs.
+  const podSource = pod?.key === sessionKey ? pod.source : null;
   const [synthetic] = useState(() => (demo ? createDemoNotificationSource() : undefined));
   const configuration = useMemo(() => {
     return {
@@ -81,19 +140,30 @@ function AccountNotifications({
         ...sources,
         ...(accountId ? [localNotificationSource(accountId)] : []),
         ...(synthetic ? [synthetic] : []),
+        ...(podSource ? [podSource] : []),
       ],
       decider: decider ?? synthetic,
     };
-  }, [sources, decider, synthetic, accountId]);
+  }, [sources, decider, synthetic, accountId, podSource]);
   return (
-    <NotificationSessionProvider
-      accountId={accountId}
-      sources={configuration.sources}
-      decider={configuration.decider}
-      liveUpdates={capabilities.liveUpdates === true}
-    >
-      {children}
-    </NotificationSessionProvider>
+    <>
+      <PodNotificationSource
+        key={sessionKey}
+        account={accounts.active}
+        ready={accounts.status === "ready"}
+        sessionKey={sessionKey}
+        latest={latest}
+        onSource={setPod}
+      />
+      <NotificationSessionProvider
+        accountId={accountId}
+        sources={configuration.sources}
+        decider={configuration.decider}
+        liveUpdates={capabilities.liveUpdates === true}
+      >
+        {children}
+      </NotificationSessionProvider>
+    </>
   );
 }
 export function NotificationsProvider({

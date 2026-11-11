@@ -39,6 +39,7 @@ export function memoryTarget(
         etag: null,
         maxAgeMs: 0,
         verificationMethods: [],
+        owner: null,
       };
       if (protocol === "lws") {
         description.services = [{ type: [LWS.StorageRoot], endpoint: root, extra: {} }];

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { isHttpIri } from "@jeswr/solid-task-model/task";
 import type { NewTask } from "../../state/tasks-cache";
+import { requireHttp } from "../model/rdf";
 import type { StoredProject } from "../model/store";
 import type { TodoistProjectDraft, TodoistTaskDraft, TodoistWarning } from "../todoist";
 import { priorityValue } from "../views/types";
@@ -17,6 +17,15 @@ export interface ImportWarning {
   line: number;
 }
 
+/** The task writer's own IRI rule, so a value accepted here never fails at creation. */
+function webId(value: string): string | undefined {
+  try {
+    return requireHttp(value);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Display names cannot be resolved to WebIDs without an identity mapping. Keep them verbatim. */
 function taskMetadata(draft: TodoistTaskDraft) {
   const fields: Pick<NewTask, "creator" | "assignee"> = {};
@@ -27,9 +36,11 @@ function taskMetadata(draft: TodoistTaskDraft) {
     description.push(`${label}: ${value}`);
     warnings.push({ code, line });
   };
-  if (isHttpIri(draft.author)) fields.creator = draft.author;
+  const creator = webId(draft.author);
+  if (creator) fields.creator = creator;
   else keep(draft.author, "Author", "UNRESOLVED_AUTHOR");
-  if (isHttpIri(draft.responsible)) fields.assignee = draft.responsible;
+  const assignee = webId(draft.responsible);
+  if (assignee) fields.assignee = assignee;
   else keep(draft.responsible, "Responsible", "UNRESOLVED_RESPONSIBLE");
   if (draft.duration) {
     const { amount, unit } = draft.duration;

@@ -7,6 +7,8 @@ export type NotificationKind =
   | "sync-conflict"
   | "storage"
   | "system";
+/** createdAt for a notification without a usable date: stable, sorts last, never displayed. */
+export const UNDATED = -8640000000000000;
 export interface SuiteNotification {
   id: string;
   kind: NotificationKind;

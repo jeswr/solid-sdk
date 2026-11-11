@@ -45,6 +45,7 @@ const VERBS = new Set(["Announce", "Offer", "Accept", "Reject", "Create"]);
 export function createNotifyClient(options: NotifyOptions): Notify {
   const fetcher = clientFetch(options);
   const discover = inboxDiscovery(options);
+  const clock = options.clock ?? Date.now;
 
   return async (agentWebId, activity) => {
     let inbox: string | null = null;
@@ -61,6 +62,8 @@ export function createNotifyClient(options: NotifyOptions): Notify {
         object: httpsIri(activity.object),
         ...(activity.target === undefined ? {} : { target: httpsIri(activity.target) }),
         ...(activity.summary === undefined ? {} : { summary: activity.summary }),
+        // Readers order and date inbox items by as:published; stamp the send time.
+        published: new Date(clock()).toISOString(),
       });
       const discovery = await discover(agentWebId);
       inbox = discovery.inbox;

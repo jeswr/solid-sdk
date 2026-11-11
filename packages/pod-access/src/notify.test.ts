@@ -51,7 +51,7 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
       }),
     )
     .mockResolvedValue(new Response(null, { status: 201 }));
-  const notify = createNotify({ fetch });
+  const notify = createNotify({ fetch, clock: () => Date.parse("2026-11-11T12:00:00.000Z") });
   await expect(
     notify(webId, {
       ...assignmentAnnounce(
@@ -66,7 +66,7 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(fetch.mock.calls[1]?.[0]).toBe(inbox);
   expect(fetch.mock.calls[1]?.[1]?.body).toMatchInlineSnapshot(
-    `"{"@context":"https://www.w3.org/ns/activitystreams","type":"Announce","actor":"https://alice.example/profile#me","object":"https://pod.example/task#it","target":"https://pod.example/tracker#this","summary":"Alice assigned you 'Pay rent'"}"`,
+    `"{"@context":"https://www.w3.org/ns/activitystreams","type":"Announce","actor":"https://alice.example/profile#me","object":"https://pod.example/task#it","target":"https://pod.example/tracker#this","summary":"Alice assigned you 'Pay rent'","published":"2026-11-11T12:00:00.000Z"}"`,
   );
 });
 
@@ -113,6 +113,7 @@ test("wraps inbox discovery and reading, and classifies each real builder round-
           actor: { "@type": "@id" },
           object: { "@type": "@id" },
           target: { "@type": "@id" },
+          published: { "@type": "http://www.w3.org/2001/XMLSchema#dateTime" },
         },
       }),
       {
@@ -120,16 +121,20 @@ test("wraps inbox discovery and reading, and classifies each real builder round-
       },
     );
   });
-  const notify = createNotify({ fetch });
+  let tick = 0;
+  // A strictly increasing clock makes the reader's newest-first order deterministic. The
+  // reader shares it so inbox discovery is shared with the notifier.
+  const clock = () => Date.UTC(2026, 10, 11) + 1_000 * tick++;
+  const notify = createNotify({ fetch, clock });
   for (const draft of drafts) await notify(webId, { ...draft, actor: webId });
-  const reader = createInboxReader({ fetch });
+  const reader = createInboxReader({ fetch, clock });
   expect(await reader.inbox(webId)).toBe(inbox);
   const notifications = await reader.list(inbox);
   expect(notifications.map(notificationKind)).toEqual([
-    "share",
-    "assignment",
-    "mention",
     "invitation",
+    "mention",
+    "assignment",
+    "share",
   ]);
   expect(fetch.mock.calls.filter(([url]) => url === "https://8.8.8.8/profile")).toHaveLength(1);
 });
