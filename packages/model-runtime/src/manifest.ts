@@ -42,6 +42,8 @@ const CAP = {
 
 /** Per-field guard flags — all pure data (enums / booleans), no computation. */
 export interface ManifestFieldGuards {
+  /** Ontology-derived closed IRI enum: exact membership; invalid writes throw TypeError. */
+  iriEnum?: true;
   /** Filter + canonicalise IRI values through the http(s)-only lexical filter. */
   iriScheme?: "http-https" | "https";
   /** Closed SHACL prefix pattern, checked on the original RDF IRI before normalization. */
@@ -262,6 +264,7 @@ function assertKnownKeys(obj: Record<string, unknown>, allowed: Set<string>, wha
 }
 
 const GUARD_KEYS = new Set<string>([
+  "iriEnum",
   "iriScheme",
   "iriPattern",
   "requiredFailClosed",
@@ -331,6 +334,10 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
   if (!isObject(raw)) fail("field.guards must be an object");
   assertKnownKeys(raw, GUARD_KEYS, "field.guards");
   const g: ManifestFieldGuards = {};
+  if (raw.iriEnum !== undefined) {
+    if (raw.iriEnum !== true) fail("field.guards.iriEnum must be true when present");
+    g.iriEnum = true;
+  }
   if (raw.iriScheme !== undefined) {
     if (raw.iriScheme !== "http-https" && raw.iriScheme !== "https") {
       fail('field.guards.iriScheme must be "http-https" or "https"');
@@ -503,6 +510,14 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
 
   field.guards = validateGuards(raw.guards);
   const g = field.guards;
+  if (g.iriEnum !== undefined) {
+    if (kind !== "iri" || !field.in?.length) fail("iriEnum requires a non-empty IRI enumeration");
+    if (new Set(field.in).size !== field.in.length) fail("iriEnum requires distinct members");
+    if (g.trim === true || g.dropBlank === true)
+      fail("iriEnum cannot trim or drop supplied values");
+    if (field.default !== undefined && !field.in.includes(field.default))
+      fail("iriEnum default must be an enum member");
+  }
   const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";
   if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");

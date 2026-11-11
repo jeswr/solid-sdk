@@ -171,8 +171,8 @@ describe("alias admission fails closed", () => {
     ).toThrow(AdmissionError);
   });
 
-  it("rejects multiple shapes for the same canonical class", () => {
-    expect(() => generated(`${shape()}\n${shape()}`)).toThrow(AdmissionError);
+  it("merges identical anonymous shapes for the same canonical class", () => {
+    expect(generated(`${shape()}\n${shape()}`).manifest.entities).toHaveLength(1);
   });
 });
 

@@ -26,6 +26,7 @@ import {
   implicitClassTargets,
   localName,
   type NormalizedShapes,
+  propertySources,
   sharedAliasPredicates,
 } from "./shapes.js";
 
@@ -109,12 +110,33 @@ export function admit(
   const childProperties = new Set(
     shapes.nodeShapes
       .filter((shape) => childTargets.has(shape.targetClass))
-      .flatMap((shape) => shape.properties.map((c) => c.shapeIri)),
+      .flatMap((shape) => shape.properties.flatMap(propertySources).map((c) => c.shapeIri)),
   );
   const graph = new Graph(shapes.quads);
-  const shapeByIri = new Map(shapes.nodeShapes.map((shape) => [shape.iri, shape]));
+  const shapeByIri = new Map(
+    shapes.nodeShapes.flatMap((shape) =>
+      (shape.shapeIris ?? [shape.iri]).map((iri) => [iri, shape] as const),
+    ),
+  );
   const constraintByIri = new Map(
-    shapes.nodeShapes.flatMap((shape) => shape.properties.map((c) => [c.shapeIri, c] as const)),
+    shapes.nodeShapes.flatMap((shape) =>
+      shape.properties.flatMap((c) =>
+        propertySources(c).map(
+          (source) =>
+            [
+              source.shapeIri,
+              {
+                ...source,
+                // Validate source guards against the conjoined value kind. A lexical
+                // guard cannot disappear behind another shape's numeric/date datatype.
+                kind: c.kind,
+                datatype: c.datatype,
+                conceptIris: c.conceptIris,
+              },
+            ] as const,
+        ),
+      ),
+    ),
   );
   const nestedShapeIris = new Set<string>();
   for (const entity of config?.entities ?? []) {
@@ -123,7 +145,7 @@ export function admit(
       const shape = shapes.nodeShapes.find((s) => s.targetClass === node.targetClass);
       for (const c of shape?.properties ?? []) {
         if (node.links?.[c.name ?? localName(c.pathIri)] !== undefined)
-          nestedShapeIris.add(c.shapeIri);
+          for (const source of propertySources(c)) nestedShapeIris.add(source.shapeIri);
       }
     }
   }
@@ -259,7 +281,12 @@ export function admit(
         if (config !== undefined && !isNested)
           unsupported("sh:node requires a projected composite link");
       }
-      if (component === "class" && !isNested && config !== undefined) {
+      if (
+        component === "class" &&
+        !isNested &&
+        c?.conceptIris === undefined &&
+        config !== undefined
+      ) {
         // Root advisory hints retain their documented omission policy. A child
         // reached through sh:node must enforce even present optional constraints.
         const advisory = !childProperties.has(subject.value) && !isFailClosedSeverity(c?.severity);
@@ -299,10 +326,17 @@ export function admit(
   // 3. Every instance-data class (a sector owl:Class) has a NodeShape covering it;
   //    literal properties carry a datatype; every property states a cardinality.
   const shapeByTarget = new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
+  const conceptClasses = new Set(
+    shapes.nodeShapes
+      .flatMap((s) => s.properties.flatMap(propertySources))
+      .filter((c) => c.conceptIris !== undefined)
+      .map((c) => c.hasClass),
+  );
   for (const c of ontology.classes) {
     if (!inNamespace(c.iri, namespace)) continue;
     const shape = shapeByTarget.get(c.iri);
     if (!shape) {
+      if (conceptClasses.has(c.iri)) continue;
       add(
         "missing-shape",
         "error",

@@ -68,6 +68,17 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   by comparing canonical decimal spellings before/after JS number conversion.
   String-subtype lexical validators run on raw values on reads and writes; never
   sanitize an invalid lexical form into a valid one.
+- Ontology-derived concept enums use the same exact RDF membership path with
+  `guards.iriEnum: true`. This marker requires an IRI field with a nonempty, distinct,
+  capped `in` list of safe absolute IRIs. False/nonboolean markers, nested/literal
+  fields, trim/dropBlank policies and defaults outside the enum fail manifest validation.
+  Supplied nonmember or nonstring values throw the existing `TypeError` on build,
+  setters and live-set adds; reject before alias migration or normalization.
+  Set builds require arrays; duplicate valid members deduplicate. `undefined` clears
+  a singleton or omits a build field, but is invalid as a supplied set member.
+  Reads drop nonmember IRIs, literals and blank nodes; required failures reject the
+  record. Concepts need no `rdf:type` triples in pod data. Ordinary `in` enums keep
+  their historical drop-invalid writes.
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias

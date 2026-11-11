@@ -115,6 +115,28 @@ export function validateConfig(config: CodegenConfig): void {
   if (!isSafeAbsoluteIri(config.shapesBase)) {
     throw new TypeError("shapesBase must be a safe absolute IRI");
   }
+  assertClassOwnership(config);
+}
+
+/** A class cannot silently select the first of competing flat/composite configs. */
+export function assertClassOwnership(config: CodegenConfig): void {
+  const owners = new Map<string, { index: number; name: string; composite: boolean }>();
+  config.entities.forEach((entity, index) => {
+    const composite = isCompositeConfig(entity);
+    const targets = isCompositeConfig(entity)
+      ? Object.values(entity.nodes).map((node) => node.targetClass)
+      : [entity.targetClass];
+    for (const target of targets) {
+      const prior = owners.get(target);
+      // The compiler already checks re-use within/across composites. Keep those
+      // diagnostics, while rejecting flat claims that previously shadowed configs.
+      if (prior && prior.index !== index && (!prior.composite || !composite))
+        throw new TypeError(
+          `target class ${target} has more than one entity config: ${prior.name} and ${entity.name}`,
+        );
+      owners.set(target, { index, name: entity.name, composite });
+    }
+  });
 }
 
 /** Look up the FLAT entity config for a target class (composite configs are excluded). */

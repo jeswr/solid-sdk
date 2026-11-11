@@ -36,9 +36,11 @@ import {
   linkTargetConforms,
 } from "./compile.js";
 import {
+  enumValues,
   implicitClassTargets,
   localName,
   type NormalizedShapes,
+  propertySources,
   type ShapeConstraint,
   type ShapeScalar,
   sharedAliasPredicates,
@@ -89,7 +91,7 @@ function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]>
       minCount: c.minCount ?? null,
       maxCount: c.maxCount ?? null,
       collection: c.maxCount !== 1,
-      inValues: inJson(c.in),
+      inValues: inJson(enumValues(c)),
     }));
     out.set(shape.targetClass, sortFields(fields));
   }
@@ -255,6 +257,7 @@ function guardIsShapeDerived(
   guard: string,
 ): boolean {
   if (constraint === undefined) return false;
+  if (guard === "iriEnum") return guards.iriEnum === true && constraint.conceptIris !== undefined;
   if (guard === "iriScheme")
     return (
       guards.iriScheme === iriSchemeForPattern(constraint.pattern) &&
@@ -270,12 +273,7 @@ function guardIsShapeDerived(
   // Severity-aware (G1): a required guard is shape-derived only when the minCount ≥ 1
   // constraint is Violation-graded (or severity absent) AND the guard fails closed.
   if (guard === "requiredFailClosed")
-    return (
-      guards.requiredFailClosed === true &&
-      constraint.minCount !== undefined &&
-      constraint.minCount >= 1 &&
-      isFailClosedSeverity(constraint.severity)
-    );
+    return guards.requiredFailClosed === true && isPresenceMust(constraint);
   if (guard === "minInclusive")
     return constraint.minInclusive !== undefined && guards.minInclusive === constraint.minInclusive;
   if (guard === "maxInclusive")
@@ -289,6 +287,7 @@ function guardIsShapeDerived(
 /** Re-derive ALL required scalar guards from SHACL, independently of the compiler. */
 function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
   const required: ManifestFieldGuards = {};
+  if (c.conceptIris !== undefined) required.iriEnum = true;
   if (isPresenceMust(c)) required.requiredFailClosed = true;
   if (c.kind === "iri" && isHttpPattern(c.pattern)) {
     required.iriScheme = iriSchemeForPattern(c.pattern);
@@ -390,10 +389,8 @@ function assertTraceability(compiled: CompileResult, shapes: NormalizedShapes): 
 
 /** True for a shape property that requires PRESENCE at Violation grade (a runtime MUST). */
 function isPresenceMust(constraint: ShapeConstraint): boolean {
-  return (
-    constraint.minCount !== undefined &&
-    constraint.minCount >= 1 &&
-    isFailClosedSeverity(constraint.severity)
+  return propertySources(constraint).some(
+    (c) => (c.minCount ?? 0) >= 1 && isFailClosedSeverity(c.severity),
   );
 }
 
@@ -510,7 +507,11 @@ function assertCompositeFidelity(
         continue;
       }
 
-      if (node.name !== composite.root && constraint.hasClass !== undefined) {
+      if (
+        node.name !== composite.root &&
+        constraint.hasClass !== undefined &&
+        constraint.conceptIris === undefined
+      ) {
         throw new FidelityError(
           `child shape sh:class constraint ${field.predicate} requires a projected composite link`,
         );
@@ -526,7 +527,7 @@ function assertCompositeFidelity(
         minCount: constraint.minCount ?? null,
         maxCount: constraint.maxCount ?? null,
         collection: constraint.maxCount !== 1,
-        inValues: inJson(constraint.in),
+        inValues: inJson(enumValues(constraint)),
       };
       const manifestProj: FieldProjection = {
         name: field.name,
@@ -591,6 +592,8 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   // Independently mirror the compiler's pre-projection satisfiability checks.
   for (const shape of shapes.nodeShapes) {
     for (const c of shape.properties) {
+      if (c.conceptIris !== undefined && (c.kind !== "iri" || enumValues(c)?.length === 0))
+        throw new FidelityError(`property ${c.shapeIri} has an invalid concept IRI enumeration`);
       if (c.kind === "iri" && c.datatype !== undefined) {
         throw new FidelityError(
           `property ${c.shapeIri} has an incompatible datatype and IRI node kind`,
