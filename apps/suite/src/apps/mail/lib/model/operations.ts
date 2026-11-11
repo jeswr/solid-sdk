@@ -37,6 +37,7 @@ export async function loadFolders(store: MailStore, root: string) {
     [...messages.messages].flatMap((message) =>
       message.partOfThread ? [documentOf(message.partOfThread)] : [],
     ),
+    true,
   );
   const loaded = new Set([...messages.messages].map((message) => documentOf(message.value)));
   const members = await snapshotPresent(
@@ -46,15 +47,7 @@ export async function loadFolders(store: MailStore, root: string) {
       .filter((url) => !loaded.has(url)),
   );
   const combined = combine([folders, messages, threads, members]);
-  return folderCounts(combined).map((count) => ({
-    ...count,
-    unreadThreads: pageThreads(
-      combined,
-      count.folder.value,
-      0,
-      Number.MAX_SAFE_INTEGER,
-    ).items.filter((row) => row.messages.some((message) => !message.isRead)).length,
-  }));
+  return folderCounts(combined);
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
   const folder = await store.load(documentOf(folderIri));
@@ -65,6 +58,7 @@ export async function loadThreads(store: MailStore, folderIri: string, offset = 
   const threads = await snapshotPresent(
     store,
     [...messages.messages].flatMap((m) => (m.partOfThread ? [documentOf(m.partOfThread)] : [])),
+    true,
   );
   const members = await snapshotPresent(
     store,
@@ -87,8 +81,16 @@ export async function loadThread(store: MailStore, threadIri: string) {
   );
   return threadMessages(combine([thread.mailbox, messages]), threadIri);
 }
-/** Loads documents with bounded concurrency, skipping ones that no longer exist (404). */
-async function snapshotPresent(store: MailStore, urls: string[]): Promise<MailboxDataset> {
+/** Referenced thread metadata may be absent or unreadable without hiding readable messages. */
+export function unavailableThread(error: unknown): boolean {
+  return error instanceof MailError && [401, 403, 404, 410].includes(error.status);
+}
+/** Loads documents with bounded concurrency, skipping absent documents. */
+async function snapshotPresent(
+  store: MailStore,
+  urls: string[],
+  threadMetadata = false,
+): Promise<MailboxDataset> {
   const unique = [...new Set(urls)];
   const dataset = new Store();
   let next = 0;
@@ -99,7 +101,11 @@ async function snapshotPresent(store: MailStore, urls: string[]): Promise<Mailbo
       try {
         dataset.addQuads([...(await store.load(url)).mailbox]);
       } catch (error) {
-        if (error instanceof MailError && error.code === "not-found") continue;
+        if (
+          (error instanceof MailError && error.code === "not-found") ||
+          (threadMetadata && unavailableThread(error))
+        )
+          continue;
         failed = true;
         throw error;
       }

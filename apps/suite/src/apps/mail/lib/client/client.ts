@@ -27,6 +27,7 @@ import {
   setLabel,
   setRead,
   setStarred,
+  unavailableThread,
   updateDraft,
 } from "../model";
 import { mailAddressName, mailAttachments, privateMailIndex } from "../model/client-support";
@@ -356,25 +357,38 @@ export class MailClient {
     const messages = [...(await this.store.snapshot(iris)).messages]
       .sort((a, b) => (b.dateSent?.getTime() ?? 0) - (a.dateSent?.getTime() ?? 0))
       .slice(0, 5000);
-    const threads = new Set(
-      messages
-        .filter((m) =>
-          evaluateQuery(ast, {
-            from: m.sender ? searchAddress(m, m.sender) : "",
-            to: [...m.to, ...m.cc].map((iri) => searchAddress(m, iri)),
-            subject: m.subjectLine ?? "",
-            snippet: (m.body ?? "").replace(/\s+/g, " ").slice(0, 140),
-            hasAttachment: m.attachments.size > 0,
-            unread: !m.isRead,
-            dateSent: m.dateSent?.getTime() ?? 0,
-          }),
-        )
-        .map((m) => m.partOfThread)
-        .filter((iri): iri is string => iri !== undefined),
+    const matches = messages.filter((m) =>
+      evaluateQuery(ast, {
+        from: m.sender ? searchAddress(m, m.sender) : "",
+        to: [...m.to, ...m.cc].map((iri) => searchAddress(m, iri)),
+        subject: m.subjectLine ?? "",
+        snippet: (m.body ?? "").replace(/\s+/g, " ").slice(0, 140),
+        hasAttachment: m.attachments.size > 0,
+        unread: !m.isRead,
+        dateSent: m.dateSent?.getTime() ?? 0,
+      }),
     );
-    const rows: ThreadRow[] = [];
-    for (const iri of threads) rows.push(row(iri, await loadThread(this.store, iri), this.webId));
-    return rows
+    const rows = new Map<string, ThreadRow>();
+    const threads = new Map<string, Message[] | undefined>();
+    for (const message of matches) {
+      const iri = message.partOfThread;
+      if (!iri) {
+        rows.set(message.value, row(message.value, [message], this.webId));
+        continue;
+      }
+      if (!threads.has(iri)) {
+        try {
+          threads.set(iri, await loadThread(this.store, iri));
+        } catch (error) {
+          if (!unavailableThread(error)) throw error;
+          threads.set(iri, undefined);
+        }
+      }
+      const loaded = threads.get(iri);
+      const key = loaded ? iri : message.value;
+      rows.set(key, row(key, loaded ?? [message], this.webId));
+    }
+    return [...rows.values()]
       .sort((a, b) => b.latest.getTime() - a.latest.getTime() || a.iri.localeCompare(b.iri))
       .slice(0, limit);
   }
