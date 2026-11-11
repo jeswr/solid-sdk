@@ -1,26 +1,27 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
-import { describe, it, expect, vi } from "vitest";
+
 import { Parser } from "n3";
+import { describe, expect, it, vi } from "vitest";
+import { serializeTurtle } from "./pod-data.js";
 import {
-  buildPoll,
-  parsePoll,
-  tallyRsvps,
-  winningOption,
-  readPollAt,
-  respondToPoll,
   aggregatePollRsvps,
-  readRsvpResourceAt,
+  buildPoll,
   POLL_CLASS,
   type Poll,
+  parsePoll,
   type Rsvp,
+  readPollAt,
+  readRsvpResourceAt,
+  respondToPoll,
+  tallyRsvps,
+  winningOption,
 } from "./schedule.js";
-import { InvalidTargetError } from "./errors.js";
-import { serializeTurtle } from "./pod-data.js";
 
-const URL = "https://alice.example/schedule/p1.ttl";
-const ALICE = "https://alice.example/profile/card#me";
-const BOB = "https://bob.example/profile/card#me";
-const CAROL = "https://carol.example/profile/card#me";
+const URL = "https://8.8.8.8/schedule/p1.ttl";
+const ALICE = "https://8.8.8.8/profile/card#me";
+const BOB = "https://8.8.4.4/profile/card#me";
+const CAROL = "https://1.1.1.1/profile/card#me";
 const OPT_A = "2026-07-01T18:00:00.000Z";
 const OPT_B = "2026-07-02T18:00:00.000Z";
 
@@ -72,7 +73,7 @@ describe("buildPoll / parsePoll round-trip", () => {
 
   it("returns undefined for a non-poll document", () => {
     const ds = buildPoll(URL, { name: "x", options: [], invitees: [], rsvps: [] });
-    expect(parsePoll("https://alice.example/schedule/other.ttl", ds)).toBeUndefined();
+    expect(parsePoll("https://8.8.8.8/schedule/other.ttl", ds)).toBeUndefined();
   });
 });
 
@@ -87,9 +88,9 @@ describe("tallyRsvps (pure)", () => {
   it("counts yes/no/maybe per option, with empty options at zero", () => {
     const OPT_C = "2026-07-03T18:00:00.000Z";
     const t = tallyRsvps([OPT_A, OPT_B, OPT_C], rsvps);
-    const a = t.find((x) => x.option === OPT_A)!;
-    const b = t.find((x) => x.option === OPT_B)!;
-    const c = t.find((x) => x.option === OPT_C)!;
+    const a = t.find((x) => x.option === OPT_A);
+    const b = t.find((x) => x.option === OPT_B);
+    const c = t.find((x) => x.option === OPT_C);
     expect(a).toMatchObject({ yes: 2, no: 0, maybe: 0 });
     expect(b).toMatchObject({ yes: 0, no: 1, maybe: 1 });
     expect(c).toMatchObject({ yes: 0, no: 0, maybe: 0 });
@@ -112,24 +113,30 @@ describe("tallyRsvps (pure)", () => {
 
   it("winningOption tiebreak: equal yes → fewest no, then earliest time", () => {
     // Both options have 1 yes; OPT_A also has 1 no, OPT_B has 0 no → OPT_B wins.
-    const tie = tallyRsvps([OPT_A, OPT_B], [
-      { attendee: BOB, option: OPT_A, response: "yes" },
-      { attendee: CAROL, option: OPT_A, response: "no" },
-      { attendee: BOB, option: OPT_B, response: "yes" },
-    ]);
+    const tie = tallyRsvps(
+      [OPT_A, OPT_B],
+      [
+        { attendee: BOB, option: OPT_A, response: "yes" },
+        { attendee: CAROL, option: OPT_A, response: "no" },
+        { attendee: BOB, option: OPT_B, response: "yes" },
+      ],
+    );
     expect(winningOption(tie)?.option).toBe(OPT_B);
 
     // Equal yes AND equal no → earliest time wins (OPT_A < OPT_B).
-    const tie2 = tallyRsvps([OPT_A, OPT_B], [
-      { attendee: BOB, option: OPT_A, response: "yes" },
-      { attendee: CAROL, option: OPT_B, response: "yes" },
-    ]);
+    const tie2 = tallyRsvps(
+      [OPT_A, OPT_B],
+      [
+        { attendee: BOB, option: OPT_A, response: "yes" },
+        { attendee: CAROL, option: OPT_B, response: "yes" },
+      ],
+    );
     expect(winningOption(tie2)?.option).toBe(OPT_A);
   });
 });
 
 describe("readPollAt — validated read-only foreign poll fetch", () => {
-  const POLL_URL = "https://carol.example/schedule/p1.ttl";
+  const POLL_URL = "https://1.1.1.1/schedule/p1.ttl";
 
   it("validates the URL and reads a foreign poll read-only", async () => {
     const ds = buildPoll(POLL_URL, {
@@ -153,22 +160,24 @@ describe("readPollAt — validated read-only foreign poll fetch", () => {
   });
 
   it("refuses to fetch a poll URL on an unsafe host (SSRF guard)", async () => {
-    const fetchImpl = vi.fn(async () => new Response("x", { status: 200 })) as unknown as typeof fetch;
-    await expect(readPollAt("https://127.0.0.1/schedule/p.ttl", fetchImpl)).rejects.toBeInstanceOf(
-      InvalidTargetError,
-    );
-    await expect(readPollAt("http://carol.example/p.ttl", fetchImpl)).rejects.toBeInstanceOf(
-      InvalidTargetError,
-    ); // http is bad-scheme
+    const fetchImpl = vi.fn(
+      async () => new Response("x", { status: 200 }),
+    ) as unknown as typeof fetch;
+    await expect(readPollAt("https://127.0.0.1/schedule/p.ttl", fetchImpl)).rejects.toMatchObject({
+      name: "RdfFetchError",
+    });
+    await expect(readPollAt("http://1.1.1.1/p.ttl", fetchImpl)).rejects.toMatchObject({
+      name: "RdfFetchError",
+    }); // http is bad-scheme
     expect(fetchImpl).not.toHaveBeenCalled(); // never fetched
   });
 });
 
 describe("respondToPoll — same-pod write + notify organiser", () => {
-  const POLL_URL = "https://carol.example/schedule/p1.ttl";
-  const ATTENDEE_POD = "https://bob.example/";
-  const ORG_DOC = "https://carol.example/profile/card";
-  const ORG_INBOX = "https://carol.example/inbox/";
+  const POLL_URL = "https://1.1.1.1/schedule/p1.ttl";
+  const ATTENDEE_POD = "https://8.8.4.4/";
+  const ORG_DOC = "https://1.1.1.1/profile/card";
+  const ORG_INBOX = "https://1.1.1.1/inbox/";
 
   it("writes the RSVP to the attendee's OWN pod and notifies the organiser", async () => {
     const calls: { url: string; method: string; body?: string }[] = [];
@@ -198,14 +207,15 @@ describe("respondToPoll — same-pod write + notify organiser", () => {
     );
 
     // The RSVP resource was written in the ATTENDEE's own pod (never carol's).
-    expect(responseUrl.startsWith("https://bob.example/schedule-responses/")).toBe(true);
+    expect(responseUrl.startsWith("https://8.8.4.4/schedule-responses/")).toBe(true);
     const put = calls.find((c) => c.method === "PUT");
     expect(put?.url).toBe(responseUrl);
     // And it is a valid RsvpAction.
     const quads = new Parser().parse(put?.body as string);
     expect(
       quads.some(
-        (q) => q.predicate.value.endsWith("#type") && q.object.value === "https://schema.org/RsvpAction",
+        (q) =>
+          q.predicate.value.endsWith("#type") && q.object.value === "https://schema.org/RsvpAction",
       ),
     ).toBe(true);
 
@@ -213,7 +223,7 @@ describe("respondToPoll — same-pod write + notify organiser", () => {
     const post = calls.find((c) => c.method === "POST");
     expect(post?.url).toBe(ORG_INBOX);
     // No write ever targeted the organiser's pod beyond the inbox POST.
-    expect(calls.some((c) => c.method === "PUT" && c.url.startsWith("https://carol.example/"))).toBe(
+    expect(calls.some((c) => c.method === "PUT" && c.url.startsWith("https://1.1.1.1/"))).toBe(
       false,
     );
   });
@@ -243,10 +253,15 @@ describe("respondToPoll — same-pod write + notify organiser", () => {
 });
 
 describe("aggregatePollRsvps — organiser-side loop closure", () => {
-  const POLL_URL = "https://carol.example/schedule/p1.ttl";
-  const BOB_RESP = "https://bob.example/schedule-responses/rsvp-x.ttl";
+  const POLL_URL = "https://1.1.1.1/schedule/p1.ttl";
+  const BOB_RESP = "https://8.8.4.4/schedule-responses/rsvp-x.ttl";
 
-  function rsvpTtl(opts: { subject: string; object: string; attendee: string; option: string }): string {
+  function rsvpTtl(opts: {
+    subject: string;
+    object: string;
+    attendee: string;
+    option: string;
+  }): string {
     return `
       @prefix schema: <https://schema.org/> .
       <${opts.subject}#it> a schema:RsvpAction ;
@@ -266,7 +281,13 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
       return new Response("nf", { status: 404 });
     }) as unknown as typeof fetch;
 
-    const poll: Poll = { name: "p", options: [OPT_A], invitees: [BOB], rsvps: [], organizer: CAROL };
+    const poll: Poll = {
+      name: "p",
+      options: [OPT_A],
+      invitees: [BOB],
+      rsvps: [],
+      organizer: CAROL,
+    };
     const merged = await aggregatePollRsvps(
       poll,
       POLL_URL,
@@ -298,29 +319,35 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
   it("drops a response whose schema:object is a different poll", async () => {
     const wrongPoll = rsvpTtl({
       subject: BOB_RESP,
-      object: "https://carol.example/schedule/OTHER.ttl",
+      object: "https://1.1.1.1/schedule/OTHER.ttl",
       attendee: BOB,
       option: OPT_A,
     });
-    const fetchImpl = vi.fn(async () =>
-      new Response(wrongPoll, { status: 200, headers: { "content-type": "text/turtle" } }),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(wrongPoll, { status: 200, headers: { "content-type": "text/turtle" } }),
     ) as unknown as typeof fetch;
     const poll: Poll = { name: "p", options: [OPT_A], invitees: [], rsvps: [], organizer: CAROL };
-    const merged = await aggregatePollRsvps(poll, POLL_URL, [{ actor: BOB, object: POLL_URL, content: BOB_RESP }], fetchImpl);
+    const merged = await aggregatePollRsvps(
+      poll,
+      POLL_URL,
+      [{ actor: BOB, object: POLL_URL, content: BOB_RESP }],
+      fetchImpl,
+    );
     expect(merged).toEqual([]);
   });
 
   it("anti-impersonation: drops an Offer whose content is not in the actor's pod", async () => {
     // Attacker (bob) POSTs an Offer claiming actor=CAROL but hosts the response
-    // in bob's own pod. CAROL's profile advertises only carol.example storage, so
+    // in bob's own pod. CAROL's profile advertises only 1.1.1.1 storage, so
     // the bob-hosted content does NOT belong to CAROL → rejected, never fetched.
     const requested: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       requested.push(url);
-      if (url === "https://carol.example/profile/card") {
+      if (url === "https://1.1.1.1/profile/card") {
         return new Response(
-          `@prefix pim: <http://www.w3.org/ns/pim/space#> . <${CAROL}> pim:storage <https://carol.example/> .`,
+          `@prefix pim: <http://www.w3.org/ns/pim/space#> . <${CAROL}> pim:storage <https://1.1.1.1/> .`,
           { status: 200, headers: { "content-type": "text/turtle" } },
         );
       }
@@ -338,12 +365,12 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
   });
 
   it("accepts a response in the actor's advertised pim:storage even on a different WebID origin", async () => {
-    // Dan's WebID is on idp.example but his pod is on pods.example (the common
+    // Dan's WebID is on 9.9.9.9 but his pod is on 1.0.0.1 (the common
     // split-origin Solid config). A response under his advertised storage counts.
-    const DAN = "https://idp.example/dan#me";
-    const DAN_DOC = "https://idp.example/dan";
-    const DAN_STORAGE = "https://pods.example/dan/";
-    const DAN_RESP = "https://pods.example/dan/schedule-responses/r.ttl";
+    const DAN = "https://9.9.9.9/dan#me";
+    const DAN_DOC = "https://9.9.9.9/dan";
+    const DAN_STORAGE = "https://1.0.0.1/dan/";
+    const DAN_RESP = "https://1.0.0.1/dan/schedule-responses/r.ttl";
     const respTtl = rsvpTtl({ subject: DAN_RESP, object: POLL_URL, attendee: DAN, option: OPT_A });
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -358,7 +385,13 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
       }
       return new Response("nf", { status: 404 });
     }) as unknown as typeof fetch;
-    const poll: Poll = { name: "p", options: [OPT_A], invitees: [DAN], rsvps: [], organizer: CAROL };
+    const poll: Poll = {
+      name: "p",
+      options: [OPT_A],
+      invitees: [DAN],
+      rsvps: [],
+      organizer: CAROL,
+    };
     const merged = await aggregatePollRsvps(
       poll,
       POLL_URL,
@@ -372,8 +405,8 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
     // Defence-in-depth: the actor's profile claims a 127.0.0.1 storage and the
     // content is "within" it, so contentBelongsToActor returns true — but the
     // final assertValidTargetUrl in readRsvpResourceAt must still block the GET.
-    const EVIL = "https://idp.example/eve#me";
-    const EVIL_DOC = "https://idp.example/eve";
+    const EVIL = "https://9.9.9.9/eve#me";
+    const EVIL_DOC = "https://9.9.9.9/eve";
     const LOOPBACK_RESP = "http://127.0.0.1/eve/r.ttl";
     const requested: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
@@ -402,8 +435,8 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
     // redirect:manual (noFollowFetch) so the redirect is NOT followed — the
     // loopback URL is never requested, storage resolves empty, and a bob-hosted
     // content (different origin from the actor) is therefore dropped.
-    const EVIL = "https://idp.example/eve#me";
-    const EVIL_DOC = "https://idp.example/eve";
+    const EVIL = "https://9.9.9.9/eve#me";
+    const EVIL_DOC = "https://9.9.9.9/eve";
     const requested: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -428,10 +461,10 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
     const requested: string[] = [];
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       requested.push(String(input));
-      // bob's profile advertises bob.example storage.
-      if (String(input) === "https://bob.example/profile/card") {
+      // bob's profile advertises 8.8.4.4 storage.
+      if (String(input) === "https://8.8.4.4/profile/card") {
         return new Response(
-          `@prefix pim: <http://www.w3.org/ns/pim/space#> . <${BOB}> pim:storage <https://bob.example/> .`,
+          `@prefix pim: <http://www.w3.org/ns/pim/space#> . <${BOB}> pim:storage <https://8.8.4.4/> .`,
           { status: 200, headers: { "content-type": "text/turtle" } },
         );
       }
@@ -443,7 +476,7 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
       POLL_URL,
       [
         // Wrong poll → filtered out before any fetch.
-        { actor: BOB, object: "https://carol.example/schedule/OTHER.ttl", content: BOB_RESP },
+        { actor: BOB, object: "https://1.1.1.1/schedule/OTHER.ttl", content: BOB_RESP },
         // Unsafe content host (not in bob's storage, not same-origin as actor) → dropped.
         { actor: BOB, object: POLL_URL, content: "https://127.0.0.1/steal.ttl" },
       ],
@@ -455,10 +488,12 @@ describe("aggregatePollRsvps — organiser-side loop closure", () => {
   });
 
   it("readRsvpResourceAt refuses an unsafe URL before fetching", async () => {
-    const fetchImpl = vi.fn(async () => new Response("x", { status: 200 })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(
+      async () => new Response("x", { status: 200 }),
+    ) as unknown as typeof fetch;
     await expect(
       readRsvpResourceAt("https://10.0.0.1/x.ttl", POLL_URL, BOB, fetchImpl),
-    ).rejects.toBeInstanceOf(InvalidTargetError);
+    ).rejects.toMatchObject({ name: "RdfFetchError" });
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

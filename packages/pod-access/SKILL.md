@@ -115,7 +115,9 @@ not establish safe migration. Run its regression suite when changing the transla
 `createNotify({ fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
 `notify(agentWebId, activity)`. Supply the pod-auth fetch and an explicit actor WebID.
 Builders return templates without actor: `shareNotification`, `assignmentAnnounce`,
-`mentionNotification`, `roomInvitation`. Preserve Tasks §5.7's assignment summary exactly.
+`mentionNotification`, `roomInvitation`, `issueAnnounce(issue, recipient, summary)`. The latter
+preserves Issues' issue-event recipient target and human summary as an Announce draft.
+Preserve Tasks §5.7's assignment summary exactly.
 Delivery failures return structured values and never throw. Do not change permissions here.
 
 Discovery caches exact WebIDs for ten minutes, shared by notifiers/readers with identical
@@ -134,7 +136,26 @@ Node transport into the client entry. Fetch at most maxItems children (default 5
 most six requests active. Refuse foreign/outside/nested/query/fragment/encoded-slash members.
 Unreadable members are skipped; container 401/403/404 and parse failures return []; other
 container failures reject. Aborts reject with AbortError and start no further requests.
-There is no mark-read/delete API. `notificationKind(n)` maps Announce share summaries before
+`listPage(inboxUrl, { signal? })` also returns the complete eligible `members` list and
+`truncated` (whether the child-fetch ceiling was exceeded), retaining limit warnings even
+when fetched notifications are unreadable. Activities can also carry `content`, an optional
+`object`, and the existing Pod Manager `Invite`/`Update` verbs. Legacy `as:name` and valid
+untyped publication dates remain readable. `createNotifyFetch(options)` exposes the same
+guarded transport for foreign resources linked by notifications; it rejects a changed final
+response URL if the caller transport ignored manual redirects.
+
+`createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
+discovers the owner's inbox and returns null unless it is inside a trusted active storage
+root and has no query. Roots come from the authenticated session, never notification RDF.
+The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
+`read` from the existence of `<notification>.read.ttl` in the same container and hides these
+reserved sidecars. Direct children only: reject foreign origins, nesting, credentials,
+queries/fragments and encoded slash/backslash before I/O. Marker updates and deletes
+require a strong ETag read by HEAD and send If-Match; absent marker creation sends
+If-None-Match: *. Missing resources dismiss idempotently; marker cleanup after dismissal
+is best effort. Conflicts propagate without retry; never write unconditionally.
+
+`notificationKind(n)` maps Announce share summaries before
 Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
 every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
 

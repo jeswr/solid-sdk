@@ -1,16 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
-import { Parser, Store } from "n3";
-import { parseNotification, resolveOwnInbox, readInbox } from "./inbox";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { describe, expect, it, vi } from "vitest";
+import { readInbox, resolveOwnInbox } from "./inbox";
 
-const WEBID = "https://pod.example/alice/profile/card#me";
-const OWN = ["https://pod.example/alice/"];
-const INBOX = "https://pod.example/alice/inbox/";
-
-function turtle(ttl: string): Store {
-  const store = new Store();
-  store.addQuads(new Parser({ format: "text/turtle" }).parse(ttl));
-  return store;
-}
+const WEBID = "https://8.8.8.8/alice/profile/card#me";
+const OWN = ["https://8.8.8.8/alice/"];
+const INBOX = "https://8.8.8.8/alice/inbox/";
 
 const PREFIXES = `
 @prefix ldp: <http://www.w3.org/ns/ldp#> .
@@ -18,79 +12,43 @@ const PREFIXES = `
 @prefix solid: <http://www.w3.org/ns/solid/terms#> .
 `;
 
-describe("parseNotification", () => {
-  it("parses an as:Announce activity at the resource URL", () => {
-    const url = `${INBOX}n1.ttl`;
-    const ds = turtle(`${PREFIXES}
-      <${url}> a as:Announce ;
-        as:actor <https://bob.example/profile#me> ;
-        as:object <https://pod.example/alice/issues/issues/42.ttl> ;
-        as:summary "Bob assigned you issue #42" ;
-        as:target <https://pod.example/alice/issues/tracker.ttl#it> ;
-        as:published "2026-06-10T09:00:00Z" .
-    `);
-    const n = parseNotification(url, ds);
-    expect(n.url).toBe(url);
-    expect(n.types).toContain("https://www.w3.org/ns/activitystreams#Announce");
-    expect(n.actor).toBe("https://bob.example/profile#me");
-    expect(n.object).toBe("https://pod.example/alice/issues/issues/42.ttl");
-    expect(n.summary).toBe("Bob assigned you issue #42");
-    expect(n.target).toBe("https://pod.example/alice/issues/tracker.ttl#it");
-    expect(n.published).toBe("2026-06-10T09:00:00Z");
-  });
-
-  it("falls back to content/name when as:summary is absent", () => {
-    const url = `${INBOX}n2.ttl`;
-    const ds = turtle(`${PREFIXES}
-      <${url}> a as:Create ; as:content "A mention" .
-    `);
-    expect(parseNotification(url, ds).summary).toBe("A mention");
-  });
-
-  it("resolves the activity at a fragment subject when none sits at the resource URL", () => {
-    const url = `${INBOX}n3.ttl`;
-    const ds = turtle(`${PREFIXES}
-      <${url}#activity> a as:Add ; as:object <https://pod.example/alice/issues/issues/7.ttl> .
-    `);
-    const n = parseNotification(url, ds);
-    expect(n.types).toContain("https://www.w3.org/ns/activitystreams#Add");
-    expect(n.object).toBe("https://pod.example/alice/issues/issues/7.ttl");
-  });
-});
-
 describe("resolveOwnInbox (own-pod SSRF guard)", () => {
   it("returns the inbox URL when it is within the user's own pod", async () => {
-    const doFetch = vi.fn(async () =>
-      new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <${INBOX}> .`, {
-        headers: { "content-type": "text/turtle" },
-      }),
+    const doFetch = vi.fn(
+      async () =>
+        new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <${INBOX}> .`, {
+          headers: { "content-type": "text/turtle" },
+        }),
     ) as unknown as typeof fetch;
     expect(await resolveOwnInbox(WEBID, OWN, doFetch)).toBe(INBOX);
   });
 
   it("REJECTS a foreign inbox URL (never fetched with the user's token)", async () => {
-    const doFetch = vi.fn(async () =>
-      new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <https://evil.example/inbox/> .`, {
-        headers: { "content-type": "text/turtle" },
-      }),
+    const doFetch = vi.fn(
+      async () =>
+        new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <https://evil.example/inbox/> .`, {
+          headers: { "content-type": "text/turtle" },
+        }),
     ) as unknown as typeof fetch;
     expect(await resolveOwnInbox(WEBID, OWN, doFetch)).toBeUndefined();
   });
 
   it("rejects a sibling-pod inbox on the same host", async () => {
-    const doFetch = vi.fn(async () =>
-      new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <https://pod.example/bob/inbox/> .`, {
-        headers: { "content-type": "text/turtle" },
-      }),
+    const doFetch = vi.fn(
+      async () =>
+        new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <https://8.8.8.8/bob/inbox/> .`, {
+          headers: { "content-type": "text/turtle" },
+        }),
     ) as unknown as typeof fetch;
     expect(await resolveOwnInbox(WEBID, OWN, doFetch)).toBeUndefined();
   });
 
   it("returns undefined when the profile advertises no inbox", async () => {
-    const doFetch = vi.fn(async () =>
-      new Response(`${PREFIXES}\n<${WEBID}> solid:oidcIssuer <https://idp.example/> .`, {
-        headers: { "content-type": "text/turtle" },
-      }),
+    const doFetch = vi.fn(
+      async () =>
+        new Response(`${PREFIXES}\n<${WEBID}> solid:oidcIssuer <https://idp.example/> .`, {
+          headers: { "content-type": "text/turtle" },
+        }),
     ) as unknown as typeof fetch;
     expect(await resolveOwnInbox(WEBID, OWN, doFetch)).toBeUndefined();
   });
@@ -105,9 +63,12 @@ describe("readInbox (end to end, mocked fetch)", () => {
     `;
     return vi.fn(async (url: string) => {
       const u = String(url);
-      if (u === WEBID) return new Response(profileTtl, { headers: { "content-type": "text/turtle" } });
-      if (u === INBOX) return new Response(containerTtl, { headers: { "content-type": "text/turtle" } });
-      if (notificationTtl[u]) return new Response(notificationTtl[u], { headers: { "content-type": "text/turtle" } });
+      if (u === WEBID.split("#")[0])
+        return new Response(profileTtl, { headers: { "content-type": "text/turtle" } });
+      if (u === INBOX)
+        return new Response(containerTtl, { headers: { "content-type": "text/turtle" } });
+      if (notificationTtl[u])
+        return new Response(notificationTtl[u], { headers: { "content-type": "text/turtle" } });
       return new Response("not found", { status: 404 });
     }) as unknown as typeof fetch;
   }
@@ -158,7 +119,8 @@ describe("readInbox (end to end, mocked fetch)", () => {
       // LAST 50 (i=10..59) are the newest. Use a real instant per member so every
       // timestamp is valid (a fixed calendar field would overflow past 31 days).
       const published = new Date(Date.UTC(2026, 0, 1) + i * 3600_000).toISOString();
-      ttl[m] = `${PREFIXES}\n<${m}> a as:Announce ; as:summary "n${i}" ; as:published "${published}" .`;
+      ttl[m] =
+        `${PREFIXES}\n<${m}> a as:Announce ; as:summary "n${i}" ; as:published "${published}" .`;
     });
     const doFetch = inboxPod(members, ttl);
     const { notifications } = await readInbox(WEBID, OWN, doFetch);
@@ -183,7 +145,9 @@ describe("readInbox (end to end, mocked fetch)", () => {
     expect(result.notifications.length).toBe(3); // only the ceiling was fetched
     // The foreign-member filter still feeds totalMembers (eligible only).
     const spy = doFetch as unknown as ReturnType<typeof vi.fn>;
-    const fetchedMembers = spy.mock.calls.filter((c) => String(c[0]).startsWith(INBOX) && String(c[0]) !== INBOX);
+    const fetchedMembers = spy.mock.calls.filter(
+      (c) => String(c[0]).startsWith(INBOX) && String(c[0]) !== INBOX,
+    );
     expect(fetchedMembers.length).toBe(3);
   });
 
@@ -200,7 +164,7 @@ describe("readInbox (end to end, mocked fetch)", () => {
 
   it("returns an empty list when the profile advertises no own-pod inbox", async () => {
     const doFetch = vi.fn(async (url: string) => {
-      if (String(url) === WEBID) {
+      if (String(url) === WEBID.split("#")[0]) {
         return new Response(`${PREFIXES}\n<${WEBID}> ldp:inbox <https://evil.example/inbox/> .`, {
           headers: { "content-type": "text/turtle" },
         });

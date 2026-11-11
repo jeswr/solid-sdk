@@ -320,3 +320,26 @@ test("coalesces transient discovery failures and safely retries after all observ
   expect(await reader.inbox(webId)).toBe(inbox);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+test("exposes complete eligible member counts and truncation even when fetched members are unreadable", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockImplementation(async (url) =>
+      url === inbox
+        ? listing([`${inbox}bad`, `${inbox}later`, "https://1.1.1.1/outside"])
+        : new Response(null, { status: 403 }),
+    );
+  const page = await createInboxReader({ fetch, maxItems: 1 }).listPage(inbox);
+  expect(page).toEqual({
+    members: [`${inbox}bad`, `${inbox}later`],
+    notifications: [],
+    truncated: true,
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("list remains safe to pass as a detached callback", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(turtle(""));
+  const { list } = createInboxReader({ fetch });
+  expect(await list(inbox)).toEqual([]);
+});

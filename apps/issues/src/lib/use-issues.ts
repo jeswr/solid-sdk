@@ -1,21 +1,29 @@
 "use client";
+
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Repository, type IssueRecord, type NewIssueInput, type IssuePatch, type SprintRecord, type ActivityRecord } from "@/lib/repository";
-import { watchContainer } from "@/lib/notifications";
 import { Announcer } from "@/lib/announce";
-import { ConflictError } from "@/lib/errors";
-import { RdfFetchError } from "@jeswr/fetch-rdf";
-import type { IssueState, StatusSlug } from "@/lib/issue";
 import type { OpenBlocker } from "@/lib/dependencies";
-import { readIssueCache, writeIssueCache } from "@/lib/issue-cache";
-import { PodSavedViews, type PodSavedView } from "@/lib/pod-saved-views";
+import { ConflictError } from "@/lib/errors";
 import type { IssueQuery } from "@/lib/filter";
+import type { IssueState, StatusSlug } from "@/lib/issue";
+import { readIssueCache, writeIssueCache } from "@/lib/issue-cache";
+import { watchContainer } from "@/lib/notifications";
+import { type PodSavedView, PodSavedViews } from "@/lib/pod-saved-views";
+import {
+  type ActivityRecord,
+  type IssuePatch,
+  type IssueRecord,
+  type NewIssueInput,
+  Repository,
+  type SprintRecord,
+} from "@/lib/repository";
 import type { View } from "@/lib/view";
 
-export type { IssueRecord, SprintRecord, ActivityRecord, WorklogRecord } from "@/lib/repository";
+export type { ActivityRecord, IssueRecord, SprintRecord, WorklogRecord } from "@/lib/repository";
 
 function describe(e: unknown): string {
   if (e instanceof ConflictError) return e.message;
@@ -91,7 +99,10 @@ export interface UseIssues {
   }) => void;
   /** F4: log work (seconds, optional note) against an issue, then refresh. */
   logWork: (url: string, seconds: number, note?: string) => Promise<void>;
-  uploadAttachment: (url: string, file: { name: string; type: string; data: ArrayBuffer }) => Promise<void>;
+  uploadAttachment: (
+    url: string,
+    file: { name: string; type: string; data: ArrayBuffer },
+  ) => Promise<void>;
   removeAttachment: (url: string, fileUrl: string) => Promise<void>;
   remove: (url: string) => Promise<void>;
   createSprint: (title: string) => Promise<void>;
@@ -166,7 +177,14 @@ function hydrate(webId: string | null, trackerUrl: string | null): TrackerSnapsh
   // Tag with BOTH the tracker and the WebID so the render shows the cached issues
   // immediately (and only for this same identity); a background fetch reconciles.
   // Sprints aren't cached (small, config-derived).
-  return { tracker: trackerUrl, creator: webId, issues: cached, sprints: [], canCreate: true, error: null };
+  return {
+    tracker: trackerUrl,
+    creator: webId,
+    issues: cached,
+    sprints: [],
+    canCreate: true,
+    error: null,
+  };
 }
 
 export function useIssues(
@@ -224,28 +242,16 @@ export function useIssues(
   // keeps the SAME assignment idempotent (mentions are per-comment). Non-blocking:
   // the pod write always succeeds even if the notify fails; a failure surfaces as
   // a non-intrusive toast, never a thrown error into the mutation.
-  // Loopback SSRF-policy relaxation for LOCAL development / e2e ONLY: when the app
-  // itself is served from localhost (the mandated local-CSS test topology, where a
-  // collaborator's pod is `http://localhost:<port>`), permit http/loopback targets
-  // so cross-pod announces are exercisable. A deployed (https) origin never sets
-  // this, so production stays strict https-only. Even under the relaxation, a
-  // NON-loopback private address (10.x, 169.254.169.254 metadata, …) is still
-  // refused by the guard — this only re-permits genuine loopback.
-  const devLoopback =
-    typeof location !== "undefined" &&
-    (location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1" ||
-      location.hostname === "[::1]");
   const announcer = useMemo(
     () =>
       creator
         ? new Announcer({
             actorWebId: creator,
             onError: (message) => toast.error(message),
-            ...(devLoopback ? { guardOptions: { allowLoopback: true } } : {}),
+            fetch: (input, init) => globalThis.fetch(input, init),
           })
         : null,
-    [creator, devLoopback],
+    [creator],
   );
 
   // Stable announce-assignment seam for mutation paths that write OUTSIDE the wired
@@ -253,8 +259,12 @@ export function useIssues(
   // `Repository.update`). Memoised so passing it into per-render controllers keeps
   // them stable. Fire-and-forget, self-skipping, session-deduped; no-op signed out.
   const notifyAssignment = useCallback(
-    (input: { issueUrl: string; assignee?: string; previousAssignee?: string; issueTitle?: string }) =>
-      announcer?.announceAssignment(input),
+    (input: {
+      issueUrl: string;
+      assignee?: string;
+      previousAssignee?: string;
+      issueTitle?: string;
+    }) => announcer?.announceAssignment(input),
     [announcer],
   );
 
@@ -271,9 +281,19 @@ export function useIssues(
     const forCreator = creator;
     try {
       const repo = new Repository(trackerUrl, undefined, forCreator ?? undefined);
-      const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
+      const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([
+        repo.list(),
+        repo.listSprints(),
+      ]);
       if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
-      setSnapshot({ tracker: trackerUrl, creator: forCreator, issues: list, sprints: sprintList, canCreate: cc, error: null });
+      setSnapshot({
+        tracker: trackerUrl,
+        creator: forCreator,
+        issues: list,
+        sprints: sprintList,
+        canCreate: cc,
+        error: null,
+      });
       setFetched(true);
       // Persist the fresh list so the next reopen paints from it — scoped to the
       // active WebID so it only ever rehydrates for this same identity.
@@ -327,6 +347,7 @@ export function useIssues(
 
   // Keep queued invalidations and unchanged watchers across membership changes.
   // Tear down only when the tracker, identity, or storage scope changes, or on unmount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Scope changes must dispose existing watchers.
   useEffect(() => {
     const syncs = liveSyncs.current;
     return () => {
@@ -373,7 +394,7 @@ export function useIssues(
       if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
       liveRefreshTimer.current = setTimeout(flush, 800);
     };
-    const topics = new Set([containerUrl, ...JSON.parse(issueUrlsKey) as string[]]);
+    const topics = new Set([containerUrl, ...(JSON.parse(issueUrlsKey) as string[])]);
     const syncs = liveSyncs.current;
     for (const [topic, sync] of syncs) {
       if (!topics.has(topic)) {
@@ -382,7 +403,8 @@ export function useIssues(
       }
     }
     for (const topic of topics) {
-      if (!syncs.has(topic)) syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
+      if (!syncs.has(topic))
+        syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
     }
   }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey]);
 
@@ -413,7 +435,12 @@ export function useIssues(
 
   // A "saved" flash auto-clears back to idle so the indicator is non-intrusive.
   const savedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);
+  useEffect(
+    () => () => {
+      if (savedTimer.current) clearTimeout(savedTimer.current);
+    },
+    [],
+  );
   const flashSaved = useCallback(() => {
     setSaveState("saved");
     if (savedTimer.current) clearTimeout(savedTimer.current);
@@ -464,8 +491,11 @@ export function useIssues(
   // Bounded fan-out of status-transition history for the three-band CFD.
   const statusHistory = useCallback(
     async (urls: string[]) => {
-      if (!trackerUrl || urls.length === 0) return new Map<string, { to: StatusSlug; at: Date }[]>();
-      return new Repository(trackerUrl, undefined, creator ?? undefined).dashboardStatusHistory(urls);
+      if (!trackerUrl || urls.length === 0)
+        return new Map<string, { to: StatusSlug; at: Date }[]>();
+      return new Repository(trackerUrl, undefined, creator ?? undefined).dashboardStatusHistory(
+        urls,
+      );
     },
     [trackerUrl, creator],
   );
@@ -481,7 +511,11 @@ export function useIssues(
   const saveView = useCallback(
     async (name: string, query: IssueQuery, view?: View) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).save(name, query, view);
+      return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).save(
+        name,
+        query,
+        view,
+      );
     },
     [trackerUrl, creator],
   );
@@ -489,7 +523,9 @@ export function useIssues(
   const removeView = useCallback(
     async (iri: string) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      await new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).remove(iri);
+      await new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).remove(
+        iri,
+      );
     },
     [trackerUrl, creator],
   );
@@ -538,13 +574,16 @@ export function useIssues(
       }),
     notifyAssignment,
     logWork: (url, seconds, note) => mutate((r) => r.logWork(url, seconds, note)),
-    uploadAttachment: (url, file) => mutate(async (r) => void (await r.uploadAttachment(url, file))),
+    uploadAttachment: (url, file) =>
+      mutate(async (r) => void (await r.uploadAttachment(url, file))),
     removeAttachment: (url, fileUrl) => mutate((r) => r.removeAttachment(url, fileUrl)),
     remove: (url) => mutate((r) => r.remove(url)),
     createSprint: (title) => mutate((r) => r.createSprint(title).then(() => undefined)),
-    setSprintMembership: (sprintIri, issueUrl, member) => mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
+    setSprintMembership: (sprintIri, issueUrl, member) =>
+      mutate((r) => r.setSprintMembership(sprintIri, issueUrl, member)),
     startSprint: (sprintIri) => mutate((r) => r.startSprint(sprintIri)),
-    completeSprint: (sprintIri, releaseUrls) => mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
+    completeSprint: (sprintIri, releaseUrls) =>
+      mutate((r) => r.completeSprint(sprintIri, releaseUrls)),
     batch: (fn) => mutate(fn),
     activityLog,
     openBlockers,

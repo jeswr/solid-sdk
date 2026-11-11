@@ -200,7 +200,7 @@ These types serve different APIs; translation mode implication does not change t
 Notification delivery lives at `@jeswr/pod-access/notify`:
 
 ```ts
-import { assignmentAnnounce, createNotify } from '@jeswr/pod-access/notify';
+import { assignmentAnnounce, createInboxManager, createNotify } from '@jeswr/pod-access/notify';
 
 const notify = createNotify({ fetch: auth.fetch });
 const result = await notify(assigneeWebId, {
@@ -211,8 +211,9 @@ const result = await notify(assigneeWebId, {
 //   reason?: 'no-inbox' | 'forbidden' | 'lws-no-ldn' | 'network' }
 ```
 
-Activities support `Announce`, `Offer`, `Accept`, `Reject`, and `Create`; `object` and `actor`
-are required, with optional `target` and `summary`. The POST body is ActivityStreams JSON-LD
+Activities support `Announce`, `Offer`, `Accept`, `Reject`, `Create`, `Invite` and `Update`;
+`actor` is required, with optional `object`, `target`, `summary` and `content`.
+The POST body is ActivityStreams JSON-LD
 (`application/ld+json`). Delivery failures resolve as values. An inbox's 401/403 is `forbidden`;
 other transport, parsing, policy or HTTP failures are `network`. No unambiguous inbox is `no-inbox`.
 
@@ -220,7 +221,9 @@ Builders return templates without actor: `shareNotification(resource, role)` ann
 with summary `Shared with you as {role}`; `assignmentAnnounce(task, tracker, assignerName, title)`
 announces the task with tracker target and summary `{name} assigned you '{title}'`;
 `mentionNotification(annotation, document)` creates an annotation with the document target;
-`roomInvitation(room)` offers a room. These helpers do not modify grants or resource data.
+`roomInvitation(room)` offers a room. `issueAnnounce(issue, recipient, summary)` preserves
+an issue event's recipient target and app-provided summary in an Announce draft.
+These helpers do not modify grants or resource data.
 
 Notifiers and readers cache positive and missing-inbox discovery for ten minutes, sharing concurrent
 profile reads when fetch, pinningFetch and clock identities match. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
@@ -244,14 +247,47 @@ supplies the current actor/fetch and resets the cache on identity changes.
 is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbox or returns
 null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
 newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
-and optional `actor`, `object`, `target`, `summary`, `content`, `published` (ISO string).
+and optional `actor`, `object`, `target`, `summary`, `content`, `name`, `published` (ISO string).
+Legacy names and valid untyped publication dates are retained. `listPage(inboxUrl, { signal? })`
+returns `{ notifications, members, truncated }`: `members` includes all eligible direct children,
+and `truncated` reports whether there were more members than the fetch ceiling, even when
+individual fetched members could not be read.
 
 Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At most
 `maxItems` direct children (default 50, non-negative safe integer) are fetched in listing
 order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
 encoded-slash members are never dereferenced; unreadable members are skipped. Container
 401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
-with `AbortError` and stops new work. There is no mark-read or delete operation.
+with `AbortError` and stops new work. `createNotifyFetch({ fetch, pinningFetch? })` exposes
+the same transport for notification-linked foreign resources. It also refuses a final response
+URL different from the requested document if a caller transport ignored manual redirects.
+
+`createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
+discovers the owner's inbox, returning `null` if absent or outside the active storage roots
+(or query-addressed). Supply trusted roots from the authenticated session. The returned
+`{ inboxUrl, list, markRead, dismiss }` pins all writes to direct children of that inbox:
+
+```ts
+const inbox = await createInboxManager({
+  webId: auth.webId, storageRoots: [storage.root], fetch: auth.fetch,
+});
+if (inbox) {
+  const [notification] = await inbox.list(); // each also has read: boolean
+  if (notification) {
+    await inbox.markRead(notification.url);
+    await inbox.dismiss(notification.url);
+  }
+}
+```
+
+Read state uses the existing same-container `<notification>.read.ttl` sidecar convention;
+sidecars are hidden from the notification list and still count toward the bounded child-fetch
+budget. Marker creation sends `If-None-Match: *`; updates and deletes read a strong ETag by
+HEAD and send `If-Match`. Missing/weak/wildcard validators refuse writes, and conflicts reject
+without retry. Dismissal tolerates missing resources and cleans up its sidecar best effort.
+The shared scope guard refuses foreign/outside/nested/query/fragment/credentialed and
+encoded-delimiter targets before any I/O. Public HTTPS, pinning, redirect, size and deadline
+limits apply to reads and writes alike.
 
 `notificationKind(notification)` classifies builder round-trips as `share` (Announce with
 summary starting `Shared with you as `), `assignment` (Announce with target), `mention`

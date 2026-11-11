@@ -119,7 +119,7 @@ test("preserves scope filtering, deduplication and ordering ties", async () => {
 
 // AUTHORED-BY Claude Opus 5.5
 test.each([
-  ['as:published "2026-11-11T12:00:00.000Z"', undefined],
+  ['as:published "2026-11-11T12:00:00.000Z"', "2026-11-11T12:00:00.000Z"],
   ['as:published "not a date"^^<http://www.w3.org/2001/XMLSchema#dateTime>', undefined],
   [
     'as:published "2026-11-11T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>',
@@ -132,4 +132,31 @@ test.each([
   const notification = parseInboxNotification(`${inbox}n`, dataset);
   expect(notification?.type).toBe("Announce");
   expect(notification?.published).toBe(expected);
+});
+
+test("retains legacy display names and untyped dates for migrated readers", async () => {
+  const dataset = await parseRdf(
+    `${as} <#it> a as:Announce; as:name "Legacy name"; as:published "2026-11-11T12:00:00Z".`,
+    "text/turtle",
+    { baseIRI: `${inbox}n` },
+  );
+  expect(parseInboxNotification(`${inbox}n`, dataset)).toMatchObject({
+    name: "Legacy name",
+    published: "2026-11-11T12:00:00.000Z",
+  });
+  for (const url of ["https://user:pass@8.8.4.4/inbox/n", `${inbox}a%5cb`])
+    expect(isDirectChild(url, inbox)).toBe(false);
+});
+
+test("non-date publication metadata never hides an otherwise readable activity", async () => {
+  const dataset = await parseRdf(
+    `${as} <#it> a as:Announce; as:name <https://pod.example/name>; as:published <https://pod.example/date>.`,
+    "text/turtle",
+    { baseIRI: `${inbox}n` },
+  );
+  expect(parseInboxNotification(`${inbox}n`, dataset)).toEqual({
+    url: `${inbox}n`,
+    type: "Announce",
+    name: "https://pod.example/name",
+  });
 });

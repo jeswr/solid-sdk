@@ -2,18 +2,21 @@
 import { httpsIri, inboxDiscovery } from "./client-discovery.js";
 
 export type { InboxNotification } from "./inbox.js";
-export type { InboxReader, InboxReaderOptions } from "./inbox-client.js";
+export { isDirectChild as isInboxChild } from "./inbox.js";
+export type { InboxPage, InboxReader, InboxReaderOptions } from "./inbox-client.js";
 export { createInboxReader } from "./inbox-client.js";
 export type { ClientTransportOptions } from "./security/clientFetch.js";
+export { clientFetch as createNotifyFetch } from "./security/clientFetch.js";
 
 import { type ClientTransportOptions, clientFetch } from "./security/clientFetch.js";
 
 /** Activities supported by the suite's notification API. */
 export interface NotifyActivity {
-  type: "Announce" | "Offer" | "Accept" | "Reject" | "Create";
-  object: string;
+  type: "Announce" | "Offer" | "Accept" | "Reject" | "Create" | "Invite" | "Update";
+  object?: string;
   target?: string;
   summary?: string;
+  content?: string;
   actor: string;
 }
 
@@ -34,7 +37,7 @@ export interface NotifyOptions extends ClientTransportOptions {
 /** Deliver an activity using a caller-owned authenticated transport. */
 export type Notify = (agentWebId: string, activity: NotifyActivity) => Promise<NotifyResult>;
 
-const VERBS = new Set(["Announce", "Offer", "Accept", "Reject", "Create"]);
+const VERBS = new Set(["Announce", "Offer", "Accept", "Reject", "Create", "Invite", "Update"]);
 
 /**
  * Create a session-scoped LDN sender. Profile RDF is parsed by fetch-rdf over the supplied
@@ -59,9 +62,10 @@ export function createNotifyClient(options: NotifyOptions): Notify {
         "@context": "https://www.w3.org/ns/activitystreams",
         type: activity.type,
         actor: httpsIri(activity.actor),
-        object: httpsIri(activity.object),
+        ...(activity.object === undefined ? {} : { object: httpsIri(activity.object) }),
         ...(activity.target === undefined ? {} : { target: httpsIri(activity.target) }),
         ...(activity.summary === undefined ? {} : { summary: activity.summary }),
+        ...(activity.content === undefined ? {} : { content: activity.content }),
         // Readers order and date inbox items by as:published; stamp the send time.
         published: new Date(clock()).toISOString(),
       });

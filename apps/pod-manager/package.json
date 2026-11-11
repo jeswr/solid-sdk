@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
     "@jeswr/reactive-authentication": "workspace:*",

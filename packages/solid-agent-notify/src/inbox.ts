@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
+import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { ActivityDoc } from "./activity.js";
 import { AS, LDP_CONTAINS, RDF_TYPE } from "./vocabulary.js";
@@ -19,6 +21,8 @@ export interface InboxNotification {
   summary?: string;
   /** `as:content`. */
   content?: string;
+  /** Legacy display name, used when summary and content are absent. */
+  name?: string;
   /** `as:published` as an ISO string (serialisable). */
   published?: string;
 }
@@ -49,15 +53,14 @@ export function isDirectChild(url: string, container: string): boolean {
   }
   const containerPath = parent.pathname.endsWith("/") ? parent.pathname : `${parent.pathname}/`;
   if (
-    parsed.origin !== parent.origin ||
-    !parsed.pathname.startsWith(containerPath) ||
+    !isWithinPodScope(container, url, { allowRoot: false }) ||
     parsed.search !== "" ||
     parsed.hash !== ""
   ) {
     return false;
   }
   const rest = parsed.pathname.slice(containerPath.length);
-  return rest.length > 0 && !rest.includes("/") && !/%2f/i.test(rest);
+  return rest.length > 0 && !rest.includes("/");
 }
 
 /**
@@ -99,8 +102,11 @@ export function parseInboxNotification(
   try {
     published = doc.published;
   } catch {
-    published = undefined;
+    published = new Date(
+      String(OptionalFrom.subjectPredicate(doc, `${AS}published`, LiteralAs.string)),
+    );
   }
+  const name = OptionalFrom.subjectPredicate(doc, `${AS}name`, LiteralAs.string);
   return {
     url,
     type: typeLabel(doc.types),
@@ -109,6 +115,7 @@ export function parseInboxNotification(
     ...(doc.target !== undefined ? { target: doc.target } : {}),
     ...(doc.summary !== undefined ? { summary: doc.summary } : {}),
     ...(doc.content !== undefined ? { content: doc.content } : {}),
+    ...(name !== undefined ? { name } : {}),
     ...(published !== undefined && !Number.isNaN(published.getTime())
       ? { published: published.toISOString() }
       : {}),

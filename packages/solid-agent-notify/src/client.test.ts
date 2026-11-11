@@ -297,7 +297,7 @@ test("refuses oversized profile responses", async () => {
 });
 
 test.each([
-  { ...activity, type: "Invite" },
+  { ...activity, type: "Unknown" },
   { ...activity, actor: "bad" },
   { ...activity, object: "bad" },
   { ...activity, target: "bad" },
@@ -320,4 +320,21 @@ test("does not silently use the unpinned fallback when a pinned auth transport i
   });
   expect(fetch).not.toHaveBeenCalled();
   expect(pinningFetch).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  "Invite",
+  "Update",
+] as const)("preserves %s and content for existing collaboration callers", async (type) => {
+  const fetch = transport();
+  expect(
+    await createNotifyClient({ fetch })(webId, {
+      type,
+      actor: activity.actor,
+      content: "https://pod.example/rsvp",
+    }),
+  ).toEqual({ delivered: true, inbox });
+  const body = JSON.parse(fetch.mock.calls[1]?.[1]?.body as string);
+  expect(body).toMatchObject({ type, actor: activity.actor, content: "https://pod.example/rsvp" });
+  expect(body).not.toHaveProperty("object");
 });

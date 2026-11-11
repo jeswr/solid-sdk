@@ -37,8 +37,8 @@ DNS-pinning path, which requires Node ≥ 22.19.0.)
 pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
 ten minutes per transport/clock scope, and POSTs ActivityStreams JSON-LD through the caller's fetch.
-Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'`, `actor`, `object`, optional
-`target` and `summary`; the POSTed body also carries `published` (the send time from `clock`, default
+Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'|'Invite'|'Update'`, `actor`,
+and optional `object`, `target`, `summary` and `content`; the POSTed body also carries `published` (the send time from `clock`, default
 `Date.now`, as an ISO string) so readers can date and order items. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
 Reasons are `no-inbox`, `forbidden` (401/403), `lws-no-ldn`, and `network` (other failures).
 
@@ -47,7 +47,9 @@ The client entry avoids the root API's Node transport/config imports. Its egress
 caps, and eight-second deadlines. Node hostname destinations require an authenticated
 `pinningFetch` explicitly asserted to pin DNS; supplying only an ordinary caller fetch fails
 closed. Browsers use the shared guard's syntactic policy because sockets cannot be pinned there.
-The fetch implementation must honor manual redirects. Activity IRIs require HTTPS.
+The fetch implementation must honor manual redirects; a changed final response URL is also
+refused as a backstop. `createNotifyFetch({ fetch, pinningFetch? })` exposes this same boundary
+for SDK notification management and linked-resource reads. Activity IRIs require HTTPS.
 
 Known LWS recipients can be short-circuited with `recipientProtocol(webId) => 'lws'`; LWS profile
 media types also return `lws-no-ldn`. The sender's protocol never determines the recipient's.
@@ -70,14 +72,18 @@ identities match (omitted clock uses Date.now). Recreate session transports on a
 Discovery failures return null; transient failures are retried. The cache holds at most 256 WebIDs.
 
 `list` returns `InboxNotification[]` (`url`, `type`, optional `actor`, `object`, `target`,
-`summary`, `content`, `published`), newest first, undated last, with URL tie ordering. It reads
+`summary`, `content`, `name`, `published`), newest first, undated last, with URL tie ordering. It reads
 at most `maxItems` direct children in listing order (default 50, a non-negative safe integer),
 with at most six member requests active. Cross-origin, outside-container, nested, query,
-fragment and encoded-slash members are skipped. Unreadable/non-activity members are skipped;
+fragment, credentialed and encoded-delimiter members are skipped. Unreadable/non-activity members are skipped;
 401/403/404 containers and unparseable listings return `[]`. Other container transport/HTTP
 failures reject. Cancellation rejects with `AbortError`, even for a custom abort reason, and
 starts no further requests. Reads use the same bounded `clientFetch` as delivery: HTTPS only,
-no URL credentials or redirects, including on members. This API does not mark read or delete.
+no URL credentials or redirects, including on members. Legacy names and valid untyped publication
+dates are retained. `listPage(inboxUrl, { signal? })` returns `{ notifications, members, truncated }`,
+with the full eligible direct-child list and an explicit fetch-limit flag. `isInboxChild(url, inbox)`
+exposes the same pure direct-child scope guard for SDK mutations. Conditional read markers and
+dismissal live in `@jeswr/pod-access/notify` via `createInboxManager`.
 
 ## Node API
 

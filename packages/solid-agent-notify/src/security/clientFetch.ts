@@ -12,7 +12,7 @@ export interface ClientTransportOptions {
 export function clientFetch(options: ClientTransportOptions): typeof fetch {
   const g = globalThis as { window?: unknown; document?: unknown };
   const browser = g.window === globalThis && g.document !== undefined && g.document !== null;
-  return refuseRedirects(
+  const guarded = refuseRedirects(
     createGuardedFetch({
       fetch: options.fetch,
       pinningFetch: options.pinningFetch,
@@ -25,4 +25,14 @@ export function clientFetch(options: ClientTransportOptions): typeof fetch {
       timeoutMs: 8_000,
     }),
   );
+  return async (input, init) => {
+    const expected = new URL(input instanceof Request ? input.url : String(input));
+    expected.hash = "";
+    const response = await guarded(input, init);
+    if (new URL(response.url).href !== expected.href) {
+      await response.body?.cancel();
+      throw new TypeError("Notification transport followed a redirect");
+    }
+    return response;
+  };
 }

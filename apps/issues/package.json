@@ -19,6 +19,7 @@
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/suite-ui": "workspace:*",

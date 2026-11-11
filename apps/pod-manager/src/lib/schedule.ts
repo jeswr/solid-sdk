@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
  * Scheduling / RSVP (Feature 3) — propose an event poll with several time
@@ -41,19 +42,19 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { freshRdf } from "./rdf-read.js";
-import { assertValidTargetUrl, isValidTargetUrl, noFollowFetch } from "./agent-target.js";
+import { noFollowFetch } from "./agent-target.js";
 import { sendNotification } from "./notify-send.js";
 import { writeResource } from "./pod-data.js";
-import { readProfile } from "./profile.js";
-import { profileDocUrl } from "./profile-edit.js";
 import { isInOwnPods } from "./pod-scope.js";
 import {
   createStore,
   type ProductivityStore,
-  type StoredItem,
   type StoreConfig,
+  type StoredItem,
 } from "./productivity-store.js";
+import { readProfile } from "./profile.js";
+import { profileDocUrl } from "./profile-edit.js";
+import { freshRdf } from "./rdf-read.js";
 
 const SCHEMA = "https://schema.org/";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -133,11 +134,21 @@ class PollDoc extends TermWrapper {
   }
   /** Proposed start-time options as date literals. */
   get startDates(): Set<Date> {
-    return SetFrom.subjectPredicate(this, `${SCHEMA}startDate`, LiteralAs.date, LiteralFrom.dateTime);
+    return SetFrom.subjectPredicate(
+      this,
+      `${SCHEMA}startDate`,
+      LiteralAs.date,
+      LiteralFrom.dateTime,
+    );
   }
   /** Invited attendee WebIDs. */
   get invitees(): Set<string> {
-    return SetFrom.subjectPredicate(this, `${SCHEMA}invitee`, NamedNodeAs.string, NamedNodeFrom.string);
+    return SetFrom.subjectPredicate(
+      this,
+      `${SCHEMA}invitee`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
 }
 
@@ -221,12 +232,7 @@ class RsvpDoc extends TermWrapper {
  * own-pod response). `TermWrapper`'s `object` getter is reserved, so the doc
  * exposes the poll link as `object` setter (mapped to `schema:object`).
  */
-function writeRsvpAction(
-  store: Store,
-  subject: string,
-  pollSubject: string,
-  rsvp: Rsvp,
-): void {
+function writeRsvpAction(store: Store, subject: string, pollSubject: string, rsvp: Rsvp): void {
   const optDate = new Date(rsvp.option);
   const doc = new RsvpDoc(subject, store, DataFactory).mark();
   doc.forPoll = pollSubject;
@@ -241,7 +247,11 @@ function writeRsvpAction(
  */
 function readRsvps(dataset: import("@rdfjs/types").DatasetCore): Rsvp[] {
   const byKey = new Map<string, Rsvp>();
-  for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(RSVP_ACTION))) {
+  for (const q of dataset.match(
+    null,
+    DataFactory.namedNode(RDF_TYPE),
+    DataFactory.namedNode(RSVP_ACTION),
+  )) {
     const doc = new RsvpDoc(q.subject.value, dataset, DataFactory);
     const attendee = doc.attendee;
     const option = doc.option;
@@ -360,17 +370,16 @@ export const RESPONSES_SLUG = "schedule-responses/";
  * SECURITY: the poll URL arrives via an Invite notification's `as:object`, so it
  * is attacker-influenceable. Before fetching it with the auth-patched global
  * `fetch` we run it through the SAME strict validator the POST path uses
- * (`assertValidTargetUrl`: https-only, no userinfo, no loopback/private/metadata
+ * (`noFollowFetch`: SDK public HTTPS, no userinfo, no loopback/private/metadata
  * host) and force `redirect: "manual"` (via `noFollowFetch`) so a 401/redirect
  * can't steer our token to a private host. Returns the parsed {@link Poll}.
  *
- * @throws InvalidTargetError when the poll URL is not a safe target.
+ * @throws Error when the poll URL is not a safe target.
  */
 export async function readPollAt(
   pollUrl: string,
   fetchImpl?: typeof fetch,
 ): Promise<Poll | undefined> {
-  assertValidTargetUrl(pollUrl); // fail closed before any authenticated GET
   const guarded = noFollowFetch(fetchImpl);
   const { dataset } = await freshRdf(pollUrl, guarded);
   return parsePoll(pollUrl, dataset);
@@ -469,7 +478,7 @@ function sameOrigin(a: string, b: string): boolean {
  * in the actor's declared storage even on a different origin from the WebID).
  *
  * The actor WebID is attacker-influenceable (it is the self-asserted `as:actor`
- * of an inbox Offer). We validate the host (`isValidTargetUrl`) and fetch with
+ * of an inbox Offer). We validate the host through the SDK guarded transport and fetch with
  * `redirect: "manual"` (`noFollowFetch`) so the auth-patched fetch is NEVER
  * steered to a private host on a malicious 303 — fail closed.
  *
@@ -491,7 +500,6 @@ async function actorStorages(webId: string, fetchImpl?: typeof fetch): Promise<s
   } catch {
     return [];
   }
-  if (!isValidTargetUrl(docUrl)) return [];
   try {
     const { dataset } = await freshRdf(docUrl, noFollowFetch(fetchImpl));
     return readProfile(webId, dataset).storages;
@@ -506,7 +514,11 @@ async function actorStorages(webId: string, fetchImpl?: typeof fetch): Promise<s
  * Covers both the WebID==pod-origin case and the common Solid case where the
  * WebID host differs from the pod host.
  */
-function contentBelongsToActor(content: string, actor: string, storages: readonly string[]): boolean {
+function contentBelongsToActor(
+  content: string,
+  actor: string,
+  storages: readonly string[],
+): boolean {
   if (sameOrigin(content, actor)) return true;
   return isInOwnPods(content, storages);
 }
@@ -594,7 +606,7 @@ export async function aggregatePollRsvps(
 
 /**
  * Read an RSVP response resource that lives in ANOTHER agent's pod, read-only.
- * Same SSRF guard as {@link readPollAt}: validate the URL + redirect:manual.
+ * Same SSRF guard as {@link readPollAt}: use the SDK guarded transport + redirect:manual.
  *
  * INTEGRITY: returns ONLY the RSVPs whose `schema:object` equals `expectedPoll`
  * AND whose `schema:attendee` equals `expectedAttendee` (the Offer's sender), so
@@ -607,10 +619,13 @@ export async function readRsvpResourceAt(
   expectedAttendee: string,
   fetchImpl?: typeof fetch,
 ): Promise<Rsvp[]> {
-  assertValidTargetUrl(url);
   const { dataset } = await freshRdf(url, noFollowFetch(fetchImpl));
   const out: Rsvp[] = [];
-  for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(RSVP_ACTION))) {
+  for (const q of dataset.match(
+    null,
+    DataFactory.namedNode(RDF_TYPE),
+    DataFactory.namedNode(RSVP_ACTION),
+  )) {
     const doc = new RsvpDoc(q.subject.value, dataset, DataFactory);
     const attendee = doc.attendee;
     const option = doc.option;
