@@ -2203,6 +2203,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/solid-photos':
+        specifier: workspace:*
+        version: link:../../packages/solid-photos
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2273,6 +2276,9 @@ importers:
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
+      '@jeswr/solid-photos':
+        specifier: workspace:*
+        version: link:../../../packages/solid-photos
       '@jeswr/solid-session-restore':
         specifier: workspace:*
         version: link:../../../packages/solid-session-restore
