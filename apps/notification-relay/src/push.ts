@@ -3,7 +3,7 @@
 import { randomBytes } from "node:crypto";
 import { matchesHash, sha256, verifyDeviceProof } from "./device-proof.js";
 import { createPushInbox } from "./push-inbox.js";
-import type { PushInvalidation, PushSink } from "./push-payload.js";
+import { challengePayload, type PushInvalidation, type PushSink } from "./push-payload.js";
 import {
   expireRegistrations,
   expireUnattached,
@@ -94,13 +94,10 @@ export function createPushApi(options: {
   }
   async function challenge(installation: Installation, nonce: string): Promise<boolean> {
     try {
-      await (options.pushSink as PushSink).send(installation, {
-        v: 1,
-        id: randomId(),
-        kind: "challenge",
-        nonce,
-        sentAt: now(),
-      });
+      await (options.pushSink as PushSink).send(
+        installation,
+        challengePayload(installation.installationId, nonce, now()),
+      );
       return true;
     } catch {
       return false;

@@ -9,7 +9,7 @@ import {
 } from "node:http2";
 import { duplexPair } from "node:stream";
 import { jwtVerify } from "jose";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { activity, challenge } from "../test/delivery-fixtures.js";
 import { buildApnsMessage, createApnsTransport } from "./apns.js";
 
@@ -25,7 +25,10 @@ afterEach(async () => {
   for (const transport of active.splice(0)) transport.close?.();
   for (const close of cleanup.splice(0)) await close();
 });
-async function local(handler: (stream: ServerHttp2Stream, headers: IncomingHttpHeaders) => void) {
+async function local(
+  handler: (stream: ServerHttp2Stream, headers: IncomingHttpHeaders) => void,
+  settings: import("node:http2").Settings = {},
+) {
   const sessions = new Set<import("node:http2").ServerHttp2Session>();
   cleanup.push(async () => {
     await Promise.all(
@@ -39,12 +42,13 @@ async function local(handler: (stream: ServerHttp2Stream, headers: IncomingHttpH
     );
   });
   const authorities: string[] = [];
+  const clients: import("node:http2").ClientHttp2Session[] = [];
   // Real Node HTTP/2 client/server and frames. Paired streams also run in sandboxes
   // that prohibit listen(); no HTTP/2 implementation methods are mocked.
   const injected = ((authority: string) => {
     authorities.push(authority);
     const [clientSocket, serverSocket] = duplexPair();
-    const session = performServerHandshake(serverSocket);
+    const session = performServerHandshake(serverSocket, { settings });
     sessions.add(session);
     session.on("error", () => {});
     session.on("close", () => sessions.delete(session));
@@ -53,9 +57,11 @@ async function local(handler: (stream: ServerHttp2Stream, headers: IncomingHttpH
       stream.resume();
       handler(stream, headers);
     });
-    return connect("http://local.test", { createConnection: () => clientSocket });
+    const client = connect("http://local.test", { createConnection: () => clientSocket });
+    clients.push(client);
+    return client;
   }) as typeof connect;
-  return { connect: injected, authorities };
+  return { connect: injected, authorities, sessions, clients };
 }
 function transport(overrides: Partial<Parameters<typeof createApnsTransport>[0]> = {}) {
   const value = createApnsTransport({ ...options, ...overrides });
@@ -158,7 +164,7 @@ test("sends real HTTP/2 requests with verifiable ES256 auth and refreshes JWTs e
   now++;
   await sender.send(message);
   expect(requests[2]?.headers.authorization).not.toBe(requests[0]?.headers.authorization);
-  expect(fixture.authorities).toEqual(Array(3).fill("https://api.push.apple.com"));
+  expect(fixture.authorities).toEqual(["https://api.push.apple.com"]);
   const sandbox = transport({ connect: fixture.connect, sandbox: true });
   await sandbox.send({ ...message, token: "token/with?delimiters" });
   expect(fixture.authorities.at(-1)).toBe("https://api.sandbox.push.apple.com");
@@ -194,36 +200,30 @@ test("bounds provider response bodies, times out hung requests, and reports stre
     stream.respond({ ":status": 500 });
     stream.end("x".repeat(32_768));
   });
-  await expect(transport({ connect: oversized.connect }).send(message)).rejects.toThrow(
-    "too large",
-  );
+  expect(await transport({ connect: oversized.connect }).send(message)).toEqual({ status: 503 });
   const silent = await local(() => {});
   await expect(
     transport({ connect: silent.connect, requestTimeoutMs: 20 }).send(message),
-  ).rejects.toThrow("timed out");
+  ).resolves.toEqual({ status: 503 });
   const reset = await local((stream) => stream.close(constants.NGHTTP2_INTERNAL_ERROR));
-  await expect(transport({ connect: reset.connect }).send(message)).rejects.toThrow("request");
+  expect(await transport({ connect: reset.connect }).send(message)).toEqual({ status: 503 });
   const closed = await local((stream) => stream.session?.destroy());
-  await expect(transport({ connect: closed.connect }).send(message)).rejects.toThrow(
-    /closed|failed/u,
-  );
+  expect(await transport({ connect: closed.connect }).send(message)).toEqual({ status: 503 });
   const refused = await local((stream) =>
     stream.session?.destroy(undefined, constants.NGHTTP2_INTERNAL_ERROR),
   );
-  await expect(transport({ connect: refused.connect }).send(message)).rejects.toThrow(
-    /connection|request/u,
-  );
+  expect(await transport({ connect: refused.connect }).send(message)).toEqual({ status: 503 });
   const disconnected = transport({
     connect: (() => connect("http://127.0.0.1:1")) as typeof connect,
   });
-  await expect(disconnected.send(message)).rejects.toThrow(/connection|request/u);
+  await expect(disconnected.send(message)).resolves.toEqual({ status: 503 });
   const invalid = await local(() => {});
   await expect(
     transport({ connect: invalid.connect }).send({
       ...message,
       headers: { ...message.headers, "invalid header": "invalid" },
     }),
-  ).rejects.toThrow("request failed");
+  ).resolves.toEqual({ status: 503 });
 });
 
 test("close cancels active sessions, rejects subsequent sends, and default construction opens no socket", async () => {
@@ -234,10 +234,10 @@ test("close cancels active sessions, rejects subsequent sends, and default const
   const fixture = await local(() => started());
   const sender = transport({ connect: fixture.connect });
   const pending = sender.send(message);
-  const rejected = expect(pending).rejects.toThrow(/closed|failed/u);
+  const completed = expect(pending).resolves.toEqual({ status: 503 });
   await arrived;
   sender.close?.();
-  await rejected;
+  await completed;
   await expect(sender.send(message)).rejects.toThrow("closed");
   transport();
 });
@@ -259,4 +259,163 @@ test("validates key material, P-256 curve, team and key identifiers", () => {
     },
   ])
     expect(() => createApnsTransport({ ...options, ...override })).toThrow();
+});
+
+// Event-based stream arrival lets the tests hold responses without sleeps or real sockets.
+function arrivals() {
+  const streams: ServerHttp2Stream[] = [];
+  let changed: (() => void) | undefined;
+  return {
+    streams,
+    handler(stream: ServerHttp2Stream) {
+      streams.push(stream);
+      changed?.();
+    },
+    async count(n: number) {
+      while (streams.length < n)
+        await new Promise<void>((resolve) => {
+          changed = resolve;
+        });
+    },
+    respond(index: number) {
+      const stream = streams[index] as ServerHttp2Stream;
+      stream.respond({ ":status": 200 });
+      stream.end();
+    },
+  };
+}
+
+test("honours peer stream limits, queues excess requests and resumes after completion or SETTINGS changes", async () => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 1 });
+  const sender = transport({ connect: fixture.connect });
+  const a = sender.send(message);
+  const b = sender.send(message);
+  const c = sender.send(message);
+  await arrived.count(1);
+  expect(arrived.streams).toHaveLength(1);
+  expect(fixture.authorities).toHaveLength(1);
+  arrived.respond(0);
+  expect(await a).toEqual({ status: 200 });
+  await arrived.count(2);
+  expect(arrived.streams).toHaveLength(2);
+  // A changed setting, rather than an existing stream completing, releases the next one.
+  for (const session of fixture.sessions) session.settings({ maxConcurrentStreams: 2 });
+  await arrived.count(3);
+  arrived.respond(1);
+  arrived.respond(2);
+  expect(await Promise.all([b, c])).toEqual([{ status: 200 }, { status: 200 }]);
+  expect(fixture.authorities).toHaveLength(1);
+});
+
+test("pool size and queue are bounded, and close completes both active and waiting work", async () => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 1 });
+  const sender = transport({ connect: fixture.connect, maxSessions: 2, maxQueued: 1 });
+  const a = sender.send(message);
+  await arrived.count(1);
+  const b = sender.send(message);
+  await arrived.count(2);
+  const c = sender.send(message);
+  expect(await sender.send(message)).toEqual({ status: 503 });
+  expect(arrived.streams).toHaveLength(2);
+  expect(fixture.authorities).toHaveLength(2);
+  sender.close?.();
+  expect(await Promise.all([a, b, c])).toEqual(Array(3).fill({ status: 503 }));
+  await expect(sender.send(message)).rejects.toThrow("closed");
+  await vi.waitFor(() => expect(fixture.sessions.size).toBe(0));
+});
+
+test("deadlines cover queued work even if a peer allows zero streams", async () => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 0 });
+  const sender = transport({ connect: fixture.connect, requestTimeoutMs: 20 });
+  expect(await sender.send(message)).toEqual({ status: 503 });
+  expect(arrived.streams).toHaveLength(0);
+  expect(fixture.authorities).toHaveLength(1);
+});
+
+test("per-request deadlines survive an active session and allow later sends to reuse it", async () => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 1 });
+  const sender = transport({ connect: fixture.connect, requestTimeoutMs: 50 });
+  const hung = sender.send(message);
+  await arrived.count(1);
+  // Keep receiving data: an inactivity timeout would never fire here.
+  const stream = arrived.streams[0] as ServerHttp2Stream;
+  stream.respond({ ":status": 200 });
+  const interval = setInterval(() => stream.write(" "), 5);
+  try {
+    expect(await hung).toEqual({ status: 503 });
+  } finally {
+    clearInterval(interval);
+  }
+  const next = sender.send(message);
+  await arrived.count(2);
+  arrived.respond(1);
+  expect(await next).toEqual({ status: 200 });
+  expect(fixture.authorities).toHaveLength(1);
+});
+
+test.each([
+  "close",
+  "error",
+  "goaway",
+] as const)("reconnects after session %s and fails its in-flight requests transiently", async (event) => {
+  const arrived = arrivals();
+  const fixture = await local(arrived.handler, { maxConcurrentStreams: 2 });
+  const sender = transport({ connect: fixture.connect });
+  const a = sender.send(message);
+  const b = sender.send(message);
+  await arrived.count(2);
+  const session = [...fixture.sessions][0] as import("node:http2").ServerHttp2Session;
+  if (event === "goaway") session.goaway();
+  else session.destroy(undefined, event === "error" ? constants.NGHTTP2_INTERNAL_ERROR : undefined);
+  expect(await Promise.all([a, b])).toEqual([{ status: 503 }, { status: 503 }]);
+  const next = sender.send(message);
+  await arrived.count(3);
+  arrived.respond(2);
+  expect(await next).toEqual({ status: 200 });
+  expect(fixture.authorities).toHaveLength(2);
+});
+
+test("an idle session's GOAWAY removes it so the next send reconnects", async () => {
+  const fixture = await local((stream) => {
+    stream.respond({ ":status": 200 });
+    stream.end();
+  });
+  const sender = transport({ connect: fixture.connect });
+  await sender.send(message);
+  const session = [...fixture.sessions][0] as import("node:http2").ServerHttp2Session;
+  const gone = new Promise<void>((resolve) => fixture.clients[0]?.once("goaway", () => resolve()));
+  session.goaway();
+  await gone;
+  expect(await sender.send(message)).toEqual({ status: 200 });
+  expect(fixture.authorities).toHaveLength(2);
+});
+
+test("connection construction failures are transient and leave queued work and future sends usable", async () => {
+  const fixture = await local((stream) => {
+    stream.respond({ ":status": 200 });
+    stream.end();
+  });
+  const connect = vi.fn(fixture.connect).mockImplementationOnce(() => {
+    throw new Error("connect failed");
+  });
+  const sender = transport({ connect });
+  expect(await sender.send(message)).toEqual({ status: 503 });
+  expect(await sender.send(message)).toEqual({ status: 200 });
+});
+
+test("validates pool size, queue capacity and finite positive request deadlines", () => {
+  for (const override of [
+    { maxSessions: 0 },
+    { maxSessions: 5 },
+    { maxSessions: 1.5 },
+    { maxQueued: 0 },
+    { maxQueued: Number.POSITIVE_INFINITY },
+    { requestTimeoutMs: 0 },
+    { requestTimeoutMs: 1.5 },
+  ])
+    expect(() => createApnsTransport({ ...options, ...override })).toThrow("configuration");
 });

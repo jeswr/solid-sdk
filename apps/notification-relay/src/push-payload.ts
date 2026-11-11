@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
+import { randomBytes } from "node:crypto";
 import type { Installation } from "./push-state.js";
 
 /** P5 plaintext. No URLs, WebIDs or labels; `kind` comes from the stored topic, never the webhook. */
@@ -6,6 +8,8 @@ export interface ChallengePayload {
   v: 1;
   id: string;
   kind: "challenge";
+  registrationId: string;
+  topicIndex: 0;
   nonce: string;
   sentAt: number;
 }
@@ -18,6 +22,34 @@ export interface ActivityPayload {
   sentAt: number;
 }
 export type PushPayload = ChallengePayload | ActivityPayload;
+
+/** Shared by both send paths and the native interop vectors. IDs never contain provider data. */
+export function challengePayload(
+  installationId: string,
+  nonce: string,
+  at: number,
+  id = randomBytes(16).toString("hex"),
+): ChallengePayload {
+  return {
+    v: 1,
+    id,
+    kind: "challenge",
+    registrationId: installationId,
+    topicIndex: 0,
+    nonce,
+    sentAt: Math.floor(at),
+  };
+}
+
+export function activityPayload(
+  registrationId: string,
+  topicIndex: number,
+  kind: ActivityPayload["kind"],
+  at: number,
+  id = randomBytes(16).toString("hex"),
+): ActivityPayload {
+  return { v: 1, id, kind, registrationId, topicIndex, sentAt: Math.floor(at) };
+}
 
 /**
  * Delivery boundary between the routes (push.ts) and the transports (push-delivery.ts). send()

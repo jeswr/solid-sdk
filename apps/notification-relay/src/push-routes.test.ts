@@ -100,7 +100,15 @@ test("creates inactive installations, protects nonce activation, and never sends
   expect(id).toMatch(/^[a-f0-9]{32}$/u);
   const challenge = f.challenges()[0];
   expect(challenge?.nonce).toMatch(/^[\w-]{22}$/u);
-  expect(challenge).toMatchObject({ v: 1, kind: "challenge", sentAt: epoch });
+  expect(challenge).toEqual({
+    v: 1,
+    id: expect.stringMatching(/^[a-f0-9]{32}$/u),
+    kind: "challenge",
+    registrationId: id,
+    topicIndex: 0,
+    nonce: expect.stringMatching(/^[\w-]{22}$/u),
+    sentAt: epoch,
+  });
   expect(installation.challengeHash).not.toBe(challenge?.nonce);
   await f.call("PUT", "/push/registrations/account", f.registration(id));
   // A guessed secret cannot bypass activation through the push inbox.

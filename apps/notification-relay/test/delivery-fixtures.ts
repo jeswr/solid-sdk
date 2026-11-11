@@ -21,7 +21,9 @@ export const challenge: ChallengePayload = {
   v: 1,
   id: "challenge-1",
   kind: "challenge",
-  nonce: "activation-nonce",
+  registrationId: "phone-1",
+  topicIndex: 0,
+  nonce: "AAECAwQFBgcICQoLDA0ODw",
   sentAt: activity.sentAt,
 };
 export const installation: Installation = {

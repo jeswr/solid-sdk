@@ -186,7 +186,7 @@ test("retries network, 429 and server failures with exponential backoff, at most
   const { sink, schedule, onOutcome } = setup({ fcm: { send } });
   await sink.send(installation, activity);
   await flush();
-  for (const ms of [1000, 2000, 4000, 8000, 16000]) {
+  for (const ms of [1000, 120_000, 4000, 8000, 16000]) {
     expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), ms);
     await vi.advanceTimersByTimeAsync(ms - 1);
     const before = send.mock.calls.length;
@@ -203,7 +203,7 @@ test("retries network, 429 and server failures with exponential backoff, at most
   expect(new Set(send.mock.calls.map(([m]) => m.message.data.p)).size).toBe(1);
 });
 
-test("honours Retry-After seconds and HTTP dates, bounded at five minutes", async () => {
+test("honours Retry-After seconds and HTTP dates beyond five minutes", async () => {
   const send = vi
     .fn(async () => ({ status: 429, retryAfter: "120" }))
     .mockResolvedValueOnce({
@@ -220,8 +220,8 @@ test("honours Retry-After seconds and HTTP dates, bounded at five minutes", asyn
     [1, undefined, 1000],
     [1, "garbage", 1000],
     [1, "0", 1000],
-    [1, "900", 300_000],
-    [1, "9".repeat(400), 300_000],
+    [1, "900", 900_000],
+    [1, "9".repeat(400), Number.POSITIVE_INFINITY],
     [12, undefined, 300_000],
     [2, new Date(0).toUTCString(), 2000],
   ] as const)
@@ -474,4 +474,109 @@ test("coalesces failed attempts to the latest topic activity despite out-of-orde
     gates[2]?.({ status: 200 });
     await flush();
   }
+});
+
+test("FCM 429 defaults to sixty seconds with capped exponential growth; APNs retains normal backoff", async () => {
+  for (const platform of ["android", "ios"] as const) {
+    const send = vi.fn(async () => ({ status: 429 }));
+    const { sink, schedule, onOutcome } = setup({ fcm: { send }, apns: { send } });
+    await sink.send({ ...installation, platform }, challenge);
+    await flush();
+    const delays =
+      platform === "android"
+        ? [60_000, 120_000, 240_000, 300_000, 300_000]
+        : [1000, 2000, 4000, 8000, 16000];
+    for (const delay of delays) {
+      expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), delay);
+      const before = send.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(send).toHaveBeenCalledTimes(before);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(send).toHaveBeenCalledTimes(before + 1);
+    }
+    expect(onOutcome).toHaveBeenLastCalledWith({
+      id: challenge.id,
+      kind: "challenge",
+      outcome: "exhausted",
+    });
+    sink.close();
+  }
+});
+
+test("Retry-After is a minimum above five minutes for both providers, including HTTP dates", async () => {
+  for (const platform of ["android", "ios"] as const) {
+    for (const retryAfter of ["900", new Date(activity.sentAt + 900_000).toUTCString()]) {
+      const send = vi
+        .fn(async () => ({ status: 200 }))
+        .mockResolvedValueOnce({ status: 429, retryAfter } as TransportResult);
+      const { sink, schedule } = setup({ fcm: { send }, apns: { send } });
+      await sink.send({ ...installation, platform }, challenge);
+      await flush();
+      expect(schedule).toHaveBeenLastCalledWith(expect.any(Function), 900_000);
+      await vi.advanceTimersByTimeAsync(899_999);
+      expect(send).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(send).toHaveBeenCalledTimes(2);
+      sink.close();
+    }
+  }
+});
+
+test("drops retries at or beyond the accepted job's 24-hour TTL instead of scheduling them", async () => {
+  for (const retryAfter of [
+    "86400",
+    "86401",
+    "9".repeat(400),
+    new Date(activity.sentAt + 86_401_000).toUTCString(),
+  ]) {
+    const send = vi.fn(async () => ({ status: 429, retryAfter }));
+    const { sink, schedule, onOutcome } = setup({ fcm: { send } });
+    await sink.send(installation, { ...challenge, sentAt: 0 });
+    await flush();
+    expect(onOutcome).toHaveBeenLastCalledWith({
+      id: challenge.id,
+      kind: "challenge",
+      outcome: "expired",
+    });
+    expect(schedule).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(90_000_000);
+    expect(send).toHaveBeenCalledTimes(1);
+    sink.close();
+  }
+  // Time spent waiting for a provider response consumes the same TTL.
+  let release!: (result: TransportResult) => void;
+  const send = vi.fn(
+    () =>
+      new Promise<TransportResult>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const { sink, onOutcome } = setup({ fcm: { send } });
+  await sink.send(installation, challenge);
+  await vi.advanceTimersByTimeAsync(86_399_000);
+  release({ status: 503, retryAfter: "2" });
+  await flush();
+  expect(onOutcome).toHaveBeenLastCalledWith({
+    id: challenge.id,
+    kind: "challenge",
+    outcome: "expired",
+  });
+});
+
+test("queued and scheduled jobs expire if the event loop or another request holds them beyond the TTL", async () => {
+  let release!: (result: TransportResult) => void;
+  const send = vi.fn(
+    () =>
+      new Promise<TransportResult>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const { sink, onOutcome } = setup({ fcm: { send }, maxConcurrent: 1 });
+  await sink.send(installation, challenge);
+  await sink.send(installation, activity);
+  vi.setSystemTime(activity.sentAt + 86_400_000);
+  release({ status: 200 });
+  await flush();
+  expect(send).toHaveBeenCalledTimes(1);
+  expect(onOutcome).toHaveBeenLastCalledWith({ id: activity.id, kind: "chat", outcome: "expired" });
 });

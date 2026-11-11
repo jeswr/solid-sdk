@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import {
+  type ClientHttp2Session,
   type ClientHttp2Stream,
+  constants,
   connect as http2Connect,
   type IncomingHttpHeaders,
 } from "node:http2";
@@ -64,10 +66,28 @@ export interface ApnsOptions {
   sandbox?: boolean;
   connect?: typeof http2Connect;
   now?: () => number;
+  /** End-to-end deadline, including queue time (default ten seconds). */
   requestTimeoutMs?: number;
+  /** Maximum persistent HTTP/2 sessions, 1..4 (default one). */
+  maxSessions?: number;
+  /** Waiting requests, in addition to at most 100 streams per session (default 1,000). */
+  maxQueued?: number;
 }
 
-/** One bounded-lifetime HTTP/2 session per request; no idle socket or unbounded session queue. */
+type Connection = {
+  session: ClientHttp2Session;
+  capacity: number;
+  active: Set<PendingRequest>;
+};
+type PendingRequest = {
+  message: ApnsMessage;
+  resolve: (result: TransportResult) => void;
+  timer: ReturnType<typeof setTimeout>;
+  connection?: Connection;
+  stream?: ClientHttp2Stream;
+};
+
+/** Persistent bounded pool; peer settings govern streams and every queued request has a deadline. */
 export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMessage> {
   const key = createPrivateKey(options.key);
   if (
@@ -82,7 +102,22 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
   const authority = options.sandbox
     ? "https://api.sandbox.push.apple.com"
     : "https://api.push.apple.com";
-  const sessions = new Set<ReturnType<typeof connect>>();
+  const maxSessions = options.maxSessions ?? 1;
+  const maxQueued = options.maxQueued ?? 1000;
+  const timeout = options.requestTimeoutMs ?? 10_000;
+  if (
+    !Number.isSafeInteger(maxSessions) ||
+    maxSessions < 1 ||
+    maxSessions > 4 ||
+    !Number.isSafeInteger(maxQueued) ||
+    maxQueued < 1 ||
+    !Number.isSafeInteger(timeout) ||
+    timeout < 1
+  )
+    throw new Error("Invalid APNs pool configuration");
+  const connections = new Set<Connection>();
+  const queue = new Set<PendingRequest>();
+  const pending = new Set<PendingRequest>();
   let cached: { jwt: string; created: number } | undefined;
   let closed = false;
   function token(): string {
@@ -98,77 +133,138 @@ export function createApnsTransport(options: ApnsOptions): PushTransport<ApnsMes
     cached = { jwt: `${input}.${signature.toString("base64url")}`, created: now() };
     return cached.jwt;
   }
+  let scheduled = false;
+  function wake() {
+    if (scheduled) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      pump();
+    });
+  }
+  function finish(job: PendingRequest, result: TransportResult) {
+    if (!pending.delete(job)) return;
+    clearTimeout(job.timer);
+    queue.delete(job);
+    job.connection?.active.delete(job);
+    job.stream?.close(constants.NGHTTP2_CANCEL);
+    job.resolve(result);
+    wake();
+  }
+  function retire(connection: Connection) {
+    // Remove before completing requests so no new stream can use a dead session.
+    if (!connections.delete(connection)) return;
+    for (const job of connection.active) finish(job, { status: 503 });
+    // If the pool loses its last connection, return waiting work to the delivery sink too.
+    // Its backoff prevents a failed handshake from becoming a tight reconnect loop.
+    if (connections.size === 0) for (const job of queue) finish(job, { status: 503 });
+    connection.session.destroy();
+    wake();
+  }
+  function open() {
+    const session = connect(authority);
+    const connection: Connection = { session, capacity: 0, active: new Set() };
+    connections.add(connection);
+    // Wait for peer SETTINGS before opening any streams. A peer may advertise zero.
+    session.on("remoteSettings", (settings) => {
+      // Node supplies a complete peer-settings snapshot, including the protocol defaults.
+      connection.capacity = Math.min(settings.maxConcurrentStreams as number, 100);
+      wake();
+    });
+    session.on("error", () => retire(connection));
+    session.on("close", () => retire(connection));
+    session.on("goaway", () => retire(connection));
+  }
+  function start(connection: Connection, job: PendingRequest) {
+    queue.delete(job);
+    connection.active.add(job);
+    job.connection = connection;
+    let request: ClientHttp2Stream;
+    try {
+      request = connection.session.request({
+        ...job.message.headers,
+        ":method": "POST",
+        ":path": `/3/device/${encodeURIComponent(job.message.token)}`,
+        authorization: `bearer ${token()}`,
+        "content-type": "application/json",
+      });
+    } catch {
+      finish(job, { status: 503 });
+      return;
+    }
+    job.stream = request;
+    let headers: IncomingHttpHeaders = {};
+    const chunks: Buffer[] = [];
+    let size = 0;
+    request.on("response", (value: IncomingHttpHeaders) => {
+      headers = value;
+    });
+    request.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 16_384) finish(job, { status: 503 });
+      else chunks.push(chunk);
+    });
+    request.once("error", () => finish(job, { status: 503 }));
+    request.once("close", () => finish(job, { status: 503 }));
+    request.once("end", () => {
+      if (headers[":status"] === undefined) {
+        finish(job, { status: 503 });
+        return;
+      }
+      const result: TransportResult = { status: Number(headers[":status"]) };
+      const retryAfter = headers["retry-after"];
+      if (typeof retryAfter === "string") result.retryAfter = retryAfter;
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+        if (typeof body?.reason === "string") result.reason = body.reason;
+        if (typeof body?.timestamp === "number" && Number.isFinite(body.timestamp))
+          result.timestamp = body.timestamp;
+      } catch {
+        /* Successful APNs responses have no body. */
+      }
+      finish(job, result);
+    });
+    request.end(JSON.stringify(job.message.body));
+  }
+  function pump() {
+    if (closed) return;
+    for (const job of queue) {
+      const available = [...connections].find(
+        (connection) => connection.active.size < connection.capacity,
+      );
+      if (available) start(available, job);
+      else {
+        if (connections.size < maxSessions) {
+          try {
+            open();
+          } catch {
+            finish(job, { status: 503 });
+          }
+        }
+        // SETTINGS, completion or the deadline will resume the queue.
+        return;
+      }
+    }
+  }
   return {
     async send(message) {
       if (closed) throw new Error("APNs transport closed");
-      return new Promise<TransportResult>((resolve, reject) => {
-        const session = connect(authority);
-        sessions.add(session);
-        let settled = false;
-        function finish(error?: Error, result?: TransportResult) {
-          if (settled) return;
-          settled = true;
-          sessions.delete(session);
-          session.destroy();
-          if (error) reject(error);
-          else resolve(result as TransportResult);
-        }
-        session.once("error", () => finish(new Error("APNs connection failed")));
-        session.once("close", () => finish(new Error("APNs connection closed")));
-        session.setTimeout(options.requestTimeoutMs ?? 5000, () =>
-          finish(new Error("APNs request timed out")),
-        );
-        let request: ClientHttp2Stream;
-        try {
-          request = session.request({
-            ...message.headers,
-            ":method": "POST",
-            ":path": `/3/device/${encodeURIComponent(message.token)}`,
-            authorization: `bearer ${token()}`,
-            "content-type": "application/json",
-          });
-        } catch {
-          finish(new Error("APNs request failed"));
-          return;
-        }
-        let headers: IncomingHttpHeaders = {};
-        const chunks: Buffer[] = [];
-        let size = 0;
-        request.on("response", (value: IncomingHttpHeaders) => {
-          headers = value;
-        });
-        request.on("data", (chunk: Buffer) => {
-          size += chunk.length;
-          if (size > 16_384) finish(new Error("APNs response too large"));
-          else chunks.push(chunk);
-        });
-        request.once("error", () => finish(new Error("APNs request failed")));
-        request.once("close", () => finish(new Error("APNs request closed")));
-        request.once("end", () => {
-          if (headers[":status"] === undefined) {
-            finish(new Error("APNs connection closed without a response"));
-            return;
-          }
-          const result: TransportResult = { status: Number(headers[":status"]) };
-          const retryAfter = headers["retry-after"];
-          if (typeof retryAfter === "string") result.retryAfter = retryAfter;
-          try {
-            const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-            if (typeof body?.reason === "string") result.reason = body.reason;
-            if (typeof body?.timestamp === "number" && Number.isFinite(body.timestamp))
-              result.timestamp = body.timestamp;
-          } catch {
-            /* Successful APNs responses have no body. */
-          }
-          finish(undefined, result);
-        });
-        request.end(JSON.stringify(message.body));
+      if (queue.size >= maxQueued) return { status: 503 };
+      return new Promise<TransportResult>((resolve) => {
+        const job: PendingRequest = {
+          message,
+          resolve,
+          timer: setTimeout(() => finish(job, { status: 503 }), timeout),
+        };
+        pending.add(job);
+        queue.add(job);
+        pump();
       });
     },
     close() {
       closed = true;
-      for (const session of sessions) session.destroy();
-      sessions.clear();
+      for (const job of pending) finish(job, { status: 503 });
+      for (const connection of connections) retire(connection);
     },
   };
 }

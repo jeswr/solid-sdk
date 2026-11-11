@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { randomBytes } from "node:crypto";
 import { matchesHash, sha256 } from "./device-proof.js";
-import type { ActivityPayload, PushSink } from "./push-payload.js";
+import { activityPayload, type PushSink } from "./push-payload.js";
 import type { PushRegistration, PushState } from "./push-state.js";
 import { PushError, parseBody, pushBody } from "./push-validation.js";
 import { type ResourceIdentity, webhookSenderPolicy } from "./resource-auth.js";
@@ -139,6 +139,7 @@ export function createPushInbox(options: {
         return 202;
       }
     }
+    // Store transactions may be replayed; choose entropy outside their pure callback.
     const payloadId = randomBytes(16).toString("hex");
     const delivery = await options.transaction((state, at) => {
       const live = state.registrations.get(id);
@@ -146,14 +147,7 @@ export function createPushInbox(options: {
       if (unauthenticated) live.unauthenticated = true;
       const installation = state.installations.get(live.installationId);
       if (!installation?.activated) return;
-      const payload: ActivityPayload = {
-        v: 1,
-        id: payloadId,
-        kind: topic.kind,
-        registrationId: id,
-        topicIndex: topic.index,
-        sentAt: at,
-      };
+      const payload = activityPayload(id, topic.index, topic.kind, at, payloadId);
       return { installation, payload };
     });
     if (delivery) {

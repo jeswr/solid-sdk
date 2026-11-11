@@ -42,6 +42,7 @@ type Job = {
   payload: PushPayload;
   attempts: number;
   due: number;
+  expiresAt: number;
   inFlight: boolean;
   topic?: string;
   message: FcmMessage | ApnsMessage;
@@ -56,14 +57,19 @@ function defaultSchedule(fn: () => void, ms: number) {
   return () => clearTimeout(timer);
 }
 
-/** Retry-After is a minimum delay; neither it nor exponential backoff exceeds five minutes. */
-export function retryDelay(attempt: number, retryAfter: string | undefined, now: number): number {
-  const backoff = Math.min(1000 * 2 ** (attempt - 1), maxDelay);
+/** Only exponential backoff is capped. Provider Retry-After always remains a minimum. */
+export function retryDelay(
+  attempt: number,
+  retryAfter: string | undefined,
+  now: number,
+  base = 1000,
+): number {
+  const backoff = Math.min(base * 2 ** (attempt - 1), maxDelay);
   if (retryAfter === undefined) return backoff;
   const delay = /^\d+$/u.test(retryAfter)
     ? Number(retryAfter) * 1000
     : Date.parse(retryAfter) - now;
-  return Number.isNaN(delay) ? backoff : Math.min(maxDelay, Math.max(backoff, delay));
+  return Number.isNaN(delay) ? backoff : Math.max(backoff, delay);
 }
 
 /**
@@ -130,9 +136,13 @@ export function createDeliverySink(options: DeliveryOptions) {
     let next = Number.POSITIVE_INFINITY;
     for (const job of jobs) {
       if (job.inFlight) continue;
+      if (at >= job.expiresAt) {
+        drop(job, "expired");
+        continue;
+      }
       const due = Math.max(job.due, allowed(job, at));
       if (due > at) {
-        next = Math.min(next, due);
+        next = Math.min(next, due, job.expiresAt);
         continue;
       }
       if (running >= concurrency) continue;
@@ -213,8 +223,17 @@ export function createDeliverySink(options: DeliveryOptions) {
       if (paused.has(platform)) drop(job, "paused");
       else if (job.attempts >= 6) drop(job, "exhausted");
       else {
-        job.due = now() + retryDelay(job.attempts, result.retryAfter, now());
-        if (job.payload.kind !== "challenge") {
+        const at = now();
+        job.due =
+          at +
+          retryDelay(
+            job.attempts,
+            result.retryAfter,
+            at,
+            platform === "android" && result.status === 429 ? minute : 1000,
+          );
+        if (job.due >= job.expiresAt) drop(job, "expired");
+        else if (job.payload.kind !== "challenge") {
           const topic = JSON.stringify([job.payload.registrationId, job.payload.topicIndex]);
           const pending = topics.get(topic);
           if (pending && pending.order > job.order) drop(job, "coalesced");
@@ -235,6 +254,7 @@ export function createDeliverySink(options: DeliveryOptions) {
   }
   const sink: PushSink = {
     async send(installation, payload) {
+      const acceptedAt = now();
       const platform = installation.platform;
       if (closed || paused.has(platform)) throw new Error("Push sink unavailable");
       if (platform === "android" ? !options.fcm : !options.apns)
@@ -246,7 +266,13 @@ export function createDeliverySink(options: DeliveryOptions) {
         message =
           platform === "android"
             ? buildFcmMessage(snapshot.pushToken, p)
-            : buildApnsMessage(snapshot.pushToken, payload, p, options.bundleId as string, now());
+            : buildApnsMessage(
+                snapshot.pushToken,
+                payload,
+                p,
+                options.bundleId as string,
+                acceptedAt,
+              );
       } catch {
         log({ id: payload.id, kind: payload.kind, outcome: "encryption-error" });
         return;
@@ -263,7 +289,8 @@ export function createDeliverySink(options: DeliveryOptions) {
         payload: { ...payload },
         message,
         attempts: 0,
-        due: now(),
+        due: acceptedAt,
+        expiresAt: acceptedAt + 24 * hour,
         inFlight: false,
         topic,
       };
