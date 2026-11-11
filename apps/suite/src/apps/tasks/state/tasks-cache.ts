@@ -9,6 +9,7 @@ import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/mo
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
+import { completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { compareTasks } from "../lib/views/project-groups";
@@ -915,7 +916,10 @@ export class TasksCache {
     this.unresolvedMoves.set(item.url, { target: target.url, run });
     return run();
   }
-  deleteTask(item: StoredTask): Promise<boolean | undefined> {
+  deleteTask(
+    item: StoredTask,
+    options: { silent?: boolean; completedOnly?: boolean } = {},
+  ): Promise<boolean | undefined> {
     const project = this.baseline.projects.find((project) =>
       this.baseline.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -924,12 +928,30 @@ export class TasksCache {
     return this.mutate(
       remove,
       async () => {
-        await this.store.deleteTask(this.task(project.url, item.url));
+        const current = this.task(project.url, item.url);
+        if (options.completedOnly) {
+          const ancestry = Object.values(this.baseline.tasks).flatMap((load) =>
+            load.items.map(({ task }) => ({
+              id: task.id,
+              parentId: task.parent,
+              state: task.state === "closed" ? ("closed" as const) : ("open" as const),
+            })),
+          );
+          // Re-check after queued edits: a task may be reopened or gain an open child during Undo.
+          if (
+            current.task.state !== "closed" ||
+            completedParentsToKeep(ancestry, new Set([current.task.id])).parents.size
+          )
+            return { result: false, commit: (state) => state };
+        }
+        await this.store.deleteTask(current);
         return { result: true, commit: remove };
       },
       () => {
-        void this.deleteTask(item);
+        void this.deleteTask(item, options);
       },
+      [item.url],
+      options.silent ? () => {} : this.onFailure,
     );
   }
   /** Temporary visibility owned by the delayed-delete controller, independent of pod writes. */

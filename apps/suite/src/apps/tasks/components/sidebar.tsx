@@ -43,6 +43,7 @@ import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
+import { DeleteCompletedDialog, DeleteCompletedMenuItem } from "./delete-completed";
 import { useDropTarget } from "./dnd/use-task-drag";
 import { ShareProject } from "./share-project";
 
@@ -79,6 +80,8 @@ function ProjectRow({
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [clearCompleted, setClearCompleted] = useState(false);
+  const actionsButton = useRef<HTMLButtonElement>(null);
   const renameRoot = useRef<HTMLDivElement>(null);
   const name = project.tracker.title ?? "Untitled";
   const href = `/tasks/p/${encodeRef(project.url)}`;
@@ -114,6 +117,7 @@ function ProjectRow({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <IconButton
+            ref={actionsButton}
             className="tsk-project-actions"
             label={`Project actions for ${name}`}
             variant="ghost"
@@ -167,9 +171,16 @@ function ProjectRow({
           <DropdownMenuItem disabled={!project.etag} onSelect={() => setConfirm(true)}>
             Delete
           </DropdownMenuItem>
+          <DeleteCompletedMenuItem project={project} onSelect={() => setClearCompleted(true)} />
         </DropdownMenuContent>
       </DropdownMenu>
       {sharing && <ShareProject project={project} onClose={() => setSharing(false)} />}
+      <DeleteCompletedDialog
+        project={project}
+        open={clearCompleted}
+        onOpenChange={setClearCompleted}
+        returnFocus={() => actionsButton.current?.focus()}
+      />
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -201,6 +212,8 @@ export function TasksSidebar() {
   const { preferences, dispatch } = useTasksPreferences();
   const path = useRoutePathname();
   const [creating, setCreating] = useState(false);
+  const [clearShared, setClearShared] = useState<StoredProject>();
+  const sharedActionButtons = useRef(new Map<string, HTMLButtonElement>());
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
   const open = tasks.views.filter((task) => task.state === "open");
@@ -352,9 +365,8 @@ export function TasksSidebar() {
           <ul className="tsk-nav-list">
             {shared.map((project) => {
               const href = `/tasks/p/${encodeRef(project.url)}`;
-              const title =
-                tasks.projects.find((loaded) => loaded.url === project.url)?.tracker.title ??
-                project.title;
+              const loaded = tasks.projects.find((item) => item.url === project.url);
+              const title = loaded?.tracker.title ?? project.title;
               return (
                 <li key={project.url} className="tsk-project-row">
                   <span className="tsk-project-dot" aria-hidden="true" />
@@ -364,6 +376,10 @@ export function TasksSidebar() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <IconButton
+                        ref={(button) => {
+                          if (button) sharedActionButtons.current.set(project.url, button);
+                          else sharedActionButtons.current.delete(project.url);
+                        }}
                         className="tsk-project-actions"
                         label={`Project actions for ${title}`}
                         variant="ghost"
@@ -372,6 +388,12 @@ export function TasksSidebar() {
                       </IconButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
+                      {loaded && (
+                        <DeleteCompletedMenuItem
+                          project={loaded}
+                          onSelect={() => setClearShared(loaded)}
+                        />
+                      )}
                       <DropdownMenuItem
                         onSelect={() => {
                           tasks.cache.forgetSharedProject(project.url);
@@ -389,6 +411,14 @@ export function TasksSidebar() {
             })}
           </ul>
         </>
+      )}
+      {clearShared && (
+        <DeleteCompletedDialog
+          project={clearShared}
+          open
+          onOpenChange={(open) => !open && setClearShared(undefined)}
+          returnFocus={() => sharedActionButtons.current.get(clearShared.url)?.focus()}
+        />
       )}
       <div className="tsk-sidebar-footer">
         {creating ? (
