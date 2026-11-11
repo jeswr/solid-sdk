@@ -668,7 +668,11 @@ export function createProviders(
     contextFor,
     fence,
     fetchFor: (origins: readonly string[], account: Identity, assertSession: () => void) => {
-      if (account.webId === null || sessionRequest === undefined)
+      if (
+        account.protocol !== "solid-oidc" ||
+        account.webId === null ||
+        sessionRequest === undefined
+      )
         throw new Error("Extra resource origins require a Solid-OIDC account");
       const target = sessionRequest;
       const selected = { ...hint };
@@ -718,8 +722,7 @@ export function createProviders(
             matches: observe(provider, "solid-oidc", true).matches,
             upgrade: async (request, challenge) => {
               assertSession();
-              // A human LWS session is eligible only through its already established Solid grant.
-              // Inspect claims without starting a flow, then recheck the result after any refresh.
+              // Inspect claims without starting a flow, then recheck after any refresh.
               await assertIdentity(request);
               const upgraded = await provider.upgrade(request, challenge);
               await assertIdentity(request);
@@ -731,12 +734,31 @@ export function createProviders(
         ],
       });
       return async (input: RequestInfo | URL, init?: RequestInit) => {
+        const body = init?.body;
         const request = new Request(input, init);
+        const replay = body instanceof Blob ? { body } : undefined;
         // Keep normal pod routing. Auxiliary servers refuse every redirect, including before a 401,
         // so application-supplied headers such as Installation-Proof cannot cross origins either.
-        return resources.allows(request.url)
-          ? await scoped.fetch(new Request(request, { redirect: "error", credentials: "omit" }))
-          : await manager.fetch(request);
+        if (!resources.allows(request.url)) return await manager.fetch(request, replay);
+        const metadata = await asFor(selected).getAuthorizationServer(
+          new Request(target.url, { signal: request.signal }),
+        );
+        assertSession();
+        const destination = new URL(request.url);
+        // Credential endpoints are protocol-only, even when explicitly admitting their origin.
+        // Ignore query/fragment so an endpoint cannot be reclassified by adding a parameter.
+        if (
+          [metadata.token_endpoint, metadata.registration_endpoint].some((endpoint) => {
+            if (typeof endpoint !== "string") return false;
+            const url = new URL(endpoint);
+            return url.origin === destination.origin && url.pathname === destination.pathname;
+          })
+        )
+          throw new Error("OIDC credential endpoints cannot be extra resources");
+        return await scoped.fetch(
+          new Request(request, { redirect: "error", credentials: "omit" }),
+          replay,
+        );
       };
     },
     restore: async (account: import("./sessions.js").ActiveAccount) => {

@@ -149,6 +149,8 @@ export function createMockLwsAs(options: {
 export function createMockOp(
   options: {
     issuer?: string;
+    tokenEndpoint?: string;
+    registrationEndpoint?: string;
     subject?: string;
     webId?: string | null;
     issuers?: string[];
@@ -242,8 +244,8 @@ export function createMockOp(
       return Response.json({
         issuer,
         authorization_endpoint: new URL("authorize", issuer).href,
-        token_endpoint: new URL("token", issuer).href,
-        registration_endpoint: new URL("register", issuer).href,
+        token_endpoint: options.tokenEndpoint ?? new URL("token", issuer).href,
+        registration_endpoint: options.registrationEndpoint ?? new URL("register", issuer).href,
         ...(options.revocation ? { revocation_endpoint: new URL("revoke", issuer).href } : {}),
         jwks_uri: new URL("jwks", issuer).href,
         scopes_supported: ["openid", "webid", "offline_access"],
@@ -283,7 +285,7 @@ export function createMockOp(
       const turtle = new Writer().quadsToString([...dataset]);
       return new Response(turtle, { headers: { "content-type": "text/turtle" } });
     }
-    if (request.url === new URL("register", issuer).href) {
+    if (request.url === (options.registrationEndpoint ?? new URL("register", issuer).href)) {
       stats.registrations++;
       return Response.json(
         {
@@ -321,7 +323,7 @@ export function createMockOp(
       refreshTokens.delete(form.get("token")!);
       return new Response(null, { status: 200 });
     }
-    if (request.url === new URL("token", issuer).href) {
+    if (request.url === (options.tokenEndpoint ?? new URL("token", issuer).href)) {
       const form = new URLSearchParams(await request.text());
       const params = codes.get(form.get("code")!);
       codes.delete(form.get("code")!);

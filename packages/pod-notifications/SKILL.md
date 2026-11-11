@@ -247,3 +247,19 @@ Webhook subscriptions batch all topics, select the WebhookSubscription service e
 another push service is preferred, retain DELETE cleanup, and report `webhook-relay` as via.
 A relay registration 403 closes forbidden. The optional ID-token callback preserves existing
 `plan()` configuration, but an actual webhook subscription requires it.
+
+<!-- // AUTHORED-BY Codex GPT-6 -->
+## Pod webhooks for native push
+
+Use `createWebhookSubscriptions(accountPodFetch, clock?)` for device relay subscriptions; see
+README's device webhook contract. It shares discovery and LWS protocol helpers with live channels.
+Keep account selection, labels and routes in the app, and native keys/relay registration in
+suite-native. Do not introduce a native-package dependency here or duplicate protocol code in apps.
+
+Pass protocol, canonical storage id, inbox, topic URL strings, requestedExpiresAt and signal to
+`subscribe`; persist returned topic/channel/sender/actual expiresAt. Solid creates one channel per
+topic and LWS batches all topics. Protocol RDF uses direct wrapper accessors and n3.Writer without
+adding a handwritten vocabulary model. Reject foreign topics, services, channel URLs, redirects,
+untrusted JSON-LD contexts, mismatched bindings and invalid expiry. Keep setup rollback, bounded
+reads and cancellation. `remove` skips expired topics and validates the complete batch before any
+DELETE; retain failed metadata for retry, and supply a bounded cleanup signal.

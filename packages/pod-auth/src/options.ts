@@ -18,7 +18,7 @@ export function extraResourceOrigins(options?: FetchForOptions): readonly string
   return origins.map((value: unknown) => {
     if (typeof value !== "string") throw new TypeError("Invalid resource origin");
     const url = secureUrl(value, false, "resource origin");
-    if (value !== url.origin)
+    if (value !== url.origin || url.hostname.includes("*"))
       throw new TypeError("Resource origins must be canonical HTTPS origins");
     return value;
   });

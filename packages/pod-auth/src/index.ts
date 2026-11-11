@@ -141,7 +141,11 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       const started = epoch;
       const lifetime = providers.fence.signal;
       const assertSession = () => {
-        if (started !== epoch || !accountMatches(selected, current))
+        if (
+          started !== epoch ||
+          !accountMatches(selected, current) ||
+          (origins.length > 0 && current?.protocol !== "solid-oidc")
+        )
           throw new Error("Account session is unavailable");
         lifetime.throwIfAborted();
       };
@@ -149,12 +153,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         ? providers.fetchFor(origins, selected, assertSession)
         : providers.manager.fetch;
       return async (input, init) => {
+        const body = init?.body;
         const request = new Request(input, init);
         // Durable generation reads detect another realm's logout even before its broadcast arrives.
         await readIdentity();
         assertSession();
         return await scoped(
           new Request(request, { signal: AbortSignal.any([request.signal, lifetime]) }),
+          body instanceof Blob ? { body } : undefined,
         );
       };
     },

@@ -187,15 +187,14 @@ export function AccountsProvider({
     if (!account) return;
     const backend = sessions.current.get(id) ?? backends.find((item) => item.kind === account.kind);
     retiring.current.add(id);
+    const failures: unknown[] = [];
     try {
       const cleanup = beforeSignOut(account);
       if (cleanup) await cleanup;
     } catch (error) {
-      retiring.current.delete(id);
-      throw error;
+      failures.push(error);
     }
     sessions.current.delete(id);
-    retiring.current.delete(id);
     try {
       clearRecentItems(localStorage, id);
     } catch {
@@ -203,7 +202,15 @@ export function AccountsProvider({
     }
     // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
-    await backend?.signOut(account);
+    try {
+      await backend?.signOut(account);
+    } catch (error) {
+      failures.push(error);
+    } finally {
+      retiring.current.delete(id);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Sign-out cleanup failed");
   };
   const signOutAll = async () => {
     ++generation.current;
@@ -212,17 +219,11 @@ export function AccountsProvider({
       backend: sessions.current.get(account.id) ?? backends.find((b) => b.kind === account.kind),
     }));
     for (const { account } of previous) retiring.current.add(account.id);
-    try {
-      const cleanups = previous
-        .map(({ account }) => beforeSignOut(account))
-        .filter((value) => value !== undefined);
-      if (cleanups.length) await Promise.all(cleanups);
-    } catch (error) {
-      retiring.current.clear();
-      throw error;
-    }
+    const cleanups = previous
+      .map(({ account }) => beforeSignOut(account))
+      .filter((value) => value !== undefined);
+    const cleanupResults = cleanups.length ? await Promise.allSettled(cleanups) : [];
     sessions.current.clear();
-    retiring.current.clear();
     try {
       clearRecentItems(localStorage);
     } catch {
@@ -230,10 +231,14 @@ export function AccountsProvider({
     }
     dispatch({ type: "clear" });
     const results = await Promise.allSettled(
-      previous.map(({ account, backend }) => backend?.signOut(account)),
+      previous.map(async ({ account, backend }) => await backend?.signOut(account)),
     );
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") throw failure.reason;
+    retiring.current.clear();
+    const failures = [...cleanupResults, ...results]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "Sign-out cleanup failed");
   };
   const active = state.accounts.find((a) => a.id === state.activeId) ?? null;
   const reauth = () => {

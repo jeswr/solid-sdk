@@ -107,6 +107,9 @@ test("selectors, options and explicit origins fail closed before any network", a
     "https://user@relay.example",
     "https://RELAY.example",
     "https://relay.example:443",
+    "https://*.relay.example",
+    "https://relay*.example",
+    "https://*",
     " https://relay.example",
     "https:\\relay.example",
   ])
@@ -313,8 +316,8 @@ test("extra origins require a current human Solid-OIDC session", async () => {
   await g.auth.login();
   await g.auth.fetch(g.op.root + "lws");
   expect((await g.auth.identity())?.protocol).toBe("lws");
-  expect((await g.auth.fetchFor(g.account, { extraResourceOrigins: [relay] })(path)).status).toBe(
-    200,
+  expect(() => g.auth.fetchFor(g.account, { extraResourceOrigins: [relay] })).toThrow(
+    "Solid-OIDC account",
   );
   const providers = createProviders(g.options, { challenge: () => {}, session: async () => {} });
   const identity = (await g.auth.identity())!;
@@ -454,33 +457,112 @@ test("account fetch snapshots URL and request options before its durable generat
   expect(authenticated(f.op.requests, `${relay}/other`)).toHaveLength(0);
 });
 
-test.each([
-  "missing",
-  "foreign",
-  "after-refresh",
-] as const)("human LWS sessions require their matching existing Solid grant: %s", async (kind) => {
+test("LWS sessions reject extra origins without network or UI, including pre-existing handles", async () => {
   const f = fixture();
   await f.auth.login();
-  await f.auth.fetch(f.op.root + "lws");
-  const identity = (await f.auth.identity())!;
-  expect(identity.protocol).toBe("lws");
   const scoped = f.auth.fetchFor(f.account, { extraResourceOrigins: [relay] });
-  const proof = vi.spyOn(DPoPTokenProvider.prototype, "identity");
-  if (kind === "after-refresh")
-    proof
-      .mockResolvedValueOnce(identity as Claims)
-      .mockResolvedValueOnce({ ...identity, subject: "foreign" } as Claims);
-  else
-    proof.mockResolvedValue(
-      kind === "missing"
-        ? undefined
-        : ({ ...identity, webId: "https://foreign.example/#me" } as Claims),
-    );
-  const authorizations = f.op.stats.authorizations,
-    tokens = f.op.stats.tokens,
-    refreshes = f.op.stats.refreshes;
+  await f.auth.fetch(f.op.root + "lws");
+  expect((await f.auth.identity())?.protocol).toBe("lws");
+  const before = f.transport.mock.calls.length;
+  expect(() => f.auth.fetchFor(f.account, { extraResourceOrigins: [relay] })).toThrow("Solid-OIDC");
   await expect(scoped(path)).rejects.toThrow("unavailable");
-  expect(authenticated(f.op.requests, path)).toHaveLength(0);
-  expect(f.op.stats).toMatchObject({ authorizations, tokens, refreshes });
-  expect(f.options.ui.getCode).toHaveBeenCalledTimes(authorizations);
+  expect(f.transport).toHaveBeenCalledTimes(before);
+  expect(f.options.ui.getCode).toHaveBeenCalledOnce();
+  expect((await f.auth.fetchFor(f.account)(f.op.root + "lws")).status).toBe(200);
+});
+
+test.each([
+  "Blob",
+  "File",
+] as const)("%s uploads bypass the replay buffer cap through both wrappers and retry DPoP nonces", async (kind) => {
+  for (const extra of [false, true]) {
+    const f = fixture();
+    const auth = createPodAuth({ ...f.options, maxReplayBodyBytes: 3 });
+    await auth.login();
+    const url = extra ? path : f.op.root + "upload";
+    const attempts: Request[] = [];
+    let challenged = false;
+    f.transport.mockImplementation(async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url === url) {
+        attempts.push(request.clone());
+        if (request.headers.has("authorization") && !challenged) {
+          challenged = true;
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "www-authenticate": 'DPoP error="use_dpop_nonce"',
+              "dpop-nonce": "upload-nonce",
+            },
+          });
+        }
+      }
+      return await f.op.fetch(request);
+    });
+    const content = "upload larger than the stream buffer cap";
+    const body =
+      kind === "Blob"
+        ? new Blob([content], { type: "application/octet-stream" })
+        : new File([content], "upload.bin", { type: "application/octet-stream" });
+    const scoped = auth.fetchFor(f.account, extra ? { extraResourceOrigins: [relay] } : undefined);
+    expect((await scoped(url, { method: "PUT", body })).status).toBe(200);
+    expect(challenged).toBe(true);
+    expect(attempts).toHaveLength(3);
+    for (const request of attempts) {
+      expect(await request.text()).toBe(content);
+      expect(request.headers.get("content-type")).toBe("application/octet-stream");
+    }
+    expect(jwt(attempts.at(-1)!.headers.get("dpop")!)).toMatchObject({
+      nonce: "upload-nonce",
+      htm: "PUT",
+      htu: url,
+    });
+    expect(f.op.stats.accepted).toBe(1); // mock OP verifies the final proof's signature and token binding
+  }
+});
+
+test.each([
+  "token",
+  "register",
+])("an admitted issuer origin never permits resource credentials at its %s endpoint", async (endpoint) => {
+  const f = fixture();
+  await f.auth.login();
+  const scoped = f.auth.fetchFor(f.account, {
+    extraResourceOrigins: [new URL(f.op.issuer).origin],
+  });
+  const before = f.transport.mock.calls.length;
+  for (const suffix of ["", "?resource=true", "#fragment"]) {
+    await expect(scoped(f.op.issuer + endpoint + suffix)).rejects.toThrow(
+      "OIDC credential endpoints",
+    );
+  }
+  expect(f.transport).toHaveBeenCalledTimes(before);
+  expect(authenticated(f.op.requests, f.op.issuer + endpoint)).toHaveLength(0);
+});
+
+test("credential endpoints remain excluded when the issuer advertises a different host", async () => {
+  const f = fixture({ tokenEndpoint: relay + "/token", registrationEndpoint: relay + "/register" });
+  await f.auth.login();
+  const scoped = f.auth.fetchFor(f.account, { extraResourceOrigins: [relay] });
+  const before = f.transport.mock.calls.length;
+  await expect(scoped(relay + "/token")).rejects.toThrow("OIDC credential endpoints");
+  await expect(scoped(relay + "/register")).rejects.toThrow("OIDC credential endpoints");
+  expect(f.transport).toHaveBeenCalledTimes(before);
+});
+
+test("extra resources work when the issuer advertises no dynamic registration endpoint", async () => {
+  const f = fixture();
+  f.transport.mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    const response = await f.op.fetch(request);
+    if (request.url === f.op.issuer + ".well-known/openid-configuration") {
+      const { registration_endpoint: _registration, ...metadata } = await response.json();
+      return Response.json(metadata);
+    }
+    return response;
+  });
+  await f.auth.login();
+  expect((await f.auth.fetchFor(f.account, { extraResourceOrigins: [relay] })(path)).status).toBe(
+    200,
+  );
 });
