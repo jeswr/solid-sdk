@@ -37,10 +37,11 @@ export interface VerifyOptions {
    * A `fetch` implementation (e.g. an authenticated Solid fetch).
    *
    * SECURITY — this fetch is the SSRF boundary when verifying by URL. When
-   * omitted, `@jeswr/guarded-fetch`'s DNS-pinned Node fetch is used: private,
-   * loopback and link-local targets are refused, including via redirects. An
-   * injected fetch replaces that boundary, so it must enforce its own SSRF policy
-   * for UNTRUSTED URLs. Prefer the `body` /
+   * omitted under Node, `@jeswr/guarded-fetch`'s DNS-pinned fetch is used (loaded
+   * lazily): private, loopback and link-local targets are refused, including via
+   * redirects. In a browser the default is `globalThis.fetch`, which is only
+   * partially guarded. An injected fetch replaces either default, so it must
+   * enforce its own SSRF policy for UNTRUSTED URLs. Prefer the `body` /
    * {@link verifyDataset} paths when the RDF is already in hand — they never
    * touch the network.
    */
@@ -94,7 +95,7 @@ export async function verifyDescriptor(
         baseIRI: options.baseIRI ?? input,
       });
     } else {
-      const fetched = await fetchRdf(input, { fetch: fetchOrGuarded(options.fetch) });
+      const fetched = await fetchRdf(input, { fetch: await fetchOrGuarded(options.fetch) });
       dataset = fetched.dataset;
     }
   } catch (err) {

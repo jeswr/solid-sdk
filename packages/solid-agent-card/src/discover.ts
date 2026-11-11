@@ -25,10 +25,13 @@ export interface DiscoverOptions {
    *
    * SECURITY — this fetch is the SSRF boundary. `discoverAgent` follows the
    * agent-pointer IRI read from a (possibly untrusted) WebID profile and fetches
-   * it. When omitted, both fetches use `@jeswr/guarded-fetch`'s DNS-pinned Node
-   * fetch, which refuses private, loopback and link-local targets (including via
-   * redirects) and bounds body size and time. An injected fetch replaces that
-   * boundary entirely, so it must enforce its own SSRF policy when the WebID is
+   * it. When omitted under Node, both fetches use `@jeswr/guarded-fetch`'s
+   * DNS-pinned fetch (loaded lazily), which refuses private, loopback and
+   * link-local targets (including via redirects) and bounds body size and time.
+   * In a browser the default is `globalThis.fetch`: CORS only limits which
+   * responses a page can read, not which requests it issues, so untrusted
+   * browser-side discovery is only partially guarded. An injected fetch replaces
+   * either default, so it must enforce its own SSRF policy when the WebID is
    * untrusted. (This is distinct from the subject-binding spoofing guard, which
    * prevents a descriptor from *claiming* a different agent IRI, not SSRF.)
    *
@@ -84,7 +87,7 @@ export async function discoverAgent(
   if (!webId) {
     throw new TypeError("discoverAgent: webId is required.");
   }
-  const fetchOpts = { fetch: fetchOrGuarded(options.fetch) };
+  const fetchOpts = { fetch: await fetchOrGuarded(options.fetch) };
 
   let profileDataset: import("@rdfjs/types").DatasetCore;
   try {
