@@ -41,7 +41,7 @@ export interface PodReadOptions {
 export interface PodHeadResult {
   /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
   acl?: string;
-  /** Complete absolute ACL, ACP access-control and describedby links; absent means unknown. */
+  /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
   auxiliaryResources?: readonly string[];
   /** Whether the exact target exists (false on HTTP 404). */
   exists?: boolean;
@@ -159,7 +159,7 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       });
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
-        throw new Error("WAC ACL discovery failed");
+        throw Object.assign(new Error("WAC ACL discovery failed"), { status: response.status });
       const metadata: PodHeadResult = { exists: response.status !== 404 };
       const header = response.headers.get("link") ?? "";
       try {

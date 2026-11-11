@@ -52,7 +52,7 @@ Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for R
 reads; generic byte reads must retain the backend default representation.
 
 Generic PodOutput.write/delete must refuse decoded, case-insensitive `.acl`, `.acr`
-and `.meta` suffixes and all ACL, ACP access-control and describedby URLs advertised
+and `.meta` suffixes and all ACL, ACP access-control, describedby and linkset URLs advertised
 by HEAD of the target or parent. Use the current guarded PodPort, never raw fetch.
 PodHeadResult.auxiliaryResources is the complete absolute link set (empty is known;
 absent is unknown), and exists distinguishes an existing target from a 404. Missing
@@ -67,9 +67,15 @@ PodOutput generic writes require explicit conditions and storage-pod-port refuse
 empty write conditions instead of translating them to storage-client's unconditional
 `*`. pod_read/solid_read return content first and an optional `ETag: <value>` second
 text block; fetch retains metadata.etag. Projected containers omit source ETags.
-chat_save is also behind this generic boundary: its ChatWriter ACL provisioning
-must fail closed before mutation, including nonstandard advertised ACLs. Keep chat
-reads over owner-provisioned data and do not add an ACL bypass to restore saves.
+Reject ambiguous generic targets before normalization: semicolons, query/fragment
+delimiters (raw or encoded), trailing dots/spaces and encoded unreserved characters.
+Compare advertised links with queries intact. Both adapters refuse arbitrary RDF
+description bodies when creating containers. Truncated fetch output omits its ETag.
+chat_save and capture use a dedicated ChatWriter ACL capability: discover through
+the current PodPort, confine target and ACL to private/chats/, validate the exact
+owner-only body, recheck discovery, and use conditional writes. Existing ACLs must
+be dedicated to that target; identical owner-only ACLs need no replacement on replay.
+Never expose that capability to generic pod_write/solid_write or guess ACL URLs.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;

@@ -582,7 +582,7 @@ export async function writeResource(
   let result: { etag?: string };
   try {
     result = await output.write(
-      target,
+      url,
       new TextEncoder().encode(content),
       contentType,
       ifMatch === undefined ? { ifNoneMatch: "*" } : { ifMatch },

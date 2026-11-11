@@ -15,21 +15,19 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
+import { chatAclAccess } from "./chat-acl.js";
+import { requireContainerCreationBody } from "./container-mutation.js";
+import { WRITE_ETAG_REQUIRED } from "./generic-mutation.js";
 import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
-import { wacAclLink } from "./wac-link.js";
 
-/** Adapt only the chat storage surface while MCP-01's shared port is absent. */
+/** Adapt chat persistence with owner-only WAC provisioning through the current guarded port. */
 export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {
+  const currentPod = pod ?? createFetchPodPort(config);
+  const aclAccess = chatAclAccess(currentPod);
   const fetch = scopedFetch(config);
-  function check(response: Response): void {
-    if (!response.ok)
-      throw Object.assign(new Error(`Chat pod request failed (${response.status})`), {
-        status: response.status,
-      });
-  }
   async function portOperation<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -63,19 +61,12 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     root: config.podRoot,
     webId: config.webId ?? "",
     async discoverAcl(url) {
-      const target = requirePodScopedWriteUrl(config, url);
-      // Inspect this exact resource, including a not-yet-created container's 404.
-      const response = await config.fetch(target, { method: "HEAD", redirect: "manual" });
-      if (response.status !== 404) check(response);
-      const acl = new URL(wacAclLink(response.headers.get("link") ?? ""), target);
-      if (acl.hash || acl.search || acl.href === target)
-        throw new Error("Invalid chat ACL resource URL");
-      return requirePodScopedWriteUrl(config, acl.href);
+      return portOperation(() => aclAccess.discover(url));
     },
     async read(url) {
       return portOperation(() =>
         withPodReadLimits(async () => {
-          const output = new PodOutput(pod ?? createFetchPodPort(config));
+          const output = new PodOutput(currentPod);
           const raw = await output.read(url, { accept: "text/turtle" });
           requireChatRdf(raw.contentType || "text/turtle");
           const read = await output.representation(url, raw);
@@ -109,9 +100,28 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
-      return portOperation(() =>
-        new PodOutput(pod ?? createFetchPodPort(config)).write(target, body, contentType, cond),
-      );
+      return portOperation(async () => {
+        const protectedWrite = await aclAccess.write(target, body, contentType, cond);
+        if (protectedWrite) return protectedWrite;
+        try {
+          return await new PodOutput(currentPod).write(url, body, contentType, cond);
+        } catch (error) {
+          // The generic boundary already approved target/parent metadata, but
+          // requires read-first guidance for existing data. ChatWriter preserves
+          // atomic create requests on replay and handles the server's 412 itself.
+          if (
+            cond.ifNoneMatch === "*" &&
+            cond.ifMatch === undefined &&
+            target.startsWith(new URL("private/chats/", currentPod.root).href) &&
+            error instanceof Error &&
+            error.message === WRITE_ETAG_REQUIRED
+          ) {
+            await requireContainerCreationBody(target, body, contentType);
+            return currentPod.write(target, body, contentType, { ifNoneMatch: "*" });
+          }
+          throw error;
+        }
+      });
     },
   };
 }
@@ -140,7 +150,7 @@ export function registerChatTools(
     "chat_save",
     {
       description:
-        "Chat saves currently fail closed: the writer requires ACL provisioning, which generic MCP mutation access refuses. Read owner-provisioned chats with chat_list, chat_get or chat_export.",
+        "Save a redacted conversation under private/chats with owner-only, server-advertised WAC ACLs and create-only messages.",
       inputSchema: {
         provider,
         conversationId: id,

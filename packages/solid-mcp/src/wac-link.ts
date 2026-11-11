@@ -2,9 +2,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
 function parseLinks(header: string): Array<{ target: string; params: Map<string, string> }> {
+  if (header.length > 8192 || new TextEncoder().encode(header).byteLength > 8192)
+    throw new Error("Chat ACL discovery Link header exceeds bounds");
   const links: Array<{ target: string; params: Map<string, string> }> = [];
   let remaining = header;
   while (remaining.trim()) {
+    if (links.length === 64) throw new Error("Chat ACL discovery Link header exceeds bounds");
     const link =
       /^\s*<([^<>]*)>((?:\s*;\s*[\w-]+\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^\s;,"]+))*)\s*(?:,|$)/.exec(
         remaining,
@@ -32,12 +35,17 @@ export function auxiliaryResourceLinks(header: string, base: string): string[] {
     const relations = (params.get("rel") ?? "").toLowerCase().split(/\s+/);
     if (
       !relations.some((rel) =>
-        ["acl", "describedby", "http://www.w3.org/ns/solid/acp#accesscontrol"].includes(rel),
+        ["acl", "describedby", "linkset", "http://www.w3.org/ns/solid/acp#accesscontrol"].includes(
+          rel,
+        ),
       )
     )
       continue;
     if (!target || params.has("anchor")) throw new Error("Ambiguous auxiliary resource link");
-    resources.push(new URL(target, base).href);
+    const url = new URL(target, base);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash)
+      throw new Error("Invalid auxiliary resource URL");
+    resources.push(url.href);
   }
   return resources;
 }
@@ -45,8 +53,8 @@ export function auxiliaryResourceLinks(header: string, base: string): string[] {
 export function wacAclLink(header: string): string {
   const acls: string[] = [];
   for (const { target, params } of parseLinks(header)) {
-    const relations = (params.get("rel") ?? "").split(/\s+/);
-    if (relations.includes("http://www.w3.org/ns/solid/acp#accessControl"))
+    const relations = (params.get("rel") ?? "").toLowerCase().split(/\s+/);
+    if (relations.includes("http://www.w3.org/ns/solid/acp#accesscontrol"))
       throw new Error("Unsupported chat access-control model: ACP");
     if (relations.includes("acl")) {
       if (params.has("anchor")) throw new Error("Unsupported anchored chat ACL link");

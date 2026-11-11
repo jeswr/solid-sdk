@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RdfLimitError } from "../src/bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { fetchDocument } from "../src/fetch.js";
-import { listContainer, readRdf, search } from "../src/pod.js";
+import { listContainer, readRdf, search, writeResource } from "../src/pod.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createStoragePodPort } from "../src/storage-pod-port.js";
 
@@ -34,6 +34,23 @@ function fixture(protocol: "solid" | "lws" = "solid", readOnly = false) {
 }
 
 describe("storage-client PodPort", () => {
+  it("refuses advertised access-control writes through the complete storage output path", async () => {
+    const { pod, storage, fetch } = fixture();
+    const create = vi.spyOn(storage, "create");
+    const write = vi.spyOn(storage, "write");
+    fetch.mockImplementation(
+      async () =>
+        new Response(null, {
+          headers: { link: `<${FILE}>; rel="linkset"` },
+        }),
+    );
+    await expect(writeResource(pod, FILE, "x", "text/plain")).rejects.toThrow(
+      /access-control|description/,
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it.each([200, 404])("retains WAC HEAD discovery on HTTP %s", async (status) => {
     const { pod, fetch } = fixture();
     fetch.mockResolvedValueOnce(
@@ -209,7 +226,11 @@ it.each([
   const result = await fetchDocument(pod, FILE);
   const binary = contentType === "application/octet-stream";
   expect(result.text).toBe(contentType === "text/plain" ? "x".repeat(MAX_CONTENT_BYTES) : "");
-  expect(result.metadata).toEqual({ contentType, etag: '"v1"', truncated: !binary });
+  expect(result.metadata).toEqual({
+    contentType,
+    ...(binary ? { etag: '"v1"' } : {}),
+    truncated: !binary,
+  });
   expect(downloaded).toBeLessThanOrEqual(binary ? 0 : MAX_CONTENT_BYTES + 65536);
   expect(cancel).toHaveBeenCalledOnce();
 });

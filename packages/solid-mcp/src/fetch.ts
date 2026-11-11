@@ -82,6 +82,7 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
     }
     const { bytes, truncated } = await limitedBody(response);
     result.metadata.truncated = truncated;
+    if (truncated) delete result.metadata.etag;
     if (rdf) {
       // A partial RDF input cannot safely be parsed; empty text is valid Turtle.
       if (truncated) return result;
@@ -106,6 +107,7 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
         result.metadata.truncated = true;
       }
     }
+    if (result.metadata.truncated) delete result.metadata.etag;
     return result;
   });
 }

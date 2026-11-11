@@ -6,6 +6,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { SolidMcpConfig } from "../src/auth.js";
@@ -134,6 +135,77 @@ async function seedChat(pod: ReturnType<typeof fakePod>, conversation: ChatConve
 }
 
 describe("MCP chat tools over the scoped fetch port", () => {
+  it("preserves ChatWriter's atomic create-conflict requests on replay", async () => {
+    const f = fakePod();
+    const url = `${ROOT}private/chats/claude/chat/m-message.ttl`;
+    f.resources.set(url, { body: "existing", contentType: "text/plain" });
+    const port = createChatPodPort({
+      fetch: f.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    await expect(
+      port.write(url, new TextEncoder().encode("replacement"), "text/plain", { ifNoneMatch: "*" }),
+    ).rejects.toMatchObject({ status: 412 });
+    expect(f.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+    expect(f.resources.get(url)?.body).toBe("existing");
+  });
+
+  it("allows only the exact owner-only ACL body on a discovered chat ACL", async () => {
+    const f = fakePod();
+    const config = { fetch: f.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const port = createChatPodPort(config);
+    const target = `${ROOT}private/chats/`;
+    const acl = await port.discoverAcl(target);
+    for (const [owner, scope] of [
+      ["https://evil.example/#me", target],
+      [OWNER, `${ROOT}other/`],
+    ]) {
+      const store = new Store();
+      const auth = new Authorization(`${acl}#owner`, store, DataFactory);
+      auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+      auth.accessTo = scope;
+      auth.default = scope;
+      auth.agent.add(owner);
+      auth.canRead = true;
+      auth.canWrite = true;
+      auth.canReadWriteAcl = true;
+      await expect(
+        port.write(
+          acl,
+          new TextEncoder().encode(
+            await serialize([...store], {
+              format: "text/turtle",
+            }),
+          ),
+          "text/turtle",
+          {},
+        ),
+      ).rejects.toThrow();
+    }
+    expect(f.requests.some((r) => r.method === "PUT")).toBe(false);
+  });
+
+  it("uses the current port's ACL discovery and refuses ACLs outside private/chats", async () => {
+    const f = fakePod();
+    const config = { fetch: f.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const pod = createFetchPodPort(config);
+    const port = createChatPodPort(config, pod);
+    for (const acl of [
+      `${ROOT}other.acl`,
+      `${ROOT}private/chats%2Fescape/.acl`,
+      `${ROOT}private/chats/.acr`,
+    ]) {
+      pod.head = vi.fn(async () => ({ acl, auxiliaryResources: [acl] }));
+      await expect(port.discoverAcl(`${ROOT}private/chats/`)).rejects.toThrow();
+      expect(pod.head).toHaveBeenCalledOnce();
+    }
+    pod.head = undefined;
+    await expect(port.discoverAcl(`${ROOT}private/chats/`)).rejects.toThrow();
+    expect(f.requests).toEqual([]);
+  });
+
   it.each([
     "chat_list",
     "chat_get",
@@ -195,7 +267,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     }
   });
 
-  it("reads owner-provisioned chats for each provider, refuses saves, and pages with since", async () => {
+  it("saves and reads chats for each provider and pages with since", async () => {
     const pod = fakePod();
     const client = await connect({
       fetch: pod.fetch,
@@ -205,7 +277,11 @@ describe("MCP chat tools over the scoped fetch port", () => {
     });
     try {
       for (const provider of ["claude", "chatgpt", "codex"] as const) {
-        await seedChat(pod, { ...input, provider });
+        const saved = await client.callTool({
+          name: "chat_save",
+          arguments: { ...input, provider },
+        });
+        expect(saved.isError).toBeFalsy();
         const got = await client.callTool({
           name: "chat_get",
           arguments: { provider, conversationId: input.conversationId },
@@ -214,8 +290,8 @@ describe("MCP chat tools over the scoped fetch port", () => {
         expect(json(got)).toMatchObject({ ...input, provider });
       }
       const replay = await client.callTool({ name: "chat_save", arguments: input });
-      expect(replay.isError).toBe(true);
-      expect(JSON.stringify(replay)).toMatch(/access-control/);
+      expect(replay.isError).toBeFalsy();
+      expect(json(replay)).toMatchObject({ saved: 0, skipped: 2 });
       const first = json(
         await client.callTool({ name: "chat_list", arguments: { limit: 1, since: DAY1 } }),
       );
@@ -440,7 +516,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     ).rejects.toThrow(/read-only/);
   });
 
-  it("refuses chat saves that would write a nonstandard advertised ACL", async () => {
+  it("saves chats through a nonstandard advertised ACL confined to the chat area", async () => {
     const pod = fakePod();
     const target = `${ROOT}private/chats/`;
     pod.aclLinks.set(target, '<owner-permissions>; title="private, owner"; rel="acl"');
@@ -452,11 +528,9 @@ describe("MCP chat tools over the scoped fetch port", () => {
     });
     try {
       const saved = await client.callTool({ name: "chat_save", arguments: input });
-      expect(saved.isError).toBe(true);
-      expect(JSON.stringify(saved)).toMatch(/access-control/);
-      expect(pod.requests.some((r) => r.method === "PUT")).toBe(false);
+      expect(saved.isError).toBeFalsy();
+      expect(pod.resources.has(`${target}owner-permissions`)).toBe(true);
       expect(pod.resources.has(`${target}.acl`)).toBe(false);
-      expect(pod.requests.filter((r) => r.method === "HEAD" && r.url === target)).toHaveLength(2);
     } finally {
       await client.close();
     }
@@ -466,6 +540,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     "",
     '<.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
     '<.acl>; rel="acl", <.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+    '<.acl>; rel="acl", <.acr>; rel="HTTP://WWW.W3.ORG/NS/SOLID/ACP#ACCESSCONTROL"',
     '<one>; rel="acl", <two>; rel="acl"',
     '<.acl>; rel="acl"; anchor="/elsewhere"',
     '<.acl>; rel="acl"; rel="type"',
@@ -504,10 +579,13 @@ describe("MCP chat tools over the scoped fetch port", () => {
     );
     const port = createChatPodPort({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
     await expect(port.discoverAcl(`${ROOT}private/chats/`)).rejects.toMatchObject({ status });
-    expect(fetch).toHaveBeenCalledExactlyOnceWith(`${ROOT}private/chats/`, {
-      method: "HEAD",
-      redirect: "manual",
-    });
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(
+      `${ROOT}private/chats/`,
+      expect.objectContaining({
+        method: "HEAD",
+        redirect: "manual",
+      }),
+    );
   });
 
   it.each([
@@ -532,7 +610,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
     }
   });
 
-  it("refuses ACL writes before a save can request a mutation or redirect", async () => {
+  it("refuses chat ACL PUT redirects without creating content", async () => {
     const pod = fakePod();
     const fetch: typeof globalThis.fetch = async (input, init) => {
       if (init?.method === "PUT")
@@ -544,7 +622,7 @@ describe("MCP chat tools over the scoped fetch port", () => {
       const saved = await client.callTool({ name: "chat_save", arguments: input });
       expect(saved.isError).toBe(true);
       expect(saved.content).toEqual([
-        expect.objectContaining({ text: expect.stringMatching(/access-control/) }),
+        expect.objectContaining({ text: expect.stringMatching(/redirect/) }),
       ]);
       expect(pod.resources.size).toBe(0);
       expect(pod.requests.some((r) => r.url === ROOT)).toBe(false);

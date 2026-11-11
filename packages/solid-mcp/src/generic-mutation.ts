@@ -13,7 +13,7 @@ export const WRITE_CONFLICT =
 
 /** A single strong HTTP entity tag, never a wildcard, weak tag or validator list. */
 export function strongWriteEtag(etag: string): boolean {
-  return /^"[\x21\x23-\x7e\x80-\xff]*"$/u.test(etag);
+  return /^"[\x21\x23-\x7e\x80-\xff]*"(?![\s\S])/u.test(etag);
 }
 
 /** Generic writes always carry an atomic create or exact-version condition. */
@@ -30,9 +30,19 @@ export function requireWriteConditions(
   throw new Error(WRITE_ETAG_REQUIRED);
 }
 
-/** Check every decoded alias, including slashless container and path-parameter aliases. */
+/** Refuse ambiguous server path interpretations before URL normalization. */
+export function ambiguousMutationTarget(target: string): boolean {
+  if (/[;?#\\]/u.test(target) || /[. ](?:\/|$)/u.test(target)) return true;
+  for (const [, hex] of target.matchAll(/%([\da-f]{2})/giu)) {
+    const character = String.fromCharCode(Number.parseInt(hex as string, 16));
+    if (/[A-Za-z0-9._~%/\\;?#-]/u.test(character)) return true;
+  }
+  return /%20(?:\/|$)/iu.test(target);
+}
+
+/** Check untruncated paths; reject encodings and delimiters before alias normalization. */
 export function requireDataMutationPath(target: string): void {
-  if (pathAliases(new URL(target)).some((path) => /\.(acl|acr|meta)$/iu.test(path)))
+  if (ambiguousMutationTarget(target) || /\.(acl|acr|meta)\/*$/iu.test(target))
     throw new Error(AUXILIARY_MUTATION_DENIED);
 }
 
@@ -50,6 +60,8 @@ export function requireDataMutationMetadata(target: string, metadata: PodHeadRes
     }
     if (
       linked.origin === parsed.origin &&
+      linked.search === parsed.search &&
+      linked.hash === parsed.hash &&
       pathAliases(linked).some((path) => aliases.includes(path))
     )
       throw new Error(AUXILIARY_MUTATION_DENIED);

@@ -14,6 +14,7 @@ import { ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
 import { parseBoundedRdf, serializeBoundedTurtle } from "./bounded-rdf.js";
+import { requireContainerCreationBody } from "./container-mutation.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
 import {
   AUXILIARY_MUTATION_DENIED,
@@ -240,17 +241,22 @@ export class PodOutput {
   async write(url: string, body: Uint8Array, contentType: string, cond: PodConditions) {
     const target = this.target(url, true);
     if (!this.personal) {
+      requireDataMutationPath(url);
       const metadata = await this.mutationMetadata(target);
       requireWriteConditions(cond);
       if (cond.ifNoneMatch === "*" && metadata.exists === true)
         throw new Error(WRITE_ETAG_REQUIRED);
+      await requireContainerCreationBody(target, body, contentType);
     }
     return this.operation(() => this.pod.write(target, body, contentType, cond));
   }
 
   async delete(url: string, cond?: PodConditions): Promise<void> {
     const target = this.target(url, true);
-    if (!this.personal) await this.mutationMetadata(target);
+    if (!this.personal) {
+      requireDataMutationPath(url);
+      await this.mutationMetadata(target);
+    }
     return this.operation(() => this.pod.delete(target, cond));
   }
 

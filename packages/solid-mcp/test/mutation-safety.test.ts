@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import { createChatPodPort } from "../src/chat-tools.js";
+import { strongWriteEtag } from "../src/generic-mutation.js";
 import { PodOutput } from "../src/output.js";
 import { writeResource } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
@@ -119,6 +120,9 @@ describe("generic mutation safety", () => {
     '<memo.txt>; rel="acl"; anchor="other"',
     '<memo.txt>; rel="acl"; rel="alternate"',
     '<memo.txt>; rel="describedby", malformed',
+    '<memo.txt#acl>; rel="acl"',
+    `${'<other>; rel="alternate",'.repeat(64)}<memo.txt>; rel="acl"`,
+    `<other>; rel="alternate"; title="${"x".repeat(8192)}"`,
   ])("refuses malformed, anchored or multiple advertised links: %s", async (link) => {
     const f = fixture();
     f.links.set(PARENT, link);
@@ -170,6 +174,14 @@ describe("generic mutation safety", () => {
 });
 
 describe("conditional pod_write and read ETags", () => {
+  it.each([
+    '"a"\n',
+    '"a"\r\n',
+    '"a\t"',
+    '"a\u007f"',
+    '"\u0100"',
+  ])("rejects invalid strong ETag octets: %j", (value) =>
+    expect(strongWriteEtag(value)).toBe(false));
   it.each([
     "pod_write",
     "solid_write",

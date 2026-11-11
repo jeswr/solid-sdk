@@ -178,7 +178,8 @@ An existing resource is refused: read it first and pass its exact strong ETag as
 are refused. Concurrent creates or edits return a conflict with the same read-first
 guidance; no unconditional overwrite is available through generic tools.
 `pod_read` and `solid_read` retain their content in the first text block and add
-`ETag: <value>` in a second block when available. `fetch` supplies `metadata.etag`.
+`ETag: <value>` in a second block when available. `fetch` supplies `metadata.etag`
+only for complete output; truncated results omit it to prevent prefix overwrites.
 Projected container representations omit the source ETag.
 
 ## Portable pod access
@@ -208,14 +209,14 @@ an ETag and refuses deletion when none is available. Container writes require cr
 conditions and accept empty bodies or LDP container types; other container metadata
 is refused before mutation. Exact named creates reject URL spellings the backend would rewrite.
 The legacy `createFetchPodPort` and fetch-based server configuration remain
-supported. Supplying both `fetch` and `pod` to the server keeps chat ACL discovery through
-the fetch capability while pod operations use the supplied port.
+supported. Supplying both `fetch` and `pod` to the server uses the supplied port for
+chat ACL discovery and all pod operations, including current decorators.
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
 HTTP 404 for resources not yet created. It also returns `exists` and
-`auxiliaryResources`: the complete absolute URLs advertised by `acl`, `describedby`
+`auxiliaryResources`: the complete absolute URLs advertised by `acl`, `describedby`, `linkset`
 and ACP `http://www.w3.org/ns/solid/acp#accessControl` relations. An empty array
 means successful discovery with no such links; an absent field means unknown.
 HEAD refuses redirects. Optional
@@ -252,7 +253,10 @@ the fixed diagnostic `Personal data requires a purpose-limited tool`, without
 echoing a URL. Generic writes/deletes also refuse ancestors of the reserved area.
 
 Generic writes and deletes also refuse decoded filename suffixes `.acl`, `.acr`
-and `.meta`, regardless of case, including repeatedly encoded aliases. Before a
+and `.meta`, regardless of case, including repeatedly encoded aliases. Ambiguous
+targets with semicolons, queries, fragments (including encoded delimiters), trailing
+dots/spaces, or percent-encoded unreserved characters are refused before mutation.
+Advertised targets are compared with their query and fragment intact. Before a
 mutation, `PodOutput` HEADs the target and its parent through the current PodPort.
 It refuses any target advertised by either as a WAC ACL, ACP access-control or
 description resource, including URLs without a reserved suffix. Redirects, failed
@@ -261,8 +265,9 @@ HEAD support, or missing `auxiliaryResources` fail closed with
 `Access-control and description discovery unavailable; mutation refused`.
 A successful 404 still supplies discovery metadata for a not-yet-created target.
 Custom ports must return complete auxiliary metadata to enable generic mutations.
-Dedicated memory and audit ACL provisioning retains its existing protected-area
-and purpose checks.
+Generic container bodies may declare only LDP container types; arbitrary description
+metadata is refused on both adapters. Dedicated memory and audit ACL provisioning
+retains its existing protected-area and purpose checks.
 
 Listings, search candidates/results, Type Index hints, container projections and
 MCP resource enumeration omit protected children before reading them. Redirect
@@ -465,12 +470,12 @@ and address reads remain available on a read-only server when permitted.
 ## Chat tools
 
 All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and require
-`webId` to identify the owner. Chat reads work with owner-provisioned storage.
-`chat_save` currently fails closed: `ChatWriter` requires ACL writes, which the
-generic MCP mutation boundary refuses, including nonstandard advertised ACL URLs.
+`webId` to identify the owner. `chat_save` provisions owner-only WAC ACLs through a
+narrow path confined to server-advertised ACLs inside `private/chats/`. Generic
+mutation tools continue to refuse those ACLs.
 
 - `chat_save({provider, conversationId, title, messages})` requires `readOnly:false`
-  and currently returns an error before ACL or chat-content mutation.
+  and saves redacted, owner-only chats with ACLs provisioned before content.
   Messages are `{id?, role, text, createdAt}`. Providers: `claude`, `chatgpt`, `codex`.
   Roles: `system`, `user`, `assistant`, `tool`; dates require an explicit timezone.
 - `chat_list({provider?, since?, cursor?, limit?})` returns `{conversations, nextCursor?}`.
@@ -487,16 +492,21 @@ generic MCP mutation boundary refuses, including nonstandard advertised ACL URLs
 Storage is `<podRoot>private/chats/<provider>/<conversationId>/`. IDs use 1–200
 letters, digits, underscores or hyphens. The fetch adapter retains pod-scope and
 redirect checks and accepts only Turtle/N3-family RDF for chats, preventing remote
-JSON-LD context loads. The ACL-before-content sequence is refused at its first ACL
-write; there is no fallback to inherited permissions or unprotected chat content.
+JSON-LD context loads. ChatWriter provisions only server-advertised WAC ACLs inside
+`private/chats/`, through the current guarded port. Its dedicated ACL path accepts
+only the exact owner-only body built by ChatWriter and rechecks the association before
+mutation. New ACLs use `If-None-Match: *`; changed existing ACLs must be dedicated to
+the target and have a strong ETag for `If-Match`. Identical owner-only ACLs need no
+replacement on replay. Missing/unsafe discovery and shared ACLs fail before content;
+there is no fallback to inherited permissions. Generic `pod_write` and `solid_write`
+continue to refuse these ACLs.
 Listing skips containers whose conversation metadata returns 404,
 while preserving permission, transport and message-read errors.
 
 Chat tools are registered alongside the canonical pod tools and compatibility
 aliases when using the fetch-based server configuration. The chat adapter retains
-its ACL discovery and write safeguards. The portable `PodPort` configuration
-registers pod and memory tools; chat tools currently require the fetch-based
-configuration for their ACL discovery.
+its ACL discovery and write safeguards and also accepts an injected `PodPort` with
+complete WAC HEAD metadata. The portable server configuration registers pod and memory tools.
 
 ## Streamable HTTP
 
@@ -562,5 +572,5 @@ The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
-Its generic mutation guard also refuses ACL provisioning, so capture saves through
-this adapter currently fail closed.
+Capture uses the same narrow, owner-only chat ACL path as `chat_save`; generic
+mutation tools continue to refuse ACL provisioning.
