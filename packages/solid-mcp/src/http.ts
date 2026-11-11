@@ -230,7 +230,7 @@ export function createMcpHttpHandler<Principal>(
       response.headers.set("Access-Control-Allow-Origin", origin);
       response.headers.set(
         "Access-Control-Expose-Headers",
-        "WWW-Authenticate, MCP-Protocol-Version",
+        "WWW-Authenticate, MCP-Protocol-Version, Retry-After",
       );
     }
     return response;

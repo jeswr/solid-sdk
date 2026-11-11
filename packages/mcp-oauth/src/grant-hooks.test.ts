@@ -178,6 +178,21 @@ describe("grant hook isolation and failures", () => {
     expect(f.provider.revoke).toHaveBeenCalledTimes(2);
   });
 
+  it("still revokes the grant and the pod session when the session tombstone fails", async () => {
+    const grantCreated = vi.fn<GrantCreated>().mockRejectedValue(new Error("private detail"));
+    const f = fixture({ grantCreated });
+    const codes = vi.spyOn(f.stores.codes, "put");
+    vi.spyOn(f.stores.grants, "revokeSession").mockRejectedValueOnce(new Error("store down"));
+    const response = await f.server.authorize(f.authRequest(await f.register()), SESSION);
+    expect(new URL(response.headers.get("location") as string).searchParams.get("error")).toBe(
+      "server_error",
+    );
+    expect(codes).not.toHaveBeenCalled();
+    const grantId = grantCreated.mock.calls[0]?.[0].grant.id as string;
+    expect(await f.stores.grants.get(grantId)).toMatchObject({ revoked: true });
+    expect(f.provider.revoke).toHaveBeenCalledTimes(1);
+  });
+
   it("never calls the hook when grant storage fails", async () => {
     const grantCreated = vi.fn<GrantCreated>();
     const f = fixture({ grantCreated });

@@ -307,11 +307,13 @@ export class AuthorizationServer {
         structuredClone({ grant, client, redirectUri: authorization.redirectUri, issuedAt }),
       );
     } catch {
-      try {
-        await this.revokeSessionGrant(grant);
-      } catch {
-        // Never issue a code or expose cleanup failures through the trusted redirect.
-      }
+      // Best-effort, independent steps: a failing tombstone must not leave the grant live or
+      // the new upstream pod session in the vault. Never issue a code or expose failures.
+      await Promise.allSettled([
+        this.stores.grants.revokeSession(grant.session.id),
+        this.stores.grants.revoke(grant.id),
+        this.options.podSessions.revoke(grant.session.id),
+      ]);
       throw new OAuthError("server_error", 500);
     }
     const code = opaque();

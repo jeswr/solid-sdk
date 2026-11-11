@@ -352,6 +352,8 @@ describe("authentication and methods", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("vary")).toBe("Origin");
     expect(response.headers.get("access-control-allow-origin")).toBe(origin ?? null);
+    if (origin)
+      expect(response.headers.get("access-control-expose-headers")).toContain("Retry-After");
     expect(await response.json()).toEqual({
       jsonrpc: "2.0",
       error: { code: -32000, message: "Temporarily unavailable" },
