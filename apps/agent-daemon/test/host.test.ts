@@ -73,6 +73,27 @@ it("persists detached proposal results across restarts and refuses unsafe or cor
       extra: "not allowed",
     } as unknown as Parameters<typeof local.proposalResults.put>[1]),
   ).rejects.toThrow();
+  // A legacy-id migration persists, and must name exactly one cached proposal location.
+  const proposal = structuredClone(exampleRecords["action-proposal"]);
+  const migrated = {
+    proposals: [proposal],
+    calls: [],
+    migrations: [
+      { legacyId: "https://pod.example/agent/proposals/x:y.ttl", location: proposal.id },
+    ],
+  };
+  await local.proposalResults.put(key, migrated);
+  expect(await createLocalState(dir).proposalResults.get(key)).toEqual(migrated);
+  for (const migrations of [
+    [],
+    [{ legacyId: "urn:legacy", location: "urn:not-a-proposal" }],
+    [{ legacyId: proposal.id, location: proposal.id }],
+    [
+      { legacyId: "urn:legacy:1", location: proposal.id },
+      { legacyId: "urn:legacy:2", location: proposal.id },
+    ],
+  ])
+    await expect(local.proposalResults.put(key, { ...migrated, migrations })).rejects.toThrow();
 });
 it("refuses symlink cursor reads, bad account paths and replaced leases; HALT symlinks halt", async () => {
   const dir = await temporary();

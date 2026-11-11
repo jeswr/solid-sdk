@@ -400,7 +400,80 @@ it.each([
   });
   expect(h.pod.requests.some((request) => request.url === id)).toBe(false);
   expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toHaveLength(1);
-  expect(h.ledger.entries().filter((entry) => entry.record.type === "model-call")).toHaveLength(1);
+  const calls = h.ledger.entries().filter((entry) => entry.record.type === "model-call");
+  expect(calls).toHaveLength(1);
+  // A repaired cache keeps the reference earlier model-call evidence may already carry.
+  expect(calls[0]?.record).toMatchObject({ proposal: cached ? id : expectedId });
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
+});
+it("repairs a legacy proposal id while replaying its existing model-call audit evidence", async () => {
+  const h = harness();
+  const legacyId = h.workspace.url("proposals/x:y.ttl");
+  const expectedId = h.workspace.url(`proposals/${digestOf(legacyId).slice(8)}.ttl`);
+  const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
+  const key = digestOf({ account: "fixture", source, digest: h.message.rawSha256 });
+  const call = measuredCall("proposer");
+  // The pre-repair cache format: no migration mapping, and the id createAt now refuses.
+  await h.state.proposalResults.put(key, {
+    proposals: [{ ...exampleRecords["action-proposal"], id: legacyId }],
+    calls: [call],
+  });
+  // An earlier run durably audited the Proposer call against the legacy id, then failed
+  // while publishing the proposal, before the cursor committed.
+  h.ledger.append(
+    {
+      type: "model-call",
+      id: call.id,
+      context: call.context,
+      provider: call.provider,
+      model: call.model,
+      tokens: call.inputTokens + call.outputTokens,
+      inputTokens: call.inputTokens,
+      outputTokens: call.outputTokens,
+      toolCalls: call.toolCalls,
+      latencyMs: Math.round(call.latencyMs),
+      retries: call.retries,
+      proposal: legacyId,
+      taskId: `task-${key.slice(8)}`,
+      conversation: `urn:sha256:${digestOf({ account: "fixture", thread: "seed" }).slice(8)}`,
+      agent: AGENT_ID,
+      owner: OWNER,
+    },
+    new Date(AT).toISOString(),
+  );
+  const project = vi.fn(h.options.proposalWritten);
+  const options = { ...h.options, proposalWritten: project };
+  await createDaemon(options).once();
+  expect(project).toHaveBeenCalledOnce();
+  expect(project.mock.calls[0]?.[0].id).toBe(expectedId);
+  expect(h.state.cursors.get("fixture")).toBe("one");
+  expect(await h.state.proposalResults.get(key)).toMatchObject({
+    proposals: [{ id: expectedId }],
+    migrations: [{ legacyId, location: expectedId }],
+  });
+  const resource = h.pod.resources.get(expectedId);
+  expect(await recordFromTurtle(resource?.body ?? "", expectedId)).toMatchObject({
+    id: expectedId,
+  });
+  expect(h.pod.requests.some((request) => request.url === legacyId)).toBe(false);
+  const records = () =>
+    h.ledger
+      .entries()
+      .map((entry) => entry.record)
+      .filter((record) => record.type !== "ledger-checkpoint");
+  const first = records();
+  expect(first.filter((record) => record.type === "model-call")).toEqual([
+    expect.objectContaining({ id: call.id, proposal: legacyId }),
+  ]);
+  expect(first.filter((record) => record.type === "proposal")).toEqual([
+    expect.objectContaining({ id: expectedId, proposal: expectedId }),
+  ]);
+  // A second pass replays the same evidence and publication without new effects.
+  await createDaemon(options).once();
+  expect(records()).toEqual(first);
+  expect(h.pod.resources.get(expectedId)).toEqual(resource);
+  expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+  expect(h.state.cursors.get("fixture")).toBe("one");
   expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
 });
 

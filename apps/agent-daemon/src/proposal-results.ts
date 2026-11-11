@@ -4,29 +4,46 @@ import { z } from "zod";
 import type { ProposalResult } from "./types.js";
 
 const count = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const resultSchema = z.strictObject({
-  proposals: z.array(
-    podRecordSchema.transform((record) => {
-      if (record.type !== "action-proposal" || record.state !== "proposed")
-        throw new Error("Invalid cached proposal");
-      return record;
-    }),
-  ),
-  calls: z.array(
-    z.strictObject({
-      id: z.string(),
-      context: z.enum(["reader", "proposer"]),
-      provider: z.enum(["openai", "anthropic"]),
-      model: z.string(),
-      tokens: z.strictObject({ input: count, output: count }),
-      inputTokens: count,
-      outputTokens: count,
-      toolCalls: count,
-      latencyMs: z.number().nonnegative().finite(),
-      retries: count,
-    }),
-  ),
-});
+const resultSchema = z
+  .strictObject({
+    proposals: z.array(
+      podRecordSchema.transform((record) => {
+        if (record.type !== "action-proposal" || record.state !== "proposed")
+          throw new Error("Invalid cached proposal");
+        return record;
+      }),
+    ),
+    calls: z.array(
+      z.strictObject({
+        id: z.string(),
+        context: z.enum(["reader", "proposer"]),
+        provider: z.enum(["openai", "anthropic"]),
+        model: z.string(),
+        tokens: z.strictObject({ input: count, output: count }),
+        inputTokens: count,
+        outputTokens: count,
+        toolCalls: count,
+        latencyMs: z.number().nonnegative().finite(),
+        retries: count,
+      }),
+    ),
+    migrations: z
+      .array(z.strictObject({ legacyId: z.string(), location: z.string() }))
+      .min(1)
+      .optional(),
+  })
+  .superRefine((result, context) => {
+    // Each repaired location names one cached proposal, so its audit reference is unambiguous.
+    const ids = new Set(result.proposals.map((proposal) => proposal.id));
+    const locations = new Set(result.migrations?.map((migration) => migration.location));
+    if (
+      locations.size !== (result.migrations?.length ?? 0) ||
+      result.migrations?.some(
+        (migration) => migration.legacyId === migration.location || !ids.has(migration.location),
+      )
+    )
+      context.addIssue({ code: "custom", message: "Invalid proposal migration" });
+  });
 
 export function checkedProposalResult(value: unknown): ProposalResult {
   const json = canonicalJson(value);

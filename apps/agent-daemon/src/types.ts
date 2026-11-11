@@ -21,9 +21,18 @@ export interface Checkpoints {
   get(account: string): Promise<Cursor | undefined>;
   put(account: string, cursor: Cursor): Promise<void>;
 }
+/** A cached proposal ID repaired to its exact location under `proposals/`. */
+export interface ProposalMigration {
+  /** The ID first cached, which existing model-call audit evidence may reference. */
+  readonly legacyId: string;
+  /** The repaired ID used for outbox projection, pod publication and proposal evidence. */
+  readonly location: string;
+}
 export interface ProposalResult {
   readonly proposals: readonly ActionProposal[];
   readonly calls: readonly ModelCall[];
+  /** Legacy-to-repaired IDs; model-call evidence keeps the legacy reference for replay. */
+  readonly migrations?: readonly ProposalMigration[];
 }
 /** Private, durable results keyed by account, source URL and inbound content digest. */
 export interface ProposalResults {

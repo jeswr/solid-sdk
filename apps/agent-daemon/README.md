@@ -25,7 +25,10 @@ would change on name encoding before any create request (for example `x:y.ttl` a
 `x%3ay.ttl`; `x%3Ay.ttl` is accepted). Proposal IDs must pass the shared
 `isExactChildUrl` predicate for a direct `.ttl` child of `proposals/`; other IDs use a
 deterministic digest location. Cached IDs from older runs are repaired and saved before
-outbox projection, preserving replay without another Proposer call.
+outbox projection, preserving replay without another Proposer call. The saved result
+records each repair as `migrations: [{ legacyId, location }]`: projection, publication and
+proposal evidence use `location`, while model-call evidence keeps `legacyId`, so calls an
+earlier failed run already audited replay without a conflict.
 Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.

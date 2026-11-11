@@ -200,14 +200,26 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await o.workspace.triage(source, triage);
       let result = await o.proposalResults.get(key);
       if (result) {
-        result = checkedProposalResult(result);
-        const cachedProposals = result.proposals;
-        const proposals = cachedProposals.map((proposal) => ({
+        const cached = checkedProposalResult(result);
+        result = cached;
+        const proposals = cached.proposals.map((proposal) => ({
           ...proposal,
           id: o.workspace.proposalLocation(proposal.id),
         }));
-        if (proposals.some((proposal, index) => proposal.id !== cachedProposals[index]?.id)) {
-          result = checkedProposalResult({ calls: result.calls, proposals });
+        if (proposals.some((proposal, index) => proposal.id !== cached.proposals[index]?.id)) {
+          // Earlier runs may already hold model-call evidence naming the first cached ID.
+          // Record each repair so replay keeps that reference while effects use the new one.
+          const earlier = new Map(cached.migrations?.map((m) => [m.location, m.legacyId]));
+          const migrations = proposals.flatMap((proposal, index) => {
+            const previous = cached.proposals[index]?.id ?? proposal.id;
+            const legacyId = earlier.get(previous) ?? previous;
+            return legacyId === proposal.id ? [] : [{ legacyId, location: proposal.id }];
+          });
+          result = checkedProposalResult({
+            calls: cached.calls,
+            proposals,
+            ...(migrations.length > 0 ? { migrations } : {}),
+          });
           // Repair legacy IDs durably before the trusted outbox sees their new locations.
           await o.proposalResults.put(key, result);
         }
@@ -250,18 +262,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
           throw new Error("Outbox terms digest mismatch");
         entries.push(entry);
       }
+      const migrations = result.migrations;
       result = checkedProposalResult({
         calls: result.calls,
         proposals: entries.map((entry) => entry.proposal),
+        ...(migrations ? { migrations } : {}),
       });
       // Publish only the finalized proposals returned by the trusted outbox projection.
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      const proposalRef =
-        result.proposals.length === 1 && result.proposals[0]
-          ? o.workspace.proposalLocation(result.proposals[0].id)
-          : undefined;
+      const only = result.proposals.length === 1 ? result.proposals[0] : undefined;
+      // A repaired proposal keeps its legacy reference so existing model-call evidence replays.
+      const proposalRef = only
+        ? (migrations?.find((m) => m.location === only.id)?.legacyId ??
+          o.workspace.proposalLocation(only.id))
+        : undefined;
       await calls(result.calls, task, proposalRef);
       for (const entry of entries) {
         const proposal = entry.proposal;
