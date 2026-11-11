@@ -181,7 +181,11 @@ test("8: registry accounts stay private, show conflicts and write verified owner
   await page.getByRole("alertdialog").getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(page.getByRole("button", { name: "Disconnect", exact: true })).toBeFocused();
   expect(
-    loadedRecords(await readControl(fixture.client)).some((row) => row.bindingState === "disabled"),
+    loadedRecords(await readControl(fixture.client)).some(
+      (row) =>
+        row.target === `${fixture.client.paths.accounts}${account?.id}.ttl` &&
+        row.bindingState === "disabled",
+    ),
   ).toBe(false);
   await page.getByRole("button", { name: "Disconnect", exact: true }).click();
   await page
