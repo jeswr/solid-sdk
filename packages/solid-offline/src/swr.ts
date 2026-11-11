@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
@@ -35,6 +36,7 @@ import {
   requestCacheDirective,
   withCacheProvenance,
 } from './cache-policy.js';
+import { nextPages } from './listing-pages.js';
 import { type MetadataStore, responseBytes } from './metadata-store.js';
 import { reportRevalidation } from './revalidation-events.js';
 import type { CacheMetadata, OfflineEvent } from './types.js';
@@ -440,7 +442,7 @@ async function finalizeForced(
   // answer or a failed/oversized comparison stream.
   try {
     if (changed && decision.cacheable && previous.cached)
-      changed = !(await sameRepresentation(previous.cached, fresh));
+      changed = !(await sameRepresentation(rl.url, previous, fresh));
   } finally {
     await purgeAllVariants(rl.url, deps);
   }
@@ -454,8 +456,20 @@ async function finalizeForced(
   };
 }
 
-async function sameRepresentation(cached: Response, fresh: Response): Promise<boolean> {
+async function sameRepresentation(
+  url: string,
+  previous: { record?: CacheMetadata; cached?: Response },
+  fresh: Response,
+): Promise<boolean> {
+  const cached = previous.cached;
+  if (!cached) return false;
+  // A changed continuation link evicts the old cursor chain, so it is a listing change
+  // even when the first page's bytes are identical.
+  const priorPages = previous.record?.nextPages ?? nextPages(url, cached.headers.get('link'));
+  const freshPages = nextPages(url, fresh.headers.get('link'));
   if (
+    priorPages.length !== freshPages.length ||
+    priorPages.some((page, index) => page !== freshPages[index]) ||
     cached.status !== fresh.status ||
     cached.headers.get('etag') !== fresh.headers.get('etag') ||
     cached.headers.get('content-type') !== fresh.headers.get('content-type')

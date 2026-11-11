@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 
 import type { NotificationsClient, Subscription } from '@jeswr/pod-notifications';
@@ -488,6 +489,26 @@ it.each([
   await h.cache.fetch(url);
   expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(1);
   h.fetch.mockImplementation(async () => respond('changed', 'v2'));
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(2);
+});
+
+it('reports a changed continuation link on an unchanged first page as an update', async () => {
+  const h = fixture();
+  const page = (next: string) =>
+    new Response('same first page', {
+      headers: { etag: 'v1', link: `<${root}${next}>; rel="next"` },
+    });
+  h.fetch.mockImplementation(async () => page('?page=2'));
+  await h.cache.fetch(url);
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toEqual([]);
+  h.fetch.mockImplementation(async () => page('?cursor=fresh'));
+  await h.cache.fetch(url);
+  expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(1);
+  h.fetch.mockImplementation(
+    async () => new Response('same first page', { headers: { etag: 'v1' } }),
+  );
   await h.cache.fetch(url);
   expect(h.events.filter((event) => event.event === 'updated')).toHaveLength(2);
 });
