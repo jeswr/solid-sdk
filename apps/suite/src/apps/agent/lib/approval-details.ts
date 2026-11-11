@@ -1,8 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Mandate } from "@jeswr/agent-mandate";
+import { type Approval, readApprovalClaims } from "@jeswr/agent-mandate/approval";
 import { AGENT, evaluateIntent, solidOdrlEngine } from "@jeswr/agent-mandate/verify";
 import type { ActionProposal, Transmission } from "@jeswr/agent-model";
-import { proposalIntent } from "./mandate-rules";
+import type { AgentClient } from "./client";
+import { actionNames, proposalIntent } from "./mandate-rules";
+import type { ProfileSession } from "./profile";
+import { type DisplayApproval, readApprovals } from "./readers";
+import { createAgentVerifier } from "./verify";
 
 /** Presentation aliases only: signed action names always reach the evaluator unchanged. */
 export function approvalKind(action: string): string {
@@ -65,29 +70,65 @@ export async function approvalExplanation(
   // owner-approval is returned only for a present, valid policy.
   const policy = (mandate as Mandate).withApproval;
   const rules = policy.permissions as NonNullable<typeof policy.permissions>;
-  const matches = await Promise.all(
-    rules.map(async (rule, index) =>
-      (await solidOdrlEngine.evaluate({ ...policy, permissions: [rule] }, intent)).effect ===
-      "permit"
-        ? index + 1
-        : undefined,
-    ),
-  );
-  return {
-    reason,
-    rule: `Ask first · rule ${matches.filter((index) => index !== undefined).join(", ")}`,
-    ruleDetails: JSON.stringify(
-      { policy: policy.id, rules: rules.filter((_, index) => matches.includes(index + 1)) },
-      null,
-      2,
-    ),
-  };
+  try {
+    const matches = (
+      await Promise.all(
+        rules.map(async (rule) =>
+          (await solidOdrlEngine.evaluate({ ...policy, permissions: [rule] }, intent)).effect ===
+          "permit"
+            ? rule
+            : undefined,
+        ),
+      )
+    ).filter((rule) => rule !== undefined);
+    if (matches.length) {
+      const labels = matches.map(
+        (rule) =>
+          Object.entries(actionNames).find(
+            ([action]) => rule.action === `${AGENT}${action}`,
+          )?.[1] ?? "another action",
+      );
+      return {
+        reason,
+        rule: `Asks you first: ${[...new Set(labels)].join(", ")}`,
+        ruleDetails: JSON.stringify({ policy: policy.id, rules: matches }, null, 2),
+      };
+    }
+  } catch {
+    // A rule-level engine failure must not prevent the queue from loading.
+  }
+  return { reason: REASONS.indeterminate, rule: REASONS.indeterminate };
+}
+
+/** Activity-only history: a verified refusal remains a refusal after its validity window. */
+export function readApprovalHistory(client: AgentClient, session: ProfileSession) {
+  const verifier = createAgentVerifier(session);
+  return readApprovals(client, {
+    ...verifier,
+    async verifyApproval(document, claims) {
+      const result = await verifier.verifyApproval(document, claims);
+      if (typeof result === "object" && result.invalid === "expired") {
+        // readApprovals has already parsed these same claims successfully.
+        const approval = (await readApprovalClaims(document, claims.id)) as Approval;
+        if (approval.decision === "deny") {
+          // Reverify the signature and current owner key within the signed validity window.
+          // The actionable queue continues to use the verifier's current-time checks.
+          return createAgentVerifier(
+            session,
+            () => new Date(Date.parse(approval.expires) - 1),
+          ).verifyApproval(document, claims);
+        }
+      }
+      return result;
+    },
+  });
 }
 
 /** Expiry is a view of proposal records, not an audit entry authored by the browser. */
 export function expiredApprovals(
   proposals: readonly ActionProposal[],
   outbox: readonly Transmission[],
+  approvals: readonly DisplayApproval[],
   now: number,
 ): ActionProposal[] {
   return proposals
@@ -95,6 +136,12 @@ export function expiredApprovals(
       (proposal) =>
         ["proposed", "approved", "expired"].includes(proposal.state) &&
         Date.parse(proposal.validUntil) <= now &&
+        !approvals.some(
+          (approval) =>
+            approval.approves === proposal.id &&
+            approval.verification === "verified" &&
+            approval.decision === "deny",
+        ) &&
         !outbox.some((tx) => tx.proposal === proposal.id),
     )
     .sort((a, b) => Date.parse(b.validUntil) - Date.parse(a.validUntil));

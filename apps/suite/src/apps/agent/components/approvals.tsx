@@ -111,15 +111,18 @@ function useQueue(): Query<Row<PendingApproval>[]> {
     if (!("record" in row)) return row;
     const earlier = previous.get(
       `${row.record.proposal.id} ${row.record.proposal.intent.termsDigest}`,
-    )?.reason;
-    const reason = conservativeReason(row.record.reason, earlier ?? row.record.reason);
+    );
+    const reason = conservativeReason(row.record.reason, earlier?.reason ?? row.record.reason);
     return {
       ...row,
       record: {
         ...row.record,
         reason: reason === "Allowed" ? "Ask first" : reason,
         similarAllowed: false,
-        explanation: { reason: "Checking your permissions", rule: "Checking your permissions" },
+        explanation: (evaluated.policy === policy ? earlier?.explanation : undefined) ?? {
+          reason: "Checking your permissions",
+          rule: "Checking your permissions",
+        },
       },
     };
   });
@@ -225,17 +228,22 @@ function ApprovalDetail({
       <div className="agent-row">
         <ApprovalSummary row={row} accounts={accounts} />
       </div>
-      <h2>Exact preview</h2>
-      <pre>
-        {preview.text}
-        <span className="agent-preview-footer">{preview.footer}</span>
-      </pre>
+      <h2>Preview prepared by the agent</h2>
+      <section aria-label="Preview prepared by the agent">
+        <pre>
+          {preview.text}
+          <span className="agent-preview-footer">{preview.footer}</span>
+        </pre>
+      </section>
       <p>Rule requiring approval: {row.explanation?.rule ?? "Checking your permissions"}</p>
       <Link href="/agent/permissions">View permissions</Link>
-      <DecisionState row={row} />
+      <div role="status">
+        <DecisionState row={row} />
+      </div>
       <details>
         <summary>Advanced</summary>
         <p>Terms digest</p>
+        <p>Your approval is tied to this terms digest.</p>
         <code>{row.proposal.intent.termsDigest}</code>
         <Button
           variant="outline"
@@ -254,7 +262,11 @@ function ApprovalDetail({
         {row.explanation?.ruleDetails && (
           <>
             <p>Permission rule</p>
-            <code>{row.explanation.ruleDetails}</code>
+            <section aria-label="Permission rule">
+              <pre>
+                <code>{row.explanation.ruleDetails}</code>
+              </pre>
+            </section>
           </>
         )}
         <p>
@@ -307,11 +319,10 @@ function ApprovalDetail({
 }
 function DecisionState({ row }: { row: PendingApproval }) {
   return (
-    <div role="status">
+    <div>
       {row.state === "approved" && (
         <>
           <p>Approved (waiting for agent)</p>
-          <p>Approved — the agent will send within a minute</p>
           <AgentControl stopped={false} link />
         </>
       )}
@@ -327,7 +338,8 @@ export function ApprovalsScreen({ id }: { id?: string }) {
   const { client, session } = useAgentWorkspace();
   const device = useApprovalDevice();
   const accounts = useAgentQuery(client.paths.accounts, readAccounts);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Map<string, string>>(new Map());
+  const [selectionNotice, setSelectionNotice] = useState("");
   const [optimistic, setOptimistic] = useState<
     Record<string, { digest: string; state: "approved" | "denied" }>
   >({});
@@ -335,6 +347,25 @@ export function ApprovalsScreen({ id }: { id?: string }) {
   const inFlight = useRef(false);
   const [error, setError] = useState(false);
   const [pendingRevocation, setPendingRevocation] = useState<PendingRevocation>();
+  const latestQuery = useRef(query);
+  latestQuery.current = query;
+  useEffect(() => {
+    if (query.status !== "ready") return;
+    const proposals = new Map(
+      loadedRecords(query.data).map((row) => [row.proposal.id, row.proposal]),
+    );
+    const stale = [...selected].filter(
+      ([id, digest]) => proposals.get(id)?.intent.termsDigest !== digest,
+    );
+    if (!stale.length) return;
+    if (stale.some(([id]) => proposals.has(id)))
+      setSelectionNotice("A selected request changed. Please review it and select it again.");
+    setSelected((current) => {
+      const next = new Map(current);
+      for (const [id] of stale) next.delete(id);
+      return next;
+    });
+  }, [query, selected]);
   useEffect(() => {
     if (id || query.status !== "ready") return;
     const stored = tabState("agent.approvals.returnFocus");
@@ -353,7 +384,12 @@ export function ApprovalsScreen({ id }: { id?: string }) {
     handle = requestAnimationFrame(restore);
     return () => cancelAnimationFrame(handle);
   }, [id, query.status]);
-  const decide = (rows: PendingApproval[], decision: "approve" | "deny", similar = false) => {
+  const decide = (
+    rows: PendingApproval[],
+    decision: "approve" | "deny",
+    similar = false,
+    bulk = false,
+  ) => {
     if (inFlight.current) return;
     void device.requireKey(() => {
       if (inFlight.current) return;
@@ -363,6 +399,21 @@ export function ApprovalsScreen({ id }: { id?: string }) {
       const run = async () => {
         for (const row of rows) {
           const proposal = row.proposal;
+          if (bulk) {
+            const current = latestQuery.current;
+            const latest =
+              current.status === "ready"
+                ? loadedRecords(current.data).find(
+                    (candidate) => candidate.proposal.id === proposal.id,
+                  )
+                : undefined;
+            if (
+              !latest ||
+              latest.proposal.intent.termsDigest !== proposal.intent.termsDigest ||
+              !canBulkApprove([latest])
+            )
+              continue;
+          }
           setOptimistic((current) => ({
             ...current,
             [proposal.id]: {
@@ -390,18 +441,28 @@ export function ApprovalsScreen({ id }: { id?: string }) {
                 mandate,
               );
             }
+            if (bulk) {
+              const current = await client.read(proposal.id, "action-proposal");
+              if (current.record.intent.termsDigest !== proposal.intent.termsDigest) {
+                setSelectionNotice(
+                  "A selected request changed. Please review it and select it again.",
+                );
+                continue;
+              }
+            }
             await createAgentSigner(session, client).signApproval(proposal, decision);
           } catch (error) {
+            if (error instanceof PendingRevocation) throw error;
+            throw new Error("Approval couldn't be saved");
+          } finally {
             setOptimistic((current) => {
               const next = { ...current };
               delete next[proposal.id];
               return next;
             });
-            if (error instanceof PendingRevocation) throw error;
-            throw new Error("Approval couldn't be saved");
           }
         }
-        setSelected(new Set());
+        setSelected(new Map());
       };
       void run()
         .catch((error) => {
@@ -416,9 +477,38 @@ export function ApprovalsScreen({ id }: { id?: string }) {
     });
   };
   const own = accounts.status === "ready" ? loadedRecords(accounts.data) : [];
+  const rows =
+    query.status === "ready"
+      ? loadedRecords(query.data).map((row) => {
+          const local = optimistic[row.proposal.id];
+          return busy &&
+            isComplete(query.data) &&
+            local &&
+            local.digest === row.proposal.intent.termsDigest &&
+            row.state === "pending" &&
+            !row.needsNewApproval
+            ? { ...row, state: local.state, approvedAwaitingSend: local.state === "approved" }
+            : row;
+        })
+      : [];
+  const decisionNotice = [
+    ["approved", "approved and waiting for the agent"],
+    ["denied", "denied"],
+    ["sent", "sent"],
+  ]
+    .flatMap(([state, label]) => {
+      const count = rows.filter((row) => row.state === state).length;
+      return count ? [`${count} ${count === 1 ? "request" : "requests"} ${label}.`] : [];
+    })
+    .join(" ");
   const content = (
     <>
       <OfflineBanner status={status} />
+      {!id && (
+        <p role="status" aria-live="polite">
+          {[selectionNotice, decisionNotice].filter(Boolean).join(" ")}
+        </p>
+      )}
       {error && <p role="alert">Couldn't save your decision. Try again.</p>}
       {pendingRevocation && (
         <div role="alert">
@@ -444,19 +534,7 @@ export function ApprovalsScreen({ id }: { id?: string }) {
         </div>
       )}
       <QueryRows query={query} empty="Nothing waiting for you">
-        {(records) => {
-          const rows = records.map((row) => {
-            const local = optimistic[row.proposal.id];
-            return busy &&
-              query.status === "ready" &&
-              isComplete(query.data) &&
-              local &&
-              local.digest === row.proposal.intent.termsDigest &&
-              row.state === "pending" &&
-              !row.needsNewApproval
-              ? { ...row, state: local.state, approvedAwaitingSend: local.state === "approved" }
-              : row;
-          });
+        {() => {
           if (id) {
             const row = rows.find((row) => resourceSlug(row.proposal.id) === id);
             return row ? (
@@ -472,12 +550,14 @@ export function ApprovalsScreen({ id }: { id?: string }) {
               <p>This proposal is no longer waiting for approval.</p>
             );
           }
-          const chosen = rows.filter((row) => selected.has(row.proposal.id));
+          const chosen = rows.filter(
+            (row) => selected.get(row.proposal.id) === row.proposal.intent.termsDigest,
+          );
           return (
             <>
               <Button
                 disabled={busy || !canBulkApprove(chosen)}
-                onClick={() => decide(chosen, "approve")}
+                onClick={() => decide(chosen, "approve", false, true)}
               >
                 Approve all
               </Button>
@@ -487,16 +567,18 @@ export function ApprovalsScreen({ id }: { id?: string }) {
                     <label className="agent-row">
                       <input
                         type="checkbox"
-                        checked={selected.has(row.proposal.id)}
+                        checked={selected.get(row.proposal.id) === row.proposal.intent.termsDigest}
                         disabled={row.state !== "pending" || row.reason === "Never"}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          setSelectionNotice("");
+                          const checked = event.target.checked;
                           setSelected((current) => {
-                            const next = new Set(current);
-                            if (event.target.checked) next.add(row.proposal.id);
+                            const next = new Map(current);
+                            if (checked) next.set(row.proposal.id, row.proposal.intent.termsDigest);
                             else next.delete(row.proposal.id);
                             return next;
-                          })
-                        }
+                          });
+                        }}
                       />
                       Select{" "}
                       {String(row.proposal.intent.parameters.summary ?? row.proposal.intent.action)}

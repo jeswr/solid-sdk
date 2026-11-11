@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Mandate } from "@jeswr/agent-mandate";
 import { defaultMandate } from "@jeswr/agent-mandate/issue";
-import { AGENT } from "@jeswr/agent-mandate/verify";
+import { AGENT, solidOdrlEngine } from "@jeswr/agent-mandate/verify";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   expiredApprovals,
   previewParts,
 } from "../src/apps/agent/lib/approval-details";
+import type { DisplayApproval } from "../src/apps/agent/lib/readers";
 
 const now = new Date("2026-11-01T12:00:00Z");
 const proposal = {
@@ -28,7 +29,10 @@ const mandate = (): Mandate =>
     recipientHashes: [proposal.intent.recipientHash],
     now,
   });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it.each([
   ["SendMessage", "send"],
@@ -82,7 +86,7 @@ describe("verified permission explanations", () => {
     );
     expect(explained).toMatchObject({
       reason: "Your permissions require approval for this action",
-      rule: "Ask first · rule 2",
+      rule: "Asks you first: remember information",
     });
     expect(JSON.parse(explained.ruleDetails as string)).toEqual({
       policy: m.withApproval.id,
@@ -96,7 +100,54 @@ describe("verified permission explanations", () => {
         proposal,
       ),
     ).toMatchObject({
-      rule: expect.stringContaining("Ask first · rule"),
+      rule: "Asks you first: remember information",
+    });
+  });
+  it.each([
+    "throw",
+    "empty",
+  ])("falls back safely when per-rule evaluation is %s", async (failure) => {
+    const base = mandate();
+    const m: Mandate = {
+      ...base,
+      withApproval: {
+        ...base.withApproval,
+        permissions: [
+          { type: "permission", action: `${AGENT}SendMessage` },
+          { type: "permission", action: `${AGENT}Remember` },
+        ],
+      },
+    };
+    const evaluate = solidOdrlEngine.evaluate.bind(solidOdrlEngine);
+    vi.spyOn(solidOdrlEngine, "evaluate").mockImplementation((policy, intent) => {
+      if (policy.id === m.withApproval.id && policy.permissions?.length === 1) {
+        if (failure === "throw") throw new Error("Rule evaluation failed");
+        return { effect: "not-applicable" };
+      }
+      return evaluate(policy, intent);
+    });
+    expect(await approvalExplanation(m, proposal, now)).toEqual({
+      reason: "Your permissions could not confirm this action",
+      rule: "Your permissions could not confirm this action",
+    });
+  });
+  it("uses the shared fallback wording for an action outside the editor", async () => {
+    const m = mandate();
+    const action = "use";
+    expect(
+      await approvalExplanation(
+        {
+          ...m,
+          withApproval: {
+            ...m.withApproval,
+            permissions: [{ type: "permission", action }],
+          },
+        },
+        { ...proposal, intent: { ...proposal.intent, action } },
+        now,
+      ),
+    ).toMatchObject({
+      rule: "Asks you first: another action",
     });
   });
   it("explains absent, expired, future, prohibited, indeterminate, autonomous and unmatched policies", async () => {
@@ -151,7 +202,27 @@ it("moves unresolved expired proposals to Activity, newest expiry first, without
         { ...exampleRecords.transmission, proposal: "urn:outbox" },
         { ...exampleRecords.transmission, proposal: "urn:unrelated" },
       ],
+      [],
       now.getTime(),
     ).map((p) => p.id),
   ).toEqual([expired.id, "urn:approved", older.id]);
+});
+
+it("keeps a verified denial out of expired requests after its approval expires", () => {
+  const expired = { ...proposal, state: "proposed" as const, validUntil: now.toISOString() };
+  const denial: DisplayApproval = {
+    ...exampleRecords.approval,
+    approves: proposal.id,
+    decision: "deny",
+    verification: "verified",
+    expires: now.toISOString(),
+  };
+  const at = now.getTime() + 1;
+  expect(expiredApprovals([expired], [], [denial], at)).toEqual([]);
+  for (const approval of [
+    { ...denial, approves: "urn:another-request" },
+    { ...denial, verification: { invalid: "Invalid signature" } },
+    { ...denial, decision: "approve" as const },
+  ])
+    expect(expiredApprovals([expired], [], [approval], at)).toEqual([expired]);
 });
