@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 
 # @jeswr/solid-chat-interop
 
@@ -49,6 +50,90 @@ preserves message content, author, time, replies, edits, deletion, provenance, a
   at `/shapes/message.shacl.ttl`.
 
 IRI-valued fields from untrusted data are restricted to safe HTTP(S) IRIs on both read and write.
+
+## Generated canonical model
+
+The Message (`as:Note`) and stored Conversation (`as:Collection`) models are generated
+by `@jeswr/federation-codegen` from [codegen/](./codegen/) and interpreted by
+`@jeswr/model-runtime`. The committed `src/generated/` contains the manifest, fixed JS
+shim, declarations, normalized SHACL and input/output hashes. Never edit these files.
+
+The [AS2 facade](./src/as2.ts) keeps the public plain-data types, arbitrary subject
+IRIs, media-type and write-time timestamp defaults, PROV-O nesting, and the co-typed
+task overlay (closed wins over open). `As2MessageDoc` is a minimal public view of the
+generated wrapper; its hand-written field accessors have been removed. ChatWriter
+uses the generated message metadata accessors and [conversation facade](./src/conversation.ts).
+ACL enforcement, redaction, IDs, timestamps, pagination, adapters, JSON-LD loading and
+LongChat reconciliation retain their existing policy.
+
+The profile starts from the social sector's Note/Feed model but preserves this package's
+existing AS2 IRIs. The header in [chat.shapes.ttl](./codegen/chat.shapes.ttl) lists every
+mapping, narrowing, addition and omission; social IRIs do not become read aliases.
+The published [message shape](./shapes/message.shacl.ttl), `/shape` API, and pc: legacy
+namespace migration remain available with their original behavior.
+
+Generator/runtime gaps retained in the facade:
+
+- Closed admission cannot express the advisory `rdf:type` qualified task-state shape
+  (`sh:qualifiedValueShape` / `sh:qualifiedMaxCount`) or conditional `wf:Task`
+  co-typing. Only that property shape is omitted from generation; the published shape
+  still contains it, and the facade keeps the existing closed-wins/default-open policy.
+- The runtime's HTTP guard normalizes URL identities. Chat's existing lexical HTTP(S)
+  filtering and percent-escaping stay in [canonical-iris.ts](./src/canonical-iris.ts),
+  a typed singleton accessor for all eight IRI fields. The generated profile retains
+  their IRI/cardinality/pattern constraints. The facade restores exact guarded object
+  spellings after building and reads them without URL normalization.
+- Required fields cannot have config defaults. The facade computes `published = now`
+  only on write. Foreign incomplete notes still parse through individually guarded
+  generated accessors when strict entity parsing fails; this is a compatibility
+  projection, not a SHACL validation result. Missing/malformed content becomes `""`,
+  media type defaults to `text/plain`, and malformed/missing dates stay absent. The
+  generated entity and published SHACL retain both required-field constraints.
+- The sector feed's `core:hasPart` aggregation is outside this stored conversation
+  projection: messages remain separate resources discovered through the injected pod
+  port. `CanonicalRoom.messages` remains an adapter's plain-data projection.
+
+From the workspace root:
+
+```sh
+export PATH=/opt/node24/bin:$PATH
+pnpm --filter @jeswr/federation-codegen... run build
+pnpm --filter @jeswr/solid-chat-interop run codegen --update-lock
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/solid-chat-interop
+node scripts/check-codegen.mjs
+```
+
+The drift test regenerates every artifact byte for byte, including the lockfile. All
+410 original tests remain unchanged. The build bundles the generated JS and runtime
+into `dist/` with esbuild, so no generated-file copy step is needed. Public declarations
+use a declaration-only wrapper view with no runtime/generated imports; the runtime is
+therefore listed in `mirrorPublish.inlined`. Tests verify this and compile a strict
+consumer, including clearing setters. `dist/` remains uncommitted.
+
+## Exact divergences
+
+These changes from the hand-written AS2 core are pinned in
+[test/compatibility.test.ts](./test/compatibility.test.ts):
+
+- Ambiguous singleton content, media type, dates, task title and all eight IRI fields
+  drop instead of selecting the first value. Content/media type use their existing
+  empty/plain defaults; the rest stay absent. Ambiguous stored identifiers/roles or
+  conversation titles now cause ChatWriter's existing invalid-resource checks to fail.
+- Text reads require `xsd:string`: language-tagged and numeric literals drop instead
+  of returning their lexical spelling. Stored conversation titles/identifiers follow
+  the same rule. Dates require a valid `xsd:dateTime`; `xsd:date` and impossible
+  calendar values drop. Invalid date writes and mistyped body/task-title writes now
+  drop the field instead of throwing.
+- Data-graph subclasses of `as:Note` and `as:Collection` are recognized through the
+  runtime's bounded, cycle-safe class walk.
+- Direct `As2MessageDoc` access now uses the generated guards: writes sanitize text,
+  IRI fields normalize accepted URLs and drop invalid values, and unsafe/relative
+  or non-NamedNode subjects throw. `parseAs2Message` returns `undefined` for an unsafe
+  subject. The high-level build/parse facade keeps chat's lexical escaping policy.
+
+The compatibility suite also pins unchanged full-message Turtle/JSON bytes, arbitrary
+subject fragments, incomplete-note parsing, lexical IRIs, task state precedence,
+published scalar constraint parity, generated SHACL validation, and mirror declarations.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

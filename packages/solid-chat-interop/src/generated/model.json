@@ -1,0 +1,210 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "as": "https://www.w3.org/ns/activitystreams#",
+    "dct": "http://purl.org/dc/terms/",
+    "schema": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "wf": "http://www.w3.org/2005/01/wf/flow#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Conversation",
+      "typeIris": [
+        "https://www.w3.org/ns/activitystreams#Collection"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "identifier",
+          "predicate": "http://purl.org/dc/terms/identifier",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "title",
+          "predicate": "https://www.w3.org/ns/activitystreams#name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Message",
+      "typeIris": [
+        "https://www.w3.org/ns/activitystreams#Note"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "identifier",
+          "predicate": "http://purl.org/dc/terms/identifier",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "replacedBy",
+          "predicate": "http://purl.org/dc/terms/isReplacedBy",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "taskTitle",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "role",
+          "predicate": "http://purl.org/dc/terms/type",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "in": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ],
+          "guards": {}
+        },
+        {
+          "name": "deletedAt",
+          "predicate": "http://schema.org/dateDeleted",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "assignee",
+          "predicate": "http://www.w3.org/2005/01/wf/flow#assignee",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "provAttributedTo",
+          "predicate": "http://www.w3.org/ns/prov#wasAttributedTo",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "provDerivedFrom",
+          "predicate": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "provGeneratedBy",
+          "predicate": "http://www.w3.org/ns/prov#wasGeneratedBy",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "author",
+          "predicate": "https://www.w3.org/ns/activitystreams#attributedTo",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "content",
+          "predicate": "https://www.w3.org/ns/activitystreams#content",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "room",
+          "predicate": "https://www.w3.org/ns/activitystreams#context",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "inReplyTo",
+          "predicate": "https://www.w3.org/ns/activitystreams#inReplyTo",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "mediaType",
+          "predicate": "https://www.w3.org/ns/activitystreams#mediaType",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "published",
+          "predicate": "https://www.w3.org/ns/activitystreams#published",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    }
+  ]
+}

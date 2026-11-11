@@ -2,23 +2,15 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { buildAs2Message, parseAs2Message } from "./as2.js";
+import { As2MessageDoc, buildAs2Message, parseAs2Message } from "./as2.js";
+import { buildConversation, type ConversationMetadata, parseConversation } from "./conversation.js";
 import { safeHttpIri, sanitizeText } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
 import { redactSecrets } from "./redact.js";
-import { AS_COLLECTION, AS_NAME, DCT, RDF_TYPE } from "./vocab.js";
+import { RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
 export interface ChatPodPort {
@@ -67,31 +59,6 @@ export interface ChatListOptions {
   /** Exclusive conversation URL from the previous page. */
   cursor?: string;
   limit?: number;
-}
-
-/** Metadata layered onto canonical AS2 notes using existing Dublin Core terms. */
-class ChatDoc extends TermWrapper {
-  get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string);
-  }
-  get identifier(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${DCT}identifier`, LiteralAs.string);
-  }
-  set identifier(v: string | undefined) {
-    OptionalAs.object(this, `${DCT}identifier`, v, LiteralFrom.string);
-  }
-  get role(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${DCT}type`, LiteralAs.string);
-  }
-  set role(v: string | undefined) {
-    OptionalAs.object(this, `${DCT}type`, v, LiteralFrom.string);
-  }
-  get title(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, AS_NAME, LiteralAs.string);
-  }
-  set title(v: string | undefined) {
-    OptionalAs.object(this, AS_NAME, v, LiteralFrom.string);
-  }
 }
 
 export function chatPortStatus(error: unknown): number | undefined {
@@ -217,23 +184,26 @@ export class ChatWriter {
           room: url,
           ...(message.role === "user" ? { author: this.owner } : {}),
         });
-        const doc = new ChatDoc(subject, store, DataFactory);
+        const doc = new As2MessageDoc(subject, store, DataFactory);
         doc.identifier = id;
         doc.role = message.role;
         return { resource, turtle: await storeToTurtle(store) };
       }),
     );
-    const metadata = new Store();
-    const room = new ChatDoc(`${url}_conversation.ttl#it`, metadata, DataFactory);
-    room.types.add(AS_COLLECTION);
-    room.identifier = conversation.conversationId;
-    room.title = redactSecrets(sanitizeText(conversation.title));
+    const metadata = buildConversation(`${url}_conversation.ttl#it`, {
+      identifier: conversation.conversationId,
+      title: redactSecrets(sanitizeText(conversation.title)),
+    });
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();
-      new ChatDoc(container, containerStore, DataFactory).types.add(
-        "http://www.w3.org/ns/ldp#BasicContainer",
-      );
+      // Container infrastructure is not part of the canonical message model.
+      SetFrom.subjectPredicate(
+        new TermWrapper(container, containerStore, DataFactory),
+        RDF_TYPE,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ).add("http://www.w3.org/ns/ldp#BasicContainer");
       await this.createProtected(container, await storeToTurtle(containerStore));
     }
     await this.createProtected(`${url}_conversation.ttl`, roomTurtle);
@@ -269,16 +239,16 @@ export class ChatWriter {
   ): Promise<ChatConversation & { url: string }> {
     const url = this.conversationUrl(provider, conversationId);
     const metadataUrl = `${url}_conversation.ttl`;
-    const room = new ChatDoc(`${metadataUrl}#it`, await this.dataset(metadataUrl), DataFactory);
+    const room = parseConversation(`${metadataUrl}#it`, await this.dataset(metadataUrl));
     return this.readConversation(provider, conversationId, room);
   }
-  private async readConversation(provider: ChatProvider, conversationId: string, room: ChatDoc) {
+  private async readConversation(
+    provider: ChatProvider,
+    conversationId: string,
+    room: ConversationMetadata | undefined,
+  ) {
     const url = this.conversationUrl(provider, conversationId);
-    if (
-      !room.types.has(AS_COLLECTION) ||
-      room.identifier !== conversationId ||
-      room.title === undefined
-    ) {
+    if (!room || room.identifier !== conversationId) {
       throw new Error("Invalid conversation metadata");
     }
     const messages: (ChatMessage & { id: string })[] = [];
@@ -294,7 +264,7 @@ export class ChatWriter {
       const dataset = await this.dataset(child.url);
       const subject = `${child.url}#it`;
       const canonical = parseAs2Message(subject, dataset);
-      const doc = new ChatDoc(subject, dataset, DataFactory);
+      const doc = new As2MessageDoc(subject, dataset, DataFactory);
       const id = doc.identifier;
       const role = doc.role as ChatRole;
       if (
@@ -348,7 +318,7 @@ export class ChatWriter {
       const conversation = await this.readConversation(
         candidate.provider,
         candidate.id,
-        new ChatDoc(`${metadataUrl}#it`, metadata, DataFactory),
+        parseConversation(`${metadataUrl}#it`, metadata),
       );
       const updatedAt = conversation.messages.at(-1)?.createdAt;
       if (since !== undefined && (updatedAt === undefined || updatedAt <= since)) continue;
