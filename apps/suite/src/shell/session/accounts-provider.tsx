@@ -30,6 +30,8 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
+  /** Checks the live session, including changes React has not committed yet. */
+  isActiveAccount(id: string): boolean;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
   /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
@@ -63,6 +65,10 @@ export function AccountsProvider({
   const sessions = useRef(new Map<string, SessionBackend>());
   const generation = useRef(0);
   const signInAttempt = useRef(0);
+  const isActiveAccount = useCallback(
+    (id: string) => current.current.activeId === id && currentStatus.current === "ready",
+    [],
+  );
   const changeStatus = useCallback((value: SessionStatus) => {
     currentStatus.current = value;
     setStatus(value);
@@ -221,6 +227,7 @@ export function AccountsProvider({
         status,
         active,
         accounts: state.accounts,
+        isActiveAccount,
         signIn,
         signInDemo,
         signInWith,

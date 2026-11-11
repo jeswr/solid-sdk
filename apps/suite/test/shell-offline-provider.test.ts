@@ -15,6 +15,7 @@ const fixture = vi.hoisted(() => ({
   account: {
     active: { id: "one", kind: "demo", storageUrl: "https://example.org/" },
     status: "ready",
+    isActiveAccount: (id: string): boolean => fixture.account.active.id === id,
   },
   settings: { preferences: { offline: true, offlineHintSeen: true }, ready: true, update: vi.fn() },
   pathname: "/drive/my",
