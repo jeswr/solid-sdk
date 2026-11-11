@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
 
 const sample = fileURLToPath(new URL("../../public/samples/sample-mailbox.mbox", import.meta.url));
 test.use({ locale: "en" });
@@ -27,6 +28,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__mail-test-reset");
+  await seedDemoSession(page);
 });
 async function capture(page: Page, info: TestInfo, view: string) {
   await page.evaluate(() => document.fonts.ready);
