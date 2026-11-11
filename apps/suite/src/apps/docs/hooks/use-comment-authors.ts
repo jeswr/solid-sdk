@@ -6,6 +6,8 @@ import type { PodSession } from "@/lib/session/types";
 import { loadProfileName } from "../../chat/lib/model/extras";
 import type { CommentThread } from "../lib/model/comments";
 
+const AUTHOR_CACHE_LIMIT = 128;
+
 function authorFallback(webId: string): string {
   try {
     return new URL(webId).host || "Unknown author";
@@ -15,14 +17,16 @@ function authorFallback(webId: string): string {
 }
 
 export function useCommentAuthors(session: PodSession, threads: CommentThread[]) {
-  // Keep completed and in-flight lookups across refreshes and sidebar reopening,
-  // but discard them when the session changes (including an account switch).
+  // Keep a bounded LRU of completed and in-flight lookups across refreshes and
+  // sidebar reopening; discard it on session changes (including account switches).
   const lookup = useMemo(() => {
     const cache = new Map<string, Promise<string>>();
     const publicFetch = session.mode === "demo" ? globalThis.fetch : session.publicFetch;
     return (webId: string) => {
       let pending = cache.get(webId);
-      if (!pending) {
+      if (pending) {
+        cache.delete(webId);
+      } else {
         const fallback = authorFallback(webId);
         pending = loadProfileName(
           session.fetch,
@@ -31,7 +35,11 @@ export function useCommentAuthors(session: PodSession, threads: CommentThread[])
           webId,
           fallback,
         ).catch(() => fallback);
-        cache.set(webId, pending);
+      }
+      cache.set(webId, pending);
+      if (cache.size > AUTHOR_CACHE_LIMIT) {
+        const oldest = cache.keys().next().value;
+        if (oldest !== undefined) cache.delete(oldest);
       }
       return pending;
     };
@@ -48,13 +56,24 @@ export function useCommentAuthors(session: PodSession, threads: CommentThread[])
         ...replies.map((reply) => reply.creator),
       ]),
     );
+    setResolved((previous) => ({
+      lookup,
+      names: new Map(
+        previous?.lookup === lookup
+          ? [...previous.names].filter(([webId]) => authors.has(webId))
+          : [],
+      ),
+    }));
     for (const webId of authors) {
       void lookup(webId).then((name) => {
         if (!live) return;
-        setResolved((previous) => ({
-          lookup,
-          names: new Map(previous?.lookup === lookup ? previous.names : []).set(webId, name),
-        }));
+        setResolved((previous) => {
+          if (previous?.lookup === lookup && previous.names.get(webId) === name) return previous;
+          return {
+            lookup,
+            names: new Map(previous?.lookup === lookup ? previous.names : []).set(webId, name),
+          };
+        });
       });
     }
     return () => {

@@ -15,6 +15,9 @@ import type { SolidPodSession } from "../src/lib/session/types";
 
 const storageUrl = "https://pod.example/alice/";
 const webId = `${storageUrl}profile/card#me`;
+function churnAuthor(index: number): string {
+  return `${storageUrl}profile/author-${index}#me`;
+}
 function threadsFor(creator = webId): CommentThread[] {
   const root = {
     url: `${storageUrl}docs/plan/comments/one.ttl`,
@@ -89,6 +92,69 @@ it("uses the host while loading and caches in-flight and completed lookups acros
   rerender({ threads: [] });
   rerender({ threads: threadsFor() });
   await waitFor(() => expect(result.current(webId)).toBe("Alice"));
+  expect(fetch).toHaveBeenCalledOnce();
+});
+
+it("bounds cached lookups and drops resolved names as 500 authors cycle through a document", async () => {
+  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const creator = new URL(input instanceof Request ? input.url : input);
+    creator.hash = "me";
+    return profile(creator.href, creator.pathname);
+  });
+  const pod = session(fetch);
+  const authors = Array.from({ length: 500 }, (_, index) => churnAuthor(index));
+  const { result, rerender } = renderHook(({ threads }) => useCommentAuthors(pod, threads), {
+    initialProps: { threads: [] as CommentThread[] },
+  });
+  for (const creator of authors) {
+    await act(async () => rerender({ threads: threadsFor(creator) }));
+    expect(result.current(creator)).toBe(new URL(creator).pathname);
+  }
+  rerender({ threads: [] });
+  for (const creator of authors) expect(result.current(creator)).toBe("pod.example");
+  expect(fetch).toHaveBeenCalledTimes(500);
+
+  // The recent lookup survives a sidebar refresh; the oldest must be fetched again.
+  const newest = churnAuthor(499);
+  await act(async () => rerender({ threads: threadsFor(newest) }));
+  expect(result.current(newest)).toBe(new URL(newest).pathname);
+  expect(fetch).toHaveBeenCalledTimes(500);
+  const oldest = churnAuthor(0);
+  await act(async () => rerender({ threads: threadsFor(oldest) }));
+  expect(result.current(oldest)).toBe(new URL(oldest).pathname);
+  expect(fetch).toHaveBeenCalledTimes(501);
+});
+
+it("evicts the least recently used author rather than a recently reused lookup", async () => {
+  const fetch = vi.fn().mockRejectedValue(new Error("Offline"));
+  const pod = session(fetch);
+  const authors = Array.from({ length: 129 }, (_, index) => churnAuthor(index));
+  const { rerender } = renderHook(({ threads }) => useCommentAuthors(pod, threads), {
+    initialProps: { threads: [] as CommentThread[] },
+  });
+  for (const creator of authors.slice(0, 128)) {
+    await act(async () => rerender({ threads: threadsFor(creator) }));
+  }
+  await act(async () => rerender({ threads: threadsFor(churnAuthor(0)) }));
+  await act(async () => rerender({ threads: threadsFor(churnAuthor(128)) }));
+  await act(async () => rerender({ threads: threadsFor(churnAuthor(0)) }));
+  expect(fetch).toHaveBeenCalledTimes(129);
+  await act(async () => rerender({ threads: threadsFor(churnAuthor(1)) }));
+  expect(fetch).toHaveBeenCalledTimes(130);
+});
+
+it("does not restore a removed author's name when their pending lookup finishes", async () => {
+  const pending = deferred();
+  const fetch = vi.fn().mockReturnValue(pending.promise);
+  const pod = session(fetch);
+  const { result, rerender } = renderHook(({ threads }) => useCommentAuthors(pod, threads), {
+    initialProps: { threads: threadsFor() },
+  });
+  rerender({ threads: [] });
+  await act(async () => pending.resolve(await profile(webId, "Alice")));
+  expect(result.current(webId)).toBe("pod.example");
+  await act(async () => rerender({ threads: threadsFor() }));
+  expect(result.current(webId)).toBe("Alice");
   expect(fetch).toHaveBeenCalledOnce();
 });
 
