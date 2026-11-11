@@ -1,5 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { serialize } from "@jeswr/rdf-serialize";
+import {
+  LiteralFrom,
+  NamedNodeAs,
+  NamedNodeFrom,
+  OptionalAs,
+  SetFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, test, vi } from "vitest";
 import { createInboxReader } from "./client.js";
@@ -251,4 +260,95 @@ test("auxiliary resources and LDP containers never become notifications through 
     expect(parseInboxNotification(url, ds)).toBeUndefined();
   }
   expect(parseInboxNotification(`${inbox}folder/`, new Store())).toBeUndefined();
+});
+
+test.each([
+  "document",
+  "fragment",
+  "blank",
+  "foreign",
+])("unrelated self-describing RDF is not a notification (%s subject)", async (kind) => {
+  const url = `${inbox}n`;
+  const subject =
+    kind === "blank"
+      ? DataFactory.blankNode()
+      : DataFactory.namedNode(
+          kind === "document"
+            ? url
+            : kind === "fragment"
+              ? `${url}#it`
+              : "https://other.example/doc",
+        );
+  const doc = new TermWrapper(subject, new Store(), DataFactory);
+  OptionalAs.object(doc, "http://purl.org/dc/terms/title", "Unrelated", LiteralFrom.string);
+  SetFrom.subjectPredicate(
+    doc,
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  ).add("https://other.example/Type");
+  const dataset = await parseRdf(await serialize([...doc.dataset]), "text/turtle", {
+    baseIRI: url,
+  });
+  expect(findActivitySubject(url, dataset)).toBeUndefined();
+  expect(parseInboxNotification(url, dataset)).toBeUndefined();
+});
+
+test.each([
+  "actor",
+  "object",
+  "summary",
+  "content",
+  "published",
+  "name",
+])("unknown-type activities retain recognizable as:%s metadata on named and blank subjects", async (property) => {
+  const url = `${inbox}n`;
+  for (const subject of [
+    DataFactory.namedNode(url),
+    DataFactory.namedNode(`${url}#it`),
+    DataFactory.blankNode(),
+  ]) {
+    const doc = new TermWrapper(subject, new Store(), DataFactory);
+    SetFrom.subjectPredicate(
+      doc,
+      "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    ).add("https://other.example/UnknownActivity");
+    const predicate = `https://www.w3.org/ns/activitystreams#${property}`;
+    if (property === "actor" || property === "object")
+      OptionalAs.object(doc, predicate, "https://alice.example/#me", NamedNodeFrom.string);
+    else
+      OptionalAs.object(
+        doc,
+        predicate,
+        property === "published" ? "2026-11-11T12:00:00Z" : "Metadata",
+        LiteralFrom.string,
+      );
+    const dataset = await parseRdf(await serialize([...doc.dataset]), "text/turtle", {
+      baseIRI: url,
+    });
+    expect(parseInboxNotification(url, dataset)).toMatchObject({ url, type: "Notification" });
+  }
+});
+
+test.each([
+  "https://www.w3.org/ns/activitystreams#UnknownActivity",
+  "http://www.w3.org/ns/ldp#Resource",
+])("recognizes notification vocabulary types without metadata: %s", async (type) => {
+  const url = `${inbox}n`;
+  const doc = new TermWrapper(`${url}#it`, new Store(), DataFactory);
+  SetFrom.subjectPredicate(
+    doc,
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  ).add(type);
+  const dataset = await parseRdf(await serialize([...doc.dataset]), "text/turtle", {
+    baseIRI: url,
+  });
+  expect(parseInboxNotification(url, dataset)).toEqual({
+    url,
+    type: type.endsWith("#Resource") ? "Notification" : "UnknownActivity",
+  });
 });

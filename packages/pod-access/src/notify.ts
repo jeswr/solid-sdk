@@ -1,16 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralFrom, NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import {
   createInboxReader as createClientInboxReader,
@@ -107,7 +98,7 @@ export function notificationKind(
   return "other";
 }
 
-/** A notification with the owner's sidecar-derived read state. */
+/** A notification with advisory, filename-derived read state; never use it for authorization. */
 export interface ReadableNotification extends InboxNotification {
   read: boolean;
 }
@@ -129,15 +120,6 @@ export interface InboxManagerOptions extends InboxReaderOptions {
 const AS = "https://www.w3.org/ns/activitystreams#";
 
 class ReadMarker extends TermWrapper {
-  get read(): boolean | undefined {
-    return OptionalFrom.subjectPredicate(this, `${AS}read`, LiteralAs.boolean);
-  }
-  get notification(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${AS}object`, NamedNodeAs.string);
-  }
-  get creator(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${AS}actor`, NamedNodeAs.string);
-  }
   mark(notificationUrl: string, webId: string): void {
     OptionalAs.object(this, `${AS}actor`, webId, NamedNodeFrom.string);
     OptionalAs.object(this, `${AS}read`, true, LiteralFrom.boolean);
@@ -200,27 +182,11 @@ export async function createInboxManager(
   async function listPage() {
     const page = await reader.listPage(inboxUrl);
     const members = new Set(page.members);
-    const notifications = page.notifications
-      .slice(0, maxItems)
-      .map((item) => ({ ...item, read: false }));
-    const remaining = notifications.values();
-    await Promise.all(
-      Array.from({ length: Math.min(6, notifications.length) }, async () => {
-        for (const item of remaining) {
-          const marker = `${item.url}${READ_SUFFIX}`;
-          if (!members.has(marker)) continue;
-          try {
-            const { dataset } = await fetchRdf(marker, { fetch: fetcher });
-            const doc = new ReadMarker(`${marker}#it`, dataset, DataFactory);
-            item.read = doc.read === true && doc.notification === item.url && doc.creator === webId;
-          } catch {
-            // Unreadable, malformed or sender-authored markers cannot establish read state.
-          }
-        }
-      }),
-    );
     return {
-      notifications,
+      // Append-only senders can create these names too: read state is advisory.
+      notifications: page.notifications
+        .slice(0, maxItems)
+        .map((item) => ({ ...item, read: members.has(`${item.url}${READ_SUFFIX}`) })),
       truncated: page.truncated || page.notifications.length > maxItems,
     };
   }

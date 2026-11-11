@@ -23,9 +23,6 @@
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
   },
-  "apps/issues/src/lib/announce.ts": {
-    "rdf-factory": 11
-  },
   "apps/issues/src/lib/testing/fake-pod.ts": {
     "rdf-literal": 2
   },

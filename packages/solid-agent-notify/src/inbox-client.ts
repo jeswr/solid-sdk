@@ -111,10 +111,9 @@ export function createInboxReader(options: InboxReaderOptions): InboxReader {
           try {
             const { dataset } = await fetchRdf(member, { fetch: fetcher, signal });
             checkAbort(signal);
-            if (isInboxContainer(member, dataset)) continue;
             const item = parseInboxNotification(member, dataset);
             if (item) items.push(item);
-            else if (options.includeUnknownActivities)
+            else if (options.includeUnknownActivities && !isInboxContainer(member, dataset))
               items.push({ url: member, type: "Notification" });
           } catch {
             checkAbort(signal);

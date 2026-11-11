@@ -215,8 +215,9 @@ Activities support `Announce`, `Offer`, `Accept`, `Reject`, `Create`, `Invite` a
 `actor` is required, with optional `object`, `target`, `summary` and `content`.
 The client binds `actor` to the authenticated `webId` supplied at construction and refuses
 mismatches as `invalid-actor`. It builds a typed RDF/JS dataset and serializes with n3.Writer
-as `text/turtle`, using a blank activity subject. HTTP 415 retries once with context-free
-`application/ld+json` serialized from the same RDF dataset. Non-HTTPS optional object/target
+as `text/turtle`, using the named `<#it>` activity subject so receivers can reference it
+relative to the stored notification URL. HTTP 415 retries once with context-free
+`application/ld+json` serialized from the same RDF dataset, retaining `@id: "#it"`. Non-HTTPS optional object/target
 links are omitted. Issue drafts include PROV-O attribution and generation time.
 Delivery failures resolve as values: `no-inbox`, `lws-no-ldn`, `invalid-target`,
 `profile-unreadable`, `forbidden` (inbox 401/403), or `network`. HTTP failures retain `status`.
@@ -252,7 +253,10 @@ is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbo
 null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
 newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
 and optional `actor`, `object`, `target`, `summary`, `content`, `name`, `published` (ISO string).
-Legacy names and valid untyped publication dates are retained. `includeUnknownActivities: true`
+The parser requires an ActivityStreams property (including actor, object, summary, content,
+published or legacy name) or an ActivityStreams/LDN type. Unrelated self-describing RDF is
+skipped; unknown types with recognizable properties remain readable, including blank-node
+activities. Legacy names and valid untyped publication dates are retained. `includeUnknownActivities: true`
 keeps even empty readable RDF as unknown notifications (Issues opts in); the fallback label
 does not assert an ActivityStreams type IRI. `listPage(inboxUrl, { signal? })`
 returns `{ notifications, members, truncated }`: `members` includes all eligible direct children read before the byte ceiling,
@@ -286,12 +290,12 @@ if (inbox) {
 }
 ```
 
-Read state uses exactly named same-container `<notification>.read.ttl` sidecars. The manager
-fetches sidecars only for displayed notifications (at most six requests active) and requires
-the expected `#it` subject, `as:read true`, exact notification `as:object`, and owner WebID
-`as:actor`. Sender activities, malformed/unreadable markers, and encoded filename aliases
-cannot establish read state. Sidecars do not consume the notification fetch budget.
-Legacy markers without the owner actor remain unread until `markRead` rewrites them.
+Read state is advisory: a listed, exactly named same-container `<notification>.read.ttl`
+sidecar marks its notification read, whatever the sidecar contains. Contents are not fetched;
+legacy markers without an actor keep working. A sender with append access can create the
+sidecar for its own notification, including one claiming the public owner WebID as actor,
+and make that notification appear read. Read state must never gate security decisions.
+Encoded filename aliases do not match. Sidecars do not consume the notification fetch budget.
 Names containing a literal percent sign remain ordinary notifications.
 The manager fetches up to `MAX_INBOX_ITEMS`, sorts newest first, then applies its optional
 display `maxItems` (default the package maximum). `listPage()` returns notifications and

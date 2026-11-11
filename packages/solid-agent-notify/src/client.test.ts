@@ -62,6 +62,10 @@ test.each([
   expect(init?.method).toBe("POST");
   expect(init?.redirect).toBe("manual");
   expect(new Headers(init?.headers).get("content-type")).toBe("text/turtle");
+  const dataset = await parseRdf(String(init?.body), "text/turtle", { baseIRI: `${inbox}n` });
+  expect(dataset.size).toBeGreaterThan(0);
+  expect([...dataset].every((q) => q.subject.termType === "NamedNode")).toBe(true);
+  expect([...dataset].every((q) => q.subject.value === `${inbox}n#it`)).toBe(true);
   expect(await sent(init?.body)).toEqual({
     url: `${inbox}n`,
     ...activity,
@@ -444,7 +448,7 @@ test("discovery policy caches cannot promote development or DNS-less results to 
 
 test.each([
   201, 415, 403,
-])("415 retries once with the exact dataset as JSON-LD (retry status %s)", async (status) => {
+])("415 retries once with the named <#it> dataset as JSON-LD (retry status %s)", async (status) => {
   const fetch = transport();
   let posts = 0;
   fetch.mockImplementation(async (_url, init) => {
@@ -468,6 +472,7 @@ test.each([
   const turtle = fetch.mock.calls[1][1];
   const jsonld = fetch.mock.calls[2][1];
   expect(new Headers(jsonld?.headers).get("content-type")).toBe("application/ld+json");
+  expect(JSON.parse(String(jsonld?.body))[0]["@id"]).toBe("#it");
   const first = await parseRdf(String(turtle?.body), "text/turtle", { baseIRI: `${inbox}n` });
   const second = await parseRdf(String(jsonld?.body), "application/ld+json", {
     baseIRI: `${inbox}n`,
@@ -475,6 +480,8 @@ test.each([
   const values = (ds: typeof first) =>
     [...ds]
       .map((q) => [
+        q.subject.termType,
+        q.subject.value,
         q.predicate.value,
         q.object.termType,
         q.object.value,
@@ -483,5 +490,9 @@ test.each([
       ])
       .sort();
   expect(values(second)).toEqual(values(first));
-  expect([...second].every((q) => q.subject.termType === "BlankNode")).toBe(true);
+  for (const ds of [first, second]) {
+    expect(ds.size).toBeGreaterThan(0);
+    expect([...ds].every((q) => q.subject.termType === "NamedNode")).toBe(true);
+    expect([...ds].every((q) => q.subject.value === `${inbox}n#it`)).toBe(true);
+  }
 });

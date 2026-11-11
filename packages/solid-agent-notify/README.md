@@ -36,12 +36,13 @@ DNS-pinning path, which requires Node ≥ 22.19.0.)
 `solid-agent-notify/client` exposes `createNotifyClient({ webId, fetch, clock?, recipientProtocol?,
 pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
-ten minutes per transport/clock scope, and POSTs a typed RDF/JS ActivityStreams dataset serialized by n3.Writer as Turtle (`text/turtle`) with a blank activity subject through the caller's fetch.
+ten minutes per transport/clock scope, and POSTs a typed RDF/JS ActivityStreams dataset serialized by n3.Writer as Turtle (`text/turtle`) with the named `<#it>` activity subject through the caller's fetch.
 Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'|'Invite'|'Update'`, `actor`,
 and optional `object`, `target`, `summary` and `content`; the POSTed body also carries `published` (the send time from `clock`, default
 `Date.now`, as an ISO string) so readers can date and order items. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
 On HTTP 415, the client retries once with `application/ld+json`, serialized from the same
-RDF dataset by the existing rdf-serialize dependency; no remote contexts are emitted. A
+RDF dataset by the existing rdf-serialize dependency, retaining `@id: "#it"` so receivers can
+reference the activity relative to the stored notification URL; no remote contexts are emitted. A
 second 415 is returned with its status.
 The session `webId` binds the actor; mismatches return `invalid-actor`. Non-HTTPS optional
 object/target links are omitted. Reasons are `no-inbox`, `forbidden` (inbox 401/403),
@@ -88,7 +89,10 @@ Discovery failures return null; transient failures are retried. The cache holds 
 `summary`, `content`, `name`, `published`), newest first, undated last, with URL tie ordering. It reads
 at most `maxItems` direct children in listing order (default 50, a non-negative safe integer up to exported `MAX_INBOX_ITEMS` = 500),
 with at most six member requests active. Cross-origin, outside-container, nested, query,
-fragment, credentialed and encoded-delimiter members are skipped. Unreadable members are skipped; unknown activities retain a display fallback.
+fragment, credentialed and encoded-delimiter members are skipped. Unreadable members are skipped.
+A notification requires an ActivityStreams property (such as actor, object, summary, content,
+published or legacy name) or an ActivityStreams/LDN type; unrelated self-describing RDF is
+skipped. Unknown-type activities with recognizable properties retain a display fallback.
 404 containers and unparseable listings return `[]`. 401/403 and other container transport/HTTP
 failures reject. Cancellation rejects with `AbortError`, even for a custom abort reason, and
 starts no further requests. Reads use the same bounded `clientFetch` as delivery: HTTPS only,

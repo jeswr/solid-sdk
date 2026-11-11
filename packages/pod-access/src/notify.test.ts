@@ -74,7 +74,9 @@ test("wraps the real sender and delivers the byte-stable assignment with the cal
   const ds = await parseRdf(String(fetch.mock.calls[1]?.[1]?.body), "text/turtle", {
     baseIRI: `${inbox}n`,
   });
-  expect([...ds].every((q) => q.subject.termType === "BlankNode")).toBe(true);
+  expect([...ds].map((q) => [q.subject.termType, q.subject.value])).toEqual(
+    [...ds].map(() => ["NamedNode", `${inbox}n#it`]),
+  );
 });
 
 test("wraps inbox discovery and reading, and classifies each real builder round-trip", async () => {
@@ -187,7 +189,11 @@ test("issue announcements preserve Issues' recipient target and summary as plain
 const owner = "https://8.8.8.8/profile#me";
 const ownInbox = "https://8.8.8.8/inbox/";
 const item = `${ownInbox}n`;
-async function markerBody(notification: string, actor = owner, read = true): Promise<string> {
+async function markerBody(
+  notification: string,
+  actor: string | null = owner,
+  read = true,
+): Promise<string> {
   const { OptionalAs, LiteralFrom, NamedNodeFrom, TermWrapper } = await import("@rdfjs/wrapper");
   const { Store, DataFactory } = await import("n3");
   const { serialize } = await import("@jeswr/rdf-serialize");
@@ -195,7 +201,7 @@ async function markerBody(notification: string, actor = owner, read = true): Pro
   OptionalAs.object(
     doc,
     "https://www.w3.org/ns/activitystreams#actor",
-    actor,
+    actor ?? undefined,
     NamedNodeFrom.string,
   );
   OptionalAs.object(doc, "https://www.w3.org/ns/activitystreams#read", read, LiteralFrom.boolean);
@@ -249,8 +255,8 @@ test("discovers only an owner's scoped inbox; missing, foreign and query inboxes
   }
 });
 
-test("reads verified marker content from the listing, filters sidecars, and retains unread notifications", async () => {
-  const { box } = await manager(async (url) => {
+test("reads marker filenames from the listing, filters sidecars, and retains unread notifications", async () => {
+  const { box, fetch } = await manager(async (url) => {
     if (url === `${item}.read.ttl`) return rdf(await markerBody(item));
     if (url === ownInbox)
       return rdf(
@@ -263,6 +269,7 @@ test("reads verified marker content from the listing, filters sidecars, and reta
     { url: item, type: "Announce", read: true },
     { url: `${ownInbox}unread`, type: "Announce", read: false },
   ]);
+  expect(fetch.mock.calls.map(([url]) => url)).not.toContain(`${item}.read.ttl`);
 });
 
 test.each([
@@ -431,7 +438,7 @@ test("manager reads beyond 50 notifications, ignores sidecars in its budget and 
   expect(page.notifications[0].url).toBe(`${ownInbox}59`);
   expect(page.notifications.every((item) => item.read)).toBe(true);
   expect(page.truncated).toBe(false);
-  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith(".read.ttl"))).toHaveLength(60);
+  expect(fetch.mock.calls.filter(([url]) => String(url).endsWith(".read.ttl"))).toHaveLength(0);
   const limited = await createInboxManager({
     fetch,
     webId: owner,
@@ -460,34 +467,43 @@ test.each([
   expect(fetch).not.toHaveBeenCalled();
 });
 
-test("a sender's reserved Slug cannot mark a notification read; malformed or mismatched markers fail closed", async () => {
-  let marker = await markerBody(item, "https://sender.example/#me");
-  const { box } = await manager((url) => {
-    if (url === ownInbox)
-      return rdf(
-        `<${ownInbox}> <http://www.w3.org/ns/ldp#contains> <${item}>, <${item}.read.ttl>.`,
-      );
+test("advisory read state accepts a sender's forged owner-actor marker and ignores marker content", async () => {
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } = await import("@rdfjs/wrapper");
+  const { DataFactory, Store } = await import("n3");
+  const listing = new TermWrapper(ownInbox, new Store(), DataFactory);
+  const members = SetFrom.subjectPredicate(
+    listing,
+    "http://www.w3.org/ns/ldp#contains",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  );
+  members.add(item);
+  members.add(`${item}.read.ttl`);
+  const listingBody = await serialize([...listing.dataset]);
+  let marker = await markerBody(item, owner);
+  const { box, fetch } = await manager((url) => {
+    if (url === ownInbox) return rdf(listingBody);
     if (url === `${item}.read.ttl`) return rdf(marker);
     return rdf("<#it> a <https://www.w3.org/ns/activitystreams#Announce>.");
   });
   expect.assert(box);
   for (const body of [
     marker,
+    await markerBody(item, "https://sender.example/#me"),
+    await markerBody(item, null),
     "",
     "broken { RDF",
     await markerBody(item, owner, false),
     await markerBody(`${ownInbox}other`),
-    '<#it> <https://www.w3.org/ns/activitystreams#read> "invalid".',
-    "<#it> <https://www.w3.org/ns/activitystreams#read> true; <https://www.w3.org/ns/activitystreams#object> <other>.",
   ]) {
     marker = body;
-    expect((await box.list())[0].read).toBe(false);
+    expect((await box.list())[0].read).toBe(true);
   }
-  marker = await markerBody(item);
-  expect((await box.list())[0].read).toBe(true);
+  expect(fetch.mock.calls.map(([url]) => url)).not.toContain(`${item}.read.ttl`);
 });
 
-test("unreadable markers and encoded marker aliases cannot establish read state", async () => {
+test("listed markers establish advisory read state even when unreadable; encoded aliases do not match", async () => {
   for (const markerUrl of [`${item}.read.ttl`, `${item}.read%2Ettl`]) {
     const { box } = await manager((url) => {
       if (url === ownInbox)
@@ -495,7 +511,7 @@ test("unreadable markers and encoded marker aliases cannot establish read state"
       if (url === markerUrl) return new Response(null, { status: 403 });
       return rdf("<#it> a <https://www.w3.org/ns/activitystreams#Announce>.");
     });
-    expect((await box.list())[0].read).toBe(false);
+    expect((await box.list())[0].read).toBe(markerUrl === `${item}.read.ttl`);
   }
 });
 

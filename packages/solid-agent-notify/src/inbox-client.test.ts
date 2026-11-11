@@ -156,7 +156,6 @@ test("skips unreadable, malformed and non-activity members", async () => {
     .mockResolvedValueOnce(turtle('<> <http://purl.org/dc/terms/title> "No activity".'))
     .mockRejectedValueOnce(new Error("offline"));
   expect(await createInboxReader({ fetch }).list(inbox)).toEqual([
-    { url: `${inbox}not-activity`, type: "Notification" },
     { url: `${inbox}ok`, type: "Announce", summary: "hello" },
   ]);
 });

@@ -140,7 +140,9 @@ container failures reject. Aborts reject with AbortError and start no further re
 `truncated` (whether the child-fetch ceiling was exceeded), retaining limit warnings even
 when fetched notifications are unreadable. Activities can also carry `content`, an optional
 `object`, and the existing Pod Manager `Invite`/`Update` verbs. Legacy `as:name` and valid
-untyped publication dates remain readable. `createNotifyFetch(options)` exposes the same
+untyped publication dates remain readable. Require an ActivityStreams property (including
+legacy `as:name`) or an `as:`/`ldp:` type; unrelated self-describing RDF is skipped, while
+unknown-type activities with recognizable properties remain readable. `createNotifyFetch(options)` exposes the same
 guarded transport for foreign resources linked by notifications; it rejects a changed final
 response URL if the caller transport ignored manual redirects.
 
@@ -148,10 +150,12 @@ response URL if the caller transport ignored manual redirects.
 discovers the owner's inbox and returns null unless it is inside a trusted active storage
 root (strictly below it) and has no query. Roots come from the authenticated session, never notification RDF.
 The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
-`read` only after fetching the exactly named `<notification>.read.ttl` sidecar and checking
-its `#it` subject, `as:read true`, exact notification object and owner actor. It hides reserved
-sidecars while preserving ordinary names containing `%`. Unreadable/malformed/sender markers
-leave notifications unread. Fetch at most six sidecars concurrently, only for displayed items. Direct children only: reject foreign origins, nesting, credentials,
+`read` when the listing contains an exactly named `<notification>.read.ttl` sidecar, whatever
+its content; never fetch marker contents. Legacy markers without an actor keep working.
+Read state in an append-only inbox is advisory: a sender can create its own sidecar, even
+claiming the public owner WebID as actor, and make its own notification appear read.
+Read state must never gate security decisions. Hide reserved sidecars while preserving
+ordinary names containing `%`; encoded filename aliases do not match. Direct children only: reject foreign origins, nesting, credentials,
 queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and notification DELETE are unconditional and idempotent; no HEAD or ETag is
 required. Only read-modify-write operations require strong ETag preconditions. Missing
 resources dismiss idempotently and sidecar cleanup is best effort. The manager fetches up to
@@ -162,8 +166,9 @@ Listing 401/403 errors must propagate to app error states. `includeUnknownActivi
 retains even empty readable RDF as unknown notifications; Issues opts in and exposes no
 invented ActivityStreams type IRI.
 
-Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with a blank activity subject.
-HTTP 415 retries once with JSON-LD serialized from that same dataset.
+Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with the named `<#it>` activity
+subject so receivers can reference it relative to the stored notification URL.
+HTTP 415 retries once with JSON-LD serialized from that same dataset, retaining `@id: "#it"`.
 Read activity subjects as RDF/JS terms, including blank nodes. Issue drafts add PROV-O
 attribution and generation time. Optional non-HTTPS object/target links are omitted.
 Delivery results distinguish invalid targets, unreadable profiles, network failures and real

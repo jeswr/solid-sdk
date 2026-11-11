@@ -77,18 +77,14 @@ export function createNotifyClient(options: NotifyOptions): Notify {
       if (!VERBS.has(activity.type)) throw new TypeError("Unsupported activity type");
       if (activity.actor !== webId) return { delivered: false, inbox, reason: "invalid-actor" };
       httpsIri(webId, options.devLoopback);
-      // A blank subject preserves the exact dataset across Turtle and JSON-LD;
-      // its identity does not depend on a receiver-assigned resource URL.
-      const dataset = buildActivity(
-        {
-          ...activity,
-          actor: webId,
-          object: optionalHttps(activity.object, options.devLoopback),
-          target: optionalHttps(activity.target, options.devLoopback),
-          published: new Date(clock()),
-        },
-        DataFactory.blankNode("it"),
-      );
+      // Both formats name the activity <#it>, relative to the receiver-assigned document.
+      const dataset = buildActivity({
+        ...activity,
+        actor: webId,
+        object: optionalHttps(activity.object, options.devLoopback),
+        target: optionalHttps(activity.target, options.devLoopback),
+        published: new Date(clock()),
+      });
       const body = await serializeTurtle(dataset);
       if ((await options.recipientProtocol?.(agentWebId)) === "lws") {
         return { delivered: false, inbox, reason: "lws-no-ldn" };
@@ -103,10 +99,26 @@ export function createNotifyClient(options: NotifyOptions): Notify {
       });
       if (response.status === 415) {
         await response.body?.cancel();
+        // The shared JSON-LD serializer requires absolute or blank IDs. Serialize a
+        // temporary blank root, then give that node the fixed relative activity ID.
+        const jsonld = JSON.parse(
+          await serialize(
+            [...dataset].map((quad) =>
+              DataFactory.quad(
+                DataFactory.blankNode("it"),
+                quad.predicate,
+                quad.object,
+                quad.graph,
+              ),
+            ),
+            { format: "application/ld+json" },
+          ),
+        );
+        jsonld[0]["@id"] = "#it";
         response = await fetcher(inbox, {
           method: "POST",
           headers: { "content-type": "application/ld+json" },
-          body: await serialize([...dataset], { format: "application/ld+json" }),
+          body: JSON.stringify(jsonld),
         });
       }
       return response.ok

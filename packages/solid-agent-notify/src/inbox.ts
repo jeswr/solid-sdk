@@ -108,8 +108,9 @@ export function isDirectChild(url: string, container: string): boolean {
 
 /**
  * Locate the RDF/JS activity subject (named or blank) within a notification dataset: the first subject
- * carrying an `as:` rdf:type, else the first with an `as:actor`. Falls back to the
- * conventional `${url}#it`. Pure.
+ * carrying an `as:` or `ldp:` rdf:type, else the first with an `as:actor`. Other
+ * ActivityStreams properties prefer `${url}#it`, then the document, then any subject.
+ * Unrelated RDF is not a notification. Pure.
  */
 export function findActivitySubject(
   url: string,
@@ -123,28 +124,28 @@ export function findActivitySubject(
     return undefined;
   }
   for (const q of dataset.match(null, DataFactory.namedNode(RDF_TYPE), null)) {
-    if (q.object.termType === "NamedNode" && q.object.value.startsWith(AS)) {
+    if (
+      q.object.termType === "NamedNode" &&
+      (q.object.value.startsWith(AS) || q.object.value.startsWith("http://www.w3.org/ns/ldp#"))
+    ) {
       return q.subject as NamedNode | BlankNode;
     }
   }
   for (const q of dataset.match(null, DataFactory.namedNode(`${AS}actor`), null)) {
     return q.subject as NamedNode | BlankNode;
   }
-  const itUrl = `${url}#it`;
-  const it = new ActivityDoc(itUrl, dataset, DataFactory);
-  if (it.actor || it.summary || it.content) return DataFactory.namedNode(itUrl);
-  for (const q of dataset.match(DataFactory.namedNode(url), null, null)) {
-    return q.subject as NamedNode;
-  }
-  for (const q of dataset.match(null, null, null)) {
-    if (q.predicate.value.startsWith(AS)) return q.subject as NamedNode | BlankNode;
+  for (const subject of [DataFactory.namedNode(`${url}#it`), DataFactory.namedNode(url), null]) {
+    for (const q of dataset.match(subject, null, null)) {
+      if (q.predicate.value.startsWith(AS)) return q.subject as NamedNode | BlankNode;
+    }
   }
   return undefined;
 }
 
 /**
  * Parse a notification document into an {@link InboxNotification}, or `undefined`
- * if no activity or resource subject can be identified. Unknown types remain readable.
+ * if no subject has ActivityStreams properties or an AS/LDN type. Unknown types
+ * with recognizable properties remain readable.
  */
 export function parseInboxNotification(
   url: string,
