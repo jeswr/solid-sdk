@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { sniffAudio, validateAudio } from "../src/feedback/audio";
-import { allowedOrigin, createLimiter, readBody, visitorKey } from "../src/feedback/security";
+import {
+  allowedOrigin,
+  createGithubBackoff,
+  createLimiter,
+  readBody,
+  visitorKey,
+} from "../src/feedback/security";
 
 it("normalises IPv6 /64s including compressed and mapped addresses", () => {
   expect(visitorKey("2001:0db8:0000:0001::1234")).toBe(visitorKey("2001:db8:0:1:ffff::1"));
@@ -110,4 +116,44 @@ it("limits audio uploads to twenty per visitor per hour and applies an instance 
   const instance = createLimiter(() => now, { turn: 1, submit: 1, audio: 1 });
   expect(instance("a", "audio")).toBeUndefined();
   expect(instance("b", "audio")).toBeGreaterThan(0);
+});
+
+it("preserves a healthy budget and distinguishes GitHub permission failures from throttling", async () => {
+  const backoff = createGithubBackoff(() => 1_800_000_000_000);
+  for (const response of [
+    Response.json({}, { headers: { "x-ratelimit-remaining": "50" } }),
+    Response.json({ message: "Resource not accessible by integration" }, { status: 403 }),
+    new Response("Forbidden", { status: 403 }),
+  ])
+    await expect(backoff.observe(response)).resolves.toBeUndefined();
+  expect(() => backoff.check()).not.toThrow();
+});
+it.each([
+  { reset: 180, retry: 90 },
+  { reset: 90, retry: 180 },
+])("honours the later primary reset ($reset) and retry HTTP date ($retry)", async ({
+  reset,
+  retry,
+}) => {
+  let now = 1_800_000_000_000;
+  const backoff = createGithubBackoff(() => now);
+  await expect(
+    backoff.observe(
+      Response.json(
+        {},
+        {
+          status: 429,
+          headers: {
+            "x-ratelimit-remaining": "0",
+            "x-ratelimit-reset": String(now / 1000 + reset),
+            "retry-after": new Date(now + retry * 1000).toUTCString(),
+          },
+        },
+      ),
+    ),
+  ).rejects.toMatchObject({ status: 503, retryAfter: 180 });
+  now += 90_000;
+  expect(() => backoff.check()).toThrow();
+  now += 90_000;
+  expect(() => backoff.check()).not.toThrow();
 });

@@ -35,17 +35,23 @@ these API requests. API route handlers are excluded from native staging and its 
 the native artifact checker rejects an exported `api/` directory.
 
 Recordings upload individually to `POST /api/feedback/audio` as soon as they stop, with
-one automatic retry and a visible saving state. The server validates the MIME and magic bytes,
-creates a Git blob in the private feedback repo, and returns `{ sha, size, ext, sig }`.
+one automatic retry (except during a storage cooldown) and a visible saving state. The server
+validates the MIME and magic bytes,
+creates a Git blob in the private feedback repo, and returns `{ submissionId, sha, size, ext, sig }`.
+The client creates a random submission UUID when the interview starts and sends it as the
+`submissionId` query parameter on every audio upload.
 The signature contains the expiry as `expiry.hmac`; HMAC-SHA256 authenticates
-`sha|size|ext|expiry` with a repository-scoped derived key. Receipts expire after two hours.
-`POST /api/feedback/submit` accepts JSON only (at most 1 MB): `{ record, receipts }`, with up
-to ten authenticated, unexpired receipts. Unknown/forged and duplicate blob SHAs are refused.
+`submissionId|sha|size|ext|expiry` with a repository-scoped derived key. Receipts expire
+after two hours.
+`POST /api/feedback/submit` accepts JSON only (at most 1 MB):
+`{ submissionId, record, receipts }`, with up to ten authenticated, unexpired receipts.
+Receipts from another submission, unknown/forged receipts and duplicate blob SHAs are refused.
 
 Submissions create one atomic Git Data API commit containing all receipt audio blobs,
 `submission.json` and `summary.md` under `feedback/<yyyy-mm-dd>/<uuid>/`, then open an issue.
 The store reads the private repo's default branch once and uses the current head tree as the
-base. A non-fast-forward 422 re-reads the head and retries the tree/commit/ref update up to
+base, preserving path segments in branch names such as `team/main`. A non-fast-forward 422
+re-reads the head and retries the tree/commit/ref update up to
 five times with jittered backoff, without forcing the ref or re-uploading blobs. No issue is
 opened until the ref update succeeds. Audio links use immutable commit URLs and require
 repository membership. Issue labels are `feedback`, `pathway:guided` or `pathway:quick`, and
@@ -70,6 +76,11 @@ continues with the plain guide while preserving its full transcript. Per visitor
 five submits per hour. IPv6 addresses share a /64 allowance. Each server instance caps 2000
 turns, 2000 audio uploads and 200 submissions per UTC day. **All these limits are per instance**;
 in-memory counters reset on restart and do not coordinate across instances.
+GitHub responses with fewer than 50 remaining requests or a 403/429 rate limit stop storage
+calls immediately, without retrying. Uploads and submissions share an instance cooldown
+until the primary reset or `Retry-After` deadline (60 seconds when neither is available).
+The API returns a friendly 503 with `Retry-After`; the page asks participants to try later
+and keeps their answers and audio available through **Download my feedback**.
 
 **Required deployment step: configure an Anthropic workspace spend limit before enabling the
 interviewer.** This is the account-level cap across instances. Deploy behind a proxy that

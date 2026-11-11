@@ -6,6 +6,7 @@ export class FeedbackError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAfter?: number,
   ) {
     super(message);
   }
@@ -143,3 +144,45 @@ export async function readBody(request: Request, max: number): Promise<Uint8Arra
   return bytes;
 }
 export const rateLimiter = createLimiter();
+
+// Shared by uploads and submissions, even though each request creates a fresh store.
+export function createGithubBackoff(now = () => Date.now()) {
+  let until = 0;
+  function check() {
+    if (until > now())
+      throw new FeedbackError(
+        503,
+        "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
+        Math.ceil((until - now()) / 1000),
+      );
+  }
+  return {
+    check,
+    async observe(response: Response) {
+      const remaining = response.headers.get("x-ratelimit-remaining");
+      const low = remaining !== null && /^\d+$/.test(remaining) && Number(remaining) < 50;
+      const retry = response.headers.get("retry-after");
+      let secondary = response.status === 429;
+      if (response.status === 403) {
+        const data = await response
+          .clone()
+          .json()
+          .catch(() => ({}));
+        secondary = retry !== null || /rate limit|abuse/i.test(String(data?.message ?? ""));
+      }
+      if (!low && !secondary) return;
+      const t = now();
+      const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+      const retryAt = retry
+        ? /^\d+$/.test(retry)
+          ? t + Number(retry) * 1000
+          : Date.parse(retry)
+        : 0;
+      const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
+      // GitHub asks for at least a minute when a secondary limit has no retry header.
+      until = Math.max(until, ...(deadlines.length ? deadlines : [t + 60_000]));
+      check();
+    },
+  };
+}
+export const githubBackoff = createGithubBackoff();

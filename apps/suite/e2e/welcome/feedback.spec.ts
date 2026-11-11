@@ -53,6 +53,9 @@ test("guided interview taps a scale, confirms read-back and submits", async ({ p
   });
   await page.route("**/api/feedback/submit", async (route) => {
     const body = route.request().postData() ?? "";
+    expect(route.request().postDataJSON().submissionId).toMatch(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    );
     expect(body).toContain('"seq_drive":6');
     expect(body).toContain('"walkthrough":["drive"]');
     expect(body).toContain('"confirmed":"yes"');
@@ -93,10 +96,10 @@ test("unhosted quick feedback offers a ZIP after a platform rejects submission",
   await page.getByRole("button", { name: "Download my feedback" }).click();
   expect((await downloading).suggestedFilename()).toBe("solid-suite-feedback.zip");
 });
-for (const fails of [false, true])
-  test(`voice upload ${fails ? "failure keeps raw audio for download" : "retries and submits a receipt"}`, async ({
-    page,
-  }) => {
+for (const outcome of ["success", "failure", "cooldown"] as const)
+  test(`voice upload ${outcome}: keeps audio and submission identity`, async ({ page }) => {
+    const fails = outcome !== "success";
+    const limited = outcome === "cooldown";
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "mediaDevices", {
         configurable: true,
@@ -132,20 +135,32 @@ for (const fails of [false, true])
     });
     await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
     let uploads = 0;
+    let submissionId = "";
     let releaseUploads = () => {};
     const allowUploads = new Promise<void>((resolve) => {
       releaseUploads = resolve;
     });
-    await page.route("**/api/feedback/audio", async (route) => {
+    await page.route("**/api/feedback/audio?*", async (route) => {
       uploads++;
+      const id = new URL(route.request().url()).searchParams.get("submissionId");
+      expect(id).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+      if (submissionId) expect(id).toBe(submissionId);
+      else submissionId = id ?? "";
       await allowUploads;
       expect(route.request().headers()["content-type"]).toBe("audio/webm");
       expect(route.request().postDataBuffer()?.length).toBe(12);
-      if (uploads === 1 || fails) {
+      if (limited) {
+        await route.fulfill({
+          status: 503,
+          headers: { "Retry-After": "90" },
+          json: { error: "RAW_AUDIO_ERROR" },
+        });
+      } else if (uploads === 1 || fails) {
         await route.fulfill({ status: 413, contentType: "text/plain", body: "RAW_AUDIO_ERROR" });
       } else {
         await route.fulfill({
           json: {
+            submissionId,
             sha: "a".repeat(40),
             size: 12,
             ext: "webm",
@@ -159,6 +174,7 @@ for (const fails of [false, true])
       expect(body).toContain('"audio":[0]');
       expect(body).toContain("voice answer recorded; no transcript");
       expect(route.request().headers()["content-type"]).toBe("application/json");
+      expect(route.request().postDataJSON().submissionId).toBe(submissionId);
       expect(route.request().postDataJSON().receipts).toEqual([
         expect.objectContaining({ sha: "a".repeat(40), size: 12, ext: "webm" }),
       ]);
@@ -176,10 +192,10 @@ for (const fails of [false, true])
     releaseUploads();
     if (fails) {
       await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        "couldn't save that recording",
+        limited ? "try again later" : "couldn't save that recording",
       );
       await expect(page.getByRole("main")).not.toContainText("RAW_AUDIO_ERROR");
-      expect(uploads).toBe(2);
+      expect(uploads).toBe(limited ? 1 : 2);
       const downloading = page.waitForEvent("download");
       await page.getByRole("button", { name: "Download my feedback" }).click();
       const path = await (await downloading).path();
@@ -230,4 +246,36 @@ test("non-JSON turn failures and unsafe submit errors produce only friendly mess
     await expect(page.getByRole("main")).not.toContainText("RAW_SUBMIT_ERROR");
     await expect(page.getByRole("main")).not.toContainText("RAW_PARSE_ERROR");
   }
+});
+
+test("a GitHub cooldown asks the participant to try later and preserves their download", async ({
+  page,
+}) => {
+  await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+  let submits = 0;
+  await page.route("**/api/feedback/submit", (route) => {
+    submits++;
+    return route.fulfill({
+      status: 503,
+      headers: { "Retry-After": "90" },
+      json: { error: "RAW_GITHUB_ERROR" },
+    });
+  });
+  await page.goto("/feedback");
+  await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+  await page.getByLabel("Your answer", { exact: true }).fill("Alice found the demo confusing.");
+  await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("try again later");
+  await expect(page.getByRole("main")).not.toContainText("RAW_GITHUB_ERROR");
+  expect(submits).toBe(1);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download my feedback" }).click();
+  const path = await (await downloading).path();
+  if (!path) throw new Error("Feedback download is unavailable.");
+  const { readFile } = await import("node:fs/promises");
+  const { unzipSync } = await import("fflate");
+  const archive = unzipSync(await readFile(path));
+  expect(new TextDecoder().decode(archive["submission.json"])).toContain(
+    "Alice found the demo confusing.",
+  );
 });

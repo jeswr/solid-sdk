@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { unzipSync } from "fflate";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { feedbackArchive } from "../src/feedback/download";
 import { plainTitle, renderMarkdown } from "../src/feedback/markdown";
 import { signReceipt, verifyReceipts } from "../src/feedback/receipts";
@@ -33,8 +33,9 @@ const sha = "a".repeat(40);
 const head = "b".repeat(40);
 const baseTree = "c".repeat(40);
 const treeSha = "d".repeat(40);
-const receipt = signReceipt({ sha, size: 2, ext: "webm" }, env);
-const metadata = { private: true, default_branch: "feedback/main" };
+const submissionId = "11111111-1111-4111-8111-111111111111";
+const receipt = signReceipt({ submissionId, sha, size: 2, ext: "webm" }, env);
+const metadata = { private: true, default_branch: "team/main" };
 function commitResponses(
   transport: ReturnType<typeof vi.fn<typeof fetch>>,
   conflict = false,
@@ -80,11 +81,11 @@ it("creates one atomic commit with audio, JSON and Markdown, then an issue with 
     ["", "GET"],
     ["/git/blobs", "POST"],
     ["/git/blobs", "POST"],
-    ["/git/ref/heads/feedback%2Fmain", "GET"],
+    ["/git/ref/heads/team/main", "GET"],
     [`/git/commits/${head}`, "GET"],
     ["/git/trees", "POST"],
     ["/git/commits", "POST"],
-    ["/git/refs/heads/feedback%2Fmain", "PATCH"],
+    ["/git/refs/heads/team/main", "PATCH"],
     ["/issues", "POST"],
     ["/issues", "POST"],
   ]);
@@ -133,12 +134,15 @@ it("uploads a base64 Git blob, signs its receipt and reads private repository me
     .mockResolvedValueOnce(Response.json(metadata))
     .mockResolvedValueOnce(Response.json({ sha }));
   const store = createGithubStore(env, transport);
-  const uploaded = await store.upload({
-    bytes: new Uint8Array([1, 2]),
-    ext: "webm",
-    type: "audio/webm",
-  });
-  expect(verifyReceipts([uploaded], env)).toEqual([uploaded]);
+  const uploaded = await store.upload(
+    {
+      bytes: new Uint8Array([1, 2]),
+      ext: "webm",
+      type: "audio/webm",
+    },
+    submissionId,
+  );
+  expect(verifyReceipts([uploaded], submissionId, env)).toEqual([uploaded]);
   expect(bodies(transport)[1]).toEqual({ content: "AQI=", encoding: "base64" });
   // Subsequent save uses cached metadata and the audio SHA without uploading it again.
   transport
@@ -236,4 +240,84 @@ it("downloads JSON, Markdown and all audio in one archive", async () => {
   expect(md).toContain("## Values and ladders");
   expect(md).toContain("## Jobs to be done");
   expect(md).toContain("<details>");
+});
+
+afterEach(() => vi.useRealTimers());
+it("stops on a low GitHub budget and shares the reset cooldown across fresh stores", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  vi.resetModules();
+  const { createGithubStore: freshStore } = await import("../src/feedback/store");
+  const reset = Date.now() / 1000 + 120;
+  const transport = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json(metadata))
+    .mockResolvedValueOnce(
+      Response.json(
+        { sha: head },
+        {
+          headers: {
+            "x-ratelimit-remaining": "49",
+            "x-ratelimit-reset": String(reset),
+          },
+        },
+      ),
+    );
+  await expect(freshStore(env, transport).save(submission, [])).rejects.toMatchObject({
+    status: 503,
+    message: expect.stringContaining("try again later"),
+    retryAfter: 120,
+  });
+  const audio = { bytes: new Uint8Array([1, 2]), ext: "webm" as const, type: "audio/webm" };
+  await expect(freshStore(env, transport).upload(audio, submissionId)).rejects.toMatchObject({
+    status: 503,
+  });
+  expect(transport).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(120_000);
+  transport
+    .mockResolvedValueOnce(Response.json(metadata))
+    .mockResolvedValueOnce(Response.json({ sha }));
+  await expect(freshStore(env, transport).upload(audio, submissionId)).resolves.toMatchObject({
+    sha,
+  });
+  expect(transport).toHaveBeenCalledTimes(4);
+});
+it.each([
+  { status: 403, headers: { "retry-after": "90" }, wait: 90 },
+  { status: 429, headers: { "retry-after": "90" }, wait: 90 },
+  { status: 403, headers: {}, wait: 60 },
+])("stops immediately for a secondary limit ($status, $wait seconds), without retrying", async ({
+  status,
+  headers,
+  wait,
+}) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  vi.resetModules();
+  const { createGithubStore: freshStore } = await import("../src/feedback/store");
+  const transport = vi.fn<typeof fetch>();
+  const pause = vi.fn();
+  initial(transport);
+  commitResponses(transport);
+  transport.mockResolvedValueOnce(
+    Response.json(
+      { message: "You have exceeded a secondary rate limit." },
+      {
+        status,
+        headers: { ...headers, "x-ratelimit-remaining": "4000" },
+      },
+    ),
+  );
+  const store = freshStore(env, transport, undefined, undefined, pause);
+  await expect(store.save(submission, [])).rejects.toMatchObject({ status: 503, retryAfter: wait });
+  await expect(freshStore(env, transport).save(submission, [])).rejects.toMatchObject({
+    status: 503,
+  });
+  expect(transport).toHaveBeenCalledTimes(9);
+  expect(pause).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(wait * 1000);
+  initial(transport);
+  commitResponses(transport);
+  transport.mockResolvedValueOnce(Response.json({ number: 14 }));
+  await expect(freshStore(env, transport).save(submission, [])).resolves.toEqual({ reference: 14 });
 });

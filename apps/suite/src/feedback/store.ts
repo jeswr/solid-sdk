@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { AudioFile } from "./audio";
 import { plainTitle, renderMarkdown } from "./markdown";
 import { type AudioReceipt, signReceipt } from "./receipts";
-import { type FeedbackEnv, FeedbackError } from "./security";
+import { type FeedbackEnv, FeedbackError, githubBackoff } from "./security";
 import type { Submission } from "./validation";
 
 export interface FeedbackStore {
-  upload(audio: AudioFile): Promise<AudioReceipt>;
+  upload(audio: AudioFile, submissionId: string): Promise<AudioReceipt>;
   save(submission: Submission, audio: AudioReceipt[]): Promise<{ reference: number }>;
 }
 const failure = () =>
@@ -29,8 +29,9 @@ export function createGithubStore(
   const token = env.FEEDBACK_GITHUB_TOKEN?.trim();
   const repo = env.FEEDBACK_GITHUB_REPO?.trim();
   const base = `https://api.github.com/repos/${repo}`;
-  const call = (path: string, method: string, body?: unknown) =>
-    transport(`${base}${path}`, {
+  const call = async (path: string, method: string, body?: unknown) => {
+    githubBackoff.check();
+    const response = await transport(`${base}${path}`, {
       method,
       redirect: "error",
       signal: AbortSignal.timeout(30_000),
@@ -42,6 +43,9 @@ export function createGithubStore(
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    await githubBackoff.observe(response);
+    return response;
+  };
   const read = async (path: string, method = "GET", body?: unknown) => {
     const response = await call(path, method, body);
     if (!response.ok) throw failure();
@@ -80,10 +84,14 @@ export function createGithubStore(
     );
   const textBlob = (text: string) => blob(new TextEncoder().encode(text));
   return {
-    async upload(audio) {
+    async upload(audio, submissionId) {
       await metadata();
       const sha = await blob(audio.bytes);
-      return signReceipt({ sha, size: audio.bytes.length, ext: audio.ext }, env, now().getTime());
+      return signReceipt(
+        { submissionId, sha, size: audio.bytes.length, ext: audio.ext },
+        env,
+        now().getTime(),
+      );
     },
     async save(submission, audio) {
       const { branch } = await metadata();
@@ -108,7 +116,7 @@ export function createGithubStore(
         { path: `${directory}/submission.json`, sha: recordSha },
         { path: `${directory}/summary.md`, sha: summarySha },
       ].map((entry) => ({ ...entry, mode: "100644", type: "blob" }));
-      const ref = `heads/${encodeURIComponent(branch)}`;
+      const ref = `heads/${branch.split("/").map(encodeURIComponent).join("/")}`;
       let commitSha = "";
       // A losing writer rebuilds on the new head; blobs stay immutable and are reused.
       for (let attempt = 0; attempt <= 5; attempt++) {

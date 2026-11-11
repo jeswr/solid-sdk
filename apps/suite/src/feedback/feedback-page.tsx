@@ -22,6 +22,9 @@ import { useVoice, type VoiceClip, voiceInThisBuild } from "./speech";
 import { type Message, type Submission, validateAnswers } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
+class FeedbackRetryLater extends Error {}
+const retryLaterMessage =
+  "Feedback storage is busy. Please try again later. Your answers and recordings are still here. Use Download my feedback to keep a copy.";
 export function feedbackApiBase(): string {
   if (process.env.NEXT_PUBLIC_SUITE_TARGET !== "native") return "";
   try {
@@ -34,6 +37,8 @@ export function feedbackApiBase(): string {
 }
 /** Platform errors may be HTML or plain text; never display upstream error bodies. */
 async function feedbackResponse(response: Response) {
+  if ([429, 503].includes(response.status) && response.headers.has("Retry-After"))
+    throw new FeedbackRetryLater();
   if (!response.ok || !response.headers.get("content-type")?.includes("application/json"))
     throw new Error("Feedback request failed.");
   const value = await response.json().catch(() => undefined);
@@ -160,6 +165,7 @@ export function FeedbackPage() {
   const [clips, setClips] = useState<VoiceClip[]>([]);
   const clipsRef = useRef<VoiceClip[]>([]);
   const receipts = useRef<(AudioReceipt | undefined)[]>([]);
+  const submissionId = useRef("");
   const [savingRecordings, setSavingRecordings] = useState(0);
   const uploading = useRef(0);
   const [pending, setPending] = useState<number[]>([]);
@@ -178,9 +184,11 @@ export function FeedbackPage() {
       clipsRef.current = [...clipsRef.current, clip];
       setClips(clipsRef.current);
       setPending((current) => [...current, index]);
-      void uploadRecording(clip, index).catch(() =>
+      void uploadRecording(clip, index).catch((error) =>
         setError(
-          "We couldn't save that recording. Your audio is still here. Try submitting again, or use Download my feedback.",
+          error instanceof FeedbackRetryLater
+            ? retryLaterMessage
+            : "We couldn't save that recording. Your audio is still here. Try submitting again, or use Download my feedback.",
         ),
       );
     },
@@ -215,15 +223,19 @@ export function FeedbackPage() {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetch(`${feedbackApiBase()}/api/feedback/audio`, {
-            method: "POST",
-            credentials: "omit",
-            signal: AbortSignal.timeout(45_000),
-            headers: { "Content-Type": clip.blob.type },
-            body: clip.blob,
-          });
+          const response = await fetch(
+            `${feedbackApiBase()}/api/feedback/audio?submissionId=${submissionId.current}`,
+            {
+              method: "POST",
+              credentials: "omit",
+              signal: AbortSignal.timeout(45_000),
+              headers: { "Content-Type": clip.blob.type },
+              body: clip.blob,
+            },
+          );
           const receipt = await feedbackResponse(response);
           if (
+            receipt.submissionId !== submissionId.current ||
             typeof receipt.sha !== "string" ||
             !/^[a-f0-9]{40,64}$/.test(receipt.sha) ||
             receipt.size !== clip.blob.size ||
@@ -234,7 +246,8 @@ export function FeedbackPage() {
             throw new Error("Recording receipt is unavailable.");
           receipts.current[index] = receipt;
           return receipt;
-        } catch {
+        } catch (error) {
+          if (error instanceof FeedbackRetryLater) throw error;
           if (attempt === 1) throw new Error("Recording could not be saved.");
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
@@ -246,6 +259,7 @@ export function FeedbackPage() {
     }
   }
   function start(p: Pathway) {
+    submissionId.current = crypto.randomUUID();
     const q = questionById(p === "quick" ? "general" : "context_work");
     setPathway(p);
     setQuestion(q);
@@ -424,15 +438,21 @@ export function FeedbackPage() {
         signal: AbortSignal.timeout(75_000),
         credentials: "omit",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record: record(), receipts: saved }),
+        body: JSON.stringify({
+          submissionId: submissionId.current,
+          record: record(),
+          receipts: saved,
+        }),
       });
       const result = await feedbackResponse(r);
       if (!Number.isSafeInteger(result.reference) || result.reference < 1)
         throw new Error("Feedback reference is unavailable.");
       setReference(result.reference);
-    } catch {
+    } catch (error) {
       setError(
-        "We couldn't submit your feedback. Your answers and recordings are still here. Try again, or use Download my feedback to keep a copy.",
+        error instanceof FeedbackRetryLater
+          ? retryLaterMessage
+          : "We couldn't submit your feedback. Your answers and recordings are still here. Try again, or use Download my feedback to keep a copy.",
       );
     } finally {
       sending.current = false;
