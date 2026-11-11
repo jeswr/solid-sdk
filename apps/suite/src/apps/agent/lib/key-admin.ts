@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Owner approval keys: listing and safe revocation. Verifiers accept a control only while its
 // signing key is in the owner's profile, so removing a key would silently drop every statement
@@ -18,6 +19,7 @@ import {
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { SEC_ASSERTION_METHOD } from "@jeswr/solid-vc";
 import { DataFactory, Store } from "n3";
+import { readArchive } from "./archive";
 import type { AgentClient } from "./client";
 import { isLoaded } from "./client";
 import { approvalKeyStatus, deviceKeyId, removeApprovalKey, withApprovalKey } from "./keys";
@@ -98,8 +100,11 @@ async function signedBy(
   const verifier = createAgentVerifier(session, () => now);
   const found: Signed[] = [];
   let lapsing = 0;
-  for (const container of [client.paths.control, client.paths.archive]) {
-    const rows = await readControl(client, verifier, container);
+  for (const read of [
+    () => readControl(client, verifier, client.paths.control),
+    () => readArchive(client, verifier, now),
+  ]) {
+    const rows = await read();
     if (!rows.complete) throw new Error("There are too many agent controls to check this key.");
     for (const row of rows.filter(isLoaded<DisplayControl>)) {
       const { verification, ...claims } = row.record;

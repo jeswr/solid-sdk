@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Agent app: owner approval keys
 
@@ -22,8 +23,9 @@ the key that signed an in-force Halt would let the agent resume. So `revokeAppro
 
 1. Refuses when the profile is outside the shared storage, when the key is this device's own,
    when it isn't one of the owner's approval keys, or when this device has no ready key.
-2. Reads `control/` and `archive/` with verification, and fails closed if either listing is
-   incomplete.
+2. Reads `control/`, the legacy flat `archive/`, and monthly `archive/YYYY-MM/` partitions
+   with verification, and fails closed if any listing is incomplete. New Archive controls use
+   their creation time's UTC month; reads cover the 365-day lifetime with one day's margin.
 3. Re-signs, with this device's key, every verified, owner-attributed, in-force control that
    the revoked key signed and that can only restrict the agent: Halt, RevokeMandate, Archive,
    and a SetBindingState that disables or disconnects an account or turns actions off. Each
