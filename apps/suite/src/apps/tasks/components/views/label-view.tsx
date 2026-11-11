@@ -19,6 +19,7 @@ import { useId, useRef, useState } from "react";
 import { labelUnion, labelViewGroups } from "../../lib/views/labels";
 import { useTasks } from "../../state/tasks-context";
 import { deleteLabel, labelTargets, renameLabel } from "../../state/view-actions";
+import { LabelColourPicker } from "../label-colour-picker";
 import { CrossProjectView } from "./cross-project-view";
 import { ViewGroup } from "./view-group";
 
@@ -83,6 +84,7 @@ export function LabelView({ label }: { label: string }) {
       emptyIcon={<Tag size={24} strokeWidth={1.5} aria-hidden="true" />}
       actions={
         <div className="tsk-label-actions">
+          <LabelColourPicker name={name} />
           <Button
             type="button"
             size="sm"

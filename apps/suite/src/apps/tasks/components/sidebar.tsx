@@ -29,7 +29,6 @@ import {
   Ellipsis,
   Inbox,
   Plus,
-  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,12 +39,15 @@ import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
+import { labelColour } from "../lib/views/label-colours";
 import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 import { useDropTarget } from "./dnd/use-task-drag";
 import { TasksImportDialog } from "./import/import-dialog";
+import { LabelDot } from "./label-chip";
+import { LabelColourPicker } from "./label-colour-picker";
 import { ProjectColourPicker } from "./project-colour-picker";
 import { ProjectDot } from "./project-dot";
 import { ShareProject } from "./share-project";
@@ -368,16 +370,24 @@ export function TasksSidebar() {
             <ul className="tsk-nav-list">
               {[...labels]
                 .sort(([a], [b]) => a.localeCompare(b))
-                .map(([name, categories]) =>
-                  link(
-                    `/tasks/l/${encodeURIComponent(name)}`,
-                    `@${categories[0]?.name}`,
-                    <Tag size={16} aria-hidden="true" />,
-                    open.filter((task) =>
-                      task.labelIds.some((id) => categories.some((category) => category.id === id)),
-                    ).length,
-                  ),
-                )}
+                .map(([name, categories]) => {
+                  const href = `/tasks/l/${encodeURIComponent(name)}`;
+                  const count = open.filter((task) =>
+                    task.labelIds.some((id) => categories.some((category) => category.id === id)),
+                  ).length;
+                  return (
+                    <li key={name} className="tsk-project-row">
+                      <Link href={href} aria-current={path === href ? "page" : undefined}>
+                        <LabelDot colour={labelColour(name, tasks.projects)} />
+                        <span>@{categories[0]?.name}</span>
+                        <span role="img" className="tsk-count" aria-label={`${count} open tasks`}>
+                          {count}
+                        </span>
+                      </Link>
+                      <LabelColourPicker name={categories[0]?.name ?? name} menu />
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </>

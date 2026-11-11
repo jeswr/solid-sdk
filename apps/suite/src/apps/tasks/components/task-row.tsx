@@ -31,6 +31,7 @@ import { encodeRef } from "@/lib/refs";
 import type { DropContainer } from "../lib/dnd/types";
 import { formatDue, isOverdue } from "../lib/format/due";
 import { addDays, localDayKey } from "../lib/views/days";
+import { labelColour } from "../lib/views/label-colours";
 import type { Row } from "../lib/views/project-groups";
 import { planTreeMove, taskLevel, taskProgress } from "../lib/views/tree";
 import { priorityValue } from "../lib/views/types";
@@ -44,6 +45,7 @@ import { changeTaskDepth } from "../state/tree-actions";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDrag } from "./dnd/use-task-drag";
+import { LabelChip } from "./label-chip";
 import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
 import { ProjectDot } from "./project-dot";
 import { RowProperties } from "./row-properties";
@@ -402,9 +404,11 @@ export function TaskRow({
             <TaskProgress tasks={tasks.views} id={task.id} />
             {orphanParentTitle && <span>↳ {orphanParentTitle}</span>}
             {labels.slice(0, 3).map((label) => (
-              <span className="tsk-chip" key={label.id}>
-                @{label.name}
-              </span>
+              <LabelChip
+                key={label.id}
+                name={label.name}
+                colour={labelColour(label.name, tasks.projects)}
+              />
             ))}
             {labels.length > 3 && (
               <span

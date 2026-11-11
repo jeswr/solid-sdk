@@ -812,8 +812,8 @@ describe("Label view", () => {
     const { host } = await mount(
       h("main", null, h(TasksSidebar), h(LabelView, { label: "bills" })),
     );
-    expect(host.querySelectorAll('a[href="/tasks/l/bills"]')).toHaveLength(1);
-    expect(host.querySelector('a[href="/tasks/l/bills"]')?.textContent).toContain("2");
+    expect(host.querySelectorAll('.tsk-sidebar a[href="/tasks/l/bills"]')).toHaveLength(1);
+    expect(host.querySelector('.tsk-sidebar a[href="/tasks/l/bills"]')?.textContent).toContain("2");
     expect(titles(region(host, "Inbox"))).toEqual(["Inbox rent"]);
     expect(titles(region(host, "Home"))).toEqual(["Home rent"]);
     await click(button("Home", region(host, "Home")));
