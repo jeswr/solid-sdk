@@ -21,6 +21,7 @@ import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { orderedItemTargets } from "./ordered.js";
 import { Graph, RDF, SH } from "./rdf.js";
 import {
   implicitClassTargets,
@@ -77,6 +78,15 @@ export function admit(
   const violations: AdmissionViolation[] = [];
   const add = (code: string, severity: AdmissionSeverity, subject: string, message: string) =>
     violations.push({ code, severity, subject, message });
+  try {
+    orderedItemTargets(shapes, config);
+  } catch (error) {
+    if (!(error instanceof AdmissionError)) throw error;
+    violations.push(...error.violations);
+    // The ordinary scalar admission pass assumes a validated item projection.
+    // Return its closed diagnostic rather than mapping a rejected datatype.
+    return { ok: false, namespace, violations };
+  }
 
   // Inspect the ORIGINAL constraint graph, not just the lossy normalized projection.
   // Metadata never constrains accepted instance data. Every other sh:* predicate
@@ -139,6 +149,14 @@ export function admit(
     ),
   );
   const nestedShapeIris = new Set<string>();
+  const orderedShapeIris = new Set(
+    shapes.nodeShapes.flatMap((s) =>
+      s.properties
+        .filter((c) => c.ordered)
+        .flatMap(propertySources)
+        .map((c) => c.shapeIri),
+    ),
+  );
   for (const entity of config?.entities ?? []) {
     if (!isCompositeConfig(entity)) continue;
     for (const node of Object.values(entity.nodes)) {
@@ -278,12 +296,13 @@ export function admit(
         ) {
           unsupported("inline or unprojected sh:node reference");
         }
-        if (config !== undefined && !isNested)
+        if (config !== undefined && !isNested && !orderedShapeIris.has(subject.value))
           unsupported("sh:node requires a projected composite link");
       }
       if (
         component === "class" &&
         !isNested &&
+        !orderedShapeIris.has(subject.value) &&
         c?.conceptIris === undefined &&
         config !== undefined
       ) {

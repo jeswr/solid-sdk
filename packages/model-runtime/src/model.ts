@@ -28,7 +28,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory as N3DataFactory, Store } from "n3";
-import { type DatatypeMapper, iriMapper, literalMapper } from "./datatypes.js";
+import { type DatatypeMapper, iriMapper, literalMapper, readLiteral, XSD } from "./datatypes.js";
 import {
   httpIriOrUndefined,
   isSafeAbsoluteIri,
@@ -39,6 +39,7 @@ import {
 import {
   type CompositeManifestEntity,
   isCompositeEntity,
+  MAX_ORDERED_ITEMS,
   type ManifestEntity,
   type ManifestField,
   type ManifestNode,
@@ -632,6 +633,175 @@ function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   );
 }
 
+/** Ordered links follow exact, safe same-document http(s) NamedNodes, like composites. */
+function orderedItemIri(doc: TermWrapper, term: Term): boolean {
+  return (
+    term.termType === "NamedNode" &&
+    isSafeAbsoluteIri(term.value) &&
+    /^https?:\/\//i.test(term.value) &&
+    term.value.split("#", 1)[0] === doc.value.split("#", 1)[0] &&
+    term.value !== doc.value
+  );
+}
+
+/** Items reuse the scalar reader/writer; cardinality on the outer field counts items. */
+function orderedValuePlan(plan: FieldPlan): FieldPlan {
+  const {
+    ordered,
+    collection: _collection,
+    minCount: _min,
+    maxCount: _max,
+    ...scalar
+  } = plan.field;
+  if (!ordered) throw new TypeError("ordered descriptor is required");
+  return { mapper: plan.mapper, field: { ...scalar, predicate: ordered.value } };
+}
+
+/** Undefined means the WHOLE field is invalid, including ambiguous positions. */
+function readOrdered(doc: TermWrapper, plan: FieldPlan): unknown[] | undefined {
+  const { field } = plan;
+  const ordered = field.ordered;
+  if (!ordered) return undefined;
+  let reads = 0;
+  const consume = () => ++reads <= MAX_CLASS_READS;
+  const single = (subject: Term, predicate: string): Term | undefined => {
+    let value: Term | undefined;
+    for (const term of matchObjects(doc.dataset, subject, doc.factory.namedNode(predicate))) {
+      if (!consume() || (value && !value.equals(term))) return undefined;
+      value = term;
+    }
+    return value;
+  };
+  const items = new Set<string>();
+  const positions = new Set<number>();
+  const values: { position: number; value: unknown }[] = [];
+  const valuePlan = orderedValuePlan(plan);
+  for (const term of matchObjects(
+    doc.dataset,
+    doc as unknown as Term,
+    doc.factory.namedNode(field.predicate),
+  )) {
+    if (!consume() || !orderedItemIri(doc, term)) return undefined;
+    if (items.has(term.value)) continue;
+    items.add(term.value);
+    if (
+      items.size > MAX_ORDERED_ITEMS ||
+      (field.maxCount !== undefined && items.size > field.maxCount)
+    )
+      return undefined;
+    if (!hasDatasetClass(doc, term.value, [ordered.itemClass], undefined, consume))
+      return undefined;
+    const positionTerm = single(term, ordered.position);
+    if (positionTerm?.termType !== "Literal" || positionTerm.datatype.value !== `${XSD}integer`)
+      return undefined;
+    const position = tryRead(() => readLiteral(positionTerm));
+    if (
+      typeof position !== "number" ||
+      !Number.isSafeInteger(position) ||
+      (ordered.minPosition !== undefined && position < ordered.minPosition) ||
+      positions.has(position)
+    )
+      return undefined;
+    positions.add(position);
+    const valueTerm = single(term, ordered.value);
+    if (!valueTerm) return undefined;
+    const value = readTerm(doc, valuePlan, valueTerm);
+    if (value === undefined) return undefined;
+    values.push({ position, value });
+  }
+  if (items.size < Math.max(field.minCount ?? 0, field.guards?.requiredFailClosed ? 1 : 0))
+    return undefined;
+  return values.sort((a, b) => a.position - b.position).map(({ value }) => value);
+}
+
+/** Stage replacement before migration/mutation; no raw quad construction or foreign deletion. */
+function writeOrdered(
+  doc: TermWrapper,
+  plan: FieldPlan,
+  raw: unknown,
+  beforeWrite = () => {},
+): void {
+  const { field } = plan;
+  const ordered = field.ordered;
+  if (!ordered) throw new TypeError("ordered descriptor is required");
+  if (
+    [field.predicate, ordered.position, ordered.value, ordered.itemClass].some(
+      (iri) => !isSafeAbsoluteIri(iri),
+    )
+  )
+    throw new TypeError("unsafe ordered field IRI");
+  if (raw !== undefined && !Array.isArray(raw))
+    throw new TypeError(`field ${field.name} requires an array`);
+  const members: unknown[] = raw ?? [];
+  if (members.length > MAX_ORDERED_ITEMS)
+    throw new TypeError(`field ${field.name} exceeds the ${MAX_ORDERED_ITEMS}-item cap`);
+  const output = new Store([...doc.dataset.match()]);
+  const focus = new TermWrapper(doc as unknown as Term, output, doc.factory);
+  const links = SetFrom.subjectPredicate(focus, field.predicate, TermAs.term, TermFrom.itself);
+  const owned = new Set<string>();
+  let oldItems = 0;
+  for (const term of links) {
+    if (++oldItems > MAX_ORDERED_ITEMS)
+      throw new TypeError(`field ${field.name} exceeds the ${MAX_ORDERED_ITEMS}-item cap`);
+    if (!orderedItemIri(doc, term)) continue;
+    // A shared item is never ours to delete, even when another owner uses the same field.
+    const exclusive = output
+      .getQuads(null, null, term.value, null)
+      .every(
+        (q) => q.subject.equals(doc as unknown as Term) && q.predicate.value === field.predicate,
+      );
+    if (!exclusive) continue;
+    owned.add(term.value);
+    for (const quad of output.getQuads(term.value, null, null, null)) {
+      if (
+        [ordered.position, ordered.value].includes(quad.predicate.value) ||
+        (quad.predicate.value === RDF_TYPE &&
+          quad.object.termType === "NamedNode" &&
+          quad.object.value === ordered.itemClass)
+      )
+        output.delete(quad);
+    }
+  }
+  links.clear();
+  const valuePlan = orderedValuePlan(plan);
+  let index = 0;
+  for (const member of members) {
+    const iri = subjectIri(doc.value.split("#", 1)[0] as string, `${field.name}-${index + 1}`);
+    const term = doc.factory.namedNode(iri);
+    if (!orderedItemIri(doc, term))
+      throw new TypeError("ordered item requires a same-document http(s) subject");
+    if (
+      !owned.has(iri) &&
+      (output.countQuads(iri, null, null, null) || output.countQuads(null, null, iri, null))
+    )
+      throw new TypeError(`ordered item subject collision for field ${field.name}`);
+    const item = new TermWrapper(term, output, doc.factory);
+    writeSingle(item, valuePlan, member);
+    if (readSingle(item, valuePlan) === undefined) continue;
+    index++;
+    SetFrom.subjectPredicate(item, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom).add(
+      ordered.itemClass,
+    );
+    writeSingle(
+      item,
+      planField({
+        name: "position",
+        predicate: ordered.position,
+        kind: "literal",
+        datatype: `${XSD}integer`,
+      }),
+      index,
+    );
+    links.add(term);
+  }
+  // Capture the explicit delta before migration, preserving its unrelated canonicalisation.
+  const removed = [...doc.dataset.match()].filter((q) => !output.has(q));
+  const added = [...output].filter((q) => !doc.dataset.has(q));
+  beforeWrite();
+  for (const quad of removed) doc.dataset.delete(quad);
+  for (const quad of added) doc.dataset.add(quad);
+}
+
 /**
  * Build a Wrapper class that stamps `typeIris` (via `mark`) and installs a per-field
  * accessor for each plan (a live set for a set field; a guarded getter/setter for a
@@ -674,7 +844,18 @@ function makeWrapperClass(
 
   for (const plan of plans) {
     const { field } = plan;
-    if (field.collection === "set") {
+    if (field.collection === "ordered") {
+      Object.defineProperty(Wrapper.prototype, field.name, {
+        get(this: TermWrapper) {
+          return readOrdered(this, plan);
+        },
+        set(this: TermWrapper, value: unknown) {
+          writeOrdered(this, plan, value, () => beforeWrite(this, field));
+        },
+        enumerable: false,
+        configurable: true,
+      });
+    } else if (field.collection === "set") {
       Object.defineProperty(Wrapper.prototype, field.name, {
         get(this: TermWrapper) {
           return fieldSet(this, plan, () => beforeWrite(this, field));
@@ -709,6 +890,10 @@ function makeWrapperClass(
 function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): void {
   const { field } = plan;
   const raw = data[field.name];
+  if (field.collection === "ordered") {
+    writeOrdered(doc, plan, raw);
+    return;
+  }
   if (field.collection === "set") {
     if (field.guards?.iriEnum && raw !== undefined && !Array.isArray(raw))
       throw new TypeError(`field ${field.name} requires an array of IRI enumeration members`);
@@ -802,6 +987,17 @@ function readFlatFieldInto(
   data: EntityData,
   strict = false,
 ): "ok" | "reject" {
+  if (plan.field.collection === "ordered") {
+    const values = readOrdered(doc, plan);
+    if (values === undefined)
+      return strict ||
+        plan.field.guards?.requiredFailClosed ||
+        plan.field.ordered?.severity === "Violation"
+        ? "reject"
+        : "ok";
+    if (values.length) data[plan.field.name] = values;
+    return "ok";
+  }
   if (strict && !flatTermsConform(doc, plan)) return "reject";
   const { field } = plan;
   if (field.collection === "set") {
@@ -1034,7 +1230,12 @@ function aliasFocusNodes(
   return { scopes, checks: allChecks, linkClasses };
 }
 
-function sameProjection(a: EntityData | undefined, b: EntityData | undefined): boolean {
+function sameProjection(
+  a: EntityData | undefined,
+  b: EntityData | undefined,
+  node: ShapeOwner,
+  byName: ReadonlyMap<string, ManifestNode>,
+): boolean {
   if (a === undefined || b === undefined) return a === b;
   const keys = Object.keys(a);
   return (
@@ -1045,7 +1246,11 @@ function sameProjection(a: EntityData | undefined, b: EntityData | undefined): b
         right = b[key];
       return Array.isArray(left) && Array.isArray(right)
         ? left.length === right.length &&
-            left.every((value) => right.some((other) => sameValueZero(value, other)))
+            ([...node.fields, ...[...byName.values()].flatMap((n) => n.fields)].some(
+              (f) => f.name === key && f.collection === "ordered",
+            )
+              ? left.every((value, index) => sameValueZero(value, right[index]))
+              : left.every((value) => right.some((other) => sameValueZero(value, other))))
         : sameValueZero(left, right);
     })
   );
@@ -1154,7 +1359,7 @@ function canonicalizeAliases(
         migration: budget,
       },
     );
-    if (!sameProjection(check.before, after))
+    if (!sameProjection(check.before, after, check.node, check.byName))
       throw new MigrationError(
         `alias migration changed the parsed result for ${check.node.name} at ${check.iri}`,
       );
@@ -1286,6 +1491,7 @@ function hasDatasetClass(
   subject: string,
   required: readonly string[],
   budget?: MigrationBudget,
+  consume?: () => boolean,
 ): boolean {
   const accepted = new Set(required);
   const pending: Term[] = [];
@@ -1307,6 +1513,7 @@ function hasDatasetClass(
     doc.factory.namedNode(RDF_TYPE),
   )) {
     if (budget) migrationRead(budget);
+    if (consume && !consume()) return false;
     if (++reads > MAX_CLASS_READS) return false;
     if (enqueue(type)) return true;
   }
@@ -1315,6 +1522,7 @@ function hasDatasetClass(
     const type = pending.pop() as Term;
     for (const parent of matchObjects(doc.dataset, type, subClassOf)) {
       if (budget) migrationRead(budget);
+      if (consume && !consume()) return false;
       if (++reads > MAX_CLASS_READS) return false;
       if (enqueue(parent)) return true;
     }

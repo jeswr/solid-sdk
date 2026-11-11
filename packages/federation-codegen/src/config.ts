@@ -16,6 +16,8 @@ import { isSafeAbsoluteIri, type ManifestScalar } from "@jeswr/model-runtime";
 
 /** Per-field guard configuration (only the flags SHACL cannot express live here). */
 export interface FieldConfig {
+  /** Explicit item-node ordering; these are full, distinct predicate IRIs. */
+  ordered?: { position: string; value: string };
   /** Explicit whitespace-only string policy (never inferred from minimum length). */
   nonBlank?: boolean;
   /** `build` drops an empty-string value. */

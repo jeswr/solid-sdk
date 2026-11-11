@@ -23,6 +23,54 @@ const parsed = await bookmark.parseDocument(resourceUrl, body, contentType); // 
 const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory);
 ```
 
+## Ordered collection rules
+
+The generator accepts `fields.instructions.ordered = { position: "http://schema.org/position",
+value: "http://schema.org/text" }` for a property referencing an item NodeShape. Its
+manifest projection is:
+
+```json
+{
+  "name": "instructions",
+  "predicate": "http://schema.org/recipeInstructions",
+  "kind": "literal",
+  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+  "collection": "ordered",
+  "ordered": {
+    "itemClass": "http://schema.org/HowToStep",
+    "position": "http://schema.org/position",
+    "value": "http://schema.org/text",
+    "minPosition": 1,
+    "severity": "Violation"
+  }
+}
+```
+
+```ts
+const store = recipe.build(resourceUrl, { instructions: ["Boil water", "Add pasta", "Add pasta"] });
+const wrapper = new recipe.Wrapper(recipe.subject(resourceUrl), store, DataFactory);
+wrapper.instructions = ["New first step", "New second step"];
+// Getter: readonly string[] snapshot; assigning replaces. Local array mutation is not persisted.
+```
+
+| Contract | Behavior |
+|---|---|
+| Item admission | Same lexical document, safe absolute http(s) NamedNode; blank/literal/foreign/unsafe links fail. Require the item class through actual data-graph types/subclasses. |
+| Position | Exactly one `xsd:integer` term, validated by the existing integer mapper (safe-integer precision cap); apply optional `minPosition`. Numeric ascending order, gaps allowed, duplicate positions invalid even for equal values. Negative integers are allowed without a restricting lower bound. |
+| Value | Exactly one term, read/written with the same datatype, enum, IRI scheme, pattern, length, range and text sanitization rules as scalar fields. Duplicate values survive. No new string-size or lexical policy is invented. |
+| Failure grading | Any invalid item, duplicate position or outer cardinality failure rejects at Violation severity (even on a present optional field); Warning/Info omit the whole field. `requiredFailClosed` still enforces absence. Strict `sh:node` children retain their all-constraints policy. |
+| Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray supplied writes throw `TypeError` before mutation. |
+| Write identity | `<document>#<resolvedFieldName>-<n>` with n = 1..n, item class asserted. Invalid scalar writes drop members just as other collection writes do; survivors are renumbered consecutively. |
+| Replacement | Clear owner links; remove only matching item class, position and value triples on safe same-document items exclusively referenced by that owner/field. Preserve unrelated predicates/types, shared items and foreign nodes. Subject collisions with unrelated/shared data throw before any mutation. |
+| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear. Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
+
+Manifest validation rejects missing/unknown descriptor keys, unsafe or overlapping predicate
+IRIs, invalid severity or unwritable position bounds, item classes owned as migration aliases,
+and scalar defaults, aliases or set policies on ordered fields. The generator's closed item
+profile requires exactly position + one value property, each with minCount/maxCount 1.
+It emits explicit item-class and IRI node-kind SHACL constraints because targetClass alone
+does not constrain a linked item. See federation-codegen's ordered admission table.
+
 ## Rules
 
 - Never hand-write a manifest for production use. Manifests come from `federation-codegen`,

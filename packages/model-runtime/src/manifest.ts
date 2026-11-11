@@ -73,6 +73,18 @@ export interface ManifestFieldGuards {
 /** A literal scalar a manifest may carry (default value / `sh:in` member). */
 export type ManifestScalar = string | number | boolean;
 
+/** Ordered item-node encoding. Scalar keys on the field constrain its ONE item value. */
+export interface ManifestOrdered {
+  itemClass: string;
+  position: string;
+  value: string;
+  minPosition?: number;
+  severity: "Violation" | "Warning" | "Info";
+}
+
+/** Bounded independently of the manifest's field and enum inventories. */
+export const MAX_ORDERED_ITEMS = 256;
+
 export interface ManifestField {
   /** The JS/TS accessor name (allowlisted charset, reserved-name-checked). */
   name: string;
@@ -96,8 +108,9 @@ export interface ManifestField {
   hasClass?: string;
   /** True when the source link has sh:class but no sh:node; its target must match exactly. */
   classOnly?: true;
-  /** Present ⇒ the field is a live set; absent ⇒ a single value. */
-  collection?: "set";
+  /** Set ⇒ live set; ordered ⇒ replacing array snapshot; absent ⇒ singleton. */
+  collection?: "set" | "ordered";
+  ordered?: ManifestOrdered;
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
   datatype?: string;
   minCount?: number;
@@ -287,6 +300,7 @@ const FIELD_KEYS = new Set<string>([
   "hasClass",
   "classOnly",
   "collection",
+  "ordered",
   "datatype",
   "minCount",
   "maxCount",
@@ -399,6 +413,7 @@ function validateNestedField(
     "aliasPredicates",
     "datatype",
     "collection",
+    "ordered",
     "maxCount",
     "default",
     "defaultNow",
@@ -459,11 +474,14 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   const kind = raw.kind;
 
-  let collection: "set" | undefined;
+  let collection: "set" | "ordered" | undefined;
   if (raw.collection !== undefined) {
-    if (raw.collection !== "set") fail('field.collection must be "set" when present');
-    collection = "set";
+    if (raw.collection !== "set" && raw.collection !== "ordered")
+      fail('field.collection must be "set" or "ordered" when present');
+    collection = raw.collection;
   }
+  if (collection !== "ordered" && raw.ordered !== undefined)
+    fail("field.ordered requires an ordered collection");
 
   let datatype: string | undefined;
   if (kind === "literal") {
@@ -481,6 +499,36 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     );
   }
   if (collection) field.collection = collection;
+  if (collection === "ordered") {
+    if (!isObject(raw.ordered)) fail("ordered collection requires field.ordered");
+    const o = raw.ordered;
+    assertKnownKeys(
+      o,
+      new Set(["itemClass", "position", "value", "minPosition", "severity"]),
+      "field.ordered",
+    );
+    const itemClass = checkIri(o.itemClass, "field.ordered.itemClass");
+    const position = checkIri(o.position, "field.ordered.position");
+    const value = checkIri(o.value, "field.ordered.value");
+    const reserved = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    if (new Set([predicate, position, value, reserved]).size !== 4)
+      fail("ordered predicates must be distinct and exclude rdf:type");
+    if (!["Violation", "Warning", "Info"].includes(o.severity as string))
+      fail("field.ordered.severity must be Violation, Warning, or Info");
+    field.ordered = {
+      itemClass,
+      position,
+      value,
+      severity: o.severity as ManifestOrdered["severity"],
+    };
+    if (o.minPosition !== undefined) {
+      if (!Number.isSafeInteger(o.minPosition) || (o.minPosition as number) > 1)
+        fail("field.ordered.minPosition must be a safe integer no greater than 1");
+      field.ordered.minPosition = o.minPosition as number;
+    }
+    for (const key of ["aliasPredicates", "default", "defaultNow", "materializeDefault"])
+      if (raw[key] !== undefined) fail(`ordered field cannot carry ${key}`);
+  }
   if (datatype) field.datatype = datatype;
 
   if (raw.minCount !== undefined) field.minCount = checkCount(raw.minCount, "field.minCount");
@@ -510,6 +558,10 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
 
   field.guards = validateGuards(raw.guards);
   const g = field.guards;
+  if (collection === "ordered") {
+    for (const key of ["trim", "dropBlank", "sortOnRead", "emptyStringDrop", "iriEnum"] as const)
+      if (g[key] !== undefined) fail(`ordered field cannot carry ${key}`);
+  }
   if (g.iriEnum !== undefined) {
     if (kind !== "iri" || !field.in?.length) fail("iriEnum requires a non-empty IRI enumeration");
     if (new Set(field.in).size !== field.in.length) fail("iriEnum requires distinct members");
@@ -634,6 +686,8 @@ function validateTypeAliases(entities: AnyManifestEntity[]): void {
   }
   for (const node of nodes) {
     for (const field of node.fields) {
+      if (field.ordered && aliases.has(field.ordered.itemClass))
+        fail(`ordered field "${field.name}" item class is a type alias removed by migration`);
       if (field.hasClass !== undefined && aliases.has(field.hasClass)) {
         fail(
           `composite nested field "${field.name}" sh:class ${field.hasClass} is a target type alias removed by migration`,

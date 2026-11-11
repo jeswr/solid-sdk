@@ -32,6 +32,8 @@ export type ShapeScalar = string | number | boolean;
 export type ShapeKind = "iri" | "literal";
 
 export interface ShapeConstraint {
+  /** Config-selected ordered encoding; validated against the complete item shape. */
+  ordered?: { position: string; value: string };
   /** `sh:path` — the predicate IRI. */
   pathIri: string;
   /** Ordered read aliases from sh:alternativePath, excluding the canonical member. */
@@ -708,6 +710,46 @@ export function parseShapes(
       const parents = superClasses[q.subject.value] ?? [];
       parents.push(q.object.value);
       superClasses[q.subject.value] = parents;
+    }
+  }
+  // Keep config selection separate from constraint projection. Admission, compilation
+  // and fidelity each re-check the complete referenced item shape.
+  for (const entity of config?.entities ?? []) {
+    const owners = isCompositeConfig(entity) ? Object.values(entity.nodes) : [entity];
+    for (const owner of owners) {
+      const shape = nodeShapes.find((s) => s.targetClass === owner.targetClass);
+      for (const [name, field] of Object.entries(owner.fields ?? {})) {
+        if (field.ordered === undefined) continue;
+        const c = shape?.properties.find((p) => (p.name ?? localName(p.pathIri)) === name);
+        if (!c)
+          throw new AdmissionError([
+            {
+              code: "invalid-ordered",
+              severity: "error",
+              subject: shape?.iri ?? owner.targetClass,
+              message: `ordered field ${name}: no matching shape property`,
+            },
+          ]);
+        c.ordered = field.ordered;
+        const allowed = new Set([
+          "ordered",
+          "rename",
+          "nonBlank",
+          "sanitizeText",
+          "requiredFailClosed",
+          "iriScheme",
+        ]);
+        for (const key of Object.keys(field))
+          if (!allowed.has(key))
+            throw new AdmissionError([
+              {
+                code: "invalid-ordered",
+                severity: "error",
+                subject: c.shapeIri,
+                message: `ordered field ${name}, item shape ${c.node ?? "(missing sh:node)"}: unsupported config key ${key}`,
+              },
+            ]);
+      }
     }
   }
   return { quads: rewritten, nodeShapes, superClasses };

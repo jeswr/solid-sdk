@@ -75,6 +75,82 @@ the vocabulary set; zero named individuals and projected composite links retain 
 existing class/link behavior. Supplied nonmember writes throw the runtime's `TypeError`;
 reads retain severity-graded drops. Ordinary `sh:in` writes still drop invalid values.
 
+## Ordered collections
+
+Opt in per field with full predicate IRIs (also supported in composite node `fields`,
+including `rename`):
+
+```json
+{
+  "fields": {
+    "instructions": {
+      "ordered": {
+        "position": "http://schema.org/position",
+        "value": "http://schema.org/text"
+      }
+    }
+  }
+}
+```
+
+The owning property uses `sh:node` to one named item NodeShape:
+
+```turtle
+ex:RecipeShape a sh:NodeShape; sh:targetClass schema:Recipe;
+  sh:property [
+    sh:name "instructions"; sh:path schema:recipeInstructions;
+    sh:node ex:StepShape; sh:minCount 1
+  ] .
+ex:StepShape a sh:NodeShape; sh:targetClass schema:HowToStep;
+  sh:property [
+    sh:path schema:position; sh:datatype xsd:integer;
+    sh:minCount 1; sh:maxCount 1; sh:minInclusive 1
+  ], [
+    sh:path schema:text; sh:datatype xsd:string;
+    sh:minCount 1; sh:maxCount 1
+  ] .
+```
+
+| Input | Admission |
+|---|---|
+| Ordered config | Exactly `{ position, value }`, distinct safe absolute IRIs, distinct from the owning predicate and `rdf:type`; matching field and named `sh:node` required. |
+| Owning property | Direct, unaliased node link; optional `sh:nodeKind sh:IRI`, cardinality and severity. An explicit `sh:class` must equal the item's target class. Scalar constraints on the link reject. |
+| Item NodeShape | Exactly one target class and exactly the two configured properties; no target aliases, merged item shapes, competing flat/composite ownership, or extra node constraints. Metadata is allowed. Item shapes are consumed by ordered fields, not emitted as separate entities. |
+| Position property | Exactly `xsd:integer`, `minCount 1`, `maxCount 1`; optional `nodeKind Literal` and `minInclusive` (safe integer ≤ 1 so writes starting at 1 conform). Other constraints reject. |
+| Value property | Exactly one value (`minCount 1`, `maxCount 1`); an existing validated literal datatype or explicit `sh:IRI`, with the existing enum, pattern, length and numeric guards. Class/node links, aliases and extra properties reject. |
+| Config policies | Existing value `iriScheme`, `nonBlank`, `sanitizeText`, outer `requiredFailClosed`, and composite `rename` are supported. Defaults, set sorting/trimming/dropping, and unknown keys reject. |
+| Unsupported/missing/ambiguous encoding | `AdmissionError`; diagnostics identify the ordered field and item shape. Compilation and fidelity recheck the complete item contract. |
+
+The manifest uses `collection: "ordered"`; its `kind`, `datatype`, `in`, and scalar
+guards constrain the item value. `ordered` records `itemClass`, `position`, `value`,
+optional `minPosition`, and outer `severity`. Outer cardinality counts linked items.
+Data and wrapper types use `readonly T[]`; assigning a new array replaces the field.
+Composite `nodes` lenses retain this contract.
+
+Runtime reads sort safe integer positions numerically, retain duplicate values, and permit
+gaps. Duplicate positions or any malformed item reject the entity at Violation severity;
+Warning/Info drop the entire field. A merged outer property rejects if any source is
+Violation. Strict composite-child validation still rejects every present violation.
+Named items must be safe http(s) IRIs in the same lexical document; blank nodes reject,
+matching composite NamedNode traversal. Item class membership uses the existing bounded
+data-graph subclass walk. Fields cap at 256 items and 10,000 raw link/item/class reads.
+
+Writes mint `<document>#<resolvedFieldName>-<1-based index>`, assert the item class,
+and write positions 1..n. Invalid scalar values follow the existing datatype drop/sanitize
+policy; surviving values keep their relative order and receive consecutive positions.
+Oversized/nonarray inputs throw before mutation. Replacement clears links and only removes
+the item class, position and value triples of exclusively linked, same-document items.
+Shared/foreign items and unrelated predicates/types survive. Deterministic subject
+collisions with unrelated or shared nodes throw atomically.
+
+Two deliberate refinements keep the encoding interoperable: normalized SHACL adds explicit
+`sh:class <itemClass>` and `sh:nodeKind sh:IRI` on the owning property, because
+`sh:targetClass` alone does not constrain values of `sh:node`. This is the requested
+typed-item runtime policy made explicit for other validators. Position uniqueness, safety
+and resource caps remain runtime policies. Negative positions are valid only when the
+profile's optional lower bound permits them; use `sh:minInclusive 1` for positive positions.
+No ordered opt-in means unchanged generation bytes.
+
 ## The bookmarks pilot + the parity bar
 
 [`examples/bookmark/`](./examples/bookmark/README.md) points to the production
