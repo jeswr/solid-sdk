@@ -1202,9 +1202,10 @@ describe('inject — binary bodies and Request inputs', () => {
       mode: 'cors',
       duplex: 'half',
     } as RequestInit);
+    // Not 'omit': an omitting request never enters the routed path (sst-5mya).
     const init = {
       headers: new Headers({ 'X-App': 'snapshot' }),
-      credentials: 'omit' as RequestCredentials,
+      credentials: 'same-origin' as RequestCredentials,
     };
     const promise = (autoDivert ? dom.window.fetch : solidApi().fetch)(request, init);
     init.headers.set('X-App', 'mutated');
@@ -1218,7 +1219,7 @@ describe('inject — binary bodies and Request inputs', () => {
       expect(copy.url).toBe(request.url);
       expect(copy.method).toBe('PUT');
       expect(copy.mode).toBe('cors');
-      expect(snapInit.credentials).toBe('omit');
+      expect(snapInit.credentials).toBe('same-origin');
       expect(new Headers(snapInit.headers).get('x-app')).toBe('snapshot');
       controller.close();
       const reader = copy.body!.getReader();
@@ -1320,4 +1321,131 @@ it('disconnect remains callable without a grant and rejects a worker error', asy
     );
     await expectation;
   }
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("inject — sst-5mya: credentials 'omit' never reaches authenticated egress", () => {
+  /** What native fetch would act on: a real Request built from the arguments it received. */
+  function nativeView(): Request {
+    const [input, init] = nativeFetch.mock.calls[0] as [RequestInfo, RequestInit?];
+    return new Request(input, init);
+  }
+
+  it.each([
+    ['init', () => ['https://pod.example/public', { credentials: 'omit' }]],
+    // The suite's publicFetch shape: caller init spread, then credentials forced to omit.
+    ['spread init', () => ['https://pod.example/public', { method: 'GET', credentials: 'omit' }]],
+    ['Request', () => [new Request('https://pod.example/public', { credentials: 'omit' })]],
+    [
+      'Request with init that does not override it',
+      () => [new Request('https://pod.example/public', { credentials: 'omit' }), { method: 'GET' }],
+    ],
+    [
+      'an object whose String() is omit',
+      () => ['https://pod.example/public', { credentials: { toString: (): string => 'omit' } }],
+    ],
+    [
+      'a Request whose credentials property is shadowed',
+      () => {
+        const request = new Request('https://pod.example/public', { credentials: 'omit' });
+        Object.defineProperty(request, 'credentials', { value: 'include' });
+        return [request];
+      },
+    ],
+  ] as const)('a cross-origin fetch omitting credentials via %s stays on native fetch', async (_, args) => {
+    await importInject();
+    posted.length = 0;
+    await dom.window.fetch(...(args() as unknown as [RequestInfo, RequestInit?]));
+    expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(false);
+    expect(nativeFetch).toHaveBeenCalledTimes(1);
+    expect(nativeView().credentials).toBe('omit');
+  });
+
+  it('reads a credentials getter once and hands native fetch the value it checked', async () => {
+    await importInject();
+    posted.length = 0;
+    const answers = ['omit', 'include'];
+    const get = vi.fn(() => answers.shift());
+    const init = Object.defineProperty({}, 'credentials', { get, enumerable: true });
+    await dom.window.fetch('https://pod.example/public', init);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(false);
+    expect(nativeView().credentials).toBe('omit');
+  });
+
+  it('a getter answering include first is routed on that answer, not re-read', async () => {
+    await importInject();
+    posted.length = 0;
+    const answers = ['include', 'omit'];
+    const get = vi.fn(() => answers.shift());
+    void dom.window.fetch(
+      'https://pod.example/private',
+      Object.defineProperty({}, 'credentials', { get }),
+    );
+    await vi.waitFor(() => expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(true));
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it('a throwing getter rejects with its first error and is not re-run', async () => {
+    await importInject();
+    posted.length = 0;
+    const failure = new Error('getter');
+    const get = vi.fn(() => {
+      throw failure;
+    });
+    await expect(
+      dom.window.fetch(
+        'https://pod.example/public',
+        Object.defineProperty({}, 'credentials', { get }),
+      ),
+    ).rejects.toBe(failure);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(nativeFetch).not.toHaveBeenCalled();
+    expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(false);
+  });
+
+  it('an invalid mode is normalised and rejected as native fetch would, never sent to the worker', async () => {
+    await importInject();
+    posted.length = 0;
+    const outcome = await dom.window
+      .fetch('https://pod.example/public', {
+        credentials: { toString: () => 'bogus' } as unknown as RequestCredentials,
+      })
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST')).toBe(false);
+    if (outcome !== 'resolved') expect(outcome).toBeInstanceOf(TypeError);
+    else expect(() => nativeView()).toThrow(TypeError);
+  });
+
+  it.each([
+    ['no credentials option', () => ['https://pod.example/private']],
+    ["credentials 'include'", () => ['https://pod.example/private', { credentials: 'include' }]],
+    ['a null init', () => ['https://pod.example/private', null]],
+    [
+      "an init 'include' overriding a Request's 'omit'",
+      () => [
+        new Request('https://pod.example/private', { credentials: 'omit' }),
+        { credentials: 'include' },
+      ],
+    ],
+    // A URL has no credentials mode of its own, even with a property claiming one.
+    [
+      'a URL object claiming omit',
+      () => [Object.assign(new URL('https://pod.example/private'), { credentials: 'omit' })],
+    ],
+  ] as const)('a cross-origin fetch with %s is still routed', async (_, args) => {
+    await importInject();
+    posted.length = 0;
+    void dom.window.fetch(...(args() as unknown as [RequestInfo, RequestInit?])).catch(() => {});
+    await vi.waitFor(() =>
+      expect(posted.some((m) => m.type === 'SOLID_FETCH_REQUEST' && m.autoDivert === true)).toBe(
+        true,
+      ),
+    );
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
 });

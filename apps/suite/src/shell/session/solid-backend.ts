@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import {
   AmbiguousIssuerError,
@@ -10,8 +11,15 @@ import {
   type PodAuthOptions,
 } from "@jeswr/pod-auth";
 import { classifyLoginInput, resolveLoginTarget } from "@jeswr/pod-auth/directory";
+import {
+  type AuthSessionPlugin,
+  createNativeCodeDriver,
+  isNativeApp,
+  MOBILE_REDIRECT_URI,
+} from "@jeswr/suite-native";
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
+import { CLIENT_ID_URL } from "@/lib/urls";
 import { openSolidLoginPopup, type SolidLoginPopup } from "./solid-popup";
 import {
   type SessionBackend,
@@ -23,11 +31,18 @@ import {
 
 // Capture before authentication starts. Discovery and display reads never attach credentials.
 const pristineFetch = globalThis.fetch.bind(globalThis);
-interface SolidBackendOptions {
+export interface SolidBackendOptions {
   createAuth?: (options: PodAuthOptions) => PodAuth;
   resolveTarget?: typeof resolveLoginTarget;
   publicFetch?: typeof fetch;
   openPopup?: (redirectUri: string) => SolidLoginPopup;
+  isNativeApp?: () => boolean;
+  loadAuthSessionPlugin?: () => Promise<AuthSessionPlugin>;
+  createNativeCodeDriver?: typeof createNativeCodeDriver;
+}
+
+async function loadAuthSessionPlugin(): Promise<AuthSessionPlugin> {
+  return (await import("@jeswr/suite-native/capacitor")).authSessionPlugin;
 }
 
 function isLoopback(hostname: string): boolean {
@@ -42,7 +57,10 @@ function signInFailure(error: unknown): SignInError {
   if (error instanceof SignInError) return error;
   if (error instanceof IssuerNotAuthorizedError) return new SignInError("issuer-not-authorized");
   if (error instanceof AmbiguousIssuerError) return new SignInError("ambiguous-issuer");
-  if (error instanceof Error && ["AbortError", "CodeRequestCancelledError"].includes(error.name))
+  if (
+    error instanceof Error &&
+    ["AbortError", "CodeRequestCancelledError", "UserCancelledError"].includes(error.name)
+  )
     return new SignInError("cancelled");
   return new SignInError("failed");
 }
@@ -56,6 +74,7 @@ export class SolidBackend implements SessionBackend {
   readonly kind = "solid";
   readonly #options: SolidBackendOptions;
   readonly #publicFetch: typeof fetch;
+  readonly #native: boolean;
   readonly #listeners = new Set<() => void>();
   #auth: PodAuth | undefined;
   #restoring: Promise<SuiteAccount | null> | undefined;
@@ -66,11 +85,13 @@ export class SolidBackend implements SessionBackend {
   #attempt: AbortController | undefined;
   #authorizing = false;
   #popup: SolidLoginPopup | undefined;
+  #nativeDriver: PodAuthOptions["ui"]["getCode"] | undefined;
   #redirectUri = "";
   #insecure = false;
 
   constructor(options: SolidBackendOptions = {}) {
     this.#options = options;
+    this.#native = (options.isNativeApp ?? isNativeApp)();
     const transport = options.publicFetch ?? pristineFetch;
     this.#publicFetch = (input, init) => transport(input, { ...init, credentials: "omit" });
   }
@@ -78,30 +99,48 @@ export class SolidBackend implements SessionBackend {
   #core(): PodAuth {
     if (this.#auth) return this.#auth;
     if (typeof location === "undefined") throw new SignInError("unavailable");
-    this.#insecure = process.env.NODE_ENV !== "production" && isLoopback(location.hostname);
-    this.#redirectUri = new URL("/auth/callback.html", location.origin).href;
+    this.#insecure =
+      !this.#native && process.env.NODE_ENV !== "production" && isLoopback(location.hostname);
+    this.#redirectUri = this.#native
+      ? MOBILE_REDIRECT_URI
+      : new URL("/auth/callback.html", location.origin).href;
     this.#auth = (this.#options.createAuth ?? createPodAuth)({
-      // Same loopback-only dynamic registration as Drive; reuse the shell's deployed document.
-      clientId: this.#insecure
-        ? { dynamicRegistration: true }
-        : new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
+      // Native identity stays on the public deployment, independently of the local WebView origin.
+      clientId: this.#native
+        ? CLIENT_ID_URL
+        : this.#insecure
+          ? { dynamicRegistration: true }
+          : new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
       redirectUri: this.#redirectUri,
       allowInsecureLoopback: this.#insecure,
+      // The scheme callback is accepted only with pod-auth's explicit native opt-in.
+      ...(this.#native ? { nativeRedirect: true as const } : {}),
       ui: {
         getWebId: async () => {
           throw new SignInError("invalid-url");
         },
         getCode: async (url, signal) => {
-          // Restore and background fetch must never open interactive windows. A refresh that
-          // needs authorization ends the shell session; explicit reauthentication owns a popup.
+          // Restore and background fetch must never open the browser. A refresh that needs
+          // authorization ends the shell session; only explicit reauthentication owns the UI.
           if (
             !this.#authorizing ||
-            !this.#popup ||
+            (!this.#native && !this.#popup) ||
             url.searchParams.get("prompt")?.split(/\s+/u).includes("none")
           ) {
             if (this.#account && !this.#attempt) this.#expire();
             throw new SignInError("cancelled");
           }
+          if (this.#native) {
+            if (!this.#nativeDriver) {
+              const plugin = await (this.#options.loadAuthSessionPlugin ?? loadAuthSessionPlugin)();
+              this.#nativeDriver = (this.#options.createNativeCodeDriver ?? createNativeCodeDriver)(
+                { plugin, redirectUri: this.#redirectUri, returns: "callback" },
+              );
+            }
+            if (signal.aborted || !this.#authorizing) throw new SignInError("cancelled");
+            return this.#nativeDriver(url, signal);
+          }
+          if (!this.#popup) throw new SignInError("cancelled");
           return this.#popup.getCode(url, signal);
         },
       },
@@ -235,6 +274,7 @@ export class SolidBackend implements SessionBackend {
   async signIn(hint: SignInHint, options: SignInOptions = {}): Promise<SuiteAccount> {
     const input = "issuer" in hint ? hint.issuer : hint.webId;
     const insecure =
+      !this.#native &&
       typeof location !== "undefined" &&
       process.env.NODE_ENV !== "production" &&
       isLoopback(location.hostname);
@@ -254,7 +294,8 @@ export class SolidBackend implements SessionBackend {
     const started = this.#version;
     try {
       const core = this.#core();
-      this.#popup = (this.#options.openPopup ?? openSolidLoginPopup)(this.#redirectUri);
+      if (!this.#native)
+        this.#popup = (this.#options.openPopup ?? openSolidLoginPopup)(this.#redirectUri);
       // Cancelling this attempt must not cancel or log out the independently restoring session.
       let cancelRestore = () => {};
       const cancelled = new Promise<never>((_resolve, reject) => {
