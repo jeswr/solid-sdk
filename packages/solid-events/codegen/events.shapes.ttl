@@ -1,0 +1,55 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <https://schema.org/> .
+@prefix ev: <https://jeswr.org/ns/events#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+# Derived from scheduling/scheduling.shacl.ttl CalendarEventShape and AttendanceShape.
+# Map summary/startTime/endTime/organizer to schema.org invitation equivalents.
+# Narrow the date/dateTime sh:or to dateTime only (closed admission rejects sh:or).
+# Organizer is required and an http(s) IRI; omit sh:class Agent (no local rdf:type).
+# Omit recurrence, inCalendar, tasks, reminders and availability: invitations are not schedules.
+# Attendance becomes an independent schema:RsvpAction; guest-list entries use InviteAction.
+# Add invitation policy, timestamps, location text, capacity and schema.org IRI enums.
+# Additional guests are narrowed to 0–20 for invitations.
+# Cross-field time ordering and agent-or-name rules are facade policy, not SHACL sh:or.
+
+ev:EventShape a sh:NodeShape ; sh:targetClass schema:Event ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:pattern "\\S" ; ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:maxCount 1 ; sh:datatype xsd:string ; ] ;
+  sh:property [ sh:path schema:startDate ; sh:name "startDate" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path schema:endDate ; sh:name "endDate" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; ] ;
+  sh:property [ sh:path schema:location ; sh:name "location" ; sh:maxCount 1 ; sh:datatype xsd:string ; ] ;
+  sh:property [ sh:path schema:address ; sh:name "address" ; sh:maxCount 1 ; sh:datatype xsd:string ; ] ;
+  sh:property [ sh:path schema:url ; sh:name "onlineUrl" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; ] ;
+  sh:property [ sh:path schema:image ; sh:name "image" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; ] ;
+  sh:property [ sh:path schema:organizer ; sh:name "organizer" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path schema:eventStatus ; sh:name "eventStatus" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:in ( schema:EventScheduled schema:EventCancelled schema:EventPostponed ) ; ] ;
+  sh:property [ sh:path schema:maximumAttendeeCapacity ; sh:name "capacity" ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ; ] ;
+  sh:property [ sh:path ev:guestListVisible ; sh:name "guestListVisible" ; sh:maxCount 1 ; sh:datatype xsd:boolean ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path ev:visibility ; sh:name "visibility" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ( "invitees" "link" ) ; ] ;
+  sh:property [ sh:path ev:publication ; sh:name "publication" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ( "draft" "published" ) ; ] ;
+  sh:property [ sh:path ev:rsvpDeadline ; sh:name "rsvpDeadline" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] .
+
+ev:RsvpShape a sh:NodeShape ; sh:targetClass schema:RsvpAction ;
+  sh:property [ sh:path schema:agent ; sh:name "agent" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; ] ;
+  sh:property [ sh:path schema:object ; sh:name "event" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path schema:rsvpResponse ; sh:name "response" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; sh:in ( schema:RsvpResponseYes schema:RsvpResponseNo schema:RsvpResponseMaybe ) ; ] ;
+  sh:property [ sh:path schema:additionalNumberOfGuests ; sh:name "additionalGuests" ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:minInclusive 0 ; sh:maxInclusive 20 ; ] ;
+  sh:property [ sh:path schema:comment ; sh:name "comment" ; sh:maxCount 1 ; sh:datatype xsd:string ; ] ;
+  sh:property [ sh:path schema:startTime ; sh:name "repliedAt" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path schema:name ; sh:name "displayName" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "\\S" ; ] ;
+  sh:property [ sh:path ev:guestKey ; sh:name "guestKey" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "\\S" ; ] .
+
+ev:InviteeShape a sh:NodeShape ; sh:targetClass schema:InviteAction ;
+  sh:property [ sh:path schema:recipient ; sh:name "webId" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; ] ;
+  sh:property [ sh:path schema:name ; sh:name "displayName" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "\\S" ; ] ;
+  sh:property [ sh:path schema:object ; sh:name "event" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:minCount 1 ; ] ;
+  sh:property [ sh:path schema:startTime ; sh:name "invitedAt" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ; sh:minCount 1 ; ] .

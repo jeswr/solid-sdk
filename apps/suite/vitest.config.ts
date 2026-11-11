@@ -24,6 +24,8 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/events/lib/**/*.ts",
+        "src/apps/events/state/**/*.{ts,tsx}",
         "src/apps/agent/lib/**/*.ts",
         "src/shell/lib/**/*.ts",
         "src/shell/sync/connection-state.ts",

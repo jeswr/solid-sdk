@@ -1,0 +1,64 @@
+{
+  "shapesBase": "https://jeswr.org/ns/events/shapes#",
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "ev": "https://jeswr.org/ns/events#",
+    "dct": "http://purl.org/dc/terms/"
+  },
+  "entities": [
+    {
+      "name": "Event",
+      "targetClass": "https://schema.org/Event",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "onlineUrl": {
+          "iriScheme": "http-https"
+        },
+        "image": {
+          "iriScheme": "http-https"
+        },
+        "organizer": {
+          "iriScheme": "http-https"
+        },
+        "eventStatus": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "Rsvp",
+      "targetClass": "https://schema.org/RsvpAction",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "agent": {
+          "iriScheme": "http-https"
+        },
+        "event": {
+          "iriScheme": "http-https"
+        },
+        "response": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "Invitee",
+      "targetClass": "https://schema.org/InviteAction",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "webId": {
+          "iriScheme": "http-https"
+        },
+        "event": {
+          "iriScheme": "http-https"
+        }
+      }
+    }
+  ]
+}

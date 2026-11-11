@@ -1,0 +1,52 @@
+{
+  "name": "@jeswr/solid-events",
+  "version": "0.1.0",
+  "description": "Generated Solid event invitations, independent RSVPs and guest lists.",
+  "type": "module",
+  "securityCritical": true,
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/events.ontology.ttl --shapes codegen/events.shapes.ttl --config codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test *.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/storage-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@biomejs/biome": "2.5.3",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "25.9.5",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
