@@ -15,6 +15,7 @@ import {
 } from "../lib/accounts-store";
 import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
+import { forgetMovePodDestination } from "../settings/move-pod-session";
 import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
 import { SolidBackend } from "./solid-backend";
@@ -209,6 +210,7 @@ export function AccountsProvider({
     const results = await Promise.allSettled([
       purgeNativePodCache(account.webId),
       backend?.signOut(account),
+      forgetMovePodDestination(id),
     ]);
     const failure = results.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
@@ -226,12 +228,13 @@ export function AccountsProvider({
       /* Browser storage may be blocked. */
     }
     dispatch({ type: "clear" });
-    const results = await Promise.allSettled(
-      previous.flatMap(({ account, backend }) => [
+    const results = await Promise.allSettled([
+      ...previous.flatMap(({ account, backend }) => [
         purgeNativePodCache(account.webId),
         backend?.signOut(account),
       ]),
-    );
+      forgetMovePodDestination(),
+    ]);
     const failure = results.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
   };

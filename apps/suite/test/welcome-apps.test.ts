@@ -31,6 +31,11 @@ describe("welcome app directory", () => {
       .map((app) => app.project.replace(/^solid-(?:sdk-)?/, ""));
     expect(new Set(companionApps.map((app) => app.id)).size).toBe(companionApps.length);
     for (const app of companionApps) {
+      if (app.id === "pod-migrator") {
+        // Moved into Settings; the Pages slug only redirects to the default deployment.
+        expect(app.href).toBe("/settings/move-pod");
+        continue;
+      }
       expect(app.href).toBe(
         app.statusLabel === "For developers"
           ? `https://github.com/jeswr/solid-sdk/tree/main/apps/${app.id}`

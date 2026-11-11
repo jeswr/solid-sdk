@@ -201,7 +201,10 @@ test("client identity and callback bridge are served", async ({ page, request, b
   const origin = new URL(document.client_id).origin;
   expect(new URL(origin).hostname).toMatch(/^(localhost|127\.0\.0\.1)$/);
   expect(document.client_id).toBe(`${origin}/.well-known/solid-client-id.jsonld`);
-  expect(document.redirect_uris).toEqual([`${origin}/auth/callback.html`]);
+  expect(document.redirect_uris).toEqual([
+    `${origin}/auth/callback.html`,
+    `${origin}/settings/move-pod/callback/target`,
+  ]);
   const forged = await request.get(clientUrl, {
     headers: { "x-forwarded-host": "attacker.example" },
   });

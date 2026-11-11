@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Plugin } from "vite";
 import { afterEach, expect, it, vi } from "vitest";
-import config from "../vite.config.js";
+import config, { suiteRedirectBase } from "../vite.config.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -18,7 +18,7 @@ it.each([
   if (typeof config !== "function") throw new Error("Missing Vite configuration");
   const resolved = await config({ command: "build", mode: "test" });
   const suiteUrl = JSON.parse(resolved.define?.["import.meta.env.VITE_SUITE_URL"] as string);
-  expect(suiteUrl).toBe(configured ?? "https://solid-suite.vercel.app");
+  expect(suiteUrl).toBe(expected);
   vi.stubEnv("VITE_SUITE_URL", suiteUrl);
   const link = { href: "" };
   const replace = vi.fn();
@@ -39,4 +39,26 @@ it.each([
       {} as never,
     ),
   ).toContain(`href="${link.href}"`);
+});
+
+it.each([
+  "javascript:alert(1)",
+  "http://suite.example",
+  "https://user:pass@suite.example",
+  "https://suite.example/?next=x",
+  "https://suite.example/#x",
+  "not a url",
+])("refuses an unsafe suite URL %s", (value) => {
+  expect(() => suiteRedirectBase(value)).toThrow();
+});
+
+it("escapes the suite URL for the HTML link", async () => {
+  vi.stubEnv("VITE_SUITE_URL", "https://suite.example/a'b");
+  if (typeof config !== "function") throw new Error("Missing Vite configuration");
+  const resolved = await config({ command: "build", mode: "test" });
+  const plugin = resolved.plugins?.[0] as Plugin;
+  const transform = plugin.transformIndexHtml as { handler: (html: string) => string };
+  expect(transform.handler('<a href="%VITE_SUITE_URL%/x">')).toBe(
+    '<a href="https://suite.example/a&#39;b/x">',
+  );
 });

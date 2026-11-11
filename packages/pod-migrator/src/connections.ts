@@ -353,6 +353,126 @@ export async function inspectPod(
   } catch {
     // Unavailable headers supply no implementation evidence; source readings stay conservative.
   }
-  signal.throwIfAborted();
+  // A slow pod only loses implementation evidence; a caller's cancellation still rejects.
+  if (
+    signal.aborted &&
+    !(signal.reason instanceof DOMException && signal.reason.name === "TimeoutError")
+  )
+    throw signal.reason;
   return { ...side, implementation };
+}
+
+// AUTHORED-BY Claude Opus 5.5
+/** Literal key (audited by the storage-isolation test) recording which host account owns a session. */
+const hostOwnerKeys = {
+  source: "pod-migrator:source:host-owner",
+  target: "pod-migrator:target:host-owner",
+} as const satisfies Record<ConnectionId, string>;
+
+function readOwner(id: ConnectionId): string | null {
+  try {
+    return globalThis.localStorage?.getItem(hostOwnerKeys[id]) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOwner(id: ConnectionId, owner: string | null): void {
+  try {
+    if (owner === null) globalThis.localStorage?.removeItem(hostOwnerKeys[id]);
+    else globalThis.localStorage?.setItem(hostOwnerKeys[id], owner);
+  } catch {
+    // Blocked storage: an unrecorded owner never matches, so the session is discarded next time.
+  }
+}
+
+function clearRecentAccounts(id: ConnectionId): void {
+  try {
+    globalThis.localStorage?.removeItem(storageKeys[id].recentAccountsKey);
+  } catch {
+    // Blocked storage holds no recent accounts.
+  }
+}
+
+/**
+ * A session embedded in a host app that has its own accounts. The stored session belongs to
+ * the host account that started it: when a different host account (or none recorded) opens
+ * the flow, the stored session is logged out before anything is restored, and a sign-in
+ * callback started by another host account is not completed.
+ */
+class HostBoundConnection extends PodConnection {
+  private bound: Promise<void> | undefined;
+
+  constructor(
+    id: ConnectionId,
+    auth: SolidAuth,
+    base: string,
+    private readonly home: string,
+    private readonly owner: string,
+  ) {
+    super(id, auth, base);
+  }
+
+  override initialize(url: string): Promise<void> {
+    this.bound ??= this.initializeBound(url);
+    return this.bound;
+  }
+
+  private async initializeBound(url: string): Promise<void> {
+    if (readOwner(this.id) === this.owner) return super.initialize(url);
+    writeOwner(this.id, null);
+    clearRecentAccounts(this.id);
+    // logout() clears the restore pointer before its durable delete, so a failed delete
+    // still leaves nothing to restore.
+    await this.auth.logout().catch(() => {});
+    // Never complete a callback another host account started: initialise as a plain visit.
+    return super.initialize(this.home);
+  }
+
+  override async login(value: string, kind: "webid" | "issuer"): Promise<void> {
+    writeOwner(this.id, this.owner);
+    return super.login(value, kind);
+  }
+
+  override async logout(): Promise<void> {
+    await super.logout();
+    writeOwner(this.id, null);
+  }
+}
+
+/** Create a session owned by one host account (see {@link HostBoundConnection}). */
+export function createHostBoundConnection(options: {
+  id: ConnectionId;
+  origin: string;
+  base: string;
+  owner: string;
+  clientId?: string;
+}): PodConnection {
+  const config = authConfig(options.id, options.origin, options.base);
+  if (options.clientId) config.clientId = options.clientId;
+  return new HostBoundConnection(
+    options.id,
+    createSolidAuth(config),
+    options.base,
+    new URL(options.base, options.origin).href,
+    options.owner,
+  );
+}
+
+/**
+ * Log out a stored session when the host signs out. With `owner`, only a session that host
+ * account started is forgotten; without it (sign out of everything) any owned session is.
+ */
+export async function forgetHostBoundConnection(options: {
+  id: ConnectionId;
+  origin: string;
+  base: string;
+  owner?: string;
+}): Promise<void> {
+  const stored = readOwner(options.id);
+  // A session with no recorded owner is never restored by a host-bound connection.
+  if (stored === null || (options.owner !== undefined && stored !== options.owner)) return;
+  writeOwner(options.id, null);
+  clearRecentAccounts(options.id);
+  await createSolidAuth(authConfig(options.id, options.origin, options.base)).logout();
 }

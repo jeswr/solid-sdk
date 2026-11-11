@@ -18,14 +18,21 @@ import {
   readPreviousRun,
   saveReport,
 } from "@jeswr/pod-migrator";
-import { createConnection, inspectPod, type PodConnection } from "@jeswr/pod-migrator/connections";
+import {
+  createHostBoundConnection,
+  inspectPod,
+  type PodConnection,
+} from "@jeswr/pod-migrator/connections";
 import { Button, Input } from "@jeswr/suite-ui";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
 import { ConnectionCard } from "./migration-connection";
 import { PlanReport } from "./migration-report";
+import { MOVE_POD_BASE, movePodUnavailable } from "./move-pod-session";
 
+const leaveWhileRunning =
+  "A migration is running. Leaving this page stops it after the current request. Leave anyway?";
 const steps = ["Connect source", "Connect target", "Options", "Plan", "Run", "Result"];
 const phaseLabels: Record<Progress["phase"], string> = {
   crawl: "Finding your files",
@@ -175,6 +182,15 @@ export function MovePodSettings() {
     return (
       <p>Moving to another pod needs a real pod. Sign in with your Solid account to continue.</p>
     );
+  const unavailable = movePodUnavailable();
+  if (unavailable)
+    return (
+      <p>
+        {unavailable === "native"
+          ? "Moving to another pod is available in Solid Suite on the web. Open Settings there to continue."
+          : "Moving to another pod needs the suite to be served over HTTPS, so the destination sign-in can complete."}
+      </p>
+    );
   return (
     <LiveMigration
       key={`${account.id}:${account.webId}:${account.storageUrl}:${accounts.status}`}
@@ -196,19 +212,26 @@ function LiveMigration({
   const [sourceError, setSourceError] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
-    const connection = createConnection(
-      "target",
-      location.origin,
-      "/settings/move-pod/",
-      new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
-    );
-    setConnection(connection);
-    const http = createPodHttp({ root: account.storageUrl, fetch: fetchFor(account) });
-    // This transport is intentionally anonymous; group expansion never falls back to owner credentials.
-    const publicHttp = createPodHttp({
-      root: account.storageUrl,
-      fetch: connection.auth.publicFetch,
+    // The destination session belongs to this suite account: another account never restores it.
+    const connection = createHostBoundConnection({
+      id: "target",
+      origin: location.origin,
+      base: MOVE_POD_BASE,
+      owner: account.id,
+      clientId: new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
     });
+    setConnection(connection);
+    let http: PodSide["http"];
+    let publicHttp: PodSide["http"];
+    try {
+      http = createPodHttp({ root: account.storageUrl, fetch: fetchFor(account) });
+      // This transport is intentionally anonymous; group expansion never falls back to owner credentials.
+      publicHttp = createPodHttp({ root: account.storageUrl, fetch: connection.auth.publicFetch });
+    } catch {
+      // A storage URL the path fence refuses (not HTTPS, or with a query or fragment).
+      setSourceError(true);
+      return () => controller.abort();
+    }
     void inspectPod(
       { root: account.storageUrl, ownerWebId: account.webId, http, publicHttp },
       AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
@@ -266,7 +289,7 @@ export function MigrationFlow({
   useEffect(() => {
     void targetConnection.initialize(location.href).then(() => {
       if (location.pathname.includes("/callback/target"))
-        history.replaceState(null, "", "/settings/move-pod");
+        history.replaceState(null, "", MOVE_POD_BASE.slice(0, -1));
     });
   }, [targetConnection]);
   useEffect(() => {
@@ -279,6 +302,30 @@ export function MigrationFlow({
     },
     [],
   );
+  // Leaving the section stops a run, so confirm before an in-app link or a page unload does it.
+  useEffect(() => {
+    if (busy !== "running") return;
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const click = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target as Partial<Element> | null;
+      const anchor = target?.closest?.("a[href]") as HTMLAnchorElement | null | undefined;
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      const url = new URL(anchor.href, location.href);
+      if (url.origin === location.origin && url.pathname === location.pathname) return;
+      if (!window.confirm(leaveWhileRunning)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", click, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", click, true);
+    };
+  }, [busy]);
 
   const target = useMemo<PodSide | null>(
     () =>
@@ -480,8 +527,9 @@ export function MigrationFlow({
         ],
       };
     } finally {
+      // Keep the record even when the section closed mid-run: it lists what was already written.
+      persist();
       if (generation.current === current) {
-        persist();
         setReport(journal);
         setStep(5);
         setBusy(null);

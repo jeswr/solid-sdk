@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { createPodHttp, executeMigration, finalizePlan, planMigration } from "@jeswr/pod-migrator";
 import {
   type ConnectionState,
-  createConnection,
+  createHostBoundConnection,
   inspectPod,
   type PodConnection,
 } from "@jeswr/pod-migrator/connections";
@@ -11,6 +11,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
 import { MigrationFlow, MovePodSettings } from "../src/shell/settings/move-pod";
+import { movePodUnavailable } from "../src/shell/settings/move-pod-session";
 import { deferred, h } from "./drive-ui-dom";
 import { samplePlan, sourceRoot, targetRoot } from "./migrator-fixtures";
 
@@ -30,8 +31,12 @@ vi.mock("@jeswr/pod-migrator", async (original) => ({
 }));
 vi.mock("@jeswr/pod-migrator/connections", async (original) => ({
   ...(await original<typeof import("@jeswr/pod-migrator/connections")>()),
-  createConnection: vi.fn(),
+  createHostBoundConnection: vi.fn(),
   inspectPod: vi.fn(),
+}));
+vi.mock("../src/shell/settings/move-pod-session", async (original) => ({
+  ...(await original<typeof import("../src/shell/settings/move-pod-session")>()),
+  movePodUnavailable: vi.fn(() => null),
 }));
 
 let state: ConnectionState;
@@ -89,7 +94,7 @@ beforeEach(() => {
     status: "ready",
     fetchFor: vi.fn(() => vi.fn()),
   } as unknown as AccountsContextValue;
-  vi.mocked(createConnection).mockReturnValue(target);
+  vi.mocked(createHostBoundConnection).mockReturnValue(target);
   vi.mocked(inspectPod).mockImplementation(async (side) => side);
   vi.mocked(planMigration).mockResolvedValue(samplePlan);
   vi.mocked(finalizePlan).mockReturnValue({} as ReturnType<typeof finalizePlan>);
@@ -118,7 +123,7 @@ it("hides migration controls and authentication for demo accounts", () => {
   render(h(MovePodSettings));
   expect(screen.getByText(/needs a real pod/)).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
-  expect(createConnection).not.toHaveBeenCalled();
+  expect(createHostBoundConnection).not.toHaveBeenCalled();
   expect(accounts.current.fetchFor).not.toHaveBeenCalled();
 });
 
@@ -130,12 +135,13 @@ it("pins the source to the active account and uses an independent destination cl
     expect.objectContaining({ root: account.storageUrl, ownerWebId: account.webId }),
     expect.any(AbortSignal),
   );
-  expect(createConnection).toHaveBeenCalledWith(
-    "target",
-    location.origin,
-    "/settings/move-pod/",
-    new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
-  );
+  expect(createHostBoundConnection).toHaveBeenCalledWith({
+    id: "target",
+    origin: location.origin,
+    base: "/settings/move-pod/",
+    owner: account.id,
+    clientId: new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
+  });
   expect(screen.getByText(account.webId)).toBeTruthy();
 });
 
@@ -280,4 +286,89 @@ it("cancels execution and displays the engine's partial report", async () => {
   expect(
     JSON.parse(sessionStorage.getItem("pod-migrator:run-report:v1") ?? "null").result.cancelled,
   ).toBe(true);
+});
+
+it.each([
+  ["native", /available in Solid Suite on the web/],
+  ["insecure", /served over HTTPS/],
+] as const)("explains why the destination sign-in cannot run (%s)", (reason, text) => {
+  vi.mocked(movePodUnavailable).mockReturnValueOnce(reason);
+  render(h(MovePodSettings));
+  expect(screen.getByText(text)).toBeTruthy();
+  expect(createHostBoundConnection).not.toHaveBeenCalled();
+  expect(accounts.current.fetchFor).not.toHaveBeenCalled();
+});
+
+it("shows the source error for a storage URL the path fence refuses", async () => {
+  accounts.current.active = { ...account, storageUrl: "http://source.example/" };
+  render(h(MovePodSettings));
+  expect((await screen.findByRole("alert")).textContent).toContain("Could not connect");
+});
+
+it("keeps the engine's report when the section closes mid-run", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof executeMigration>>>();
+  vi.mocked(executeMigration).mockReturnValueOnce(pending.promise);
+  await review();
+  for (const radio of screen.getAllByLabelText(/Leave out the group grant/)) fireEvent.click(radio);
+  fireEvent.click(screen.getByRole("checkbox", { name: /I have reviewed/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Start migration" }));
+  await screen.findByRole("button", { name: "Cancel migration" });
+  cleanup();
+  expect(vi.mocked(executeMigration).mock.calls[0]?.[1].signal?.aborted).toBe(true);
+  await act(async () => {
+    pending.resolve({
+      copied: [`${targetRoot}notes.txt`],
+      aclWritten: [],
+      failed: [],
+      skipped: [],
+      log: [],
+      verified: false,
+      cancelled: true,
+    });
+  });
+  const saved = JSON.parse(sessionStorage.getItem("pod-migrator:run-report:v1") ?? "null");
+  expect(saved.status).toBe("finished");
+  expect(saved.result.copied).toEqual([`${targetRoot}notes.txt`]);
+});
+
+it("asks before an in-app link leaves a running migration", async () => {
+  const pending = deferred<Awaited<ReturnType<typeof executeMigration>>>();
+  vi.mocked(executeMigration).mockReturnValueOnce(pending.promise);
+  const link = document.createElement("a");
+  link.href = "/drive";
+  link.textContent = "Drive";
+  document.body.append(link);
+  const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+  link.addEventListener("click", followed);
+  const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+  try {
+    await review();
+    for (const radio of screen.getAllByLabelText(/Leave out the group grant/))
+      fireEvent.click(radio);
+    fireEvent.click(screen.getByRole("checkbox", { name: /I have reviewed/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Start migration" }));
+    await screen.findByRole("button", { name: "Cancel migration" });
+    fireEvent.click(link);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(followed).not.toHaveBeenCalled();
+    fireEvent.click(link);
+    expect(followed).toHaveBeenCalledTimes(1);
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+  } finally {
+    confirm.mockRestore();
+    link.remove();
+    await act(async () => {
+      pending.resolve({
+        copied: [],
+        aclWritten: [],
+        failed: [],
+        skipped: [],
+        log: [],
+        verified: true,
+        cancelled: false,
+      });
+    });
+  }
 });

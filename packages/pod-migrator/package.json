@@ -39,7 +39,8 @@
     "dist",
     "README.md",
     "SKILL.md",
-    "docs/DESIGN.md"
+    "docs/DESIGN.md",
+    "src/README.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
