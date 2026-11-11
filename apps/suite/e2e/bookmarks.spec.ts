@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { seedDemoSession } from "./demo-session";
 
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
+  await seedDemoSession(page);
   await page.route("**/__bookmarks-test-reset", (route) =>
     route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Reset demo</title>" }),
   );
