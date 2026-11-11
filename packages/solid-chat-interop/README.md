@@ -138,12 +138,18 @@ The value rule covers shell assignments/exports, `=`/`:`/`:=` code and object ke
 URL query parameters. Compact env lines starting with an optionally indented/exported
 `UPPER_SNAKE_CASE=` name redact regardless of the name, covering `DATABASE_URL` and
 `STRIPE_LIVE`; lowercase or spaced neutral code assignments stay. URL userinfo
-passwords also redact. Quoted values include embedded newlines and unfinished final
-quotes. In shell and env assignments, backslashes are literal inside single quotes: the
-next single quote ends the value. Code string literals (JS, Python, JSON, `name: '...'`)
-and double quotes support backslash escapes, so `'abc\'def'` is redacted to its real
-end. Where a `name:` value could be either, it scans escape-aware and errs toward
-redacting more. Following code and lines stay.
+passwords also redact.
+
+Values never cross a line break, except on an unambiguous env line (an optionally
+exported `UPPER_SNAKE_CASE=` assignment at line start), whose multi-line quotes and
+backslash continuations redact in full. Everywhere else an unterminated or ambiguous
+quote redacts to the end of its line and scanning resumes on the next line, so a value
+can never swallow a later key while leaving that key's value visible; the price is that
+a mid-line multi-line string keeps its later lines. In shell and env assignments,
+backslashes are literal inside single quotes, and a word continues after a closing
+quote (`'abc\'123'` redacts as one word, quotes included). Code string literals (JS,
+Python, JSON, `name: '...'`) and double quotes support backslash escapes, so
+`'abc\'def'` is redacted to its real end. Following code and lines stay.
 
 Unquoted value boundaries depend on syntax:
 

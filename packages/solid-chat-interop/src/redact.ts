@@ -39,16 +39,35 @@ function secretName(name: string): boolean {
 
 type ValueSyntax = "code" | "shell" | "query";
 
-/** Find one value without backtracking; retain its surrounding quotes, if any. */
-function valueSpan(text: string, offset: number, syntax: ValueSyntax) {
+/**
+ * Find one value without backtracking; retain its surrounding quotes, if any.
+ * Only an unambiguous env/shell line (`[export] UPPER_NAME=` at line start) may continue past
+ * its line, through a multi-line quote or a backslash continuation. Every other value stops at
+ * the end of its line: an unterminated or ambiguous quote redacts to end of line and scanning
+ * resumes on the next line, so a value can never swallow a later key while leaving its value.
+ */
+function valueSpan(text: string, offset: number, syntax: ValueSyntax, multiline: boolean) {
   const quote = text[offset];
-  const quoted = quote === '"' || quote === "'";
-  const start = quoted ? offset + 1 : offset;
+  let quoted = quote === '"' || quote === "'";
+  let start = quoted ? offset + 1 : offset;
   let innerQuote = quoted ? quote : undefined;
   let end = start;
   while (end < text.length) {
     const char = text[end];
-    if (quoted && char === quote) return { start, end, next: end + 1 };
+    if (!multiline && (char === "\n" || char === "\r")) break;
+    if (quoted && char === quote) {
+      // A shell word continues straight after a closing quote (`'abc\'123'` is one word), so
+      // redact the whole word, quotes included, instead of leaving its tail.
+      const after = text[end + 1] ?? "";
+      if (syntax !== "shell" || after === "" || /[\s;|&]/.test(after)) {
+        return { start, end, next: end + 1 };
+      }
+      quoted = false;
+      innerQuote = undefined;
+      start = offset;
+      end += 1;
+      continue;
+    }
     if (!innerQuote) {
       // Token rules run first; their markers contain spaces and must stay atomic.
       const length = markerLength(text, end);
@@ -72,7 +91,12 @@ function valueSpan(text: string, offset: number, syntax: ValueSyntax) {
     // Backslash is literal only inside shell single quotes; code string literals
     // (JS, Python, JSON) stay escape-aware so `'abc\'def'` is scanned to its real end.
     if (char === "\\" && !(innerQuote === "'" && syntax === "shell") && syntax !== "query") {
-      // Include escaped whitespace and LF/CRLF continuations, even at EOF.
+      // Include escaped whitespace and LF/CRLF continuations, even at EOF. A single-line
+      // value keeps its trailing backslash but stops at the line break.
+      if (!multiline && (text[end + 1] === "\n" || text[end + 1] === "\r")) {
+        end += 1;
+        break;
+      }
       end += text[end + 1] === "\r" && text[end + 2] === "\n" ? 3 : 2;
     } else {
       end += 1;
@@ -100,13 +124,12 @@ function typeAnnotationSpan(text: string, offset: number) {
     if (limit >= text.length || !/^\s*(?:[A-Za-z_$][A-Za-z0-9_$.]*)?\s*$/.test(window)) {
       return undefined;
     }
-    let end = offset;
-    while (/\s/.test(text[end] ?? "")) end += 1;
-    const identifier = end;
+    // Blank-ness is decided inside the bounded window, before any scan beyond it.
+    if (/^\s*$/.test(window)) return { end: limit, complete: false, overflow: true };
+    let end = limit;
     while (/[A-Za-z0-9_$.]/.test(text[end] ?? "")) end += 1;
-    const blank = end === identifier;
     while (/\s/.test(text[end] ?? "")) end += 1;
-    return blank || text[end] === "<" ? { end, complete: false, overflow: true } : undefined;
+    return text[end] === "<" ? { end, complete: false, overflow: true } : undefined;
   }
   let depth = 0;
   let needsType = true;
@@ -234,7 +257,7 @@ function redactValues(text: string): string {
       } else if (!flag || offset === nameEnd) continue;
       while (text[offset] === " " || text[offset] === "\t") offset += 1;
     }
-    const span = valueSpan(text, offset, syntax);
+    const span = valueSpan(text, offset, syntax, Boolean(env));
     replace(span.start, span.end);
     candidates.lastIndex = span.next;
     previousEnd = span.next;

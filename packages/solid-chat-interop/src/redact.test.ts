@@ -109,8 +109,12 @@ describe("redaction before persistence", () => {
     expect(redactSecrets("Before\nAuthorization: FAKE\nAfter")).toBe(
       "Before\n[REDACTED AUTHORIZATION]\nAfter",
     );
-    // sst-5ax.36 preserves KEY and its quotes, unlike the old whole-assignment rule.
-    expect(redactSecrets('Before KEY="FAKE\nBODY" After')).toBe('Before KEY="[REDACTED]" After');
+    // sst-5ax.36 preserves KEY and its quotes, unlike the old whole-assignment rule. Only a
+    // line-start env assignment may continue past its line; mid-line values stop at the break.
+    expect(redactSecrets('Before KEY="FAKE\nBODY" After')).toBe(
+      'Before KEY="[REDACTED]\nBODY" After',
+    );
+    expect(redactSecrets('KEY="FAKE\nBODY" After')).toBe('KEY="[REDACTED]" After');
   });
 
   const safeCode = [
@@ -265,16 +269,19 @@ describe("redaction before persistence", () => {
     ['password="abc123\\', 'password="[REDACTED]'],
     ["password='abc123", "password='[REDACTED]"],
     ['password="abc\\"123"; x = 1', 'password="[REDACTED]"; x = 1'],
-    // Single quotes now close even after a backslash; the following text stays verbatim.
-    ["password='abc\\'123'; x = 1", "password='[REDACTED]'123'; x = 1"],
+    // Shell single quotes close even after a backslash, but the word continues after the
+    // quote (`123'...` opens another quote to end of line), so the whole word redacts.
+    ["password='abc\\'123'; x = 1", "password=[REDACTED]"],
     ["PASS='a\\'\nx = 1", "PASS='[REDACTED]'\nx = 1"],
     ["PASS='a\\'\r\nx = 1", "PASS='[REDACTED]'\r\nx = 1"],
     ["pw = 'a\\\\' ; const total = a + b", "pw = '[REDACTED]' ; const total = a + b"],
     // `name: '...'` may be a JS/Python literal (escape-aware) or YAML (literal backslash).
-    // Erring toward redaction, it scans escape-aware: the value runs on rather than end early.
-    ["password: 'a\\'\nx = 1", "password: '[REDACTED]"],
-    ['apiKey = "first\nsecond";\nx = 1', 'apiKey = "[REDACTED]";\nx = 1'],
-    ["password=first\\\nsecond;\nx = 1", "password=[REDACTED];\nx = 1"],
+    // An ambiguous or unterminated quote redacts to the end of its line, and scanning resumes
+    // on the next line, so it can never swallow a later key.
+    ["password: 'a\\'\nx = 1", "password: '[REDACTED]\nx = 1"],
+    ['apiKey = "first\nsecond";\nx = 1', 'apiKey = "[REDACTED]\nsecond";\nx = 1'],
+    // Not a line-start env assignment: a continuation does not carry the value past its line.
+    ["password=first\\\nsecond;\nx = 1", "password=[REDACTED]\nsecond;\nx = 1"],
     ["postgres://user:abc123@host.test/db", "postgres://user:[REDACTED]@host.test/db"],
     ["git+ssh://user:abc123@host.test/repo", "git+ssh://user:[REDACTED]@host.test/repo"],
     ["https://user:abc:123@host.test/", "https://user:[REDACTED]@host.test/"],
@@ -418,6 +425,18 @@ describe("redaction before persistence", () => {
     expect(result).toBe(expected);
     expect(result).not.toMatch(/def|abc/);
     expect(redactSecrets(result)).toBe(result);
+  });
+
+  it("never lets an ambiguous quote swallow a later YAML key while leaving its value", () => {
+    const yaml = "password: 'a\\'\ntoken: 'xyz'\nname: Alice\napi_key: \"q\\\"r\"\nurl: ok";
+    const result = redactSecrets(yaml);
+    expect(result).toBe(
+      "password: '[REDACTED]\ntoken: '[REDACTED]'\nname: Alice\napi_key: \"[REDACTED]\"\nurl: ok",
+    );
+    expect(result).not.toMatch(/xyz|q\\"r/);
+    expect(redactSecrets(result)).toBe(result);
+    // Unterminated quotes stop at their line too.
+    expect(redactSecrets('secret: "abc\nother: 1')).toBe('secret: "[REDACTED]\nother: 1');
   });
 
   it("still treats backslash literally inside shell single quotes", () => {
