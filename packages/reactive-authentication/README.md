@@ -326,15 +326,27 @@ MIT licensed; see [LICENSE](LICENSE).
 
 `createServerOidcClient` supplies a split authorization/callback/refresh flow to `pod-auth/node`.
 It uses oauth4webapi for discovery, S256, state/nonce, signed ID-token validation and DPoP.
+By default, callback and refresh ID tokens must identify an HTTPS WebID whose RDF profile lists
+the configured issuer as `solid:oidcIssuer`. This applies to both the `webid` claim and the
+`sub` fallback. Profiles are fetched through the injected transport without credentials, using
+the package's bounded HTTPS redirect and RDF verification path; missing trust or retrieval
+failures reject the grant before installing credentials. `verifyWebId: false` skips this profile
+check only; use it only when the caller independently verifies the WebID-to-issuer binding.
 The broker owns encrypted pending-state and private-JWK envelopes, single-use callback consumption,
-refresh CAS, durable retirement and URL scope. A server signing key is exported once for its encrypted
+refresh CAS, durable retirement and session liveness. A server signing key is exported once for its encrypted
 JSON vault, then imported non-extractably; browser sessions retain CryptoKey persistence.
 Resource bodies have an abortable 10 MiB replay cap and nonce challenges retry once.
+Pass `allows: (url: URL) => boolean` to bound resource requests, for example
+`allows: url => url.origin === "https://pod.example"`. A denied URL throws before buffering or
+sending the request; the predicate is checked again immediately before every resource send,
+including DPoP nonce retries and LWS Bearer retries. Without `allows`, **there is no resource
+boundary**: `fetch()` attaches credentials to any requested URL, and the caller must enforce scope.
+The predicate does not govern issuer discovery, WebID profiles or token exchanges; the injected
+transport remains responsible for any network policy on those requests.
 With `lws: true`, resource challenges also route through `LwsTokenProvider`, exchanging the
 current verified OIDC ID token (URI `sub` and matching client `azp`) for a storage-audience
 Bearer token. Exchanged tokens stay in
-memory; a missing or expired ID token fails closed. The broker must enforce resource scope
-and session liveness on its injected transport, including discovery, exchange and Bearer retries.
-Pass `trustAuthorizationServer` to decide which authorization servers may receive the ID token;
-without it, any server listed in a resource's RFC 9728 metadata is trusted, so brokers should
-always set it.
+memory; a missing or expired ID token fails closed. `lws: true` requires a
+`trustAuthorizationServer` policy deciding which authorization servers may receive the ID token;
+construction throws before discovery when it is absent. The broker must enforce session liveness
+on its injected transport, including discovery, exchange and Bearer retries.

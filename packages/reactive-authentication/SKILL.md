@@ -3,6 +3,7 @@ name: reactive-authentication
 description: Use when maintaining the imported @jeswr/reactive-authentication protocol engine, token providers, credential boundaries, persistent caches, browser elements and service-worker bridge.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Maintain the authentication protocol engine
 
@@ -14,6 +15,12 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 `registerElements` has registration side effects. The core entry point must remain usable in Node.
 
 - Inject transport, credential boundaries, providers and stores. Preserve the pristine fetch seam.
+- `createServerOidcClient` verifies the WebID-to-issuer profile binding by default for callback and
+  refresh ID tokens, including the HTTPS `sub` fallback. `verifyWebId: false` is for callers that
+  independently verify that binding. Its optional `allows(URL)` predicate rejects resource URLs
+  before buffering and before each resource send (including retries); without it there is no
+  resource boundary. Discovery, profile and exchange requests use the injected transport separately.
+  `lws: true` requires `trustAuthorizationServer`; reject missing policies before discovery.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
 - RFC 9728 LWS discovery is supported; legacy `as_uri`/`realm` challenges are behind

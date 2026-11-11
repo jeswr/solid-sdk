@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from "jose";
+import { DataFactory, Writer } from "n3";
 import { afterEach, expect, test, vi } from "vitest";
 import { lwsStorage } from "../../mcp-oauth/test/lws-storage.ts";
 // Shared offline issuer verifies PKCE, DPoP signatures, key binding and refresh rotation.
@@ -10,16 +12,41 @@ import {
   POD_ROOT,
   podIssuer,
 } from "../../mcp-oauth/test/pod-issuer.ts";
+import { trustAuthorizationServers } from "../src/lws/LwsTokenProvider.js";
 import {
   createServerOidcClient,
   exportServerDpopKey,
   importServerDpopKey,
   SERVER_MAX_REPLAY_BODY_BYTES,
 } from "../src/ServerOidcClient.js";
+import { SimpleDataset } from "../src/SimpleDataset.js";
+import { WebIdAgent } from "../src/webId.js";
 
 afterEach(() => vi.restoreAllMocks());
+const lwsOptions = {
+  lws: true,
+  trustAuthorizationServer: trustAuthorizationServers(["https://lws.example/"]),
+};
 async function fixture(wrapFetch = (fetcher) => fetcher, extra = {}) {
   const op = podIssuer();
+  const profileRequests = [];
+  const issuerFetch = op.fetch;
+  // Serialize profiles for the current fixture identity, including account switches and sub fallback.
+  op.fetch = async (input, init) => {
+    const request = new Request(input instanceof Request ? input.clone() : input, init);
+    const id = op.controls.refreshWebId ?? op.controls.webId ?? op.controls.idSubject;
+    if (typeof id !== "string" || request.url !== id.split("#")[0]) return issuerFetch(input, init);
+    profileRequests.push(request);
+    const dataset = new SimpleDataset([]);
+    const agent = new WebIdAgent(id, dataset, DataFactory);
+    if (op.controls.profileIssuers > 0) agent.oidcIssuers.add(new URL(op.controls.profileIssuer));
+    if (op.controls.profileIssuers > 1)
+      agent.oidcIssuers.add(new URL("https://other-issuer.example/"));
+    return new Response(new Writer().quadsToString([...dataset]), {
+      status: op.controls.profileStatus,
+      headers: { "content-type": "text/turtle" },
+    });
+  };
   const options = {
     issuer: POD_ISSUER,
     clientId: POD_CLIENT,
@@ -30,18 +57,174 @@ async function fixture(wrapFetch = (fetcher) => fetcher, extra = {}) {
   const client = await createServerOidcClient(options);
   const begin = await client.authorizationUrl();
   const login = () => client.handleCallback({ url: op.callback(begin.url) }, begin.state);
-  return { op, options, client, begin, login };
+  return { op, options, client, begin, login, profileRequests };
 }
+
+test.each([
+  "webid",
+  "sub",
+])("rejects an issuer not listed by the %s WebID profile by default", async (claim) => {
+  const f = await fixture();
+  if (claim === "sub") {
+    f.op.controls.idSubject = f.op.controls.webId;
+    f.op.controls.webId = undefined;
+  }
+  f.op.controls.profileIssuer = "https://unrelated.example/";
+  await expect(f.login()).rejects.toThrow("issuer");
+  expect(f.client.currentWebId()).toBeUndefined();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
+});
+
+test.each([
+  undefined,
+  true,
+])("accepts a listed issuer with verifyWebId=%s using an unauthenticated profile fetch", async (verifyWebId) => {
+  const f = await fixture(undefined, { verifyWebId });
+  f.op.controls.profileIssuers = 2;
+  const session = await f.login();
+  expect(session.webId).toBe(f.op.controls.webId);
+  expect(f.client.currentWebId()).toBe(session.webId);
+  expect(f.profileRequests).toHaveLength(1);
+  const [request] = f.profileRequests;
+  expect(request.url).toBe(session.webId.split("#")[0]);
+  expect(request.credentials).toBe("omit");
+  expect(request.redirect).toBe("manual");
+  expect(request.headers.get("accept")).toBe("text/turtle");
+  expect(request.headers.has("authorization")).toBe(false);
+  expect(request.headers.has("dpop")).toBe(false);
+});
+
+test.each(["missing issuer", "unavailable profile"])("fails closed for a %s", async (kind) => {
+  const f = await fixture();
+  if (kind === "missing issuer") f.op.controls.profileIssuers = 0;
+  else f.op.controls.profileStatus = 503;
+  await expect(f.login()).rejects.toThrow();
+  expect(f.client.currentWebId()).toBeUndefined();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
+});
+
+test("checks the WebID issuer binding when restoring credentials with a refresh grant", async () => {
+  const f = await fixture();
+  const session = await f.login();
+  const restored = await createServerOidcClient({
+    ...f.options,
+    dpopKeyPair: f.client.dpopKeyPair,
+  });
+  f.op.controls.profileIssuer = "https://unrelated.example/";
+  await expect(restored.refresh(session.tokens.refreshToken)).rejects.toThrow("issuer");
+  expect(restored.currentWebId()).toBeUndefined();
+  await expect(restored.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
+});
+
+test("allows explicit WebID verification opt-out on callback and refresh without fetching a profile", async () => {
+  const f = await fixture(undefined, { verifyWebId: false });
+  f.op.controls.profileIssuer = "https://unrelated.example/";
+  f.op.controls.profileStatus = 503;
+  const session = await f.login();
+  expect(session.webId).toBe(f.op.controls.webId);
+  await f.client.refresh(session.tokens.refreshToken);
+  expect(f.client.currentWebId()).toBe(session.webId);
+  expect(f.profileRequests).toHaveLength(0);
+});
+
+test("requires an explicit LWS authorization server policy before discovery", async () => {
+  const op = podIssuer();
+  const fetcher = vi.fn(op.fetch);
+  await expect(
+    createServerOidcClient({
+      issuer: POD_ISSUER,
+      clientId: POD_CLIENT,
+      redirectUri: POD_CALLBACK,
+      fetch: fetcher,
+      lws: true,
+    }),
+  ).rejects.toThrow("lws: true requires trustAuthorizationServer");
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+test.each([
+  false,
+  true,
+])("allows blocks foreign resource URLs before transport (LWS: %s)", async (useLws) => {
+  const foreign = "https://foreign.example/private";
+  const sent = [];
+  const f = await fixture(
+    (fetcher, op) => {
+      const transport = useLws ? lwsStorage(op).fetch : fetcher;
+      return (input, init) => {
+        const request = new Request(input instanceof Request ? input.clone() : input, init);
+        sent.push(request);
+        if (request.url === foreign) return Promise.resolve(new Response("foreign"));
+        return transport(input, init);
+      };
+    },
+    {
+      ...(useLws ? lwsOptions : {}),
+      allows: (url) => url.href.startsWith(POD_ROOT),
+    },
+  );
+  await f.login();
+  expect((await f.client.fetch(`${POD_ROOT}notes`)).status).toBe(200);
+  await expect(f.client.fetch(foreign)).rejects.toThrow("boundary");
+  expect(sent.some((request) => request.url === foreign)).toBe(false);
+});
+
+test.each([
+  false,
+  true,
+])("rechecks allows before credentialed retries (LWS: %s)", async (useLws) => {
+  let allowed = true;
+  const resourceRequests = [];
+  const f = await fixture(
+    (fetcher, op) => {
+      const lws = useLws ? lwsStorage(op) : undefined;
+      if (lws)
+        lws.controls.onExchange = async () => {
+          allowed = false;
+        };
+      return async (input, init) => {
+        const request = new Request(input instanceof Request ? input.clone() : input, init);
+        const response = await (lws?.fetch ?? fetcher)(input, init);
+        if (request.url === `${POD_ROOT}notes`) {
+          resourceRequests.push(request);
+          if (!useLws) allowed = false;
+        }
+        return response;
+      };
+    },
+    {
+      ...(useLws ? lwsOptions : {}),
+      allows: () => allowed,
+    },
+  );
+  await f.login();
+  if (!useLws) f.op.controls.resourceNonce = true;
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("boundary");
+  expect(resourceRequests).toHaveLength(1);
+  expect(resourceRequests[0].headers.get("authorization")).toMatch(/^DPoP /);
+});
+
+test("without allows the caller owns the resource boundary", async () => {
+  const foreign = "https://foreign.example/private";
+  const sent = [];
+  const f = await fixture((fetcher) => (input, init) => {
+    const request = new Request(input instanceof Request ? input.clone() : input, init);
+    if (request.url !== foreign) return fetcher(input, init);
+    sent.push(request);
+    return Promise.resolve(new Response("foreign"));
+  });
+  const session = await f.login();
+  expect((await f.client.fetch(foreign)).status).toBe(200);
+  expect(sent[0].headers.get("authorization")).toBe(`DPoP ${session.tokens.accessToken}`);
+  expect(sent[0].headers.has("dpop")).toBe(true);
+});
 
 test("exchanges the verified server ID token for LWS Bearer access and reuses/renews it", async () => {
   let lws;
-  const f = await fixture(
-    (_, op) => {
-      lws = lwsStorage(op);
-      return lws.fetch;
-    },
-    { lws: true },
-  );
+  const f = await fixture((_, op) => {
+    lws = lwsStorage(op);
+    return lws.fetch;
+  }, lwsOptions);
   await f.login();
   expect((await lws.fetch(`${POD_ROOT}note.txt`)).status).toBe(401);
   for (let n = 0; n < 2; n++) {
@@ -111,13 +294,10 @@ test.each([
   "client",
 ])("LWS rejects %s credentials/discovery before exchange", async (kind) => {
   let lws;
-  const f = await fixture(
-    (_, op) => {
-      lws = lwsStorage(op);
-      return lws.fetch;
-    },
-    { lws: true },
-  );
+  const f = await fixture((_, op) => {
+    lws = lwsStorage(op);
+    return lws.fetch;
+  }, lwsOptions);
   if (kind === "subject") f.op.controls.idSubject = "opaque-subject";
   if (kind === "client") f.op.controls.idAuthorizedParty = undefined;
   const session = await f.login();
