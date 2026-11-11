@@ -26,11 +26,11 @@ import {
   type ManifestField,
   type ModelManifest,
 } from "@jeswr/model-runtime";
-import type { Quad } from "@rdfjs/types";
+import type { Quad, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import type { NodeViews } from "./nodeviews.js";
 import { resolveOrdered } from "./ordered.js";
-import { RDF, SH, serializeCanonicalTurtle } from "./rdf.js";
+import { Graph, RDF, SH, serializeCanonicalTurtle } from "./rdf.js";
 import { enumValues, type NormalizedShapes, propertySources } from "./shapes.js";
 
 const GENERATED_HEADER =
@@ -307,6 +307,49 @@ export function emitModelDts(manifest: ModelManifest, nodeViews?: NodeViews): st
   );
 }
 
+/** Remove only replaced list cells without a reference from the retained graph. */
+function withoutReplacedListCells(quads: Quad[], replacedLinks: Quad[]): Quad[] {
+  if (!replacedLinks.length) return quads;
+  const graph = new Graph(quads);
+  const key = (term: Term): string => `${term.termType}:${term.value}`;
+  const isListQuad = (q: Quad): boolean =>
+    q.predicate.value === `${RDF}first` || q.predicate.value === `${RDF}rest`;
+  const cells = new Map<string, Term>();
+  const pending: Term[] = replacedLinks.map((q) => q.object);
+  while (pending.length) {
+    const cell = pending.pop() as Term;
+    if (
+      (cell.termType !== "NamedNode" && cell.termType !== "BlankNode") ||
+      (cell.termType === "NamedNode" && cell.value === `${RDF}nil`) ||
+      cells.has(key(cell))
+    )
+      continue;
+    cells.set(key(cell), cell);
+    pending.push(...graph.objects(cell, `${RDF}rest`));
+  }
+  // A retained link to a head or suffix keeps that cell and everything it needs.
+  // Treat other retained references conservatively, including predicate/graph use.
+  const retained = new Set<string>();
+  const retain = (term: Term): void => {
+    const id = key(term);
+    if (!cells.has(id) || retained.has(id)) return;
+    retained.add(id);
+    pending.push(term);
+  };
+  for (const q of quads) {
+    if (!cells.has(key(q.subject)) || !isListQuad(q)) retain(q.object);
+    retain(q.predicate);
+    retain(q.graph);
+  }
+  while (pending.length) {
+    const cell = pending.pop() as Term;
+    for (const q of graph.store.getQuads(cell, null, null, null)) retain(q.object);
+  }
+  return quads.filter(
+    (q) => !isListQuad(q) || !cells.has(key(q.subject)) || retained.has(key(q.subject)),
+  );
+}
+
 /** shapes.ttl — the skolemized, byte-reproducible stable waist. */
 export function emitShapesTtl(shapes: NormalizedShapes, prefixes: Record<string, string>): string {
   // The closed-world ontology interpretation must also be explicit in SHACL.
@@ -317,8 +360,12 @@ export function emitShapesTtl(shapes: NormalizedShapes, prefixes: Record<string,
       .filter((c) => c.conceptIris !== undefined)
       .map((c) => [c.shapeIri, c]),
   );
-  const quads: Quad[] = shapes.quads.filter(
-    (q) => !concepts.has(q.subject.value) || ![`${SH}class`, `${SH}in`].includes(q.predicate.value),
+  const quads = withoutReplacedListCells(
+    shapes.quads.filter(
+      (q) =>
+        !concepts.has(q.subject.value) || ![`${SH}class`, `${SH}in`].includes(q.predicate.value),
+    ),
+    shapes.quads.filter((q) => concepts.has(q.subject.value) && q.predicate.value === `${SH}in`),
   );
   const occupied = new Set(
     shapes.quads

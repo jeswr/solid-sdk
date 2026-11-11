@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { AdmissionError } from "./admission.js";
-import { SH } from "./rdf.js";
+import { compareStrings, SH } from "./rdf.js";
 import {
   enumValues,
   type NodeShapeModel,
@@ -17,7 +18,7 @@ export function mergeNodeShapes(shapes: NodeShapeModel[]): NodeShapeModel[] {
     groups.set(shape.targetClass, group);
   }
   return [...groups.values()].map((group) => {
-    group.sort((a, b) => a.iri.localeCompare(b.iri));
+    group.sort((a, b) => compareStrings(a.iri, b.iri));
     const first = group[0] as NodeShapeModel;
     if (group.length === 1) return first;
     const properties = new Map<string, ShapeConstraint>();
@@ -126,7 +127,7 @@ export function mergeNodeShapes(shapes: NodeShapeModel[]): NodeShapeModel[] {
     return {
       ...first,
       shapeIris: group.map((s) => s.iri),
-      properties: [...properties.values()].sort((a, b) => a.pathIri.localeCompare(b.pathIri)),
+      properties: [...properties.values()].sort((a, b) => compareStrings(a.pathIri, b.pathIri)),
     };
   });
 }

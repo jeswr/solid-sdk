@@ -49,6 +49,9 @@ the spelling they will store. The guard inventory is:
   Ontology-derived concept enums add `guards.iriEnum: true`: supplied nonmember values
   throw `TypeError` on build, setters and live-set additions. Reads use the same exact
   membership checks and severity-graded drops; concept types need not be in pod data.
+  Even a Warning-graded concept `sh:class` becomes a strict runtime enum: supplied
+  nonmember writes throw and reads drop nonmembers, while emitted `sh:in` retains
+  `sh:Warning`. Runtime membership enforcement is stricter than that advisory SHACL severity.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
 - **One serialization boundary**, after alias migration: `serializeTurtle` checks every

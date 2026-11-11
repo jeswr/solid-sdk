@@ -74,6 +74,10 @@ TypeScript field is a union of exact IRI strings, and emitted SHACL lowers `sh:c
 the vocabulary set; zero named individuals and projected composite links retain the
 existing class/link behavior. Supplied nonmember writes throw the runtime's `TypeError`;
 reads retain severity-graded drops. Ordinary `sh:in` writes still drop invalid values.
+This also applies to a Warning-graded `sh:class` on a concept class: the runtime enum
+is strict, so supplied nonmember writes throw and reads drop nonmembers. The emitted
+`sh:in` retains `sh:Warning`; runtime membership enforcement is stricter than that
+advisory SHACL severity.
 
 ## Ordered collections
 
