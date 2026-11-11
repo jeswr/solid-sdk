@@ -72,6 +72,7 @@ export default defineConfig({
         "src/apps/tasks/lib/reminders/**/*.ts",
         "src/apps/tasks/state/reminders.ts",
         "src/apps/tasks/lib/todoist/**/*.ts",
+        "src/apps/tasks/lib/import/**/*.ts",
         "src/apps/tasks/lib/google-tasks/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/music/lib/lyrics/**/*.ts",
