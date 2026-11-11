@@ -37,6 +37,7 @@ import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
+import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
 import { openAddTask } from "../state/add-focus";
@@ -269,10 +270,15 @@ export function TasksSidebar() {
   const projects = tasks.projects.filter(
     (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
   );
-  // Only active, discovered projects render; unavailable trackers never leave stale rows here.
-  const favourites = tasks.projects.filter(
-    (project) => preferences.favourites.includes(project.url) && !project.tracker.archivedAt,
-  );
+  // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
+  const favourites = tasks.projects.filter((project) => {
+    const error = tasks.tasks[project.url]?.error;
+    return (
+      preferences.favourites.includes(project.url) &&
+      !project.tracker.archivedAt &&
+      !(error instanceof ModelError && error.url === project.url && error.category === "not-found")
+    );
+  });
   const link = (
     href: string,
     title: string,

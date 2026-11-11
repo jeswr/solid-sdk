@@ -26,6 +26,8 @@ export function ProjectColourPicker({
   const noneId = useId();
   const anchor = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
+  const interactedOutside = useRef(false);
+  const selectedColour = projectColour(colour)?.hex ?? "none";
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>
@@ -38,16 +40,21 @@ export function ProjectColourPicker({
         align="start"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
+          interactedOutside.current = false;
           content.current?.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+        }}
+        onInteractOutside={() => {
+          interactedOutside.current = true;
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          anchor.current?.querySelector<HTMLButtonElement>("button")?.focus();
+          if (!interactedOutside.current)
+            anchor.current?.querySelector<HTMLButtonElement>("button")?.focus();
         }}
       >
         <RadioGroup
           aria-label="Colour"
-          value={projectColour(colour)?.hex ?? "none"}
+          value={selectedColour}
           onValueChange={(value) => onSelect(value === "none" ? undefined : value)}
           className="tsk-colour-swatches"
         >
@@ -61,7 +68,15 @@ export function ProjectColourPicker({
             />
           ))}
           <label className="tsk-no-colour" htmlFor={noneId}>
-            <RadioGroupItem id={noneId} value="none" aria-label="No colour" />
+            <RadioGroupItem
+              id={noneId}
+              value="none"
+              aria-label="No colour"
+              onClick={() => {
+                // An unknown stored value already selects "none", so Radix emits no change.
+                if (selectedColour === "none" && colour !== undefined) onSelect(undefined);
+              }}
+            />
             No colour
           </label>
         </RadioGroup>

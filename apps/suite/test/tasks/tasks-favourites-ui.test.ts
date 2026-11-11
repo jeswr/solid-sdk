@@ -1,16 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { serialize } from "../../src/apps/tasks/lib/model/rdf";
+import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import {
   setPreferencesIdentity,
   useTasksPreferences,
 } from "../../src/apps/tasks/state/preferences";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { act, click, h, key, mount } from "../drive-ui-dom";
-import { webId } from "./pod";
+import { now, type Pod, webId } from "./pod";
 import { frameCache } from "./tasks-frame-fixtures";
 
 let cache: TasksCache;
+let pod: Pod;
 let dispatch: ReturnType<typeof useTasksPreferences>["dispatch"];
 const dropNodes = new Map<string, HTMLElement>();
 vi.mock("../../src/apps/tasks/components/dnd/use-task-drag", () => ({
@@ -46,9 +49,9 @@ beforeEach(async () => {
   setPreferencesIdentity(undefined);
   localStorage.clear();
   setPreferencesIdentity(webId);
-  cache = (await frameCache()).cache;
+  ({ cache, pod } = await frameCache());
 });
-afterEach(() => setPreferencesIdentity(undefined));
+afterEach(() => act(() => setPreferencesIdentity(undefined)));
 
 async function choose(root: ParentNode, label: string) {
   const trigger = root.querySelector<HTMLButtonElement>('[aria-label="Project actions for Home"]');
@@ -114,4 +117,50 @@ it("clears the Favourites section on account switch and sign-out", async () => {
   expect(host.querySelector('[aria-label="Favourites"]')).toBeTruthy();
   await act(() => setPreferencesIdentity(undefined));
   expect(host.querySelector('[aria-label="Favourites"]')).toBeNull();
+});
+
+it.each([
+  404, 410,
+])("drops a shared favourite after its owner deletes it (HTTP %s)", async (status) => {
+  const url = "https://bob.example/projects/home.ttl";
+  const shared = createTracker(url, "Home", url.replace(/\.ttl$/, "/"), [webId], now);
+  const body = await serialize(shared.dataset);
+  pod.seed(url, body);
+  await cache.setSharedProjects([{ url, title: "Home" }]);
+  const { host } = await mount(h(Sidebar));
+  await act(() => {
+    dispatch({ type: "sharedProject", url, title: "Home" });
+    dispatch({ type: "favouriteProject", url, value: true });
+  });
+  const favourites = () => host.querySelector('[aria-label="Favourites"]');
+  expect(favourites()?.textContent).toContain("Home");
+  const project = cache.getSnapshot().projects.find((project) => project.url === url);
+  if (!project) throw new Error("Missing shared project");
+  // A missing task container doesn't confirm deletion of the tracker itself.
+  pod.intercept = (request) =>
+    request.url === shared.tracker.stateStore ? new Response(null, { status: 410 }) : undefined;
+  await act(() => cache.loadTasks(project));
+  expect(cache.getSnapshot().tasks[url]?.error).toMatchObject({
+    status: 410,
+    url: shared.tracker.stateStore,
+  });
+  expect(favourites()?.textContent).toContain("Home");
+  // An access/server failure is not confirmation that the tracker was deleted.
+  for (const transient of [403, 503]) {
+    pod.intercept = (request) =>
+      request.url === url ? new Response(null, { status: transient }) : undefined;
+    await act(() => cache.refreshProjects());
+    expect(favourites()?.textContent).toContain("Home");
+  }
+  pod.files.delete(url);
+  pod.intercept = (request) =>
+    status === 410 && request.url === url ? new Response(null, { status }) : undefined;
+  await act(() => cache.refreshProjects());
+  expect(cache.getSnapshot().tasks[url]?.error).toMatchObject({ status });
+  expect(favourites()).toBeNull();
+  // Keep the preference so a restored tracker can reappear after a successful refresh.
+  pod.intercept = undefined;
+  pod.seed(url, body);
+  await act(() => cache.refreshProjects());
+  expect(favourites()?.textContent).toContain("Home");
 });
