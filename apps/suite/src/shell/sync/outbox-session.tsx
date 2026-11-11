@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { createPodClient, type StorageClient } from "@jeswr/storage-client";
 import {
   createOutbox,
+  type GuardPolicy,
   type Outbox,
   type QueueingStorageClient,
+  type ReplayDelegate,
   withOutbox,
 } from "@jeswr/suite-sdk/offline";
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
@@ -19,6 +22,22 @@ interface OutboxSession {
   adapter: ReturnType<typeof createRealOutbox>;
   storage: QueueingStorageClient | null;
   signal: AbortSignal;
+  /** Register trusted scope requirements for this session, including while storage opens. */
+  registerGuardPolicy(tag: string, matches: GuardPolicy): () => void;
+  /**
+   * Register after storage opens, in a useEffect keyed on this session. Replacement
+   * unregisters automatically; callers must register again for the next session.
+   */
+  registerReplayDelegate(
+    tag: string,
+    factory: (session: {
+      fetch: typeof globalThis.fetch;
+      storageUrl: string;
+      webId: string;
+      storage: StorageClient;
+      signal: AbortSignal;
+    }) => ReplayDelegate,
+  ): () => void;
 }
 const Context = createContext<OutboxSession | null>(null);
 
@@ -35,6 +54,10 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
     const controller = new AbortController();
     const active = () =>
       latest.current.active === account && latest.current.isActiveAccount(account.id);
+    const check = () => {
+      controller.signal.throwIfAborted();
+      if (!active()) throw new Error("The outbox account is no longer active");
+    };
     const fetch = outboxTransport(
       (input, init) => latest.current.fetch(input, init),
       active,
@@ -53,6 +76,30 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
       adapter,
       storage: null,
       signal: controller.signal,
+      registerGuardPolicy(tag, matches) {
+        check();
+        return outbox.registerGuardPolicy(tag, (operation) => {
+          check();
+          return matches(operation);
+        });
+      },
+      registerReplayDelegate(tag, factory) {
+        check();
+        if (!storage) throw new Error("Your storage is still opening. Please try again.");
+        const delegate = factory({
+          fetch,
+          storageUrl: account.storageUrl,
+          webId: account.webId,
+          storage,
+          signal: controller.signal,
+        });
+        return outbox.registerDelegate(tag, async (delivery, ctx) => {
+          check();
+          const result = await delegate(delivery, ctx);
+          check();
+          return result;
+        });
+      },
     };
     setSession(opened);
     let opening = false;
