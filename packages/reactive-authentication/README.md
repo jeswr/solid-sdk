@@ -251,6 +251,8 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   `OidcSessionOptions.revocationSignal` lets an owning instance cancel revocation requests, stalled
   response bodies and their deadlines on disposal. Aborting it alone does not purge session stores;
   an explicit logout still performs its local cleanup before revocation.
+- `OidcSession.identity()` returns `undefined` if logout supersedes its session while a cache or durable
+  store read is pending. Store failures still reject the lookup; reading identity never starts a login.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security
   boundary against same-origin scripts. Non-extractable keys prevent export, not use, by malicious same-origin
   JavaScript ([OAuth 2.0 for Browser-Based Applications](https://www.rfc-editor.org/rfc/rfc10017.html)).

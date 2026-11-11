@@ -1,3 +1,4 @@
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/suite-sdk
@@ -66,6 +67,12 @@ A single account is just a manager with one account; no single-session fallback 
 Existing applications can continue using `PodAuthProvider` directly.
 
 ## Offline (`SDK-APP-08`)
+
+The same entry re-exports `createPageCache`, `PageCache`, `PageCacheOptions`,
+`purgeForWebId` and `cacheProvenance` for native session integration (MOB-P3e).
+The caller supplies the bounded session fetch and live `usable()` fence, starts change
+subscriptions after commit, and purges on account switch/logout. See the
+[page cache contract](../solid-offline/README.md#native-page-cache-mob-p3e).
 
 `@jeswr/suite-sdk/offline` re-exports `createOutbox`, `withOutbox`, `mergeRdf`, the outbox
 types and `useOfflineStatus`. `useOutbox(outbox: Outbox | null)` returns
@@ -145,7 +152,8 @@ await feeder.container(driveUrl, entries); // only after every page succeeds
 
 Resources replace their own named graphs. Container feeds replace separate synthetic graphs
 with `ldp:contains`, decoded filename `dct:title`, `dct:modified`, `stat:size`, `dct:format`,
-and the listing's RDF types. `containerSearchDataset(containerUrl, entries)` also exposes
+and the listing's RDF types, built through `@jeswr/ldp-container`'s typed metadata accessors.
+`containerSearchDataset(containerUrl, entries)` also exposes
 the RDF/JS quads directly. A complete replacement removes old listing members while retaining
 cached resource graphs; remove those separately with `index.remove(resourceUrl)` on deletion.
 

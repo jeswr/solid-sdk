@@ -15,6 +15,8 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 
 - Inject transport, credential boundaries, providers and stores. Preserve the pristine fetch seam.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
+- Revalidate the captured fence generation after credential-store reads. `OidcSession.identity()` reports
+  `undefined` when logout supersedes a pending read, while unrelated store errors still propagate.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
 - `OidcSessionOptions.revocationSignal` cancels pending revocations and deadlines on owner disposal.
   Remove its listeners on settlement; cancellation alone never purges retained session stores.

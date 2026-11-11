@@ -2,6 +2,7 @@
   "name": "@jeswr/app-extension",
   "version": "0.2.0",
   "private": true,
+  "$comment": "// AUTHORED-BY Codex GPT-6",
   "description": "Browser extension (MV3) for Solid authentication \u2014 injects window.solid (DPoP-authenticated fetch) and a pinned avatar account menu, consistent with the @jeswr Solid app suite.",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -20,6 +21,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@rdfjs/wrapper": "^0.32.0",
     "@solid/object": "^0.6.0",

@@ -12,6 +12,7 @@ import { IssuerNotAuthorizedError } from "./IssuerNotAuthorizedError.js";
 import { contextKey, withLock } from "./locks.js";
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
 import { SessionFence } from "./SessionFence.js";
+import { SessionSupersededError } from "./SessionSupersededError.js";
 import { clientAuthFor } from "./serverQuirks.js";
 import { supportsOfflineAccess } from "./supportsOfflineAccess.js";
 import { type HttpOptions, oauthOptions } from "./transport.js";
@@ -245,11 +246,17 @@ export class OidcSession {
         if (lockName !== (await this.#lockName(key)))
           return await this.get(as, context, combined, usable, interactive, generation);
         const cached = await this.#cache.getItem(key);
+        combined.throwIfAborted();
+        await fence.assertCurrent(generation);
+        combined.throwIfAborted();
         if (cached !== null && cached.generation === generation && usable(cached, false))
           return cached;
 
         // Refresh only from the authoritative copy: the durable record when there is one.
         const durable = store === undefined ? null : await store.getItem(key);
+        combined.throwIfAborted();
+        await fence.assertCurrent(generation);
+        combined.throwIfAborted();
         const candidate = store === undefined ? refreshRecordOf(cached, undefined) : durable;
         const record = candidate?.generation === generation ? candidate : null;
 
@@ -313,14 +320,25 @@ export class OidcSession {
     });
   }
 
-  /** The identity of the current session, without starting any flow. */
+  /** The current session's identity, or `undefined` if absent or superseded during a read. Never starts a flow. */
   async identity(issuer: string, context: string): Promise<Identity | undefined> {
     const key = await this.#key(issuer, context);
     const generation = await this.#fence.generation();
-    const cached = await this.#cache.getItem(key);
-    if (cached?.generation === generation) return cached.identity;
-    const durable = await this.#options.sessionStore?.getItem(key);
-    return durable?.generation === generation ? durable.identity : undefined;
+    const signal = this.#fence.signalFor(generation);
+    try {
+      signal.throwIfAborted();
+      const cached = await this.#cache.getItem(key);
+      await this.#fence.assertCurrent(generation);
+      signal.throwIfAborted();
+      if (cached?.generation === generation) return cached.identity;
+      const durable = await this.#options.sessionStore?.getItem(key);
+      await this.#fence.assertCurrent(generation);
+      signal.throwIfAborted();
+      return durable?.generation === generation ? durable.identity : undefined;
+    } catch (error) {
+      if (error instanceof SessionSupersededError) return undefined;
+      throw error;
+    }
   }
 
   /**
