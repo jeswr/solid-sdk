@@ -9,6 +9,7 @@
  * and notifications are released only after the commit is durable.
  */
 
+import { migrateDemoHealthPrivacy } from "./migrate-health";
 import { createDemoPod, type DemoPod, type DemoPodSnapshot } from "./pod";
 import { buildDemoSeed, DEMO_ROOT } from "./seed";
 
@@ -107,6 +108,15 @@ export function getDemoPod(): Promise<DemoPod> {
     const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}) });
     let view = stored ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot }) : fresh();
     if (!db) return offline(view);
+    // Upgrade saved demos atomically before exposing them. Never overwrite a
+    // concurrent tab's changes or a policy that differs from the old fixture.
+    while (stored && (await migrateDemoHealthPrivacy(view))) {
+      if (await commit(db, stored.revision, view.snapshot())) break;
+      stored = await readStored(db);
+      view = stored
+        ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot })
+        : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+    }
     if (!stored) {
       if (!(await commit(db, undefined, view.snapshot()))) {
         stored = await readStored(db);
