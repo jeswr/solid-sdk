@@ -61,12 +61,9 @@ export default defineConfig({
     alias: [
       { find: "@jeswr/pod-docs/ui", replacement: podDocsSrc("ui/index.ts") },
       { find: "@jeswr/pod-docs", replacement: podDocsSrc("index.ts") },
-      { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
       { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
       // Leave SDK subpaths to package exports (a directory alias would hide them).
-      { find: /^@solid\/object$/, replacement: hostModule("@solid/object") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
-      { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source
       // from out-of-root, Vite would otherwise stub React out. Pin react/react-dom
       // (and their subpaths, e.g. react/jsx-runtime) to the host's single copy.

@@ -57,12 +57,16 @@ export function NotesLoadError({ retry }: { retry: () => void }) {
   );
 }
 
-export function NotesMissingState() {
+export function NotesMissingState({
+  detail = "This note may have been moved or deleted.",
+}: {
+  detail?: string;
+}) {
   return (
     <div className="notes-workspace">
       <h1>Note not found</h1>
       <ErrorState error="not-found">
-        <p>This note may have been moved or deleted.</p>
+        <p>{detail}</p>
         <Button asChild>
           <Link href="/notes">Back to Notes</Link>
         </Button>

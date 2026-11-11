@@ -67,9 +67,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
     path: `${artifactDir}/${testInfo.project.name}-grid.png`,
     fullPage: true,
   });
-  await card(page, "Garden ideas")
-    .getByRole("button", { name: "Garden ideas" })
-    .click();
+  await card(page, "Garden ideas").getByRole("button", { name: "Garden ideas" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit note", exact: true });
   await expect(dialog.getByRole("textbox", { name: "Note body", exact: true })).toContainText(
     "heliotrope",
@@ -91,9 +89,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
   await expect(card(page, "Garden ideas")).toBeVisible();
   await expect(card(page, "Trip plan")).toHaveCount(0);
   // Closing from a label returns to that label, including after changing its note.
-  await card(page, "Garden ideas")
-    .getByRole("button", { name: "Garden ideas" })
-    .click();
+  await card(page, "Garden ideas").getByRole("button", { name: "Garden ideas" }).click();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/label\//);
   await card(page, "Garden ideas").hover();

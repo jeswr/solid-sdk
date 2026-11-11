@@ -57,9 +57,7 @@ export async function capture(page: Page, title: string, body: string) {
 }
 
 export async function openNote(page: Page, title: string) {
-  await card(page, title)
-    .getByRole("button", { name: title })
-    .click();
+  await card(page, title).getByRole("button", { name: title }).click();
   const dialog = page.getByRole("dialog", { name: "Edit note", exact: true });
   await expect(dialog.getByRole("textbox", { name: "Note body", exact: true })).toBeVisible();
   return dialog;

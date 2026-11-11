@@ -719,3 +719,17 @@
   padding: 16px;
   border-radius: var(--radius-md);
 }
+
+.notes-shared-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline: var(--space-3);
+  color: var(--muted-foreground);
+  font-size: var(--text-xs);
+}
+.notes-shared-view {
+  max-width: 48rem;
+  margin-inline: auto;
+  padding: var(--space-4);
+}

@@ -35,7 +35,6 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Hint } from "@/apps/docs/components/common";
 import { ImageUpload } from "@/apps/docs/components/image-upload";
 import { imageTransfer, type RichImageTransfer } from "@/apps/docs/editor/image-transfer";
 import { validateImage, validLink } from "@/apps/docs/lib/editor/logic";
@@ -46,6 +45,7 @@ import { createDocsStore, type StoredDocument } from "@/apps/docs/lib/model/stor
 import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
+import { NoteMoveBlockedError } from "../lib/model/errors";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
@@ -56,11 +56,24 @@ import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls
 import { NotesAvailability } from "./notes-states";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
+import { ShareNote } from "./share-note";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
-  const { store, refresh, session, prefs, pin, colour, closeNote, opener, move, mutations } =
-    useNotesContext();
-  const { draft, change, flush, resolve, accept, status, modified } = useNoteDraft(
+  const {
+    store,
+    refresh,
+    session,
+    prefs,
+    pin,
+    colour,
+    closeNote,
+    opener,
+    move,
+    mutations,
+    refreshSharing,
+    reportError,
+  } = useNotesContext();
+  const { draft, change, flush, resolve, accept, status, modified, viewOnly } = useNoteDraft(
     note,
     store,
     refresh,
@@ -73,6 +86,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const conversions = useRef(
     new Map<string, { document: StoredDocument; title: string; body: string }>(),
   );
+  const [sharing, setSharing] = useState<StoredNote>();
   const [confirmDocs, setConfirmDocs] = useState(false);
   const [sendingTasks, setSendingTasks] = useState(false);
   const checklist = useMemo(() => checklistItems(draft.body), [draft.body]);
@@ -86,7 +100,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const titleInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const trashed = note.location === "trashed";
-  const readOnly = trashed || busy;
+  const readOnly = trashed || busy || !!viewOnly;
   const handler = useRef(change);
   handler.current = change;
   const editor = useEditor(
@@ -111,7 +125,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       },
       onSelectionUpdate: () => selectionChanged((value) => value + 1),
       onUpdate: ({ editor }) => {
-        if (!actionPending.current) handler.current({ body: editor.getHTML() });
+        if (!actionPending.current && !readOnly) handler.current({ body: editor.getHTML() });
       },
     },
     [note.url],
@@ -164,14 +178,18 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   };
   const unlock = () => {
     actionPending.current = false;
-    if (titleInput.current) titleInput.current.readOnly = trashed;
-    editor?.setEditable(!trashed, false);
+    const locked =
+      trashed ||
+      note.readOnly ||
+      getPendingDrafts(session.webId).get(note.url)?.status === "read-only";
+    if (titleInput.current) titleInput.current.readOnly = !!locked;
+    editor?.setEditable(!locked, false);
     setBusy(false);
   };
   const close = async () => {
     if (!lock()) return;
     try {
-      await flush();
+      if (!viewOnly) await flush();
       closeNote();
     } catch {
       unlock();
@@ -181,8 +199,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     if (!lock()) return Promise.resolve();
     return flush()
       .then(work)
-      .catch(() => {
-        toast.error("Couldn't complete that action. Your note is still here.");
+      .catch((error) => {
+        if (error instanceof NoteMoveBlockedError) reportError(error);
+        else toast.error("Couldn't complete that action. Your note is still here.");
         unlock();
       });
   };
@@ -314,11 +333,13 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           });
         }}
       >
-        <DialogTitle className="sr-only">Edit note</DialogTitle>
+        <DialogTitle className="sr-only">{viewOnly ? "View note" : "Edit note"}</DialogTitle>
         <DialogDescription className="sr-only">
           {trashed
             ? "Restore this note to edit it."
-            : "Your changes save automatically to your pod."}
+            : viewOnly
+              ? "View only. Your local changes remain recoverable."
+              : "Your changes save automatically to your pod."}
         </DialogDescription>
         <NotesAvailability trashed={trashed} />
         <Input
@@ -329,7 +350,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           value={draft.title}
           readOnly={readOnly}
           onChange={(event) => {
-            if (!actionPending.current) change({ title: event.target.value });
+            if (!actionPending.current && !readOnly) change({ title: event.target.value });
           }}
         />
         <input
@@ -408,7 +429,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
         <div className="notes-editor">
           {editor ? <EditorContent editor={editor} /> : <p role="status">Opening note…</p>}
         </div>
-        {status === "conflict" && (
+        {status === "conflict" && !viewOnly && (
           <div role="alert" className="notes-conflict">
             <p>This note changed somewhere else</p>
             <Button variant="outline" disabled={busy} onClick={() => void review(false)}>
@@ -419,11 +440,43 @@ export function NoteDialog({ note }: { note: StoredNote }) {
             </Button>
           </div>
         )}
+        {viewOnly && (
+          <div className="notes-conflict">
+            <p>View only. Your local changes are kept on this device.</p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(`${draft.title}\n${draft.body}`);
+                } catch {
+                  toast.error("Couldn't copy. Download your changes instead.");
+                }
+              }}
+            >
+              Copy local changes
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const url = URL.createObjectURL(
+                  new Blob([`${draft.title}\n${draft.body}`], { type: "text/plain" }),
+                );
+                const link = document.createElement("a");
+                link.href = url;
+                link.download = "note.txt";
+                link.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              Download local changes
+            </Button>
+          </div>
+        )}
         <footer className="notes-dialog-footer">
           <LabelChips links={false} labels={draft.labels} />
           <ReminderChip value={note.reminder} now={new Date(now)} />
           <div className="notes-dialog-actions">
-            {trashed ? (
+            {viewOnly ? null : trashed ? (
               <Button
                 variant="outline"
                 disabled={busy}
@@ -518,25 +571,34 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                     Add to Tasks
                   </Button>
                 )}
-                <Hint text="Sharing arrives with the suite shell">
-                  <Button variant="ghost" disabled>
-                    <Share2 size={16} aria-hidden="true" />
-                    Share
-                  </Button>
-                </Hint>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() =>
+                    void act(async (saved) => {
+                      setSharing(saved);
+                      unlock();
+                    })
+                  }
+                >
+                  <Share2 size={16} aria-hidden="true" />
+                  Collaborator
+                </Button>
               </>
             )}
           </div>
           <div className="notes-dialog-status">
             <span role="status" aria-live="polite">
-              {status === "saved"
-                ? "Saved"
-                : status === "saving"
-                  ? "Saving…"
-                  : status === "conflict"
-                    ? "Changes need review"
-                    : "Couldn't save — "}
-              {status === "failed" && (
+              {viewOnly
+                ? "View only — autosave stopped"
+                : status === "saved"
+                  ? "Saved"
+                  : status === "saving"
+                    ? "Saving…"
+                    : status === "conflict"
+                      ? "Changes need review"
+                      : "Couldn't save — "}
+              {status === "failed" && !viewOnly && (
                 <Button variant="link" disabled={busy} onClick={() => void retry()}>
                   Retry
                 </Button>
@@ -549,6 +611,16 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </div>
         </footer>
       </DialogContent>
+      {sharing && (
+        <ShareNote
+          note={sharing}
+          session={session}
+          onClose={() => {
+            setSharing(undefined);
+            refreshSharing?.();
+          }}
+        />
+      )}
       {sendingTasks && (
         <SendToTasksDialog
           items={checklist}
@@ -564,6 +636,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           close={() => setConfirmDocs(false)}
           confirm={() =>
             act(async (saved) => {
+              await store.assertMovable(saved);
               let conversion = conversions.current.get(saved.url);
               const input = {
                 title: saved.title || "Untitled document",

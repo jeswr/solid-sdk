@@ -46,7 +46,10 @@ beforeEach(() => {
     archived: resource,
     trashed: resource,
     prefs: { view: "grid" },
-    session: { webId: "https://alice.demo.pod/profile/card#me" },
+    session: {
+      webId: "https://alice.demo.pod/profile/card#me",
+      storageUrl: "https://alice.demo.pod/",
+    },
     store: {
       containers: { active: "https://alice.demo.pod/notes/" },
       purgeTrash: vi.fn(async () => ({ deleted: [], failed: [] })),
