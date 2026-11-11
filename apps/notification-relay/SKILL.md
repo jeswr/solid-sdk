@@ -1,18 +1,38 @@
 ---
 name: notification-relay
-description: Maintain the Node LWS webhook-to-SSE relay, its registration trust, signed delivery verification, and replay buffers.
+description: Maintain relay ID-token and Solid-OIDC authentication, route policies, guarded outbound reads, signed LWS deliveries, and SSE replay buffers.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 Read the repository charter and SDK core ADR-005 before changing protocol behavior.
-The app has no runtime pod-package dependencies. `jose` verifies ID tokens; the Node
-`guarded-fetch` entry pins DNS and bounds unauthenticated description/JWKS retrieval.
-Never use the session's storage access token to authenticate relay registration.
+The app has no runtime pod-package dependencies. `jose` verifies JWTs; `fetch-rdf`
+parses WebID profiles. Pass the guarded transport explicitly to every public read.
 
 `createRelay` takes a verified-ID-token function and guarded fetch for embedding/tests.
-Production composition in `config.ts` supplies both. Trust issuers/JWKS endpoints and
-client audiences explicitly; never discover keys from an untrusted token issuer.
-Do not log bearer tokens, stream URLs, raw notifications, or verifier errors.
+Composition in `config.ts` accepts `outboundFetch` and a shared async `RelayStore`.
+The existing `/register` route still accepts only ID tokens with configured issuer,
+JWKS endpoint and audience trust. Push routes use `createResourceTokenVerifier`:
+discover the issuer, require matching metadata, verify a Solid-audience access token,
+check its WebID's RDF `solid:oidcIssuer` assertions, then enforce every DPoP binding.
+Never bypass the profile assertion or use token claims to choose a route policy.
+`mobileClientPolicy` checks the configured Client ID Document; `webhookSenderPolicy`
+checks the stored sender without a client rule. P6 wiring is still pending.
+
+`/push/*` skeletons require DPoP plus `RELAY_MOBILE_CLIENT_ID` and return 501 after
+authentication. Failures return 401 with `WWW-Authenticate: DPoP`. Device proofs and
+device-only cleanup routes belong to P3; no skeleton currently permits that bypass.
+`RelayStore.insertIfAbsent` reserves a proof's replay key atomically for five minutes.
+Share one store between relay instances; a Redis implementation must use SET NX PX.
+The memory store does not persist state across processes or restarts.
+
+`createRelayOutboundFetch` uses the Node guard: DNS-pinned public HTTPS, at most
+three revalidated redirects, 256 KiB and five seconds including body reads. Discovery,
+JWKS and profile caches last ten minutes. Remote JSON-LD contexts are refused.
+Only tests enable `allowLoopbackForTests`; never read it from environment configuration.
+Both deployment entries call `productionRelay`, which requires NODE_ENV=production,
+rejects injected transports, and builds its own guard. Embedding tests may inject a
+transport through `configuredRelay`. Do not log tokens, WebIDs, URLs, payloads or errors.
 
 The webhook verifier accepts a strict single-signature RFC 9421 profile with exactly
 `@method @scheme @authority @path content-type content-digest`, a fragment-bearing keyid,

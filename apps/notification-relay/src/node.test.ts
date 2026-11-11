@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { EventEmitter } from "node:events";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
@@ -69,11 +70,13 @@ test("rejects wrong authority, ambiguous targets and duplicate security headers"
     expect(f.res.writeHead).toHaveBeenCalledWith(400);
     expect(f.handle).not.toHaveBeenCalled();
   }
-  const f = fixture();
-  f.req.rawHeaders.push("Content-Digest", "one", "content-digest", "two");
-  await f.handler(f.req, f.res);
-  expect(f.res.writeHead).toHaveBeenCalledWith(401);
-  expect(f.handle).not.toHaveBeenCalled();
+  for (const header of ["content-digest", "dpop", "authorization"]) {
+    const f = fixture();
+    f.req.rawHeaders.push(header, "one", header, "two");
+    await f.handler(f.req, f.res);
+    expect(f.res.writeHead).toHaveBeenCalledWith(401, { "www-authenticate": "DPoP" });
+    expect(f.handle).not.toHaveBeenCalled();
+  }
   const g = fixture();
   g.req.rawHeaders.push("X-Custom", "one", "X-Custom", "two");
   await g.handler(g.req, g.res);

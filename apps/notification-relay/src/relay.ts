@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { Identity } from "./auth.js";
+import { createResourceTokenVerifier, mobileClientPolicy } from "./resource-auth.js";
 import { createWebhookVerifier, safeUrl } from "./signatures.js";
+import { InMemoryRelayStore, type RelayStore } from "./store.js";
 
 const retentionMs = 15 * 60_000;
 const maxBodyBytes = 1_048_576;
@@ -48,6 +52,9 @@ export function createRelay(options: {
   verifyIdToken: (token: string) => Promise<Identity>;
   /** Must be SSRF/DNS-pinning guarded in production; default deployment supplies it. */
   fetch: typeof fetch;
+  /** Push routes remain closed until the mobile Client ID Document is configured. */
+  mobileClientId?: string;
+  store?: RelayStore;
   allowedOrigins?: readonly string[];
   now?: () => number;
   allowInsecureLoopback?: boolean;
@@ -56,6 +63,16 @@ export function createRelay(options: {
   if (base.pathname !== "/" || base.search || base.hash)
     throw new Error("Relay URL must be an origin");
   const now = options.now ?? Date.now;
+  const verifyResourceToken = createResourceTokenVerifier({
+    publicUrl: base.origin,
+    outboundFetch: options.fetch,
+    store: options.store ?? new InMemoryRelayStore(now),
+    now,
+    allowLoopbackForTests: options.allowInsecureLoopback,
+  });
+  const pushPolicy = options.mobileClientId
+    ? mobileClientPolicy(options.mobileClientId)
+    : undefined;
   const verify = createWebhookVerifier({
     fetch: options.fetch,
     now,
@@ -97,11 +114,37 @@ export function createRelay(options: {
       }
       if (
         request.method === "OPTIONS" &&
-        ["/register", "/stream/"].some((path) => url.pathname.startsWith(path))
+        ["/register", "/stream/", "/push/"].some((path) => url.pathname.startsWith(path))
       ) {
-        headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
-        headers.set("access-control-allow-headers", "Authorization, Content-Type, Last-Event-ID");
+        headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
+        headers.set(
+          "access-control-allow-headers",
+          "Authorization, DPoP, Installation-Proof, Content-Type, Last-Event-ID",
+        );
         return respond(204);
+      }
+      if (url.pathname.startsWith("/push/")) {
+        // All skeletons fail closed on tokens for now; P3 adds device-only cleanup auth.
+        try {
+          // No outbound discovery at all until the mobile Client ID Document is configured.
+          if (!pushPolicy) throw new Error("Push is not configured");
+          if (!pushPolicy(await verifyResourceToken(request))) throw new Error("Unauthorized");
+        } catch {
+          headers.set("www-authenticate", "DPoP");
+          return respond(401);
+        }
+        const routes: [string, RegExp][] = [
+          ["POST", /^\/push\/installations$/u],
+          ["PATCH", /^\/push\/installations\/[^/]+$/u],
+          ["DELETE", /^\/push\/installations\/[^/]+$/u],
+          ["POST", /^\/push\/installations\/[^/]+\/activate$/u],
+          ["PUT", /^\/push\/registrations\/[^/]+$/u],
+          ["DELETE", /^\/push\/registrations\/[^/]+$/u],
+          ["POST", /^\/push\/registrations\/[^/]+\/rotate-inbox$/u],
+        ];
+        if (routes.some(([method, path]) => method === request.method && path.test(url.pathname)))
+          return respond(501);
+        return respond(404);
       }
       if (url.pathname === "/register" && request.method === "POST" && !url.search) {
         const bearer = /^Bearer (\S+)$/u.exec(request.headers.get("authorization") ?? "");
