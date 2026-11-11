@@ -49,12 +49,16 @@ export function createSearch({ capabilities, fetch, local }: SearchConfig): Sear
         "Content-Type": "application/sparql-query",
         Accept: "application/sparql-results+json",
       },
-      body: buildSearchQuery(q),
+      body: buildSearchQuery(q, { origin }),
       signal: options?.signal,
     });
     if (!response.ok) throw new Error(`Search request failed (${response.status})`);
     const rows = jsonRows(await response.json());
     options?.signal?.throwIfAborted();
-    return searchPage("server", rows, q);
+    const page = searchPage("server", rows, q);
+    // A service that ignores the origin filter still never labels foreign resources as the pod's.
+    if (page.results.some((result) => !result.url.startsWith(origin)))
+      throw new TypeError("Search service returned a resource outside the storage origin");
+    return page;
   });
 }

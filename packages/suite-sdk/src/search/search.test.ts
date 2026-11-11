@@ -150,7 +150,11 @@ test("real Node WASM: server and local queries return equal resource sets for a 
     );
     expect(a.results).toEqual(b.results);
     expect(a.next).toBe(b.next);
-    expect(spy.mock.lastCall?.[0]).toBe(transport.mock.lastCall?.[1]?.body);
+    // Same template; the server copy is additionally held to the storage origin.
+    expect(spy.mock.lastCall?.[0]).toBe(buildSearchQuery(q));
+    expect(transport.mock.lastCall?.[1]?.body).toBe(
+      buildSearchQuery(q, { origin: "https://pod.example/" }),
+    );
   }
   expect(engine.loaded).toBe(true);
   const binary = await local.search({ text: "quarterly" });
@@ -538,4 +542,52 @@ test("real capability derivation only enables the server path for an ACQ-profile
     deriveFeatures({ ...description, services: [{ ...service, conformsTo: [] }] }).serverSearch
       .state,
   ).toBe("unknown");
+});
+
+// AUTHORED-BY Claude Opus 5.5
+test("non-HTTP subjects are filtered before paging, so search({}) and recent() still succeed", async () => {
+  const localIndex = await index();
+  const remoteIndex = await index();
+  for (const target of [localIndex, remoteIndex]) {
+    await seed(target);
+    await createSearchFeeder(target).resource(`${tasks}urn.ttl`, [
+      quad(nn("urn:uuid:7d4a"), nn(`${dct}title`), literal("report")),
+      quad(nn("urn:uuid:7d4a"), nn(`${dct}modified`), literal("2027-01-01T00:00:00Z")),
+    ]);
+  }
+  const local = createLocalSearch(localIndex);
+  const server = createSearch({ capabilities: capabilities(), fetch: acq(remoteIndex), local });
+  for (const client of [local, server]) {
+    const all = await client.search({});
+    expect(all.results.map((row) => row.url)).not.toContain("urn:uuid:7d4a");
+    const recent = await client.recent({ limit: 1 });
+    expect(recent.results.map((row) => row.url)).toEqual([task]);
+  }
+});
+
+test("server results are held to the storage origin inside the query; a service ignoring it is refused", async () => {
+  const localIndex = await index();
+  const remoteIndex = await index();
+  const local = await seed(localIndex);
+  await seed(remoteIndex);
+  const foreign = "https://pod.example.evil/doc";
+  await createSearchFeeder(remoteIndex).resource(foreign, [
+    quad(nn(foreign), nn(`${dct}title`), literal("report")),
+    quad(nn(foreign), nn(`${dct}modified`), literal("2027-01-01T00:00:00Z")),
+  ]);
+  const server = createSearch({ capabilities: capabilities(), fetch: acq(remoteIndex), local });
+  // Filtered before LIMIT: the one-row page is still a pod resource, not a shortened page.
+  const page = await server.search({ text: "report", orderBy: "modified", limit: 1 });
+  expect(page.results.map((row) => row.url)).toEqual([task]);
+  expect(page.next).toBeDefined();
+  const rogue = vi.fn<typeof fetch>(async () =>
+    Response.json({
+      results: {
+        bindings: [{ s: { type: "uri", value: foreign }, title: { type: "literal", value: "x" } }],
+      },
+    }),
+  );
+  await expect(
+    createSearch({ capabilities: capabilities(), fetch: rogue, local }).search({}),
+  ).rejects.toThrow("outside the storage origin");
 });
