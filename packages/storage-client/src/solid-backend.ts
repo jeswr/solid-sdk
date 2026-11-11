@@ -13,6 +13,7 @@ import {
   acceptReadStatus,
   createReadOperations,
   MEDIA_TYPE,
+  RDF_ACCEPT,
   type ReadExpectation,
   rdfBody,
 } from "./read.js";
@@ -250,9 +251,11 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
           message: `${described.url} advertises no describedby metadata`,
         });
       }
-      const document = await client.readRdf(described.metadataUrl);
+      // Keep metadata's HTTP errors on the shared mapping, separate from readRdf negotiation.
+      const document = await get(described.metadataUrl, { Accept: RDF_ACCEPT }, undefined);
+      const { dataset } = await rdfBody(document, "not-rdf");
       const links = new Map<string, Map<string, MetadataLink[]>>();
-      for (const quad of document.dataset.match()) {
+      for (const quad of dataset.match()) {
         if (quad.subject.termType !== "NamedNode" || quad.object.termType !== "NamedNode") continue;
         const rels = links.get(quad.subject.value) ?? new Map<string, MetadataLink[]>();
         rels.set(quad.predicate.value, [
@@ -261,7 +264,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
         ]);
         links.set(quad.subject.value, rels);
       }
-      return { url: document.url, etag: document.etag, links, raw: document.dataset };
+      return { url: document.url, etag: document.etag, links, raw: dataset };
     },
 
     async parentOf(url) {
