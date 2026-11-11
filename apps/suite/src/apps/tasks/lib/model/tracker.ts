@@ -20,6 +20,12 @@ export class TaskTracker extends Tracker {
   set description(value: string | undefined) {
     this.extra.setText(`${NS.DCT}description`, value);
   }
+  get parent() {
+    return this.extra.iri(`${NS.DCT}isPartOf`);
+  }
+  set parent(value: string | undefined) {
+    this.extra.setIri(`${NS.DCT}isPartOf`, value === undefined ? undefined : requireHttp(value));
+  }
   get created() {
     return this.extra.date(`${NS.DCT}created`);
   }

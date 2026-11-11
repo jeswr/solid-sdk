@@ -217,6 +217,44 @@
   align-items: center;
   gap: 4px;
 }
+.tsk-project-row[data-project-depth="2"] {
+  margin-inline-start: 20px;
+}
+.tsk-project-disclosure {
+  display: inline-flex;
+  flex: 0 0 32px;
+}
+.tsk-project-parent {
+  display: grid;
+  gap: 8px;
+}
+.tsk-project-parent select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  color: var(--foreground);
+  background: var(--surface);
+}
+.tsk-project-parent select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.tsk-project-row[data-project-depth="3"] {
+  margin-inline-start: 40px;
+}
+.tsk-project-child-choice {
+  display: grid;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+}
+.tsk-project-child-choice label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .tsk-project-row > a > span:first-child {
   overflow: hidden;
   text-overflow: ellipsis;

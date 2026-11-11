@@ -112,6 +112,7 @@ export default defineConfig({
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/tasks/lib/tree/**/*.ts",
+        "src/apps/tasks/lib/projects/**/*.ts",
         "src/lib/search/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
         "src/apps/docs/lib/markdown/**/*.ts",

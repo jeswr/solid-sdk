@@ -39,6 +39,7 @@ import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
+import { projectBreadcrumb, projectDescendants } from "../lib/projects/tree";
 import { labelColour } from "../lib/views/label-colours";
 import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
@@ -53,6 +54,7 @@ import { LabelDot } from "./label-chip";
 import { LabelColourPicker } from "./label-colour-picker";
 import { ProjectColourPicker } from "./project-colour-picker";
 import { ProjectDot } from "./project-dot";
+import { ProjectChildrenChoice, ProjectMoveDialog } from "./project-nesting";
 import { ShareProject } from "./share-project";
 
 /** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
@@ -60,15 +62,22 @@ function ProjectDropItem({
   projectUrl,
   className,
   children,
+  depth = 1,
 }: {
   projectUrl: string;
   className?: string;
   children: ReactNode;
+  depth?: number;
 }) {
   const id = useId();
   const drop = useDropTarget(`project:${projectUrl}:${id}`, { kind: "project", projectUrl });
   return (
-    <li ref={drop.ref} className={className} data-drop-over={drop.over || undefined}>
+    <li
+      ref={drop.ref}
+      className={className}
+      data-drop-over={drop.over || undefined}
+      data-project-depth={depth}
+    >
       {children}
     </li>
   );
@@ -79,11 +88,15 @@ function ProjectRow({
   first,
   last,
   shared = false,
+  depth = 1,
+  disclosure,
 }: {
   shared?: boolean;
   project: StoredProject;
   first: boolean;
   last: boolean;
+  depth?: number;
+  disclosure?: ReactNode;
 }) {
   const tasks = useTasks();
   const calendar = useCalendarExchange(project);
@@ -95,6 +108,9 @@ function ProjectRow({
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [childChoice, setChildChoice] = useState<"cascade" | "promote">("promote");
   const [clearCompleted, setClearCompleted] = useState(false);
   const actionsButton = useRef<HTMLButtonElement>(null);
   const renameRoot = useRef<HTMLDivElement>(null);
@@ -103,8 +119,32 @@ function ProjectRow({
   const count = tasks.views.filter(
     (task) => task.projectUrl === project.url && task.state === "open",
   ).length;
+  const tree = tasks.cache.projectTree;
+  const parent = tree.find((node) => node.project.url === project.url)?.parentUrl;
+  const siblings = tree.filter((node) => node.parentUrl === parent);
+  first = siblings[0]?.project.url === project.url;
+  last = siblings.at(-1)?.project.url === project.url;
+  const hasChildren = projectDescendants(tree, project.url).length > 0;
+  const canNest = project.etag && tree.find((node) => node.project.url === project.url)?.readable;
+  const afterRemoval = (result: boolean | undefined) => {
+    const removed = [
+      project,
+      ...(childChoice === "cascade"
+        ? projectDescendants(tree, project.url).map((node) => node.project)
+        : []),
+    ];
+    if (
+      result &&
+      removed.some((item) => {
+        const href = `/tasks/p/${encodeRef(item.url)}`;
+        return path === href || path === `${href}/board`;
+      })
+    )
+      router.push("/tasks/inbox");
+  };
   return (
-    <ProjectDropItem projectUrl={project.url} className="tsk-project-row">
+    <ProjectDropItem projectUrl={project.url} className="tsk-project-row" depth={depth}>
+      {disclosure !== undefined && <span className="tsk-project-disclosure">{disclosure}</span>}
       <ProjectDot colour={project.tracker.color} />
       {renaming ? (
         <div className="tsk-inline-edit" ref={renameRoot}>
@@ -213,17 +253,35 @@ function ProjectRow({
                 >
                   Move down
                 </DropdownMenuItem>
+                <DropdownMenuItem disabled={!canNest} onSelect={() => setMoving(true)}>
+                  Move under…
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!canNest || !project.tracker.parent}
+                  onSelect={() => {
+                    void tasks.cache.setProjectParent(project, undefined);
+                  }}
+                >
+                  Move to top level
+                </DropdownMenuItem>
                 <DropdownMenuItem
                   disabled={!project.etag}
                   onSelect={() => {
-                    void tasks.archiveProject(project).then((result) => {
-                      if (result && path === href) router.push("/tasks/inbox");
-                    });
+                    if (hasChildren) {
+                      setChildChoice("promote");
+                      setArchiving(true);
+                    } else void tasks.archiveProject(project).then(afterRemoval);
                   }}
                 >
                   Archive
                 </DropdownMenuItem>
-                <DropdownMenuItem disabled={!project.etag} onSelect={() => setConfirm(true)}>
+                <DropdownMenuItem
+                  disabled={!project.etag}
+                  onSelect={() => {
+                    setChildChoice("promote");
+                    setConfirm(true);
+                  }}
+                >
                   Delete
                 </DropdownMenuItem>
                 <DeleteCompletedMenuItem
@@ -243,21 +301,60 @@ function ProjectRow({
         returnFocus={() => actionsButton.current?.focus()}
       />
       {calendar.dialog}
+      {moving && (
+        <ProjectMoveDialog
+          project={project}
+          onClose={() => setMoving(false)}
+          returnFocus={() => actionsButton.current?.focus()}
+        />
+      )}
+      <AlertDialog open={archiving} onOpenChange={setArchiving}>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            actionsButton.current?.focus();
+          }}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive {name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Choose what to do with its sub-projects.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ProjectChildrenChoice kind="archive" value={childChoice} onChange={setChildChoice} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void tasks.archiveProject(project, childChoice).then(afterRemoval);
+              }}
+            >
+              Archive
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent
+          onCloseAutoFocus={(event) => {
+            event.preventDefault();
+            actionsButton.current?.focus();
+          }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {name}?</AlertDialogTitle>
             <AlertDialogDescription>
               This deletes the project and its tasks. This can't be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {hasChildren && (
+            <ProjectChildrenChoice kind="delete" value={childChoice} onChange={setChildChoice} />
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
-                void tasks.deleteProject(project).then((result) => {
-                  if (result && path === href) router.push("/tasks/inbox");
-                });
+                void tasks.deleteProject(project, childChoice).then(afterRemoval);
               }}
             >
               Delete
@@ -294,6 +391,32 @@ export function TasksSidebar() {
   const projects = tasks.projects.filter(
     (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
   );
+  const tree = tasks.cache.projectTree;
+  const visible = (url: string) =>
+    projectBreadcrumb(tree, url)
+      .slice(0, -1)
+      .every((ancestor) => !preferences.collapsedProjects.includes(ancestor.url));
+  const disclosureFor = (project: StoredProject) =>
+    tree.some((node) => node.parentUrl === project.url) && (
+      <IconButton
+        variant="ghost"
+        label={`Sub-projects of ${project.tracker.title ?? "Untitled"}`}
+        aria-expanded={!preferences.collapsedProjects.includes(project.url)}
+        onClick={() => dispatch({ type: "collapseProject", url: project.url })}
+      >
+        {preferences.collapsedProjects.includes(project.url) ? (
+          <ChevronRight size={14} aria-hidden="true" />
+        ) : (
+          <ChevronDown size={14} aria-hidden="true" />
+        )}
+      </IconButton>
+    );
+  const sharedRows = [
+    ...tree
+      .filter((node) => sharedUrls.has(node.project.url))
+      .map((node) => ({ url: node.project.url, title: node.project.tracker.title ?? "Untitled" })),
+    ...shared.filter((project) => !tasks.projects.some((loaded) => loaded.url === project.url)),
+  ];
   // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
   const favourites = tasks.projects.filter((project) => {
     const error = tasks.tasks[project.url]?.error;
@@ -444,25 +567,45 @@ export function TasksSidebar() {
       </button>
       {preferences.sidebar.projectsOpen && (
         <ul className="tsk-nav-list tsk-projects">
-          {projects.map((project, index) => (
-            <ProjectRow
-              key={project.url}
-              project={project}
-              first={index === 0}
-              last={index === projects.length - 1}
-            />
-          ))}
+          {tree
+            .filter(
+              (node) =>
+                projects.some((project) => project.url === node.project.url) &&
+                visible(node.project.url),
+            )
+            .map(({ project, depth }) => (
+              <ProjectRow
+                key={project.url}
+                project={project}
+                first={false}
+                last={false}
+                depth={depth}
+                disclosure={disclosureFor(project)}
+              />
+            ))}
         </ul>
       )}
       {shared.length > 0 && (
         <>
           <h2 className="tsk-nav-heading">Shared with me</h2>
           <ul className="tsk-nav-list">
-            {shared.map((project) => {
+            {sharedRows.map((project) => {
               const href = `/tasks/p/${encodeRef(project.url)}`;
               const loaded = tasks.projects.find((loaded) => loaded.url === project.url);
-              if (loaded)
-                return <ProjectRow key={project.url} project={loaded} first last shared />;
+              if (loaded) {
+                if (!visible(project.url)) return null;
+                return (
+                  <ProjectRow
+                    key={project.url}
+                    project={loaded}
+                    first
+                    last
+                    shared
+                    depth={tree.find((node) => node.project.url === project.url)?.depth ?? 1}
+                    disclosure={disclosureFor(loaded)}
+                  />
+                );
+              }
               const title = project.title;
               return (
                 <li key={project.url} className="tsk-project-row">
