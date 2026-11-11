@@ -295,11 +295,93 @@ describe("WAC sharing adapter", () => {
 });
 
 describe("WAC adapter scope limits (fail closed)", () => {
-  it("refuses folders, whose members inherit acl:default grants it would not change", async () => {
-    const { adapter, fetch } = await server();
-    const folder = `${new URL("./", FILE).href}`;
-    await expect(adapter.load(folder, signal())).rejects.toMatchObject({ code: "unsupported" });
-    expect(fetch).not.toHaveBeenCalled();
+  it("updates folder grants and defaults together, including downgrade and removal", async () => {
+    const { adapter, documents } = await server();
+    const folder = new URL("./", FILE).href;
+    const doc = document("wac", false, folder);
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+    documents.set(doc.source, doc);
+    await adapter.load(folder, signal());
+    for (const role of ["editor", "viewer", null] as const) {
+      await adapter.setPerson(folder, BOB, role);
+      const grants = [...new AclResource(doc.dataset, DataFactory).authorizations].filter((row) =>
+        row.agent.has(BOB),
+      );
+      const active = grants.filter((row) => row.accessTo === folder || row.default === folder);
+      expect(active).toHaveLength(role ? 1 : 0);
+      if (role) {
+        expect(active[0]?.accessTo).toBe(folder);
+        expect(active[0]?.default).toBe(folder);
+        expect(active[0]?.canWrite).toBe(role === "editor");
+      }
+    }
+    await adapter.setGeneral(folder, { mode: "link", role: "editor" });
+    await adapter.setGeneral(folder, { mode: "restricted" });
+    expect((await adapter.load(folder, signal())).general.mode).toBe("restricted");
+  });
+  it("removes legacy container defaults without changing another principal or scope", async () => {
+    const { adapter, documents } = await server();
+    const folder = new URL("./", FILE).href;
+    const doc = document("wac", false, folder);
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+    const shared = authorization(doc, BOB, ["Read", "Write"]);
+    shared.agent.add(CAROL);
+    properties(shared).values(`${ACL}defaultForNew`).add(folder);
+    properties(shared).values(`${ACL}accessTo`).add(FILE);
+    documents.set(doc.source, doc);
+    await adapter.load(folder, signal());
+    await adapter.setPerson(folder, BOB, "viewer");
+    const rules = [...new AclResource(doc.dataset, DataFactory).authorizations];
+    expect(
+      rules.some(
+        (row) =>
+          row.agent.has(CAROL) &&
+          row.canWrite &&
+          properties(row).values(`${ACL}defaultForNew`).has(folder),
+      ),
+    ).toBe(true);
+    expect(rules.some((row) => row.agent.has(BOB) && row.accessTo === FILE && row.canWrite)).toBe(
+      true,
+    );
+    expect(
+      rules.some(
+        (row) =>
+          row.agent.has(BOB) &&
+          row.canWrite &&
+          properties(row).values(`${ACL}defaultForNew`).has(folder),
+      ),
+    ).toBe(false);
+    await adapter.setPerson(folder, BOB, null);
+    expect(
+      (await adapter.load(folder, signal())).people.some((person) => person.webId === BOB),
+    ).toBe(false);
+  });
+  it.each([
+    "folder-only",
+    "members-only",
+    "split",
+  ])("refuses unsupported %s folder grants before writing", async (shape) => {
+    const { adapter, documents, fetch } = await server();
+    const folder = new URL("./", FILE).href;
+    const doc = document("wac", false, folder);
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+    const grant = authorization(doc, BOB, ["Read", "Write"]);
+    if (shape === "members-only") properties(grant).values(`${ACL}accessTo`).clear();
+    if (shape !== "folder-only") {
+      const members = shape === "split" ? authorization(doc, BOB, ["Read", "Write"], FILE) : grant;
+      members.default = folder;
+    }
+    documents.set(doc.source, doc);
+    if (shape === "split") {
+      await adapter.load(folder, signal());
+      await expect(adapter.setPerson(folder, BOB, "viewer")).rejects.toMatchObject({
+        code: "unsupported",
+      });
+    } else
+      await expect(adapter.load(folder, signal())).rejects.toThrow(
+        "Folder and descendant permissions differ",
+      );
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "PUT")).toBe(false);
   });
   it("locks writes as offline when storage is unreachable, then unlocks on the next load", async () => {
     const { adapter, fetch } = await server();

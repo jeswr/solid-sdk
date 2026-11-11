@@ -174,7 +174,7 @@ describe("offline queue", () => {
     await replay(directory, target, save, signal());
     expect(save).toHaveBeenCalledWith({
       ...entry.conversation,
-      messages: [{ ...entry.conversation.messages[0], text: "[REDACTED ENV]" }],
+      messages: [{ ...entry.conversation.messages[0], text: 'VALUE="[REDACTED]' }],
     });
     expect(await files()).toEqual([]);
   });

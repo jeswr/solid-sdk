@@ -2460,12 +2460,12 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
-      '@jeswr/suite-sdk':
-        specifier: workspace:*
-        version: link:../../packages/suite-sdk
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../../packages/suite-sdk
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -5726,6 +5726,9 @@ importers:
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../rdf-engine
+      '@jeswr/solid-offline':
+        specifier: workspace:*
+        version: link:../solid-offline
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../storage-capabilities
@@ -6091,9 +6094,15 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../../packages/pod-type-index
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities

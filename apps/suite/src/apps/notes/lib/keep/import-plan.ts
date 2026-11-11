@@ -46,7 +46,7 @@ export const KEEP_SKIP_REASONS: Record<
 export interface KeepImportItem {
   readonly fileName: string;
   readonly images?: readonly Blob[];
-  readonly input: Required<NoteChanges>;
+  readonly input: Required<Pick<NoteChanges, "title" | "body" | "labels">>;
   readonly pinned: boolean;
   readonly colour: NoteColour;
   readonly archived: boolean;

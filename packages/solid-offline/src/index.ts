@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** @jeswr/solid-offline — credential-free worker + authenticated page-side storage. */
 import {
   createNotifications,
@@ -45,6 +46,7 @@ export {
   shellBucketComplete,
   shellCacheName,
 } from './app-shell.js';
+export { CACHE_PROVENANCE_HEADER, cacheProvenance } from './cache-policy.js';
 export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidation.js';
 export { handleNotification, resyncSweep } from './invalidation.js';
 export type { CacheStorageLike, PurgeDeps, PurgeResult } from './logout.js';

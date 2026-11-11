@@ -12,6 +12,22 @@ notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/sea
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
 
+## Offline (`./offline`)
+
+Re-export `createOutbox`, `withOutbox`, `mergeRdf`, all outbox types and `useOfflineStatus`
+from solid-offline. `useOutbox(outbox: Outbox | null)` returns
+`{ pending, conflicts, retry, retryAll, resolve, replay }`. Cache the combined snapshot between
+events: solid-offline's getters return fresh arrays. Subscribe to both `change` and `conflict`,
+refresh after subscription to cover hydration/render races, and unsubscribe on replacement or
+unmount. Server rendering and null use empty snapshots; null actions are inert. Actions remain
+stable until the outbox changes and propagate failures. `retryAll()` delegates to `retry()`.
+
+The caller owns the per-WebID outbox and authenticated StorageClient. Never create another auth
+path here. Replay only during that account's active session, cancel on sign-out/switch, and
+preserve unsent writes (close releases listeners; purge is explicit). Replay after resolving a
+conflict to resume held operations. Read `packages/solid-offline/SKILL.md` for queue opt-in,
+conflict-copy and merge behavior. Keep this hook's tests at 100% coverage.
+
 Read `packages/pod-access/SKILL.md` for notification API details. Use `PodAuthProvider` from
 `@jeswr/pod-auth/react`; never create another auth session or modify credentials in this facade.
 The notifier cache belongs to the current identity and must reset on lifecycle/account changes.

@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
+    // CSS 7 calls jest.requireActual whenever NODE_ENV is "test" (sst-75rp); Vitest sets that default.
+    env: { NODE_ENV: "development" },
     include: ["src/**/*.test.ts"],
     coverage: {
       enabled: true,
