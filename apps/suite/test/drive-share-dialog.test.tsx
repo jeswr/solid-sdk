@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
@@ -19,7 +20,6 @@ import { ShareDialog } from "../src/apps/drive/components/share-dialog";
 import {
   applySharing,
   CONTENTS_DIFFER,
-  FOLDER_READ_ONLY,
   loadSharing,
   SharingConflictError,
   SharingIncompleteError,
@@ -221,36 +221,41 @@ it("shows load failures, retries, and reports clipboard errors", async () => {
   await screen.findByText("Couldn't copy the link. Try again.");
 });
 
-it("shows an owner why folder sharing is read-only", async () => {
-  load.mockResolvedValue({ ...snapshot(state, false), readOnly: FOLDER_READ_ONLY });
+it("enables folder editing and warns about independent item sharing before saving", async () => {
+  load.mockResolvedValue({ ...snapshot(), resource: "https://example.org/drive/Work/" });
+  show({ item: { name: "Work", url: "https://example.org/drive/Work/" } });
+  await ready();
+  expect(screen.getByText(CONTENTS_DIFFER).getAttribute("role")).toBe("note");
+  expect(CONTENTS_DIFFER).toContain("have their own sharing won't change");
+  expect((screen.getByLabelText(`Role for ${BOB}`) as HTMLSelectElement).disabled).toBe(false);
+  expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(false);
+  fireEvent.change(screen.getByLabelText(`Role for ${BOB}`), { target: { value: "editor" } });
+  await screen.findByText("Sharing saved");
+  expect(apply).toHaveBeenCalledWith(
+    session,
+    expect.objectContaining({ canManage: true }),
+    expect.objectContaining({ people: expect.arrayContaining([{ webId: BOB, role: "editor" }]) }),
+  );
+});
+
+it("shows a supplied read-only reason with editing disabled", async () => {
+  const readOnly = "Sharing is unavailable for this item";
+  load.mockResolvedValue({ ...snapshot(state, false), readOnly });
   show();
   await ready();
-  expect(screen.getByText(FOLDER_READ_ONLY).getAttribute("role")).toBe("status");
-  expect(FOLDER_READ_ONLY).toMatch(/read-only for now/);
-  expect(FOLDER_READ_ONLY).toMatch(/would not reach the files and folders inside/);
-  expect(FOLDER_READ_ONLY).toMatch(/share that file/);
-  expect(screen.queryByText(/Only an owner with Control/)).toBeNull();
-  // Every edit control is disabled; people and general access stay visible.
-  for (const label of [`Role for ${ALICE}`, `Role for ${BOB}`, "Role for added people"])
-    expect((screen.getByLabelText(label) as HTMLSelectElement).disabled).toBe(true);
-  for (const name of [`Remove access for ${BOB}`, "Share"])
-    expect((screen.getByRole("button", { name }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText(readOnly).getAttribute("role")).toBe("status");
   expect((screen.getByLabelText("Who can access") as HTMLSelectElement).disabled).toBe(true);
-  expect(screen.getByRole("group", { name: "Add people" }).hasAttribute("disabled")).toBe(true);
-  expect((screen.getByRole("button", { name: "Done" }) as HTMLButtonElement).disabled).toBe(false);
-  expect(apply).not.toHaveBeenCalled();
 });
 
 it("notes when a folder's contents are shared differently from the folder", async () => {
   load.mockResolvedValue({
     ...snapshot(state, false),
-    readOnly: FOLDER_READ_ONLY,
     contentsDiffer: true,
   });
   show();
   await ready();
   expect(screen.getByText(CONTENTS_DIFFER).getAttribute("role")).toBe("note");
-  expect(CONTENTS_DIFFER).toMatch(/inside are shared differently/);
+  expect(CONTENTS_DIFFER).toMatch(/own sharing won't change/);
 });
 
 it("shows the reloaded access, not a save, when the selection was only partly applied", async () => {

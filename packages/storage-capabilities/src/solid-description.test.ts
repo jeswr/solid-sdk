@@ -69,6 +69,7 @@ describe("parseSolidDescription", () => {
     });
     expect(documentLoader.load).toHaveBeenCalled();
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
+      owner: null,
       services: [
         {
           type: [SSD.SolidNotificationService, NOTIFY.WebSocketChannel2023],
@@ -111,6 +112,7 @@ describe("parseSolidDescription", () => {
     const before = [...dataset];
     const result = parseSolidDescription(dataset, ROOT);
     expect(result).toEqual({
+      owner: null,
       services: [
         { type: [LWS.StorageRoot], endpoint: ROOT, extra: {} },
         {
@@ -160,6 +162,7 @@ describe("parseSolidDescription", () => {
       <https://other.example/> acq:endpoint <https://other.example/sparql> .
     `);
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
+      owner: null,
       services: ["sparql", "sparql-2"].map((path) => ({
         type: [SSD.SparqlQueryService],
         endpoint: ROOT + path,
@@ -180,6 +183,7 @@ describe("parseSolidDescription", () => {
       <unrelated> did:service [ did:serviceEndpoint <ignored> ] ; lws:capability [ a ssd:RecursiveDelete ] .
     `);
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
+      owner: null,
       services: [
         {
           id: `${ROOT}#unknown`,
@@ -208,6 +212,7 @@ describe("parseSolidDescription", () => {
         lws:capability "bad", [ a "bad", ssd:RecursiveDelete ] .
     `);
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
+      owner: null,
       services: [
         {
           type: [SSD.VersioningService],
@@ -229,6 +234,7 @@ describe("parseSolidDescription", () => {
       <unknown> notify:channelType <urn:channel:unknown> .
     `);
     expect(parseSolidDescription(dataset, ROOT)).toEqual({
+      owner: null,
       services: [
         {
           type: [SSD.SolidNotificationService],
@@ -362,6 +368,7 @@ describe("parseSolidDescription", () => {
       fetchedAt: 0,
       etag: null,
       maxAgeMs: 0,
+      owner: null,
       verificationMethods: [],
       ...result,
     });
@@ -421,6 +428,7 @@ describe("parseSolidDescription", () => {
       fetchedAt: 0,
       etag: null,
       maxAgeMs: 0,
+      owner: null,
       verificationMethods: [],
       ...result,
     });
@@ -449,6 +457,7 @@ describe("parseSolidDescription", () => {
 
   test("returns empty arrays for an empty dataset", async () => {
     expect(parseSolidDescription(await turtle(""), ROOT)).toEqual({
+      owner: null,
       services: [],
       capabilities: [],
     });

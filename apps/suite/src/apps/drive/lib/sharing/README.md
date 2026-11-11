@@ -74,7 +74,8 @@ discovery, scope and redirect refusal, WAC/ACP parsing, the inherited-ACL copy
 (materialized with provenance), the owner-lockout guard and the conditional PUT.
 
 `readGrants` silently drops principals whose modes map to no role (public Read+Append, Write
-without Read, Control without Write) and reads a folder's own rules without its member rules.
+without Read, Control without Write). The SDK refuses partial folder scope with
+`partial-scope`, so legacy resource-only or members-only grants cannot be silently changed.
 `verify.ts` therefore records the access documents the SDK fetched (`recordAccess` wraps the
 fetch; each GET is attributed to the HEAD before it, and its copy is drained concurrently up
 to the SDK's 1 MiB cap so it never stalls the SDK's own bounded reader) and re-reads them with the SDK's neutral
@@ -109,12 +110,13 @@ unclassified failure or a refused (redirected) response after the PUT began is
 `SharingRefreshError` with `committed: false`; a failed reload after an accepted write is
 `SharingRefreshError` with `committed: true`, announced as "Sharing not confirmed".
 
-Folders are read-only in the dialog for now: the SDK edits `acl:accessTo` /
-`acp:accessControl` only, so a folder grant would not reach its contents and a removal
-would leave descendant access in place. For an owner, every edit control is disabled and
-`FOLDER_READ_ONLY` explains why and points to sharing each file directly; `applySharing`
-refuses folder snapshots without a request. Commenter stays disabled until Drive has a
-separate comments resource.
+Owners can edit folder roles for people and general access. The SDK writes both folder
+and member scope and removes both on revocation. Every folder dialog shows `CONTENTS_DIFFER`
+before saving: items inside with their own sharing keep it, and users must open an item's
+sharing to change it. The existing `contentsDiffer` signal also keeps this notice visible.
+No descendant access document is rewritten. Partial-scope folders fail closed with copy
+explaining that separate folder/contents permissions need a scope-aware tool.
+Commenter stays disabled until Drive has a separate comments resource.
 
 The ACP dialect is the SDK default (CSS: managers hold resource Control); no
 `implementation` is passed, so Inrupt ESS pods are not recognised as owned. They fail

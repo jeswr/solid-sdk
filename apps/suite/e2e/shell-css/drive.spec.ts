@@ -4,7 +4,11 @@ import { expect, test } from "./fixtures";
 test("Drive keeps its search route and details state in the authenticated shell", async ({
   page,
 }) => {
-  await page.goto("/drive");
+  const response = await page.goto("/drive");
+  // Finish the entry redirect in HTTP before the session-gated RSC tree exists.
+  const entry = response?.request().redirectedFrom();
+  expect(entry?.url()).toBe(new URL("/drive", page.url()).href);
+  expect((await entry?.response())?.status()).toBe(307);
   await expect(page.getByRole("heading", { level: 1, name: "Drive", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: "My Drive", exact: true })).toBeVisible({
     timeout: 30_000,
@@ -36,4 +40,5 @@ test("Drive keeps its search route and details state in the authenticated shell"
   await expect(
     page.getByRole("button", { name: "Close details", exact: true }).first(),
   ).toBeVisible();
+  await expect(page).toHaveURL("/drive/search?q=report");
 });

@@ -59,6 +59,7 @@ export function useNotesMutations(store: NotesStore, refresh: () => Promise<unkn
         title: input.title ?? "",
         body: input.body ?? "",
         labels: [...(input.labels ?? [])],
+        reminder: input.reminder ?? undefined,
         created: new Date().toISOString(),
         modified: new Date().toISOString(),
         format: "text/html",
@@ -76,7 +77,13 @@ export function useNotesMutations(store: NotesStore, refresh: () => Promise<unkn
         (notes) =>
           notes.map((item) =>
             item.url === note.url
-              ? { ...item, ...change, labels: change.labels ? [...change.labels] : item.labels }
+              ? {
+                  ...item,
+                  ...change,
+                  reminder:
+                    change.reminder === null ? undefined : (change.reminder ?? item.reminder),
+                  labels: change.labels ? [...change.labels] : item.labels,
+                }
               : item,
           ),
         () => store.save(note, change, note.etag),

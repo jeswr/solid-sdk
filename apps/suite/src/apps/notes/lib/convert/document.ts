@@ -2,7 +2,7 @@
 import type { DocsDocument, NotesDocument } from "./types";
 import { array, record, requireValue, text } from "./validation";
 
-const blocks = ["paragraph", "heading", "bulletList", "orderedList", "taskList"];
+const blocks = ["paragraph", "heading", "bulletList", "orderedList", "taskList", "image"];
 const nodeTypes = ["doc", ...blocks, "listItem", "taskItem", "text"];
 
 function link(value: Record<string, unknown>): void {
@@ -65,6 +65,31 @@ function node(value: unknown, allowed: readonly string[], depth: number, tasks: 
     return result;
   }
   requireValue(!("text" in item) && !("marks" in item), "invalid-structure");
+  if (type === "image") {
+    requireValue(!("content" in item), "invalid-structure");
+    const attrs = { ...record(item.attrs, ["src", "alt", "title", "width", "height", "link"]) };
+    text(attrs.src);
+    text(attrs.alt);
+    requireValue(!/[\s\p{Cc}\\]/u.test(attrs.src));
+    let source: URL;
+    try {
+      source = new URL(attrs.src);
+    } catch {
+      requireValue(false);
+    }
+    requireValue(/^https?:$/.test(source.protocol) && !source.username && !source.password);
+    for (const key of ["title"]) if (key in attrs && attrs[key] !== null) text(attrs[key]);
+    for (const key of ["width", "height"])
+      if (key in attrs && attrs[key] !== null)
+        requireValue(Number.isSafeInteger(attrs[key]) && (attrs[key] as number) > 0);
+    if ("link" in attrs && attrs.link !== null) {
+      const imageLink = record(attrs.link, ["href", "target", "rel", "class", "title"]);
+      link(imageLink);
+      attrs.link = { ...imageLink };
+    }
+    result.attrs = { ...attrs };
+    return result;
+  }
   if (type === "heading") {
     const attrs = record(item.attrs, ["level"]);
     requireValue([1, 2, 3].includes(attrs.level as number));

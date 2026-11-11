@@ -103,6 +103,72 @@ without a mutable shared index; it is intended for small chat collections.
 Containers with missing conversation metadata are skipped as incomplete saves;
 permission, transport and message-read errors still propagate.
 
+### Redaction
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+`redactSecrets` runs on every stored title and message and again on transcript export.
+Following Jesse's 10 November 2026 decision (sst-5ax.36), assignment redaction replaces
+only secret values with `[REDACTED]`, including env values. Names, operators, quotes and
+surrounding code stay: `const apiKey = "abc123"; const total = a + b;` becomes
+`const apiKey = "[REDACTED]"; const total = a + b;`. Ordinary assignments, comparisons,
+keyword arguments, loops and Markdown survive byte-for-byte unless they contain a
+credential. The rule errs toward redaction.
+
+Secret-looking names match these case-insensitive substrings: `token`, `secret`,
+`password`, `passwd`, `pwd`, `passphrase`, `pass`, `credential`, `creds`, `auth`,
+`cookie`, `session`, `bearer`, `signature`, `salt`, `dsn`, plus `connectionstring`
+and `connstr` after joining word parts. This covers `client_secret`, `access_token`,
+`refreshToken`, `connection_string` and `conn_str`. `key` and the short password name
+`pw` must be whole word parts, split on underscores, hyphens, dots or camelCase/acronym
+boundaries: `KEY`, `API_KEY`,
+`apiKey`, `private_key` and `key_count` redact; `monkey` and `keyboard` survive.
+`auth` skips `author` and `authority` but still matches `authorization`/`authorisation`.
+A bare TypeScript type after `name:` (`token: string`, `password: string | null`) is
+kept. An initializer after the type still redacts: `const token: string = 'abc'`
+becomes `const token: string = '[REDACTED]'`. Type scanning accepts unions, arrays
+and generics such as `Record<string, string>`, up to 256 characters, including line
+breaks. Recognized types that exceed that bound, and windows cut off at the bound
+while they could still become a type (a long generic head, or only whitespace), redact
+the uncertain remainder of the input so an initializer on a later line cannot leak. `==` and `=>` stay code; a quoted
+`"string"` value still redacts.
+
+The value rule covers shell assignments/exports, `=`/`:`/`:=` code and object keys
+(including quoted JSON keys), CLI flags (`--password value`, `--token=value`), and
+URL query parameters. Compact env lines starting with an optionally indented/exported
+`UPPER_SNAKE_CASE=` name redact regardless of the name, covering `DATABASE_URL` and
+`STRIPE_LIVE`; lowercase or spaced neutral code assignments stay. URL userinfo
+passwords also redact.
+
+Values never cross a line break, except on an unambiguous env line (an optionally
+exported `UPPER_SNAKE_CASE=` assignment at line start), whose multi-line quotes and
+backslash continuations redact in full. Everywhere else an unterminated or ambiguous
+quote redacts to the end of its line and scanning resumes on the next line, so a value
+can never swallow a later key while leaving that key's value visible; the price is that
+a mid-line multi-line string keeps its later lines. In shell and env assignments,
+backslashes are literal inside single quotes, and a word continues after a closing
+quote (`'abc\'123'` redacts as one word, quotes included). Code string literals (JS,
+Python, JSON, `name: '...'`) and double quotes support backslash escapes, so
+`'abc\'def'` is redacted to its real end. Following code and lines stay.
+
+Unquoted value boundaries depend on syntax:
+
+- Shell/env words include `,`, `)`, `}` and `]`, quoted segments, escaped whitespace
+  and backslash continuations. Compact `NAME=` assignments at shell word boundaries
+  use these rules; declarations and function arguments use code rules. Unquoted `;`,
+  `&&`, `||` and `|` end a shell word, even without spaces: `export PASS=a;b` becomes
+  `export PASS=[REDACTED];b` because `b` is a separate command. Escaped or quoted
+  semicolons belong to the value: `export PASS=a\;b` becomes `export PASS=[REDACTED]`.
+- URL query values stop only at `&`, `#`, whitespace, quotes, backticks or angle
+  brackets. Punctuation such as `;`, `,`, `)`, `}` and `]` stays inside the redaction.
+- Code, object keys, YAML, JSON and CLI flags retain the code delimiters: whitespace,
+  `;`, `,`, `)`, `}` and `]`, with escaped whitespace and continuations included.
+
+The existing PEM private-key, `sk-`, GitHub, AWS key-ID, JWT and `Authorization:`
+header rules run first with their existing markers. Redaction is pure, emits no
+diagnostics containing input, and produces a fixpoint, so derived message IDs stay
+stable when capture and storage both redact. Value scanning takes linear time.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)

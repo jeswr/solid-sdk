@@ -1,5 +1,11 @@
 [
   {
+    "test": "claims:accessControl",
+    "status": "pass",
+    "feature": "accessControl",
+    "reason": null
+  },
+  {
     "test": "claims:move",
     "status": "pass",
     "feature": "move",
@@ -21,6 +27,24 @@
     "test": "claims:rdfConneg",
     "status": "pass",
     "feature": "rdfConneg",
+    "reason": null
+  },
+  {
+    "test": "claims:trash",
+    "status": "pass",
+    "feature": "trash",
+    "reason": null
+  },
+  {
+    "test": "claims:typeIndex",
+    "status": "pass",
+    "feature": "typeIndex",
+    "reason": null
+  },
+  {
+    "test": "claims:versioning",
+    "status": "pass",
+    "feature": "versioning",
     "reason": null
   },
   {
@@ -163,6 +187,54 @@
   },
   {
     "test": "SC-CAP-discovery-cache",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ROLES-commenter",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ROLES-editor",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ROLES-manager",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ROLES-inherited",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-TRASH-roundtrip",
+    "status": "pass",
+    "feature": "trash",
+    "reason": null
+  },
+  {
+    "test": "SC-VERSIONS-roundtrip",
+    "status": "pass",
+    "feature": "versioning",
+    "reason": null
+  },
+  {
+    "test": "SC-TYPEINDEX-register-find",
+    "status": "pass",
+    "feature": "typeIndex",
+    "reason": null
+  },
+  {
+    "test": "SC-PREFS-create-update-412",
     "status": "pass",
     "feature": null,
     "reason": null

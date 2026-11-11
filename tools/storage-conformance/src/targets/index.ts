@@ -10,16 +10,22 @@ export function selectTargets(selection = "memory,sparq-solid"): ConformanceTarg
   for (const name of selection.split(",")) {
     const selected =
       name === "memory"
-        ? [memoryTarget("solid"), memoryTarget("lws")]
+        ? [
+            memoryTarget("solid"),
+            memoryTarget("solid", { accessModel: "acp" }),
+            memoryTarget("lws"),
+          ]
         : name === "memory-solid"
           ? [memoryTarget("solid")]
           : name === "memory-lws"
             ? [memoryTarget("lws")]
-            : name === "sparq-solid"
-              ? [sparqSolidTarget]
-              : name === "css"
-                ? [cssTarget]
-                : null;
+            : name === "memory-solid-acp"
+              ? [memoryTarget("solid", { accessModel: "acp" })]
+              : name === "sparq-solid"
+                ? [sparqSolidTarget]
+                : name === "css"
+                  ? [cssTarget]
+                  : null;
     if (!selected) throw new TypeError("Unknown conformance target");
     for (const target of selected) targets.set(target.name, target);
   }

@@ -282,7 +282,17 @@ export function createProviders(
     },
   };
   const boundary = createBoundary(options, http);
-  const namespace = JSON.stringify(["pod-auth", options.clientId, options.redirectUri]);
+  const native = options.nativeRedirect === true;
+  const redirectUri = options.redirectUri;
+  // Login only selects an account/context and upgrades in memory; this URL is never fetched.
+  // A private-use callback has no resource origin. Use a dedicated HTTPS URL on the validated
+  // Client ID Document's origin for native bootstrap contexts and DPoP proofs instead. This
+  // synthetic URL grants no boundary root; the first verified storage inherits its session.
+  const bootstrapUri = native
+    ? new URL("/.well-known/pod-auth/native-bootstrap", options.clientId as string).href
+    : redirectUri;
+  // The redirect remains a configuration discriminator, never a native resource context.
+  const namespace = JSON.stringify(["pod-auth", options.clientId, redirectUri]);
   const browser =
     options.storage === undefined && typeof indexedDB !== "undefined"
       ? createBrowserCaches(namespace, { persistSessions: true, wrapFenceStore: protectStore })
@@ -309,7 +319,7 @@ export function createProviders(
   };
   let hint: LoginHint = {};
   let restoredContext: { selected: LoginHint; context: string } | undefined;
-  // Login before storage discovery keys its grant to the callback URL; that grant belongs to the
+  // Login before storage discovery keys its grant to the bootstrap URL; that grant belongs to the
   // first verified storage root, the context login would have used had the roots been known.
   let loginContext: { selected: LoginHint; context: string; root: string } | undefined;
   let sessionRequest: Request | undefined;
@@ -435,6 +445,11 @@ export function createProviders(
       secureUrl(url.href, insecure, "authorization endpoint");
       const value = await options.ui.getCode(url, signal);
       signal.throwIfAborted();
+      // Private-use schemes all have origin "null". Supplement the engine's origin/path check
+      // with an exact callback base, including scheme and absence of authority. State, issuer,
+      // fragment and code validation remain with the protocol engine.
+      if (native && value.split("?", 1)[0] !== redirectUri)
+        throw new Error("Authorization response did not arrive at the native redirect URI");
       // From here a grant may be stored even if the exchange then observes an abort.
       codeRedeemed?.();
       return {
@@ -460,7 +475,7 @@ export function createProviders(
     sessionLock: persistence.lock,
   };
   const solidProvider = new DPoPTokenProvider(
-    options.redirectUri,
+    redirectUri,
     codeProvider,
     asProvider,
     clientProvider,
@@ -497,7 +512,7 @@ export function createProviders(
     },
   });
   const umaProvider = new SolidUmaTokenProvider(
-    options.redirectUri,
+    redirectUri,
     codeProvider,
     asProvider,
     clientProvider,
@@ -529,17 +544,11 @@ export function createProviders(
           const as = es256(
             await asFor(selected).getAuthorizationServer(new Request(target.url, { signal })),
           );
-          const oidc = new OidcIdTokenSource(
-            as,
-            options.redirectUri,
-            codeProvider,
-            clientProvider,
-            {
-              ...sessionOptions,
-              session: solidProvider.session,
-              context,
-            },
-          );
+          const oidc = new OidcIdTokenSource(as, redirectUri, codeProvider, clientProvider, {
+            ...sessionOptions,
+            session: solidProvider.session,
+            context,
+          });
           credentialContext = { oidc, selected };
         }
         return credentialContext;
@@ -734,9 +743,9 @@ export function createProviders(
     selections.clear();
     // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
     const generation = await fence.generation();
-    // Only a login made before any root was known is keyed to the callback URL.
+    // Only a login made before any root was known is keyed to the bootstrap URL.
     const bootstrap = boundary.roots().length === 0;
-    const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
+    const request = new Request(boundary.roots()[0] ?? bootstrapUri, {
       signal: AbortSignal.any([signal, fence.signalFor(generation)]),
     });
     request.signal.throwIfAborted();

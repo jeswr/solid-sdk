@@ -9,9 +9,11 @@ import { DataFactory, isSharedTrackerUrl, requireProjectFolder } from "../lib/mo
 import type { ProjectCreation, StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
+import { runBulk } from "../lib/views/bulk";
 import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
@@ -496,6 +498,7 @@ export class TasksCache {
     retry: () => void,
     urls: string[] = [],
     onFailure: MutationFailure = this.onFailure,
+    signal?: AbortSignal,
     strictReconciliation = false,
   ): Promise<T | undefined> {
     const entry = { apply, urls };
@@ -504,6 +507,8 @@ export class TasksCache {
     this.emit();
     const run = this.tail.then(async () => {
       try {
+        // Cancellation can happen while this operation waits behind another mutation.
+        if (signal?.aborted) return undefined;
         const { result, commit } = await write();
         this.baseline = commit(this.baseline);
         return result;
@@ -541,6 +546,106 @@ export class TasksCache {
   }
   createTask(project: StoredProject, data: NewTask): Promise<StoredTask | undefined> {
     return this.prepareTaskCreate(project, data)();
+  }
+  /** One queue reservation protects an import while independent task documents write four at a time. */
+  importTasks(
+    project: StoredProject,
+    entries: readonly { id: string; parentId: string | null; data: NewTask }[],
+    signal: AbortSignal,
+    onProgress: (completed: number) => void,
+  ) {
+    return this.mutate(
+      (state) => state,
+      async () => {
+        const current = this.project(project.url);
+        const outcomes = new Map<string, Promise<StoredTask | undefined>>();
+        const confirmed: StoredTask[] = [];
+        let failed = 0;
+        let completed = 0;
+        await runBulk(entries, (entry) => {
+          const run = async (): Promise<StoredTask | undefined> => {
+            if (signal.aborted) return;
+            const parent = entry.parentId ? await outcomes.get(entry.parentId) : undefined;
+            if (signal.aborted) return;
+            try {
+              // Keep the forest intact when a parent failed; unrelated rows still import.
+              if (entry.parentId && !parent) throw new Error("The parent could not be imported");
+              const data = entry.data;
+              const id = crypto.randomUUID();
+              const url = `${current.tracker.stateStore}${id}.ttl`;
+              let reserved: StoredTask | undefined;
+              let task: StoredTask;
+              try {
+                task = await this.store.createTask(
+                  current,
+                  {
+                    ...data,
+                    state: "open",
+                    creator: data.creator ?? this.webId,
+                    ...(data.allDay
+                      ? { dueDate: new Date(`${data.allDay}T00:00:00`) }
+                      : data.due
+                        ? { dueDate: data.due }
+                        : {}),
+                    rank: data.position,
+                    ...(parent ? { parent: parent.task.id } : {}),
+                    categoryTypes: [
+                      ...(data.labelIds ?? []),
+                      ...(data.sectionId ? [data.sectionId] : []),
+                    ],
+                  },
+                  id,
+                  (resource) => {
+                    reserved = {
+                      ...resource,
+                      task: new TaskItem(`${url}#it`, resource.dataset, DataFactory),
+                    };
+                  },
+                );
+              } catch (error) {
+                // A lost response may have committed. Count only our exact reserved payload.
+                const existing = await this.optionalTask(url);
+                if (
+                  !reserved ||
+                  !existing ||
+                  !isomorphic([...reserved.dataset], [...existing.dataset])
+                )
+                  throw error;
+                task = existing;
+              }
+              confirmed.push(task);
+              return task;
+            } catch {
+              failed++;
+              return undefined;
+            } finally {
+              onProgress(++completed);
+            }
+          };
+          const outcome = run();
+          outcomes.set(entry.id, outcome);
+          return outcome;
+        });
+        return {
+          result: { imported: confirmed.length, failed },
+          commit: (state: TasksSnapshot): TasksSnapshot => {
+            const previous = state.tasks[project.url];
+            const items = new Map((previous?.items ?? []).map((task) => [task.url, task]));
+            for (const task of confirmed) items.set(task.url, task);
+            return {
+              ...state,
+              tasks: {
+                ...state.tasks,
+                [project.url]: { ...previous, status: "ready", items: [...items.values()] },
+              },
+            };
+          },
+        };
+      },
+      () => {},
+      [project.url],
+      () => {},
+    );
   }
   /** One reservation and captured draft shared by every retry, including batch-owned toasts. */
   prepareTaskCreate(
@@ -688,6 +793,8 @@ export class TasksCache {
     project: StoredProject,
     names: readonly string[],
     onRetry?: () => void,
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const current = this.baseline.projects.find((item) => item.url === project.url);
     if (!this.pending.length && current && !missingLabels(current, names).length)
@@ -700,7 +807,7 @@ export class TasksCache {
         tracker.defineCategory("Label", name, undefined, source?.color);
       }
     };
-    return this.updateProject(project, define, onRetry);
+    return this.updateProject(project, define, onRetry, onFailure, signal);
   }
   updateTask(
     item: StoredTask,
@@ -976,6 +1083,7 @@ export class TasksCache {
       () => {},
       [],
       () => {},
+      undefined,
       true,
     );
   }
@@ -1041,6 +1149,7 @@ export class TasksCache {
       },
       [item.url],
       options.silent ? () => {} : this.onFailure,
+      undefined,
       options.completedOnly,
     );
   }
@@ -1545,6 +1654,8 @@ export class TasksCache {
   prepareProjectCreate(
     title: string,
     onRetry?: () => void,
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): () => Promise<StoredProject | undefined> {
     const url = `${this.store.projects}pending-${crypto.randomUUID()}.ttl`;
     const { tracker, dataset } = createTracker(url, title, `${url}/`, [this.webId], new Date());
@@ -1568,6 +1679,8 @@ export class TasksCache {
         },
         onRetry ?? (() => void run()),
         [url],
+        onFailure,
+        signal,
       );
     let attempted = false;
     let saved: StoredProject | undefined;
@@ -1594,6 +1707,8 @@ export class TasksCache {
     change: (tracker: TaskTracker) => void,
     /** Composite operations retry their complete intent rather than this write alone. */
     onRetry?: () => void,
+    onFailure?: MutationFailure,
+    signal?: AbortSignal,
   ): Promise<StoredProject | undefined> {
     const attempt = (retry = false): Promise<StoredProject | undefined> =>
       this.mutate(
@@ -1616,6 +1731,8 @@ export class TasksCache {
             void attempt(true);
           }),
         [project.url],
+        onFailure,
+        signal,
       );
     return attempt();
   }
@@ -1791,6 +1908,13 @@ export class TasksCache {
     this.updateProject(project, (tracker) => {
       tracker.title = title.trim();
     });
+  setProjectColor = (project: StoredProject, color: string | undefined) => {
+    const selected = projectColour(color);
+    if (color !== undefined && !selected) throw new TypeError("Unknown project colour.");
+    return this.updateProject(project, (tracker) => {
+      tracker.color = selected?.hex;
+    });
+  };
   archiveProject = (project: StoredProject) => {
     const archivedAt = new Date();
     return this.updateProject(project, (tracker) => {
