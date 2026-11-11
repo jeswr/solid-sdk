@@ -2,7 +2,7 @@
 
 # @jeswr/suite-sdk
 
-> **Experimental — AI-agent-generated.** Private registration, notification and search facades.
+> **Experimental — AI-agent-generated.** Private registration, notification, search and preferences facades.
 
 Mount `PodAuthProvider` from `@jeswr/pod-auth/react`, then use the provider's authenticated
 fetch and current actor through the hook:
@@ -141,3 +141,76 @@ reject with `Registration session changed`. Option replacement/unmount aborts ac
 logout/expiry/restore/unrelated login also cancels it. The run's own matching login is permitted to
 finish its profile write and return Identity while old retained actions are revoked. In-flight
 failures remain typed RegistrationError values. No application shell wiring is included.
+
+## Preferences (`SDK-APP-11`)
+
+```ts
+import { createPreferences } from '@jeswr/suite-sdk/preferences';
+
+// Keep one factory for the current authenticated session. storage and typeIndex are existing clients.
+const usePreferences = createPreferences({ storage, typeIndex, webId });
+const railSchema = {
+  parse(value: unknown): { collapsed: boolean } {
+    if (!value || typeof value !== 'object' || !('collapsed' in value) ||
+        typeof value.collapsed !== 'boolean') throw new Error('Invalid rail preference');
+    return { collapsed: value.collapsed };
+  },
+};
+
+function Rail() {
+  const { value, set, loading, pending, error } = usePreferences(
+    'rail', railSchema, { collapsed: false },
+  );
+  // set({ collapsed: true }) or set(current => ({ collapsed: !current.collapsed }))
+  // Await set() for durable queuing and the current delivery attempt; render pending/error as needed.
+  return null;
+}
+
+// On logout or session/client replacement, including logging in again as the same account:
+usePreferences.dispose();
+```
+
+The hook returns `{ value, set(next | updater): Promise<void>, loading, pending, error }`.
+The schema only needs `parse(unknown): T` (zod-compatible); `defaultValue` is required.
+Keys match `[a-z0-9][a-z0-9.-]{0,63}` and are encoded in URLs. Examples include `rail`,
+`density`, `onboarding`, `recentsearches`, `drive`, `docs.starred`, `docs.shared`, `tasks`,
+`notes.pinned`, `connectors`, and `permissions.view`. Use lowercase `recentsearches` for the
+app's camelCase `recentSearches` key. Values and defaults must be JSON. `PreferencesError.code`
+classifies `invalid-key`, `invalid-json`, `too-large`, `session-changed`, `unsafe-location`,
+`missing-etag` and `unsupported-access`. Sets reject invalid schemas/non-JSON values and values
+larger than 64 KiB UTF-8; read/schema failures use the default and warn once per key per store.
+
+On Solid, JSON lives at `<preferences-directory>/suite/<key>.json`. The directory comes from
+the profile's `pim:preferencesFile`, or a `pim:ConfigurationFile` Type Index registration.
+Without either, the store creates `settings` and registers its returned URL. LWS uses the
+same logical layout while honoring server-assigned URLs: typed creation links identify the
+settings/suite containers and individual keys for later discovery. Slugs never establish
+LWS resource identity. Type Index and profile pointers must remain inside the selected storage.
+Supply `profile?: RdfReadResult` with an already parsed WebID profile when hosted elsewhere;
+otherwise the store reads it through the supplied storage client. Native non-RDF/missing LWS
+profiles have no RDF preference pointer.
+
+The suite container is owner-only before JSON access. The local WAC provisioner consumes
+pod-access policy helpers and the server's advertised ACL link. It creates an owner-only ACL
+only when the container has none of its own; an existing ACL is the owner's choice and is never
+rewritten. For ACP/LWS, supply
+`ensureOwnerOnly?: (containerUrl: string, signal: AbortSignal) => Promise<void>` to provision or
+verify owner-only resource **and descendant** access through your deployment's access layer.
+It must honor cancellation and be idempotent. Without a supported provisioner the store fails
+closed. The public SDK currently lacks an exported container-provisioning/profile-pointer helper,
+so these small equivalents live in this facade; the security-critical packages are unchanged.
+
+Updates use ETags; Solid creates use If-None-Match: *. On 412 the store re-reads and retries once,
+keeping the local whole value. A second conflict surfaces in `error` and preserves the queue.
+Concurrent setters update memory immediately and coalesce to the latest whole value per key,
+with one write in flight. Durable pending values replace the future SDK-APP-08 outbox through
+a small internal replay interface. They replay in sequence on `online`, on the next committed
+mount, or through `await usePreferences.flush()`. Ordinary storage/cache errors populate hook
+state; offline sets remain `pending` until delivery succeeds. Without IndexedDB, caching and
+queuing are memory-only. Without BroadcastChannel, tab updates are unavailable.
+
+Memory, IndexedDB keys/envelopes and `BroadcastChannel('suite-prefs')` messages are scoped by
+WebID and storage root. Another account's values never hydrate or broadcast into the current
+store. Create a fresh factory per authenticated session and dispose the old one; this revokes
+retained setters and aborts/fences late operations. Pending durable values remain available only
+to that same WebID/storage session on restart. Construction and speculative renders do no I/O.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
@@ -121,6 +122,7 @@ describe("Keep import plans", () => {
         file("Keep/Shopping copy.json", {
           title: "Shopping",
           listContent: [{ text: "Milk", isChecked: false }],
+          attachments: [{ filePath: "photo.jpg", mimetype: "image/jpeg" }],
         }),
         file("Keep/Old.JSON", { title: "Old", textContent: "Kept" }),
         file("Keep/Plain.json", { title: "Plain", textContent: "Hello" }),
@@ -166,6 +168,65 @@ describe("Keep import plans", () => {
     expect(keepFingerprint({ title: "T", body: "", labels: ["b", "a"] })).toBe(
       keepFingerprint({ title: "T", body: "", labels: ["a", "b"] }),
     );
+  });
+  it("keeps notes with different attachments while skipping identical batch copies", () => {
+    const note = (filePath?: string) => ({
+      title: "Birds",
+      textContent: "In the garden",
+      labels: [{ name: "Home" }],
+      ...(filePath && { attachments: [{ filePath, mimetype: "image/png" }] }),
+    });
+    const first = new File(["pixels"], "first.png", { type: "image/png" });
+    const second = new File(["pixels"], "second.png", { type: "image/png" });
+    const plan = planKeepImport(
+      [
+        file("Keep/First.json", note("first.png")),
+        file("Keep/Second.json", note("second.png")),
+        file("Keep/First copy.json", note("./first.png")),
+        file("Keep/Other/First.json", note("first.png")),
+        file("Keep/Text.json", note()),
+        file("Keep/Missing.json", note("missing.png")),
+      ],
+      [],
+      new Map([
+        ["Keep/first.png", first],
+        ["Keep/second.png", second],
+        ["Keep/Other/first.png", first],
+      ]),
+    );
+    expect(plan.ready.map((item) => item.fileName)).toEqual([
+      "Keep/First.json",
+      "Keep/Second.json",
+      "Keep/Other/First.json",
+      "Keep/Text.json",
+      "Keep/Missing.json",
+    ]);
+    expect(plan.ready.map((item) => item.images?.length ?? 0)).toEqual([1, 1, 1, 0, 0]);
+    expect(plan.skipped).toEqual([
+      { fileName: "Keep/First copy.json", reason: KEEP_SKIP_REASONS.duplicate },
+    ]);
+    expect(plan.attachments).toBe(1);
+  });
+  it("reports existing Notes as duplicates even when the selection has different images", () => {
+    const files = [
+      file("Keep/Birds.json", {
+        title: "Birds",
+        textContent: "In the garden",
+        labels: [{ name: "Home" }],
+        attachments: [{ filePath: "new.png", mimetype: "image/png" }],
+      }),
+    ];
+    const media = new Map([
+      ["Keep/new.png", new File(["pixels"], "new.png", { type: "image/png" })],
+    ]);
+    for (const body of [
+      "<p>In the garden</p>",
+      '<p>In the garden</p><img src="https://pod.example/notes/media/old.png" alt="Bird">',
+    ]) {
+      const plan = planKeepImport(files, [{ title: "Birds", body, labels: ["Home"] }], media);
+      expect(plan.ready).toEqual([]);
+      expect(plan.skipped).toEqual([{ fileName: "Keep/Birds.json", reason: "Already in Notes" }]);
+    }
   });
   it("names files whose names could not be read by position", () => {
     const plan = planKeepImport([{ fileName: `${"x".repeat(2000)}.json`, json: "{}" }], []);

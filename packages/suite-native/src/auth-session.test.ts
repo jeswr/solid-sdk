@@ -411,3 +411,43 @@ describe("session lifecycle", () => {
     await expect(getCode(authUrl(), signal())).resolves.toBe("c");
   });
 });
+
+describe("callback-URL mode (pod-auth ui.getCode)", () => {
+  const good = `${REDIRECT}?code=the-code&state=s1&${ISS}`;
+  const run = (callback: string, options: { resolveIssuer?: () => string } = {}) =>
+    createNativeCodeDriver({
+      plugin: plugin(callback),
+      redirectUri: REDIRECT,
+      returns: "callback",
+      ...options,
+    })(authUrl(), signal());
+
+  test("returns the whole validated callback URL, with or without a resolver", async () => {
+    await expect(run(good)).resolves.toBe(new URL(good).href);
+    await expect(run(good, { resolveIssuer })).resolves.toBe(new URL(good).href);
+  });
+
+  test("still requires exactly one iss without a resolver, and checks it with one", async () => {
+    for (const callback of [
+      `${REDIRECT}?code=c&state=s1`,
+      `${REDIRECT}?code=c&state=s1&${ISS}&${ISS}`,
+      `${REDIRECT}?code=c&state=s1&iss=`,
+    ])
+      await expect(run(callback)).rejects.toBeInstanceOf(AuthorizationRequestError);
+    await expect(
+      run(`${REDIRECT}?code=c&state=s1&iss=https://evil.example/`, { resolveIssuer }),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
+  });
+
+  test("keeps the state, redirect and error checks", async () => {
+    await expect(run(`${REDIRECT}?code=c&state=s2&${ISS}`)).rejects.toBeInstanceOf(
+      StateMismatchError,
+    );
+    await expect(
+      run(`org.jeswr.evil:/oauth/callback?code=c&state=s1&${ISS}`),
+    ).rejects.toBeInstanceOf(AuthorizationRequestError);
+    await expect(run(`${REDIRECT}?error=access_denied&state=s1&${ISS}`)).rejects.toBeInstanceOf(
+      AuthorizationError,
+    );
+  });
+});

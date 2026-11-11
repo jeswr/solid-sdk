@@ -32,6 +32,7 @@ function description(values: Partial<StorageDescription> = {}): StorageDescripti
     fetchedAt: 0,
     etag: null,
     maxAgeMs: 0,
+    owner: null,
     verificationMethods: [],
     ...values,
   };

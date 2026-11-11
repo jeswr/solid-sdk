@@ -131,6 +131,20 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 - Require HTTPS for the production client ID. `{ dynamicRegistration: true }` is limited to a loopback
   callback outside production. `allowInsecureLoopback` permits only explicit development HTTP and is
   checked on every protocol hop. Browser callback origins must match the application origin.
+- Native applications may explicitly set `nativeRedirect: true` with a private-use scheme callback
+  such as `org.jeswr.suite:/oauth/callback`. This mode requires a lowercase reverse-domain scheme
+  (suite-native's grammar); reserved schemes, authority (including empty `//`), credentials, relative
+  paths, queries, fragments and URL normalization are rejected. HTTP(S) callbacks are rejected in
+  native mode; omitting the opt-in retains the browser policy. Supply an HTTPS Client ID Document
+  URL with `application_type: native` and the exact redirect registered; dynamic registration and
+  `allowInsecureLoopback: true` are forbidden. Only the scheme callback skips the WebView-origin
+  check (`capacitor://localhost` or `https://localhost` may host the app). `ui.getCode` still returns
+  the complete callback URL with `code`, `state` and `iss`, and owns native cancellation/cleanup.
+  The scheme URI stays in OAuth authorization/token parameters and the configuration namespace,
+  never in a resource Request, boundary root or storage context. Without known roots, login uses
+  `/.well-known/pod-auth/native-bootstrap` on the Client ID Document's HTTPS origin for its synthetic
+  upgrade/context; that URL is never fetched or implicitly trusted. Verified storage roots alone
+  gain resource access, and the first inherits the bootstrap session as in browser login.
 - Fence login, refresh, restore, persistence and logout against stale work after each awaited boundary.
   Do not expose identity until credentials and refresh rotation are durable.
 

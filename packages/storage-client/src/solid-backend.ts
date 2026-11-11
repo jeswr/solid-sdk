@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 // Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
-import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
+import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";
 import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
@@ -41,6 +41,15 @@ export interface SolidBackendOptions {
 
 /** A listed member with the optional `dct:format` literal some servers emit. */
 class Member extends Resource {
+  get displayTitle(): string | undefined {
+    const title = OptionalFrom.subjectPredicate(
+      this,
+      "http://purl.org/dc/terms/title",
+      TermAs.term,
+    );
+    return title?.termType === "Literal" ? title.value : undefined;
+  }
+
   get format(): string | undefined {
     return OptionalFrom.subjectPredicate(this, DCT_FORMAT, LiteralAs.string);
   }
@@ -91,6 +100,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       protocol: "solid",
       id: root,
       root,
+      owner: null,
       descriptionUrl: null,
       services: [],
       capabilities: [],
@@ -147,6 +157,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     const modified = member.modifiedAt;
     return {
       url: member.id,
+      displayName: tolerant(() => member.displayTitle) ?? null,
       kind,
       contentType: kind === "container" ? null : (format ?? iana ?? null),
       size: typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : null,
