@@ -34,6 +34,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { WalkthroughDock } from "@/welcome/walkthrough";
 
 export type SuiteAppId =
   | "home"
@@ -224,7 +225,12 @@ export function SuiteFrame({
         </button>
         <div className="ish-context">{context}</div>
         {search ? <SearchBox search={search} /> : <div className="ish-spacer" />}
-        <div className="ish-actions">{actions}</div>
+        <div className="ish-actions">
+          {actions}
+          <Link className="suite-feedback-link" href="/feedback">
+            Give feedback
+          </Link>
+        </div>
       </header>
       <main id="main-content" className="ish-main" tabIndex={-1}>
         {children}
@@ -264,6 +270,7 @@ export function SuiteFrame({
           </Link>
         ))}
       </nav>
+      <WalkthroughDock />
     </div>
   );
 }
