@@ -1,14 +1,35 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 
+import type { PushState } from "./push-state.js";
+
 /** Shared relay state. Redis implementations must use SET NX PX, never get-then-set. */
 export interface RelayStore {
   /** Atomically reserve a replay key until ttlMs has elapsed. Fail closed on store errors. */
   insertIfAbsent(key: string, ttlMs: number): Promise<boolean>;
+  /**
+   * Serializable, all-or-nothing push-state transaction. The callback is synchronous,
+   * deterministic, has no I/O, and must not retain state references. Backends may rerun
+   * it: Redis can WATCH a versioned snapshot and commit it with MULTI/EXEC, retrying
+   * conflicts (or implement equivalent operations with Lua). Throws roll back.
+   */
+  transaction<T>(operation: (state: PushState) => T): Promise<T>;
 }
 
 /** Share one instance between local relays; independent processes need a shared backend. */
 export class InMemoryRelayStore implements RelayStore {
+  private state: PushState = { installations: new Map(), registrations: new Map() };
+
+  async transaction<T>(operation: (state: PushState) => T): Promise<T> {
+    const draft = structuredClone(this.state);
+    // No await: all reads, checks and writes run in one critical section.
+    const result = operation(draft);
+    if (result instanceof Promise) throw new Error("Transactions must be synchronous");
+    const detached = structuredClone(result);
+    this.state = structuredClone(draft);
+    return detached;
+  }
+
   // One queue per lifetime: insertion order is then expiry order, so cleanup only ever
   // looks at the head of each queue and never scans unexpired reservations.
   private readonly queues = new Map<number, Map<string, number>>();

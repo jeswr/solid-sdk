@@ -761,6 +761,10 @@ importers:
       jose:
         specifier: ^6.2.3
         version: 6.2.14
+    devDependencies:
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
 
   apps/pod-chat:
     dependencies:

@@ -19,6 +19,34 @@ test("atomically reserves keys, isolates keys and expires them at five minutes",
   expect(await new InMemoryRelayStore().insertIfAbsent("system-clock", 1)).toBe(true);
 });
 
+test("transactions roll back errors and isolate returned and retained references", async () => {
+  const store = new InMemoryRelayStore();
+  const state = await store.transaction((state) => state);
+  state.installations.set("external", {} as never);
+  expect(await store.transaction((state) => state.installations.size)).toBe(0);
+  let retained = state;
+  await store.transaction((state) => {
+    retained = state;
+  });
+  retained.installations.set("external", {} as never);
+  expect(await store.transaction((state) => state.installations.size)).toBe(0);
+  await expect(
+    store.transaction((state) => {
+      state.installations.set("rollback", {} as never);
+      throw new Error("rollback");
+    }),
+  ).rejects.toThrow("rollback");
+  expect(await store.transaction((state) => state.installations.size)).toBe(0);
+  await expect(store.transaction(async () => undefined)).rejects.toThrow("synchronous");
+});
+
+test("removing an already absent registration leaves unrelated installations intact", async () => {
+  const { removeRegistration } = await import("./push-state.js");
+  const store = new InMemoryRelayStore();
+  await store.transaction((state) => removeRegistration(state, "missing"));
+  expect(await store.transaction((state) => state.registrations.size)).toBe(0);
+});
+
 test("fails closed at capacity and frees expired reservations first", async () => {
   let now = 0;
   const store = new InMemoryRelayStore(() => now, 3);
