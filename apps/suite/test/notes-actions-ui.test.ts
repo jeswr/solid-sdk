@@ -545,3 +545,54 @@ it("keeps pod image URLs when opening an image note in Docs", async () => {
   );
   expect(mocks.push).toHaveBeenCalledWith(`/docs/d/${encodeRef(documentUrl)}`);
 });
+
+it("opens read-only notes with locked title and body, recovery actions and no writer", async () => {
+  const target = { ...note(), readOnly: true };
+  await mount(h(NoteDialog, { note: target }));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.readOnly).toBe(
+    true,
+  );
+  expect(mocks.editor?.isEditable).toBe(false);
+  expect(document.body.textContent).toContain("View only");
+  expect(button("Copy local changes")).toBeTruthy();
+  expect(button("Download local changes")).toBeTruthy();
+  expect(document.body.textContent).not.toContain("Collaborator");
+  await click(button("Close"));
+  expect(mocks.context.closeNote).toHaveBeenCalledOnce();
+  expect((mocks.context.store as { save: unknown }).save).not.toHaveBeenCalled();
+});
+
+it("locks the mounted editor on a 403 save and keeps the local text available", async () => {
+  const { ResourceWriteError } = await import("../src/apps/docs/lib/model/errors");
+  const target = note();
+  const save = vi.fn().mockRejectedValue(new ResourceWriteError(target.url, 403));
+  mocks.context.store = { save };
+  const ui = await mount(h(NoteDialog, { note: target }));
+  await fill("Note title", "Local work");
+  await click(button("Close"));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.readOnly).toBe(
+    true,
+  );
+  expect(mocks.editor?.isEditable).toBe(false);
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value).toBe(
+    "Local work",
+  );
+  const pending = getPendingDrafts((mocks.context.session as { webId: string }).webId);
+  await act(() => pending.retry());
+  await ui.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(pending.get(target.url)?.draft.title).toBe("Local work");
+});
+
+it("shows the shared card indicator only for known grants", async () => {
+  const target = note();
+  mocks.context.sharedNotes = {};
+  const ui = await mount(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")).toBeNull();
+  mocks.context.sharedNotes = { [target.url]: false };
+  await ui.render(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")).toBeNull();
+  mocks.context.sharedNotes = { [target.url]: true };
+  await ui.render(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")?.textContent).toBe("Shared");
+});

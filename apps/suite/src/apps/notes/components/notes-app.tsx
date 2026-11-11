@@ -10,10 +10,12 @@ import { decodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import type { StoredNote } from "../lib/model/store";
+import { noteLink } from "../lib/shared-note";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
 import { useNoteReminders } from "../state/reminders";
 import { NoteDialog } from "./note-dialog";
 import { NotesGrid } from "./notes-grid";
+import { SharedNote } from "./shared-note";
 import { NotesSidebar } from "./sidebar";
 
 const purged = new Set<string>();
@@ -140,6 +142,28 @@ function NotesChrome({ children }: { children: ReactNode }) {
 }
 function SessionGate({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
+  const pathname = useRoutePathname();
+  const reference = pathname.startsWith("/notes/n/")
+    ? pathname.slice("/notes/n/".length)
+    : undefined;
+  if (reference && state.status === "ready") {
+    const root = state.session.storageUrl;
+    try {
+      const link = noteLink(reference, root);
+      if (link.foreign)
+        return (
+          <SuiteFrame app="notes" sidebar={null}>
+            <SharedNote reference={reference} podRoot={root} />
+          </SuiteFrame>
+        );
+    } catch (error) {
+      return (
+        <div className="notes-boot" role="alert">
+          {(error as Error).message}
+        </div>
+      );
+    }
+  }
   if (state.status === "loading")
     return (
       <div className="notes-boot" role="status">

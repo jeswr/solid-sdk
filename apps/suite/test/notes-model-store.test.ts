@@ -125,7 +125,11 @@ describe("notes store", () => {
     expect((await s.store.create({ title: "Hello World" })).url).toBe(`${ROOT}hello-world-3.ttl`);
     expect((await s.store.create()).url).toBe(`${ROOT}note.ttl`);
     expect((await s.store.create({ title: "!!!" })).url).toBe(`${ROOT}note-2.ttl`);
-    expect(await s.store.read(a.url)).toEqual({ ...a, localGeneration: expect.any(Number) });
+    expect(await s.store.read(a.url)).toEqual({
+      ...a,
+      readOnly: false,
+      localGeneration: expect.any(Number),
+    });
     for (const url of Object.values(s.store.containers)) expect(s.pod.has(url)).toBe(true);
     expect(
       s.calls
@@ -247,7 +251,11 @@ describe("notes store", () => {
     expect(note.created).toBe(original.created);
     expect(note.labels).toEqual(["home"]);
     expect(note.revisions[0]?.id).toBe(`${note.url}#rev-25`);
-    expect(await s.store.read(note.url)).toEqual({ ...note, localGeneration: expect.any(Number) });
+    expect(await s.store.read(note.url)).toEqual({
+      ...note,
+      readOnly: false,
+      localGeneration: expect.any(Number),
+    });
     await expect(s.store.save(original, { title: "Stale" }, original.etag)).rejects.toBeInstanceOf(
       NoteConflictError,
     );
@@ -314,7 +322,7 @@ describe("notes store", () => {
     }
     expect(note.url).toBe(originalUrl);
     expect(await s.store.list("active")).toEqual([
-      { ...note, localGeneration: expect.any(Number) },
+      { ...note, readOnly: false, localGeneration: expect.any(Number) },
     ]);
     expect(await s.store.unarchive(note)).toBe(note);
     const archived = await s.store.archive(note);
@@ -333,6 +341,7 @@ describe("notes store", () => {
     expect((await s.store.archive(second)).url).toBe(`${ROOT}archive/same-2.ttl`);
     expect(await s.store.read(first.url)).toEqual({
       ...first,
+      readOnly: false,
       localGeneration: expect.any(Number),
     });
     const url = `${ROOT}extensionless`;
@@ -661,6 +670,7 @@ describe("notes store", () => {
     expect((await s.store.read(archived.url))?.labels).toEqual(["B"]);
     expect(await s.store.read(destination.url)).toEqual({
       ...destination,
+      readOnly: false,
       localGeneration: expect.any(Number),
     });
     expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
@@ -729,6 +739,7 @@ it("never deletes a replacement at the confirmed trash URL", async () => {
   expect(s.calls[0]?.headers.get("if-match")).toBe(confirmed.etag);
   expect(await s.store.read(replacement.url)).toEqual({
     ...replacement,
+    readOnly: false,
     localGeneration: expect.any(Number),
   });
 });
@@ -764,6 +775,7 @@ it("rolls back the stale destination on a concurrent source edit without a verif
   expect(s.calls.filter((call) => call.method === "GET")).toEqual([]);
   expect(await s.store.read(original.url)).toEqual({
     ...edited,
+    readOnly: false,
     localGeneration: expect.any(Number),
   });
   expect(s.pod.has(`${ROOT}archive/concurrent.ttl`)).toBe(false);

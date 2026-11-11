@@ -62,6 +62,7 @@ export interface ShareDialogProps {
   caps: ShareCapabilities;
   suiteHref: string;
   contacts?: SharingPerson[];
+  notice?: string;
   onPeopleAdded?: (count: number) => void;
   useProfile?: (webId: string) => SharingProfile;
 }
@@ -119,6 +120,7 @@ function SharingContent({
   contacts = [],
   useProfile = emptyProfile,
   mobile,
+  notice,
 }: ShareDialogProps & { mobile: boolean }) {
   const id = useId();
   const online = !useNeedsConnection().disabled;
@@ -599,6 +601,7 @@ function SharingContent({
           )}
         </>
       )}
+      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
       <footer className={styles.footer}>
         <Button
           variant="outline"

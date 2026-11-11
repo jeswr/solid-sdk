@@ -36,6 +36,8 @@ export interface Note
   > {
   url: string;
   labels: string[];
+  /** Owner-only metadata is stored separately before granting note access. */
+  privatePreferences?: string | undefined;
   reminder?: string | undefined;
   reminderId?: string | undefined;
   location: NoteLocation;
@@ -45,6 +47,12 @@ export interface Note
 
 /** Extra interoperable properties on the shared document's #it subject. */
 export class NoteDoc extends DocumentDoc {
+  get privatePreferences(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${NS.RDFS}seeAlso`, NamedNodeAs.string);
+  }
+  set privatePreferences(value: string | undefined) {
+    OptionalAs.object(this, `${NS.RDFS}seeAlso`, value, NamedNodeFrom.string);
+  }
   override mark(): this {
     super.mark();
     this.types.add(`${NS.SCHEMA}TextDigitalDocument`);
@@ -129,6 +137,7 @@ export class NoteDoc extends DocumentDoc {
 }
 
 export interface BuildNoteInput extends Omit<BuildDocumentInput, "format"> {
+  privatePreferences?: string | undefined;
   labels?: readonly string[] | undefined;
   reminder?: Date | string | null | undefined;
   reminderId?: string | undefined;
@@ -159,6 +168,7 @@ export function buildNote(url: string, input: BuildNoteInput): Store {
     revisionLabel: undefined,
   });
   const doc = new NoteDoc(documentSubject(url), dataset, DataFactory).mark();
+  doc.privatePreferences = input.privatePreferences;
   for (const label of labels) doc.labels.add(label);
   doc.trashedAt = input.trashedAt === undefined ? undefined : new Date(input.trashedAt);
   doc.previousContainer = input.previousContainer;
@@ -181,6 +191,7 @@ export function parseNote(
     ...document,
     url,
     labels: [...doc.labels],
+    ...(doc.privatePreferences ? { privatePreferences: doc.privatePreferences } : {}),
     reminder: doc.reminder?.toISOString(),
     reminderId: doc.reminderId,
     location,

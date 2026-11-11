@@ -18,6 +18,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { isDirectChild } from "../../docs/lib/model/layout";
 import { type NoteColour, rekeyPreferences, togglePinned } from "../lib/model/prefs";
 import { createNotesStore, type NoteChanges, type StoredNote } from "../lib/model/store";
+import { discoverNoteShares } from "../lib/sharing";
 import { getPendingDrafts } from "./draft-registry";
 import { useNotesMutations } from "./mutations";
 import { useNotesPreferences } from "./prefs";
@@ -26,10 +27,17 @@ import { useNotes } from "./use-notes";
 function useNotesValue(session: PodSession) {
   const store = useMemo(
     () =>
-      createNotesStore({ fetch: session.fetch, podRoot: session.storageUrl, webId: session.webId }),
+      createNotesStore({
+        fetch: session.fetch,
+        podRoot: session.storageUrl,
+        webId: session.webId,
+        mode: session.mode,
+      }),
     [session],
   );
   const [prefs, updatePrefs] = useNotesPreferences(session.webId);
+  const [sharedNotes, setSharedNotes] = useState<Record<string, boolean>>({});
+  const [shareRevision, setShareRevision] = useState(0);
   const active = useNotes(store, { location: "active" });
   const archived = useNotes(store, { location: "archived" });
   const trashed = useNotes(store, { location: "trashed" });
@@ -67,8 +75,28 @@ function useNotesValue(session: PodSession) {
     );
   const notes = [
     ...projected.filter((note) => !recovered.some((entry) => entry.note.url === note.url)),
-    ...recovered.map(({ note, draft }) => ({ ...note, ...draft })),
+    ...recovered.map(({ note, draft }) => {
+      const current = projected.find((item) => item.url === note.url);
+      const freshPermission =
+        current?.readOnly !== undefined &&
+        current.localGeneration !== undefined &&
+        current.localGeneration > (note.localGeneration ?? -1);
+      return { ...note, ...draft, ...(freshPermission ? { readOnly: current.readOnly } : {}) };
+    }),
   ];
+  const shareUrls = JSON.stringify(
+    notes.filter((note) => note.etag !== null).map((note) => note.url),
+  );
+  // Discovery runs after rendering the list, never as part of its loading state.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: shareRevision explicitly invalidates ACL knowledge after the dialog closes
+  useEffect(() => {
+    const controller = new AbortController();
+    setSharedNotes({});
+    void discoverNoteShares(JSON.parse(shareUrls), session, controller.signal, (url, shared) => {
+      setSharedNotes((current) => ({ ...current, [url]: shared }));
+    });
+    return () => controller.abort();
+  }, [shareUrls, session, shareRevision]);
   const router = useRouter();
   const pathname = usePathname();
   const query = useSearchParams().toString();
@@ -169,6 +197,8 @@ function useNotesValue(session: PodSession) {
     move,
     attempt,
     create,
+    sharedNotes,
+    refreshSharing: () => setShareRevision((value) => value + 1),
   };
 }
 type NotesContextValue = ReturnType<typeof useNotesValue>;

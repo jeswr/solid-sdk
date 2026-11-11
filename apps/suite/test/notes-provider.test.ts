@@ -187,8 +187,54 @@ it("flushes an unmounted dialog's pending draft before a card moves its URL", as
   expect(moved).toMatchObject({ title: "Latest title", body: "<p>Latest text</p>", labels: ["A"] });
   expect(await s.value.store.read(moved.url)).toEqual({
     ...moved,
+    readOnly: false,
     localGeneration: expect.any(Number),
   });
   expect(pending.get(note.url)).toBeUndefined();
   expect(s.value.notes.some((item) => item.url === note.url)).toBe(false);
+});
+
+it("keeps denied drafts locked through provider redraws and unlocks them after a fresh Write hint", async () => {
+  let draft!: ReturnType<typeof useNoteDraft>;
+  function Draft({ note }: { note: StoredNote }) {
+    const context = useNotesContext();
+    draft = useNoteDraft(
+      note,
+      context.store,
+      context.refresh,
+      getPendingDrafts(context.session.webId),
+    );
+    return null;
+  }
+  function Editor() {
+    const note = useNotesContext().notes[0];
+    return note ? h(Draft, { note }) : null;
+  }
+  const s = await fixture(h(Editor));
+  let note!: StoredNote;
+  await act(async () => {
+    note = await s.value.create({ title: "Before" }, false, "default");
+  });
+  const transport = s.fetchImpl.getMockImplementation();
+  expect(transport).toBeDefined();
+  s.fetchImpl.mockImplementation(async (input, init) =>
+    init?.method === "PUT" && String(input) === note.url
+      ? new Response(null, { status: 403 })
+      : (transport as typeof fetch)(input, init),
+  );
+  await act(() => draft.change({ title: "Recoverable" }));
+  await act(() => draft.flush().catch(() => {}));
+  const pending = getPendingDrafts(s.value.session.webId);
+  expect(draft.viewOnly).toBe(true);
+  const deniedCalls = s.fetchImpl.mock.calls.length;
+  await act(() => pending.retry());
+  await s.ui.render(s.render());
+  expect(draft.viewOnly).toBe(true);
+  expect(s.fetchImpl).toHaveBeenCalledTimes(deniedCalls);
+  s.fetchImpl.mockImplementation(transport as typeof fetch);
+  await act(() => s.value.refresh());
+  expect(draft.viewOnly).toBe(false);
+  await act(() => pending.retry());
+  expect(pending.get(note.url)).toBeUndefined();
+  expect((await s.value.store.read(note.url))?.title).toBe("Recoverable");
 });

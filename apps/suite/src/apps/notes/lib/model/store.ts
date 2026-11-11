@@ -22,10 +22,12 @@ import {
 import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
+import { privateNotePreferences } from "../private-preferences";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
 import { reminderKey } from "../reminders/scheduler";
+import { NoteSharingAdapter } from "../sharing";
 import { type NoteAction, reduceNoteState } from "../state";
-import { NoteConflictError, NoteMoveUncertainError } from "./errors";
+import { NoteConflictError, NoteMoveUncertainError, NotePermissionError } from "./errors";
 import {
   type BuildNoteInput,
   buildNote,
@@ -37,6 +39,7 @@ import {
 
 export interface StoredNote extends Note {
   etag: string | null;
+  readOnly?: boolean | undefined;
   /** Local request/write order; independent of RDF dates and discarded on draft recovery. */
   localGeneration?: number;
 }
@@ -54,6 +57,7 @@ export interface NotesStoreOptions {
   fetch: typeof fetch;
   podRoot: string;
   webId: string;
+  mode?: string;
   now?: () => Date;
   fired?: FiredReminderStore;
 }
@@ -68,11 +72,20 @@ export class NotesStore {
   private initialization?: Promise<void>;
   private generation = 0;
   private readonly fired: FiredReminderStore | undefined;
+  private readonly ownerPreferences;
+  private readonly sharingSession;
 
   constructor(options: NotesStoreOptions) {
     this.podRoot = normalizePodBase(options.podRoot);
     this.webId = options.webId;
     this.fired = options.fired;
+    this.sharingSession = {
+      fetch: refuseRedirects(options.fetch),
+      storageUrl: this.podRoot,
+      webId: options.webId,
+      mode: options.mode ?? "solid",
+    };
+    this.ownerPreferences = privateNotePreferences(this.sharingSession);
     this.fetchImpl = refuseRedirects(options.fetch);
     this.now = options.now ?? (() => new Date());
     const active = new URL("notes/", this.podRoot).href;
@@ -99,9 +112,30 @@ export class NotesStore {
   async read(url: string): Promise<StoredNote | undefined> {
     const location = this.scope(url);
     const localGeneration = ++this.generation;
-    const { dataset, etag } = await readRdf(url, this.fetchImpl);
+    let readOnly: boolean | undefined;
+    const { dataset, etag } = await readRdf(url, async (input, init) => {
+      const response = await this.fetchImpl(input, init);
+      const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(response.headers.get("wac-allow") ?? "");
+      if (user) readOnly = !/\bwrite\b/i.test(user[1] as string);
+      return response;
+    });
     const note = parseNote(url, dataset, location);
-    return note && { ...note, etag, localGeneration };
+    if (note?.privatePreferences) {
+      if (note.privatePreferences !== this.ownerPreferences.urlFor(url))
+        throw new OutOfScopeError(note.privatePreferences, this.podRoot);
+      try {
+        const preferences = await this.ownerPreferences.read(url);
+        if (preferences) Object.assign(note, preferences.fields);
+      } catch (error) {
+        if (!(error instanceof RdfFetchError && (error.status === 401 || error.status === 403)))
+          throw error;
+        // A readable note must remain viewable when its owner's private preferences are not.
+        readOnly = true;
+      }
+    }
+    return (
+      note && { ...note, etag, localGeneration, ...(readOnly === undefined ? {} : { readOnly }) }
+    );
   }
 
   async list(location: NoteLocation): Promise<StoredNote[]> {
@@ -189,7 +223,7 @@ export class NotesStore {
   private async allocate(
     container: string,
     filename: string,
-    build: (url: string) => Store,
+    build: (url: string) => Store | Promise<Store>,
   ): Promise<StoredNote> {
     const dot = filename.lastIndexOf(".");
     const stem = dot > 0 ? filename.slice(0, dot) : filename;
@@ -197,7 +231,7 @@ export class NotesStore {
     for (let suffix = 1; ; suffix++) {
       const url = `${container}${stem}${suffix === 1 ? "" : `-${suffix}`}${extension}`;
       const location = this.scope(url);
-      const dataset = build(url);
+      const dataset = await build(url);
       try {
         const { etag } = await writeRdf(url, dataset, {
           createOnly: true,
@@ -253,6 +287,17 @@ export class NotesStore {
     return saved;
   }
 
+  /** Persist private fields first, then conditionally remove them from the shareable document. */
+  async prepareSharing(note: StoredNote): Promise<StoredNote> {
+    this.scope(note.url, note.location);
+    if (note.privatePreferences) return note;
+    return this.write(
+      { ...note, privatePreferences: this.ownerPreferences.urlFor(note.url) },
+      {},
+      note.etag,
+    );
+  }
+
   /** The scheduler identifies through the same guarded write, then claims delivery. */
   async identifyReminder(note: StoredNote): Promise<StoredNote | undefined> {
     if (note.reminderId) return note;
@@ -266,7 +311,26 @@ export class NotesStore {
 
   private async write(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
     this.scope(note.url, note.location);
-    const dataset = buildNote(note.url, { ...this.input(note), ...input });
+    let fields = {
+      labels: [...(input.labels ?? note.labels)],
+      reminder: input.reminder === null ? undefined : (input.reminder ?? note.reminder),
+      reminderId: note.reminderId,
+    };
+    if (note.privatePreferences) {
+      if (note.privatePreferences !== this.ownerPreferences.urlFor(note.url))
+        throw new OutOfScopeError(note.privatePreferences, this.podRoot);
+      fields = await this.ownerPreferences.write(note.url, fields);
+      if (input.body !== undefined && input.body !== note.body)
+        await new NoteSharingAdapter(
+          { url: note.url, body: input.body },
+          this.sharingSession,
+        ).syncImages(new AbortController().signal);
+    }
+    const dataset = buildNote(note.url, {
+      ...this.input(note),
+      ...input,
+      ...(note.privatePreferences ? { labels: [], reminder: null, reminderId: undefined } : {}),
+    });
     try {
       const written = await writeRdf(note.url, dataset, {
         etag,
@@ -275,12 +339,15 @@ export class NotesStore {
       });
       return {
         ...(parseNote(note.url, dataset, note.location) as Note),
+        ...(note.privatePreferences ? fields : {}),
         etag: written.etag,
         localGeneration: ++this.generation,
       };
     } catch (error) {
       if (error instanceof ResourceWriteError && error.status === 412)
         throw new NoteConflictError(note.url, { cause: error });
+      if (error instanceof ResourceWriteError && error.status === 403)
+        throw new NotePermissionError(note.url, ++this.generation, error);
       throw error;
     }
   }
@@ -318,7 +385,13 @@ export class NotesStore {
     const sourceEtag = note.etag;
     await this.ensureContainers();
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
-    const moved = await this.allocate(this.containers[state.status], filename, (url) => {
+    let ownerFields: Pick<Note, "labels" | "reminder" | "reminderId"> = note;
+    const moved = await this.allocate(this.containers[state.status], filename, async (url) => {
+      if (note.privatePreferences)
+        ownerFields = await this.ownerPreferences.write(url, {
+          ...note,
+          reminder: state.status === "trashed" ? undefined : note.reminder,
+        });
       // Relink every entity, including foreign/imported IDs, without carrying a
       // predecessor back into the old resource. No content revision is added by a move.
       const revisions: Revision[] = note.revisions.map((revision, index) => ({
@@ -331,15 +404,23 @@ export class NotesStore {
         revision.wasRevisionOf = revisions[index + 1]?.id;
       const dataset = buildNote(url, {
         ...this.input(note),
+        ...(note.privatePreferences
+          ? {
+              privatePreferences: this.ownerPreferences.urlFor(url),
+              labels: [],
+              reminderId: undefined,
+            }
+          : {}),
         priorRevisions: revisions,
         now: new Date(revisions[0]?.generatedAt ?? note.modified ?? this.now()),
-        reminder: state.status === "trashed" ? null : note.reminder,
+        reminder: state.status === "trashed" || note.privatePreferences ? null : note.reminder,
         trashedAt: state.status === "trashed" ? this.now() : undefined,
         previousContainer: state.status === "trashed" ? this.containers[state.previous] : undefined,
       });
       new NoteDoc(documentSubject(url), dataset, DataFactory).modified = this.now();
       return dataset;
     });
+    if (note.privatePreferences) Object.assign(moved, ownerFields);
     this.recordOverdueIdentity(note, moved);
     try {
       await this.remove(note.url, sourceEtag);

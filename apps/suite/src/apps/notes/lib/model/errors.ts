@@ -11,6 +11,17 @@ export class NoteConflictError extends ResourceWriteError {
   }
 }
 
+/** Fence permission hints from reads started before the denied write. */
+export class NotePermissionError extends ResourceWriteError {
+  constructor(
+    url: string,
+    readonly localGeneration: number,
+    cause: unknown,
+  ) {
+    super(url, 403, { cause });
+  }
+}
+
 export class NoteMoveUncertainError extends Error {
   constructor(
     readonly source: string,
