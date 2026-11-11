@@ -34,6 +34,10 @@
       "import": "./dist/date-time/model.js"
     },
     "./styles/sharing.css": "./dist/styles/sharing.css",
+    "./sharing": {
+      "types": "./dist/sharing/grant-policy.d.ts",
+      "import": "./dist/sharing/grant-policy.js"
+    },
     "./styles/components.css": "./dist/styles/components.css",
     "./styles/collections.css": "./dist/styles/collections.css",
     "./styles/navigation.css": "./dist/styles/navigation.css",

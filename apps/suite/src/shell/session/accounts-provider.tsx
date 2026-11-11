@@ -3,6 +3,7 @@
 "use client";
 
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { purgeNativePodCache } from "@/lib/session/native-pod-cache";
 import {
   ACCOUNTS_KEY,
   type AccountsAction,
@@ -31,7 +32,9 @@ export interface AccountsContextValue {
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
   /** Checks the live session, including changes React has not committed yet. */
-  isActiveAccount(id: string): boolean;
+  isActiveAccount(id: string, sessionVersion?: number): boolean;
+  /** Live transition counter, including switches that React batches into one render. */
+  sessionVersion?: number;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signInDemo(): Promise<SuiteAccount>;
   /** Sign in through a specific backend (e.g. "extension"); rejects when none is registered. */
@@ -65,8 +68,12 @@ export function AccountsProvider({
   const sessions = useRef(new Map<string, SessionBackend>());
   const generation = useRef(0);
   const signInAttempt = useRef(0);
+  const sessionVersion = useRef(0);
   const isActiveAccount = useCallback(
-    (id: string) => current.current.activeId === id && currentStatus.current === "ready",
+    (id: string, expected?: number) =>
+      current.current.activeId === id &&
+      currentStatus.current === "ready" &&
+      (expected === undefined || expected === sessionVersion.current),
     [],
   );
   const changeStatus = useCallback((value: SessionStatus) => {
@@ -75,6 +82,13 @@ export function AccountsProvider({
   }, []);
   const publish = useCallback(
     (value: AccountsState) => {
+      const previous = current.current;
+      if (
+        previous.activeId !== value.activeId ||
+        previous.accounts.find((account) => account.id === previous.activeId) !==
+          value.accounts.find((account) => account.id === value.activeId)
+      )
+        ++sessionVersion.current;
       current.current = value;
       setState(value);
       try {
@@ -85,6 +99,13 @@ export function AccountsProvider({
       changeStatus(
         !value.activeId ? "signed-out" : sessions.current.has(value.activeId) ? "ready" : "expired",
       );
+      if (previous.activeId && previous.activeId !== value.activeId) {
+        const departed = previous.accounts.find((account) => account.id === previous.activeId);
+        if (departed)
+          void purgeNativePodCache(departed.webId).catch(() => {
+            // Sign-out awaits and reports purge failures; switches are synchronous.
+          });
+      }
     },
     [changeStatus],
   );
@@ -184,7 +205,12 @@ export function AccountsProvider({
     }
     // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
-    await backend?.signOut(account);
+    const results = await Promise.allSettled([
+      purgeNativePodCache(account.webId),
+      backend?.signOut(account),
+    ]);
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") throw failure.reason;
   };
   const signOutAll = async () => {
     ++generation.current;
@@ -200,7 +226,10 @@ export function AccountsProvider({
     }
     dispatch({ type: "clear" });
     const results = await Promise.allSettled(
-      previous.map(({ account, backend }) => backend?.signOut(account)),
+      previous.flatMap(({ account, backend }) => [
+        purgeNativePodCache(account.webId),
+        backend?.signOut(account),
+      ]),
     );
     const failure = results.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
@@ -228,6 +257,7 @@ export function AccountsProvider({
         active,
         accounts: state.accounts,
         isActiveAccount,
+        sessionVersion: sessionVersion.current,
         signIn,
         signInDemo,
         signInWith,

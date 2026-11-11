@@ -72,6 +72,14 @@ contacts; unresolved emails ask for an Account ID. Profile names override contac
 Account ID remains visible. `RoleSelect.options` accepts a disabled flag and required reason per
 role; `DurationChips` accepts the same pair for its entire group. Custom dates are ISO date strings.
 
+`sharingGrantPolicy` and its `SharingGrantRestrictions` contract are available from
+`@jeswr/suite-ui` or the browser-independent `@jeswr/suite-ui/sharing` entry.
+Pass the adapter's `grantDisabledReason` to disable additions, upgrades and audience changes
+while allowing removal, restriction and same-audience downgrades. Use `roleOptions` for
+`RoleSelect` and `allowsPerson` / `allowsGeneral` in handlers, including delayed Undo actions.
+Recompute the policy from the latest state before a write. `updateWarning` carries unconfirmed
+related-resource outcomes independently of whether grants are available.
+
 `ConsentSheet` takes an open flag, selected data-type IDs, duration props and account choices.
 The caller preselects the requested data types and duration. Share is disabled for an empty
 selection or missing custom date. Cancel asks for confirmation before calling `onCancel`.

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { notifySavedHtml } from "@/lib/chip-mentions";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { NoteConflictError } from "../lib/model/errors";
@@ -31,7 +31,7 @@ export function useNoteDraft(
   const current = useRef(draft);
   const callback = useRef(onSaved);
   callback.current = onSaved;
-  const [status, setStatus] = useState<"saved" | "saving" | "failed" | "conflict">(
+  const [status, setStatus] = useState<"saved" | "saving" | "failed" | "conflict" | "read-only">(
     pending.get(note.url)?.status ?? "saved",
   );
   const [modified, setModified] = useState(note.modified ?? note.created);
@@ -63,8 +63,10 @@ export function useNoteDraft(
     [store, session],
   );
   const flush = useCallback(() => pending.flush(baseline.current, save), [pending, save]);
+  useLayoutEffect(() => {
+    pending.bind(note, save);
+  }, [note, pending, save]);
   useEffect(() => {
-    pending.bind(baseline.current, save);
     const unsubscribe = pending.subscribe((url, saved) => {
       if (url !== note.url) return;
       const entry = pending.get(url);
@@ -82,19 +84,22 @@ export function useNoteDraft(
       setDraft(value);
       setStatus(entry?.status ?? "saved");
     });
-    void pending.recover?.(baseline.current, async (input) => {
-      const recovered = await store.create(input);
-      void callback.current();
-      return recovered;
-    });
+    setStatus(pending.get(note.url)?.status ?? "saved");
+    if (!baseline.current.readOnly && pending.get(note.url)?.status !== "read-only")
+      void pending.recover?.(baseline.current, async (input) => {
+        const recovered = await store.create(input);
+        void callback.current();
+        return recovered;
+      });
     return () => {
       unsubscribe();
       // change() already handed off and durably recorded the latest snapshot synchronously.
       // This writer stays alive after unmount and uses each acknowledged ETag in order.
       void flush().catch(() => {});
     };
-  }, [pending, save, flush, note.url, store, adopt]);
+  }, [pending, flush, note.url, store, adopt]);
   const change = (patch: Partial<NoteDraft>) => {
+    if (note.readOnly || status === "read-only") return;
     pending.change(
       baseline.current,
       { ...current.current, ...patch, labels: [...(patch.labels ?? current.current.labels)] },
@@ -104,10 +109,10 @@ export function useNoteDraft(
   // A failed write waits for Retry or reconnect; edits restart the debounce.
   // biome-ignore lint/correctness/useExhaustiveDependencies: every draft edit restarts the debounce
   useEffect(() => {
-    if (status !== "saving") return;
+    if (note.readOnly || status !== "saving") return;
     const timer = setTimeout(() => void flush().catch(() => {}), 800);
     return () => clearTimeout(timer);
-  }, [draft, status, flush]);
+  }, [draft, status, flush, note.readOnly]);
   const resolve = async (keepMine: boolean) => {
     try {
       const latest = await store.read(baseline.current.url);
@@ -129,5 +134,14 @@ export function useNoteDraft(
     adopt(saved);
     setModified(saved.modified);
   };
-  return { draft, change, flush, resolve, accept, status, modified };
+  return {
+    draft,
+    change,
+    flush,
+    resolve,
+    accept,
+    status,
+    modified,
+    viewOnly: note.readOnly || status === "read-only",
+  };
 }
