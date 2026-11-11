@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { mailtos } from "@jeswr/pod-connectors/mail";
 import { MailError, type MailStore } from "./io.js";
 import type { Message } from "./message.js";
@@ -62,19 +63,25 @@ function address(iri: string): string {
   return decodeURIComponent(iri.replace(/^mailto:/i, ""));
 }
 
-/** Files a message under Drafts; re-reads and retries when another tab changed the folder. */
-async function fileUnderDrafts(store: MailStore, root: string, iri: string, on: boolean) {
-  const folder = draftsFolder(root);
+/** Re-reads and retries shared folder membership when another tab changed the folder. */
+async function fileUnderFolder(
+  store: MailStore,
+  root: string,
+  kind: "drafts" | "sent",
+  iri: string,
+  on: boolean,
+) {
+  const folder = `${systemFolderDocument(root, kind)}#it`;
   for (let attempt = 0; ; attempt++) {
     const folderDoc = await store.load(documentOf(folder), true);
-    let drafts = folderDoc.mailbox.findFolder(folder);
-    if (on === Boolean(drafts?.messageIris.has(iri))) return;
-    if (!drafts) {
-      drafts = folderDoc.mailbox.createFolder(folder);
-      drafts.title = "Drafts";
+    let collection = folderDoc.mailbox.findFolder(folder);
+    if (on === Boolean(collection?.messageIris.has(iri))) return;
+    if (!collection) {
+      collection = folderDoc.mailbox.createFolder(folder);
+      collection.title = kind === "drafts" ? "Drafts" : "Sent";
     }
-    if (on) drafts.addMessage(iri);
-    else drafts.removeMessage(iri);
+    if (on) collection.addMessage(iri);
+    else collection.removeMessage(iri);
     try {
       await store.save(folderDoc);
       return;
@@ -118,7 +125,7 @@ export async function createDraft(
   created.title = fields.subject || "(No subject)";
   created.addMessage(iri);
   await store.save(threadDoc);
-  await fileUnderDrafts(store, root, iri, true);
+  await fileUnderFolder(store, root, "drafts", iri, true);
   return { iri, etag: loaded.etag };
 }
 function write(message: Message, fields: DraftInput, at: Date): void {
@@ -168,7 +175,7 @@ export async function updateDraft(
   write(message, fields, at);
   await store.save(loaded);
   // Repairs a Drafts entry lost to an earlier partial create.
-  await fileUnderDrafts(store, root, draft.iri, true);
+  await fileUnderFolder(store, root, "drafts", draft.iri, true);
   const thread = message.partOfThread;
   if (thread && isAppDraft(root, thread, "threads"))
     await store.mutate(documentOf(thread), (mailbox) => {
@@ -176,6 +183,48 @@ export async function updateDraft(
       if (found) found.title = fields.subject || "(No subject)";
     });
   return { iri: draft.iri, etag: loaded.etag };
+}
+/**
+ * Demo-only filing, with no delivery transport. The message's caller-supplied ETag guards
+ * the transition; shared folder writes use fresh validators and bounded conflict retries.
+ * As with draft saves, cross-document failures may leave partial writes: callers reload.
+ */
+export async function sendDemoDraft(
+  store: MailStore,
+  root: string,
+  draft: SavedDraft,
+  now: Date,
+): Promise<string> {
+  if (!Number.isFinite(now.getTime())) throw new TypeError("Invalid send date");
+  const { loaded, message } = await loadDraft(store, root, draft.iri, draft.etag);
+  const fields = draftFields({
+    to: [...message.to].map(address),
+    cc: [...message.cc].map(address),
+    subject: message.subjectLine ?? "",
+    text: message.body ?? "",
+  });
+  if (fields.to.length + fields.cc.length === 0) throw new TypeError("Add at least one recipient");
+  const threadIri =
+    message.partOfThread ?? `${root}threads/${draft.iri.slice(`${root}messages/`.length)}`;
+  if (!isAppDraft(root, threadIri, "threads")) throw new TypeError("Invalid draft thread");
+  const threadDoc = await store.load(documentOf(threadIri), true);
+  const thread = threadDoc.mailbox.createThread(threadIri);
+  thread.title = fields.subject || "(No subject)";
+  thread.created ??= now;
+  thread.modified = now;
+  thread.addMessage(draft.iri);
+  write(message, fields, now);
+  // A draft may know its own email address. A WebID alone is not a From address.
+  if (!/^mailto:/i.test(message.sender ?? "")) message.sender = undefined;
+  message.partOfThread = threadIri;
+  message.folderIris.delete(draftsFolder(root));
+  message.folderIris.add(`${systemFolderDocument(root, "sent")}#it`);
+  // Claim the draft version first: a racing send/save must fail before touching folders.
+  await store.save(loaded);
+  await store.save(threadDoc);
+  await fileUnderFolder(store, root, "sent", draft.iri, true);
+  await fileUnderFolder(store, root, "drafts", draft.iri, false);
+  return draft.iri;
 }
 /**
  * Discards a draft: leaves Drafts first, so a failed delete leaves a harmless orphan rather than
@@ -189,7 +238,7 @@ export async function discardDraft(
   remove: (url: string, etag: string | null) => Promise<void>,
 ): Promise<void> {
   const { loaded, message } = await loadDraft(store, root, draft.iri, draft.etag);
-  await fileUnderDrafts(store, root, draft.iri, false);
+  await fileUnderFolder(store, root, "drafts", draft.iri, false);
   await remove(documentOf(draft.iri), loaded.etag);
   const thread = message.partOfThread;
   if (thread && isAppDraft(root, thread, "threads")) await remove(documentOf(thread), null);

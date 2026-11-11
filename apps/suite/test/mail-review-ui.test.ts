@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   params: new URLSearchParams(),
   pathname: "/mail/inbox",
   account: "imported",
+  mode: "demo" as "demo" | "solid" | "extension",
   actions: { markRead: vi.fn(), star: vi.fn(), archive: vi.fn(), forRows: vi.fn() },
   setAccount: vi.fn(),
   invalidate: vi.fn(),
@@ -43,6 +44,7 @@ vi.mock("../src/apps/mail/state/mail-context", () => ({
     setAccount: mocks.setAccount,
     invalidate: mocks.invalidate,
     account: mocks.account,
+    session: { mode: mocks.mode },
   }),
   useMailActions: () => mocks.actions,
   useThread: () => ready(conversation),
@@ -80,6 +82,7 @@ beforeEach(() => {
   mocks.params = new URLSearchParams();
   mocks.pathname = "/mail/inbox";
   mocks.account = "imported";
+  mocks.mode = "demo";
   vi.stubGlobal("history", window.history);
   vi.stubGlobal("location", window.location);
   history.replaceState({}, "", "/mail/inbox");
@@ -428,5 +431,22 @@ it("uses envelope empty states with equal Button sizes and no skipped heading le
       element.getAttribute("data-size"),
     ),
   ).toEqual(["default", "default"]);
+  await view.unmount();
+});
+it.each([
+  "demo",
+  "solid",
+  "extension",
+] as const)("shows the not-delivered note only for Sent in a %s session", async (mode) => {
+  mocks.mode = mode;
+  const message = conversation.messages[0]!;
+  message.labels = [`${client.root("imported")}folders/system:sent.ttl#it`];
+  const view = await mount(h(ThreadView, { iri: conversation.iri }));
+  expect(view.host.textContent?.includes("Sent from the demo pod. Not delivered.")).toBe(
+    mode === "demo",
+  );
+  message.labels = [folders[0]!.iri];
+  await view.render(h(ThreadView, { iri: conversation.iri }));
+  expect(view.host.textContent).not.toContain("Sent from the demo pod. Not delivered.");
   await view.unmount();
 });

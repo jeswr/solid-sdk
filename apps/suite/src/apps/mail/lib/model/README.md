@@ -46,6 +46,12 @@ retaining original Message-IDs and folder titles as metadata. System folders use
 `folders/system:<id>.ttl` documents (for example `system:inbox`); custom label keys retain their
 case and escape colons, so even a custom `system:inbox` label stays distinct. Archive and star
 mutations use the same reserved system documents.
+`sendDemoDraft` conditionally turns an app draft into a Sent message, stamps its send date,
+and updates its thread and both folder memberships (creating Sent when absent). It retains a
+known `mailto:` draft sender; a WebID alone does not supply an email address. No delivery
+status is written: the demo UI explains that mail in Sent was not delivered. Folder conflicts
+use the draft code's bounded retries; message/thread conflicts surface for reload. These
+sequential writes have the same partial-failure boundary as draft saves and imports.
 The splitter accumulates fixed blocks of at most 64 KiB and classifies separator/quote prefixes
 across chunk boundaries without buffering whole lines. Each message is bounded to 25 MiB;
 MIME is buffered per message, never per mailbox. `splitMbox` accepts an optional

@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
-import { type MessageView, mailErrorMessage } from "../lib/client";
+import { folderKey, type MessageView, mailErrorMessage } from "../lib/client";
 import { useFolders, useMail, useMailActions, useThread } from "../state/mail-context";
 import { MailAsync } from "./async";
 import { MailAttachment } from "./attachment";
@@ -72,6 +72,7 @@ function MessageCard({
   last: boolean;
   expandAll: boolean | undefined;
 }) {
+  const { session } = useMail();
   const { resolvedTheme } = useTheme();
   const colorScheme = resolvedTheme === "dark" ? "dark" : "light";
   const [open, setOpen] = useState(last || !message.read);
@@ -156,6 +157,9 @@ function MessageCard({
                 </details>
               )}
             </>
+          )}
+          {session.mode === "demo" && message.labels.some((iri) => folderKey(iri) === "sent") && (
+            <p className="mail-muted">Sent from the demo pod. Not delivered.</p>
           )}
           {message.draft && (
             <p className="mail-draft-note">

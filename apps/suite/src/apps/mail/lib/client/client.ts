@@ -24,6 +24,7 @@ import {
   persistImportedMail,
   readDraft,
   type SavedDraft,
+  sendDemoDraft,
   setLabel,
   setRead,
   setStarred,
@@ -112,7 +113,12 @@ export class MailClient {
   readonly binaryFetch: typeof globalThis.fetch;
   readonly storageUrl: string;
   readonly webId: string;
-  constructor(fetch: typeof globalThis.fetch, storageUrl: string, webId?: string) {
+  constructor(
+    fetch: typeof globalThis.fetch,
+    storageUrl: string,
+    webId?: string,
+    private readonly mode: "demo" | "solid" | "extension" = "solid",
+  ) {
     this.storageUrl = new URL(".", storageUrl.endsWith("/") ? storageUrl : `${storageUrl}/`).href;
     this.store = new MailStore(fetch, this.storageUrl);
     this.binaryFetch = createPodScopedFetch(this.storageUrl, { fetch });
@@ -300,6 +306,11 @@ export class MailClient {
   }
   async draft(iri: string): Promise<Draft> {
     return readDraft(this.store, this.rootOf(iri), iri);
+  }
+  /** Files in Sent inside the demo pod; never delivers mail to a recipient. */
+  async sendDemo(draftIri: string, etag: string | null): Promise<string> {
+    if (this.mode !== "demo") throw new MailError("forbidden", 403);
+    return sendDemoDraft(this.store, this.rootOf(draftIri), { iri: draftIri, etag }, new Date());
   }
   async discardDraft(draft: SavedDraft): Promise<void> {
     await discardDraft(this.store, this.rootOf(draft.iri), draft, async (url, etag) => {

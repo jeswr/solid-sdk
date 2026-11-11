@@ -1,8 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { Button, Input, Label, Textarea, toast } from "@jeswr/suite-ui";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { mailErrorMessage } from "../lib/client";
 import type { SavedDraft } from "../lib/model";
@@ -50,15 +52,17 @@ export function ComposePage() {
   return <ComposeForm key={requested ?? "new"} requested={requested} />;
 }
 function ComposeForm({ requested }: { requested: string | null }) {
-  const { client, account, invalidate } = useMail();
+  const { client, account, invalidate, session } = useMail();
   const router = useRouter();
   const editing = draftRef(requested);
   const [saved, setSaved] = useState<SavedDraft | null>(null);
   const [fields, setFields] = useState<Fields>(EMPTY);
+  const [savedFields, setSavedFields] = useState<Fields>(EMPTY);
   const [status, setStatus] = useState<"loading" | "ready" | "missing">(
     editing ? "loading" : requested ? "missing" : "ready",
   );
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
   const [error, setError] = useState("");
   const ids = {
     to: useId(),
@@ -76,12 +80,14 @@ function ComposeForm({ requested }: { requested: string | null }) {
       (draft) => {
         if (!live) return;
         setSaved({ iri: draft.iri, etag: draft.etag });
-        setFields({
+        const next = {
           to: draft.to.join(", "),
           cc: draft.cc.join(", "),
           subject: draft.subject,
           text: draft.text,
-        });
+        };
+        setFields(next);
+        setSavedFields(next);
         setStatus("ready");
       },
       () => live && setStatus("missing"),
@@ -92,29 +98,63 @@ function ComposeForm({ requested }: { requested: string | null }) {
   }, [client, editing]);
   const change = (key: keyof Fields) => (value: string) =>
     setFields((current) => ({ ...current, [key]: value }));
+  const canSend =
+    session.mode === "demo" &&
+    status === "ready" &&
+    !busy &&
+    parseRecipients(fields.to).length + parseRecipients(fields.cc).length > 0;
+  const persist = async () => {
+    const next = await client.saveDraft(
+      account,
+      {
+        to: parseRecipients(fields.to),
+        cc: parseRecipients(fields.cc),
+        subject: fields.subject,
+        text: fields.text,
+      },
+      saved ?? undefined,
+    );
+    setSaved(next);
+    setSavedFields(fields);
+    invalidate();
+    return next;
+  };
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const next = await client.saveDraft(
-        account,
-        {
-          to: parseRecipients(fields.to),
-          cc: parseRecipients(fields.cc),
-          subject: fields.subject,
-          text: fields.text,
-        },
-        saved ?? undefined,
-      );
-      setSaved(next);
-      invalidate();
+      const next = await persist();
       // The new URL remounts the form, which reloads exactly what was saved.
       if (!saved) router.replace(`/mail/compose?draft=${encodeRef(next.iri)}`);
       toast("Draft saved");
     } catch (failure) {
       setError(mailErrorMessage(failure));
     } finally {
+      setBusy(false);
+    }
+  };
+  const send = async () => {
+    if (!canSend || sending.current) return;
+    sending.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const next =
+        saved && JSON.stringify(fields) === JSON.stringify(savedFields) ? saved : await persist();
+      const draft = await client.draft(next.iri);
+      await client.sendDemo(next.iri, next.etag);
+      invalidate();
+      toast("Saved in Sent (demo, not delivered)", {
+        duration: 8000,
+        action: <Link href={`/mail/t/${encodeRef(draft.thread)}`}>View</Link>,
+      });
+      router.push("/mail/sent");
+    } catch (failure) {
+      setError(mailErrorMessage(failure));
+      invalidate();
+    } finally {
+      sending.current = false;
       setBusy(false);
     }
   };
@@ -153,10 +193,21 @@ function ComposeForm({ requested }: { requested: string | null }) {
           Loading draft…
         </p>
       ) : (
-        <form className="mail-form mail-compose-form" onSubmit={save} aria-busy={busy}>
+        <form
+          className="mail-form mail-compose-form"
+          onSubmit={save}
+          aria-busy={busy}
+          onKeyDown={(event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+              event.preventDefault();
+              if (canSend) void send();
+            }
+          }}
+        >
           <Label htmlFor={ids.to}>To</Label>
           <Input
             id={ids.to}
+            disabled={busy}
             aria-invalid={error ? true : undefined}
             aria-describedby={described}
             value={fields.to}
@@ -167,6 +218,7 @@ function ComposeForm({ requested }: { requested: string | null }) {
           <Label htmlFor={ids.cc}>Cc</Label>
           <Input
             id={ids.cc}
+            disabled={busy}
             aria-invalid={error ? true : undefined}
             aria-describedby={described}
             value={fields.cc}
@@ -176,12 +228,14 @@ function ComposeForm({ requested }: { requested: string | null }) {
           <Label htmlFor={ids.subject}>Subject</Label>
           <Input
             id={ids.subject}
+            disabled={busy}
             value={fields.subject}
             onChange={(event) => change("subject")(event.target.value)}
           />
           <Label htmlFor={ids.text}>Message</Label>
           <Textarea
             id={ids.text}
+            disabled={busy}
             rows={12}
             value={fields.text}
             onChange={(event) => change("text")(event.target.value)}
@@ -195,7 +249,13 @@ function ComposeForm({ requested }: { requested: string | null }) {
             <Button type="submit" disabled={busy}>
               Save draft
             </Button>
-            <Button type="button" variant="outline" disabled aria-describedby={ids.note}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!canSend}
+              aria-describedby={ids.note}
+              onClick={() => void send()}
+            >
               Send
             </Button>
             <Button type="button" variant="ghost" disabled={busy} onClick={discard}>
@@ -203,7 +263,9 @@ function ComposeForm({ requested }: { requested: string | null }) {
             </Button>
           </div>
           <p id={ids.note} className="mail-muted">
-            Sending needs a connected mail account. Drafts are saved in your pod.
+            {session.mode === "demo"
+              ? "Demo pod: Send files the message in Sent. Nothing leaves your browser."
+              : "Sending needs a connected mail account. Drafts are saved in your pod."}
           </p>
         </form>
       )}
