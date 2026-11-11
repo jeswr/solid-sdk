@@ -39,8 +39,14 @@ export function pagination(q: SearchQuery): { limit: number; offset: number } {
  * escaping (including quotes, backslashes and control characters); IRIs are validated separately.
  * Grouping produces one deterministic row per subject across labels, types and resource graphs.
  */
-export function buildSearchQuery(q: SearchQuery): string {
+export function buildSearchQuery(q: SearchQuery, options: { origin?: string } = {}): string {
   const { limit, offset } = pagination(q);
+  // Results must be HTTP(S) resources; a server is further held to the storage origin.
+  // Both filters run before LIMIT/OFFSET so a stray subject never shortens or breaks a page.
+  const origin =
+    options.origin === undefined
+      ? ""
+      : `\n  FILTER(STRSTARTS(STR(?s), ${JSON.stringify(`${new URL(httpIri(options.origin)).origin}/`)}))`;
   const text = JSON.stringify(q.text ?? "");
   const types = q.types?.map((type) => `<${httpIri(type)}>`);
   const within = q.within?.map((prefix) => {
@@ -62,6 +68,7 @@ SELECT ?s (MIN(STR(?label)) AS ?title) (MIN(STR(?type)) AS ?resultType)
 WHERE {
   GRAPH ?g { ?s (dct:title|rdfs:label|schema:name|<http://schema.org/name>|wf:description|sioc:name) ?label }
   FILTER(isIRI(?s) && isLiteral(?label))
+  FILTER(STRSTARTS(LCASE(STR(?s)), "http://") || STRSTARTS(LCASE(STR(?s)), "https://"))${origin}
   FILTER(CONTAINS(LCASE(STR(?label)), LCASE(${text})))
   ${within?.length ? `FILTER(${within.join(" || ")})` : ""}
   ${types?.length ? `VALUES ?type { ${types.join(" ")} }\n  GRAPH ?tg { ?s a ?type }` : "OPTIONAL { GRAPH ?tg { ?s a ?type } }"}
