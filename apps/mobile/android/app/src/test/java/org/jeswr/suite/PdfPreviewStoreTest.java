@@ -1,10 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
 import static org.junit.Assert.*;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -14,12 +18,27 @@ public class PdfPreviewStoreTest {
     @Rule public TemporaryFolder temp = new TemporaryFolder();
     private File root;
     private PdfPreviewStore store;
+    private JvmPreviewFs fs;
     private final long now = 1_800_000_000_000L;
     private static final byte[] PDF = "%PDF-1.7\n%%EOF\n".getBytes(StandardCharsets.US_ASCII);
 
     @Before public void setup() throws Exception {
         root = new File(temp.getRoot(), "pdf-preview");
-        store = new PdfPreviewStore(root);
+        fs = new JvmPreviewFs();
+        store = new PdfPreviewStore(root, fs);
+    }
+
+    @After public void closesAllDirectories() {
+        assertEquals(0, fs.openDirectories);
+    }
+
+    private void refusesCleanup() throws Exception {
+        try {
+            store.clear();
+            fail("expected cleanup to throw IOException");
+        } catch (IOException expected) {
+            assertEquals(0, fs.openDirectories);
+        }
     }
 
     private String code(ThrowingRunnable action) {
@@ -180,7 +199,7 @@ public class PdfPreviewStoreTest {
         assertTrue(stale.getParentFile().mkdirs());
         assertTrue(stale.createNewFile());
         assertTrue(new File(root, "loose").createNewFile());
-        new PdfPreviewStore(root);
+        new PdfPreviewStore(root, fs);
         assertEquals(0, root.listFiles().length);
     }
 
@@ -209,5 +228,171 @@ public class PdfPreviewStoreTest {
         assertEquals(0, root.listFiles().length);
         assertTrue(kept.exists());
         assertTrue(outsideFile.exists());
+    }
+
+    @Test public void clearRefusesASymlinkSwappedInBeforeOpen() throws Exception {
+        File outside = temp.newFolder("outside");
+        File kept = new File(outside, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+        File victim = new File(root, "victim");
+        File moved = new File(root, "moved");
+        fs = new JvmPreviewFs() {
+            @Override public Directory openDirectory(Directory parent, String name) throws IOException {
+                if (name.equals("victim")) {
+                    Files.move(victim.toPath(), moved.toPath());
+                    Files.createSymbolicLink(victim.toPath(), outside.toPath());
+                }
+                return super.openDirectory(parent, name);
+            }
+        };
+        store = new PdfPreviewStore(root, fs);
+        assertTrue(victim.mkdir());
+
+        refusesCleanup();
+
+        assertTrue(Files.isSymbolicLink(victim.toPath()));
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearRefusesADifferentInodeAfterOpeningAChild() throws Exception {
+        File outside = temp.newFolder("outside");
+        File kept = new File(outside, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+        File victim = new File(root, "victim");
+        File moved = new File(root, "moved");
+        fs = new JvmPreviewFs() {
+            private Directory swapped;
+
+            @Override public Directory openDirectory(Directory parent, String name) throws IOException {
+                if (name.equals("victim")) {
+                    Files.move(victim.toPath(), moved.toPath());
+                    Files.createSymbolicLink(victim.toPath(), outside.toPath());
+                    // Model a raced open returning the target: fstat must stop traversal itself.
+                    swapped = super.openDirectory(outside.getPath());
+                    return swapped;
+                }
+                return super.openDirectory(parent, name);
+            }
+
+            @Override public Stat fstat(Directory directory) throws IOException {
+                Stat actual = super.fstat(directory);
+                if (directory == swapped) assertNotEquals(lstat(moved.getPath()).inode, actual.inode);
+                return actual;
+            }
+
+            @Override public String[] list(Directory directory) throws IOException {
+                assertNotSame("must verify the inode before listing", swapped, directory);
+                return super.list(directory);
+            }
+        };
+        store = new PdfPreviewStore(root, fs);
+        assertTrue(victim.mkdir());
+
+        refusesCleanup();
+
+        assertTrue(Files.isSymbolicLink(victim.toPath()));
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearRefusesARootReplacedByASymlink() throws Exception {
+        File outside = temp.newFolder("outside");
+        File kept = new File(outside, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+        Files.move(root.toPath(), new File(temp.getRoot(), "original-root").toPath());
+        Files.createSymbolicLink(root.toPath(), outside.toPath());
+
+        refusesCleanup();
+
+        assertTrue(Files.isSymbolicLink(root.toPath()));
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearRefusesARootReplacedByAnotherDirectory() throws Exception {
+        Files.move(root.toPath(), new File(temp.getRoot(), "original-root").toPath());
+        assertTrue(root.mkdir());
+        File kept = new File(root, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+
+        refusesCleanup();
+
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearKeepsUsingTheOpenedRootIfItsPathIsReplaced() throws Exception {
+        File outside = temp.newFolder("outside");
+        File kept = new File(outside, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+        File moved = new File(temp.getRoot(), "original-root");
+        boolean[] swap = {false};
+        fs = new JvmPreviewFs() {
+            @Override public String[] list(Directory directory) throws IOException {
+                if (swap[0]) {
+                    swap[0] = false;
+                    Files.move(root.toPath(), moved.toPath());
+                    Files.createSymbolicLink(root.toPath(), outside.toPath());
+                }
+                return super.list(directory);
+            }
+        };
+        store = new PdfPreviewStore(root, fs);
+        File stale = new File(new File(root, "nested"), "stale.pdf");
+        assertTrue(stale.getParentFile().mkdir());
+        Files.write(stale.toPath(), PDF);
+        swap[0] = true;
+
+        store.clear();
+
+        assertEquals(0, moved.list().length);
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+        refusesCleanup();
+    }
+
+    @Test public void clearRefusesEntriesOnAnotherDevice() throws Exception {
+        fs = new JvmPreviewFs() {
+            @Override public Stat lstat(Directory parent, String name) throws IOException {
+                Stat actual = super.lstat(parent, name);
+                return new Stat(actual.device + 1, actual.inode, actual.directory);
+            }
+        };
+        store = new PdfPreviewStore(root, fs);
+        File kept = new File(root, "kept.pdf");
+        Files.write(kept.toPath(), PDF);
+
+        refusesCleanup();
+
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearRefusesADeviceChangeAfterOpeningAChild() throws Exception {
+        fs = new JvmPreviewFs() {
+            private Directory child;
+
+            @Override public Directory openDirectory(Directory parent, String name) throws IOException {
+                child = super.openDirectory(parent, name);
+                return child;
+            }
+
+            @Override public Stat fstat(Directory directory) throws IOException {
+                Stat actual = super.fstat(directory);
+                return directory == child ? new Stat(actual.device + 1, actual.inode, true) : actual;
+            }
+        };
+        store = new PdfPreviewStore(root, fs);
+        File kept = new File(new File(root, "nested"), "kept.pdf");
+        assertTrue(kept.getParentFile().mkdir());
+        Files.write(kept.toPath(), PDF);
+
+        refusesCleanup();
+
+        assertArrayEquals(PDF, Files.readAllBytes(kept.toPath()));
+    }
+
+    @Test public void clearUnlinksDanglingSymlinks() throws Exception {
+        File link = new File(root, "dangling");
+        Files.createSymbolicLink(link.toPath(), new File(temp.getRoot(), "missing").toPath());
+
+        store.clear();
+
+        assertFalse(Files.exists(link.toPath(), LinkOption.NOFOLLOW_LINKS));
     }
 }
