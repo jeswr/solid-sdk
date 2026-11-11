@@ -4,6 +4,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
+import placesModel from "./generated/model.js";
 import {
   entities,
   PLACE_CLASS,
@@ -28,17 +29,40 @@ interface ReadProof {
   value: Read;
   chunks: Uint8Array<ArrayBuffer>[];
 }
-/** A recorded access-document read with a fresh, single-use body. */
-function replay({ value, chunks }: ReadProof): Read {
-  const response = new Response(new Blob(chunks));
+/**
+ * Re-expose a read over `body`. As in the storage-client contract, `bytes()/text()/blob()`
+ * buffer that same stream once and return copies; never the original, locked response.
+ */
+function withBody(value: Read, body: ReadableStream<Uint8Array>): Read {
+  let buffered: Promise<Uint8Array<ArrayBuffer>> | undefined;
+  const bytes = async () => {
+    buffered ??= new Response(body).arrayBuffer().then((data) => new Uint8Array(data));
+    return (await buffered).slice();
+  };
   return {
     ...value,
-    body: response.body,
-    bytes: response.bytes.bind(response),
-    text: response.text.bind(response),
-    blob: response.blob.bind(response),
+    body,
+    bytes,
+    text: async () => new TextDecoder().decode(await bytes()),
+    blob: async () =>
+      new Blob([await bytes()], value.contentType ? { type: value.contentType } : {}),
   };
 }
+/** A recorded access-document read with a fresh, single-use body over the recorded bytes. */
+function replay({ value, chunks }: ReadProof): Read {
+  return withBody(value, new Blob(chunks).stream());
+}
+/** Generated legacy read aliases per canonical Place predicate. Edits clear them. */
+const PLACE_ALIASES = new Map(
+  // The generated Place entity is flat; its manifest entry carries the field aliases.
+  (
+    placesModel.manifest.entities.find((entity) => entity.name === "Place") as {
+      fields: { predicate: string; aliasPredicates?: string[] }[];
+    }
+  ).fields.flatMap((field) =>
+    field.aliasPredicates ? [[field.predicate, field.aliasPredicates] as const] : [],
+  ),
+);
 function missing(error: unknown) {
   return error instanceof StorageError && error.code === "not-found";
 }
@@ -69,16 +93,26 @@ export function createPlacesRepository(
       throw error;
     }
   }
-  // Session-scoped proofs: retain only container observations from successful shared
-  // checks. File ACL overrides are always checked afresh. Reopening clears all proofs.
+  // Operation-scoped proofs: retain only container observations from successful shared
+  // checks. File ACL overrides are always checked afresh. Opening, each load and each
+  // import start from no proofs, so a container shared mid-session is re-checked; a
+  // check that began before a reset never records into the next generation.
   // checkOwnerOnly drains each access document's body once, so a read is recorded as it is
   // drained (within the helper's own byte cap) and replayed as a fresh body.
   const verified = new Set<string>();
   const proofHeads = new Map<string, Head>();
   const proofReads = new Map<string, ReadProof>();
+  let generation = 0;
+  function forgetProofs() {
+    generation++;
+    verified.clear();
+    proofHeads.clear();
+    proofReads.clear();
+  }
   async function verifyPrivacy(url: string) {
     scope(url);
     if (verified.has(url)) return;
+    const started = generation;
     const heads = new Map<string, Head>();
     const reads = new Map<string, ReadProof>();
     const proofStorage = new Proxy(storage, {
@@ -110,7 +144,7 @@ export function createPlacesRepository(
                 },
               }),
             );
-            return { ...value, body };
+            return withBody(value, body);
           };
         const value = Reflect.get(target, key);
         return typeof value === "function" ? value.bind(target) : value;
@@ -118,7 +152,7 @@ export function createPlacesRepository(
     });
     if (!(await checkOwnerOnly({ storage: proofStorage, url, ownerWebId: owner })).private)
       throw new Error("Cannot confirm owner-only Places storage");
-    if (url.endsWith("/")) {
+    if (url.endsWith("/") && started === generation) {
       verified.add(url);
       for (const [key, value] of heads) proofHeads.set(key, value);
       for (const [key, value] of reads) proofReads.set(key, value);
@@ -162,9 +196,7 @@ export function createPlacesRepository(
   }
   async function initialize() {
     initialized = false;
-    verified.clear();
-    proofHeads.clear();
-    proofReads.clear();
+    forgetProofs();
     if (
       storage.protocol !== "solid" ||
       storage.features.accessControl.state !== "available" ||
@@ -221,20 +253,30 @@ export function createPlacesRepository(
   }
   async function load(): Promise<PlacesSnapshot> {
     ready();
+    forgetProofs();
     const snapshot: PlacesSnapshot = { places: [], visits: [], journeys: [], skipped: 0 };
     let readCount = 0;
+    let skipped = 0;
+    // `url` is already verified private. Listed shards are checked before their listing.
     const walk = async (
       url: string,
       kind: "Place" | "Visit" | "Journey",
       depth: number,
     ): Promise<void> => {
-      if (depth > 2) throw new RangeError("Unexpected Places shard depth");
-      await verifyPrivacy(url);
       for await (const entry of storage.listAll(url, { maxBytes: 4 * 1024 * 1024 })) {
         if (++readCount > MAX_RESOURCES)
           throw new RangeError("Places history is too large to open in one view");
         if (entry.kind === "container") {
-          if (kind !== "Place") await walk(entry.url, kind, depth + 1);
+          if (kind === "Place") continue;
+          if (depth >= 2) throw new RangeError("Unexpected Places shard depth");
+          try {
+            await verifyPrivacy(entry.url);
+          } catch {
+            // A shared or unrepresentable shard is skipped like a file; nothing is read.
+            skipped++;
+            continue;
+          }
+          await walk(entry.url, kind, depth + 1);
           continue;
         }
         if (!new URL(entry.url).pathname.endsWith(".ttl")) continue;
@@ -254,13 +296,19 @@ export function createPlacesRepository(
             snapshot.journeys.push({ url: entry.url, etag, data });
           }
         } catch {
-          snapshot.skipped!++;
+          skipped++;
         }
       }
     };
-    await walk(collection, "Place", 0);
-    await walk(new URL("visits/", base).href, "Visit", 0);
-    await walk(new URL("journeys/", base).href, "Journey", 0);
+    for (const [url, kind] of [
+      [collection, "Place"],
+      [new URL("visits/", base).href, "Visit"],
+      [new URL("journeys/", base).href, "Journey"],
+    ] as const) {
+      await verifyPrivacy(url);
+      await walk(url, kind, 0);
+    }
+    snapshot.skipped = skipped;
     return snapshot;
   }
   async function destination(kind: "visits" | "journeys", at: Date) {
@@ -320,6 +368,7 @@ export function createPlacesRepository(
     signal?: AbortSignal,
   ) {
     ready();
+    forgetProofs();
     let done = 0;
     const total = input.places.length + input.visits.length + input.journeys.length;
     const placeUrls = new Map<string, string>();
@@ -386,14 +435,14 @@ export function createPlacesRepository(
     const after = entities.Place.build(record.url, data);
     if (!entities.Place.parse(record.url, after)) throw new TypeError("Invalid place");
     const changed = [...before, ...after].filter((quad) => before.has(quad) !== after.has(quad));
+    // An edited field replaces its canonical value and any generated legacy alias value.
     for (const quad of changed) {
-      for (const original of current.dataset.getQuads(
-        quad.subject.value,
+      for (const predicate of [
         quad.predicate.value,
-        null,
-        null,
-      ))
-        current.dataset.delete(original);
+        ...(PLACE_ALIASES.get(quad.predicate.value) ?? []),
+      ])
+        for (const original of current.dataset.getQuads(quad.subject.value, predicate, null, null))
+          current.dataset.delete(original);
     }
     for (const quad of after) {
       if (

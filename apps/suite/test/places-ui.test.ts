@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { PlacesRepository } from "@jeswr/solid-places";
 import { beforeEach, expect, it, vi } from "vitest";
 import { sampleWeek } from "../src/apps/places/demo/sample";
@@ -167,4 +168,31 @@ it("keeps file reading in the controller and ignores superseded or disposed read
   const calls = mocks.read.mock.calls.length;
   await controller.readFile(new File([], "closed.json"));
   expect(mocks.read).toHaveBeenCalledTimes(calls);
+});
+it.each([
+  [0, null],
+  [1, "1 raw location trace ignored."],
+  [3, "3 raw location traces ignored."],
+])("reports %i raw traces apart from invalid records", async (traces, notice) => {
+  const repo = {
+    base: "https://pod.example/places/",
+    initialize: vi.fn(),
+    load: vi.fn(async () => snapshot),
+    savePlace: vi.fn(),
+    importTimeline: vi.fn(),
+  } satisfies PlacesRepository;
+  const controller = placesController(repo, false, vi.fn());
+  await controller.open();
+  mocks.read.mockResolvedValue({ ...sampleWeek(), skipped: 2, traces });
+  await mount(h(ImportView, { controller, offline: false }));
+  await act(async () => {
+    await controller.readFile(new File(["{}"], "Timeline.json"));
+  });
+  expect(text()).toContain("2 unsupported or invalid records skipped.");
+  if (notice) expect(text()).toContain(`skipped. ${notice} These counts describe this file.`);
+  else {
+    expect(text()).not.toContain("raw location");
+    expect(text()).toContain("skipped. These counts describe this file.");
+  }
+  controller.dispose();
 });

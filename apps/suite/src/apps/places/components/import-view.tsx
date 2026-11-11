@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, EmptyState, Input, Label, toast } from "@jeswr/suite-ui";
 import { FileUp, ShieldCheck } from "lucide-react";
@@ -101,9 +102,11 @@ export function ImportView({
             </article>
           </div>
           <p className="pl-muted">
-            {preview.skipped} unsupported or invalid records skipped. These counts describe this
-            file. Previously imported records are kept, including your names, notes and saved
-            places.
+            {preview.skipped} unsupported or invalid records skipped.
+            {preview.traces > 0 &&
+              ` ${preview.traces} raw location ${preview.traces === 1 ? "trace" : "traces"} ignored.`}{" "}
+            These counts describe this file. Previously imported records are kept, including your
+            names, notes and saved places.
           </p>
           {preview.places.length + preview.visits.length + preview.journeys.length === 0 ? (
             <EmptyState

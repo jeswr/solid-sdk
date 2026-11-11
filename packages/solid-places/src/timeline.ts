@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { JourneyData, PlaceData, VisitData } from "./generated/model.js";
 
 export const IMPORT_LIMITS = Object.freeze({
@@ -35,7 +36,10 @@ export interface TimelineImport {
   places: ImportedPlace[];
   visits: ImportedVisit[];
   journeys: ImportedJourney[];
+  /** Unsupported or invalid records. */
   skipped: number;
+  /** Raw path-only location traces, ignored by design rather than invalid. */
+  traces: number;
 }
 type Obj = Record<string, unknown>;
 function obj(value: unknown): Obj {
@@ -192,6 +196,7 @@ export function parseGoogleTimeline(json: string): TimelineImport {
   const visits = new Map<string, ImportedVisit>();
   const journeys = new Map<string, ImportedJourney>();
   let skipped = 0;
+  let traces = 0;
   let pointBudget = 0;
   const addJourney = (record: Obj, activity: Obj, span: { startTime: Date; endTime: Date }) => {
     const path = Array.isArray(record.timelinePath) ? record.timelinePath : [];
@@ -322,16 +327,16 @@ export function parseGoogleTimeline(json: string): TimelineImport {
           ...(confidence !== undefined && confidence >= 0 && confidence <= 1 ? { confidence } : {}),
         },
       });
-    } else if (
-      !(segment.activity || segment.activitySegment) ||
-      !addJourney(segment, activity, span)
-    )
-      skipped++;
+    } else if (segment.activity || segment.activitySegment) {
+      if (!addJourney(segment, activity, span)) skipped++;
+    } else if (Array.isArray(segment.timelinePath)) traces++;
+    else skipped++;
   }
   return {
     places: [...places.values()],
     visits: [...visits.values()],
     journeys: [...journeys.values()],
     skipped,
+    traces,
   };
 }

@@ -1,12 +1,19 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
-import { ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { entities } from "../src/model.js";
 import { createPlacesRepository, importId } from "../src/repository.js";
 import { parseGoogleTimeline } from "../src/timeline.js";
+
+const actual = await vi.importActual<typeof import("@jeswr/pod-access")>("@jeswr/pod-access");
+// A pass-through spy, so a test can observe the reads the shared helper receives.
+vi.mock("@jeswr/pod-access", async (original) => {
+  const module = await original<typeof import("@jeswr/pod-access")>();
+  return { ...module, checkOwnerOnly: vi.fn(module.checkOwnerOnly) };
+});
 
 const root = "https://pod.example/",
   owner = `${root}profile/card#me`;
@@ -497,7 +504,7 @@ it("skips and counts malformed, oversized, invalid and non-private files while k
     skipped: 4,
   });
 });
-it("verifies containers once per session, reuses sealed month folders and still checks file overrides", async () => {
+it("verifies containers once per operation, reuses sealed month folders and still checks file overrides", async () => {
   const f = await fixture();
   await f.repo.initialize();
   const many = {
@@ -506,26 +513,129 @@ it("verifies containers once per session, reuses sealed month folders and still 
   };
   await f.repo.importTimeline(many);
   const heads = vi.mocked(f.storage.head);
+  const reads = vi.mocked(f.storage.read);
   const month = `${root}places/visits/2026/11/`;
   // Initial HEAD, post-create HEAD, then the shared proof, independent of record count.
   expect(heads.mock.calls.filter(([url]) => url === month)).toHaveLength(3);
-  const requests = heads.mock.calls.length;
-  await f.repo.load();
-  await f.repo.load();
-  expect(
-    heads.mock.calls.slice(requests).filter(([url]) => url.endsWith("/") || url === `${month}.acl`),
-  ).toHaveLength(0);
-  // The month ACL body is read once, by the shared proof, and replayed for file checks.
-  expect(
-    vi.mocked(f.storage.read).mock.calls.filter(([url]) => url === `${month}.acl`),
-  ).toHaveLength(1);
-  expect(heads.mock.calls.slice(requests).filter(([url]) => url.endsWith(".ttl.acl")).length).toBe(
-    54,
-  );
+  for (const loads of [1, 2]) {
+    const headCount = heads.mock.calls.length;
+    const readCount = reads.mock.calls.length;
+    await f.repo.load();
+    const newHeads = heads.mock.calls.slice(headCount).map(([url]) => url);
+    const newReads = reads.mock.calls.slice(readCount).map(([url]) => url);
+    // Each load proves each container once, however many files it holds, and replays the
+    // month ACL body for every file's inheritance check.
+    expect(
+      newHeads.filter((url) => url === month),
+      `load ${loads}`,
+    ).toHaveLength(1);
+    expect(newHeads.filter((url) => url === `${month}.acl`)).toHaveLength(1);
+    expect(newReads.filter((url) => url === `${month}.acl`)).toHaveLength(1);
+    expect(newHeads.filter((url) => url.endsWith(".ttl.acl"))).toHaveLength(27);
+  }
   await f.repo.initialize();
+  expect(reads.mock.calls.filter(([url]) => url === `${root}places/.acl`)).toHaveLength(2);
+});
+it("re-checks containers shared between loads and imports instead of reusing old proofs", async () => {
+  const f = await fixture();
+  await f.repo.initialize();
+  await f.repo.importTimeline(input);
+  expect((await f.repo.load()).places).toHaveLength(1);
+  // e.g. the collection is shared from Drive while Places stays open.
+  const collection = `${root}places/places/`;
+  const acl = `${collection}.acl`;
+  const shared = await writeWac(ownerPolicy("https://stranger.example/me", true), collection, acl);
+  const original = await f.memory.head(acl);
+  await f.memory.write(acl, shared, { contentType: "text/turtle", ifMatch: original.etag! });
+  await expect(f.repo.load()).rejects.toThrow("owner-only");
+  await expect(f.repo.importTimeline(input)).rejects.toThrow("owner-only");
+  // Within one import, proofs are still reused; a month shared between imports is refused.
+  const g = await fixture();
+  await g.repo.initialize();
+  await g.repo.importTimeline(input);
+  const month = `${root}places/visits/2026/11/`;
+  const monthAcl = await g.memory.head(`${month}.acl`);
+  await g.memory.write(
+    `${month}.acl`,
+    await writeWac(ownerPolicy("https://stranger.example/me", true), month, `${month}.acl`),
+    { contentType: "text/turtle", ifMatch: monthAcl.etag! },
+  );
+  const creates = vi.mocked(g.storage.create).mock.calls.length;
+  await expect(
+    g.repo.importTimeline({ ...input, visits: [{ ...input.visits[0]!, id: "new-visit" }] }),
+  ).rejects.toThrow("owner-only");
+  expect(vi.mocked(g.storage.create).mock.calls.slice(creates)).toHaveLength(0);
+});
+it("never records proofs from a check that straddles initialize", async () => {
+  const f = await fixture();
+  await f.repo.initialize();
+  const month = `${root}places/visits/2026/11/`;
+  const acl = `${month}.acl`;
+  let arrive!: () => void;
+  let release!: () => void;
+  const reached = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const resume = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let paused = false;
+  vi.mocked(f.storage.read).mockImplementation(async (...args) => {
+    const value = await f.memory.read(...args);
+    if (args[0] === acl && !paused) {
+      // The import's month check has observed the private ACL; hold it in flight.
+      paused = true;
+      arrive();
+      await resume;
+    }
+    return value;
+  });
+  const importing = f.repo.importTimeline(input);
+  await reached;
+  await f.repo.initialize();
+  // The month is shared after the in-flight observation and the new session started.
+  const current = await f.memory.head(acl);
+  await f.memory.write(
+    acl,
+    await writeWac(ownerPolicy("https://stranger.example/me", true), month, acl),
+    { contentType: "text/turtle", ifMatch: current.etag! },
+  );
+  release();
+  // The stale check completes privately but is not cached, so the record write re-checks.
+  await expect(importing).rejects.toThrow("owner-only");
   expect(
-    vi.mocked(f.storage.read).mock.calls.filter(([url]) => url === `${root}places/.acl`),
-  ).toHaveLength(2);
+    vi
+      .mocked(f.storage.create)
+      .mock.calls.some(([parent, , options]) => parent === month && options?.kind !== "container"),
+  ).toBe(false);
+});
+it("skips and counts a shared visit shard without reading it, keeping other history", async () => {
+  const f = await fixture();
+  await f.repo.initialize();
+  await f.repo.importTimeline(input);
+  const month = `${root}places/visits/2026/11/`;
+  const acl = `${month}.acl`;
+  const current = await f.memory.head(acl);
+  await f.memory.write(
+    acl,
+    await writeWac(ownerPolicy("https://stranger.example/me", true), month, acl),
+    { contentType: "text/turtle", ifMatch: current.etag! },
+  );
+  const listed = vi.spyOn(f.storage, "listAll");
+  const reads = vi.mocked(f.storage.read).mock.calls.length;
+  expect(await f.repo.load()).toMatchObject({
+    places: [expect.anything()],
+    visits: [],
+    journeys: [expect.anything()],
+    skipped: 1,
+  });
+  expect(listed.mock.calls.some(([url]) => url === month)).toBe(false);
+  expect(
+    vi
+      .mocked(f.storage.read)
+      .mock.calls.slice(reads)
+      .some(([url]) => url.startsWith(month) && url !== acl),
+  ).toBe(false);
 });
 it("bounds the resource count and unexpected shard depth", async () => {
   const f = await fixture();
@@ -610,9 +720,11 @@ it("preserves other apps' triples and unedited RDF while accepting a weak If-Mat
     `${await (await f.memory.read(before.url)).text()}\n<${entities.Place.subject(before.url)}> <https://other.example/annotation> "kept". <https://other.example/subject> <https://other.example/p> "also kept".`,
     { ifMatch: before.etag!, contentType: "text/turtle" },
   );
+  // Record reads carry weak validators. Access documents keep the validator their HEAD
+  // advertised, as every load now re-checks containers against a fresh HEAD.
   vi.mocked(f.storage.read).mockImplementation(async (...args) => {
     const value = await f.memory.read(...args);
-    return { ...value, etag: `W/${value.etag}` };
+    return args[0].endsWith(".ttl") ? { ...value, etag: `W/${value.etag}` } : value;
   });
   vi.mocked(f.storage.write).mockImplementation(async (url, body, options) =>
     f.memory.write(url, body, { ...options, ifMatch: options.ifMatch.replace(/^W\//, "") }),
@@ -744,4 +856,104 @@ it("imports with an active cancellation signal", async () => {
   await f.repo.initialize();
   await f.repo.importTimeline(input, undefined, new AbortController().signal);
   expect((await f.repo.load()).places).toHaveLength(1);
+});
+it("re-exposes live and replayed access reads with buffered accessors over the recorded bytes", async () => {
+  const f = await fixture();
+  const month = `${root}places/visits/2026/11/.acl`;
+  const untyped = `${root}places/.acl`;
+  const seen: string[] = [];
+  // Accessor reads must work on a live (recorded) read and on its replay alike.
+  vi.mocked(checkOwnerOnly).mockImplementation(async (options) => {
+    const storage = new Proxy(options.storage, {
+      get(target, key) {
+        if (key === "read")
+          return async (...args: Parameters<StorageClient["read"]>) => {
+            const value = await target.read(...args);
+            const bytes = await value.bytes();
+            bytes.fill(0); // Each call returns a copy of the single buffer.
+            const text = await value.text();
+            expect(text).toBe(await (await f.memory.read(args[0])).text());
+            expect(new TextDecoder().decode(await value.bytes())).toBe(text);
+            const blob = await value.blob();
+            expect(blob.type).toBe(value.contentType ?? "");
+            expect(await blob.text()).toBe(text);
+            seen.push(args[0]);
+            return {
+              ...value,
+              contentType: value.contentType ?? "text/turtle",
+              body: new Blob([text]).stream(),
+            };
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    return actual.checkOwnerOnly({ ...options, storage });
+  });
+  vi.mocked(f.storage.read).mockImplementation(async (...args) => {
+    const value = await f.memory.read(...args);
+    return args[0] === untyped ? { ...value, contentType: null } : value;
+  });
+  try {
+    await f.repo.initialize();
+    await f.repo.importTimeline(input);
+    const reads = vi.mocked(f.storage.read).mock.calls.length;
+    seen.length = 0;
+    expect((await f.repo.load()).visits).toHaveLength(1);
+    // One live month ACL read in the load; the visit's inherited check replays it.
+    expect(
+      vi
+        .mocked(f.storage.read)
+        .mock.calls.slice(reads)
+        .filter(([url]) => url === month),
+    ).toHaveLength(1);
+    expect(seen.filter((url) => url === month)).toHaveLength(2);
+    expect(seen).not.toContain(untyped);
+  } finally {
+    vi.mocked(checkOwnerOnly).mockImplementation(actual.checkOwnerOnly);
+  }
+});
+it("removes a legacy alias value when its field is edited", async () => {
+  const f = await fixture();
+  await f.repo.initialize();
+  const url = `${root}places/places/legacy.ttl`;
+  const data = { ...input.places[0]!.data, category: "food" as const };
+  // Legacy bytes as an older HTTP schema.org writer would have stored them.
+  const legacy = (await entities.Place.serialize(url, data)).replaceAll(
+    "https://schema.org/",
+    "http://schema.org/",
+  );
+  await f.memory.create(`${root}places/places/`, legacy, {
+    name: "legacy.ttl",
+    contentType: "text/turtle",
+  });
+  const record = (await f.repo.load()).places.find((place) => place.url === url)!;
+  expect(record.data).toMatchObject({ name: "Park", category: "food" });
+  const spy = vi.spyOn(entities.Place, "storeToTurtle");
+  const saved = await f.repo.savePlace(record, { name: "My park", category: "outdoors" });
+  expect(saved.data).toMatchObject({ name: "My park", category: "outdoors" });
+  const { dataset } = await f.memory.readRdf(url);
+  const values = (predicate: string) =>
+    [...dataset.match(null, null, null)]
+      .filter((quad) => quad.predicate.value === predicate)
+      .map((quad) => quad.object.value);
+  expect(values("http://schema.org/name")).toEqual([]);
+  expect(values("http://schema.org/category")).toEqual([]);
+  expect(values("https://schema.org/name")).toEqual(["My park"]);
+  expect(values("https://schema.org/category")).toEqual(["outdoors"]);
+  // The generated serialiser canonicalises unedited legacy fields, keeping their values.
+  expect(values("http://schema.org/latitude")).toEqual([]);
+  expect(values("https://schema.org/latitude")).toEqual(["50.1"]);
+  // The graph handed to the serialiser already has no conflicting legacy/canonical pair.
+  const graph = [...vi.mocked(entities.Place.storeToTurtle).mock.calls.at(-1)![0]];
+  expect(
+    graph.filter((quad) =>
+      ["http://schema.org/name", "http://schema.org/category"].includes(quad.predicate.value),
+    ),
+  ).toEqual([]);
+  spy.mockRestore();
+  expect(entities.Place.parse(url, dataset)).toMatchObject({
+    name: "My park",
+    category: "outdoors",
+  });
 });

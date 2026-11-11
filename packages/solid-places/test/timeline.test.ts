@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
   ACTIVITY_TYPES,
@@ -120,7 +121,14 @@ describe("Google Timeline exports", () => {
     expect(result.journeys).toHaveLength(1);
     expect(result.journeys[0]?.data.activityType).toBe("walking");
     expect(result.journeys[0]?.data.distance).toBe(1500);
-    expect(result.skipped).toBe(1);
+    // Raw traces are ignored by design: they are never reported as invalid records.
+    expect(result.skipped).toBe(0);
+    expect(result.traces).toBe(1);
+    // A malformed trace field is still an unsupported record, not a trace.
+    expect(parse([{ startTime, endTime, timelinePath: "geo:50,-1" }])).toMatchObject({
+      skipped: 1,
+      traces: 0,
+    });
   });
   it("uses timelinePath only on an activity, ignoring invalid intermediate points", () => {
     const result = parse([
@@ -256,7 +264,7 @@ describe("Google Timeline exports", () => {
   ])("rejects invalid/unsupported document %s", (value) =>
     expect(() => parseGoogleTimeline(value)).toThrow());
   it("accepts an empty recognised export", () =>
-    expect(parse([])).toEqual({ places: [], visits: [], journeys: [], skipped: 0 }));
+    expect(parse([])).toEqual({ places: [], visits: [], journeys: [], skipped: 0, traces: 0 }));
   it("caps input bytes, record counts and path counts", () => {
     expect(() => parseGoogleTimeline(" ".repeat(IMPORT_LIMITS.bytes + 1))).toThrow(RangeError);
     expect(() => parseGoogleTimeline('"' + "💚".repeat(IMPORT_LIMITS.bytes / 4) + '"')).toThrow(
@@ -318,8 +326,8 @@ it("accepts exact import budgets and rejects unsupported year/time values", () =
   );
   expect(parse(Array(IMPORT_LIMITS.records).fill(null)).skipped).toBe(IMPORT_LIMITS.records);
   expect(
-    parse([{ startTime, endTime, timelinePath: Array(IMPORT_LIMITS.points).fill(null) }]).skipped,
-  ).toBe(1);
+    parse([{ startTime, endTime, timelinePath: Array(IMPORT_LIMITS.points).fill(null) }]),
+  ).toMatchObject({ skipped: 0, traces: 1 });
   for (const value of ["0000-01-01T00:00:00Z", "2026-11-11T99:00:00Z"])
     expect(parse([{ ...modernVisit(), startTime: value }]).skipped).toBe(1);
   expect(

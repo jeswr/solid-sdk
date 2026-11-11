@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { TimelineImport } from "@jeswr/solid-places";
 /** Merewick is fictional; these Atlantic coordinates are illustrative, never a home address. */
 export function sampleWeek(): TimelineImport {
@@ -100,5 +101,5 @@ export function sampleWeek(): TimelineImport {
       source: "manual",
     },
   });
-  return { places, visits, journeys, skipped: 0 };
+  return { places, visits, journeys, skipped: 0, traces: 0 };
 }
