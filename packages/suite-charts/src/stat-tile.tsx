@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { Sparkline } from "./sparkline.js";
 import type { StatTileProps } from "./types.js";

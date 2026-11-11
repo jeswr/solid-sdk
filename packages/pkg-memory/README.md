@@ -286,3 +286,21 @@ typed scalar fields throw a fixed error without values. Direct non-message evide
 has no persisted per-evidence timestamp/speaker; these stay absent. This does not
 change builder output, parser behavior or hashing. `NanopubStore.ownerWebId` exposes
 the explicit construction-time owner identity without I/O for owner-checked consumers.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+Tolerant import is opt-in: `parseNanopublications(text, { invalid: "skip", baseIRI? })`
+returns the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]`. Existing calls,
+including the string baseIRI overload, retain atomic behaviour. Each complete
+head/assertion/provenance/pubinfo envelope is validated once per graph; invalid shared
+assertions drop every user. Referenced batch source/entity graphs must also validate.
+Only graphs referenced by retained nanopubs survive, including their batch graphs.
+All-skipped input returns an empty dataset and nanopub list. Malformed TriG, absent
+heads and malformed metadata still throw. Reports contain only nanopub IDs and error
+class names, never rejected values, datatypes or diagnostic messages. The supported
+literal parity set is unchanged (double/dateTimeStamp remain excluded).
+
+`createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation
+batch graph cache. Use it when projecting many nanopubs; the uncached
+`readNanopubProvenance(value, np)` remains available. Neither caches across reads or
+changes graph-scoped evidence semantics.

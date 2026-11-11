@@ -1,10 +1,11 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
 # Read profile derived from sectors/health/health.shacl.ttl and pkg-memory templates.
 # This is a projection, not a clinical conformance validator. Changes from the sector:
-# - Only Condition, MedicationStatement, MedicinalProduct, Observation, Immunization,
-#   Encounter and CodeableConcept are retained; external FHIR AllergyIntolerance is added.
-#   HealthRecord, ClinicalEntry, Patient/care-team roles, vital subtypes and clinical
-#   activity shapes, aggregation/custodian/IDMP constraints are outside this reader.
+# - Retains Condition, MedicationStatement, MedicinalProduct, Observation and its four
+#   sector subtypes, Immunization, Encounter and CodeableConcept; adds external FHIR
+#   AllergyIntolerance, schema PropertyValue/DigitalDocument and OWL-Time Instant.
+#   HealthRecord, ClinicalEntry, Patient/care-team roles, clinical activity shapes
+#   and aggregation/custodian/IDMP constraints remain outside this reader.
 # - All projected fields are optional singletons (maxCount 1): incomplete historical
 #   assertions remain visible. Sector minCount/class constraints are omitted: PKG
 #   templates do not type patients as core:Person or require codes, units or dates.
@@ -12,12 +13,15 @@
 # - schema:name, schema subject aliases, skos:exactMatch are PKG read additions.
 # - Canonical classes accept legacy type aliases; Condition also accepts MedicalCondition,
 #   MedicinalProduct accepts Drug, Observation accepts FHIR/schema Observation.
-# - Shared patient/hasCode/medication predicates stay canonical in this model. Generator
+# - Shared patient/hasCode/medication/unitCode/hasUnit stay canonical. Generator
 #   admission forbids their aliases across owners. The facade's typed read view provides
 #   canonical-first legacy reads plus FHIR/schema subject links and rdfs:label fallback.
 # - Mixed XSD temporal bounds (date/dateTime/gYearMonth/gYear), observation numeric/string
 #   values and effectiveTime (literal or OWL-Time resource) cannot be represented by this
-#   closed profile. The typed read view handles them without coercing lexical values.
+#   closed profile. Numeric builds narrow value to decimal; effectiveTime builds use
+#   named Instant links, with dateTime instants. Document builds narrow creation to
+#   dateTime; the reader preserves other literal date precisions. Typed read views
+#   preserve mixed imported values and handle blank PropertyValue/document subjects.
 # - schema:doseSchedule and schema:code are omitted: BlankNodeOrIRI records are not
 #   admitted. The typed view reads their typed fields, including skolemized records.
 # - CodeableConcept core:value is narrowed to string (as written by PKG templates);
@@ -32,6 +36,7 @@
 @prefix schema: <https://schema.org/> .
 @prefix fhir: <http://hl7.org/fhir/> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix time: <http://www.w3.org/2006/time#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 shape:Condition a sh:NodeShape ;
@@ -56,22 +61,26 @@ shape:Observation a sh:NodeShape ;
   sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
-  sh:property [ sh:path [ sh:alternativePath ( health:hasUnit old:hasUnit ) ] ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
-  sh:property [ sh:path [ sh:alternativePath ( health:unitCode old:unitCode ) ] ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
+  sh:property [ sh:path health:hasUnit ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .
 
 shape:Immunization a sh:NodeShape ;
   sh:targetClass health:Immunization, old:Immunization ;
   sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
-  sh:property [ sh:path health:medication ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+  sh:property [ sh:path health:medication ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
 
 shape:Encounter a sh:NodeShape ;
   sh:targetClass health:Encounter, old:Encounter ;
   sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
-  sh:property [ sh:path [ sh:alternativePath ( health:recordedBy old:recordedBy ) ] ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+  sh:property [ sh:path [ sh:alternativePath ( health:recordedBy old:recordedBy ) ] ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
 
 shape:CodeableConcept a sh:NodeShape ;
   sh:targetClass health:CodeableConcept, old:CodeableConcept ;
@@ -84,3 +93,58 @@ shape:AllergyIntolerance a sh:NodeShape ;
   sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:Instant a sh:NodeShape ;
+  sh:targetClass time:Instant ;
+  sh:property [ sh:path time:inXSDDateTime ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:DigitalDocument a sh:NodeShape ;
+  sh:targetClass schema:DigitalDocument ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:about ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:dateCreated ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:PropertyValue a sh:NodeShape ;
+  sh:targetClass schema:PropertyValue ;
+  sh:property [ sh:path schema:propertyID ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:value ; sh:name "textValue" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:VitalSign a sh:NodeShape ;
+  sh:targetClass health:VitalSign, old:VitalSign ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasUnit ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:HeartRateObservation a sh:NodeShape ;
+  sh:targetClass health:HeartRateObservation, old:HeartRateObservation ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasUnit ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:StepCountObservation a sh:NodeShape ;
+  sh:targetClass health:StepCountObservation, old:StepCountObservation ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasUnit ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:SleepObservation a sh:NodeShape ;
+  sh:targetClass health:SleepObservation, old:SleepObservation ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:patient ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasCode ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:hasUnit ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .

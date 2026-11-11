@@ -5,7 +5,8 @@ import type { HealthPeriod } from "./types.js";
 
 /** Calendar-checked parsing, with UTC for zone-less XSD values; lexical data is untouched. */
 export function temporalTime(term: Literal): number | undefined {
-  const kind = term.datatype.value.slice(XSD.length);
+  const rawKind = term.datatype.value.slice(XSD.length);
+  const kind = rawKind === "dateTimeStamp" ? "dateTime" : rawKind;
   if (!term.datatype.value.startsWith(XSD)) return undefined;
   const patterns: Record<string, RegExp> = {
     date: /^(\d{4})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/,
@@ -15,7 +16,8 @@ export function temporalTime(term: Literal): number | undefined {
       /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-4]):([0-5]\d):([0-5]\d)(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/,
   };
   const match = patterns[kind]?.exec(term.value);
-  if (!match || match[0] !== term.value) return undefined;
+  if (!match || (rawKind === "dateTimeStamp" && !match[8]) || match[0] !== term.value)
+    return undefined;
   // XSD permits the next day's midnight as 24:00:00, with a zero fraction only.
   if (
     kind === "dateTime" &&
@@ -65,6 +67,7 @@ export function effectiveTime(node: ReadNode): { value?: string; time?: number }
     const temporal = node.child(...health("effectiveTime"));
     const instant = temporal?.child(`${TIME}hasBeginning`) ?? temporal;
     term = instant?.literal(
+      `${TIME}inXSDDateTimeStamp`,
       `${TIME}inXSDDateTime`,
       `${TIME}inXSDDate`,
       `${TIME}inXSDgYearMonth`,

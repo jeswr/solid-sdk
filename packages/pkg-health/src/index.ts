@@ -2,6 +2,7 @@
 
 export { type BodySystem, classifyBodySystem } from "./body-system.js";
 export { healthTimeline, observationSeries } from "./charts.js";
+export { importHealthExport } from "./import.js";
 export { correctHealthFact, forgetHealthFact, type HealthMutationOptions } from "./mutations.js";
 export { HEALTH_CATEGORIES, projectHealthFacts } from "./project.js";
 export * from "./types.js";

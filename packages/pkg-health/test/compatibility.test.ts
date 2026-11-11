@@ -221,7 +221,7 @@ it("drops ambiguous values, preserves language labels, and does not fall back fr
     "Fictional label",
   );
   const view = projectHealthFacts(await batch([{ ...claim("one"), assertion: graph }]), { owner });
-  expect(view.facts[0]?.label).toBe("Health fact");
+  expect(view.facts[0]?.label).toBe("Condition");
 });
 it.each([
   ["date", "1900-02-29", undefined],
@@ -306,7 +306,7 @@ it("handles unknown labelled/unlabelled categories and nameless allergies withou
     { owner },
   );
   expect(view.unrecognised.map((f) => f.label).sort()).toEqual(["Health fact", "Owned unknown"]);
-  expect(view.byKind.allergy[0]).toMatchObject({ label: "Health fact", substance: undefined });
+  expect(view.byKind.allergy[0]).toMatchObject({ label: "Allergy", substance: undefined });
   expect(JSON.stringify(view)).not.toContain("Foreign unknown");
 });
 it("returns referenced sources in deterministic IRI order without unused batch sources", async () => {

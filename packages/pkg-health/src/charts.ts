@@ -48,15 +48,22 @@ export function healthTimeline(
   view: HealthGraphView,
   options: HealthFilterOptions = {},
 ): HealthTimeline {
-  const lanes: HealthTimeline = { condition: [], medication: [], immunization: [], encounter: [] };
+  const lanes: HealthTimeline = {
+    condition: [],
+    medication: [],
+    immunization: [],
+    encounter: [],
+    documents: [],
+  };
   for (const kind of Object.keys(lanes) as TimelineKind[]) {
-    for (const fact of view.byKind[kind]) {
+    for (const fact of view.byKind[kind === "documents" ? "document" : kind]) {
       if (options.beliefs && !options.beliefs.includes(fact.belief)) continue;
+      if (fact.kind === "document" && fact.dateCreated === undefined) continue;
       lanes[kind].push({
         id: fact.id,
         label: fact.label,
         start:
-          fact.period.start ??
+          (fact.kind === "document" ? fact.dateCreated : fact.period.start) ??
           (fact.kind === "encounter" || fact.kind === "immunization" ? fact.date : undefined),
         end: fact.period.end,
         tone:

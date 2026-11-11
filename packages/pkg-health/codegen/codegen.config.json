@@ -68,6 +68,62 @@
         "convention": "self"
       },
       "fields": {}
+    },
+    {
+      "name": "Instant",
+      "targetClass": "http://www.w3.org/2006/time#Instant",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "DigitalDocument",
+      "targetClass": "https://schema.org/DigitalDocument",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "PropertyValue",
+      "targetClass": "https://schema.org/PropertyValue",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "VitalSign",
+      "targetClass": "https://jeswr.org/ns/sectors/health#VitalSign",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "HeartRateObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#HeartRateObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "StepCountObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#StepCountObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "SleepObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#SleepObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
     }
   ]
 }

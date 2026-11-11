@@ -37,6 +37,34 @@ export interface AllergyIntoleranceEntity {
   ): Promise<AllergyIntoleranceData | undefined>;
 }
 
+export interface InstantData {
+  "inXSDDateTime"?: Date;
+}
+
+export interface InstantWrapper extends EntityWrapper {
+  "inXSDDateTime"?: Date;
+}
+
+export interface InstantEntity {
+  readonly name: "Instant";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => InstantWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: InstantData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): InstantData | undefined;
+  serialize(resourceUrl: string, data: InstantData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<InstantData | undefined>;
+}
+
 export interface CodeableConceptData {
   "exactMatch"?: string;
   "codeValue"?: string;
@@ -102,6 +130,7 @@ export interface ConditionEntity {
 }
 
 export interface EncounterData {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "patient"?: string;
   "recordedBy"?: string;
@@ -109,6 +138,7 @@ export interface EncounterData {
 }
 
 export interface EncounterWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "patient"?: string;
   "recordedBy"?: string;
@@ -135,7 +165,48 @@ export interface EncounterEntity {
   ): Promise<EncounterData | undefined>;
 }
 
+export interface HeartRateObservationData {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface HeartRateObservationWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface HeartRateObservationEntity {
+  readonly name: "HeartRateObservation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => HeartRateObservationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: HeartRateObservationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): HeartRateObservationData | undefined;
+  serialize(resourceUrl: string, data: HeartRateObservationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<HeartRateObservationData | undefined>;
+}
+
 export interface ImmunizationData {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "medication"?: string;
   "patient"?: string;
@@ -143,6 +214,7 @@ export interface ImmunizationData {
 }
 
 export interface ImmunizationWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "medication"?: string;
   "patient"?: string;
@@ -232,18 +304,22 @@ export interface MedicinalProductEntity {
 }
 
 export interface ObservationData {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "hasUnit"?: string;
   "patient"?: string;
   "unitCode"?: string;
+  "numericValue"?: number;
   "name"?: string;
 }
 
 export interface ObservationWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
   "hasCode"?: string;
   "hasUnit"?: string;
   "patient"?: string;
   "unitCode"?: string;
+  "numericValue"?: number;
   "name"?: string;
 }
 
@@ -267,6 +343,188 @@ export interface ObservationEntity {
   ): Promise<ObservationData | undefined>;
 }
 
+export interface SleepObservationData {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface SleepObservationWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface SleepObservationEntity {
+  readonly name: "SleepObservation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => SleepObservationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: SleepObservationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): SleepObservationData | undefined;
+  serialize(resourceUrl: string, data: SleepObservationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<SleepObservationData | undefined>;
+}
+
+export interface StepCountObservationData {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface StepCountObservationWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface StepCountObservationEntity {
+  readonly name: "StepCountObservation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => StepCountObservationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: StepCountObservationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): StepCountObservationData | undefined;
+  serialize(resourceUrl: string, data: StepCountObservationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<StepCountObservationData | undefined>;
+}
+
+export interface VitalSignData {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface VitalSignWrapper extends EntityWrapper {
+  "effectiveTime"?: string;
+  "hasCode"?: string;
+  "hasUnit"?: string;
+  "patient"?: string;
+  "unitCode"?: string;
+  "numericValue"?: number;
+  "name"?: string;
+}
+
+export interface VitalSignEntity {
+  readonly name: "VitalSign";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => VitalSignWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: VitalSignData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): VitalSignData | undefined;
+  serialize(resourceUrl: string, data: VitalSignData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<VitalSignData | undefined>;
+}
+
+export interface DigitalDocumentData {
+  "about"?: string;
+  "dateCreated"?: Date;
+  "name"?: string;
+}
+
+export interface DigitalDocumentWrapper extends EntityWrapper {
+  "about"?: string;
+  "dateCreated"?: Date;
+  "name"?: string;
+}
+
+export interface DigitalDocumentEntity {
+  readonly name: "DigitalDocument";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => DigitalDocumentWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: DigitalDocumentData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): DigitalDocumentData | undefined;
+  serialize(resourceUrl: string, data: DigitalDocumentData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<DigitalDocumentData | undefined>;
+}
+
+export interface PropertyValueData {
+  "propertyID"?: string;
+  "textValue"?: string;
+}
+
+export interface PropertyValueWrapper extends EntityWrapper {
+  "propertyID"?: string;
+  "textValue"?: string;
+}
+
+export interface PropertyValueEntity {
+  readonly name: "PropertyValue";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => PropertyValueWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: PropertyValueData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): PropertyValueData | undefined;
+  serialize(resourceUrl: string, data: PropertyValueData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<PropertyValueData | undefined>;
+}
+
 export declare const nodes: Readonly<Record<string, never>>;
 
 export interface GeneratedModel {
@@ -274,13 +532,20 @@ export interface GeneratedModel {
   readonly prefixes: Record<string, string>;
   readonly entities: {
   readonly AllergyIntolerance: AllergyIntoleranceEntity;
+  readonly Instant: InstantEntity;
   readonly CodeableConcept: CodeableConceptEntity;
   readonly Condition: ConditionEntity;
   readonly Encounter: EncounterEntity;
+  readonly HeartRateObservation: HeartRateObservationEntity;
   readonly Immunization: ImmunizationEntity;
   readonly MedicationStatement: MedicationStatementEntity;
   readonly MedicinalProduct: MedicinalProductEntity;
   readonly Observation: ObservationEntity;
+  readonly SleepObservation: SleepObservationEntity;
+  readonly StepCountObservation: StepCountObservationEntity;
+  readonly VitalSign: VitalSignEntity;
+  readonly DigitalDocument: DigitalDocumentEntity;
+  readonly PropertyValue: PropertyValueEntity;
   };
 }
 

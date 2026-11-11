@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 "use client";
 import { useId } from "react";
 import { linearScale, toTime } from "./scale.js";
@@ -96,7 +95,7 @@ export function LineChart(props: LineChartProps) {
               s.points.map((p) => [s.label, displayX(p.x), formatY(p.y), p.label ?? ""]),
             )}
           />
-          {props.band && (
+          {props.band && Number.isFinite(props.band.from) && Number.isFinite(props.band.to) && (
             <p>
               Reference range:{" "}
               {withUnit(`${formatY(props.band.from)}–${formatY(props.band.to)}`, props.unit)} (
@@ -318,7 +317,13 @@ function LinePlot({
             </g>
           );
         })}
-        {!pointMarks.length && <Empty width={width} height={height} />}
+        {!pointMarks.length && (
+          <Empty
+            width={width}
+            height={height}
+            message={all.length ? "No values in the shown range" : "No data yet"}
+          />
+        )}
       </svg>
       <Tooltip mark={interaction.active} id={interaction.tooltipId} width={width} height={height} />
     </div>

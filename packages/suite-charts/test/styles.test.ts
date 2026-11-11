@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,11 +26,14 @@ describe("chart accessibility styles", () => {
     // Two classes plus an element outranks the two-class annotation fill rules.
     expect(text.selectorText).toBe(".sc-chart .sc-svg text");
   });
-  it("distinguishes active and neutral intervals by border pattern", () => {
+  it("gives active, neutral and past intervals distinct border patterns", () => {
     const styles = rules() as CSSStyleRule[];
-    const neutral = styles.find((rule) => rule.selectorText === ".sc-tone-neutral .sc-interval");
-    const active = styles.find((rule) => rule.selectorText === ".sc-tone-active .sc-interval");
-    expect(neutral?.style.getPropertyValue("stroke-dasharray")).toBe("4 3");
-    expect(active?.style.getPropertyValue("stroke-dasharray")).toBe("none");
+    const pattern = (selector: string) =>
+      styles
+        .find((rule) => rule.selectorText === selector)
+        ?.style.getPropertyValue("stroke-dasharray");
+    expect(pattern(".sc-tone-active .sc-interval")).toBe("none");
+    expect(pattern(".sc-tone-neutral .sc-interval")).toBe("1 3");
+    expect(pattern(".sc-tone-past .sc-mark")).toBe("6 3");
   });
 });

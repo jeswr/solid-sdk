@@ -58,3 +58,23 @@ health:recordedBy a owl:ObjectProperty ;
     rdfs:label "recorded by"@en ;
     skos:definition "The practitioner or provider (a core:Agent) who carried out / authored a clinical activity (an Encounter, an ObservationActivity, an ImmunizationActivity). A sub-property of core:performedBy. Aligns to fhir:Encounter.participant / fhir:Immunization.performer."@en .
 core:value a owl:DatatypeProperty .
+
+health:VitalSign a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Vital Sign"@en ;
+  skos:definition "An Observation of a physiological vital sign (heart rate, blood pressure, body temperature, respiratory rate, oxygen saturation). Mirrors the FHIR vital-signs profile category (LOINC 85353-1)."@en .
+
+health:HeartRateObservation a owl:Class ;
+  rdfs:subClassOf health:VitalSign ;
+  rdfs:label "Heart Rate Observation"@en ;
+  skos:definition "A heart-rate measurement in beats/min. Maps the Apple Health HKQuantityTypeIdentifierHeartRate type and LOINC 8867-4; the value carries unit:BEAT-PER-MIN (QUDT) / UCUM '/min'."@en .
+
+health:StepCountObservation a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Step Count Observation"@en ;
+  skos:definition "A count of steps over an interval. Maps the Apple Health HKQuantityTypeIdentifierStepCount type and LOINC 55423-8; a dimensionless count (UCUM '{steps}'). Carries an interval effective time, not an instant."@en .
+
+health:SleepObservation a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Sleep Observation"@en ;
+  skos:definition "A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'."@en .
