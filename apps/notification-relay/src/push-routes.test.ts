@@ -65,7 +65,7 @@ test("requires a fresh correct device proof for create, update, attach, activate
   for (const [method, path, body] of [
     ["POST", "/push/installations", f.owner.body],
     ["PATCH", `/push/installations/${id}`, { pushToken: "new" }],
-    ["POST", `/push/installations/${id}/activate`, { nonce: f.send.mock.calls[0]?.[1].nonce }],
+    ["POST", `/push/installations/${id}/activate`, { nonce: f.challenges()[0]?.nonce }],
     ["PUT", "/push/registrations/other", f.registration(id)],
     ["DELETE", "/push/registrations/account", undefined],
     ["DELETE", `/push/installations/${id}`, undefined],
@@ -98,12 +98,20 @@ test("creates inactive installations, protects nonce activation, and never sends
     tokenVersion: 1,
   });
   expect(id).toMatch(/^[a-f0-9]{32}$/u);
-  const challenge = f.send.mock.calls[0]?.[1];
+  const challenge = f.challenges()[0];
   expect(challenge?.nonce).toMatch(/^[\w-]{22}$/u);
-  expect(challenge).toMatchObject({ v: 1, kind: "challenge", sentAt: epoch });
+  expect(challenge).toEqual({
+    v: 1,
+    id: expect.stringMatching(/^[a-f0-9]{32}$/u),
+    kind: "challenge",
+    registrationId: id,
+    topicIndex: 0,
+    nonce: expect.stringMatching(/^[\w-]{22}$/u),
+    sentAt: epoch,
+  });
   expect(installation.challengeHash).not.toBe(challenge?.nonce);
   await f.call("PUT", "/push/registrations/account", f.registration(id));
-  // P6 delivery is absent; a secret URL cannot bypass activation via the legacy inbox.
+  // A guessed secret cannot bypass activation through the push inbox.
   expect((await f.call("POST", "/inbox/account/secret", {})).status).toBe(404);
   expect(f.send).toHaveBeenCalledTimes(1);
   for (const nonce of ["guessed", "", "x".repeat(1000)])
@@ -151,7 +159,7 @@ test("creates inactive installations, protects nonce activation, and never sends
 test("refreshes tokens/keys with the old key, invalidates old nonces and caps challenges at three/hour", async () => {
   const f = await setup();
   const id = await f.create();
-  const firstNonce = f.send.mock.calls[0]?.[1].nonce;
+  const firstNonce = f.challenges()[0]?.nonce;
   expect(
     (await f.call("POST", `/push/installations/${id}/activate`, { nonce: firstNonce })).status,
   ).toBe(204);
@@ -224,7 +232,7 @@ test("refreshes tokens/keys with the old key, invalidates old nonces and caps ch
       await f.call(
         "POST",
         `/push/installations/${id}/activate`,
-        { nonce: f.send.mock.calls.at(-1)?.[1].nonce },
+        { nonce: f.challenges().at(-1)?.nonce },
         { phone: replacement },
       )
     ).status,
@@ -510,12 +518,63 @@ test("admits installations atomically up to capacity and expires ones never atta
         publicOrigin: publicUrl,
         store: f.store,
         now: f.now,
+        verifyResourceToken: f.verify,
+        verifyWebhook: async () => {
+          throw new Error("unused");
+        },
         authorize: async () => {
           throw new Error("unused");
         },
         ...limits,
       }),
     ).toThrow(/Invalid/u);
+});
+
+test("caps installations per admitting WebID and frees the slot on deletion", async () => {
+  const f = await setup({ maxPushInstallationsPerWebId: 2 });
+  const devices = [await phone(), await phone(), await phone()];
+  const ids: string[] = [];
+  for (const device of devices.slice(0, 2)) ids.push(await f.create(device));
+  // Another account's installation does not count against this WebID.
+  await f.store.transaction((state) => {
+    const mine = state.installations.get(ids[1] as string) as Installation;
+    state.installations.set("other", {
+      ...mine,
+      installationId: "other",
+      admittedBy: "https://other.example/profile#me",
+    });
+  });
+  expect((await f.state()).installations.size).toBe(3);
+  const third = devices[2] as (typeof devices)[number];
+  expect((await f.call("POST", "/push/installations", third.body, { phone: third })).status).toBe(
+    429,
+  );
+  expect(
+    (
+      await f.call("DELETE", `/push/installations/${ids[0]}`, undefined, {
+        phone: devices[0],
+        token: false,
+      })
+    ).status,
+  ).toBe(204);
+  expect(await f.create(third)).toMatch(/^[a-f0-9]{32}$/u);
+  expect(() =>
+    createPushApi({
+      publicOrigin: publicUrl,
+      store: f.store,
+      now: f.now,
+      authorize: async () => {
+        throw new Error("unused");
+      },
+      verifyResourceToken: async () => {
+        throw new Error("unused");
+      },
+      verifyWebhook: async () => {
+        throw new Error("unused");
+      },
+      maxInstallationsPerWebId: 0,
+    }),
+  ).toThrow(/Invalid/u);
 });
 
 test("routes only the specified methods and paths and exposes proof CORS headers", async () => {
@@ -656,7 +715,8 @@ test("rechecks device identity/version at commit after asynchronous verification
 });
 
 test("rejects stale registration refresh/rotation/deletion commits after concurrent ownership changes", async () => {
-  const f = await setup();
+  // Many installations under one test WebID; the per-WebID quota has its own test.
+  const f = await setup({ maxPushInstallationsPerWebId: 100 });
   for (const operation of ["put", "rotate", "delete"] as const) {
     for (const mutation of ["delete", "webid", "installation"] as const) {
       const id = await f.create();

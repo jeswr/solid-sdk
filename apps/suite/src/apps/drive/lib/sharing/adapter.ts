@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // Drive's thin view-model adapter over the SDK role layer. Discovery, WAC/ACP parsing,
 // inherited-ACL copying, owner lockout, conditional writes and RDF serialisation all
@@ -87,19 +88,18 @@ export class SharingIncompleteError extends Error {
   }
 }
 
-// SDK gap: role writes edit WAC acl:accessTo / ACP acp:accessControl only, so a folder
-// grant would not reach its contents and a removal would leave descendant access behind.
-// Decision: folders stay read-only in the dialog until the SDK can write member access.
-export const FOLDER_READ_ONLY =
-  "Folder sharing is read-only for now. Changes here would not reach the files and folders inside, so this dialog only shows who can access the folder itself. To change access to a file, share that file.";
 export const CONTENTS_DIFFER =
-  "Files and folders inside are shared differently from this folder. Open an item's sharing to see who can access it.";
+  "Items inside that have their own sharing won't change. Open an item's sharing to change it.";
+const PARTIAL_SCOPE =
+  "This folder has different sharing for the folder and its contents. Use a sharing tool that supports separate folder and contents permissions.";
 const NOT_SAVED = "Permissions were not saved.";
 const LOAD_MESSAGES: Partial<Record<RoleError["code"], string>> = {
+  "partial-scope": PARTIAL_SCOPE,
   unsupported: "This item's sharing uses access rules that this dialog can't show.",
   scope: "This item's access document is outside your pod, so its sharing can't be shown.",
 };
 const SAVE_MESSAGES: Partial<Record<RoleError["code"], string>> = {
+  "partial-scope": `${PARTIAL_SCOPE} ${NOT_SAVED}`,
   "owner-lockout": "You cannot remove your own owner access or Control",
   "inherited-grant": "Inherited access must be changed at its source",
   unsupported: `These permissions use access rules that this dialog can't change. ${NOT_SAVED}`,
@@ -237,14 +237,12 @@ async function readSharing(
     grants.grants,
   );
   const owner = state.people.some((p) => p.webId === session.webId && p.role === "owner");
-  const folder = resource.endsWith("/");
   return {
     snapshot: {
       resource,
       grants,
       state,
-      canManage: owner && !folder,
-      ...(owner && folder ? { readOnly: FOLDER_READ_ONLY } : {}),
+      canManage: owner,
       contentsDiffer,
     },
     pins: recorder.validators(),

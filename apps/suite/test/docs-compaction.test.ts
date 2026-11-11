@@ -143,6 +143,7 @@ describe("Docs log compaction before trash", () => {
     "write-validator",
   ])("keeps every original when the %s stage fails", async (stage) => {
     const f = fixture();
+    const written = new Set<string>();
     f.intercept(async (url, init) => {
       const method = init?.method ?? "GET";
       if (stage === "listing" && url === LOG) return new Response(null, { status: 403 });
@@ -151,8 +152,11 @@ describe("Docs log compaction before trash", () => {
       if (stage === "write" && method === "PUT") return new Response(null, { status: 503 });
       if (
         (["weak", "no-validator"].includes(stage) && f.originals.includes(url)) ||
-        (stage === "write-validator" && method === "PUT")
+        (stage === "write-validator" && method === "PUT") ||
+        // sst-2vvz: reading the written copy back offers no validator either.
+        (stage === "write-validator" && method === "GET" && written.has(url))
       ) {
+        if (stage === "write-validator" && method === "PUT") written.add(url);
         const response = await f.pod.fetch(url, init);
         const headers = new Headers(response.headers);
         if (stage === "weak") headers.set("etag", 'W/"weak"');

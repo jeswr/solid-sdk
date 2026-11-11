@@ -3,13 +3,25 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 // @ts-expect-error Root script is intentionally a dependency-free ESM module.
 import { declarations, normalizeCssValue, parseTokens } from "../../../scripts/token-css.mjs";
-import { tokens } from "../src/tokens.js";
+import { PROJECT_COLOURS, tokens } from "../src/tokens.js";
 
 test("exported inventory equals the frozen spec tables (§2.1–2.7)", async () => {
   await expect(`${JSON.stringify(tokens, null, 2)}\n`).toMatchFileSnapshot(
     new URL("./spec-tokens.json", import.meta.url).pathname,
   );
   expect(new Set(tokens.map((token) => token.name)).size).toBe(tokens.length);
+});
+test("project palette preserves wire values independently of the active theme", () => {
+  expect(PROJECT_COLOURS).toHaveLength(12);
+  expect(new Set(PROJECT_COLOURS.map((colour) => colour.hex)).size).toBe(12);
+  for (const colour of PROJECT_COLOURS) {
+    expect(colour.hex).toMatch(/^#[\dA-F]{6}$/);
+    expect(tokens.find((token) => token.name === `--project-${colour.token}`)).toMatchObject({
+      light: colour.hex.toLowerCase(),
+      category: "colour",
+      tag: "graphic",
+    });
+  }
 });
 test("CSS exactly equals every exported value in both themes and densities", () => {
   const css = readFileSync(new URL("../src/styles/tokens.css", import.meta.url), "utf8");
