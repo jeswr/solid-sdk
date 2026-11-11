@@ -51,7 +51,11 @@ import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 import { WorkbookComments } from "./cell-comments";
 import { ShareWorkbook } from "./share-workbook";
+import { DataMenus } from "./sheet-data-menus";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
+import "@univerjs/preset-sheets-sort/lib/index.css";
+import "@univerjs/preset-sheets-filter/lib/index.css";
+import "@univerjs/preset-sheets-find-replace/lib/index.css";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
 import "@univerjs/preset-sheets-data-validation/lib/index.css";
@@ -379,6 +383,7 @@ export function SheetEditor({ container }: { container: string }) {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <DataMenus engine={chartEngine} locked={state.readOnly || commentsLoading} />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
