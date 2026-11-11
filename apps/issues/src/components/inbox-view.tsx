@@ -1,5 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readInbox, type InboxNotification } from "@/lib/inbox";
@@ -27,6 +30,7 @@ export function InboxView({
   webId: string;
   ownStorageUrls: readonly string[];
 }) {
+  const podFetch = usePodFetch();
   const [notifications, setNotifications] = useState<InboxNotification[]>([]);
   const [inboxUrl, setInboxUrl] = useState<string | undefined>(undefined);
   const [truncated, setTruncated] = useState(false);
@@ -43,7 +47,7 @@ export function InboxView({
     setError(null);
     try {
       const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
-      const result = await readInbox(webId, ownStorage);
+      const result = await readInbox(webId, ownStorage, podFetch);
       if (seq !== loadSeq.current) return;
       setNotifications(result.notifications);
       setInboxUrl(result.inboxUrl);
@@ -54,7 +58,7 @@ export function InboxView({
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [webId, ownStorageKey]);
+  }, [webId, ownStorageKey, podFetch]);
 
   useEffect(() => {
     // Mount/refresh load. `load` flips `setLoading(true)` synchronously before its

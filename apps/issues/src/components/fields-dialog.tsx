@@ -1,4 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -77,6 +80,7 @@ export function FieldsDialog({
   migrateIssues?: (urls: string[], toStatus: string) => Promise<void>;
   onSaved?: () => void;
 }) {
+  const podFetch = usePodFetch();
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [components, setComponents] = useState<ComponentDef[]>([]);
   const [versions, setVersions] = useState<VersionDef[]>([]);
@@ -103,7 +107,7 @@ export function FieldsDialog({
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    new Repository(trackerUrl)
+    new Repository(trackerUrl, podFetch)
       .info()
       .then((info) => {
         if (cancelled) return;
@@ -121,7 +125,7 @@ export function FieldsDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, trackerUrl, reloadKey]);
+  }, [open, trackerUrl, reloadKey, podFetch]);
 
   const add = async () => {
     const optionLabels = options
@@ -134,7 +138,7 @@ export function FieldsDialog({
     }
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.defineField(name.trim(), type, optionLabels);
       setFields(await repo.fieldDefs());
       setName("");
@@ -151,7 +155,7 @@ export function FieldsDialog({
   const remove = async (slug: string) => {
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.removeField(slug);
       setFields(await repo.fieldDefs());
       onSaved?.();
@@ -167,7 +171,7 @@ export function FieldsDialog({
     if (!label) return;
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.defineComponent(label);
       setComponents(await repo.components());
       setComponentName("");
@@ -182,7 +186,7 @@ export function FieldsDialog({
   const removeComponent = async (slug: string) => {
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.removeComponent(slug);
       setComponents(await repo.components());
       onSaved?.();
@@ -198,7 +202,7 @@ export function FieldsDialog({
     if (!label) return;
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.defineVersion(label, {
         releaseDate: versionDate ? new Date(versionDate) : undefined,
         released: versionReleased,
@@ -218,7 +222,7 @@ export function FieldsDialog({
   const toggleReleased = async (v: VersionDef) => {
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       // Redefining by the same label keeps the position; flips the released flag.
       await repo.defineVersion(v.label, { position: v.position, releaseDate: v.releaseDate, released: !v.released });
       setVersions(await repo.versions());
@@ -233,7 +237,7 @@ export function FieldsDialog({
   const removeVersion = async (slug: string) => {
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.removeVersion(slug);
       setVersions(await repo.versions());
       onSaved?.();
@@ -263,7 +267,7 @@ export function FieldsDialog({
     });
     setBusy(true);
     try {
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       await repo.setWipLimit(slug, next);
       setWipLimits(await repo.wipLimits());
       onSaved?.();
@@ -271,7 +275,7 @@ export function FieldsDialog({
       toast.error(e instanceof Error ? e.message : "Could not set the WIP limit.");
       // Reconcile to the true stored state.
       try {
-        setWipLimits(await new Repository(trackerUrl).wipLimits());
+        setWipLimits(await new Repository(trackerUrl, podFetch).wipLimits());
       } catch {
         /* keep optimistic value */
       }

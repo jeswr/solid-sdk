@@ -1,9 +1,10 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { useSolidSession } from "@/lib/session-context";
+import { usePodFetch, useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord, type ActivityRecord } from "@/lib/use-issues";
 import { Repository } from "@/lib/repository";
 import { setGroupAccess } from "@/lib/sharing";
@@ -188,6 +189,7 @@ function automationToast(a: RuleAction): string {
 }
 
 export function IssuesView() {
+  const podFetch = usePodFetch();
   const { profile, trackerUrl, storageUrl, logout } = useSolidSession();
   const ownTracker: TrackerLocation = { ownerWebId: profile!.webId, trackerUrl: trackerUrl! };
 
@@ -301,7 +303,7 @@ export function IssuesView() {
   const patchQuery = (p: Partial<IssueQuery>) => setQuery((q) => ({ ...q, ...p }));
   const toggleIn = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
-  const repo = useMemo(() => new Repository(tracker.trackerUrl), [tracker.trackerUrl]);
+  const repo = useMemo(() => new Repository(tracker.trackerUrl, podFetch), [tracker.trackerUrl, podFetch]);
 
   // Monotonic sequence: the tracker tag stops cross-project leaks, but two
   // same-tracker loads can still resolve out of order (e.g. the mount load
@@ -311,7 +313,7 @@ export function IssuesView() {
     const url = tracker.trackerUrl;
     const seq = ++infoSeq.current;
     try {
-      const info = await new Repository(url).info();
+      const info = await new Repository(url, podFetch).info();
       if (seq !== infoSeq.current) return;
       // Field defs matter on shared trackers too; the team only on your own.
       setTrackerInfo({
@@ -331,7 +333,7 @@ export function IssuesView() {
       // the previous project left behind.
       setTrackerInfo({ tracker: url, fields: [], components: [], versions: [], group: EMPTY_GROUP, workflow: DEFAULT_WORKFLOW, wipLimits: {}, rules: [] });
     }
-  }, [isOwn, tracker.trackerUrl]);
+  }, [isOwn, tracker.trackerUrl, podFetch]);
 
   useEffect(() => {
     // Mount fetch; setState only runs after the await inside loadTrackerInfo.
@@ -685,7 +687,7 @@ export function IssuesView() {
     onShare: () => setShareResource({ url: issue.url, label: "this issue" }),
     onShareTeam: () =>
       run(
-        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }, podFetch),
         "Shared with the team",
       ),
     onToggle: () => {

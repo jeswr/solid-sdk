@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
@@ -6,7 +7,7 @@
  * Notification channel/subscription URLs and the user's `ldp:inbox` URL all come
  * from data the server (or a third party) controls — the storage description, the
  * subscription POST response (`receiveFrom`), and the WebID profile. Before we
- * connect a WebSocket to, or fetch (with the user's auth-patched `fetch`), any of
+ * connect a WebSocket to, or fetch (with the user's explicit authenticated `fetch`), any of
  * those URLs we MUST confirm the URL points at one of the user's OWN pod storages.
  * Otherwise a malicious profile/description could:
  *   • drive the app to open an authenticated request to an attacker origin

@@ -527,6 +527,9 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/app-session':
+        specifier: workspace:*
+        version: link:../../packages/app-session
       '@jeswr/app-shell':
         specifier: workspace:*
         version: link:../../packages/app-shell
@@ -536,6 +539,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../../packages/pod-auth
       '@jeswr/solid-odrl':
         specifier: workspace:*
         version: link:../../packages/solid-odrl
@@ -554,9 +560,6 @@ importers:
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
-      '@solid/reactive-authentication':
-        specifier: 0.1.5
-        version: 0.1.5
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -566,9 +569,6 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      dpop:
-        specifier: ^2.1.1
-        version: 2.1.1
       lucide-react:
         specifier: ^1.17.0
         version: 1.24.0(react@19.2.7)
@@ -581,9 +581,6 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      oauth4webapi:
-        specifier: ^3.8.6
-        version: 3.8.6
       radix-ui:
         specifier: ^1.5.0
         version: 1.6.2(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 "use client";
 
@@ -8,7 +9,7 @@ import { Suspense, useState } from "react";
 import { Loader2, Menu } from "lucide-react";
 import { FeedbackButton } from "@jeswr/app-shell";
 import { useSolidSession } from "@/lib/session-context";
-import { LoginScreen } from "@/components/login-screen";
+import { IssuesLoginScreen } from "@/components/login-screen";
 import { SidebarNav, BottomNav } from "@/components/sidebar-nav";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -33,19 +34,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { status, profile } = useSolidSession();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // "initialising" = booting the auth manager; "restoring" = a silent
-  // refresh-grant restore of a prior session (pss-203m); "autologin" = a
-  // Pod-Manager `#autologin/<webid>` full-page redirect being initiated or
-  // completed. All three show a brief spinner rather than flashing the login
-  // screen, so a returning / deep-linked user lands on their page without
-  // seeing (or interacting with) the login form.
-  if (status === "initialising" || status === "restoring" || status === "autologin") {
-    const message =
-      status === "restoring"
-        ? "Restoring your session…"
-        : status === "autologin"
-          ? "Signing you in…"
-          : "Loading…";
+  // Restore once on mount, then load the account's tracker before showing data.
+  if (status === "initialising" || status === "restoring") {
+    const message = status === "restoring" ? "Restoring your session…" : "Loading…";
     return (
       <div className="grid min-h-dvh place-items-center" role="status" aria-live="polite">
         <span className="flex items-center gap-2 text-muted-foreground">
@@ -57,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (status !== "logged-in") {
-    return <LoginScreen />;
+    return <IssuesLoginScreen />;
   }
 
   return (

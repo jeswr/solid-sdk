@@ -3,7 +3,7 @@
 > ⚠️ **Experimental — AI-agent-generated.** This project was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened; review before relying on it.
 
 An issue tracker where the data lives in **your own Solid Pod**, not a central
-server. Sign in with your WebID; issues are read and written over authenticated
+server. Sign in with a remembered account, WebID or provider; issues are read and written over authenticated
 HTTP to a single document in your pod.
 
 Built following the [`solid-ai-coding`](https://github.com/jeswr/solid-ai-coding)
@@ -13,12 +13,41 @@ guide (`AGENTS.md`).
 
 | Concern | Library |
 |---|---|
-| Browser auth (patched `fetch`, DPoP) | `@solid/reactive-authentication` + the issuer-from-profile `WebIdDPoPTokenProvider` (`src/lib/`) |
+| Browser auth / shared sign-in | `@jeswr/app-session` over `@jeswr/pod-auth`, with explicit credential-bounded `auth.fetch` |
 | Fetch + parse RDF | `@jeswr/fetch-rdf` |
 | Typed Solid data access | `@solid/object` |
 | Typed RDF wrappers (`Issue`, `Tracker`) | `@rdfjs/wrapper` |
 | RDF terms / Turtle | `n3` |
 | UI | Next.js (App Router) · Tailwind · shadcn/ui · react-hook-form + zod · sonner |
+
+<!-- AUTHORED-BY GPT-6.1 Sol -->
+## Sign-in and sessions
+
+The shared app-session provider restores once on mount and owns the two-step
+SignInCard, popup callback, remembered accounts, and issuer selection. Issues keeps
+only client configuration and tracker setup in `src/lib/session-context.tsx`:
+multiple verified storage roots require a choice (remembered per WebID and revalidated
+on each sign-in), and an account without storage
+cannot open a tracker. Tracker reachability and best-effort type-index registration
+still run after sign-in. Failed tracker setup can be retried without signing in again.
+
+Repositories, sharing, inbox reads, subscriptions and announcement writes receive
+`auth.fetch` explicitly. Global fetch stays pristine; display profiles and announcement
+profile discovery use public fetch with cookies omitted. Credentials apply only to
+verified storage roots and the `/.notifications/` service on those storage servers.
+Foreign tracker/inbox access remains public unless a credential boundary grants it.
+
+`#autologin/<encoded-WebID>` suggests an account and requires a click. Full-page
+redirect login and the old `?webid=` suggestion are retired; only `/callback.html`
+is registered in the Client Identifier Document. Development loopback alone permits
+HTTP and dynamic client registration. Deploy with `APP_ORIGIN` matching the public
+origin so the generated document and browser client ID agree.
+
+One-time cleanup removes IndexedDB `solid-issues-auth`, localStorage
+`solid:recent-accounts`, and sessionStorage `solid-issues.autologin.flow` /
+`solid-issues.autologin-attempted`. Other storage is retained. Logout and account
+switches clear issue snapshots; there is no Issues outbox or logout purge-warning
+flow to migrate.
 
 ## Data model
 
@@ -60,15 +89,15 @@ A SHACL shape (`shapes/issue.ttl`) validates the model in CI.
 ## Develop
 
 ```sh
-npm install
-npm run dev      # in-memory CSS on :3000, seeds alice/bob + prints creds, app on :3200
+pnpm install --offline   # from the workspace root
+pnpm --filter @jeswr/app-issues dev      # in-memory CSS on :3000, seeds alice/bob + prints creds, app on :3200
 ```
 
 Open http://localhost:3200 and sign in with the printed WebID.
 
 > **Port note:** the dev script and tests default to CSS on `:3000` (per the
 > guide). If `:3000` is occupied, override the test port — the app uses an
-> issuer-from-profile auth provider, so it is not tied to `:3000`:
+> shared pod-auth provider discovery, so it is not tied to `:3000`:
 > ```sh
 > IT_CSS_PORT=3100 IT_CSS_BASE=http://localhost:3100 npm run test:e2e
 > ```
@@ -79,7 +108,7 @@ Open http://localhost:3200 and sign in with the printed WebID.
 npm run typecheck   # tsc --noEmit
 npm test            # Vitest — data layer unit/integration (src/lib)
 npm run test:e2e    # Playwright — golden path against a real local CSS (popup login)
-npm run build       # next build
+npm run build       # Next production build with Webpack (no Turbopack CSS-worker socket)
 ```
 
 ## Views & productivity

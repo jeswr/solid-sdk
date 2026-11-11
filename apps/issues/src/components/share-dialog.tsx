@@ -1,4 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -58,6 +61,7 @@ export function ShareDialog({
   /** Called after access changes so the parent can refresh assignee suggestions. */
   onChanged?: () => void;
 }) {
+  const podFetch = usePodFetch();
   const [assignments, setAssignments] = useState<RoleAssignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,14 +77,14 @@ export function ShareDialog({
     setError(null);
     try {
       // F7: surface each grant as its named role (viewer / editor / admin).
-      const all = await listRoleAssignments(resourceUrl, ownerWebId);
+      const all = await listRoleAssignments(resourceUrl, ownerWebId, podFetch);
       setAssignments(all.filter((a) => a.kind === "agent"));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read who this is shared with.");
     } finally {
       setLoading(false);
     }
-  }, [resourceUrl, ownerWebId]);
+  }, [resourceUrl, ownerWebId, podFetch]);
 
   useEffect(() => {
     // Fetch when the dialog opens; setState runs after the await inside refresh.
@@ -91,13 +95,13 @@ export function ShareDialog({
   const grant = async (values: FormValues) => {
     try {
       const webId = values.webId.trim();
-      await assignRole(resourceUrl, ownerWebId, webId, values.role);
+      await assignRole(resourceUrl, ownerWebId, webId, values.role, podFetch);
       // Collaborators need the side resources too (sprint membership / label
       // declaration write the config doc). The config never confers control, so an
       // admin on the issues still only gets editor on the config — capped at editor.
       const sideRole: Role = values.role === "viewer" ? "viewer" : "editor";
       for (const extra of extraResourceUrls) {
-        await assignRole(extra, ownerWebId, webId, sideRole);
+        await assignRole(extra, ownerWebId, webId, sideRole, podFetch);
       }
       toast.success("Access granted");
       form.reset({ webId: "", role: values.role });
@@ -111,8 +115,8 @@ export function ShareDialog({
   const revoke = async (webId: string) => {
     setBusyId(webId);
     try {
-      await removeAccess(resourceUrl, ownerWebId, webId);
-      for (const extra of extraResourceUrls) await removeAccess(extra, ownerWebId, webId);
+      await removeAccess(resourceUrl, ownerWebId, webId, podFetch);
+      for (const extra of extraResourceUrls) await removeAccess(extra, ownerWebId, webId, podFetch);
       toast.success("Access removed");
       await refresh();
       onChanged?.();

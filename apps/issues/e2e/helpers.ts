@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { expect, type BrowserContext, type Page } from "@playwright/test";
@@ -37,8 +38,8 @@ export function handleLoginPopups(context: BrowserContext, email: string, passwo
 /** Sign in via the WebID-first login screen; resolves once the issues view is shown. */
 export async function signIn(page: Page, webId: string) {
   await page.goto("/");
-  await page.getByLabel(/your webid/i).fill(webId);
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByLabel(/^webid$/i).fill(webId);
+  await page.getByRole("button", { name: /^continue$/i }).click();
   await expect(page.getByRole("button", { name: /open tracker/i })).toBeVisible({ timeout: 30_000 });
 }
 

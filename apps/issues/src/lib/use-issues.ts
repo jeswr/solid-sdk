@@ -1,4 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "./session-context";
+import { allowInsecureLoopback } from "@jeswr/app-session";
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -174,6 +178,7 @@ export function useIssues(
   creator: string | null,
   ownStorageUrls: readonly string[] = [],
 ): UseIssues {
+  const podFetch = usePodFetch();
   // All fetched data lives in ONE snapshot tagged with its tracker, and the
   // render derives from it only when the tag matches the current tracker. A
   // read from a previously-open project can therefore never be rendered — or
@@ -231,21 +236,18 @@ export function useIssues(
   // this, so production stays strict https-only. Even under the relaxation, a
   // NON-loopback private address (10.x, 169.254.169.254 metadata, …) is still
   // refused by the guard — this only re-permits genuine loopback.
-  const devLoopback =
-    typeof location !== "undefined" &&
-    (location.hostname === "localhost" ||
-      location.hostname === "127.0.0.1" ||
-      location.hostname === "[::1]");
+  const devLoopback = allowInsecureLoopback(process.env.NODE_ENV === "development");
   const announcer = useMemo(
     () =>
       creator
         ? new Announcer({
             actorWebId: creator,
+            fetch: podFetch,
             onError: (message) => toast.error(message),
             ...(devLoopback ? { guardOptions: { allowLoopback: true } } : {}),
           })
         : null,
-    [creator, devLoopback],
+    [creator, devLoopback, podFetch],
   );
 
   // Stable announce-assignment seam for mutation paths that write OUTSIDE the wired
@@ -270,7 +272,7 @@ export function useIssues(
     // can never be rendered for a different later identity.
     const forCreator = creator;
     try {
-      const repo = new Repository(trackerUrl, undefined, forCreator ?? undefined);
+      const repo = new Repository(trackerUrl, podFetch, forCreator ?? undefined);
       const [{ issues: list, canCreate: cc }, sprintList] = await Promise.all([repo.list(), repo.listSprints()]);
       if (seq !== fetchSeq.current) return; // a newer fetch superseded this one
       setSnapshot({ tracker: trackerUrl, creator: forCreator, issues: list, sprints: sprintList, canCreate: cc, error: null });
@@ -291,7 +293,7 @@ export function useIssues(
     } finally {
       if (seq === fetchSeq.current) setRefreshing(false);
     }
-  }, [trackerUrl, creator]);
+  }, [trackerUrl, creator, podFetch]);
 
   const refresh = useCallback(async () => {
     if (trackerUrl) setRefreshing(true); // fetchInto no-ops without a tracker
@@ -307,7 +309,7 @@ export function useIssues(
   useEffect(() => {
     setFetched(false);
     setSnapshot(hydrate(creator, trackerUrl));
-  }, [creator, trackerUrl]);
+  }, [creator, trackerUrl, podFetch]);
 
   useEffect(() => {
     // Client-side mount fetch; setState only runs after the await inside fetchInto.
@@ -344,7 +346,7 @@ export function useIssues(
   // too so edits to existing resources invalidate the board on CSS.
   useEffect(() => {
     if (!trackerUrl) return;
-    const containerUrl = new Repository(trackerUrl).containerUrl;
+    const containerUrl = new Repository(trackerUrl, podFetch).containerUrl;
     const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
     const flush = () => {
       if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
@@ -382,17 +384,17 @@ export function useIssues(
       }
     }
     for (const topic of topics) {
-      if (!syncs.has(topic)) syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
+      if (!syncs.has(topic)) syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage, fetch: podFetch }));
     }
-  }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey]);
+  }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey, podFetch]);
 
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      await apply(new Repository(trackerUrl, undefined, creator ?? undefined));
+      await apply(new Repository(trackerUrl, podFetch, creator ?? undefined));
       await refresh();
     },
-    [trackerUrl, creator, refresh],
+    [trackerUrl, creator, refresh, podFetch],
   );
 
   // Optimistic local edit of the issue list (board moves slide instantly).
@@ -429,7 +431,7 @@ export function useIssues(
       if (!trackerUrl) throw new Error("Not signed in.");
       setSaveState("saving");
       try {
-        await write(new Repository(trackerUrl, undefined, creator ?? undefined));
+        await write(new Repository(trackerUrl, podFetch, creator ?? undefined));
         flashSaved();
         void fetchInto(); // background reconcile; does not block the smooth move
       } catch (e) {
@@ -437,7 +439,7 @@ export function useIssues(
         throw e;
       }
     },
-    [trackerUrl, creator, flashSaved, fetchInto],
+    [trackerUrl, creator, flashSaved, fetchInto, podFetch],
   );
 
   // Read-only fetch of an issue's provenance activity log (F3), not part of the
@@ -445,9 +447,9 @@ export function useIssues(
   const activityLog = useCallback(
     async (url: string) => {
       if (!trackerUrl || !url) return [];
-      return new Repository(trackerUrl, undefined, creator ?? undefined).activityLog(url);
+      return new Repository(trackerUrl, podFetch, creator ?? undefined).activityLog(url);
     },
-    [trackerUrl, creator],
+    [trackerUrl, creator, podFetch],
   );
 
   // Dependency enforcement (#75 P1-4): authoritative open-blocker check, read
@@ -456,18 +458,18 @@ export function useIssues(
   const openBlockers = useCallback(
     async (url: string) => {
       if (!trackerUrl || !url) return [];
-      return new Repository(trackerUrl, undefined, creator ?? undefined).openBlockers(url);
+      return new Repository(trackerUrl, podFetch, creator ?? undefined).openBlockers(url);
     },
-    [trackerUrl, creator],
+    [trackerUrl, creator, podFetch],
   );
 
   // Bounded fan-out of status-transition history for the three-band CFD.
   const statusHistory = useCallback(
     async (urls: string[]) => {
       if (!trackerUrl || urls.length === 0) return new Map<string, { to: StatusSlug; at: Date }[]>();
-      return new Repository(trackerUrl, undefined, creator ?? undefined).dashboardStatusHistory(urls);
+      return new Repository(trackerUrl, podFetch, creator ?? undefined).dashboardStatusHistory(urls);
     },
-    [trackerUrl, creator],
+    [trackerUrl, creator, podFetch],
   );
 
   // Shareable, pod-persisted saved views (tracker-config reads/writes). These do
@@ -475,23 +477,23 @@ export function useIssues(
   // `mutate` — they operate directly on a fresh Repository.
   const listSavedViews = useCallback(async () => {
     if (!trackerUrl) return [];
-    return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).list();
-  }, [trackerUrl, creator]);
+    return new PodSavedViews(new Repository(trackerUrl, podFetch, creator ?? undefined)).list();
+  }, [trackerUrl, creator, podFetch]);
 
   const saveView = useCallback(
     async (name: string, query: IssueQuery, view?: View) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      return new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).save(name, query, view);
+      return new PodSavedViews(new Repository(trackerUrl, podFetch, creator ?? undefined)).save(name, query, view);
     },
-    [trackerUrl, creator],
+    [trackerUrl, creator, podFetch],
   );
 
   const removeView = useCallback(
     async (iri: string) => {
       if (!trackerUrl) throw new Error("Not signed in.");
-      await new PodSavedViews(new Repository(trackerUrl, undefined, creator ?? undefined)).remove(iri);
+      await new PodSavedViews(new Repository(trackerUrl, podFetch, creator ?? undefined)).remove(iri);
     },
-    [trackerUrl, creator],
+    [trackerUrl, creator, podFetch],
   );
 
   return {

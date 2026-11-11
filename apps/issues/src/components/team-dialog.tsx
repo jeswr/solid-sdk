@@ -1,4 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -33,6 +36,7 @@ export function TeamDialog({
   trackerUrl: string;
   onSaved?: () => void;
 }) {
+  const podFetch = usePodFetch();
   const [members, setMembers] = useState<string[]>([]);
   const [newWebId, setNewWebId] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,7 +48,7 @@ export function TeamDialog({
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    new Repository(trackerUrl)
+    new Repository(trackerUrl, podFetch)
       .info()
       .then((info) => {
         if (!cancelled) setMembers(info.groupMembers);
@@ -56,12 +60,12 @@ export function TeamDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, trackerUrl]);
+  }, [open, trackerUrl, podFetch]);
 
   const persist = async (next: string[]) => {
     setBusy(true);
     try {
-      await new Repository(trackerUrl).setAssigneeGroup(next);
+      await new Repository(trackerUrl, podFetch).setAssigneeGroup(next);
       setMembers(next);
       onSaved?.();
     } catch (e) {

@@ -9,10 +9,14 @@
    (we deliberately do not import its styles.css, which would clobber these).
    `node_modules` is outside Tailwind v4's default content scan, hence @source. */
 @source "../../node_modules/@jeswr/app-shell/dist";
+/* AUTHORED-BY GPT-6.1 Sol — include the shared sign-in primitives. */
+@source "../../../../packages/suite-ui/dist";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-surface: var(--card);
+  --color-surface-2: var(--muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -240,4 +244,39 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+}
+/* AUTHORED-BY GPT-6.1 Sol — shared sign-in layout; SignInCard supplies its own CSS. */
+.login-screen {
+  display: grid;
+  min-height: 100dvh;
+  place-content: center;
+  justify-items: center;
+  gap: 1rem;
+  padding: 1rem;
+}
+.login-sign-in {
+  width: min(100%, 28rem);
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* Bridge sign-in tokens to the existing Issues theme, including its portalled help sheet. */
+.su-sign-in-card,
+.su-sign-in-help {
+  --surface: var(--card);
+  --surface-2: var(--muted);
+  --foreground-muted: var(--muted-foreground);
+  --font-ui: var(--font-geist-sans);
+  --control-h: 2.75rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --lh-sm: 1.5;
+  --lh-base: 1.5;
+  --lh-xl: 1.4;
+  --shadow-1: 0 1px 3px rgb(0 0 0 / 10%);
 }

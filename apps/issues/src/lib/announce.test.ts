@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 import { describe, it, expect, vi } from "vitest";
 import { Parser, Store, DataFactory } from "n3";
 import type { GuardOptions } from "@jeswr/guarded-fetch";
@@ -138,13 +139,13 @@ describe("buildAnnounceTurtle → the AS2 Announce is well-formed and round-trip
 describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
   it("returns the inbox advertised by the collaborator's own profile", async () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, TARGET_INBOX) } });
-    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD });
+    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD });
     expect(inbox).toBe(TARGET_INBOX);
   });
 
   it("fails closed (undefined) when the profile advertises NO ldp:inbox", async () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, null) } });
-    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD });
+    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD });
     expect(inbox).toBeUndefined();
   });
 
@@ -153,28 +154,28 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
       profiles: { [TARGET]: profile(TARGET, "https://169.254.169.254/inbox/") },
     });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
   it("REFUSES an inbox on a loopback literal (127.0.0.1)", async () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, "https://127.0.0.1/inbox/") } });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
   it("REFUSES an inbox on the IPv6 loopback ([::1])", async () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, "https://[::1]/inbox/") } });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
   it("REFUSES a plain-http inbox (credential-bearing POST must be https)", async () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, "http://bob.example/inbox/") } });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
@@ -183,7 +184,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
       profiles: { [TARGET]: profile(TARGET, "https://metadata.google.internal/inbox/") },
     });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
@@ -191,7 +192,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
     const spy = vi.fn(async () => new Response("", { status: 200 })) as unknown as typeof fetch;
     await expect(
       resolveCollaboratorInbox("https://169.254.169.254/card#me", {
-        fetch: spy,
+        fetch: spy, publicFetch: spy,
         guardOptions: SAFE_GUARD,
       }),
     ).rejects.toThrow();
@@ -206,7 +207,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
       getRedirects: { [TARGET]: "https://169.254.169.254/card" },
     });
     await expect(
-      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
@@ -217,7 +218,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
       getRedirects: { [TARGET]: realDoc },
       profiles: { [realDoc]: profile(TARGET, TARGET_INBOX) },
     });
-    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, guardOptions: SAFE_GUARD });
+    const inbox = await resolveCollaboratorInbox(TARGET, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD });
     expect(inbox).toBe(TARGET_INBOX);
   });
 
@@ -226,7 +227,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
     const localInbox = "http://localhost:3000/alice/inbox/";
     const fetchImpl = fakePod({ profiles: { [localWebId]: profile(localWebId, localInbox) } });
     const inbox = await resolveCollaboratorInbox(localWebId, {
-      fetch: fetchImpl,
+      fetch: fetchImpl, publicFetch: fetchImpl,
       guardOptions: { allowLoopback: true },
     });
     expect(inbox).toBe(localInbox);
@@ -238,7 +239,7 @@ describe("resolveCollaboratorInbox → inbox discovery is fail-closed", () => {
       profiles: { [localWebId]: profile(localWebId, "http://localhost:3000/alice/inbox/") },
     });
     await expect(
-      resolveCollaboratorInbox(localWebId, { fetch: fetchImpl, guardOptions: {} }),
+      resolveCollaboratorInbox(localWebId, { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: {} }),
     ).rejects.toThrow();
   });
 });
@@ -254,7 +255,7 @@ describe("postToInbox → self-guarding, refuses redirects", () => {
         seenBody = b;
       },
     });
-    await postToInbox(TARGET_INBOX, "<> a <x> .", { fetch: fetchImpl, guardOptions: SAFE_GUARD });
+    await postToInbox(TARGET_INBOX, "<> a <x> .", { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD });
     expect(seenUrl).toBe(TARGET_INBOX);
     expect(seenBody).toContain("<> a <x> .");
   });
@@ -263,7 +264,7 @@ describe("postToInbox → self-guarding, refuses redirects", () => {
     const onPost = vi.fn();
     const fetchImpl = fakePod({ postStatus: 201, onPost });
     await expect(
-      postToInbox("https://169.254.169.254/inbox/", "body", { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      postToInbox("https://169.254.169.254/inbox/", "body", { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
     expect(onPost).not.toHaveBeenCalled();
   });
@@ -271,14 +272,14 @@ describe("postToInbox → self-guarding, refuses redirects", () => {
   it("REFUSES a 302 redirect on the credentialed POST", async () => {
     const fetchImpl = fakePod({ postStatus: 302, postLocation: "https://evil.example/steal" });
     await expect(
-      postToInbox(TARGET_INBOX, "body", { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      postToInbox(TARGET_INBOX, "body", { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toThrow();
   });
 
   it("throws AnnounceError on a non-2xx inbox response", async () => {
     const fetchImpl = fakePod({ postStatus: 403 });
     await expect(
-      postToInbox(TARGET_INBOX, "body", { fetch: fetchImpl, guardOptions: SAFE_GUARD }),
+      postToInbox(TARGET_INBOX, "body", { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD }),
     ).rejects.toBeInstanceOf(AnnounceError);
   });
 });
@@ -294,7 +295,7 @@ describe("sendAnnounce → discriminated end-to-end result", () => {
     });
     const result = await sendAnnounce(
       { kind: "assignment", actorWebId: ACTOR, objectIri: ISSUE, targetWebId: TARGET, summary: "s" },
-      { fetch: fetchImpl, guardOptions: SAFE_GUARD },
+      { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD },
     );
     expect(result.status).toBe("sent");
     // A real AS2 Announce body was posted (round-trippable turtle).
@@ -307,7 +308,7 @@ describe("sendAnnounce → discriminated end-to-end result", () => {
     const fetchImpl = fakePod({ profiles: { [TARGET]: profile(TARGET, null) }, onPost });
     const result = await sendAnnounce(
       { kind: "mention", actorWebId: ACTOR, objectIri: ISSUE, targetWebId: TARGET, summary: "s" },
-      { fetch: fetchImpl, guardOptions: SAFE_GUARD },
+      { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD },
     );
     expect(result.status).toBe("no-inbox");
     expect(onPost).not.toHaveBeenCalled();
@@ -321,7 +322,7 @@ describe("sendAnnounce → discriminated end-to-end result", () => {
     });
     const result = await sendAnnounce(
       { kind: "assignment", actorWebId: ACTOR, objectIri: ISSUE, targetWebId: TARGET, summary: "s" },
-      { fetch: fetchImpl, guardOptions: SAFE_GUARD },
+      { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD },
     );
     expect(result).toMatchObject({ status: "error", stage: "resolve" });
     expect(onPost).not.toHaveBeenCalled();
@@ -335,7 +336,7 @@ describe("sendAnnounce → discriminated end-to-end result", () => {
     });
     const result = await sendAnnounce(
       { kind: "assignment", actorWebId: ACTOR, objectIri: ISSUE, targetWebId: TARGET, summary: "s" },
-      { fetch: fetchImpl, guardOptions: SAFE_GUARD },
+      { fetch: fetchImpl, publicFetch: fetchImpl, guardOptions: SAFE_GUARD },
     );
     expect(result).toMatchObject({ status: "error", stage: "post" });
   });
@@ -346,7 +347,7 @@ describe("Announcer → non-blocking, self-skipping, transition-gated, idempoten
     const sent: string[] = [];
     const a = new Announcer({
       actorWebId: ACTOR,
-      fetch: fetchImpl,
+      fetch: fetchImpl, publicFetch: fetchImpl,
       guardOptions: SAFE_GUARD,
       onSent: (target) => sent.push(target),
       onError: extra.onError,
@@ -486,7 +487,7 @@ describe("Announcer → non-blocking, self-skipping, transition-gated, idempoten
       }
       return fetchImpl(input, init);
     }) as typeof fetch;
-    const a = new Announcer({ actorWebId: ACTOR, fetch: dynamic, guardOptions: SAFE_GUARD, onError });
+    const a = new Announcer({ actorWebId: ACTOR, fetch: dynamic, publicFetch: dynamic, guardOptions: SAFE_GUARD, onError });
     a.announceAssignment({ issueUrl: ISSUE, assignee: TARGET });
     await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
     expect(posts.length).toBe(1);
@@ -510,4 +511,15 @@ describe("defaultSummary", () => {
     expect(defaultSummary("assignment")).toBe("You were assigned to an issue");
     expect(defaultSummary("mention")).toBe("You were mentioned in a comment");
   });
+});
+
+it("uses only public transport for profile discovery and the explicit session fetch for the POST", async () => {
+  const publicTransport = vi.fn(fakePod({ profiles: { [TARGET]: profile(TARGET, TARGET_INBOX) } }));
+  const authenticated = vi.fn<typeof fetch>(async () => new Response(null, { status: 201 }));
+  const result = await sendAnnounce({ kind: "assignment", actorWebId: ACTOR, objectIri: ISSUE, targetWebId: TARGET, summary: "Assigned" }, {
+    fetch: authenticated, publicFetch: publicTransport, guardOptions: SAFE_GUARD,
+  });
+  expect(result.status).toBe("sent");
+  expect(publicTransport).toHaveBeenCalledTimes(1);
+  expect(authenticated).toHaveBeenCalledExactlyOnceWith(TARGET_INBOX, expect.objectContaining({ method: "POST", redirect: "manual" }));
 });

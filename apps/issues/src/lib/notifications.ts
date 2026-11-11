@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
@@ -10,12 +11,11 @@
  * CSS path — so live-sync works against ANY conformant Solid server. A server
  * that advertises no WebSocketChannel2023 falls through to polling.
  *
- * `fetch` here is the @solid/reactive-authentication-patched global, so the
- * subscription POST is authenticated; the `wss://` socket carries its own token.
+ * Callers supply pod-auth fetch explicitly for subscription requests; the `wss://` socket carries its own token.
  *
  * SECURITY (own-pod SSRF guard, load-bearing): the discovered subscription
  * endpoint AND the `receiveFrom` socket URL both come from server-controlled
- * data, so before we POST our auth-patched `fetch` to the endpoint, or open the
+ * data, so before we POST our explicit authenticated `fetch` to the endpoint, or open the
  * socket, we confirm each uses one of the user's OWN pod storage origins
  * (`own-pod.ts`). A foreign URL is rejected fail-closed → we fall back to polling
  * rather than attach the user's token to / open a socket against another origin.
@@ -65,7 +65,7 @@ export interface WatchOptions {
    * omitted ⇒ EVERYTHING fails the guard ⇒ poll-only (fail-closed).
    */
   ownStorageUrls?: readonly string[];
-  /** Injected fetch (tests); production uses the auth-patched global. */
+  /** Explicit pod-auth fetch; tests inject a transport. */
   fetch?: typeof fetch;
   /** Injected WebSocket constructor (tests); production uses the global. */
   WebSocketImpl?: typeof WebSocket;
@@ -118,7 +118,7 @@ export function watchContainer(
         return;
       }
       // SSRF guard: the discovered endpoint is server-controlled — only POST our
-      // auth-patched fetch to it on an OWN storage origin. CSS advertises its
+      // explicit authenticated fetch to it on an OWN storage origin. CSS advertises its
       // service outside the pod path; the topic itself must remain in-pod.
       if (!isOwnPodUrl(containerUrl, ownStorageUrls) || !isOwnPodServiceUrl(service, ownStorageUrls)) {
         startPolling();

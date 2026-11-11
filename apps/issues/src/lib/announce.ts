@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * LDN inbox WRITES (#75 / 5u9) — POST an ActivityStreams 2.0 `as:Announce`
@@ -27,8 +28,8 @@
  *      3xx — the acting user's DPoP credential can only ever reach the ONE inbox
  *      host, never a `Location` the target's server chose.
  *
- * The user's OWN DPoP-authed `fetch` (the `@solid/reactive-authentication`-patched
- * global) carries the write: the acting user appends the notification AS THEMSELVES
+ * The explicit pod-auth fetch carries the write within its verified credential
+ * boundary: the acting user appends the notification AS THEMSELVES
  * (`as:actor` = the acting user's WebID; `as:target` = the collaborator). The
  * notification is built with `n3.Writer` (never hand-concatenated) and carries
  * PROV-O provenance asserting this app/user as the source (own-origin provenance).
@@ -42,6 +43,7 @@
  * mentioning the same person notifies again).
  */
 
+import { publicFetch } from "@jeswr/app-session";
 import { TermWrapper, OptionalFrom, NamedNodeAs } from "@rdfjs/wrapper";
 import { DataFactory, Writer } from "n3";
 import { fetchRdf } from "@jeswr/fetch-rdf";
@@ -135,12 +137,10 @@ export function buildAnnounceTurtle(content: AnnounceContent): Promise<string> {
 
 /** Options threaded into the SSRF gate + the profile / inbox fetches. */
 export interface AnnounceNetworkOptions {
-  /**
-   * The fetch to carry BOTH the profile read and the credentialed inbox POST.
-   * Defaults to the (auth-patched) global `fetch` so the POST is DPoP-authed as
-   * the acting user. Injected in tests.
-   */
+  /** Explicit pod-auth fetch for the inbox POST; foreign pods receive no credentials. */
   fetch?: typeof fetch;
+  /** Pristine public profile transport; injected independently in tests. */
+  publicFetch?: typeof fetch;
   /**
    * SSRF-policy options for `assertSafeUrl` on the WebID + inbox URL. Production
    * uses the strict browser-safe default (`{}`); tests inject `dnsLookup` to drive
@@ -162,16 +162,16 @@ export async function resolveCollaboratorInbox(
   collaboratorWebId: string,
   options: AnnounceNetworkOptions = {},
 ): Promise<string | undefined> {
-  // The discovery read is CREDENTIAL-BEARING (the auth-patched fetch) and the WebID
+  // The discovery read uses pristine public fetch and the WebID
   // is foreign/untrusted data, so it goes through a guarded fetch that validates
   // the WebID host AND re-validates EVERY redirect hop (stripping credentials on a
   // cross-origin redirect). A poisoned assignee value (e.g. a WebID that resolves
   // or 30x-redirects to `169.254.169.254` / `localhost`) can therefore never drive
-  // the authenticated profile fetch at an internal target — closing the discovery
+  // the public profile fetch at an internal target — closing the discovery
   // redirect-SSRF that a bare `assertSafeUrl` on only the initial URL would leave.
   const discoveryFetch = createGuardedFetch({
     ...options.guardOptions,
-    ...(options.fetch ? { fetch: options.fetch } : {}),
+    fetch: options.publicFetch ?? publicFetch,
   });
   // NB: no custom request headers here. The WebID is CROSS-ORIGIN, so adding a
   // `Cache-Control` request header (as the own-pod reader does for same-origin
@@ -375,7 +375,7 @@ export class Announcer {
         targetWebId,
         summary: defaultSummary(kind, issueTitle),
       },
-      { fetch: this.opts.fetch, guardOptions: this.opts.guardOptions },
+      { fetch: this.opts.fetch, publicFetch: this.opts.publicFetch, guardOptions: this.opts.guardOptions },
     );
 
     if (result.status === "sent") {
