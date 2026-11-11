@@ -5,7 +5,7 @@ import { Parser, Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../src/apps/docs/lib/model/document";
 import type { StoredDocument } from "../src/apps/docs/lib/model/store";
-import { NoteConflictError } from "../src/apps/notes/lib/model/errors";
+import { NoteConflictError, NoteMoveBlockedError } from "../src/apps/notes/lib/model/errors";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { encodeRef } from "../src/lib/refs";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
@@ -92,7 +92,7 @@ beforeEach(() => {
   mocks.context = {
     labels: ["A", "B"],
     create: vi.fn(async () => note()),
-    store: { save, read: vi.fn() },
+    store: { save, read: vi.fn(), assertMovable: vi.fn(async () => {}) },
     refresh: vi.fn(async () => {}),
     session: {
       fetch: vi.fn(),
@@ -105,6 +105,8 @@ beforeEach(() => {
     closeNote: vi.fn(),
     opener: { current: null },
     move: vi.fn(async (saved) => saved),
+    reportError: vi.fn(),
+    openShare: vi.fn(),
     persistLabels: vi.fn(),
   };
 });
@@ -544,4 +546,135 @@ it("keeps pod image URLs when opening an image note in Docs", async () => {
     "trash",
   );
   expect(mocks.push).toHaveBeenCalledWith(`/docs/d/${encodeRef(documentUrl)}`);
+});
+
+it("opens read-only notes with locked title and body, recovery actions and no writer", async () => {
+  const target = { ...note(), readOnly: true };
+  await mount(h(NoteDialog, { note: target }));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.readOnly).toBe(
+    true,
+  );
+  expect(mocks.editor?.isEditable).toBe(false);
+  expect(document.body.textContent).toContain("View only");
+  expect(button("Copy local changes")).toBeTruthy();
+  expect(button("Download local changes")).toBeTruthy();
+  expect(document.body.textContent).not.toContain("Collaborator");
+  await click(button("Close"));
+  expect(mocks.context.closeNote).toHaveBeenCalledOnce();
+  expect((mocks.context.store as { save: unknown }).save).not.toHaveBeenCalled();
+});
+
+it("locks the mounted editor on a 403 save and keeps the local text available", async () => {
+  const { ResourceWriteError } = await import("../src/apps/docs/lib/model/errors");
+  const target = note();
+  const save = vi.fn().mockRejectedValue(new ResourceWriteError(target.url, 403));
+  mocks.context.store = { save };
+  const ui = await mount(h(NoteDialog, { note: target }));
+  await fill("Note title", "Local work");
+  await click(button("Close"));
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.readOnly).toBe(
+    true,
+  );
+  expect(mocks.editor?.isEditable).toBe(false);
+  expect(document.querySelector<HTMLInputElement>('[aria-label="Note title"]')?.value).toBe(
+    "Local work",
+  );
+  const pending = getPendingDrafts((mocks.context.session as { webId: string }).webId);
+  await act(() => pending.retry());
+  await ui.unmount();
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(pending.get(target.url)?.draft.title).toBe("Local work");
+});
+
+it("shows the shared card indicator only for known grants", async () => {
+  const target = note();
+  mocks.context.sharedNotes = {};
+  const ui = await mount(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")).toBeNull();
+  mocks.context.sharedNotes = { [target.url]: false };
+  await ui.render(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")).toBeNull();
+  mocks.context.sharedNotes = { [target.url]: true };
+  await ui.render(h(NoteCard, { note: target }));
+  expect(document.querySelector(".notes-shared-indicator")?.textContent).toBe("Shared");
+});
+
+it.each([
+  ["active", "Archive note"],
+  ["archived", "Unarchive note"],
+  ["active", "Move to trash"],
+  ["trashed", "Restore note"],
+] as const)("shows the sharing refusal for %s / %s in the editor", async (location, label) => {
+  const original = { ...note(), location };
+  const error = new NoteMoveBlockedError(original.url);
+  mocks.context.move = vi.fn().mockRejectedValue(error);
+  await mount(h(NoteDialog, { note: original }));
+  await click(button(label));
+  expect(mocks.context.reportError).toHaveBeenCalledExactlyOnceWith(error);
+  expect(mocks.context.closeNote).not.toHaveBeenCalled();
+  expect(mocks.toast.error).not.toHaveBeenCalled();
+  expect(button(label).disabled).toBe(false);
+});
+
+it("refuses Open in Docs before creating a copy of a shared note", async () => {
+  const original = note();
+  const error = new NoteMoveBlockedError(original.url);
+  (
+    mocks.context.store as { assertMovable: ReturnType<typeof vi.fn> }
+  ).assertMovable.mockRejectedValue(error);
+  await mount(h(NoteDialog, { note: original }));
+  await click(button("Open in Docs"));
+  await click(button("Open in Docs?"));
+  expect(mocks.createDoc).not.toHaveBeenCalled();
+  expect(mocks.context.move).not.toHaveBeenCalled();
+  expect(mocks.context.reportError).toHaveBeenCalledExactlyOnceWith(error);
+});
+
+it("offers Share from a refused permanent deletion", async () => {
+  const original = { ...note(), location: "trashed" as const };
+  mocks.context.mutations = {
+    deleteForever: vi.fn().mockRejectedValue(new NoteMoveBlockedError(original.url)),
+  };
+  await mount(h(NoteCard, { note: original }));
+  await click(button("Delete forever"));
+  await click(
+    document.querySelector(".notes-confirm-actions button:last-child") as HTMLButtonElement,
+  );
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    "Stop sharing this note before archiving or deleting it.",
+  );
+  await click(button("Share"));
+  expect(mocks.context.openShare).toHaveBeenCalledExactlyOnceWith(original.url);
+  expect(document.querySelector(".notes-confirm")).toBeNull();
+});
+
+it("empty trash reports refused notes and continues deleting the rest", async () => {
+  const shared = { ...note(), title: "Shared", location: "trashed" as const };
+  const unknown = { ...note(), title: "Unknown", location: "trashed" as const };
+  const unshared = { ...note(), location: "trashed" as const };
+  const deletion = vi.fn(async (url: string) => {
+    if (url !== unshared.url) throw new NoteMoveBlockedError(url);
+  });
+  Object.assign(mocks.context, {
+    notes: [shared, unknown, unshared],
+    active: {},
+    archived: {},
+    trashed: { data: [shared, unknown, unshared], loading: false },
+    prefs: { pinned: [], colours: {}, view: "grid", manualOrder: [] },
+    store: { deleteForever: deletion },
+  });
+  await mount(h(NotesGrid, { view: "trashed" }));
+  await click(button("Empty trash"));
+  await click(
+    document.querySelector(".notes-confirm-actions button:last-child") as HTMLButtonElement,
+  );
+  expect(deletion).toHaveBeenCalledTimes(3);
+  expect(deletion).toHaveBeenCalledWith(unshared.url, unshared.etag);
+  expect(document.querySelector(".notes-confirm")).toBeNull();
+  const alert = document.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("Shared: Stop sharing");
+  expect(alert?.textContent).toContain("Unknown: Stop sharing");
+  expect(alert?.querySelectorAll("button")).toHaveLength(2);
+  await click(alert?.querySelector("button") as HTMLButtonElement);
+  expect(mocks.context.openShare).toHaveBeenCalledExactlyOnceWith(shared.url);
 });
