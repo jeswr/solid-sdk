@@ -9,9 +9,11 @@
 //               the app's origin (CORS)
 //   metadata    authorization, token and JWKS endpoints exist; PKCE S256 and the webid scope are
 //               offered when the provider lists them
-//   jwks        the signing keys are readable from the app's origin
+//   jwks        the key set is readable from the app's origin and holds public signing keys
 //   authorize   the app's real authorization request (its Client Identifier Document, redirect
-//               URI, PKCE) reaches the provider's interactive login page, not an error
+//               URI, PKCE) reaches the provider's interactive login page: the page must match the
+//               provider's `loginPage` expectation (where it is served and a marker in its HTML),
+//               so an error or maintenance page never passes
 //   token-cors  the token endpoint's CORS preflight allows the app's origin and the DPoP header
 //
 // It never signs in and never creates accounts. Exit code 1 when any check fails; a Markdown
@@ -62,11 +64,19 @@ export function excerpt(body, length = 200) {
     .slice(0, length);
 }
 
+/** The text of an HTML page's <title>, or "" when it has none. */
+export function pageTitle(body) {
+  return excerpt(body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "", 80);
+}
+
 /**
  * Classify where an authorization request ended. `final` is the last response's status, location
- * (absolute, or null), content type and body; `redirectUri` is the app's redirect URI.
+ * (absolute, or null), content type, body and `where` (host + path); `redirectUri` is the app's
+ * redirect URI; `loginPage` is the provider's expectation: `marker`, a regular expression the login
+ * page's HTML must match, and optionally `at`, one its host + path must match. A page that does not
+ * meet it fails, so an error, maintenance or holding page is never taken for a working login.
  */
-export function classifyAuthorizeEnd(final, redirectUri) {
+export function classifyAuthorizeEnd(final, redirectUri, loginPage) {
   if (final.location?.startsWith(redirectUri)) {
     const params = new URL(final.location).searchParams;
     const error = params.get("error");
@@ -81,20 +91,60 @@ export function classifyAuthorizeEnd(final, redirectUri) {
   }
   if (final.location) return { ok: false, detail: `more than ${MAX_HOPS} redirects` };
   const html = /html/i.test(final.contentType ?? "");
-  if (final.status >= 200 && final.status < 300 && html) {
-    if (
-      /\b(invalid_request|invalid_client|unauthorized_client|invalid_redirect_uri|redirect_uri_mismatch)\b/i.test(
-        final.body,
-      )
-    ) {
-      return { ok: false, detail: `error page: ${excerpt(final.body)}` };
-    }
-    return { ok: true, detail: `login page at ${final.where}` };
+  if (!(final.status >= 200 && final.status < 300 && html)) {
+    return {
+      ok: false,
+      detail: `${final.status} at ${final.where}: ${excerpt(final.body) || "(empty body)"}`,
+    };
   }
-  return {
-    ok: false,
-    detail: `${final.status} at ${final.where}: ${excerpt(final.body) || "(empty body)"}`,
-  };
+  if (
+    /\b(invalid_request|invalid_client|unauthorized_client|invalid_redirect_uri|redirect_uri_mismatch)\b/i.test(
+      final.body,
+    )
+  ) {
+    return { ok: false, detail: `error page: ${excerpt(final.body)}` };
+  }
+  if (!loginPage?.marker) {
+    return { ok: false, detail: `no loginPage expectation configured; ended at ${final.where}` };
+  }
+  const title = pageTitle(final.body);
+  const seen = `${final.where}${title ? ` ("${title}")` : ""}`;
+  if (loginPage.at && !new RegExp(loginPage.at).test(final.where)) {
+    return { ok: false, detail: `ended at ${seen}, not the login page (${loginPage.at})` };
+  }
+  if (!new RegExp(loginPage.marker, "i").test(final.body)) {
+    return {
+      ok: false,
+      detail: `${seen} is not the login page (no ${loginPage.marker}): ${excerpt(final.body, 120)}`,
+    };
+  }
+  return { ok: true, detail: `login page at ${seen}` };
+}
+
+const PRIVATE_JWK_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "k"];
+
+/** Check a JWKS response body: JSON, public keys only, and at least one usable signing key. */
+export function checkJwks(body) {
+  let jwks;
+  try {
+    jwks = JSON.parse(body);
+  } catch {
+    return { ok: false, detail: `not JSON: ${excerpt(body, 80) || "(empty body)"}` };
+  }
+  const keys = Array.isArray(jwks?.keys) ? jwks.keys : null;
+  if (!keys?.length) return { ok: false, detail: "no keys" };
+  if (keys.some((key) => PRIVATE_JWK_MEMBERS.some((member) => key && member in key))) {
+    return { ok: false, detail: "publishes private or symmetric key material" };
+  }
+  const signing = keys.filter(
+    (key) =>
+      ["RSA", "EC", "OKP"].includes(key?.kty) &&
+      (key.use === undefined || key.use === "sig") &&
+      (key.kty !== "RSA" || (typeof key.n === "string" && typeof key.e === "string")) &&
+      (key.kty === "RSA" || (typeof key.crv === "string" && typeof key.x === "string")),
+  );
+  if (!signing.length) return { ok: false, detail: "no public signing keys" };
+  return { ok: true, detail: `${signing.length} signing key(s)` };
 }
 
 async function timedFetch(fetchImpl, url, init = {}) {
@@ -222,16 +272,19 @@ export async function checkProvider(provider, apps, fetchImpl = fetch) {
   for (const app of apps) {
     const origin = new URL(app.url).origin;
     await guard("jwks", app, async () => {
-      const res = await timedFetch(fetchImpl, metadata.jwks_uri, { headers: { origin } });
-      await res.body?.cancel();
+      const res = await timedFetch(fetchImpl, metadata.jwks_uri, {
+        headers: { accept: "application/json", origin },
+      });
+      const body = await res.text();
       if (!res.ok) return record("jwks", app, false, `HTTP ${res.status}`);
       if (!corsAllows(res.headers, origin))
         return record("jwks", app, false, `CORS does not allow ${origin}`);
-      record("jwks", app, true, "readable");
+      const verdict = checkJwks(body);
+      record("jwks", app, verdict.ok, verdict.detail);
     });
     await guard("authorize", app, async () => {
       const end = await followAuthorize(fetchImpl, metadata, app);
-      const verdict = classifyAuthorizeEnd(end, app.redirectUri);
+      const verdict = classifyAuthorizeEnd(end, app.redirectUri, provider.loginPage);
       record("authorize", app, verdict.ok, verdict.detail);
     });
     await guard("token-cors", app, async () => {

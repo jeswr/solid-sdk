@@ -23,7 +23,12 @@
       "issuer": "https://idp.solid-test.jeswr.org",
       "server": "prod-solid-server IdP broker (Keycloak upstream)",
       "advertisedBy": "Home provider default in the Vite apps, Pod Manager and the App Store",
-      "fullLogin": "Playwright signs up a throwaway account through Drive, then signs in again with it (apps/pod-drive/web/tests/live)"
+      "fullLogin": "Playwright signs up a throwaway account through Drive, then signs in again with it (apps/pod-drive/web/tests/live)",
+      "loginPage": {
+        "at": "/realms/[^/]+/",
+        "marker": "type=\"password\"",
+        "$comment": "Keycloak's username and password form, reached through the broker"
+      }
     },
     {
       "id": "solidcommunity",
@@ -31,7 +36,12 @@
       "issuer": "https://solidcommunity.net/",
       "server": "Community Solid Server",
       "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
-      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
+      "loginPage": {
+        "at": "^solidcommunity\\.net/\\.account/$",
+        "marker": "<title>\\s*Solid\\s*</title>",
+        "$comment": "CSS renders its sign-in UI client-side from the account app at /.account/"
+      }
     },
     {
       "id": "inrupt",
@@ -39,7 +49,12 @@
       "issuer": "https://login.inrupt.com/",
       "server": "Inrupt Enterprise Solid Server",
       "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
-      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
+      "loginPage": {
+        "at": "^auth\\.inrupt\\.com/login$",
+        "marker": "<title>\\s*Signin\\s*</title>",
+        "$comment": "Inrupt's sign-in page behind login.inrupt.com"
+      }
     },
     {
       "id": "solidweb",
@@ -47,7 +62,12 @@
       "issuer": "https://solidweb.org/",
       "server": "Node Solid Server",
       "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS",
-      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
+      "loginPage": {
+        "at": "^solidweb\\.org/login",
+        "marker": "type=\"password\"",
+        "$comment": "NSS's server-rendered password form"
+      }
     },
     {
       "id": "teamid",
@@ -55,7 +75,12 @@
       "issuer": "https://teamid.live/",
       "server": "Community Solid Server",
       "advertisedBy": "@jeswr/pod-auth KNOWN_PROVIDERS and the suite's default provider list",
-      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page."
+      "fullLogin": "Not automated: needs a maintainer-provided account. The protocol check proves the app's request reaches the login page.",
+      "loginPage": {
+        "at": "^teamid\\.live/\\.account/$",
+        "marker": "<title>\\s*Solid\\s*</title>",
+        "$comment": "CSS renders its sign-in UI client-side from the account app at /.account/"
+      }
     }
   ]
 }

@@ -61,5 +61,6 @@ jobs:
         if: failure()
         with:
           name: sign-in-live-test-idp
-          path: apps/pod-drive/web/test-results/
+          # Screenshots only: other diagnostics (error context, action logs) can carry form values.
+          path: apps/pod-drive/web/test-results/**/*.png
           retention-days: 7

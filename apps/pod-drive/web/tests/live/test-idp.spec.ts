@@ -7,10 +7,11 @@
 //      "Your account is ready" → Continue → consent → Drive shows "Your files".
 //   2. Existing account: a fresh browser signs in with the same account's username and password.
 //
-// The account is a throwaway with random credentials that are never logged or stored; the
+// The account is a throwaway with random credentials that are never logged or stored (passwords
+// go in through fillSecret, never fill(), and only screenshots are uploaded on failure); the
 // maintainer approved creating these on the test IdP only. Never point this at a public provider.
 import { randomBytes } from "node:crypto";
-import { type BrowserContext, expect, type Page, test } from "@playwright/test";
+import { type BrowserContext, expect, type Locator, type Page, test } from "@playwright/test";
 
 const APP_URL = process.env.LIVE_APP_URL ?? "https://jeswr.github.io/solid-sdk/pod-drive/";
 const PROVIDER = process.env.LIVE_PROVIDER_NAME ?? "idp.solid-test.jeswr.org";
@@ -58,6 +59,20 @@ async function finishInPopup(popup: Page) {
   }
 }
 
+/**
+ * Type a password without Playwright recording it. `fill()` writes its value into the action log
+ * and failure diagnostics; setting the value in the page and firing the input events keeps it out
+ * of every report and artifact.
+ */
+async function fillSecret(field: Locator, secret: string) {
+  await field.waitFor();
+  await field.evaluate((input, value) => {
+    (input as HTMLInputElement).value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, secret);
+}
+
 async function expectSignedIn(page: Page) {
   await expect(page.getByRole("heading", { name: "Your files" })).toBeVisible({ timeout: 45_000 });
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveCount(0);
@@ -81,8 +96,8 @@ test("test IdP: sign up through Drive, then sign in again with the same account"
 
     await popup.getByRole("link", { name: "Register" }).click();
     await popup.locator("#username").fill(account.username);
-    await popup.locator("#password").fill(account.password);
-    await popup.locator("#password-confirm").fill(account.password);
+    await fillSecret(popup.locator("#password"), account.password);
+    await fillSecret(popup.locator("#password-confirm"), account.password);
     await popup.locator("#email").fill(`${account.username}@example.com`);
     await popup.locator("#firstName").fill("Sign-in");
     await popup.locator("#lastName").fill("Live test");
@@ -118,7 +133,7 @@ test("test IdP: sign up through Drive, then sign in again with the same account"
     const page = await context.newPage();
     const popup = await startSignIn(page);
     await popup.locator("#username").fill(account.username);
-    await popup.locator("#password").fill(account.password);
+    await fillSecret(popup.locator("#password"), account.password);
     await popup.locator("#kc-login").click();
     await finishInPopup(popup);
     await expectSignedIn(page);
