@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-offline
 
@@ -69,7 +69,7 @@ transport already injected into `storage`, and cache state is scoped by WebID.
 Warming uses `storage.head`, `read`, and paginated `listAll`; explicit `warm.seeds` are
 combined with profile/type-index seeds inside the storage boundary. For a WebID outside
 that boundary, supply explicit seeds (or a pre-fetched profile to the low-level warmer).
-Large binary members remain lazy. Existing SW cache names and metadata schemas are retained.
+Large binary members remain lazy. Pod bodies and metadata now share the account-scoped IndexedDB database; the Cache API remains for public app-shell assets.
 
 Notifications use `@jeswr/pod-notifications` for transport selection, polling, scope checks,
 and reconnect. Pass an existing `notificationsClient` to share the app's client; otherwise
@@ -84,6 +84,59 @@ HTTP cache policy remains authoritative: invalidation retains original response 
 the worker transport boundary. A low-level injected storage without that HTTP evidence
 conservatively evicts changed bytes instead of inventing cacheable responses.
 React/status surfaces, BroadcastChannel updates, and `purgeForWebId` retain their contracts.
+
+## Native page cache (MOB-P3e)
+
+```ts
+import { createPageCache } from '@jeswr/solid-offline';
+
+const offline = createPageCache({
+  webId: account.webId,
+  storageRoot: account.storageUrl,
+  fetch: authenticatedFetch,
+  usable: () => isCurrentLiveAccount(account),
+  onEvent: event => { /* Re-read views on event.event === 'updated'. */ },
+});
+await offline.start(); // Optional built-in pod-notifications subscriptions.
+const response = await offline.fetch(resourceUrl);
+// On logout or account switch, fence immediately and await shared cleanup:
+const purge = await offline.logout();
+if (purge.dbBlocked || purge.errors.length) { /* Surface incomplete cleanup. */ }
+```
+
+This driver needs IndexedDB and no service worker or Cache API. It uses the worker's
+`handleFetch`, cache policy, canonical keys, metadata builder, notification handler,
+ETag sweep and `purgeForWebId`; it does not implement a second cache policy.
+Native reads are network-first with conditional ETag validation. The existing worker
+keeps its default stale-while-revalidate delivery mode over the same engine and store.
+Both drivers commit response bytes and their metadata in one IndexedDB transaction.
+The page adapter checks the live session and resource revision after buffering and before
+that transaction. Notifications fence their resource and membership targets, including cached
+cursor pages; unrelated resources and matching-ETag no-ops leave pending reads valid.
+Offline or a transport TypeError may return provisional bytes marked
+`X-Solid-Offline-Cache: stale` and `X-Offline: stale`. HTTP failures, cancellation,
+session errors and explicit freshness requests never become stale successes.
+`no-store` bypasses reads and writes even offline. HEAD stays a network passthrough;
+mutations, ranges, auth endpoints and requests outside the storage boundary bypass caching.
+Redirected, opaque, credential-varying, private and no-store responses are not stored.
+Neither request credentials nor sensitive response headers are persisted.
+
+`usable()` is mandatory: pass the session's live account/generation fence, including
+changes React has not committed. It is checked around network and disk awaits and before
+delivery. `close()` permanently fences this adapter and releases subscriptions/DB handles,
+but retains its reads for reopening by the same identity. `logout()` fences synchronously,
+then deletes the same database (bodies and metadata) as the worker; it retains the outbox.
+The database namespace includes the full encoded WebID, so 32-bit hash collisions cannot
+cross accounts. Old hash-only databases and Cache API copies are also purged on logout.
+Old stores are not migrated or served; the first online read populates the new namespace.
+
+`start()` watches the root plus up to 49 read resources using pod-notifications; resource
+subscriptions cover edits that Solid container subscriptions cannot observe. It reconciles
+on setup, first-live and resync. Call it again on reconnect if initial setup failed/offline.
+You may instead feed normalized changes through `notify(frame)` and call `resync()` yourself.
+`indexedDB`, `isOnline`, `now` and `notificationsClient` are injectable test seams. Individual bodies are limited to 25 MiB (declared and streamed); larger reads stay
+network-only. Cache storage failure preserves an available network answer; offline disk failures fail closed.
+Actual WebView persistence and service-worker lifecycle still require device/browser checks.
 
 ## Response cache provenance
 
@@ -138,7 +191,8 @@ const unsubscribe = outbox.on('change', () => renderQueue(outbox.pending()));
 `write`, `writeRdf`, `create`, and `delete` queue only with `offline: 'queue'`, when the
 browser reports offline or the operation fails with a network error. Other failures still
 throw. A queued write/create returns `{ url, etag: null, created: false, queued: true }`;
-`delete` continues to return void. Calls without the option pass through to storage.
+`delete` continues to return void. Calls without `offline` or `guard` pass through to storage
+when no registered guard policy requires a guard.
 `patch` and `move` remain unqueueable in v1. Bodies, including streams, are captured before
 an opted-in attempt, so a failed upload cannot consume the only local copy. This buffers
 the complete body in memory. Queued `writeRdf` bodies retain Turtle or expanded, context-free JSON-LD as requested.
@@ -156,6 +210,88 @@ the client supplied by `withOutbox` or the most recent `replay`. Progress is rep
 in bytes at start `(0, size)` and successful completion `(size, size)`; streaming upload
 progress is a later improvement. Deletes have size zero.
 
+For application policy checks, pass `guard: { tag, assertions? }` to `enqueue` or to the
+decorated `write`, `writeRdf`, `create`, and `delete` options alongside `offline: 'queue'`:
+
+```ts
+// Trusted application scope, registered independently of the editable queue records.
+const stopPolicy = outbox.registerGuardPolicy('app.policy-v1', ({ url, container }) =>
+  (container ?? url).startsWith(protectedContainerUrl),
+);
+const unregister = outbox.registerDelegate('app.policy-v1', async (delivery, { storage, signal }) => {
+  await verifyPolicy(delivery.assertions, delivery.url, signal);
+  // Dispatch delivery.op using delivery's actual URL, bytes, validators and create/delete options.
+  return deliverVerifiedOperation(storage, delivery, signal);
+});
+await queuedStorage.write(documentUrl, bytes, {
+  contentType: 'text/plain', ifMatch: documentEtag, offline: 'queue',
+  guard: { tag: 'app.policy-v1', assertions: { policyEtag: capturedPolicyEtag } },
+});
+// Later: unregister(); stopPolicy();
+```
+
+`OutboxGuard` tags match `/^[a-z][a-z0-9.-]{0,63}$/`. Assertions must be plain JSON
+(`JsonValue`), at most 16 KiB serialized as UTF-8, depth 32 (assertion root at depth zero),
+and 2,000 visited values. Depth, value-count and byte budgets are enforced during copying;
+the byte budget counts keys, strings, escaping and punctuation before full serialization.
+Enumeration of keys on a same-origin caller's own objects is not bounded by these budgets.
+Array lengths are checked against the remaining value budget before enumeration. Undefined,
+non-finite numbers, sparse arrays, accessors, class instances and cycles are rejected.
+Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
+JSON string for IndexedDB. Hydration reads only the stored envelope's `tag` and
+`assertions` fields, without enumerating its keys, and ignores any other stored key.
+It checks the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
+then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
+Invalid stored guards become failed items and cannot be sent, including through retry.
+`pending()` exposes only the read-only `guard.tag`, never assertions.
+
+`registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
+described only by `{ op, url, container? }`. On hydration and immediately before delivery,
+each matching policy requires its own tag; a throwing matcher counts as a match. Stripped
+guards and guards with another tag leave replay waiting with `blocked: 'guard-required'`,
+hold later same-URL work and allow other URLs to proceed. Online calls through `withOutbox`
+reject before network I/O, even without queue opt-in; `mine`/`both` reject and retain conflicts.
+Checks also cover the transformed conflict-copy request. URLs use StorageClient's canonical
+destination (including dot segments and the slashless storage-root alias). Named Solid creates
+describe the exact encoded child and its kind; LWS creates describe the container because the
+server chooses the identifier. LWS names such as `Report 2026/2027` remain hints, validated by
+StorageClient. Unnamed ordinary creates and advertised trash-command creates also describe the
+container. Bind the backend with `withOutbox(storage, outbox)` before direct LWS enqueues;
+enqueues without a client use Solid naming. Policies are
+session-local, never persisted, and must be reinstalled for each active session before replay.
+The shell session exposes the same `registerGuardPolicy(tag, matches)` lifecycle alongside
+`registerReplayDelegate`. No registered matching policy preserves legacy unguarded delivery.
+Delegates still verify assertions against trusted application state.
+
+Enqueue snapshots the dispatch options and persists a canonical request description, using the
+effective `createOptions.name` and `kind` rather than a preview URL or display name. Hydration
+and every replay, retry and mine/both delivery recompute it from the dispatch arguments. A
+mismatch fails the item before storage calls, including resolution HEADs. Legacy records acquire
+the description when a StorageClient is attached; policies still check their recomputed scope.
+This consistency check does not authenticate IndexedDB against coordinated edits of all fields;
+trusted session policies and delegate assertion checks remain the authorization boundary.
+
+Every guarded delivery uses the registered `ReplayDelegate`, including online attempts and
+conflict resolutions. Its `GuardedDelivery` snapshot contains `op`, `url`, optional `container`,
+`name`, `contentType`, `ifMatch`, `keepalive`, `createOptions`, `deleteOptions`, private `assertions`, and a
+`Uint8Array | null` body. `purpose` is `replay`, `resolve-mine`, or `resolve-both`. Resolution
+supplies the actual overwrite or copy request, with the fresh validator or create-only name.
+Delegates receive the underlying StorageClient and an AbortSignal; use that client rather than
+the queue decorator to avoid recursive delivery. Body, options and assertions are defensive copies.
+Delegate network, precondition and other replay errors follow the usual queue classification.
+Failed resolution retains the conflict, as it does for unguarded requests.
+`keepalive` survives guarded write/writeRdf/create/delete online attempts, queuing and conflict
+resolution. Guarded delete accepts it for delegate transports; the underlying StorageClient
+delete API does not itself provide a keepalive option.
+
+Registrations belong to one outbox instance and session. Duplicate tags throw; unregister is
+idempotent. Missing delegates leave replay items waiting with `blocked: 'no-delegate'`, hold
+later work for the same URL, and allow other URLs to proceed without reporting delivery progress.
+Register later and replay explicitly to deliver them. Online guarded attempts refuse a missing
+delegate; guarded `mine`/`both` resolutions refuse and retain the conflict. `theirs` needs no
+delegate. Guard enforcement also applies when queue opt-in is omitted, without queuing failures.
+`close()` clears delegate and policy registrations and aborts guarded requests. Delegates and credentials are never persisted.
+
 `conflicts()` returns metadata; `await localBody(conflictId)` retrieves the local bytes without
 putting bodies in snapshots or broadcasts. `resolve(id, 'mine')` HEADs for a current ETag and
 conditionally overwrites (or deletes); an absent ETag or a failed request retains the conflict.
@@ -169,7 +305,7 @@ WebID's outbox to recover unsent changes; `await outbox.purge()` explicitly disc
 **Logout purges read caches but retains the outbox.** `offline.close()`/`logout()` removes online
 listeners and aborts replay; instantiate/register the next client only for its active session.
 The configured queue's WebID must match `createOfflineClient`'s WebID. `outbox.close()` releases
-its listeners without purging persisted items. Browser Web Locks serialize replay across tabs;
+its listeners and delegates without purging persisted items. Browser Web Locks serialize replay across tabs;
 without Web Locks, only same-realm instances are serialized. Cross-tab changes refresh snapshots
 and emit `change`/`conflict` events without broadcasting bodies, credentials, URLs or ETags.
 Network failures after a server commits a mutation remain ambiguous; the queue does not promise
@@ -191,7 +327,7 @@ by exactly one terminal message:
 | Event | Meaning | Status for a tracked URL |
 | --- | --- | --- |
 | `revalidating` | Revalidation started | `pending` |
-| `revalidated` | A conditional 304 or matching sweep HEAD confirmed the existing bytes | `fresh`, preserving an unread `updated` |
+| `revalidated` | A conditional 304, matching sweep HEAD, or completed authoritative read without a cached representation change | `fresh`, preserving an unread `updated` |
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
 | `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
@@ -203,6 +339,12 @@ Direct delete purges also emit balanced `revalidating` / `updated` events (or
 `revalidate-failed` if the purge fails), without fetching. Offline cache hits,
 ETag notification short-circuits, and skipped SWR validations emit no lifecycle events.
 An unsolicited 304 on an unconditional listing refresh fails confirmation.
+Network-first and forced reads emit `updated` only when a previously cached representation
+changes (ETag, status, content type or bounded body comparison) or is evicted. Initial cache
+fills and repeated uncacheable reads complete with `revalidated`, so subscribers can reread
+on `updated` without creating a refresh loop. Real notifications retain their change events.
+Custom invalidation drivers can supply `InvalidateDeps.beforeChange(url)` to fence pending
+reads before resource, membership or cursor-page invalidation; ETag no-ops skip that callback.
 
 The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
 `markPending`. Parallel observed attempts keep a URL pending until all settle. Attempt IDs

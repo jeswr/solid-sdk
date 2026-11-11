@@ -33,6 +33,8 @@ export interface InvalidateDeps {
   storage: StorageClient;
   broadcast: Broadcaster;
   now(): number;
+  /** Fence pending reads of an actionable resource or membership target before I/O. */
+  beforeChange?(url: string): void;
 }
 
 /** Outcome of handling a single notification frame — returned for tests + observability. */
@@ -107,18 +109,16 @@ async function invalidateResource(
   opts: { deleted: boolean },
 ): Promise<InvalidateOutcome> {
   const records = await deps.meta.getByUrl(url);
-  if (records.length === 0) {
-    // We hold nothing for this resource. A Create we never warmed is not our
-    // concern (the page will fetch it on demand → P1 caches it then).
-    return { kind: 'not-cached' };
-  }
-
   // THE ETAG SHORT-CIRCUIT: a self-caused change is free.
   if (state !== undefined && records.some((r) => r.etag === state)) {
     // Remember the state so a later identical frame is still recognized as a no-op.
     await deps.meta.setLastState(url, state);
     return { kind: 'short-circuit' };
   }
+
+  // Even an uncached resource may have an older read currently buffering.
+  deps.beforeChange?.(url);
+  if (records.length === 0) return { kind: 'not-cached' };
 
   if (opts.deleted) {
     // Balance the purge's terminal event so it cannot settle an unrelated fetch.
@@ -244,10 +244,16 @@ async function readResource(
       // Replace the whole resource: drop stale OTHER variants before writing the
       // new canonical one (so lookup can't keep matching an old Vary row).
       await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonicalBytes(deps.cache, rl, fresh);
-      await deps.meta.put(
-        metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag),
-      );
+      await putCanonicalBytes(deps.cache, rl, fresh, {
+        store: deps.meta,
+        record: metadataFromResponse(
+          rl,
+          resLike(fresh),
+          deps.now(),
+          decision.negative,
+          state ?? newEtag,
+        ),
+      });
       return { kind: 'updated', etag: newEtag };
     }
     // 2xx but NOT cacheable (Cache-Control: no-store / private). The resource is
@@ -276,6 +282,7 @@ async function refreshListing(
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
   const container = frame.target ?? frame.origin ?? frame.object;
+  deps.beforeChange?.(container);
   const records = await deps.meta.getByUrl(container);
   if (records.length === 0) {
     // We never cached this container listing → nothing to refresh.
@@ -319,16 +326,16 @@ async function refreshListing(
       // Replace the whole listing: drop stale OTHER variants before writing the new
       // canonical one.
       await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonicalBytes(deps.cache, rl, fresh);
-      await deps.meta.put(
-        metadataFromResponse(
+      await putCanonicalBytes(deps.cache, rl, fresh, {
+        store: deps.meta,
+        record: metadataFromResponse(
           rl,
           resLike(fresh),
           deps.now(),
           decision.negative,
           fresh.headers.get('etag') ?? undefined,
         ),
-      );
+      });
       // (The newly-added member is fetched lazily on first read — P1 caches it then.
       // We don't eagerly pull it: the warm budget owns proactive byte-warming.)
       return { kind: 'listing-refreshed' };
@@ -408,6 +415,7 @@ export async function resyncSweep(deps: InvalidateDeps): Promise<SweepResult> {
           }
           return { kind: '304-confirmed' };
         }
+        deps.beforeChange?.(url);
         return readResource(url, records, undefined, deps);
       });
     } catch {
