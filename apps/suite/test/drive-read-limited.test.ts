@@ -107,6 +107,106 @@ describe("DriveClient.readLimited", () => {
     expect((await client(bodyless(3)).client.readLimited(FILE, 3))?.size).toBe(3);
   });
 
+  it("refuses a URL outside the signed-in pod without fetching it", async () => {
+    for (const outside of [
+      "https://elsewhere.example/report.pdf",
+      "http://pod.example/drive/report.pdf",
+      "https://user:pw@pod.example/drive/report.pdf",
+    ]) {
+      const { fetch, client: drive } = client(() => new Response("x"));
+      await expect(drive.readLimited(outside, 10)).rejects.toMatchObject({ kind: "forbidden" });
+      expect(fetch).not.toHaveBeenCalled();
+    }
+    const scoped = vi.fn(async () => new Response("x"));
+    const nested = createSolidDriveClient({
+      storageUrl: "https://pod.example/alice/",
+      fetch: scoped,
+    });
+    await expect(nested.readLimited("https://pod.example/bob/x.pdf", 10)).rejects.toMatchObject({
+      kind: "forbidden",
+    });
+    await expect(
+      nested.readLimited("https://pod.example/alice/../bob/x.pdf", 10),
+    ).rejects.toMatchObject({ kind: "forbidden" });
+    expect(scoped).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unparseable URL and scopes a storage root given without a trailing slash", async () => {
+    const { fetch, client: drive } = client(() => new Response("x"));
+    await expect(drive.readLimited("not a url", 10)).rejects.toMatchObject({ kind: "forbidden" });
+    expect(fetch).not.toHaveBeenCalled();
+    const scoped = vi.fn(async () => new Response("abc"));
+    const bare = createSolidDriveClient({ storageUrl: "https://pod.example/alice", fetch: scoped });
+    await expect(bare.readLimited("https://pod.example/alicex/y.pdf", 10)).rejects.toMatchObject({
+      kind: "forbidden",
+    });
+    expect((await bare.readLimited("https://pod.example/alice/x.pdf", 10))?.size).toBe(3);
+    expect((await bare.readLimited("https://pod.example/alice", 10))?.size).toBe(3);
+  });
+
+  it("refuses a redirected response whether or not its body can be cancelled", async () => {
+    const bodyless = () => {
+      const response = new Response("x");
+      Object.defineProperty(response, "body", { value: null });
+      Object.defineProperty(response, "redirected", { value: true });
+      return response;
+    };
+    await expect(client(bodyless).client.readLimited(FILE, 10)).rejects.toMatchObject({
+      kind: "forbidden",
+    });
+    const stuck = () => {
+      const response = new Response("x");
+      vi.spyOn(response.body as ReadableStream, "cancel").mockRejectedValue(new Error("busy"));
+      Object.defineProperty(response, "redirected", { value: true });
+      return response;
+    };
+    await expect(client(stuck).client.readLimited(FILE, 10)).rejects.toMatchObject({
+      kind: "forbidden",
+    });
+  });
+
+  it("asks the fetch to refuse redirects", async () => {
+    const { fetch, client: drive } = client(() => new Response("x"));
+    await drive.readLimited(FILE, 10);
+    expect(fetch.mock.calls.at(-1)?.[1]).toMatchObject({ redirect: "error" });
+  });
+
+  it("refuses a response that followed a redirect, even within the pod", async () => {
+    const onCancel = vi.fn();
+    const redirected = (finalUrl: string) => () => {
+      const response = new Response(stream([new Uint8Array(1)], onCancel).body);
+      Object.defineProperty(response, "redirected", { value: true });
+      Object.defineProperty(response, "url", { value: finalUrl });
+      return response;
+    };
+    for (const finalUrl of ["https://elsewhere.example/x", `${ROOT}drive/other.pdf`]) {
+      await expect(client(redirected(finalUrl)).client.readLimited(FILE, 10)).rejects.toMatchObject(
+        { kind: "forbidden" },
+      );
+    }
+    expect(onCancel).toHaveBeenCalled();
+  });
+
+  it("refuses a final response URL outside the pod", async () => {
+    const moved = () => {
+      const response = new Response("x");
+      Object.defineProperty(response, "url", { value: "https://elsewhere.example/x" });
+      return response;
+    };
+    await expect(client(moved).client.readLimited(FILE, 10)).rejects.toMatchObject({
+      kind: "forbidden",
+    });
+  });
+
+  it("accepts a final response URL inside the pod", async () => {
+    const same = () => {
+      const response = new Response("abc");
+      Object.defineProperty(response, "url", { value: FILE });
+      return response;
+    };
+    expect((await client(same).client.readLimited(FILE, 10))?.size).toBe(3);
+  });
+
   it("rejects a failed read like read()", async () => {
     const { client: drive } = client(() => new Response(null, { status: 403 }));
     await expect(drive.readLimited(FILE, 10)).rejects.toThrow();

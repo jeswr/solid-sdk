@@ -707,9 +707,35 @@ export function createSolidDriveClient(options: {
 
   const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
 
+  // Native preview and save reads hand bytes to the OS, so they stay inside the
+  // signed-in pod: the request and the final response must both be in storage,
+  // and redirects are refused rather than followed.
+  const storageRoot = new URL(storageUrl);
+  const storagePath = storageRoot.pathname.endsWith("/")
+    ? storageRoot.pathname
+    : `${storageRoot.pathname}/`;
+  const inStorage = (target: string): boolean => {
+    try {
+      const candidate = new URL(target);
+      return (
+        candidate.origin === storageRoot.origin &&
+        !candidate.username &&
+        !candidate.password &&
+        (candidate.pathname.startsWith(storagePath) || `${candidate.pathname}/` === storagePath)
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const readLimited: DriveClient["readLimited"] = async (url, limit) => {
+    if (!inStorage(url)) throw new DriveError("forbidden", 403, url);
     await provision.check(url);
-    const response = await ensureOk(await http(url), url);
+    const response = await ensureOk(await http(url, { redirect: "error" }), url);
+    if (response.redirected || (response.url !== "" && !inStorage(response.url))) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new DriveError("forbidden", 403, url);
+    }
     rememberType(url, response.headers);
     const type = response.headers.get("content-type") ?? "";
     const declared = response.headers.get("content-length");
