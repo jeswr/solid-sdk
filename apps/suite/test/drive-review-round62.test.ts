@@ -118,13 +118,21 @@ it.each(
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const url = `${PRIVATE}${step === "Upload" ? "new" : "secret"}`;
   const selected = await client.stat(`${PRIVATE}secret`);
+  let readBack = false;
   f.after(async (target, method, response) => {
+    // sst-2vvz: the read-back of the written file offers no strong validator either.
+    if (readBack && target === url && method === "GET") {
+      readBack = false;
+      if (receipt === "missing") response.headers.delete("etag");
+      else response.headers.set("etag", 'W/"weak"');
+    }
     if (
       target === url &&
       method === "PUT" &&
       response.ok &&
       (await (await f.pod.fetch(url)).text()) === "our upload"
     ) {
+      readBack = true;
       if (receipt === "missing") response.headers.delete("etag");
       else response.headers.set("etag", 'W/"weak"');
     }
