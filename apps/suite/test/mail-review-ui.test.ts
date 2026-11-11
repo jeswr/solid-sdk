@@ -107,6 +107,7 @@ beforeEach(() => {
         },
         read: false,
         starred: false,
+        draft: false,
         labels: [],
         attachments: [],
       },
