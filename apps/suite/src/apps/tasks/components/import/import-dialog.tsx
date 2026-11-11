@@ -28,7 +28,7 @@ import {
   TodoistImportError,
   type TodoistImportErrorCode,
 } from "../../lib/todoist";
-import { importProject } from "../../state/import-project";
+import { importProject, type ProjectImportState } from "../../state/import-project";
 import { useTasks } from "../../state/tasks-context";
 import "./import.css";
 
@@ -79,6 +79,7 @@ interface ImportSelection {
   draft: ProjectImportDraft;
   name: string;
   checked: boolean;
+  resume: ProjectImportState;
 }
 
 export function TasksImportDialog() {
@@ -152,6 +153,7 @@ export function TasksImportDialog() {
           draft,
           name: draft.name,
           checked: true,
+          resume: {},
         })),
       );
     } catch (cause) {
@@ -181,17 +183,25 @@ export function TasksImportDialog() {
       let failed = 0;
       let setupFailed = 0;
       let offset = 0;
-      for (const { id: projectId, draft, name } of selected) {
+      for (const { id: projectId, draft, name, resume } of selected) {
         if (job.signal.aborted) break;
         try {
-          const result = await importProject(cache, draft, name.trim(), job.signal, (done) => {
-            if (controller.current === job) setProgress(offset + done);
-          });
+          const result = await importProject(
+            cache,
+            draft,
+            name.trim(),
+            job.signal,
+            (done) => {
+              if (controller.current === job) setProgress(offset + done);
+            },
+            resume,
+          );
+          if (result.warning) toast.warning(result.warning);
           imported += result.imported;
           failed += result.failed;
           if (result.project) {
             created.push({ title: name.trim(), href: `/tasks/p/${encodeRef(result.project.url)}` });
-            completed.add(projectId);
+            if (!result.failed) completed.add(projectId);
           } else if (!job.signal.aborted) setupFailed++;
         } catch {
           if (!job.signal.aborted) {
@@ -222,7 +232,7 @@ export function TasksImportDialog() {
         );
       else toast.success(`Imported ${imported} tasks into ${title}`, { description });
       if (controller.current !== job) return;
-      if (setupFailed && !job.signal.aborted) {
+      if ((failed || setupFailed) && !job.signal.aborted) {
         // A retry must never create another project for a list already processed in this batch.
         setProjects((current) => current.filter((project) => !completed.has(project.id)));
         setError("Could not finish the import. Already-created tasks stay in the new projects.");
@@ -289,7 +299,7 @@ export function TasksImportDialog() {
             {error}
           </p>
         )}
-        {projects.map(({ id: projectId, draft, name, checked }, index) => (
+        {projects.map(({ id: projectId, draft, name, checked, resume }, index) => (
           <fieldset key={projectId} className="tsk-import-project">
             {kind === "google" && (
               <>
@@ -310,7 +320,7 @@ export function TasksImportDialog() {
               id={`${id}-name-${index}`}
               aria-label={kind === "google" ? `Project name for ${draft.name}` : undefined}
               value={name}
-              disabled={busy || !checked}
+              disabled={busy || !checked || !!resume.create}
               onChange={(event) => change(index, { name: event.target.value })}
             />
             <p>

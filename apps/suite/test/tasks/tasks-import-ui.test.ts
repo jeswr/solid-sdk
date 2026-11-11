@@ -5,7 +5,7 @@ import { act, createElement, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksImportDialog } from "../../src/apps/tasks/components/import/import-dialog";
-import { DataFactory, NS, SCHED } from "../../src/apps/tasks/lib/model/rdf";
+import { DataFactory, NS, parse, SCHED, SCHEMA } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import { parseTodoistCsv } from "../../src/apps/tasks/lib/todoist";
 import { importProject } from "../../src/apps/tasks/state/import-project";
@@ -26,7 +26,7 @@ vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 function query<T extends Element>(selector: string): T {
   const found = document.querySelector<T>(selector);
@@ -57,6 +57,14 @@ async function finished() {
   await act(async () => {
     await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
   });
+}
+async function retryable() {
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(document.querySelector('input[type="file"]:disabled')).toBeNull(),
+    );
+  });
+  expect(query('[role="alert"]').textContent).toContain("Could not finish the import.");
 }
 function taskWrite(request: RequestRecord) {
   return request.method === "PUT" && /\/work\/[^/]+\.ttl$/.test(request.url);
@@ -301,17 +309,32 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
   it("keeps successes, skips a failed parent's children, and reports the failure count", async () => {
     await pick("TYPE,CONTENT,INDENT\ntask,Failed parent,1\ntask,Child,2\ntask,Success,1");
     const create = cache.store.createTask.bind(cache.store);
-    vi.spyOn(cache.store, "createTask").mockImplementation(async (...args) => {
+    const writes = vi.spyOn(cache.store, "createTask").mockImplementation(async (...args) => {
       if (args[1].title === "Failed parent") throw new Error("Write failed");
       return create(...args);
     });
     await click("Import 3 tasks");
-    await finished();
+    await retryable();
     expect(cache.getSnapshot().views.map((item) => item.title)).toEqual(["Success"]);
     expect(toast.error).toHaveBeenCalledWith(
       "Imported 1 tasks into Work. 2 tasks failed.",
       expect.anything(),
     );
+    const project = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    const success = cache.getSnapshot().views[0];
+    writes.mockImplementation(create);
+    await click("Import 3 tasks");
+    await finished();
+    expect(cache.getSnapshot().projects.filter((item) => item.url !== inbox.url)).toEqual([
+      project,
+    ]);
+    const tasks = await cache.store.listTasks(project?.tracker.stateStore as string);
+    expect(tasks).toHaveLength(3);
+    expect(tasks.find((item) => item.task.title === "Success")?.url).toBe(success?.url);
+    const parent = tasks.find((item) => item.task.title === "Failed parent");
+    expect(tasks.find((item) => item.task.title === "Child")?.task.parent).toBe(parent?.task.id);
+    expect(writes.mock.calls.filter(([, data]) => data.title === "Success")).toHaveLength(1);
+    expect(toast.success).toHaveBeenCalledWith("Imported 3 tasks into Work", expect.anything());
   });
 
   it("counts a task whose response was lost only after checking the stored payload", async () => {
@@ -335,21 +358,95 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
     expect(cache.getSnapshot().views[0]?.due).toEqual(new Date(2026, 6, 1, 15, 30));
   });
 
-  it("keeps the new project and reports setup failures without a background retry", async () => {
+  it("retries section setup in the existing project without a background retry", async () => {
     await pick("TYPE,CONTENT\nsection,Doing\ntask,Title");
     const update = cache.store.updateProject.bind(cache.store);
-    vi.spyOn(cache.store, "updateProject").mockImplementation(async (project, change) => {
-      if (project.tracker.position !== undefined) throw new Error("Section write failed");
-      return update(project, change);
-    });
+    const updates = vi
+      .spyOn(cache.store, "updateProject")
+      .mockImplementation(async (project, change) => {
+        if (project.tracker.position !== undefined) throw new Error("Section write failed");
+        return update(project, change);
+      });
     await click("Import 1 tasks");
-    await finished();
+    await retryable();
     expect(cache.getSnapshot().projects.some((item) => item.tracker.title === "Work")).toBe(true);
     expect(cache.getSnapshot().views).toHaveLength(0);
     expect(toast.error).toHaveBeenCalledWith(
       "Imported 0 tasks into Work. 1 tasks failed.",
       expect.anything(),
     );
+    const project = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    const creates = pod
+      .mutations()
+      .filter((request) => request.headers.get("If-None-Match") === "*");
+    updates.mockImplementation(update);
+    await click("Import 1 tasks");
+    await finished();
+    expect(
+      cache
+        .getSnapshot()
+        .projects.filter((item) => item.url !== inbox.url)
+        .map((item) => item.url),
+    ).toEqual([project?.url]);
+    expect(
+      pod.mutations().filter((request) => request.headers.get("If-None-Match") === "*"),
+    ).toHaveLength(creates.length + 1);
+    const saved = await cache.store.readProject(project?.url as string);
+    expect(saved.tracker.sections.map((section) => section.name)).toEqual(["Doing"]);
+    expect(await cache.store.listTasks(saved.tracker.stateStore as string)).toHaveLength(1);
+  });
+
+  it("continues importing into the created project when its position write returns 503", async () => {
+    await pick("TYPE,CONTENT\ntask,Title");
+    let rejected = 0;
+    pod.intercept = async (request) => {
+      if (request.method !== "PUT" || !request.url.endsWith("/work.ttl")) return;
+      const rdf = await parse(request.url, request.body);
+      if (
+        rdf.getObjects(
+          DataFactory.namedNode(`${request.url}#this`),
+          DataFactory.namedNode(`${SCHEMA}position`),
+          null,
+        ).length
+      ) {
+        rejected++;
+        return new Response("Position unavailable", { status: 503 });
+      }
+    };
+    await click("Import 1 tasks");
+    await finished();
+    expect(rejected).toBe(1);
+    expect(
+      (await cache.store.listProjects()).map((project) => project.url.split("/").pop()),
+    ).toEqual(["inbox.ttl", "work.ttl"]);
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["Title"]);
+    expect(toast.warning).toHaveBeenCalledWith("Couldn't save the project's position");
+    expect(toast.success).toHaveBeenCalledWith("Imported 1 tasks into Work", expect.anything());
+  });
+
+  it("retains the project and saved sections when a later import step throws", async () => {
+    await pick("TYPE,CONTENT\nsection,Doing\ntask,Title @work");
+    const ensure = cache.ensureLabels.bind(cache);
+    vi.spyOn(cache, "ensureLabels")
+      .mockRejectedValueOnce(new Error("Later setup failed"))
+      .mockImplementation(ensure);
+    await click("Import 1 tasks");
+    await retryable();
+    const project = cache.getSnapshot().projects.find((item) => item.tracker.title === "Work");
+    await click("Import 1 tasks");
+    await finished();
+    expect(
+      (await cache.store.listProjects())
+        .filter((item) => item.url !== inbox.url)
+        .map((item) => item.url),
+    ).toEqual([project?.url]);
+    const saved = await cache.store.readProject(project?.url as string);
+    expect(saved.tracker.sections.map((section) => section.name)).toEqual(["Doing"]);
+    expect(saved.tracker.labels.map((label) => label.name)).toEqual(["work"]);
+    const tasks = await cache.store.listTasks(saved.tracker.stateStore as string);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.task.types.has(saved.tracker.sections[0]?.id as string)).toBe(true);
+    expect(tasks[0]?.task.types.has(saved.tracker.labels[0]?.id as string)).toBe(true);
   });
 
   it("cancels on unmount while preserving in-flight writes and stops project navigation", async () => {
@@ -486,6 +583,78 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
 });
 
 describe("Google Tasks through the shared import dialog", () => {
+  it("reuses its tracker reservation when the create response is lost", async () => {
+    await pick(
+      '{"kind":"tasks#tasks","items":[{"id":"task","title":"Task","position":"01","status":"needsAction"}]}',
+      "Tasks.json",
+    );
+    let lost = false;
+    pod.intercept = (request) => {
+      if (
+        !lost &&
+        request.method === "PUT" &&
+        request.url.endsWith("/imported-tasks.ttl") &&
+        request.headers.get("If-None-Match") === "*"
+      ) {
+        lost = true;
+        pod.seed(request.url, request.body);
+        throw new TypeError("Response lost");
+      }
+    };
+    await click("Import 1 tasks");
+    await retryable();
+    expect(lost).toBe(true);
+    await click("Import 1 tasks");
+    await finished();
+    const projects = (await cache.store.listProjects()).filter(
+      (project) => project.url !== inbox.url,
+    );
+    expect(projects.map((project) => project.url.split("/").pop())).toEqual(["imported-tasks.ttl"]);
+    expect(await cache.store.listTasks(projects[0]?.tracker.stateStore as string)).toHaveLength(1);
+  });
+
+  it("retries a failed child in its saved parent's project while leaving the other list complete", async () => {
+    await pick(takeout, "Tasks.json");
+    pod.intercept = async (request) => {
+      if (!taskWrite(request)) return;
+      const rdf = await parse(request.url, request.body);
+      if (
+        rdf
+          .getObjects(
+            DataFactory.namedNode(`${request.url}#it`),
+            DataFactory.namedNode(`${NS.DCT}title`),
+            null,
+          )
+          .some((title) => title.value === "Child")
+      )
+        return new Response("Child unavailable", { status: 503 });
+    };
+    await click("Import 3 tasks");
+    await retryable();
+    const parent = cache.getSnapshot().views.find((task) => task.title === "Finished");
+    const other = cache.getSnapshot().views.find((task) => task.title === "SECRET other task");
+    expect(parent).toBeDefined();
+    expect(other).toBeDefined();
+    expect([...document.querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual([
+      "Work",
+    ]);
+    const writes = pod.mutations().length;
+    pod.intercept = undefined;
+    await click("Import 2 tasks");
+    await finished();
+    expect((await cache.store.listProjects()).map((project) => project.tracker.title)).toEqual([
+      "Inbox",
+      "Work",
+      "Personal",
+    ]);
+    const tasks = cache.getSnapshot().views;
+    expect(tasks).toHaveLength(3);
+    expect(tasks.find((task) => task.title === "Finished")?.url).toBe(parent?.url);
+    expect(tasks.find((task) => task.title === "Child")?.parentId).toBe(parent?.id);
+    expect(tasks.find((task) => task.title === "SECRET other task")?.url).toBe(other?.url);
+    expect(pod.mutations()).toHaveLength(writes + 1);
+  });
+
   it("keeps a completed task without a timestamp closed without inventing its completion time", async () => {
     await pick(
       '{"kind":"tasks#tasks","items":[{"id":"done","title":"Done","position":"01","status":"completed"}]}',
@@ -668,12 +837,15 @@ describe("Google Tasks through the shared import dialog", () => {
       return create(...args);
     });
     await click("Import 3 tasks");
-    await finished();
+    await retryable();
     expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["SECRET other task"]);
     expect(toast.error).toHaveBeenCalledWith(
       "Imported 1 tasks into 2 projects. 2 tasks failed.",
       expect.anything(),
     );
+    expect([...document.querySelectorAll("legend")].map((legend) => legend.textContent)).toEqual([
+      "Work",
+    ]);
   });
 
   it("creates checked empty lists, and explains an export without lists", async () => {
@@ -766,8 +938,8 @@ describe("Google Tasks through the shared import dialog", () => {
     expect(cache.getSnapshot().projects.map((project) => project.tracker.title)).toEqual([
       "Inbox",
       "First",
-      "Last",
       "Failed",
+      "Last",
     ]);
     expect(cache.getSnapshot().views).toHaveLength(2 + failedTasks);
     for (const project of projects) {
