@@ -43,6 +43,8 @@ import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
+import { useCalendarExchange } from "./calendar-exchange/calendar-exchange";
+import "./calendar-exchange/calendar-exchange.css";
 import { useDropTarget } from "./dnd/use-task-drag";
 import { ShareProject } from "./share-project";
 
@@ -74,6 +76,7 @@ function ProjectRow({
   last: boolean;
 }) {
   const tasks = useTasks();
+  const calendar = useCalendarExchange(project);
   const path = useRoutePathname();
   const router = useRouter();
   const [sharing, setSharing] = useState(false);
@@ -122,6 +125,7 @@ function ProjectRow({
           </IconButton>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
+          {calendar.items}
           <DropdownMenuItem
             disabled={!project.etag}
             onSelect={() => {
@@ -170,6 +174,7 @@ function ProjectRow({
         </DropdownMenuContent>
       </DropdownMenu>
       {sharing && <ShareProject project={project} onClose={() => setSharing(false)} />}
+      {calendar.dialog}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>

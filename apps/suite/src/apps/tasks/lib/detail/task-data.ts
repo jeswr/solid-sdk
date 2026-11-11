@@ -51,6 +51,7 @@ export function duplicateTaskData(item: StoredTask, creator: string): TaskDetail
     endedAt: _endedAt,
     clonedFrom: _clonedFrom,
     duplicateOf: _duplicateOf,
+    calendarUid: _calendarUid,
     ...data
   } = copyTaskData(item);
   return { ...data, state: "open", creator };
