@@ -28,8 +28,8 @@ async function setup(
   let draft!: ReturnType<typeof useNoteDraft>;
   const refresh = vi.fn(async () => {});
   const store = { save, read } as unknown as NotesStore;
-  function Harness() {
-    draft = useNoteDraft(original, store, refresh, pending);
+  function Harness({ note = original }: { note?: StoredNote }) {
+    draft = useNoteDraft(note, store, refresh, pending);
     return null;
   }
   const rendered = await mount(h(Harness));
@@ -41,9 +41,61 @@ async function setup(
     read,
     refresh,
     ...rendered,
+    refreshNote: (note: StoredNote) => rendered.render(h(Harness, { note })),
   };
 }
 describe("Notes autosave", () => {
+  it("adopts a clean refreshed baseline, including text, labels and its ETag", async () => {
+    const ui = await setup();
+    const latest = { ...original, title: "Remote", labels: ["Updated"], etag: '"remote"' };
+    await ui.refreshNote(latest);
+    expect(ui.draft.draft).toEqual({ title: "Remote", body: original.body, labels: ["Updated"] });
+    await act(() => ui.draft.change({ body: "After refresh" }));
+    await act(() => ui.draft.flush());
+    expect(ui.save).toHaveBeenCalledExactlyOnceWith(
+      latest,
+      { title: "Remote", body: "After refresh", labels: ["Updated"] },
+      latest.etag,
+    );
+  });
+
+  it("preserves a dirty draft and its conditional baseline when props refresh", async () => {
+    const ui = await setup();
+    await act(() => ui.draft.change({ title: "Unsaved" }));
+    await ui.refreshNote({ ...original, title: "Remote", etag: '"remote"' });
+    expect(ui.draft.draft.title).toBe("Unsaved");
+    await act(() => ui.draft.flush());
+    expect(ui.save).toHaveBeenCalledExactlyOnceWith(
+      original,
+      { title: "Unsaved", body: original.body, labels: [] },
+      original.etag,
+    );
+  });
+
+  it("keeps an in-flight writer's acknowledged ETag across a prop refresh", async () => {
+    const saving = deferred<StoredNote>();
+    const saved = { ...original, title: "Mine", etag: '"v2"' };
+    const save = vi
+      .fn()
+      .mockReturnValueOnce(saving.promise)
+      .mockResolvedValue({ ...saved, etag: '"v3"' });
+    const ui = await setup(save);
+    await act(() => ui.draft.change({ title: "Mine" }));
+    await act(() => {
+      void ui.draft.flush();
+    });
+    await ui.refreshNote({ ...original, title: "Remote", etag: '"remote"' });
+    expect(ui.draft.draft.title).toBe("Mine");
+    await act(() => saving.resolve(saved));
+    await act(() => ui.draft.change({ body: "Next edit" }));
+    await act(() => ui.draft.flush());
+    expect(save).toHaveBeenLastCalledWith(
+      saved,
+      { title: "Mine", body: "Next edit", labels: [] },
+      saved.etag,
+    );
+  });
+
   it("debounces the last edit for 800ms and passes the current If-Match validator", async () => {
     vi.useFakeTimers();
     const ui = await setup();

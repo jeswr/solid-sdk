@@ -26,6 +26,16 @@ export function useNoteDraft(
     pending.get(note.url)?.status ?? "saved",
   );
   const [modified, setModified] = useState(note.modified ?? note.created);
+  useEffect(() => {
+    // A refreshed resource can acknowledge a card/other writer's non-text save.
+    // Never replace a durable dirty draft or an in-flight writer's baseline.
+    if (pending.get(note.url)) return;
+    baseline.current = note;
+    const value = { title: note.title, body: note.body, labels: note.labels };
+    current.current = value;
+    setDraft(value);
+    setModified(note.modified ?? note.created);
+  }, [note, pending]);
   const save = useCallback<NotesStore["save"]>((...args) => store.save(...args), [store]);
   const flush = useCallback(() => pending.flush(baseline.current, save), [pending, save]);
   useEffect(() => {

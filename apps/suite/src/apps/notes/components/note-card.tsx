@@ -56,7 +56,7 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
       <button
         type="button"
         className="notes-card-body"
-        disabled={pending}
+        disabled={busy || pending}
         onClick={(event) => openNote(note, event.currentTarget)}
         aria-label={`Open ${note.title || "Untitled note"}`}
       >

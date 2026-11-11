@@ -13,9 +13,9 @@ import {
   reminderInput,
   reminderPreset,
 } from "../src/apps/notes/lib/reminders/dates";
+import { createMemoryFiredStore } from "../src/apps/notes/lib/reminders/fired-store";
 import {
   createReminderScheduler,
-  MAX_FIRED_REMINDERS,
   MAX_REMINDER_DELAY,
 } from "../src/apps/notes/lib/reminders/scheduler";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -184,46 +184,26 @@ describe("reminders selection", () => {
 });
 
 describe("reminder scheduler", () => {
-  function fixture(initial: string | null = null) {
-    const values = new Map<string, string>();
-    if (initial !== null) values.set("suite.notes.reminders.fired.alice", initial);
-    const storage = {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => {
-        values.set(key, value);
-      },
-    };
+  function fixture() {
+    const fired = createMemoryFiredStore();
     const notify = vi.fn();
-    return {
-      values,
-      storage,
-      notify,
-      scheduler: createReminderScheduler({ account: "alice", storage, notify }),
-    };
+    return { fired, notify, scheduler: createReminderScheduler({ fired, notify }) };
   }
   const due = note({ reminder: NOW.toISOString() });
-  it("fires once, survives reload and isolates accounts and changed times", () => {
+  it("fires once, survives scheduler reload and permits changed times", async () => {
     const s = fixture();
-    s.scheduler.tick([due], NOW.getTime());
-    s.scheduler.tick([due], NOW.getTime());
+    await s.scheduler.tick([due], NOW.getTime());
+    await s.scheduler.tick([due], NOW.getTime());
     expect(s.notify).toHaveBeenCalledExactlyOnceWith(due);
-    createReminderScheduler({ account: "alice", storage: s.storage, notify: s.notify }).tick(
-      [due],
-      NOW.getTime(),
-    );
+    await createReminderScheduler({ fired: s.fired, notify: s.notify }).tick([due], NOW.getTime());
     expect(s.notify).toHaveBeenCalledTimes(1);
-    createReminderScheduler({ account: "bob", storage: s.storage, notify: s.notify }).tick(
-      [due],
-      NOW.getTime(),
-    );
-    expect(s.notify).toHaveBeenCalledTimes(2);
-    s.scheduler.tick(
+    await s.scheduler.tick(
       [note({ reminder: new Date(NOW.getTime() - 1).toISOString() })],
       NOW.getTime(),
     );
-    expect(s.notify).toHaveBeenCalledTimes(3);
+    expect(s.notify).toHaveBeenCalledTimes(2);
   });
-  it("skips old, future, invalid and trashed reminders, deferring hidden delivery", () => {
+  it("skips old, future, invalid and trashed reminders, deferring hidden delivery", async () => {
     const s = fixture();
     const notes = [
       due,
@@ -233,9 +213,9 @@ describe("reminder scheduler", () => {
       note({ reminder: undefined }),
       note({ location: "trashed" }),
     ];
-    s.scheduler.tick(notes, NOW.getTime(), false);
+    await s.scheduler.tick(notes, NOW.getTime(), false);
     expect(s.notify).not.toHaveBeenCalled();
-    s.scheduler.tick(notes, NOW.getTime(), true);
+    await s.scheduler.tick(notes, NOW.getTime(), true);
     expect(s.notify).toHaveBeenCalledExactlyOnceWith(due);
     expect(s.scheduler.nextDelay(notes, NOW.getTime())).toBe(8 * 60 * 60_000);
     expect(
@@ -253,37 +233,40 @@ describe("reminder scheduler", () => {
       MAX_REMINDER_DELAY,
     );
   });
-  it("handles corrupt, non-array and malformed records, prunes 30-day history and bounds writes", () => {
-    for (const initial of ["{", "{}", '[null,{},[2,3],["bad","time"]]']) {
-      const s = fixture(initial);
-      s.scheduler.tick([due], NOW.getTime());
-      expect(s.notify).toHaveBeenCalledTimes(1);
-    }
-    const records = Array.from({ length: MAX_FIRED_REMINDERS + 3 }, (_, i) => [
-      `key-${i}`,
-      NOW.getTime() - i,
-    ]);
-    records.push(["expired", NOW.getTime() - 30 * DAY], ["future", NOW.getTime() + 1]);
-    const s = fixture(JSON.stringify(records));
-    s.scheduler.tick([], NOW.getTime());
-    const stored = JSON.parse([...s.values.values()][0] as string);
-    expect(stored).toHaveLength(MAX_FIRED_REMINDERS);
-    expect(stored.flat()).not.toContain("expired");
-    expect(stored.flat()).not.toContain("future");
-    expect(stored.at(-1)[0]).toBe("key-0");
-  });
-  it("continues and deduplicates in memory when storage reads and writes throw", () => {
-    const fail = () => {
-      throw new Error("blocked");
-    };
-    const notify = vi.fn();
-    const scheduler = createReminderScheduler({
-      account: "alice",
-      storage: { getItem: fail, setItem: fail },
-      notify,
+  it("does not repeat after archive and unarchive, even if a collision renames the file", async () => {
+    const pod = createDemoPod({ root: "https://pod.example/" });
+    let now = NOW;
+    const store = createNotesStore({
+      podRoot: "https://pod.example/",
+      webId: "https://pod.example/#me",
+      fetch: pod.fetch,
+      now: () => now,
     });
-    scheduler.tick([due], NOW.getTime());
-    scheduler.tick([due], NOW.getTime());
-    expect(notify).toHaveBeenCalledTimes(1);
+    await store.archive(await store.create({ title: "Reminder" }));
+    now = new Date(NOW.getTime() + 1);
+    const original = await store.create({ title: "Reminder", reminder: NOW.toISOString() });
+    const s = fixture();
+    await s.scheduler.tick([original], now.getTime());
+    expect(s.notify).toHaveBeenCalledExactlyOnceWith(original);
+    const archived = await store.archive(original);
+    expect(archived.url).toContain("reminder-2.ttl");
+    await s.scheduler.tick([archived], now.getTime());
+    const restored = await store.unarchive(archived);
+    expect(restored.url).not.toBe(original.url);
+    await createReminderScheduler({ fired: s.fired, notify: s.notify }).tick(
+      [restored],
+      now.getTime(),
+    );
+    expect(s.notify).toHaveBeenCalledTimes(1);
+  });
+  it("distinguishes creation times, creators, legacy resources and changed triggers", async () => {
+    const s = fixture();
+    const original = { ...due, created: NOW.toISOString(), creator: "alice" };
+    const moved = { ...original, url: "https://pod.example/archived/renamed.ttl" };
+    await s.scheduler.tick(
+      [original, moved, { ...original, created: ISO }, { ...original, creator: "bob" }, due],
+      NOW.getTime(),
+    );
+    expect(s.notify).toHaveBeenCalledTimes(4);
   });
 });

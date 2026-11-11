@@ -3,10 +3,17 @@
 import { toast } from "@jeswr/suite-ui";
 import { useEffect, useRef } from "react";
 import type { StoredNote } from "../lib/model/store";
-import { createReminderScheduler } from "../lib/reminders/scheduler";
+import {
+  createIndexedDbFiredStore,
+  createMemoryFiredStore,
+  type FiredReminderStore,
+} from "../lib/reminders/fired-store";
+import { createReminderScheduler, reminderKey } from "../lib/reminders/scheduler";
 
 const granted = () => typeof Notification !== "undefined" && Notification.permission === "granted";
 const prompted = new Set<string>();
+// Share the fallback across mounts in this page when durable storage is unavailable.
+const fallbackStores = new Map<string, FiredReminderStore>();
 
 /** Offer once after the user saves a reminder; the action is a permission gesture. */
 export function offerReminderPermission(account: string): void {
@@ -45,13 +52,30 @@ export function useNoteReminders(
   latest.current = { notes, open };
   const check = useRef<() => void>(() => {});
   useEffect(() => {
+    let active = true;
+    let fallback = fallbackStores.get(account);
+    if (!fallback) {
+      fallback = createMemoryFiredStore();
+      fallbackStores.set(account, fallback);
+    }
+    const memory = fallback;
+    const durable =
+      typeof indexedDB === "undefined" ? memory : createIndexedDbFiredStore(account, indexedDB);
     const scheduler = createReminderScheduler({
-      account,
-      storage: {
-        getItem: (key) => localStorage.getItem(key),
-        setItem: (key, value) => localStorage.setItem(key, value),
+      fired: {
+        async claim(key, now) {
+          // Reserve locally before I/O. A later storage failure must not redeliver
+          // an already claimed reminder; concurrent tabs still arbitrate in IndexedDB.
+          if (!(await memory.claim(key, now))) return false;
+          try {
+            return durable === memory || (await durable.claim(key, now));
+          } catch {
+            return true;
+          }
+        },
       },
       notify: (note) => {
+        if (!active) return;
         const title = note.title || "Untitled note";
         const onOpen = () => latest.current.open(note as StoredNote);
         toast(title, {
@@ -61,7 +85,7 @@ export function useNoteReminders(
         });
         if (granted()) {
           try {
-            const notification = new Notification(title, { tag: `${note.url}@${note.reminder}` });
+            const notification = new Notification(title, { tag: reminderKey(note) });
             notification.onclick = () => {
               window.focus();
               onOpen();
@@ -77,7 +101,16 @@ export function useNoteReminders(
     const run = () => {
       clearTimeout(timeout);
       const now = Date.now();
-      scheduler.tick(latest.current.notes, now, document.visibilityState !== "hidden" || granted());
+      // React may immediately clean up and replay the mount effect. Check its
+      // lifetime before claiming, so that replay cannot consume an unseen reminder.
+      void Promise.resolve().then(() => {
+        if (active)
+          return scheduler.tick(
+            latest.current.notes,
+            Date.now(),
+            document.visibilityState !== "hidden" || granted(),
+          );
+      });
       timeout = setTimeout(run, scheduler.nextDelay(latest.current.notes, now));
     };
     check.current = run;
@@ -85,6 +118,7 @@ export function useNoteReminders(
     const interval = setInterval(run, 5 * 60_000);
     document.addEventListener("visibilitychange", run);
     return () => {
+      active = false;
       check.current = () => {};
       clearTimeout(timeout);
       clearInterval(interval);

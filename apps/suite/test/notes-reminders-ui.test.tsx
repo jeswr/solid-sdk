@@ -1,10 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ReactNode } from "react";
+import { type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { act, click, h, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   context: {} as Record<string, unknown>,
@@ -207,6 +207,72 @@ it("flushes text before a dialog reminder change and uses the new ETag for the n
   await reopened.unmount();
 });
 
+it("waits for a card reminder PUT before opening with the acknowledged ETag", async () => {
+  const pod = createDemoPod({ root: "https://pod.example/" });
+  const store = createNotesStore({
+    podRoot: "https://pod.example/",
+    webId: "https://pod.example/#me",
+    fetch: pod.fetch,
+  });
+  const original = await store.create({ title: "Original" });
+  const gate = deferred<void>();
+  const save = vi.spyOn(store, "save");
+  let latest = original;
+  const reminderSave = vi.fn(async (saved, change) => {
+    await gate.promise;
+    latest = await store.save(saved, change, saved.etag);
+    return latest;
+  });
+  mocks.context.store = store;
+  mocks.context.mutations = { save: reminderSave };
+  const ui = await mount(h(NoteCard, { note: original }));
+  await click(button("Remind me"));
+  await click(button("Tomorrow"));
+  expect(button("Open Original").disabled).toBe(true);
+  await click(button("Open Original"));
+  expect(mocks.context.openNote).not.toHaveBeenCalled();
+  await act(async () => {
+    gate.resolve();
+    await reminderSave.mock.results[0]?.value;
+  });
+  await ui.render(h(NoteCard, { note: latest }));
+  expect(button("Open Original").disabled).toBe(false);
+  await click(button("Open Original"));
+  expect(mocks.context.openNote).toHaveBeenCalledWith(latest, expect.anything());
+  await ui.render(h(NoteDialog, { note: latest }));
+  await fill("Note title", "After card reminder");
+  await click(button("Close"));
+  expect(save.mock.calls[1]?.[2]).toBe(latest.etag);
+  expect(await store.read(original.url)).toMatchObject({
+    title: "After card reminder",
+    reminder: "2026-11-12T08:00:00.000Z",
+  });
+  expect(mocks.toast.error).not.toHaveBeenCalled();
+  await ui.unmount();
+});
+
+it("adopts refreshed reminder ETags in a clean dialog before the next text edit", async () => {
+  const pod = createDemoPod({ root: "https://pod.example/" });
+  const store = createNotesStore({
+    podRoot: "https://pod.example/",
+    webId: "https://pod.example/#me",
+    fetch: pod.fetch,
+  });
+  const original = await store.create({ title: "Original" });
+  mocks.context.store = store;
+  const ui = await mount(h(NoteDialog, { note: original }));
+  const latest = await store.save(original, { reminder: NOW.toISOString() }, original.etag);
+  await ui.render(h(NoteDialog, { note: latest }));
+  await fill("Note title", "After refresh");
+  await click(button("Close"));
+  expect(await store.read(original.url)).toMatchObject({
+    title: "After refresh",
+    reminder: NOW.toISOString(),
+  });
+  expect(mocks.context.closeNote).toHaveBeenCalled();
+  await ui.unmount();
+});
+
 it("keeps reminders on the stored draft baseline when recovering, outside the text draft", async () => {
   const webId = "https://pod.example/#recover-reminder";
   const saved = note({ reminder: "2026-11-12T08:00:00.000Z" });
@@ -262,7 +328,9 @@ it("provides the Reminders route and sidebar link and groups upcoming and past c
 });
 
 it("moves a reminder to Past and mutes its chip as the clock advances", async () => {
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
   const upcoming = note({ reminder: new Date(Date.now() + 30_000).toISOString() });
   mocks.context.notes = [upcoming];
   const ui = await mount(h(NotesGrid, { view: "reminders" }));
@@ -314,19 +382,77 @@ it("toasts a due reminder with Open, suppresses reload delivery, and picks up ch
   expect(mocks.toast).toHaveBeenCalledTimes(2);
 });
 
-it("wakes at the due time and every five minutes, and cleans up its timers", async () => {
-  vi.useFakeTimers();
+it("wakes at the due time", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
   const due = note({ reminder: new Date(Date.now() + 1000).toISOString() });
   const ui = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "timers" }));
   expect(mocks.toast).not.toHaveBeenCalled();
   await act(() => vi.advanceTimersByTimeAsync(1000));
   expect(mocks.toast).toHaveBeenCalledTimes(1);
-  await act(() => vi.advanceTimersByTimeAsync(5 * 60_000));
-  expect(mocks.toast).toHaveBeenCalledTimes(1);
   await ui.unmount();
-  const count = mocks.toast.mock.calls.length;
-  await act(() => vi.advanceTimersByTimeAsync(24 * 86_400_000));
-  expect(mocks.toast).toHaveBeenCalledTimes(count);
+});
+
+it("checks every five minutes after a clock jump, before the next timeout", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  const due = note({ reminder: new Date(Date.now() + 10 * 60_000).toISOString() });
+  const ui = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "interval" }));
+  vi.setSystemTime(Date.now() + 10 * 60_000);
+  await act(() => vi.advanceTimersByTimeAsync(5 * 60_000 - 1));
+  expect(mocks.toast).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("Remember", expect.anything());
+  await ui.unmount();
+});
+
+it("cleans up timers and visibility listeners with an unfired reminder still scheduled", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  const existingTimers = vi.getTimerCount();
+  const due = note({ reminder: new Date(Date.now() + 60_000).toISOString() });
+  const ui = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "cleanup" }));
+  expect(vi.getTimerCount()).toBe(existingTimers + 2);
+  await ui.unmount();
+  expect(vi.getTimerCount()).toBe(existingTimers);
+  await act(() => vi.advanceTimersByTimeAsync(5 * 60_000));
+  const remainingTimers = vi.getTimerCount();
+  await act(() => document.dispatchEvent(new Event("visibilitychange")));
+  expect(vi.getTimerCount()).toBe(remainingTimers);
+  expect(mocks.toast).not.toHaveBeenCalled();
+});
+
+it("atomically claims a reminder across two schedulers mounted before it becomes due", async () => {
+  vi.useFakeTimers({
+    toFake: ["Date", "setTimeout", "clearTimeout", "setInterval", "clearInterval"],
+  });
+  const due = note({ reminder: new Date(Date.now() + 1000).toISOString() });
+  const first = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "two-tabs" }));
+  const second = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "two-tabs" }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(mocks.toast).toHaveBeenCalledTimes(1);
+  await first.unmount();
+  // A hidden, previously mounted tab must not erase the other tab's claim.
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(() => document.dispatchEvent(new Event("visibilitychange")));
+  await second.unmount();
+  visibility.mockReturnValue("visible");
+  const reloaded = await mount(h(Scheduler, { notes: [due], open: vi.fn(), account: "two-tabs" }));
+  expect(mocks.toast).toHaveBeenCalledTimes(1);
+  await reloaded.unmount();
+  visibility.mockRestore();
+});
+
+it("delivers once when React replays the scheduler mount effect", async () => {
+  const due = note({ reminder: NOW.toISOString() });
+  const ui = await mount(
+    h(StrictMode, null, h(Scheduler, { notes: [due], open: vi.fn(), account: "strict-mode" })),
+  );
+  expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("Remember", expect.anything());
+  await ui.unmount();
 });
 
 it("leaves hidden reminders unclaimed until visible, unless desktop notifications are granted", async () => {
@@ -363,6 +489,34 @@ it("leaves hidden reminders unclaimed until visible, unless desktop notification
   visibility.mockRestore();
   focus.mockRestore();
   vi.stubGlobal("Notification", undefined);
+});
+
+it.each([
+  "missing",
+  "blocked",
+])("deduplicates in page memory when IndexedDB is %s", async (mode) => {
+  vi.stubGlobal(
+    "indexedDB",
+    mode === "missing"
+      ? undefined
+      : {
+          open: () => {
+            throw new Error("blocked");
+          },
+        },
+  );
+  const due = note({ reminder: NOW.toISOString() });
+  const open = vi.fn();
+  const account = `fallback-${mode}`;
+  const ui = await mount(h(Scheduler, { notes: [due], open, account }));
+  await act(() => document.dispatchEvent(new Event("visibilitychange")));
+  expect(mocks.toast).toHaveBeenCalledTimes(1);
+  await ui.unmount();
+  const reopened = await mount(h(Scheduler, { notes: [due], open, account }));
+  expect(mocks.toast).toHaveBeenCalledTimes(1);
+  await reopened.render(h(Scheduler, { notes: [due], open, account: `${account}-other` }));
+  expect(mocks.toast).toHaveBeenCalledTimes(2);
+  await reopened.unmount();
 });
 
 it("offers notification permission once after a reminder, and handles browser refusals", async () => {
