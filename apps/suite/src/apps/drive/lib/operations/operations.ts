@@ -150,9 +150,11 @@ export async function uploadFile(
   rawName: string,
   policy: "fail" | ConflictChoice = "fail",
   approvedTarget?: Pick<DriveItem, "url" | "etag" | "verifyHeaders">,
+  /** A caller-validated type (including neutralised application/octet-stream). */
+  contentTypeOverride?: string,
 ): Promise<DriveItem | undefined> {
   const name = normalizeUploadName(rawName);
-  const contentType = contentTypeFor(name, file.type);
+  const contentType = contentTypeOverride ?? contentTypeFor(name, file.type);
   const done = (url: string): DriveItem => ({
     url,
     name: nameOf(url),
