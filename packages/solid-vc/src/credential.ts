@@ -11,8 +11,9 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { canonicalNQuads } from "./canonicalize.js";
 import { credentialDocumentLoader } from "./context-loader.js";
-import { digestQuads, digestRdfContent } from "./digest.js";
+import { digestRdfContent } from "./digest.js";
 import { isAbsoluteIri, requireObjectIri, safeObjectIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type {
@@ -656,7 +657,9 @@ async function refuseNonFragmentRelativeIris(content: string, contentType: strin
   );
   let same: boolean;
   try {
-    same = (await digestQuads(resolved)) === (await digestQuads(based));
+    // Compare canonical forms here; digestRdfContent below separately enforces
+    // digest admission, so its direction-literal error is not relabelled as an IRI error.
+    same = (await canonicalNQuads(resolved)) === (await canonicalNQuads(based));
   } catch {
     // N3 can emit an incomplete term for some base-free relative forms (`?#x` as
     // an object), which the canonicalizer cannot serialise.
