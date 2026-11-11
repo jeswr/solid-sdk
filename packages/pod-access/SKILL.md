@@ -143,21 +143,23 @@ grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-o
 On 412 re-read and observe the winner. Require strong ETags for request updates; grant through
 `./roles` `addGrant` (roles, additive, conditional) and rethrow its refusals unretried. Reject off-storage targets and credentialed discovery links.
 Keep parsing lenient, byte/member work bounded, and requester metadata notification-local.
-Approvals grant Viewer or Editor only (append-only requests are refused). Reject ACP/unknown materialisation with the typed
-error, and never read a `rel="acl"` link as proof of WAC (ESS advertises ACRs with it): detect the
-model from the advertised document with the roles layer's `detectModel`, check it before using the
-records folder ACL, and pin grants to `model: "wac"` (the roles layer then refuses an ACP target
-before writing; translate that into `UnsupportedAccessModelError`). WAC expiry is receipt metadata only: document `expiryEnforced: false` and never imply revocation.
+Approvals grant Viewer or Editor only (append-only requests are refused). Accept WAC and the
+roles layer's CSS ACP subset, requiring the storage root, records folder and targets to agree.
+Detect models from the advertised documents, never from `rel="acl"` alone (ESS uses it too).
+Pin each grant to its detected model; refuse changed/mixed/unknown models with
+`UnsupportedAccessModelError`. CSS ACP uses `acl:*` modes and resource Control. The request API
+keeps the roles layer's CSS default; do not infer a dialect from RDF. ESS query-addressed ACRs,
+`acp:*` modes and `access`/`memberAccess` management are unsupported and must refuse before grants.
+WAC/ACP expiry is receipt metadata only: report `expiryEnforced: false`, never imply revocation.
 Delivery through unauthenticated `publicFetch` is best effort and cannot roll back committed decisions;
 it never falls back to global fetch, and requester URLs must be public HTTPS (a URL check only: in
 Node pass a DNS-checking `publicFetch`, e.g. `createGuardedFetch()` from `@jeswr/guarded-fetch`).
 Records live in an owner-only `settings/access-records/` folder (created or verified before any
 write); resume only from the owner's pinned decision there, never from the requester's notification.
-Sealing the folder stores a random records key in its ACL (minted only after the folder is shown
-private; a key found next to the unverified mark is replaced; a private folder with no key is given
-one only while it holds nothing but its ACL, and otherwise refused so its records are never silently
-orphaned). Decision records are named from that
-key, the request URL, the requester, what was asked and a generation number, and say `approving`,
+Sealing the folder stores a random records key on its ACL/ACR document subject (minted only after
+the folder is shown private; a key found next to the unverified mark is replaced; a private folder
+with no key is given one only while it holds nothing but its access document, and otherwise
+refused so its records are never silently orphaned). Decision records are named from that key, the request URL, the requester, what was asked and a generation number, and say `approving`,
 `approved` or `denied`; a finished record only matches a request in the same state, so a new request
 at a reused URL starts a new generation. Grant and denial-receipt IDs derive from the record URL, so
 they are bound to the requester. Never grant the storage root (slashless form included) or anything
@@ -167,8 +169,24 @@ or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls
 and segments ending in a dot or space or containing `::`;
 ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and metadata documents
 (`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
-(pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
-the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
+(pending or Approving) compares role and expiry including their absence; only `dataTypes` may
+be omitted to keep the pinned subset. Different choices refuse. Approval results include `choices`
+with the actual granted types, highest applied role and recorded expiry (`Date`), including on
+completed replays that ignore new choices. A lost pin or CAS reports the request's re-read status
+in `RequestConflictError`.
+
+For ACP records, use the roles layer's raw bounded ACR discovery, preserving all triples rather
+than projecting conditions to role rows. Verify every reachable local control/policy/matcher and
+all additive ancestor ACRs. Refuse external definitions, unknown predicates/structure, public,
+authenticated or other-agent allows, including access to the ACR itself. Owner-only alternatives
+and further client/issuer restrictions may narrow grants; only unconditional owner Read, Write
+and Control establish full access to folder and members. Denials are safe only while owner rights
+remain. Create a missing private ACR with the unverified mark and If-None-Match, re-read privacy
+and emptiness, then atomically replace the mark with a fresh key using If-Match. Crashes keep the
+mark or sealed key; records without a key refuse rather than being orphaned. ACP inheritance is
+additive, and ancestor/folder changes cannot be locked atomically: governing settings access must
+remain owner-controlled. Never edit ancestors to make a records folder private.
+
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
 `approved` record returns that earlier grant (nothing new is granted), and the owner cannot record a
 denial for it. Each approved data type

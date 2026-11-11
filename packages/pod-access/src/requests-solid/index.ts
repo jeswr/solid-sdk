@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/** Solid request inbox and forward-only, conditional WAC approval pipeline. */
+/** Solid request inbox and forward-only, conditional WAC/CSS ACP approval pipeline. */
 export { accessModel, UnsupportedAccessModelError } from "./acl.js";
 export type { DecideOptions, DecisionResult, RequestDecision } from "./approval.js";
 export { decide, deriveGrantId } from "./approval.js";

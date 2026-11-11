@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Port of access-manager approval.ts invariants:
 // resolve ONCE → Pending/Approving CAS with deterministic grantId + snapshot →
@@ -42,7 +43,7 @@ export interface RequestDecision {
    * to: Editor (Read, Write, Append) when Write was asked for, else Viewer.
    */
   role?: "viewer" | "editor";
-  /** Receipt metadata only. WAC cannot enforce expiry or revoke automatically. */
+  /** Receipt metadata only. WAC/ACP roles cannot enforce expiry or revoke automatically. */
   expiresAt?: Date;
   /** Must be a nonempty subset of the request's dataTypes. */
   dataTypes?: string[];
@@ -72,7 +73,9 @@ export interface DecisionResult {
   grantUrl?: string;
   receiptUrl: string;
   notified: boolean;
-  /** Always false: expiresAt is receipt metadata; WAC does not enforce it. */
+  /** Recorded approval values actually applied, including on a completed-decision replay. */
+  choices?: { dataTypes: string[]; role: "viewer" | "editor"; expiresAt?: Date };
+  /** Always false: expiresAt is receipt metadata; WAC/ACP roles do not enforce it. */
   expiryEnforced: false;
 }
 
@@ -89,11 +92,13 @@ interface Snapshot {
   targetModes: Record<string, RequestMode[]>;
   dataTypes: string[];
   schemaVersion: "1";
+  /** Missing on older WAC records. A resumed approval cannot change models. */
+  model?: "wac" | "acp";
   purpose?: string;
   expiresAt?: string;
   decidedAt: string;
   /** The owner's own choices, so a resumed approval can refuse different ones. */
-  chosen: { dataTypes: string[]; viewer: boolean };
+  chosen: { dataTypes: string[]; viewer: boolean; role?: "viewer" | "editor" };
 }
 
 /** sha256(requestId, sorted target set, ownerWebID, schemaVersion), as in access-manager. */
@@ -260,14 +265,15 @@ async function settleRecord(
   throw new Error("The decision record kept changing");
 }
 
-/** A resumed approval keeps its pinned choices: refuse explicit choices that differ. */
+/** Omission is a choice too: it must match the recorded role and expiry. */
 function assertSameChoices(snapshot: Snapshot, decision: RequestDecision): void {
   const pinned = snapshot.chosen;
   if (
     (decision.dataTypes !== undefined &&
       [...new Set(decision.dataTypes)].sort().join("\n") !== pinned.dataTypes.join("\n")) ||
-    (decision.role !== undefined && (decision.role === "viewer") !== pinned.viewer) ||
-    (decision.expiresAt !== undefined && decision.expiresAt.toISOString() !== snapshot.expiresAt)
+    (decision.role === "viewer") !== pinned.viewer ||
+    decision.role !== (pinned.role ?? (pinned.viewer ? "viewer" : undefined)) ||
+    decision.expiresAt?.toISOString() !== snapshot.expiresAt
   )
     throw new Error(
       "An earlier approval of this request is still finishing with different choices; finish it first",
@@ -350,6 +356,8 @@ async function validateSnapshot(
     snapshot.schemaVersion !== "1" ||
     !Array.isArray(snapshot.chosen?.dataTypes) ||
     typeof snapshot.chosen.viewer !== "boolean" ||
+    (snapshot.chosen.role !== undefined && !["viewer", "editor"].includes(snapshot.chosen.role)) ||
+    (snapshot.model !== undefined && snapshot.model !== "wac" && snapshot.model !== "acp") ||
     snapshot.targets.length === 0 ||
     snapshot.targets.length > MAX_MEMBERS ||
     snapshot.modes.length === 0 ||
@@ -429,6 +437,22 @@ async function complete(
 ): Promise<{ grantUrl: string; receiptUrl: string }> {
   const id = request.entry.id;
   const locations = urls(options.storage, snapshot.grantId);
+  const model = snapshot.model ?? "wac";
+  // Revalidate every target before records or access writes, including on recovery.
+  for (const target of snapshot.targets) {
+    const actual = await accessModel({ fetch: fetchFn, storage: options.storage, target });
+    if (actual !== model)
+      throw new UnsupportedAccessModelError(actual === "acp" ? "acp" : "unknown");
+    await checkGrant(
+      target,
+      options.storage,
+      options.webId,
+      snapshot.agent,
+      snapshot.targetModes[target] as RequestMode[],
+      fetchFn,
+      model,
+    );
+  }
   const grant = new Store(
     policyToRdf({
       id: locations.grantUrl,
@@ -467,8 +491,6 @@ async function complete(
     true,
   );
   for (const target of snapshot.targets) {
-    const model = await accessModel({ fetch: fetchFn, storage: options.storage, target });
-    if (model !== "wac") throw new UnsupportedAccessModelError(model);
     try {
       await applyGrant(
         target,
@@ -477,6 +499,7 @@ async function complete(
         snapshot.agent,
         snapshot.targetModes[target] as RequestMode[],
         fetchFn,
+        model,
       );
     } catch (error) {
       // A competing resumer may have finished while this one lost a write race. A failed re-read
@@ -538,7 +561,9 @@ async function notify(
 
 /**
  * Decide an explicitly user-confirmed request; entry.id is re-read, never trusted as state.
- * Approving retries use the persisted snapshot and refuse explicit choices that differ from it.
+ * Supports WAC and the roles layer's CSS ACP subset; unknown/mixed models and unsupported
+ * ACP dialects fail closed. Storage, records and targets must agree on the model.
+ * Approving retries use the persisted snapshot; omitted role/expiry are compared as values.
  * Inbox children must be owner-write-only (public Append to the inbox is fine): a hash
  * is an idempotency key, not an authenticity proof for requester-writable snapshots.
  */
@@ -556,18 +581,18 @@ export async function decide(
   const id = scoped(storage, entry.id);
   const fetchFn = transport(options.fetch, options.signal);
   const model = await accessModel({ fetch: fetchFn, storage });
-  if (model !== "wac") throw new UnsupportedAccessModelError(model);
+  if (model === "unknown") throw new UnsupportedAccessModelError(model);
   const request = await current(id, fetchFn);
   const parsed = request.entry;
   const now = (options.now ?? (() => new Date()))().toISOString();
   const records = recordsFolder(storage);
   const owner = options.webId;
-  const peeked = await recordsKey(records, storage, owner, fetchFn);
+  const peeked = await recordsKey(records, storage, owner, fetchFn, model);
   const found = await findSlot(storage, peeked, parsed, owner, fetchFn);
   const recorded = found?.record;
   // Records live only in a folder only the owner can read; resolve the slot under its key.
   const sealed = async (): Promise<Slot> => {
-    const key = await ensureOwnerOnlyContainer(records, storage, owner, fetchFn);
+    const key = await ensureOwnerOnlyContainer(records, storage, owner, fetchFn, model);
     return key === peeked && found
       ? found
       : ((await findSlot(storage, key, parsed, owner, fetchFn)) as Slot);
@@ -611,6 +636,7 @@ export async function decide(
     // Resume only from the owner's record, never from the requester-authored notification. A
     // pending request here crashed after pinning but before the Approving CAS.
     snapshot = recorded.snapshot as Snapshot;
+    if ((snapshot.model ?? "wac") !== model) throw new UnsupportedAccessModelError("unknown");
     slot = await sealed();
     await validateSnapshot(snapshot, parsed, slot.url, options);
     // Only a finished approval ignores choices: it is reported as it was recorded.
@@ -657,7 +683,8 @@ export async function decide(
     const modes = [...new Set(Object.values(targetModes).flat())].sort();
     for (const target of targets) {
       const targetModel = await accessModel({ fetch: fetchFn, storage, target });
-      if (targetModel !== "wac") throw new UnsupportedAccessModelError(targetModel);
+      if (targetModel !== model)
+        throw new UnsupportedAccessModelError(targetModel === "acp" ? "acp" : "unknown");
       // Refuse now, before anything is recorded, what the sharing layer would refuse later.
       await checkGrant(
         target,
@@ -666,6 +693,7 @@ export async function decide(
         parsed.requester,
         targetModes[target] as RequestMode[],
         fetchFn,
+        model,
       );
     }
     slot = await sealed();
@@ -677,8 +705,9 @@ export async function decide(
       targetModes,
       dataTypes: granted,
       schemaVersion: "1",
+      model,
       decidedAt: now,
-      chosen: { dataTypes, viewer },
+      chosen: { dataTypes, viewer, ...(decision.role !== undefined && { role: decision.role }) },
       ...(parsed.purpose !== undefined && { purpose: parsed.purpose }),
       ...(decision.expiresAt !== undefined && { expiresAt: decision.expiresAt.toISOString() }),
     };
@@ -713,6 +742,11 @@ export async function decide(
   await settleRecord(slot, id, "approved", snapshot, fetchFn);
   return {
     status: "approved",
+    choices: {
+      dataTypes: [...snapshot.dataTypes],
+      role: roleFor(snapshot.modes),
+      ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
+    },
     ...locations,
     notified: await notify(id, snapshot.agent, true, options),
     expiryEnforced: false,

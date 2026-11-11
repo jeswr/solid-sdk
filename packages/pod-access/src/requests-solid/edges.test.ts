@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store, Writer } from "n3";
@@ -531,12 +532,12 @@ describe("forward-only approval reconciliation", () => {
           })
         : undefined;
     await expect(decide({ id: ID }, { approve: true }, opts(fresh))).rejects.toMatchObject({
-      model: "acp",
+      model: "unknown",
     });
     const pending = buildPod();
     pending.intercept = fresh.intercept;
     await expect(decide({ id: ID }, { approve: true }, opts(pending))).rejects.toMatchObject({
-      model: "acp",
+      model: "unknown",
     });
     expect(pending.log.some(({ method }) => method === "PUT")).toBe(false);
   });
