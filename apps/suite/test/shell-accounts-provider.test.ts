@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -94,6 +95,7 @@ it.each([
     order.push("revoke:one");
   });
   let pending = Promise.resolve();
+  expect(accounts.fetchFor?.(one)).toBe(fetch);
   try {
     await act(() => {
       pending = accounts[action]();
@@ -101,6 +103,11 @@ it.each([
     expect(order[0]).toBe("silence:one");
     expect(first.signOut).not.toHaveBeenCalled();
     expect(accounts.isActiveAccount("one")).toBe(false);
+    // No account-bound fetch can be minted while beforeSignOut is still pending.
+    expect(() => accounts.fetchFor?.(one)).toThrow("Sign in to continue");
+    if (action === "signOutAll")
+      expect(() => accounts.fetchFor?.(two)).toThrow("Sign in to continue");
+    else expect(accounts.fetchFor?.(two)).toBe(fetch);
     await expect(accounts.signIn({ issuer: "https://id.example" })).rejects.toThrow("in progress");
     await act(async () => {
       finish();
