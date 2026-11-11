@@ -58,7 +58,10 @@ const mock = vi.hoisted(() => {
     interceptCommand: vi.fn(() => ({ dispose: vi.fn() })),
     interceptAfterCommand: vi.fn(() => ({ dispose: vi.fn() })),
   };
-  const commandService = { registerCommand: vi.fn(() => ({ dispose: vi.fn() })) };
+  const commandService = {
+    registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    beforeCommandExecuted: vi.fn(() => ({ dispose: vi.fn() })),
+  };
   const univer = {
     dispose: vi.fn(),
     // biome-ignore lint/style/useNamingConvention: Univer API
@@ -399,7 +402,10 @@ it("enforces view-only access at mount, after reload and after losing write acce
   expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
   const change = vi.fn();
   engine.onChange(change);
-  engine.importCsv("Blocked", { mode: "replace-active" });
+  expect(engine.importCsv("Blocked", { mode: "replace-active" })).toEqual({
+    status: "blocked",
+    reason: "read-only",
+  });
   mock.emit(mutation);
   await Promise.resolve();
   expect(engine.snapshot()).toEqual(initial());
@@ -430,7 +436,10 @@ it("holds editing from mount through comment loading without overriding access o
   engine.setReadOnly(false);
   expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
   engine.load(initial());
-  engine.importCsv("Blocked", { mode: "replace-active" });
+  expect(engine.importCsv("Blocked", { mode: "replace-active" })).toEqual({
+    status: "blocked",
+    reason: "comments-loading",
+  });
   expect(engine.snapshot()).toEqual(initial());
   expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
   const change = vi.fn();

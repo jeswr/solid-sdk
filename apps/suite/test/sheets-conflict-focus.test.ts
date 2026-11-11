@@ -58,7 +58,7 @@ function fakeEngine(initial: Snapshot) {
     dispose: vi.fn(),
     exportCsv: vi.fn(() => ""),
     activeSheet: vi.fn(() => ({ id: "data", name: "Data" })),
-    importCsv: vi.fn(),
+    importCsv: vi.fn(() => ({ status: "imported" as const })),
   };
   return engine;
 }

@@ -35,9 +35,11 @@ function CommentHint({ reason, children }: { reason: string; children: ReactNode
 export function WorkbookComments({
   container,
   engine,
+  onLoadingChange,
 }: {
   container: string;
   engine: SheetEngine | null;
+  onLoadingChange?: (loading: boolean) => void;
 }) {
   const state = usePodSessionState();
   const session = state.status === "ready" ? state.session : undefined;
@@ -69,6 +71,7 @@ export function WorkbookComments({
       engine={engine}
       webId={session.webId}
       local={store.local}
+      onLoadingChange={onLoadingChange}
     />
   );
 }
@@ -78,11 +81,13 @@ export function CellComments({
   engine,
   webId,
   local,
+  onLoadingChange,
 }: {
   store: CellCommentStore;
   engine: SheetEngine | null;
   webId: string;
   local: boolean;
+  onLoadingChange?: ((loading: boolean) => void) | undefined;
 }) {
   const [threads, setThreads] = useState<CellThread[]>([]);
   const [permissions, setPermissions] = useState<CommentPermissions>({
@@ -115,12 +120,14 @@ export function CellComments({
   const refresh = async () => {
     const revision = ++lifetime.revision;
     engine?.setCommentsLoading?.(true);
+    onLoadingChange?.(true);
     const [rows, access] = await Promise.all([store.list(), store.permissions()]);
     if (isCurrent() && revision === lifetime.revision) {
       engine?.registerCommentAnchors?.(
         Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as CellAnchor])),
       );
       engine?.setCommentsLoading?.(false);
+      onLoadingChange?.(false);
       setThreads(rows);
       setPermissions(local ? access : { append: false, write: false });
     }

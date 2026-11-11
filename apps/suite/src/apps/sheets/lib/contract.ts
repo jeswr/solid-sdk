@@ -182,6 +182,10 @@ export interface ActiveSheet {
   readonly name: string;
 }
 
+export type CsvImportResult =
+  | { status: "imported" }
+  | { status: "blocked"; reason: "comments-loading" | "read-only" };
+
 export interface SheetEngine {
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
@@ -200,8 +204,11 @@ export interface SheetEngine {
   /** CSV of one sheet (default: the active sheet), cached formula results as values. */
   exportCsv(sheetId?: string): string;
   activeSheet(): ActiveSheet;
-  /** Adds a sheet with the CSV as text cells, or replaces the active sheet's cells. */
-  importCsv(csv: string, options: { mode: "new-sheet" | "replace-active"; name?: string }): void;
+  /** Adds text cells or explicitly reports a loading/access lock so the caller can retry. */
+  importCsv(
+    csv: string,
+    options: { mode: "new-sheet" | "replace-active"; name?: string },
+  ): CsvImportResult;
   setDark(dark: boolean): void;
   setReadOnly(readOnly: boolean): void;
   dispose(): void;

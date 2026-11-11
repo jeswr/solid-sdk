@@ -2,15 +2,19 @@
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { MountEngine, SheetEngine, WorkbookService } from "../src/apps/sheets/lib/contract";
-import { act, click, h, key, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 import { cellsXml, fixture } from "./sheets-xlsx-fixtures";
 
 const mocks = vi.hoisted(() => ({
   service: null as WorkbookService | null,
+  session: null as { fetch: typeof fetch; storageUrl: string; webId: string } | null,
   mount: vi.fn<MountEngine>(),
   push: vi.fn(),
   toast: { error: vi.fn() },
+}));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "ready", session: mocks.session }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
@@ -36,6 +40,7 @@ vi.mock("../src/apps/sheets/lib/engine", () => ({ loadEngine: async () => mocks.
 
 import { SheetEditor } from "../src/apps/sheets/components/sheet-editor";
 import { SheetsSidebar, workbookHref } from "../src/apps/sheets/components/sheets-sidebar";
+import { CellCommentStore, type CellThread } from "../src/apps/sheets/lib/comments/store";
 import { readXlsx } from "../src/apps/sheets/lib/xlsx";
 
 function button(label: string) {
@@ -59,23 +64,100 @@ beforeEach(async () => {
   vi.clearAllMocks();
   vi.stubGlobal("DOMParser", window.DOMParser);
   vi.stubGlobal("matchMedia", window.matchMedia);
-  mocks.service = (await harness()).service;
-  mocks.mount.mockImplementation(
-    async (_host, options) =>
-      ({
-        snapshot: vi.fn(() => options.snapshot),
-        load: vi.fn(),
-        onChange: vi.fn(() => () => {}),
-        setDark: vi.fn(),
-        setReadOnly: vi.fn(),
-        dispose: vi.fn(),
-        exportCsv: vi.fn(() => ""),
-        activeSheet: vi.fn(() => ({ id: "sheet1", name: "Data" })),
-        importCsv: vi.fn(),
-      }) satisfies SheetEngine,
-  );
+  const pod = await harness();
+  mocks.service = pod.service;
+  mocks.session = { ...pod.options, storageUrl: pod.options.podRoot };
+  mocks.mount.mockImplementation(async (_host, options) => {
+    let loading = options.commentsLoading ?? false;
+    return {
+      snapshot: vi.fn(() => options.snapshot),
+      load: vi.fn(),
+      onChange: vi.fn(() => () => {}),
+      setDark: vi.fn(),
+      setReadOnly: vi.fn(),
+      dispose: vi.fn(),
+      exportCsv: vi.fn(() => ""),
+      activeSheet: vi.fn(() => ({ id: "sheet1", name: "Data" })),
+      setCommentsLoading: vi.fn((value) => {
+        loading = value;
+      }),
+      importCsv: vi.fn<SheetEngine["importCsv"]>(() =>
+        loading ? { status: "blocked", reason: "comments-loading" } : { status: "imported" },
+      ),
+    } satisfies SheetEngine;
+  });
 });
 afterEach(() => vi.restoreAllMocks());
+
+it("disables CSV import during the initial comment load", async () => {
+  const comments = deferred<CellThread[]>();
+  vi.spyOn(CellCommentStore.prototype, "list").mockReturnValue(comments.promise);
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Loading", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  await key(button("File"), "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (element) => element.textContent === "Import CSV",
+  );
+  expect(item?.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => comments.resolve([]));
+  expect(item?.getAttribute("aria-disabled")).toBeNull();
+  await ui.unmount();
+});
+
+it("preserves a chosen CSV and retries when comments start loading during the file read", async () => {
+  const service = mocks.service as WorkbookService;
+  const book = await service.create({ title: "Refresh", snapshot: snapshot() });
+  const ui = await mount(h(SheetEditor, { container: book.container }));
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  const engine = await mocks.mount.mock.results[0]?.value;
+  await key(button("File"), "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (element) => element.textContent === "Import CSV",
+  );
+  if (!item) throw new Error("Missing CSV import item");
+  await click(item);
+  const input = document.querySelector<HTMLInputElement>('input[aria-label="CSV file to import"]');
+  if (!input) throw new Error("Missing CSV input");
+  const file = new File(["Label\nChosen"], "chosen.csv", { type: "text/csv" });
+  const read = deferred<string>();
+  vi.spyOn(file, "text").mockReturnValueOnce(read.promise);
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  Object.defineProperty(input, "value", {
+    value: "chosen.csv",
+    writable: true,
+    configurable: true,
+  });
+  await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  const comments = deferred<CellThread[]>();
+  vi.spyOn(CellCommentStore.prototype, "list").mockReturnValueOnce(comments.promise);
+  await act(() => window.dispatchEvent(new Event("focus")));
+  await act(async () => read.resolve("Label\nChosen"));
+  expect(engine?.importCsv).toHaveReturnedWith({ status: "blocked", reason: "comments-loading" });
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "Comments are loading. Try importing again when they finish.",
+  );
+  expect(input.files?.[0]).toBe(file);
+  expect(input.value).toBe("chosen.csv");
+  expect(input.disabled).toBe(true);
+  expect(document.querySelector("fieldset")?.disabled).toBe(true);
+  expect(button("Choose CSV file").disabled).toBe(true);
+  expect(button("Retry import").disabled).toBe(true);
+  await act(async () => comments.resolve([]));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("Try importing again");
+  expect(button("Retry import").disabled).toBe(false);
+  expect(input.disabled).toBe(false);
+  await click(button("Retry import"));
+  expect(engine?.importCsv).toHaveBeenLastCalledWith("Label\nChosen", {
+    mode: "new-sheet",
+    name: "chosen",
+  });
+  expect(engine?.importCsv).toHaveReturnedWith({ status: "imported" });
+  expect(input.value).toBe("");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await ui.unmount();
+});
 
 it.each([
   "report.XLSX",

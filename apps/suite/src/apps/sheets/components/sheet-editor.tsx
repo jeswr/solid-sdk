@@ -188,11 +188,14 @@ export function SheetEditor({ container }: { container: string }) {
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
   const [commentEngine, setCommentEngine] = useState<SheetEngine | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(true);
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const [dialog, setDialog] = useState<"import" | "delete" | "share">();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
+  const [csvFile, setCsvFile] = useState<File>();
+  const [importError, setImportError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
   const [grid, setGrid] = useState<{ container: string; revision: number }>();
@@ -243,6 +246,28 @@ export function SheetEditor({ container }: { container: string }) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     });
+  const importCsv = async (file: File) => {
+    try {
+      const result = engine.current?.importCsv(await file.text(), {
+        mode,
+        name: file.name.replace(/\.csv$/i, ""),
+      });
+      if (result?.status !== "imported") {
+        setImportError(
+          result?.status === "blocked" && result.reason === "read-only"
+            ? "You need Write access to import a CSV."
+            : "Comments are loading. Try importing again when they finish.",
+        );
+        return;
+      }
+      if (input.current) input.current.value = "";
+      setCsvFile(undefined);
+      setImportError(undefined);
+      setDialog(undefined);
+    } catch {
+      setImportError("Couldn't import this CSV. Try again.");
+    }
+  };
   if (state.error instanceof WorkbookNotFoundError && state.error.reason === "missing")
     return <SheetNotFound />;
   if (state.error)
@@ -296,7 +321,10 @@ export function SheetEditor({ container }: { container: string }) {
               <DropdownMenuItem asChild>
                 <Link href="/sheets/new">New spreadsheet</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem disabled={state.readOnly} onSelect={() => setDialog("import")}>
+              <DropdownMenuItem
+                disabled={state.readOnly || commentsLoading}
+                onSelect={() => setDialog("import")}
+              >
                 Import CSV
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={download}>Download current sheet as CSV</DropdownMenuItem>
@@ -351,7 +379,13 @@ export function SheetEditor({ container }: { container: string }) {
     >
       <div className="sht-editor">
         <h1 className="sr-only">{title}</h1>
-        {state.workbook && <WorkbookComments container={container} engine={commentEngine} />}
+        {state.workbook && (
+          <WorkbookComments
+            container={container}
+            engine={commentEngine}
+            onLoadingChange={setCommentsLoading}
+          />
+        )}
         {state.workbook ? (
           <Grid
             key={grid?.revision ?? 0}
@@ -389,7 +423,7 @@ export function SheetEditor({ container }: { container: string }) {
               CSV fields are imported as text, including values that start with an equals sign.
             </DialogDescription>
           </DialogHeader>
-          <fieldset className="sht-import-options">
+          <fieldset className="sht-import-options" disabled={state.readOnly || commentsLoading}>
             <legend>Where should the data go?</legend>
             <label>
               <input
@@ -410,7 +444,15 @@ export function SheetEditor({ container }: { container: string }) {
               Replace current sheet
             </label>
           </fieldset>
-          <Button disabled={state.readOnly} onClick={() => input.current?.click()}>
+          {commentsLoading && (
+            <p role="status">Comments are loading. Try importing again when they finish.</p>
+          )}
+          {importError && !commentsLoading && <p role="alert">{importError}</p>}
+          {csvFile && <p>{csvFile.name}</p>}
+          <Button
+            disabled={state.readOnly || commentsLoading}
+            onClick={() => input.current?.click()}
+          >
             Choose CSV file
           </Button>
           <input
@@ -420,21 +462,23 @@ export function SheetEditor({ container }: { container: string }) {
             type="file"
             aria-label="CSV file to import"
             accept=".csv,text/csv"
-            onChange={async (event) => {
+            disabled={state.readOnly || commentsLoading}
+            onChange={(event) => {
               const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
               if (!file || state.readOnly) return;
-              try {
-                engine.current?.importCsv(await file.text(), {
-                  mode,
-                  name: file.name.replace(/\.csv$/i, ""),
-                });
-                setDialog(undefined);
-              } catch {
-                toast.error("Couldn't import this CSV");
-              }
+              setCsvFile(file);
+              setImportError(undefined);
+              void importCsv(file);
             }}
           />
+          {csvFile && importError && (
+            <Button
+              disabled={state.readOnly || commentsLoading}
+              onClick={() => void importCsv(csvFile)}
+            >
+              Retry import
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
       <AlertDialog

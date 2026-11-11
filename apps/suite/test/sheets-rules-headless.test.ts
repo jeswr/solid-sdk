@@ -71,6 +71,112 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
 
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
 
+it.each([
+  "undo",
+  "redo",
+] as const)("blocks native %s and editing commands during a delayed comment refresh without consuming history", async (direction) => {
+  const { currentCommentAnchor } = await import("../src/apps/sheets/lib/comments/anchors");
+  const { CellCommentStore } = await import("../src/apps/sheets/lib/comments/store");
+  const { harness } = await import("./sheets-workbook-helpers");
+  const pod = await harness();
+  const engine = await mountUniver({} as HTMLElement, {
+    snapshot: {
+      id: "loading-history",
+      name: "Loading history",
+      sheetOrder: ["data"],
+      sheets: {
+        data: {
+          id: "data",
+          name: "Data",
+          rowCount: 10,
+          columnCount: 4,
+          cellData: { 1: { 1: { v: "Commented cell", t: 1 } } },
+        },
+      },
+    },
+    dark: false,
+    compact: true,
+  });
+  const injector = headless.current?.univer.__getInjector();
+  injector?.get(headless.core.IUniverInstanceService).focusUnit("loading-history");
+  const commands = injector?.get(headless.core.ICommandService);
+  const params = {
+    unitId: "loading-history",
+    subUnitId: "data",
+    range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 3 },
+    direction: headless.core.Direction.UP,
+  };
+  try {
+    expect(await commands?.executeCommand("sheet.command.insert-row", params)).toBe(true);
+    if (direction === "redo")
+      expect(await commands?.executeCommand("univer.command.undo")).toBe(true);
+    const anchor = {
+      sheetId: "data",
+      cell: direction === "undo" ? "B3" : "B2",
+      deleted: false,
+    };
+    const book = await pod.service.create({
+      title: "Loading history",
+      snapshot: engine.snapshot(),
+    });
+    const store = new CellCommentStore(book.container, pod.fetch);
+    const root = await store.create("Collaborator", "https://collaborator.example/#me", anchor);
+    let finish!: () => void;
+    const delayed = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    engine.setCommentsLoading?.(true);
+    const refresh = delayed.then(async () => {
+      const rows = await store.list();
+      engine.registerCommentAnchors?.(
+        Object.fromEntries(rows.map(({ root }) => [root.url, root.anchor as typeof anchor])),
+      );
+      engine.setCommentsLoading?.(false);
+    });
+    const before = engine.snapshot();
+    const change = vi.fn();
+    const structure = vi.fn();
+    engine.onChange(change);
+    engine.onStructure?.(structure);
+    // Exercise the real async and sync command-service paths used by shortcuts
+    // and facades. No fake engine suppresses the mutations for this test.
+    expect(await commands?.executeCommand(`univer.command.${direction}`)).toBe(false);
+    expect(commands?.syncExecuteCommand(`univer.command.${direction}`)).toBe(false);
+    for (const id of [
+      "sheet.command.insert-row",
+      "sheet.command.insert-col",
+      "sheet.command.remove-row",
+      "sheet.command.remove-col",
+      "sheet.command.set-range-values",
+      "sheet.command.set-worksheet-name",
+    ]) {
+      expect(
+        await commands?.executeCommand(id, { ...params, value: { v: "Blocked" }, name: "Blocked" }),
+        id,
+      ).toBe(false);
+    }
+    expect(engine.snapshot()).toEqual(before);
+    expect(change).not.toHaveBeenCalled();
+    expect(structure).not.toHaveBeenCalled();
+    finish();
+    await refresh;
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor)).toEqual(anchor);
+    expect(await commands?.executeCommand(`univer.command.${direction}`)).toBe(true);
+    const expectedCell = direction === "undo" ? "B2" : "B3";
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe(expectedCell);
+    const sheet = (engine.snapshot() as unknown as IWorkbookData).sheets.data;
+    expect(sheet?.rowCount).toBe(direction === "undo" ? 10 : 11);
+    expect(sheet?.cellData?.[direction === "undo" ? 1 : 2]?.[1]?.v).toBe("Commented cell");
+    await pod.service.save(book.container, engine.snapshot(), book.version);
+    const saved = await pod.service.open(book.container);
+    expect(currentCommentAnchor(saved.snapshot, root.url, anchor).cell).toBe(expectedCell);
+    engine.load(saved.snapshot);
+    expect(currentCommentAnchor(engine.snapshot(), root.url, anchor).cell).toBe(expectedCell);
+  } finally {
+    engine.dispose();
+  }
+});
+
 // Rule data colours, joined so the suite token gate (no raw colour literals) passes.
 const RED = ["#", "ff0000"].join("");
 const GREEN = ["#", "00ff00"].join("");

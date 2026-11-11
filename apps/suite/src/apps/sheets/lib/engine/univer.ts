@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { ICommandService } from "@univerjs/core";
+import { CanceledError, ICommandService } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
@@ -126,6 +126,12 @@ export const mountUniver: MountEngine = async (container, options) => {
     });
   };
   const commands = injector.get(ICommandService);
+  // setEditable does not guard native history replay. Cancel user commands before
+  // they can mutate the workbook or consume undo/redo history while anchors load.
+  // Operations (navigation) and background calculation mutations can still run.
+  const loadingGuard = commands.beforeCommandExecuted((command) => {
+    if (commentsLoading && command.type === CommandType.COMMAND) throw new CanceledError();
+  });
   const interceptors = injector.get(SheetInterceptorService);
   const anchorMutation = "sheets.mutation.comment-anchors";
   let activeOperation: AnchorMutation | undefined;
@@ -280,7 +286,8 @@ export const mountUniver: MountEngine = async (container, options) => {
       );
     },
     importCsv(csv, config) {
-      if (readOnly || commentsLoading) return;
+      if (commentsLoading) return { status: "blocked", reason: "comments-loading" };
+      if (readOnly) return { status: "blocked", reason: "read-only" };
       const rows = parseCsv(csv);
       const data = snapshot() as unknown as IWorkbookData;
       const active = workbook.getActiveSheet().getSheetId();
@@ -307,6 +314,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       workbook.setActiveSheet(id);
       editedSinceLoad = true;
       notify();
+      return { status: "imported" };
     },
     setDark(dark) {
       univerAPI.toggleDarkMode(dark);
@@ -321,6 +329,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
+      loadingGuard.dispose();
       selectionSubscription.unsubscribe();
       sheetSubscription.dispose();
       beforeStructure.dispose();
