@@ -566,7 +566,7 @@ export class TasksCache {
                   current,
                   {
                     ...data,
-                    state: "open",
+                    state: data.state ?? "open",
                     creator: data.creator ?? this.webId,
                     ...(data.allDay
                       ? { dueDate: new Date(`${data.allDay}T00:00:00`) }

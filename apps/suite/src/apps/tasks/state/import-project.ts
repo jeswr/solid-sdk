@@ -1,14 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import type { ProjectImportDraft } from "../lib/google-tasks";
 import { importProjectDescription, importTaskInput } from "../lib/import/mapping";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
-import type { TodoistProjectDraft } from "../lib/todoist";
 import type { TasksCache } from "./tasks-cache";
 
 /** Setup uses the same project and tracker paths as the composer; tasks share one bounded batch. */
 export async function importProject(
   cache: TasksCache,
-  draft: TodoistProjectDraft,
+  draft: ProjectImportDraft,
   title: string,
   signal: AbortSignal,
   onProgress: (completed: number) => void,

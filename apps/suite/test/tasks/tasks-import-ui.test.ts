@@ -5,6 +5,7 @@ import { act, createElement, useSyncExternalStore } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksImportDialog } from "../../src/apps/tasks/components/import/import-dialog";
+import { DataFactory, NS, SCHED } from "../../src/apps/tasks/lib/model/rdf";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import { parseTodoistCsv } from "../../src/apps/tasks/lib/todoist";
 import { importProject } from "../../src/apps/tasks/state/import-project";
@@ -37,8 +38,8 @@ async function click(text: string) {
   if (!button) throw new Error(`Missing ${text}`);
   await act(async () => button.click());
 }
-async function pick(csv: string, name = "Work.csv", drop = false) {
-  const file = new File([csv], name, { type: "text/csv" });
+async function pick(csv: string, name = "Work.csv", drop = false, type = "text/csv") {
+  const file = new File([csv], name, { type });
   Object.defineProperty(file, "text", { value: async () => csv });
   await act(async () => {
     if (drop) {
@@ -60,6 +61,35 @@ async function finished() {
 function taskWrite(request: RequestRecord) {
   return request.method === "PUT" && /\/work\/[^/]+\.ttl$/.test(request.url);
 }
+const takeout = JSON.stringify({
+  kind: "tasks#taskLists",
+  items: [
+    {
+      id: "work",
+      title: "Work",
+      items: [
+        { id: "child", title: "Child", parent: "parent", status: "needsAction", position: "02" },
+        {
+          id: "parent",
+          title: "Finished",
+          status: "completed",
+          hidden: true,
+          position: "01",
+          completed: "2026-11-01T12:34:56+01:00",
+          due: "2026-07-01T00:00:00Z",
+          notes: "SECRET notes",
+          links: [{ description: "Receipt", link: "https://mail.example/receipt" }],
+        },
+        { id: "deleted", deleted: true },
+      ],
+    },
+    {
+      id: "personal",
+      title: "Personal",
+      items: [{ id: "other", title: "SECRET other task", status: "needsAction", position: "01" }],
+    },
+  ],
+});
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("matchMedia", () => Object.assign(new EventTarget(), { matches: false }));
@@ -208,7 +238,9 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
   });
 
   it("reports an invalid file without echoing its contents and accepts a replacement by drop", async () => {
-    expect(query<HTMLInputElement>('input[type="file"]').accept).toBe(".csv,text/csv");
+    expect(query<HTMLInputElement>('input[type="file"]').accept).toBe(
+      ".csv,text/csv,.json,application/json",
+    );
     await pick("TYPE,CONTENT,PRIORITY\ntask,SECRET title,8");
     expect(query('[role="alert"]').textContent).toContain("A task priority is invalid");
     expect(document.body.textContent).not.toContain("SECRET");
@@ -450,5 +482,219 @@ describe("Todoist import dialog with the real conditional cache/store", () => {
       "Import cancelled. Imported 0 tasks into Work. Already-created tasks stay.",
       expect.anything(),
     );
+  });
+});
+
+describe("Google Tasks through the shared import dialog", () => {
+  it("keeps a completed task without a timestamp closed without inventing its completion time", async () => {
+    await pick(
+      '{"kind":"tasks#tasks","items":[{"id":"done","title":"Done","position":"01","status":"completed"}]}',
+      "Tasks.json",
+    );
+    await click("Import 1 tasks");
+    await finished();
+    const project = cache
+      .getSnapshot()
+      .projects.find((project) => project.tracker.title === "Imported tasks");
+    if (!project) throw new Error("Missing project");
+    const tasks = await cache.store.listTasks(project.tracker.stateStore as string);
+    expect(tasks[0]?.task.state).toBe("closed");
+    expect(tasks[0]?.task.endedAt).toBeUndefined();
+  });
+  it("previews both lists, imports only the checked list, and preserves completion, hierarchy and all-day RDF", async () => {
+    expect(query('[role="dialog"]').textContent).toContain("Import tasks");
+    expect(document.body.textContent).toContain(
+      "From a Todoist CSV or a Google Tasks export (Tasks.json from Google Takeout)",
+    );
+    await pick(takeout, "Tasks.json", false, "application/json");
+    const lists = [...document.querySelectorAll("fieldset")];
+    expect(lists).toHaveLength(2);
+    expect(lists[0]?.textContent).toContain("2 tasks · 1 sub-tasks");
+    expect(lists[1]?.textContent).toContain("1 tasks · 0 sub-tasks");
+    const checks = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(checks.every((input) => input.checked)).toBe(true);
+    expect(document.body.textContent).not.toContain("SECRET");
+    expect(document.body.textContent).toContain("List 1, task 2:");
+    expect(document.body.textContent).toContain(
+      "A hidden completed task will be imported as completed.",
+    );
+    await act(async () => checks[1]?.click());
+    const name = query<HTMLInputElement>('input[aria-label="Project name for Work"]');
+    expect(name.value).toBe("Work");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        name,
+        "Imported work",
+      );
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Import 2 tasks");
+    await finished();
+    const created = cache.getSnapshot().projects.filter((project) => project.url !== inbox.url);
+    expect(created).toHaveLength(1);
+    const project = created[0];
+    if (!project) throw new Error("Missing project");
+    expect(project.tracker.title).toBe("Imported work");
+    const tasks = await cache.store.listTasks(project.tracker.stateStore as string);
+    expect(tasks).toHaveLength(2);
+    const parent = tasks.find((task) => task.task.title === "Finished");
+    const child = tasks.find((task) => task.task.title === "Child");
+    if (!parent || !child) throw new Error("Missing task");
+    expect(parent.task.state).toBe("closed");
+    expect(parent.task.endedAt).toEqual(new Date("2026-11-01T11:34:56Z"));
+    expect(parent.task.description).toBe("SECRET notes\nReceipt: https://mail.example/receipt");
+    expect(parent.task.priority).toBeUndefined();
+    expect(parent.task.allDay).toBe("2026-07-01");
+    expect(parent.task.dueDate).toEqual(new Date(2026, 6, 1));
+    expect(child.task.parent).toBe(parent.task.id);
+    expect(child.task.state).toBe("open");
+    const rdf = await pod.dataset(parent.url);
+    expect(
+      rdf.getObjects(
+        DataFactory.namedNode(parent.task.id),
+        DataFactory.namedNode(`${SCHED}dueTime`),
+        null,
+      ),
+    ).toEqual([DataFactory.literal("2026-07-01", DataFactory.namedNode(`${NS.XSD}date`))]);
+    expect(
+      rdf.getObjects(
+        DataFactory.namedNode(parent.task.id),
+        DataFactory.namedNode(`${NS.PROV}endedAtTime`),
+        null,
+      ),
+    ).toEqual([
+      DataFactory.literal("2026-11-01T11:34:56.000Z", DataFactory.namedNode(`${NS.XSD}dateTime`)),
+    ]);
+    expect(toast.success).toHaveBeenCalledWith(
+      "Imported 2 tasks into Imported work",
+      expect.anything(),
+    );
+  });
+
+  it("creates a distinct project for every checked list using New project's collision handling", async () => {
+    await act(async () => {
+      await cache.createProject("Work");
+    });
+    await pick(
+      takeout.replace('"title":"Personal"', '"title":"Work"'),
+      "Tasks.json",
+      true,
+      "application/json",
+    );
+    await click("Import 3 tasks");
+    await finished();
+    const projects = cache
+      .getSnapshot()
+      .projects.filter((project) => project.tracker.title === "Work");
+    expect(projects.map((project) => project.url.split("/").pop()).sort()).toEqual([
+      "work-2.ttl",
+      "work-3.ttl",
+      "work.ttl",
+    ]);
+    expect(toast.success).toHaveBeenCalledWith(
+      "Imported 3 tasks into 2 projects",
+      expect.anything(),
+    );
+    expect(cache.getSnapshot().views).toHaveLength(3);
+  });
+
+  it("shows a safe parser error for malformed JSON and accepts a replacement", async () => {
+    await pick('{"kind":"SECRET",', "Tasks.json", false, "application/json");
+    expect(query('[role="alert"]').textContent).toBe(
+      "This file is not valid Google Tasks JSON. Choose another file.",
+    );
+    expect(document.body.textContent).not.toContain("SECRET");
+    await pick(takeout, "wrong.csv");
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(document.querySelectorAll('input[type="checkbox"]')).toHaveLength(2);
+  });
+
+  it("requires a checked list and a name for each selected project", async () => {
+    await pick(takeout, "Tasks.json");
+    const name = query<HTMLInputElement>('input[aria-label="Project name for Work"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, " ");
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Import 3 tasks",
+      )?.disabled,
+    ).toBe(true);
+    for (const checkbox of document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+      await act(async () => checkbox.click());
+    }
+    expect(
+      [...document.querySelectorAll("button")].find(
+        (button) => button.textContent === "Import 0 tasks",
+      )?.disabled,
+    ).toBe(true);
+  });
+
+  it("cancels during a list and never starts the next project", async () => {
+    await pick(takeout, "Tasks.json");
+    const blocked = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    pod.intercept = async (request) => {
+      if (taskWrite(request)) {
+        started.resolve();
+        await blocked.promise;
+      }
+    };
+    await click("Import 3 tasks");
+    await act(async () => started.promise);
+    expect(document.body.textContent).toContain("Importing 0 of 3…");
+    await click("Cancel");
+    await act(async () => blocked.resolve());
+    await finished();
+    expect(
+      cache
+        .getSnapshot()
+        .projects.map((project) => project.tracker.title)
+        .sort(),
+    ).toEqual(["Inbox", "Work"]);
+    expect(cache.getSnapshot().views).toHaveLength(1);
+    expect(toast.info).toHaveBeenCalledWith(
+      "Import cancelled. Imported 1 tasks into 1 projects. Already-created tasks stay.",
+      expect.anything(),
+    );
+  });
+
+  it("keeps importing other lists after a task failure and summarises both projects", async () => {
+    await pick(takeout, "Tasks.json");
+    const create = cache.store.createTask.bind(cache.store);
+    vi.spyOn(cache.store, "createTask").mockImplementation(async (...args) => {
+      if (args[1].title === "Finished") throw new Error("Write failed");
+      return create(...args);
+    });
+    await click("Import 3 tasks");
+    await finished();
+    expect(cache.getSnapshot().views.map((task) => task.title)).toEqual(["SECRET other task"]);
+    expect(toast.error).toHaveBeenCalledWith(
+      "Imported 1 tasks into 2 projects. 2 tasks failed.",
+      expect.anything(),
+    );
+  });
+
+  it("creates checked empty lists, and explains an export without lists", async () => {
+    await pick('{"kind":"tasks#taskLists","items":[]}', "Tasks.json");
+    expect(document.body.textContent).toContain("No task lists to import.");
+    await pick('{"kind":"tasks#taskLists","items":[{"id":"empty","title":"Empty"}]}', "Tasks.json");
+    await click("Import 0 tasks");
+    await finished();
+    expect(cache.getSnapshot().projects.map((project) => project.tracker.title)).toEqual([
+      "Inbox",
+      "Empty",
+    ]);
+    expect(toast.success).toHaveBeenCalledWith("Imported 0 tasks into Empty", expect.anything());
+  });
+
+  it("reports a project setup failure for an empty list instead of claiming success", async () => {
+    await pick('{"kind":"tasks#taskLists","items":[{"id":"empty","title":"Empty"}]}', "Tasks.json");
+    vi.spyOn(cache.store, "createProject").mockRejectedValue(new Error("Write failed"));
+    await click("Import 0 tasks");
+    expect(query('[role="alert"]').textContent).toContain("Could not finish the import.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(cache.getSnapshot().projects.map((project) => project.tracker.title)).toEqual(["Inbox"]);
   });
 });
