@@ -47,11 +47,13 @@ async function fixture(wrapFetch = (fetcher) => fetcher, extra = {}) {
       headers: { "content-type": "text/turtle" },
     });
   };
+  const fetcher = wrapFetch(op.fetch, op);
   const options = {
     issuer: POD_ISSUER,
     clientId: POD_CLIENT,
     redirectUri: POD_CALLBACK,
-    fetch: wrapFetch(op.fetch, op),
+    fetch: fetcher,
+    profileFetch: fetcher,
     ...extra,
   };
   const client = await createServerOidcClient(options);
@@ -59,6 +61,81 @@ async function fixture(wrapFetch = (fetcher) => fetcher, extra = {}) {
   const login = () => client.handleCallback({ url: op.callback(begin.url) }, begin.state);
   return { op, options, client, begin, login, profileRequests };
 }
+
+test("requires an explicit SSRF-guarded profile transport before discovery", async () => {
+  const fetcher = vi.fn();
+  await expect(
+    createServerOidcClient({
+      issuer: POD_ISSUER,
+      clientId: POD_CLIENT,
+      redirectUri: POD_CALLBACK,
+      fetch: fetcher,
+    }),
+  ).rejects.toThrow(new Error("verifyWebId requires an SSRF-guarded profileFetch transport"));
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+test("uses only profileFetch for profiles and rechecks its SSRF policy on redirects", async () => {
+  const targets = [];
+  const guarded = vi.fn(async (input, init) => {
+    const request = new Request(input, init);
+    targets.push(request.url);
+    if (request.url === "https://127.0.0.1/private")
+      throw new Error("Profile transport refused a private address");
+    return new Response(null, {
+      status: 302,
+      headers: { location: "https://127.0.0.1/private" },
+    });
+  });
+  const f = await fixture(
+    (fetcher) => (input, init) => {
+      expect(new Request(input, init).url).not.toContain("/profile");
+      return fetcher(input, init);
+    },
+    { profileFetch: guarded },
+  );
+  await expect(f.login()).rejects.toThrow(new Error("Profile transport refused a private address"));
+  expect(targets).toEqual(["https://alice.example/profile", "https://127.0.0.1/private"]);
+  expect(f.client.currentWebId()).toBeUndefined();
+  await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow(new Error("No pod credentials"));
+});
+
+test.each([
+  "https://OP.example/tenant",
+  "https://op.example:443/tenant",
+])("checks the validated token issuer with a normalized configuration (%s)", async (issuer) => {
+  const canonical = new URL(issuer).href;
+  const f = await fixture(
+    (fetcher, op) => {
+      op.controls.discoveryIssuer = canonical;
+      op.controls.idIssuer = canonical;
+      op.controls.profileIssuer = canonical;
+      return (input, init) => {
+        if (new Request(input, init).url.endsWith("/.well-known/openid-configuration"))
+          return fetcher(`${POD_ISSUER}.well-known/openid-configuration`, init);
+        return fetcher(input, init);
+      };
+    },
+    { issuer },
+  );
+  const callback = new URL(f.op.callback(f.begin.url));
+  callback.searchParams.set("iss", canonical);
+  const session = await f.client.handleCallback({ url: callback.href }, f.begin.state);
+  expect(session.webId).toBe(f.op.controls.webId);
+  await f.client.refresh(session.tokens.refreshToken);
+  expect(f.client.currentWebId()).toBe(session.webId);
+});
+
+test("keeps the configured profile-verification policy after options are mutated", async () => {
+  const f = await fixture();
+  f.options.verifyWebId = false;
+  f.options.profileFetch = undefined;
+  f.op.controls.profileIssuer = "https://unrelated.example/";
+  await expect(f.login()).rejects.toThrow(
+    new Error("WebID profile does not trust the configured issuer"),
+  );
+  expect(f.profileRequests).toHaveLength(1);
+});
 
 test.each([
   "webid",
@@ -70,7 +147,9 @@ test.each([
     f.op.controls.webId = undefined;
   }
   f.op.controls.profileIssuer = "https://unrelated.example/";
-  await expect(f.login()).rejects.toThrow("issuer");
+  await expect(f.login()).rejects.toThrow(
+    new Error("WebID profile does not trust the configured issuer"),
+  );
   expect(f.client.currentWebId()).toBeUndefined();
   await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
 });
@@ -98,7 +177,12 @@ test.each(["missing issuer", "unavailable profile"])("fails closed for a %s", as
   const f = await fixture();
   if (kind === "missing issuer") f.op.controls.profileIssuers = 0;
   else f.op.controls.profileStatus = 503;
-  await expect(f.login()).rejects.toThrow();
+  await expect(f.login()).rejects.toMatchObject({
+    message:
+      kind === "missing issuer"
+        ? "WebID profile does not trust the configured issuer"
+        : `${f.op.controls.webId} could not be retrieved (503)`,
+  });
   expect(f.client.currentWebId()).toBeUndefined();
   await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
 });
@@ -111,13 +195,15 @@ test("checks the WebID issuer binding when restoring credentials with a refresh 
     dpopKeyPair: f.client.dpopKeyPair,
   });
   f.op.controls.profileIssuer = "https://unrelated.example/";
-  await expect(restored.refresh(session.tokens.refreshToken)).rejects.toThrow("issuer");
+  await expect(restored.refresh(session.tokens.refreshToken)).rejects.toThrow(
+    new Error("WebID profile does not trust the configured issuer"),
+  );
   expect(restored.currentWebId()).toBeUndefined();
   await expect(restored.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
 });
 
 test("allows explicit WebID verification opt-out on callback and refresh without fetching a profile", async () => {
-  const f = await fixture(undefined, { verifyWebId: false });
+  const f = await fixture(undefined, { verifyWebId: false, profileFetch: undefined });
   f.op.controls.profileIssuer = "https://unrelated.example/";
   f.op.controls.profileStatus = 503;
   const session = await f.login();
@@ -568,7 +654,10 @@ test.each([
   if (kind === "credentials") url.username = "user";
   if (kind === "redirect") state.redirectUri = "https://evil.example/callback";
   if (kind === "state") state.state = "other-state";
-  await expect(f.client.handleCallback({ url: url.href }, state)).rejects.toThrow();
+  await expect(f.client.handleCallback({ url: url.href }, state)).rejects.toMatchObject({
+    message:
+      kind === "state" ? 'unexpected "state" response parameter value' : "Pod callback mismatch",
+  });
   expect(f.op.captured.filter((r) => r.url.endsWith("/token"))).toHaveLength(0);
 });
 
@@ -602,7 +691,7 @@ test("rejects a subject fallback signed by an unrelated key", async () => {
   });
   f.op.controls.idSubject = f.op.controls.webId;
   f.op.controls.webId = undefined;
-  await expect(f.login()).rejects.toThrow();
+  await expect(f.login()).rejects.toMatchObject({ message: "JWT signature verification failed" });
   expect(f.client.currentWebId()).toBeUndefined();
   await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
 });
@@ -617,7 +706,11 @@ test.each([
   const f = await fixture();
   f.op.controls.webId = undefined;
   f.op.controls.idSubject = subject;
-  await expect(f.login()).rejects.toThrow();
+  await expect(f.login()).rejects.toMatchObject({
+    message: ["opaque-subject", "https://"].includes(subject)
+      ? "Invalid URL"
+      : "Invalid verified WebID",
+  });
   expect(f.client.currentWebId()).toBeUndefined();
   await expect(f.client.fetch(`${POD_ROOT}notes`)).rejects.toThrow("No pod credentials");
 });
@@ -631,7 +724,12 @@ test.each([
   const f = await fixture();
   f.op.controls.idSubject = f.op.controls.webId;
   f.op.controls.webId = webId;
-  await expect(f.login()).rejects.toThrow("WebID");
+  await expect(f.login()).rejects.toMatchObject({
+    message:
+      webId === "" || typeof webId !== "string"
+        ? "Missing verified WebID"
+        : "Invalid verified WebID",
+  });
 });
 
 test.each([
@@ -648,17 +746,20 @@ test.each([
       return Response.json(metadata);
     },
   });
-  await expect(client.authorizationUrl()).rejects.toThrow();
+  await expect(client.authorizationUrl()).rejects.toMatchObject({
+    message:
+      endpoint === undefined ? "Missing authorization endpoint" : "Unsafe authorization endpoint",
+  });
 });
 
 test("refuses DPoP downgrade and cryptographically mismatched vault envelopes", async () => {
   const f = await fixture();
   f.op.controls.tokenType = "Bearer";
-  await expect(f.login()).rejects.toThrow("DPoP");
+  await expect(f.login()).rejects.toThrow(new Error("DPoP tokens required"));
   vi.spyOn(crypto.subtle, "verify").mockResolvedValueOnce(false);
   await expect(
     importServerDpopKey(await exportServerDpopKey(f.client.dpopKeyPair)),
-  ).rejects.toThrow("Mismatched");
+  ).rejects.toThrow(new Error("Mismatched server DPoP keys"));
 });
 
 test("does not invent a missing refresh grant", async () => {

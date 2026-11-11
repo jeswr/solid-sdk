@@ -32,12 +32,17 @@ export interface ServerOidcOptions {
   redirectUri: string;
   fetch: typeof fetch;
   dpopKeyPair?: ServerDpopKey;
-  /** Verify the WebID profile lists this issuer. Disable only if the caller verifies the binding. Default true. */
+  /**
+   * Profile transport, required unless verifyWebId is false. Must reject private/loopback IPs,
+   * pin validated DNS answers, recheck every redirect and honor AbortSignal. Never uses fetch as a fallback.
+   */
+  profileFetch?: typeof fetch;
+  /** Verify the WebID profile lists the validated token issuer. Disable only if the caller verifies the binding. Default true. */
   verifyWebId?: boolean;
   /**
    * Resource URLs that may receive credentials; checked before buffering and before every send.
    * Without this predicate there is no resource boundary: the caller must enforce URL scope.
-   * Discovery, WebID profile and token endpoint requests use the injected fetch independently.
+   * Discovery and token endpoint requests use fetch; WebID profiles use profileFetch independently.
    */
   allows?: (url: URL) => boolean;
   /** Answer LWS challenges with the verified OIDC ID token; credentials stay in memory. */
@@ -97,7 +102,12 @@ async function generateKey(): Promise<ServerDpopKey> {
  */
 export async function createServerOidcClient(options: ServerOidcOptions) {
   const lwsPolicy = options.lws ? requireLwsPolicy(options.trustAuthorizationServer) : undefined;
+  const verifyWebId = options.verifyWebId !== false;
+  if (verifyWebId && typeof options.profileFetch !== "function")
+    throw new Error("verifyWebId requires an SSRF-guarded profileFetch transport");
   const http: HttpOptions = { fetch: options.fetch };
+  const profileHttp =
+    options.profileFetch === undefined ? undefined : { fetch: options.profileFetch };
   const allows = options.allows ?? (() => true);
   const assertAllowed = (url: string) => {
     if (!allows(new URL(url))) throw new Error("Resource URL is outside the allowed boundary");
@@ -196,10 +206,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
       const parsed = new URL(id);
       if (parsed.protocol !== "https:" || parsed.username || parsed.password)
         throw new Error("Invalid verified WebID");
-      if (
-        options.verifyWebId !== false &&
-        !(await webIdTrustsIssuer(parsed, options.issuer, undefined, http))
-      )
+      if (verifyWebId && !(await webIdTrustsIssuer(parsed, claims.iss, undefined, profileHttp)))
         throw new Error("WebID profile does not trust the configured issuer");
       webId = id;
     } else webId = undefined;

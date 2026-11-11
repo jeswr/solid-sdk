@@ -16,10 +16,16 @@ The public entry points remain `.`, `./elements`, `./registerElements`, and `./s
 
 - Inject transport, credential boundaries, providers and stores. Preserve the pristine fetch seam.
 - `createServerOidcClient` verifies the WebID-to-issuer profile binding by default for callback and
-  refresh ID tokens, including the HTTPS `sub` fallback. `verifyWebId: false` is for callers that
-  independently verify that binding. Its optional `allows(URL)` predicate rejects resource URLs
-  before buffering and before each resource send (including retries); without it there is no
-  resource boundary. Discovery, profile and exchange requests use the injected transport separately.
+  refresh ID tokens against validated `iss`, including the HTTPS `sub` fallback. Verification
+  requires a separate SSRF-guarded `profileFetch` before discovery; there is no raw-fetch fallback.
+  That transport must pin public DNS answers, reject private/loopback targets on every hop and
+  honor AbortSignal. Turtle-only profiles have a 256 KiB streaming cap and a single eight-second
+  deadline across redirects and body reading. `verifyWebId: false` is for callers that independently
+  verify that binding (including fetch-rdf content negotiation). Profile failure after refresh may
+  discard an already rotated refresh token: require new login, or opt out, persist rotation and
+  perform the guarded verification before permitting resource access.
+  Its optional `allows(URL)` predicate rejects resource URLs before buffering and before each resource send (including retries); without it there is no
+  resource boundary. Discovery/exchange use `fetch`; profiles use `profileFetch` separately.
   `lws: true` requires `trustAuthorizationServer`; reject missing policies before discovery.
 - Keep credentials within verified storage boundaries; reject stale operations after logout or account changes.
 - Preserve non-extractable DPoP keys, refresh rotation, session fences and cross-tab locking.
