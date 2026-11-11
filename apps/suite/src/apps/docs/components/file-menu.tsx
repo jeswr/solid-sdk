@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DownloadFormat } from "../editor/export-document";
 import { ActionsMenu } from "./actions-menu";
 import { DownloadMenu } from "./download-menu";
+import { VersionMenu, type VersionMenuProps } from "./version-menu";
 export function FileMenu({
   copy,
   rename,
@@ -15,7 +16,10 @@ export function FileMenu({
   download,
   print,
   importFile,
-}: {
+  showHistory,
+  nameVersion,
+  versionReason,
+}: Partial<VersionMenuProps> & {
   copy: () => void;
   rename: () => void;
   remove: () => void;
@@ -43,6 +47,13 @@ export function FileMenu({
           <DropdownMenuItem disabled={readOnly} onSelect={choose(importFile)}>
             Import to replace…
           </DropdownMenuItem>
+          {showHistory && nameVersion && (
+            <VersionMenu
+              showHistory={choose(showHistory)}
+              nameVersion={choose(nameVersion)}
+              versionReason={versionReason}
+            />
+          )}
           <DropdownMenuItem disabled>Details — Coming soon</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem

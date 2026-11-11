@@ -22,6 +22,7 @@ import type { DownloadFormat } from "../editor/export-document";
 import { indentDocument, paragraphSpacing } from "../editor/formatting";
 import { keyboardLabel } from "../lib/editor/logic";
 import { DownloadMenu } from "./download-menu";
+import { VersionMenu, type VersionMenuProps } from "./version-menu";
 
 const MENUS = ["File", "Edit", "View", "Insert", "Format", "Tools", "Help"] as const;
 export const ZOOMS = [50, 75, 90, 100, 125, 150, 175, 200];
@@ -70,7 +71,7 @@ export function SpacingItems({
   );
 }
 
-export interface EditorMenubarProps {
+export interface EditorMenubarProps extends Partial<VersionMenuProps> {
   editor: Editor;
   actions: EditorAction[];
   mac: boolean;
@@ -181,6 +182,13 @@ export function EditorMenubar(props: EditorMenubarProps) {
         <DownloadMenu download={props.download} print={props.print} />
         {item("Import to replace…", props.importFile)}
         {item("Rename", props.rename)}
+        {props.showHistory && props.nameVersion && (
+          <VersionMenu
+            showHistory={choose(props.showHistory)}
+            nameVersion={choose(props.nameVersion)}
+            versionReason={props.versionReason}
+          />
+        )}
         {item("Move to trash", props.remove, "", readOnly || props.draft)}
         <DropdownMenuSeparator />
         {item("Print", props.print, "Mod+P", false)}
