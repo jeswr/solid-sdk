@@ -12,12 +12,13 @@ import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
 import { type QuoteAncestor, quotePaths, readQuoteStyle } from "./docx-quotes";
 import { WORD } from "./docx-xml";
+import { MAX_IMPORT_BYTES } from "./import-file";
 import { sanitiseImport } from "./sanitise";
 import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skipped";
 
 export type { SkippedItem } from "./skipped";
+export { MAX_IMPORT_BYTES };
 
-export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 const paragraphStyles = new Map<string, string>([
   ["Horizontal Rule", "hr:fresh"],
   ["Title", "h1:fresh"],

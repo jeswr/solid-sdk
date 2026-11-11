@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ActionProposal, Transmission } from "@jeswr/agent-model";
 import type { DisplayApproval } from "./readers";
 export interface PendingApproval {
+  similarAllowed?: boolean;
   proposal: ActionProposal;
   reason: string;
   expiresIn: number;
@@ -87,4 +89,13 @@ export function canBulkApprove(rows: readonly PendingApproval[]) {
         row.proposal.intent.recipientHash === first.proposal.intent.recipientHash,
     )
   );
+}
+const REASON_RANK = ["Allowed", "Ask first", "Needs a new approval", "Never"];
+/** The more restrictive of two badges; unknown wording ranks as "Ask first". */
+export function conservativeReason(a: string, b: string): string {
+  const rank = (reason: string) => {
+    const index = REASON_RANK.indexOf(reason);
+    return index < 0 ? 1 : index;
+  };
+  return rank(b) > rank(a) ? b : a;
 }

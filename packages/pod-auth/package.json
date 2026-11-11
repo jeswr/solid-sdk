@@ -27,6 +27,10 @@
     "./directory": {
       "types": "./dist/directory.d.ts",
       "default": "./dist/directory.js"
+    },
+    "./registration": {
+      "types": "./dist/registration.d.ts",
+      "default": "./dist/registration.js"
     }
   },
   "files": [
@@ -58,7 +62,8 @@
   "dependencies": {
     "@jeswr/reactive-authentication": "workspace:*",
     "@rdfjs/wrapper": "^0.34",
-    "n3": "^2"
+    "n3": "^2",
+    "@jeswr/guarded-fetch": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18"

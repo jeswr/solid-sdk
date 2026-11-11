@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 import type { Mode, PodImplementation } from "../types.js";
@@ -64,6 +65,8 @@ export interface GrantMutationOptions extends RolesOptions {
 /** Optional read-modify-write baseline; a version map must cover every selected URL. */
 export interface SetGrantsOptions extends GrantMutationOptions {
   expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
+  /** Replace/create own access, including empty ACP selections, without copying WAC defaults. */
+  ownOnly?: boolean;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */
 export interface SetGrantsResult {
@@ -81,6 +84,7 @@ export interface RoleError extends Error {
     | "conflict"
     | "precondition-required"
     | "owner-lockout"
+    | "partial-scope"
     | "inherited-grant";
   url: string;
   feature: "accessControl";

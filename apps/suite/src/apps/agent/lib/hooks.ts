@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   createContext,
@@ -71,6 +72,15 @@ const ClockContext = createContext(0);
 /** Shared by status, queue expiry, countdowns, and the sidebar waiting count. */
 export function useAgentClock() {
   return Math.max(useContext(ClockContext), Date.now());
+}
+/**
+ * The workspace tick: stable between ticks, so memoised results and effects keyed on it
+ * don't change on every render. Outside a workspace it starts at the component's mount time.
+ */
+export function useAgentTick() {
+  const tick = useContext(ClockContext);
+  const [mounted] = useState(Date.now);
+  return Math.max(tick, mounted);
 }
 export function useAgentWorkspace(): Workspace {
   const context = useContext(WorkspaceContext);
@@ -167,6 +177,7 @@ export function AgentWorkspaceProvider({
 export function useAgentQuery<T>(
   key: string,
   loader: (client: AgentClient) => Promise<T>,
+  debounceMs = 150,
 ): Query<T> {
   const { client, session } = useAgentWorkspace();
   const local = useContext(InvalidationContext);
@@ -221,7 +232,7 @@ export function useAgentQuery<T>(
           const refresh = pendingQuiet;
           pendingQuiet = true;
           run(refresh);
-        }, 150);
+        }, debounceMs);
       }
     };
     const unsubscribe = session.subscribe(notice);
@@ -233,6 +244,6 @@ export function useAgentQuery<T>(
       unsubscribe();
       unsubscribeLocal();
     };
-  }, [client, session, local, key, reload, attempt]);
+  }, [client, session, local, key, reload, attempt, debounceMs]);
   return state.key === key && state.client === client ? state.query : { status: "loading", reload };
 }

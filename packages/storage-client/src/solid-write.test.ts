@@ -123,7 +123,7 @@ describe("CSS write fixtures and HTTP plumbing", () => {
         contentType: 'text/plain; charset="utf-8"',
         ifMatch: TAG,
       }),
-    ).toEqual({ url: URL, created: false, etag: '"updated"' });
+    ).toEqual({ url: URL, created: false, etag: '"updated"', etagSource: "response" });
     expect(calls[0]).toMatchObject({ method: "PUT", url: URL, body: "body", redirect: "manual" });
     expect(Object.fromEntries(calls[0]?.headers ?? [])).toEqual({
       "content-type": 'text/plain; charset="utf-8"',
@@ -234,6 +234,8 @@ describe("CSS write fixtures and HTTP plumbing", () => {
       });
       const result = await storage.write(URL, "x", { ifMatch: "*", contentType: "text/plain" });
       expect(result.etag).toBe(typeof head === "object" ? (head.headers.etag ?? null) : null);
+      // A HEAD after the write may observe a concurrent writer, so it is never "response".
+      expect(result.etagSource).toBe(result.etag === null ? undefined : "follow-up");
       expect(calls).toHaveLength(2);
       expect(calls[1]).toMatchObject({ method: "HEAD", redirect: "manual", url: URL });
     }
@@ -514,7 +516,12 @@ describe("create (CSS fixtures)", () => {
         contentType: "text/turtle",
         links: [{ rel: "type", target: "urn:ignored" }],
       }),
-    ).toEqual({ url: `${NOTES}new%20note.ttl`, etag: '"created"', created: true });
+    ).toEqual({
+      url: `${NOTES}new%20note.ttl`,
+      etag: '"created"',
+      created: true,
+      etagSource: "response",
+    });
     expect(calls[0]?.body).toBe("body");
     expect(Object.fromEntries(calls[0]?.headers ?? [])).toEqual({
       "content-type": "text/turtle",

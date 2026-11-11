@@ -30,7 +30,14 @@ extension's granted pod, falling back to a seeded demo pod. Native staging repla
 session with a sign-in placeholder and omits the demo code. Native authentication is a later
 integration. Native `/` opens `/drive/my/`,
 and Drive preview interception falls back to `/drive/p/[ref]`. The manifest reports these
-adaptations. The native PDF handoff belongs to MOB-P3b.
+adaptations. 
+
+Before anything else renders, the root layout's startup check (MOB-P3 E6) requires a secure
+context, `crypto.subtle`, `navigator.locks` and IndexedDB. Without one of them the app shows an
+update screen and no provider renders, so no session restore or pod-auth runs. The modules below
+the gate still load (their code is in the page payload), so they must not touch the platform at
+import time. In Drive, PDFs open in the platform viewer through the `SuiteFiles` plugin
+("Open PDF", E5); files over 25 MiB offer the download instead.
 
 `route-manifest.json` has `version: 1`, `routes`, `assets`, and `adaptations`. Each route has a
 source `pattern`, typed `segments` (`static` + `value`, `param` + `name`, or `catch-all` + `name`
@@ -60,3 +67,13 @@ Tests cover cold deep links, Link navigation, router.push, prefetch, parameter c
 page state, and back/forward. CI installs Chromium; local runs use an existing installation.
 The fixture export never replaces `www/`. The web build also checks its emitted chunks for
 native calendar component exports.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Feedback
+
+Native staging excludes all `src/app/api/` route handlers, including feedback POST routes.
+The adaptation is recorded in `route-manifest.json`; `check-native.mjs` rejects API artifacts.
+`/feedback` calls `NEXT_PUBLIC_PUBLIC_SUITE_URL` (the existing deployed suite base URL),
+which must allow the native Origin through `FEEDBACK_ALLOWED_ORIGINS`. When that service
+cannot be reached, the guide works locally and Download my feedback preserves JSON,
+Markdown and audio together. See [README.md](README.md#pilot-feedback) for server setup.

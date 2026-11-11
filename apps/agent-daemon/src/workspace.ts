@@ -216,6 +216,20 @@ export class PodWorkspace {
     await this.put(url, await turtle(store));
     return triage;
   }
+  /**
+   * Publish the agent's introduction. The owner's app trusts only this resource for the
+   * agent's WebID (the mandate subject); other descriptors/ resources are channel capabilities.
+   * Rewritten on every start so it stays current.
+   */
+  async introduce(agentWebId: string): Promise<void> {
+    const agent = safe(agentWebId).href;
+    await this.container(this.url("descriptors/"));
+    const store = new Store();
+    const resource = node(store, this.url("descriptors/agent.ttl"));
+    resource.iri(`${RDF}type`, `${AGENT}ImplementationDescription`);
+    resource.iri(`${AGENT}describes`, agent);
+    await this.put(resource.value, await turtle(store));
+  }
   async heartbeat(at: Date): Promise<void> {
     const store = new Store();
     const resource = node(store, this.url("control/heartbeat.ttl"));

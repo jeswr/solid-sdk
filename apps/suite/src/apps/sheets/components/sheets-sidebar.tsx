@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef } from "react";
 import { encodeRef } from "@/lib/refs";
-import { XlsxImportError } from "../lib/xlsx/common";
+import { LIMITS, XlsxImportError } from "../lib/xlsx/common";
 import { useWorkbookService } from "../state/service";
 
 export const workbookHref = (container: string) => `/sheets/s/${encodeRef(container)}`;
@@ -43,6 +43,8 @@ export function SheetsSidebar() {
           try {
             if (/\.xlsm$/i.test(file.name))
               throw new Error("Macro-enabled Excel files are not supported");
+            if (excel && file.size > LIMITS.compressedBytes)
+              throw new XlsxImportError("Excel files must be 50 MiB or smaller");
             const opened = excel
               ? await service.createFromXlsx({
                   title: file.name.replace(/\.xlsx$/i, ""),

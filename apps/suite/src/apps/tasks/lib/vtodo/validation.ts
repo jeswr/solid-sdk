@@ -48,6 +48,7 @@ export function validateTask(task: VTodoTask): void {
     "percentComplete",
     "rrule",
     "parentUid",
+    "categories",
   ];
   requireValue(
     Object.keys(task).every((key) => keys.includes(key)),
@@ -59,6 +60,10 @@ export function validateTask(task: VTodoTask): void {
   utcValue(task.stamp);
   requireValue(task.state === "open" || task.state === "closed", "invalid-value");
   if (task.description !== undefined) textValue(task.description);
+  if (task.categories !== undefined) {
+    requireValue(Array.isArray(task.categories), "invalid-value");
+    for (const category of task.categories) nonblank(category);
+  }
   if (task.status !== undefined) {
     requireValue(
       ["NEEDS-ACTION", "IN-PROCESS", "COMPLETED", "CANCELLED"].includes(task.status),

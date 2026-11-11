@@ -15,6 +15,7 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { failureNotice, type PermissionsView, visibleRows } from "../../lib/permissions/view";
 import {
   type PermissionsBinding,
@@ -129,7 +130,7 @@ export function PermissionsPage() {
   return (
     <div className="hm-page hm-permissions-page">
       <header>
-        <h1>Permissions</h1>
+        <AppHeading>Permissions</AppHeading>
         <p className="hm-permission-muted">Who can see or change the data in your pod.</p>
       </header>
       <Tabs value={tab} onValueChange={setTab}>

@@ -1,23 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { issueApproval } from "@jeswr/agent-mandate/approval";
-import {
-  type AuditEntry,
-  canonicalJson,
-  digestOf,
-  type PodRecord,
-  recordToTurtle,
-} from "@jeswr/agent-model";
+import { digestOf, type PodRecord, recordToTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { serialize } from "@jeswr/rdf-serialize";
 import { type KeyPair, publishVerificationMethod } from "@jeswr/solid-vc";
 import { Store } from "n3";
+import { type AuditEntry, auditHeadToTurtle, auditToTurtle, sealAudit } from "./audit";
+import { demoAccountHash, demoMandateFiles } from "./demo-mandate";
 import { AGENT, metadataNode, PROV, RDF } from "./paths";
 
 /**
  * Structurally the demo pod's DemoSeedFile. Declared here because the native build stages the
  * app without src/lib/demo-pod, and this module must still type-check there.
  */
-interface DemoSeedFile {
+export interface DemoSeedFile {
   readonly path: string;
   readonly body: Uint8Array | string;
   readonly contentType: string;
@@ -56,6 +53,7 @@ export async function demoApprovalVerificationMethod() {
 export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
   const at = (offset: number) => new Date(now + offset).toISOString();
   const id = (path: string) => `${BASE}${path}`;
+  const authority = await demoMandateFiles(now);
   const records: PodRecord[] = [];
   const account = exampleRecords.account;
   const configs = [
@@ -100,13 +98,13 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       label: config.label,
       channel: config.channel,
       bindingState: config.state,
-      channelHandleHash: `salted-demo-${config.slug}`,
+      channelHandleHash: demoAccountHash(config.slug),
       restrictions: { read: config.read, triage: config.read, draft: false, send: false },
       inventory: {
         channelHandles:
           config.slug === "conflict"
             ? ["salted-demo-one", "salted-demo-two"]
-            : [`salted-demo-${config.slug}`],
+            : [demoAccountHash(config.slug)],
         credentialRefs: [],
         setupStatus: config.state,
         observedAt: at(-60_000),
@@ -138,6 +136,7 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       ...exampleRecords["inbound-message"],
       id: id(`inbox/${binding}/${binding}/message-${i}.ttl`),
       binding,
+      channelHandleHash: `salted-demo-${binding}`,
       subject: subjects[i] as string,
       text:
         i === 1
@@ -152,6 +151,12 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
                 name: "Project catch-up",
                 start: at(86_400_000),
                 end: at(90_000_000),
+                location: "Meeting room",
+              },
+              {
+                type: "text/html",
+                value:
+                  '<b>HTML alternative</b><img src="https://example.invalid/pixel" alt="Tracking pixel">',
               },
             ]
           : [],
@@ -193,8 +198,8 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       ...exampleRecords["action-proposal"].intent,
       conversation: id("conversations/welcome/"),
       binding: "gmail",
-      action: index === 1 ? "remember" : "send",
-      recipientHash: index === 2 ? "salted-demo-non-listed-recipient" : "salted-demo-gmail",
+      action: `${AGENT}${index === 1 ? "Remember" : "SendMessage"}`,
+      recipientHash: index === 2 ? `sha256:${"a".repeat(64)}` : demoAccountHash("gmail"),
       parameters: {
         summary: subjects[index] as string,
         approvalRule: "Ask before sending to another person or saving a preference",
@@ -221,8 +226,9 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
   const mandate = {
     ...exampleRecords["mandate-reference"],
     id: id("mandates/demo.ttl"),
-    credential: id("mandates/demo-credential.ttl"),
+    credential: id("mandates/demo-credential.trig"),
     credentialStatus: id("mandates/status.ttl"),
+    digest: authority.digest,
     validFrom: at(-86_400_000),
     validUntil: at(30 * 86_400_000),
   };
@@ -241,28 +247,59 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
     ...exampleRecords["control-statement"],
     id: id("control/resume.ttl"),
     kind: "Resume",
+    restrictions: undefined,
     attributedTo: OWNER,
     createdAt: at(-3_800_000),
     expires: at(86_400_000),
   });
+  const audit: AuditEntry[] = [];
   let prev = "sha-256:genesis";
-  for (let seq = 0; seq < 12; seq++) {
-    const fields = {
-      seq,
-      at: at(-3_600_000 + seq * 60_000),
-      prev,
-      record: {
-        type: seq === 11 ? "transmission" : "observation",
-        summary: seq === 11 ? "Sent email to my own account" : `Agent checked inbox (${seq + 1})`,
-      },
-    };
-    // The chain seals the canonical { seq, at, prev, record }; id/type are RDF envelope fields.
-    const hash = digestOf(JSON.parse(canonicalJson(fields)));
-    const entry: AuditEntry = { type: "audit-entry", id: id(`audit/${seq}.ttl`), ...fields, hash };
-    records.push(entry);
-    prev = hash;
+  for (let seq = 1; seq <= 12; seq++) {
+    const kinds = [
+      "ingest",
+      "model-call",
+      "proposal",
+      "decision",
+      "approval-seen",
+      "control",
+      "mandate-change",
+      "model-call",
+      "ingest",
+      "ingest",
+      "transmission",
+      "receipt",
+    ] as const;
+    const kind = kinds[seq - 1] as (typeof kinds)[number];
+    const connected = [3, 4, 5, 11, 12].includes(seq);
+    const entry = sealAudit(seq, at(-3_600_000 + seq * 60_000), prev, {
+      type: kind,
+      id:
+        seq === 3
+          ? id("proposals/previous-reply.ttl")
+          : seq === 11
+            ? id("outbox/sent-demo.ttl")
+            : `urn:demo:activity:${seq}`,
+      agent: id("#agent"),
+      owner: OWNER,
+      accountId: "gmail",
+      ...(connected
+        ? {
+            proposal: id("proposals/previous-reply.ttl"),
+            mandate: mandate.credential,
+            decisionRecord: "urn:demo:activity:4",
+            approval: id("approvals/previous-reply.trig"),
+            transmission: id("outbox/sent-demo.ttl"),
+            receipt: "urn:demo:activity:12",
+          }
+        : {}),
+      ...(seq === 11
+        ? { status: "sent" as const, recipientHashes: [`sha256:${"a".repeat(64)}`] }
+        : {}),
+    });
+    audit.push(entry);
+    prev = entry.hash;
   }
-  const files = await Promise.all(
+  const files: DemoSeedFile[] = await Promise.all(
     records.map(async (record) => ({
       path: record.id.slice(ROOT.length),
       body: await recordToTurtle(record),
@@ -286,6 +323,19 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
     contentType: "application/trig",
     modified: now,
   });
+  for (const entry of audit)
+    files.push({
+      path: `agent/audit/${entry.seq}.ttl`,
+      body: await auditToTurtle(id(`audit/${entry.seq}.ttl`), entry),
+      contentType: "text/turtle",
+      modified: now,
+    });
+  files.push({
+    path: "agent/audit/chain.ttl",
+    body: await auditHeadToTurtle(id("audit/chain.ttl"), audit.at(-1) as AuditEntry),
+    contentType: "text/turtle",
+    modified: now,
+  });
   const metadata = async (
     path: string,
     configure: (node: ReturnType<typeof metadataNode>) => void,
@@ -300,6 +350,11 @@ export async function buildAgentSeed(now: number): Promise<DemoSeedFile[]> {
       modified: now,
     });
   };
+  files.push(...authority.files);
+  await metadata("descriptors/agent.ttl", (node) => {
+    node.setIri(`${RDF}type`, `${AGENT}ImplementationDescription`);
+    node.setIri(`${AGENT}describes`, id("card#agent"));
+  });
   await metadata("control/heartbeat.ttl", (node) => {
     node.setIri(`${RDF}type`, `${AGENT}Heartbeat`);
     node.setText(`${PROV}generatedAtTime`, at(-30_000));

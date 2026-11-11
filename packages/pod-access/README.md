@@ -195,7 +195,7 @@ The sharing API uses `AccessGrant` (`agent`, an explicit mode array, optional pu
 The existing `Grant` export remains the neutral translation rule (`who`, a mode Set, scope and provenance).
 These types serve different APIs; translation mode implication does not change the sharing client's explicit modes.
 
-## Notification delivery
+## Notification delivery and reading
 
 Notification delivery lives at `@jeswr/pod-access/notify`:
 
@@ -222,9 +222,9 @@ announces the task with tracker target and summary `{name} assigned you '{title}
 `mentionNotification(annotation, document)` creates an annotation with the document target;
 `roomInvitation(room)` offers a room. These helpers do not modify grants or resource data.
 
-Each notifier caches positive and missing-inbox discovery for ten minutes, sharing concurrent
-profile reads. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
-to one caller/session: recreate the notifier on account changes. `clock` is injectable for tests.
+Notifiers and readers cache positive and missing-inbox discovery for ten minutes, sharing concurrent
+profile reads when fetch, pinningFetch and clock identities match. Transient failures are retried. Caches hold at most 256 exact WebIDs and belong
+to one caller/session: supply fresh transport wrappers on account changes. `clock` is injectable for tests.
 
 Known LWS recipients should be identified by `recipientProtocol: webId => 'lws'`; this returns
 `lws-no-ldn` without network requests. An `application/lws+json` profile response also returns
@@ -239,6 +239,24 @@ pin DNS and use guarded-fetch's browser policy. Activity IRIs currently require 
 
 React applications can use `useNotify()` from `@jeswr/suite-sdk` under `PodAuthProvider`; it
 supplies the current actor/fetch and resets the cache on identity changes.
+
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` at the same `./notify` subpath
+is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbox or returns
+null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
+newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
+and optional `actor`, `object`, `target`, `summary`, `content`, `published` (ISO string).
+
+Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At most
+`maxItems` direct children (default 50, non-negative safe integer) are fetched in listing
+order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
+encoded-slash members are never dereferenced; unreadable members are skipped. Container
+401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
+with `AbortError` and stops new work. There is no mark-read or delete operation.
+
+`notificationKind(notification)` classifies builder round-trips as `share` (Announce with
+summary starting `Shared with you as `), `assignment` (Announce with target), `mention`
+(Create with target), `invitation` (Offer), or `other`. Share summaries take precedence
+when an Announce also has a target. React consumers use `useInbox()` from suite-sdk.
 
 ## Offline policy translation
 
@@ -324,7 +342,7 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `isRoleError`, and their documented types
+`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
 (`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
 `RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
 It does not change the offline root API.
@@ -396,8 +414,23 @@ This check covers resource, member and ACR management policies in own, ancestor 
 documents, for reads and every mutation.
 
 `setGrants` applies the full requested **explicit** set to each resource, preserving
-container defaults, unrelated targets and annotations. Inherited rows are read-only and
-must match their governing source. They never overwrite an explicit selection for the same
+unrelated targets and annotations. With `kind: "folder"` and a trailing-slash URL, each
+changed grant covers both the folder and its members: WAC writes `acl:accessTo` and
+`acl:default` on the same authorization; ACP links a matching policy through
+`acp:accessControl` and `acp:memberAccessControl`. Removal clears both scopes.
+`addGrant` and `removeGrant` use the same folder scope. Non-folder operations retain their
+resource-only behavior. Descendants' own access documents are never rewritten.
+
+Existing folder permissions must match between resource and member scope, after combining
+each principal's modes in the own document. A resource-only, members-only, or differently
+scoped permission causes a typed `RoleError` with code `partial-scope`: `readGrants` rejects,
+and mutations report the refusal in `failed` without a PUT, including no-op selections.
+This conservative boundary prevents an ordinary role row from silently widening or narrowing
+legacy folder access. Only ESS own-ACR management (`acp:access` or own-ACR
+`acp:accessControl`) is exempt from this comparison. Member management through
+`acp:memberAccess` or own-ACR `acp:memberAccessControl` remains scoped and causes
+`partial-scope`, even when the same policy also grants own-ACR management.
+Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
 inheritance. A changed role is mapped using the requested kind and implementation.
@@ -479,6 +512,86 @@ root when a host serves several pods. Access RDF is limited to 1 MiB, 10,000 qua
 64-step ancestor walk; remote JSON-LD contexts and named graphs are refused. No group or
 app identifier is fetched. RDF edits use typed wrappers and n3.Writer. The roles tests use
 in-memory HTTP fixtures only.
+
+### Moves that preserve sharing
+
+```ts
+import { movePreservingAccess } from "@jeswr/pod-access/roles";
+
+const moved = await movePreservingAccess(storage, resourceUrl, destinationContainer, {
+  fetch: authenticatedFetch, root: storage.root, webId, name: "renamed.txt", signal,
+});
+// Persist moved.url. Drive shows its sharing-reset warning only if !moved.preserved.
+```
+
+`MovePreservingAccessOptions` extends `GrantMutationOptions`: the guarded authenticated fetch,
+caller WebID, root and trusted implementation are the usual role options. As with `storage.move`,
+`to` is a destination container; optional `name` is a decoded name hint. Always use the returned
+`url`. An advertised native move bypasses access entirely and returns `preserved: true`, with
+empty `reapplied` and `dropped` arrays. This supports native LWS moves without treating ODRL as WAC.
+
+Emulated Solid moves run a staged copy inside pod-access; they never call `storage.move`.
+Before any write, the destination container must establish caller (`webId`) manager/Control
+access, even when the source has no own grants. An advertised WAC-Allow denial refuses too.
+Every planned own-access replacement runs the roles lockout check; the moved root and all
+moved descendants must retain caller management. `acceptReset` never bypasses these checks.
+
+The snapshot includes each item's resource ETag, advertised own ACL/ACR URL, document ETag
+and document presence/absence. All validators must be strong. Own grants must round-trip
+through roles without losing modes or folder/member scope. Separate comments-container
+moves are refused. Source validators are re-read before each access application and across
+the entire source tree immediately before deletion. A changed resource, changed access
+document, or an own ACL/ACR appearing/disappearing aborts with `StorageError('conflict')`.
+
+Staging proceeds root first, parents before children:
+
+1. Create an exact-name empty placeholder with `storage.create` (Solid `If-None-Match: *`).
+   Resource placeholders retain the source Content-Type; containers use `kind: 'container'`.
+2. When the source has an own ACL/ACR, apply its own selection with `setGrants({ ownOnly: true })`
+   and read it back. Verify document presence and equality of the own role rows. No content
+   is written, and no child is created, until the parent's access has been verified.
+3. Stream one source resource at a time through `storage.read` and conditional `storage.write`,
+   using the placeholder's ETag. Recheck destination access and caller management after staging.
+4. Recheck every source validator, then delete source items bottom-up with `If-Match`.
+   Resources use their snapshot ETags. Child deletion changes container ETags, so containers
+   require a fresh verified-empty, server-managed RDF representation and its strong ETag.
+
+The traversal cap is 2,000 entries including the root and auxiliaries. As in storage-client,
+non-server-managed container RDF is refused; advertised access/metadata documents and
+`.acl`/`.acr` descendants are excluded from copying, and describedby metadata is dropped.
+Source access auxiliaries are deleted after their protected data; placements that cannot
+satisfy that order are refused. The backend's container allow-list is private, so pod-access
+mirrors it using public `listAll`/`readRdf` calls with their existing response bounds. Resource bytes stream without
+whole-tree buffering. Unlike the backend's private exact-URL helper, public `create` takes
+decoded names: names whose encoding cannot be reproduced exactly are refused before writes.
+
+Inherited grants follow the destination ancestors; they are neither copied nor reported as
+dropped, and can change. Unsupported own grants refuse before writes. With `acceptReset: true`,
+expressible own grants are staged and unexpressible grants appear in
+`dropped: [{ url, grant, reason }]`, naming original URLs. `preserved` is false exactly when
+`dropped` is nonempty. Unreadable or unrepresentable source policies always refuse.
+`reapplied` lists destination URLs whose own ACL/ACR selection was installed and verified;
+items without own access documents retain inheritance and are omitted. Empty own ACP
+selections still create and verify an own document; empty WAC selections refuse caller lockout.
+
+A `MovePreservingAccessError` is a non-retryable `StorageError('conflict')`, with `from` and
+`to` naming both roots and the original failure in `cause`:
+
+- `step: 'reapply'`: staging, verification or cancellation failed before deletion. Sources
+  are untouched; destination copies were conditionally removed bottom-up. `url` is `from`.
+- `step: 'rollback-failed'`: best-effort cleanup failed; `url` is `to`. An `AggregateError`
+  retains the staging and cleanup causes. Content-bearing residuals already have verified
+  own access, or inheritance when the source had no own document. An access-installation
+  failure can leave only an empty placeholder for that item.
+- `step: 'source-delete'`: deletion has started and failed or was cancelled. The destination
+  with verified access is retained in full; some source items may remain. `url` is `to`.
+  No data is recreated, no move-back is attempted, and no destination cleanup runs.
+
+Cleanup ignores the caller's spent abort signal and never deletes a resource without its
+last acknowledged strong write validator, or a container without verifying it is empty.
+These operations are not transactional: concurrent ancestor changes and races between the
+last access check and deletion cannot be made atomic through the public APIs. No retries
+are automatic. Native moves retain the existing storage backend path unchanged.
 
 ### Solid access requests
 

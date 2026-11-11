@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 // @ts-expect-error Root script is intentionally a dependency-free ESM module.
 import { declarations, normalizeCssValue, parseTokens } from "../../../scripts/token-css.mjs";
-import { tokens } from "../src/tokens.js";
+import { PROJECT_COLOURS, tokens } from "../src/tokens.js";
 
 test("exported inventory equals the frozen spec tables (§2.1–2.7)", async () => {
   await expect(`${JSON.stringify(tokens, null, 2)}\n`).toMatchFileSnapshot(
@@ -11,16 +11,37 @@ test("exported inventory equals the frozen spec tables (§2.1–2.7)", async () 
   );
   expect(new Set(tokens.map((token) => token.name)).size).toBe(tokens.length);
 });
-test("CSS exactly equals every exported value in both themes and densities", () => {
+test("project palette preserves wire values independently of the active theme", () => {
+  expect(PROJECT_COLOURS).toHaveLength(12);
+  expect(new Set(PROJECT_COLOURS.map((colour) => colour.hex)).size).toBe(12);
+  for (const colour of PROJECT_COLOURS) {
+    expect(colour.hex).toMatch(/^#[\dA-F]{6}$/);
+    expect(tokens.find((token) => token.name === `--project-${colour.token}`)).toMatchObject({
+      light: colour.hex.toLowerCase(),
+      category: "colour",
+      tag: "graphic",
+    });
+  }
+});
+test("CSS exactly equals every exported value and the shared chart palette in both themes and densities", () => {
   const css = readFileSync(new URL("../src/styles/tokens.css", import.meta.url), "utf8");
   const density = readFileSync(new URL("../src/styles/density.css", import.meta.url), "utf8");
   const actual = parseTokens(css);
+  const shared = parseTokens(
+    readFileSync(new URL("../../app-shell/src/styles/tokens.css", import.meta.url), "utf8"),
+  );
   const comfortable = declarations(density.match(/comfortable"\]\s*\{([^}]+)\}/)?.[1] ?? "");
   const compact = declarations(density.match(/compact"\]\s*\{([^}]+)\}/)?.[1] ?? "");
   for (const theme of ["light", "dark"] as const) {
-    expect({ ...actual[theme], ...comfortable }).toEqual(
-      Object.fromEntries(tokens.map((t) => [t.name, normalizeCssValue(t[theme])])),
-    );
+    expect({ ...actual[theme], ...comfortable }).toEqual({
+      ...Object.fromEntries(tokens.map((t) => [t.name, normalizeCssValue(t[theme])])),
+      ...Object.fromEntries(
+        Array.from({ length: 5 }, (_, i) => {
+          const name = `--chart-${i + 1}`;
+          return [name, shared[theme][name]];
+        }),
+      ),
+    });
   }
   expect(compact).toEqual(
     Object.fromEntries(

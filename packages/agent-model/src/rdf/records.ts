@@ -58,6 +58,7 @@ export const RECORD_MAPPINGS: Readonly<
         evidence: sequence("historicEvidence", "json"),
         identityConflicts: sequence("identityConflict", "json"),
       }),
+      // Missing predicates preserve earlier settings for controls; account fields remain required.
       restrictions: object("restrictions", {
         read: f("read", "boolean"),
         triage: f("triage", "boolean"),
@@ -178,6 +179,13 @@ export const RECORD_MAPPINGS: Readonly<
       target: ref("target"),
       binding: f("binding"),
       bindingState: f("bindingState"),
+      // Missing predicates preserve earlier settings for controls; account fields remain required.
+      restrictions: object("restrictions", {
+        read: f("read", "boolean"),
+        triage: f("triage", "boolean"),
+        draft: f("draft", "boolean"),
+        send: f("send", "boolean"),
+      }),
       proof,
     },
   },

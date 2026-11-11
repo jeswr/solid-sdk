@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
- * The app-level outbox seam the SyncSheet reads (02-suite-shell §10). The SDK's `useOutbox`
- * (SDK-APP-08) replaces the local implementation below; the interface is what the shell needs:
+ * The app-level outbox seam the SyncSheet reads (02-suite-shell §10). `createRealOutbox`
+ * adapts the SDK queue to the interface the shell needs:
  * pending changes (what, where, when), retry, conflicts with a mine/theirs/both choice and the
  * last sync time.
  *
@@ -23,7 +24,7 @@ export interface OutboxSnapshot {
 export interface Outbox {
   getSnapshot(): OutboxSnapshot;
   subscribe(listener: () => void): () => void;
-  /** Record a change made while it could not be sent; returns its id. */
+  /** Demo-only description seam. Real writes use withOutbox's durable body queue. */
   enqueue(change: { label: string; where: string }): string;
   retry(id: string): Promise<void>;
   retryAll(): Promise<void>;

@@ -97,6 +97,9 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
           : mark,
       )
       .filter((mark) => {
+        // Imported files can't carry pending suggestions: their author attributes
+        // are whatever the file says. Pending text is kept as ordinary text.
+        if (mark.type === "suggestionInsert" || mark.type === "suggestionDelete") return false;
         if (importSchema.marks[mark.type]) return true;
         reportSkipped(skipped, "Unsupported marks");
         return false;

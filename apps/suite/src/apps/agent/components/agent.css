@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 .agent-app {
   color: var(--foreground);
   height: 100%;
@@ -194,4 +195,117 @@
 .agent-app button:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
+}
+.agent-app .agent-permissions-form fieldset {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+.agent-app .agent-permissions-form legend {
+  font-weight: 600;
+  padding-inline: var(--space-2);
+}
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.agent-app .agent-timeline {
+  height: 440px;
+  overflow-y: auto;
+  contain: strict;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.agent-app .agent-timeline ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.agent-app .agent-timeline-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3);
+  height: 88px;
+  contain: strict;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+  color: var(--foreground);
+}
+.agent-app .agent-timeline-row > span {
+  min-width: 0;
+}
+.agent-app .agent-timeline-summary {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.agent-app .agent-timeline small {
+  color: var(--foreground-muted);
+  display: block;
+}
+.agent-app .agent-check-ok {
+  color: var(--success);
+  background: var(--surface-2);
+  padding: var(--space-3);
+}
+.agent-app .agent-check-bad {
+  color: var(--destructive);
+  background: var(--destructive-soft);
+  padding: var(--space-3);
+}
+.agent-app .agent-prov {
+  width: 100%;
+  max-height: 430px;
+}
+.agent-app .agent-prov rect {
+  fill: var(--surface-2);
+  stroke: var(--border);
+}
+.agent-app .agent-prov path {
+  stroke: var(--foreground-muted);
+  fill: none;
+}
+.agent-app .agent-prov text {
+  fill: var(--foreground);
+  font-size: var(--text-sm);
+}
+.agent-app .agent-prov a rect {
+  stroke: var(--primary);
+}
+.agent-app .agent-prov-missing {
+  stroke-dasharray: 5 4;
+}
+.agent-app .agent-turns li {
+  justify-self: start;
+  max-width: 92%;
+}
+.agent-app .agent-turns li[data-role="owner"] {
+  justify-self: end;
+}
+.agent-app .agent-chat aside {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+.agent-app .agent-unread {
+  color: var(--primary);
+  margin-inline-start: var(--space-2);
+}
+.agent-app .agent-command-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  background: var(--surface-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+.agent-app .agent-command-control {
+  margin-top: var(--space-3);
+}
+.agent-app .agent-typing {
+  color: var(--foreground-muted);
+  padding: var(--space-3);
 }

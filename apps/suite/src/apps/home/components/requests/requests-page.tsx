@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
+
 /** `/permissions/requests` (03-home-permissions §2.5): pending requests and 30 days of decisions. */
 
 import {
@@ -16,6 +18,7 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { permissionDate } from "../../lib/permissions/view";
 import { requestedDurationText } from "../../lib/requests/duration";
 import {
@@ -138,7 +141,7 @@ export function RequestsPage() {
         <Link className="hm-request-back" href="/permissions">
           Permissions
         </Link>
-        <h1>Requests</h1>
+        <AppHeading>Requests</AppHeading>
         <p className="hm-request-muted">Apps and people asking to use data in your pod.</p>
       </header>
       <Tabs value={tab} onValueChange={setTab}>

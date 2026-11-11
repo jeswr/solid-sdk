@@ -58,12 +58,14 @@
   "dependencies": {
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/ldp-container": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "content-type": "^1.0.5",
     "jsonld-streaming-parser": "^5.0.0",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "undici": "8.5.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
@@ -86,6 +88,7 @@
     "inlined": [
       "@jeswr/agent-model",
       "@jeswr/fetch-rdf",
+      "@jeswr/guarded-fetch",
       "@jeswr/ldp-container",
       "@jeswr/rdf-serialize"
     ]

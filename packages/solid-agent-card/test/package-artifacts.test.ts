@@ -125,6 +125,41 @@ void [state, rate, ingest, invalidFlag, invalidState, incomplete];
     });
   });
 
+  it("imports the entry and discovers with an injected fetch when undici is absent", async () => {
+    // A browser bundle must never need the lazily loaded Node guard (undici, node:dns).
+    const bare = await mkdtemp(join(tmpdir(), "agent-card-no-undici-"));
+    try {
+      await writeFile(join(bare, "package.json"), JSON.stringify(mirror));
+      await cp(join(directory, "dist"), join(bare, "dist"), { recursive: true });
+      for (const name of Object.keys(mirror.dependencies).filter((name) => name !== "undici")) {
+        const target = join(bare, "node_modules", name);
+        await mkdir(dirname(target), { recursive: true });
+        await symlink(join(root, "node_modules", name), target, "dir");
+      }
+      const entry = await readFile(join(bare, "dist/index.js"), "utf8");
+      expect(entry).not.toMatch(/from ["'](?:undici|node:)/);
+      await run(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          `import assert from 'node:assert/strict';
+await assert.rejects(import('undici'));
+const { discoverAgent } = await import('./dist/index.js');
+const webId = 'https://alice.example/profile#me';
+const found = await discoverAgent(webId, {
+  resolveDescriptor: false,
+  fetch: async () => new Response('<' + webId + '> <http://www.w3.org/ns/solid/interop#hasAuthorizationAgent> <https://alice.example/agent#it>.', { headers: { 'content-type': 'text/turtle' } }),
+});
+assert.deepEqual(found.pointers.map((p) => p.agent), ['https://alice.example/agent#it']);`,
+        ],
+        { cwd: bare },
+      );
+    } finally {
+      await rm(bare, { recursive: true, force: true });
+    }
+  });
+
   it("runs the shipped renderer without private or workspace dependencies", async () => {
     await run(
       process.execPath,

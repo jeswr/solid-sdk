@@ -29,6 +29,11 @@ export type ResourceKind = "container" | "resource";
 export interface Entry {
   url: string;
   kind: ResourceKind;
+  /**
+   * Advisory listing title (LWS target title / Solid dct:title), otherwise null. The backends
+   * always set it; it is optional so existing Entry fakes stay valid. Use displayNameOf().
+   */
+  displayName?: string | null;
   /** LWS `format`; Solid: from listing when present, else null. */
   contentType: string | null;
   size: number | null;
@@ -89,6 +94,8 @@ export type Body = string | Uint8Array | Blob | ReadableStream<Uint8Array>;
 export interface WriteOptions {
   contentType: string;
   ifMatch: string | "*";
+  /** Keep the request alive on page teardown; bodies must have a known size <= 64 KiB. */
+  keepalive?: boolean;
   signal?: AbortSignal;
 }
 export interface CreateOptions {
@@ -100,12 +107,21 @@ export interface CreateOptions {
   name?: string;
   /** Initial user metadata (LWS: Link headers on POST; Solid: ignored unless describedby is writable). */
   links?: readonly { rel: string; target: string }[];
+  /** Keep the request alive on page teardown; bodies must have a known size <= 64 KiB. */
+  keepalive?: boolean;
   signal?: AbortSignal;
 }
 export interface WriteResult {
   url: string;
   etag: string | null;
   created: boolean;
+  /**
+   * Where `etag` came from. `"response"`: the mutation response's own ETag, so it names the
+   * version this call wrote. `"follow-up"`: a later HEAD observed it, so it may already be a
+   * concurrent writer's version. Absent: the backend does not say. Only a `"response"` ETag is
+   * safe as `ifMatch` for a follow-up write or delete that must not clobber someone else.
+   */
+  etagSource?: "response" | "follow-up";
 }
 
 export type JsonPatchOp = {
@@ -140,6 +156,8 @@ export interface MetadataOp {
   anchor?: string;
   rel: string;
   href: string;
+  /** LWS target title; Solid dct:title on the anchor. */
+  title?: string;
 }
 
 /** Options for fresh HEAD and listing observations. */

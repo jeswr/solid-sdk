@@ -1,6 +1,6 @@
 ---
 name: pod-auth
-description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents or Client Identifier Documents, or migrating deprecated suite client authentication.
+description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
@@ -26,9 +26,10 @@ refresh CAS and durable retirement. Signing keys are imported non-extractable; b
 | --- | --- |
 | `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
-| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` for server brokers |
+| `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` and `storageDescriptionRoots` (LWS realm checks) for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 | `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
+| `@jeswr/pod-auth/registration` | CSS v7 self-registration, previews, progress and typed partial failures |
 
 ```ts
 import { createPodAuth, type PodAuthOptions } from '@jeswr/pod-auth';
@@ -130,6 +131,20 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 - Require HTTPS for the production client ID. `{ dynamicRegistration: true }` is limited to a loopback
   callback outside production. `allowInsecureLoopback` permits only explicit development HTTP and is
   checked on every protocol hop. Browser callback origins must match the application origin.
+- Native applications may explicitly set `nativeRedirect: true` with a private-use scheme callback
+  such as `org.jeswr.suite:/oauth/callback`. This mode requires a lowercase reverse-domain scheme
+  (suite-native's grammar); reserved schemes, authority (including empty `//`), credentials, relative
+  paths, queries, fragments and URL normalization are rejected. HTTP(S) callbacks are rejected in
+  native mode; omitting the opt-in retains the browser policy. Supply an HTTPS Client ID Document
+  URL with `application_type: native` and the exact redirect registered; dynamic registration and
+  `allowInsecureLoopback: true` are forbidden. Only the scheme callback skips the WebView-origin
+  check (`capacitor://localhost` or `https://localhost` may host the app). `ui.getCode` still returns
+  the complete callback URL with `code`, `state` and `iss`, and owns native cancellation/cleanup.
+  The scheme URI stays in OAuth authorization/token parameters and the configuration namespace,
+  never in a resource Request, boundary root or storage context. Without known roots, login uses
+  `/.well-known/pod-auth/native-bootstrap` on the Client ID Document's HTTPS origin for its synthetic
+  upgrade/context; that URL is never fetched or implicitly trusted. Verified storage roots alone
+  gain resource access, and the first inherits the bootstrap session as in browser login.
 - Fence login, refresh, restore, persistence and logout against stale work after each awaited boundary.
   Do not expose identity until credentials and refresh rotation are durable.
 
@@ -219,3 +234,35 @@ Build reactive-authentication before pod-auth, then run `lint`, `build`, `typech
 root gate. Generator regressions live in `test/client-id.test.mjs` under `pnpm run test:root`, with
 offline OIDC schema/JSON-LD checks. Keep development tool versions aligned with root; pnpm 10.4.1
 with `ignore-scripts` requires local tool declarations for filtered scripts.
+
+## CSS self-registration
+
+Read README's `./registration` contract and `src/registration.ts` before changing this surface.
+`createRegistration({ accountApi, podHost?, podAuth, fetch?, allowInsecureLoopback? })` uses the
+existing auth core, never another session. Null disables availability. Keep `methods` password-only.
+Public index controls are account.create/password.login; scoped password.create/account.pod/account.webId
+exist only after account creation. Follow only these controls, same-origin HTTPS, no URL credentials,
+queries/fragments, cookies or redirects. Reuse guarded-fetch's refusal and bounded document reads.
+Capture a pristine protocol transport; never send account requests through PodAuth.fetch.
+
+Keep local username validation before any network, and HEAD's exact 404 available / 2xx taken /
+401,403 unknown / error split. Never report 401/403 as taken: CSS denies missing children too.
+A 400 from password enrollment is `username-taken` (duplicate derived login ID), never
+`weak-password`; that code is only for the local pre-network policy check. Keep the order
+account → password → pod: CSS 7 rejects pod creation on an account without a login method.
+The username-only password ID is `<username>@registration.invalid`; expose it as public loginId,
+never pretend it is a recovery email. Do not retain passwords/account tokens or raw error causes.
+Snapshot inputs before awaits. Report account/password/pod/webid/profile/sign-in with frozen prior
+progress, and preserve confirmed results in every typed RegistrationError. Whole-flow retries are
+not idempotent; never hide partial creation or retain credential-bearing recovery state.
+
+CSS links a freshly created WebID automatically. Verify the link; POST the advertised WebID control
+only when absent. Request linkStorage on pod creation. For the protected profile, establish OIDC with
+the existing auth.login, require the exact new WebID/issuer, then write only its profile through
+auth.fetch. Build names with wrapper/n3, preserving server assertions; the final login returns the
+established Identity. Keep passwords/account tokens outside OIDC/UI hooks and persistent storage.
+
+Keep new-file thresholds at 100% and exercise the real protocol engine as well as fake account APIs.
+`tools/storage-conformance/integration/registration.test.ts` is the real CSS 7.2.0 lane; run with
+`pnpm --filter @jeswr/storage-conformance run test:registration` after dependency-first builds.
+No socket/CI skip switches: integration lives separately from the offline gate per ADR-009.

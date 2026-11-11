@@ -7,9 +7,12 @@ import {
   applyContactPatch,
   contactLabels,
   decodeContactRef,
+  displayAddress,
   displayPhone,
   encodeContactRef,
   filterContacts,
+  homeCountry,
+  postalAddress,
   projectContact,
   readStars,
   starsKey,
@@ -179,5 +182,46 @@ describe("WebID-scoped starred store", () => {
         "alice",
       ).size,
     ).toBe(0);
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("postal address display", () => {
+  it("maps stored countries to codes or names", () => {
+    expect(postalAddress({ street: " 1 Way \n\nUnit 2", country: " us " })).toEqual({
+      street: ["1 Way", "Unit 2"],
+      locality: "",
+      region: "",
+      postalCode: "",
+      countryCode: "US",
+    });
+    expect(postalAddress({ locality: "Paris", country: "France" })).toMatchObject({
+      countryName: "France",
+    });
+    // Unassigned two-letter values are neither a code nor a safe name.
+    expect(postalAddress({ country: "ZZ" })).not.toHaveProperty("countryName");
+    expect(postalAddress({})).toEqual({ street: [], locality: "", region: "", postalCode: "" });
+  });
+  it("formats by national template and falls back for data the formatter rejects", () => {
+    const us = {
+      street: "1 Main St",
+      locality: "Springfield",
+      region: "IL",
+      postalCode: "62701",
+      country: "US",
+    };
+    expect(displayAddress(us, "US")).toBe("1 Main St\nSpringfield, IL 62701");
+    expect(displayAddress(us, "GB")).toBe("1 Main St\nSpringfield, IL 62701\nUS");
+    expect(displayAddress({ locality: "Paris", country: "France" }, "US")).toBe("Paris\nFrance");
+    const controls = { street: "a\u0007b", locality: "L", postalCode: "1", country: "X Land" };
+    expect(displayAddress(controls, "US")).toBe("a\u0007b\nL 1\nX Land");
+    expect(displayAddress({ region: "R" }, "ZZ")).toBe("R");
+  });
+  it("derives the home country from a locale", () => {
+    expect(homeCountry("en-GB")).toBe("GB");
+    expect(homeCountry("fr")).toBe("FR");
+    expect(homeCountry("es-419")).toBe("US");
+    expect(homeCountry("und")).toBe("US");
+    expect(homeCountry("not a locale!")).toBe("US");
   });
 });

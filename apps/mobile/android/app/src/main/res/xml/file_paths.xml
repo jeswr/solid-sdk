@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path name="share_out" path="share-out/" />
+    <!-- AUTHORED-BY Claude Opus 5.5: the Drive "Open PDF" handoff (MOB-P3 E5). -->
+    <cache-path name="pdf_preview" path="pdf-preview/" />
 </paths>

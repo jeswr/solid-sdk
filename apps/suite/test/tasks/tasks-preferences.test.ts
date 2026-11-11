@@ -28,6 +28,7 @@ describe("Tasks preferences", () => {
       ),
     ).toEqual({
       sharedProjects: [],
+      favourites: [],
       sort: { inbox: "name" },
       viewMode: { home: "board" },
       collapsedSections: ["one"],

@@ -1,6 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { withCharts } from "../src/apps/sheets/lib/charts/spec";
 import type {
   MountEngine,
   SheetEngine,
@@ -8,13 +10,18 @@ import type {
   WorkbookService,
 } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
+import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 
 const mocks = vi.hoisted(() => ({
   service: null as WorkbookService | null,
+  session: null as { fetch: typeof fetch; storageUrl: string; webId: string; mode: "demo" } | null,
   mount: vi.fn<MountEngine>(),
   push: vi.fn(),
+}));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({ status: "ready", session: mocks.session }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
@@ -48,10 +55,11 @@ function fakeEngine(initial: Snapshot) {
     snapshot: vi.fn(() => current),
     onChange: vi.fn(() => () => {}),
     setDark: vi.fn(),
+    setReadOnly: vi.fn(),
     dispose: vi.fn(),
     exportCsv: vi.fn(() => ""),
     activeSheet: vi.fn(() => ({ id: "data", name: "Data" })),
-    importCsv: vi.fn(),
+    importCsv: vi.fn(() => ({ status: "imported" as const })),
   };
   return engine;
 }
@@ -66,6 +74,7 @@ async function setup(online = true) {
   const pod = await harness();
   const book = await pod.service.create({ title: "Conflict", snapshot: snapshot() });
   mocks.service = pod.service;
+  mocks.session = { ...pod.options, storageUrl: pod.options.podRoot, mode: "demo" };
   vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(online);
   return { ...pod, book };
 }
@@ -92,13 +101,80 @@ it("loads the remote snapshot into a mounted engine and returns conflict focus t
   const { book, remote, entry } = await conflict();
   const editor = await mount(h(SheetEditor, { container: book.container }));
   const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].commentsLoading).toBe(true);
   expect(document.activeElement?.textContent).toBe("Load their version");
   await click(button(document, "Load their version"));
-  expect(engine.load).toHaveBeenCalledWith(remote);
+  expect(engine.load).toHaveBeenCalledWith(remote, entry.workbook.version.snapshotEtag);
   expect(engine.snapshot()).toEqual(remote);
   expect(entry.workbook.snapshot).toEqual(remote);
   expect(entry.status).toBe("saved");
   await vi.waitFor(() => expect(document.activeElement).toBe(button(editor.host, "File")));
+  await editor.unmount();
+});
+
+it("acknowledges saved workbook revisions for both renames and engine edits", async () => {
+  const { book } = await setup();
+  mocks.mount.mockImplementationOnce(async (_host, options) => ({
+    ...fakeEngine(options.snapshot),
+    setWorkbookRevision: vi.fn(),
+  }));
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].workbookRevision).toBe(book.version.snapshotEtag);
+  const entry = pendingSaves.get(book.container);
+  await act(async () => {
+    entry?.rename("Renamed before editing");
+    await entry?.flush();
+  });
+  expect(engine.setWorkbookRevision).toHaveBeenCalledWith(
+    entry?.workbook.version.snapshotEtag,
+    book.snapshot,
+  );
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    await entry?.flush();
+  });
+  expect(engine.setWorkbookRevision).toHaveBeenLastCalledWith(
+    entry?.workbook.version.snapshotEtag,
+    engine.snapshot(),
+  );
+  await editor.unmount();
+});
+
+it.each([
+  "https://other.example/sheets/book/",
+  "not a URL",
+])("explains the credential boundary when rejecting shared workbook link %s", async (container) => {
+  const { calls } = await setup();
+  calls.length = 0;
+  const editor = await mount(h(SheetEditor, { container }));
+  expect(editor.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "same origin as your pod",
+  );
+  expect(calls).toEqual([]);
+  expect(mocks.mount).not.toHaveBeenCalled();
+  await editor.unmount();
+});
+
+it.each([
+  401, 403,
+])("explains unsupported private recipient access (%s) before mounting a grid", async (status) => {
+  const { book, options } = await setup();
+  const publicFetch = vi.fn<typeof fetch>(async (_input, init) => {
+    expect(init?.credentials).toBe("omit");
+    return new Response(null, { status });
+  });
+  mocks.service = createWorkbookService({
+    ...options,
+    podRoot: "https://pod.example/bob/",
+    publicFetch,
+  });
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  expect(editor.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+  );
+  expect(mocks.mount).not.toHaveBeenCalled();
+  expect(publicFetch).toHaveBeenCalledTimes(2);
   await editor.unmount();
 });
 
@@ -260,4 +336,132 @@ it.each([
   expect(save).not.toHaveBeenCalled();
   if (view === "editor") expect(mocks.push).toHaveBeenCalledWith("/sheets");
   await screen.unmount();
+});
+
+it.each([
+  "editor",
+  "list",
+])("opens the shell sharing dialog for the workbook container from the %s", async (view) => {
+  const { book, calls } = await setup();
+  for (const name of [
+    "HTMLFormElement",
+    "HTMLSelectElement",
+    "HTMLButtonElement",
+    "SVGElement",
+    "DocumentFragment",
+  ] as const)
+    vi.stubGlobal(name, window[name]);
+  window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  const screen = await mount(
+    view === "editor" ? h(SheetEditor, { container: book.container }) : h(SheetsList),
+  );
+  if (view === "editor") await click(button(screen.host, "Share"));
+  else {
+    const trigger = screen.host.querySelector<HTMLButtonElement>(
+      '[aria-label="Actions for Conflict"]',
+    );
+    if (!trigger) throw new Error("Missing menu");
+    await key(trigger, "ArrowDown");
+    const share = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent === "Share",
+    );
+    if (!share) throw new Error("Missing Share");
+    await click(share);
+  }
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("People with access"),
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Share Conflict");
+  expect(calls.some((call) => call.method === "HEAD" && call.url === book.container)).toBe(true);
+  expect(calls.some((call) => call.method === "PUT" && call.url === `${book.container}.acl`)).toBe(
+    true,
+  );
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Commenter");
+  await click(button(document, "Done"));
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await screen.unmount();
+});
+
+it("shows View only, disables engine editing and skips autosave for a reader", async () => {
+  const { book, pod, service, setHook } = await setup();
+  const chartSnapshot = withCharts(book.snapshot, [
+    {
+      id: "chart",
+      sheetId: "data",
+      range: "A1:B2",
+      type: "column",
+      title: "Shared chart",
+      legend: true,
+      series: "columns",
+    },
+  ]);
+  await service.save(book.container, chartSnapshot, book.version);
+  mocks.mount.mockImplementationOnce(async (_host, options) => ({
+    ...fakeEngine(options.snapshot),
+    setCharts: vi.fn(),
+  }));
+  setHook(async (call) => {
+    if (call.method !== "GET" || !call.url.startsWith(book.container)) return undefined;
+    const response = await pod.fetch(call.url, call.init);
+    const headers = new Headers(response.headers);
+    headers.set("wac-allow", 'user="read",public=""');
+    return new Response(response.body, { status: response.status, headers });
+  });
+  const save = vi.spyOn(service, "save");
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].readOnly).toBe(true);
+  expect(engine.setReadOnly).toHaveBeenCalledWith(true);
+  expect(editor.host.textContent).toContain("View only");
+  expect(button(editor.host, "Share").disabled).toBe(true);
+  await vi.waitFor(async () => {
+    await act(() => {});
+    expect(editor.host.querySelector("svg title")?.textContent).toBe("Shared chart");
+  });
+  expect(button(editor.host, "Insert chart").disabled).toBe(true);
+  expect(button(editor.host, "Edit chart").disabled).toBe(true);
+  await click(button(editor.host, "Insert chart"));
+  await click(button(editor.host, "Edit chart"));
+  expect(editor.host.querySelector('[aria-label="Chart editor"]')).toBeNull();
+  expect(engine.setCharts).not.toHaveBeenCalled();
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    window.dispatchEvent(new Event("pagehide"));
+    window.dispatchEvent(new Event("online"));
+    await pendingSaves.get(book.container)?.flush();
+  });
+  expect(save).not.toHaveBeenCalled();
+  await key(button(editor.host, "File"), "ArrowDown");
+  const items = [...document.querySelectorAll('[role="menuitem"]')];
+  expect(
+    items.find((item) => item.textContent === "Import CSV")?.getAttribute("aria-disabled"),
+  ).toBe("true");
+  expect(items.find((item) => item.textContent === "Delete")?.getAttribute("aria-disabled")).toBe(
+    "true",
+  );
+  await key(button(editor.host, "File"), "Escape");
+  await editor.unmount();
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("switches the mounted editor to View only after a forbidden save", async () => {
+  const { book, service, setHook } = await setup();
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  const save = vi.spyOn(service, "save");
+  setHook((call) => (call.method === "PUT" ? new Response(null, { status: 403 }) : undefined));
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    await pendingSaves.get(book.container)?.flush();
+  });
+  expect(editor.host.textContent).toContain("View only");
+  expect(engine.setReadOnly).toHaveBeenLastCalledWith(true);
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    window.dispatchEvent(new Event("online"));
+    await pendingSaves.get(book.container)?.retry();
+  });
+  expect(save).toHaveBeenCalledOnce();
+  await editor.unmount();
+  pendingSaves.drop(book.container);
 });

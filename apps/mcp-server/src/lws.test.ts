@@ -2,7 +2,10 @@
 import { createHash } from "node:crypto";
 import { createSessionVault, MemoryVaultStore } from "@jeswr/mcp-oauth";
 import { expect, it } from "vitest";
-import { lwsStorage } from "../../../packages/mcp-oauth/test/lws-storage.js";
+import {
+  LWS_AUTHORIZATION_SERVER,
+  lwsStorage,
+} from "../../../packages/mcp-oauth/test/lws-storage.js";
 import { POD_ISSUER, POD_ROOT } from "../../../packages/mcp-oauth/test/pod-issuer.js";
 import { navigation } from "../test/navigation.js";
 import { createApp } from "./handler.js";
@@ -21,6 +24,7 @@ it("reads and lists private LWS storage through the default OAuth composition", 
       store: new MemoryVaultStore(),
     }),
     upstreamFetch: lws.fetch,
+    lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER],
   });
   const request = (path: string, init?: RequestInit) => new Request(`${origin}${path}`, init);
   const post = (path: string, fields: Record<string, string>, cookie = "") =>

@@ -1,8 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { evaluateIntent } from "@jeswr/agent-mandate";
 import { type ActionProposal, digestOf, type PodRecord, recordToTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import type { Page } from "@playwright/test";
+import { auditHeadToTurtle, auditToTurtle, sealAudit } from "../../src/apps/agent/lib/audit";
 import { createAgentClient } from "../../src/apps/agent/lib/client";
+import { nextTurnNumber } from "../../src/apps/agent/lib/conversation";
+import { loadVerifiedMandate, proposalIntent } from "../../src/apps/agent/lib/mandates";
 import {
   type DisplayApproval,
   loadedRecords,
@@ -11,6 +16,7 @@ import {
   readControl,
   readOutbox,
   readProposals,
+  readTurns,
 } from "../../src/apps/agent/lib/readers";
 import { agentStatus } from "../../src/apps/agent/lib/status";
 import { createAgentVerifier } from "../../src/apps/agent/lib/verify";
@@ -59,27 +65,39 @@ export function daemonDouble(page: Page) {
   const audit = async (proposal: ActionProposal, outcome: string, approval?: string) => {
     const entries = loadedRecords(await readAudit(client));
     const latest = entries[0];
-    const seq = (latest?.seq ?? -1) + 1;
+    const seq = (latest?.seq ?? 0) + 1;
     const fields = {
       seq,
       prev: latest?.hash ?? "sha-256:genesis",
       at: new Date().toISOString(),
       record: {
         type: "transmission",
-        summary: outcome === "sent" ? "Sent with your approval" : `Refused: ${outcome}`,
+        id: `${client.paths.audit}${seq}.ttl#transmission`,
+        agent: `${client.workspace}#agent`,
+        owner: DEMO_WEBID,
+        status: outcome === "sent" ? "sent" : "refused",
         proposal: proposal.id,
         termsDigest: proposal.intent.termsDigest,
         transmission: `${client.paths.outbox}${proposal.id.split("/").at(-1)}`,
-        mandate: `${client.paths.mandates}demo-credential.ttl`,
+        mandate: `${client.paths.mandates}demo-credential.trig`,
         ...(approval ? { approval } : {}),
       },
     };
-    await write({
-      type: "audit-entry",
-      id: `${client.paths.audit}${seq}.ttl`,
-      ...fields,
-      hash: digestOf(fields),
+    const entry = sealAudit(seq, fields.at, fields.prev, {
+      ...fields.record,
+      type: "transmission",
+      status: outcome === "sent" ? "sent" : "refused",
     });
+    await client.create(
+      `${client.paths.audit}${seq}.ttl`,
+      await auditToTurtle(`${client.paths.audit}${seq}.ttl`, entry),
+    );
+    const oldHead = await client.graph(client.paths.auditChain);
+    await client.replace(
+      client.paths.auditChain,
+      await auditHeadToTurtle(client.paths.auditChain, entry),
+      oldHead.etag as string,
+    );
   };
   const outcome = async (
     proposal: ActionProposal,
@@ -99,7 +117,7 @@ export function daemonDouble(page: Page) {
       proposal: proposal.id,
       status,
       wireDigest: digestOf(proposal.renderedPreview),
-      underMandate: `${client.paths.mandates}demo-credential.ttl`,
+      underMandate: `${client.paths.mandates}demo-credential.trig`,
       ...(approval ? { underApproval: approval.id } : {}),
       ...(status === "sent" ? { externalId: `fake-${crypto.randomUUID()}` } : {}),
       startedAt: now,
@@ -139,11 +157,40 @@ export function daemonDouble(page: Page) {
       await write(changed);
       return changed;
     },
+    async answerOwnerTurn(id: string) {
+      const conversation = client.paths.resolveSlug("conversations", id);
+      const turns = loadedRecords(await readTurns(client, id));
+      if (turns[0]?.role !== "owner") return false;
+      const members = await client.list(conversation);
+      const n = nextTurnNumber(
+        members.filter((m) => !m.container).map((m) => m.url),
+        conversation,
+      );
+      await client.create(
+        `${conversation}${n}.ttl`,
+        await recordToTurtle({
+          type: "conversation-turn",
+          id: `${conversation}${n}.ttl`,
+          conversation,
+          attributedTo: `${client.workspace}#agent`,
+          role: "agent",
+          text: "I have read your message. What would you like to do next?",
+          createdAt: new Date().toISOString(),
+          refersToProposal: [],
+        }),
+      );
+      return true;
+    },
     async tick(proposal: ActionProposal) {
       const controls = loadedRecords(await readControl(client, verifier));
       const halted =
         agentStatus({ controls, now: Date.now(), owner: DEMO_WEBID }).state === "stopped";
       if (halted) return outcome(proposal, "halted");
+      const mandate = await loadVerifiedMandate(client, { fetch, webId: DEMO_WEBID });
+      if (!mandate) return outcome(proposal, "mandate-invalid");
+      const decision = await evaluateIntent(mandate, proposalIntent(proposal, mandate.subject));
+      if (decision.decision === "prohibited" || decision.decision === "refuse-all")
+        return outcome(proposal, decision.decision);
       const approvals = loadedRecords(await readApprovals(client, verifier)).filter(
         (a) => a.approves === proposal.id && a.verification === "verified",
       );
@@ -158,7 +205,7 @@ export function daemonDouble(page: Page) {
               : !current && approvals.length
                 ? "terms-digest-mismatch"
                 : undefined;
-      if (!refusal && !current) return "awaiting-approval";
+      if (!refusal && !current && decision.decision !== "permit") return "awaiting-approval";
       return outcome(proposal, refusal, current);
     },
   };

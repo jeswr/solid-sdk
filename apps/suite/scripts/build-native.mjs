@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { spawn } from "node:child_process";
@@ -8,7 +9,7 @@ import { checkNative } from "./check-native.mjs";
 import { writeCsp } from "./csp-hashes.mjs";
 import { nativeSettings } from "./native-settings.mjs";
 import { checkServerFeatures, filesUnder, writeManifest } from "./route-manifest.mjs";
-import { stageCalendarRoutes } from "./stage-native.mjs";
+import { includeNativeSource, stageCalendarRoutes } from "./stage-native.mjs";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 // Browser instrumentation and its in-memory session never enter the distributable export.
@@ -17,10 +18,12 @@ const stage = join(root, ".native-stage", ...(browserTest ? ["browser"] : []));
 const www = browserTest ? join(stage, "www") : join(root, "www");
 const info = nativeSettings(process.env);
 const adaptations = [
+  "api/ route handlers excluded; feedback uses the deployed suite or a local download",
+  "public/media excluded; the welcome videos are watched on the web suite",
   "dev/ routes excluded from the native build graph",
   ".well-known/ route handlers excluded (the Client ID Document is served by the deployed suite)",
   "native / entry redirects to /drive/my (the web / chooses by session)",
-  "demo pod session replaced by the native sign-in placeholder (mobile auth integration pending)",
+  "app sessions follow the native shell account, with signed-out fallback outside the shell",
   "shell demo account disabled; demo-pod modules replaced by inert stand-ins",
   "Drive preview interception uses the plain /drive/p/[ref] route on native",
 ];
@@ -30,8 +33,7 @@ await mkdir(stage, { recursive: true });
 await cp(join(root, "src"), join(stage, "src"), {
   recursive: true,
   // The Client ID Document is served by the deployed suite (MOB-P3 E7), never by the bundle.
-  filter: (path) =>
-    path !== join(root, "src/app/dev") && path !== join(root, "src/app/.well-known"),
+  filter: (path) => includeNativeSource(path, root),
 });
 await stageCalendarRoutes(join(stage, "src"));
 // The web deployment has no / route; the local WebView starts at /.
@@ -104,6 +106,7 @@ await writeFile(
 export class DemoStorageError extends Error {}
 interface DemoPodStandIn {
   fetch: typeof globalThis.fetch;
+  subscribe(listener: (url: string) => void): () => void;
   snapshot(): { resources: [string, { body: Uint8Array }][] };
 }
 export async function getDemoPod(): Promise<DemoPodStandIn> {
@@ -150,7 +153,8 @@ await writeFile(
 );
 await cp(join(root, "public"), join(stage, "public"), {
   recursive: true,
-  filter: (path) => path !== join(root, "public/fixtures"),
+  // Welcome videos stay on the web suite: they would push the bundle past its size budget.
+  filter: (path) => path !== join(root, "public/fixtures") && path !== join(root, "public/media"),
 });
 for (const path of await filesUnder(join(stage, "src/app"))) {
   if (!path.endsWith("/page.tsx")) continue;

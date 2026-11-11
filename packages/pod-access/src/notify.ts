@@ -1,12 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
+  createInboxReader as createClientInboxReader,
   createNotifyClient,
+  type InboxNotification,
+  type InboxReader,
+  type InboxReaderOptions,
   type Notify,
   type NotifyActivity,
   type NotifyOptions,
 } from "solid-agent-notify/client";
 
 export type {
+  InboxNotification,
+  InboxReader,
+  InboxReaderOptions,
   Notify,
   NotifyActivity,
   NotifyOptions,
@@ -49,4 +56,22 @@ export function mentionNotification(annotation: string, document: string): Notif
 /** Offer a room invitation using the suite's supported activity verbs. */
 export function roomInvitation(room: string): NotificationDraft {
   return { type: "Offer", object: room };
+}
+
+/** Read an LDN inbox through the same authenticated transport as notification delivery. */
+export function createInboxReader(options: InboxReaderOptions): InboxReader {
+  return createClientInboxReader(options);
+}
+
+/** Classify the four suite builder shapes; unfamiliar activities remain other. */
+export function notificationKind(
+  notification: InboxNotification,
+): "share" | "assignment" | "mention" | "invitation" | "other" {
+  if (notification.type === "Announce") {
+    if (notification.summary?.startsWith("Shared with you as ")) return "share";
+    if (notification.target) return "assignment";
+  }
+  if (notification.type === "Create" && notification.target) return "mention";
+  if (notification.type === "Offer") return "invitation";
+  return "other";
 }

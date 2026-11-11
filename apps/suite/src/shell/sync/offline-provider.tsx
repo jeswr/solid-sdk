@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * The shell's offline layer (02-suite-shell §10): connection state for the OfflinePill, the
@@ -21,7 +22,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  type ConnectionState,
   type Connectivity,
   createConnectivity,
   probeReachable,
@@ -45,7 +45,11 @@ import {
 import { useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
 import { useAllPreferences } from "../settings/preferences";
+import { ConnectionContext, useConnectionState } from "./connection-state";
+import { useOutboxSession } from "./outbox-session";
 import { rememberPage } from "./service-worker";
+
+export { useConnectionState } from "./connection-state";
 
 export const OFFLINE_HINT =
   "You're offline. Changes are saved on this device and sync when you reconnect.";
@@ -73,17 +77,9 @@ function connectivity(): Connectivity {
 }
 const subscribeShell = (onChange: () => void) => connectivity().subscribe(onChange);
 const shellState = () => connectivity().getState();
-const browserState = (): ConnectionState => (navigator.onLine ? "online" : "offline");
-function subscribeBrowser(onChange: () => void) {
-  addEventListener("online", onChange);
-  addEventListener("offline", onChange);
-  return () => {
-    removeEventListener("online", onChange);
-    removeEventListener("offline", onChange);
-  };
-}
+const shellConnection = { subscribe: subscribeShell, getSnapshot: shellState };
 
-/** The seam for the SDK outbox: maps an account to its outbox. */
+/** Test override. Authenticated sessions use the WebID-scoped SDK adapter. */
 export type OutboxFactory = (accountId: string) => Outbox;
 const outboxes = new Map<string, Outbox>();
 export const localOutboxFactory: OutboxFactory = (accountId) => {
@@ -104,7 +100,7 @@ export const localOutboxFactory: OutboxFactory = (accountId) => {
   outboxes.set(accountId, created);
   return created;
 };
-export const OutboxFactoryContext = createContext<OutboxFactory>(localOutboxFactory);
+export const OutboxFactoryContext = createContext<OutboxFactory | null>(null);
 
 interface OfflineContextValue {
   outbox: Outbox | null;
@@ -135,16 +131,6 @@ export function useRecentTitle(title: string | undefined) {
 
 const noSubscribe = () => () => {};
 const emptySnapshot = () => EMPTY_OUTBOX;
-
-/** "online", "offline" or "reconnecting" — the browser's view outside the shell. */
-export function useConnectionState(): ConnectionState {
-  const inShell = useContext(OfflineContext) !== null;
-  return useSyncExternalStore(
-    inShell ? subscribeShell : subscribeBrowser,
-    inShell ? shellState : browserState,
-    () => "online",
-  );
-}
 
 export interface OutboxBinding {
   snapshot: OutboxSnapshot;
@@ -205,9 +191,10 @@ function writeLastSeen(value: LastSeen) {
 }
 
 function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Outbox | null }) {
-  const { active, status } = useAccounts();
+  const { active, status, isActiveAccount } = useAccounts();
   const { preferences, update, ready } = useAllPreferences();
   const state = useConnectionState();
+  const session = useOutboxSession();
   const pathname = usePathname();
   const hinted = useRef("");
   // The page each account was last seen on, and a page opened under another account.
@@ -218,8 +205,11 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
   }, [active]);
   // Send what is waiting once the storage answers again.
   useEffect(() => {
-    if (state === "online") void outbox?.reconnected();
-  }, [state, outbox]);
+    if (state === "online" && (!session || session.storage))
+      void outbox?.reconnected().catch(() => {
+        // Durable failures remain visible in the sheet; session cancellation is expected.
+      });
+  }, [state, outbox, session]);
   useEffect(() => {
     if (!outbox || !accountId) return;
     const storage = (event: StorageEvent) => {
@@ -267,6 +257,8 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
     // Next may apply a route's title after its pathname changes, including streamed metadata.
     let recordedTitle: string | undefined;
     const record = () => {
+      // Account changes invalidate writes synchronously, before React cleans up this effect.
+      if (!isActiveAccount(accountId)) return;
       const title = pageTitle ?? document.title;
       if (title === recordedTitle) return;
       recordedTitle = title;
@@ -291,7 +283,7 @@ function OfflineEffects({ pageTitle, outbox }: { pageTitle?: string; outbox: Out
       window.clearTimeout(timer);
       observer.disconnect();
     };
-  }, [status, accountId, ready, preferences.offline, pageTitle, pathname]);
+  }, [status, accountId, ready, preferences.offline, pageTitle, pathname, isActiveAccount]);
   return null;
 }
 
@@ -331,20 +323,28 @@ export function OfflineProvider({
 }) {
   const { active } = useAccounts();
   const factory = useContext(OutboxFactoryContext);
+  const session = useOutboxSession();
   const accountId = active?.id;
-  const outbox = useMemo(() => (accountId ? factory(accountId) : null), [factory, accountId]);
+  const outbox = useMemo(() => {
+    if (!accountId) return null;
+    if (factory) return factory(accountId);
+    if (active.kind === "demo") return localOutboxFactory(accountId);
+    return session?.adapter ?? null;
+  }, [factory, accountId, active?.kind, session?.adapter]);
   const value = useMemo(() => ({ outbox }), [outbox]);
   const pathname = usePathname();
   const [named, setNamed] = useState<NamedPage | null>(null);
   // A title named for an earlier path never labels the page now open.
   const title = pageTitle ?? (named?.pathname === pathname ? named.title : undefined);
   return (
-    <OfflineContext.Provider value={value}>
-      <PageTitleContext.Provider value={setNamed}>
-        <OfflineEffects {...(title !== undefined ? { pageTitle: title } : {})} outbox={outbox} />
-        <ConnectionAnnouncement />
-        {children}
-      </PageTitleContext.Provider>
-    </OfflineContext.Provider>
+    <ConnectionContext.Provider value={shellConnection}>
+      <OfflineContext.Provider value={value}>
+        <PageTitleContext.Provider value={setNamed}>
+          <OfflineEffects {...(title !== undefined ? { pageTitle: title } : {})} outbox={outbox} />
+          <ConnectionAnnouncement />
+          {children}
+        </PageTitleContext.Provider>
+      </OfflineContext.Provider>
+    </ConnectionContext.Provider>
   );
 }

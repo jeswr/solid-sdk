@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import { Button, Input, Popover, PopoverAnchor } from "@jeswr/suite-ui";
@@ -5,22 +6,28 @@ import type { Editor } from "@tiptap/react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { RichImageTransfer } from "../editor/image-transfer";
 import type { DocumentPersistence } from "../editor/persistence";
+import { uploadPodImage } from "../lib/editor/image-upload";
 import { insertionAnchor } from "../lib/editor/insertion-anchor";
 import { docContainerUrls } from "../lib/model";
 import { EditorPopoverContent } from "./editor-popover-content";
 export function ImageUpload({
   editor,
   runtime,
+  uploadFile,
+  className,
   file: initialFile,
   transfer,
   close,
 }: {
   editor: Editor;
-  runtime: DocumentPersistence;
+  className?: string;
   file: File | null;
-  transfer?: RichImageTransfer;
+  transfer?: RichImageTransfer | undefined;
   close: () => void;
-}) {
+} & (
+  | { runtime: DocumentPersistence; uploadFile?: undefined }
+  | { runtime?: undefined; uploadFile: (file: File) => Promise<string> }
+)) {
   const id = useId();
   const [index, setIndex] = useState(0);
   const file = transfer?.images[index]?.file ?? initialFile;
@@ -70,28 +77,20 @@ export function ImageUpload({
     if (!anchor) return;
     setState("uploading");
     try {
-      if (!runtime.stored) {
-        runtime.change(editor.getHTML(), editor.getJSON());
-        await runtime.flush();
+      let src: string;
+      if (uploadFile) src = await uploadFile(file);
+      else {
+        if (!runtime.stored) {
+          runtime.change(editor.getHTML(), editor.getJSON());
+          await runtime.flush();
+        }
+        if (!runtime.stored) throw new Error("Document not saved");
+        src = await uploadPodImage(
+          file,
+          docContainerUrls(runtime.stored.url).assets,
+          runtime.session.fetch,
+        );
       }
-      if (!runtime.stored) throw new Error("Document not saved");
-      const extension = (
-        {
-          "image/png": "png",
-          "image/jpeg": "jpg",
-          "image/gif": "gif",
-          "image/webp": "webp",
-          "image/svg+xml": "svg",
-        } as Record<string, string>
-      )[file.type];
-      const src = `${docContainerUrls(runtime.stored.url).assets}${crypto.randomUUID()}.${extension}`;
-      const response = await runtime.session.fetch(src, {
-        method: "PUT",
-        redirect: "error",
-        headers: { "content-type": file.type, "if-none-match": "*" },
-        body: file,
-      });
-      if (!response.ok) throw new Error("Upload failed");
       if (editor.isDestroyed) return;
       if (transfer) {
         for (const element of transfer.images[index]?.elements ?? []) {
@@ -134,7 +133,7 @@ export function ImageUpload({
       <PopoverAnchor asChild>
         <span className="docs-popover-anchor" />
       </PopoverAnchor>
-      <EditorPopoverContent editor={editor} aria-label="Image alt text">
+      <EditorPopoverContent editor={editor} aria-label="Image alt text" className={className}>
         <form
           className="docs-form"
           onSubmit={(event) => {

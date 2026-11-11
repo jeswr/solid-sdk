@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 /** Helpers for ETag conflict handling (ADR-003 §3) and JSON Patch (RFC 6902). */
 import { StorageError } from "./errors.js";
+import type { Entry } from "./types.js";
 
 export { applyJsonPatch, JsonPatchError, jsonEqual } from "./json-patch.js";
 
@@ -32,5 +33,16 @@ export async function retryOnConflict<T>(
       }
       etag = (await read()).etag;
     }
+  }
+}
+
+/** Prefer the advisory title, otherwise decode the final path segment without throwing on bad escapes. */
+export function displayNameOf(entry: Entry): string {
+  if (entry.displayName != null) return entry.displayName;
+  const segment = new URL(entry.url).pathname.replace(/\/$/, "").split("/").pop() as string;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
   }
 }

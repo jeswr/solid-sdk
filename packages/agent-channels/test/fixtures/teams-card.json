@@ -1,0 +1,13 @@
+{
+  "attachments": [
+    {
+      "content": "{\"$schema\":\"http://adaptivecards.io/schemas/adaptive-card.json\",\"body\":[{\"text\":\"Sent by a software agent.\\nKind: describe\\nConversation: urn:example:conversation:1\\nMessage: urn:example:message:1\\nRequest: implementation description\\n— Sent by Jesse Wright's software agent · how to talk to it: https://jeswr.org/agent · spec: https://jeswr.org/agentic-web\",\"type\":\"TextBlock\",\"wrap\":true}],\"data\":{\"envelope\":{\"@context\":{\"agent\":\"https://jeswr.org/ns/agent#\"},\"@type\":\"agent:SignedMessage\",\"agent:compactJws\":\"<signed-fixture>\",\"agent:wireFormat\":\"jws-compact\"}},\"type\":\"AdaptiveCard\",\"version\":\"1.2\"}",
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "id": "00112233445566778899aabbccddeeff"
+    }
+  ],
+  "body": {
+    "content": "Sent by a software agent.<br>Kind: describe<br>Conversation: urn:example:conversation:1<br>Message: urn:example:message:1<br>Request: implementation description<br>— Sent by Jesse Wright&#39;s software agent · how to talk to it: https://jeswr.org/agent · spec: https://jeswr.org/agentic-web<attachment id=\"00112233445566778899aabbccddeeff\"></attachment>",
+    "contentType": "html"
+  }
+}

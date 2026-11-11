@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 const routes = [
   ["", "Chat", "Plan my week"],
@@ -16,16 +17,17 @@ const routes = [
   ["permissions/history", "Permission history", "Previous permission record"],
   ["accounts", "Accounts", "Personal Gmail"],
   ["accounts/gmail", "Account details", "Personal Gmail"],
-  ["inbox", "Inbox", "gmail"],
+  ["inbox", "Inbox", "Gmail"],
   ["inbox/gmail", "Inbox", "Calendar invitation"],
   ["inbox/graph-mail", "Inbox", "Welcome to the team"],
-  ["activity", "Activity", "Sent email to my own account"],
-  ["activity/11", "Activity record 11", "Sent email to my own account"],
+  ["activity", "Activity", "Sent email to"],
+  ["activity/11", "Activity record 11", "Sent email to"],
   ["settings", "Settings", "Agent running"],
 ] as const;
 
 for (const [route, heading, item] of routes) {
   test(`${route || "root"} reads seeded records and is accessible`, async ({ page }, info) => {
+    await seedDemoSession(page);
     await page.goto(`/agent/${route}`);
     await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
     await expect(page.getByText(item).filter({ visible: true }).first()).toBeVisible();
@@ -36,14 +38,12 @@ for (const [route, heading, item] of routes) {
       );
       await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();
       await expect(page.getByRole("button", { name: "Deny", exact: true })).toBeEnabled();
-      await page.locator('[title="Available once you can edit permissions"]').first().focus();
-      await expect(page.getByRole("tooltip")).toContainText(
-        "Available once you can edit permissions",
-      );
-      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "Approve and allow similar for 7 days", exact: true }),
+      ).toBeEnabled();
     }
     if (route === "chat/c/welcome") {
-      await expect(page.getByRole("textbox", { name: "Message your agent" })).toBeDisabled();
+      await expect(page.getByRole("textbox", { name: "Message your agent" })).toBeEnabled();
       await expect(page.getByRole("link", { name: /Review proposal/ })).toBeVisible();
     }
     if (route === "inbox/gmail") {
@@ -52,7 +52,7 @@ for (const [route, heading, item] of routes) {
       await expect(detail).toContainText("<b>This is plain text.</b>");
       await expect(detail.locator("b")).toHaveCount(0);
       await expect(
-        detail.getByRole("heading", { name: "text/calendar", exact: true }),
+        detail.getByRole("heading", { name: "Calendar event", exact: true }),
       ).toBeVisible();
       await expect(detail).toContainText("Read from the message by the agent");
     }

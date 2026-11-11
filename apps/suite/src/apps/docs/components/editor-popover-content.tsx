@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import { PopoverContent } from "@jeswr/suite-ui";
@@ -7,11 +8,13 @@ import { focusDocument } from "../editor/focus";
 
 type EditorPopoverProps = Omit<ComponentProps<typeof PopoverContent>, "onCloseAutoFocus"> & {
   editor: Editor;
+  restoreFocus?: () => void;
 } & ({ "aria-label": string } | { "aria-labelledby": string });
 
 /** Restore editing focus on close unless an outside interaction moved it. */
 export function EditorPopoverContent({
   editor,
+  restoreFocus = () => focusDocument(editor),
   onInteractOutside,
   onEscapeKeyDown,
   ...props
@@ -30,7 +33,7 @@ export function EditorPopoverContent({
       }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
-        if (!outside.current) focusDocument(editor);
+        if (!outside.current) restoreFocus();
       }}
     />
   );

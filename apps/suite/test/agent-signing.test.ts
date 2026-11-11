@@ -8,6 +8,8 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { createWebIdKeyResolver } from "@jeswr/solid-vc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAgentClient, isLoaded } from "../src/apps/agent/lib/client";
+import { collection } from "../src/apps/agent/lib/collections";
+import { archivedMessages, archiveView } from "../src/apps/agent/lib/inbox";
 import {
   ApprovalKeyStore,
   approvalKeyStatus,
@@ -432,7 +434,12 @@ describe("signed approvals and controls", () => {
     ).toBe("verified");
     const halt = await signer.signControl("Halt");
     expect(Date.parse(halt.expires) - now.getTime()).toBe(365 * 86400000);
-    await signer.signControl("SetBindingState", { binding: "direct", bindingState: "disabled" });
+    await signer.signControl("SetBindingState", {
+      target: `${client.paths.accounts}direct.ttl`,
+      binding: "direct",
+      bindingState: "disabled",
+      restrictions: { read: true, triage: false, draft: false, send: false },
+    });
     const controls = loadedRecords(
       await readControl(
         client,
@@ -472,6 +479,77 @@ describe("signed approvals and controls", () => {
       }),
     ).toEqual({ invalid: "malformed" });
   });
+  it("signs Archive into archive/, apart from authority controls, and hides only verified owner archives", async () => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const signer = createAgentSigner(session, client, () => now);
+    const target = `${client.paths.inbox}gmail/gmail/message-1.ttl`;
+    const authority = (await readControl(client)).length;
+    const archive = await signer.signControl("Archive", { target });
+    expect(archive.id.startsWith(client.paths.archive)).toBe(true);
+    expect(Date.parse(archive.expires) - now.getTime()).toBe(365 * 86400000);
+    await expect(signer.signControl("Archive")).rejects.toThrow(/target/);
+    // Authority reads (status pill, executor) never page through archive volume.
+    expect(await readControl(client)).toHaveLength(authority);
+    const verified = loadedRecords(
+      await readControl(
+        client,
+        createAgentVerifier(session, () => now),
+        client.paths.archive,
+      ),
+    );
+    expect(verified.map((c) => [c.kind, c.target, c.verification])).toEqual([
+      ["Archive", target, "verified"],
+    ]);
+    const at = now.getTime();
+    expect([...archivedMessages(verified, DEMO_WEBID, at)]).toEqual([target]);
+    const [row] = verified;
+    if (!row) throw new Error("Missing archive");
+    for (const control of [
+      { ...row, verification: "unchecked" as const },
+      { ...row, verification: { invalid: "signature" } },
+      { ...row, attributedTo: "https://other.example/#me" },
+      { ...row, kind: "Forget" as const },
+      { ...row, target: undefined },
+      { ...row, createdAt: new Date(at + 1).toISOString() },
+      { ...row, expires: new Date(at).toISOString() },
+    ])
+      expect(archivedMessages([control], DEMO_WEBID, at).size).toBe(0);
+  });
+  it("never presents a loading, failed or partial archive read as an empty archive", async () => {
+    const { session, client } = await fixture();
+    await setupApprovalKey(session);
+    const target = `${client.paths.inbox}gmail/gmail/message-1.ttl`;
+    await createAgentSigner(session, client, () => now).signControl("Archive", { target });
+    const rows = await readControl(
+      client,
+      createAgentVerifier(session, () => now),
+      client.paths.archive,
+    );
+    const at = now.getTime();
+    expect(archiveView({ status: "loading" }, DEMO_WEBID, at)).toEqual({ status: "loading" });
+    expect(archiveView({ status: "error" }, DEMO_WEBID, at)).toEqual({ status: "error" });
+    expect(archiveView({ status: "ready", data: rows }, DEMO_WEBID, at)).toEqual({
+      status: "ready",
+      targets: new Set([target]),
+    });
+    // A truncated listing keeps what it did verify but says it is partial.
+    expect(
+      archiveView(
+        { status: "ready", data: collection([...rows], { complete: false }) },
+        DEMO_WEBID,
+        at,
+      ),
+    ).toEqual({ status: "partial", targets: new Set([target]) });
+    // So does an archive document that couldn't be read.
+    expect(
+      archiveView(
+        { status: "ready", data: [...rows, { url: `${client.paths.archive}bad.trig`, error: 1 }] },
+        DEMO_WEBID,
+        at,
+      ),
+    ).toEqual({ status: "partial", targets: new Set([target]) });
+  });
   it("keeps malformed claims as error rows and unsigned records unchecked", async () => {
     const { client, session } = await fixture();
     await client.create(`${client.paths.approvals}bad.trig`, "bad", "application/trig");
@@ -501,7 +579,8 @@ describe("signed approvals and controls", () => {
         [...graph].filter(
           (q) =>
             q.graph.termType === "DefaultGraph" &&
-            q.predicate.value !== "https://w3id.org/security#proof",
+            q.predicate.value !== "https://w3id.org/security#proof" &&
+            q.predicate.value !== "http://purl.org/dc/terms/created",
         ),
       ),
       "application/trig",

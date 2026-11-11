@@ -29,21 +29,30 @@ import {
   Ellipsis,
   Inbox,
   Plus,
-  Tag,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
+import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
+import { labelColour } from "../lib/views/label-colours";
 import { openAddTask } from "../state/add-focus";
 import { useNow } from "../state/clock";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
+import { useCalendarExchange } from "./calendar-exchange/calendar-exchange";
+import { DeleteCompletedDialog, DeleteCompletedMenuItem } from "./delete-completed";
+import "./calendar-exchange/calendar-exchange.css";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { TasksImportDialog } from "./import/import-dialog";
+import { LabelDot } from "./label-chip";
+import { LabelColourPicker } from "./label-colour-picker";
+import { ProjectColourPicker } from "./project-colour-picker";
+import { ProjectDot } from "./project-dot";
 import { ShareProject } from "./share-project";
 
 /** A sidebar entry that accepts dropped rows: the task moves to that project (06-tasks §4.4). */
@@ -56,7 +65,8 @@ function ProjectDropItem({
   className?: string;
   children: ReactNode;
 }) {
-  const drop = useDropTarget(`project:${projectUrl}`, { kind: "project", projectUrl });
+  const id = useId();
+  const drop = useDropTarget(`project:${projectUrl}:${id}`, { kind: "project", projectUrl });
   return (
     <li ref={drop.ref} className={className} data-drop-over={drop.over || undefined}>
       {children}
@@ -68,17 +78,25 @@ function ProjectRow({
   project,
   first,
   last,
+  shared = false,
 }: {
+  shared?: boolean;
   project: StoredProject;
   first: boolean;
   last: boolean;
 }) {
   const tasks = useTasks();
+  const calendar = useCalendarExchange(project);
+  const { preferences, dispatch } = useTasksPreferences();
+  const favourite = preferences.favourites.includes(project.url);
+  const [colourOpen, setColourOpen] = useState(false);
   const path = useRoutePathname();
   const router = useRouter();
   const [sharing, setSharing] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [clearCompleted, setClearCompleted] = useState(false);
+  const actionsButton = useRef<HTMLButtonElement>(null);
   const renameRoot = useRef<HTMLDivElement>(null);
   const name = project.tracker.title ?? "Untitled";
   const href = `/tasks/p/${encodeRef(project.url)}`;
@@ -87,7 +105,7 @@ function ProjectRow({
   ).length;
   return (
     <ProjectDropItem projectUrl={project.url} className="tsk-project-row">
-      <span className="tsk-project-dot" aria-hidden="true" />
+      <ProjectDot colour={project.tracker.color} />
       {renaming ? (
         <div className="tsk-inline-edit" ref={renameRoot}>
           <EditableText
@@ -111,65 +129,120 @@ function ProjectRow({
           </span>
         </Link>
       )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <IconButton
-            className="tsk-project-actions"
-            label={`Project actions for ${name}`}
-            variant="ghost"
-          >
-            <Ellipsis size={16} aria-hidden="true" />
-          </IconButton>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem
-            disabled={!project.etag}
-            onSelect={() => {
-              setRenaming(true);
-              requestAnimationFrame(() =>
-                renameRoot.current?.querySelector<HTMLButtonElement>(".suite-editable")?.click(),
-              );
-            }}
-          >
-            Rename
-          </DropdownMenuItem>
-          {tasks.sharingAvailable && (
-            <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
-              Share
+      <ProjectColourPicker
+        colour={project.tracker.color}
+        open={colourOpen}
+        onOpenChange={setColourOpen}
+        onSelect={(colour) => {
+          void tasks.cache.setProjectColor(project, colour);
+        }}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton
+              ref={actionsButton}
+              className="tsk-project-actions"
+              label={`Project actions for ${name}`}
+              variant="ghost"
+            >
+              <Ellipsis size={16} aria-hidden="true" />
+            </IconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {calendar.items}
+            <DropdownMenuItem
+              disabled={!project.etag}
+              onSelect={() => {
+                requestAnimationFrame(() => setColourOpen(true));
+              }}
+            >
+              Colour
             </DropdownMenuItem>
-          )}
-          <DropdownMenuItem
-            disabled={first || !project.etag}
-            onSelect={() => {
-              void tasks.moveProject(project, "up");
-            }}
-          >
-            Move up
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={last || !project.etag}
-            onSelect={() => {
-              void tasks.moveProject(project, "down");
-            }}
-          >
-            Move down
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={!project.etag}
-            onSelect={() => {
-              void tasks.archiveProject(project).then((result) => {
-                if (result && path === href) router.push("/tasks/inbox");
-              });
-            }}
-          >
-            Archive
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={!project.etag} onSelect={() => setConfirm(true)}>
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem
+              disabled={!preferences.sharedOwner}
+              onSelect={() =>
+                dispatch({ type: "favouriteProject", url: project.url, value: !favourite })
+              }
+            >
+              {favourite ? "Remove from favourites" : "Add to favourites"}
+            </DropdownMenuItem>
+            {shared ? (
+              <DropdownMenuItem
+                onSelect={() => {
+                  tasks.cache.forgetSharedProject(project.url);
+                  dispatch({ type: "removeSharedProject", url: project.url });
+                  dispatch({ type: "favouriteProject", url: project.url, value: false });
+                  if (path === href || path === `${href}/board`) router.push("/tasks/inbox");
+                }}
+              >
+                Remove from Shared with me
+              </DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem
+                  disabled={!project.etag}
+                  onSelect={() => {
+                    setRenaming(true);
+                    requestAnimationFrame(() =>
+                      renameRoot.current
+                        ?.querySelector<HTMLButtonElement>(".suite-editable")
+                        ?.click(),
+                    );
+                  }}
+                >
+                  Rename
+                </DropdownMenuItem>
+                {tasks.sharingAvailable && (
+                  <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+                    Share
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem
+                  disabled={first || !project.etag}
+                  onSelect={() => {
+                    void tasks.moveProject(project, "up");
+                  }}
+                >
+                  Move up
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={last || !project.etag}
+                  onSelect={() => {
+                    void tasks.moveProject(project, "down");
+                  }}
+                >
+                  Move down
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={!project.etag}
+                  onSelect={() => {
+                    void tasks.archiveProject(project).then((result) => {
+                      if (result && path === href) router.push("/tasks/inbox");
+                    });
+                  }}
+                >
+                  Archive
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled={!project.etag} onSelect={() => setConfirm(true)}>
+                  Delete
+                </DropdownMenuItem>
+                <DeleteCompletedMenuItem
+                  project={project}
+                  onSelect={() => setClearCompleted(true)}
+                />
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </ProjectColourPicker>
       {sharing && <ShareProject project={project} onClose={() => setSharing(false)} />}
+      <DeleteCompletedDialog
+        project={project}
+        open={clearCompleted}
+        onOpenChange={setClearCompleted}
+        returnFocus={() => actionsButton.current?.focus()}
+      />
+      {calendar.dialog}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -201,6 +274,8 @@ export function TasksSidebar() {
   const { preferences, dispatch } = useTasksPreferences();
   const path = useRoutePathname();
   const [creating, setCreating] = useState(false);
+  const [clearShared, setClearShared] = useState<StoredProject>();
+  const sharedActionButtons = useRef(new Map<string, HTMLButtonElement>());
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
   const open = tasks.views.filter((task) => task.state === "open");
@@ -219,6 +294,15 @@ export function TasksSidebar() {
   const projects = tasks.projects.filter(
     (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
   );
+  // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
+  const favourites = tasks.projects.filter((project) => {
+    const error = tasks.tasks[project.url]?.error;
+    return (
+      preferences.favourites.includes(project.url) &&
+      !project.tracker.archivedAt &&
+      !(error instanceof ModelError && error.url === project.url && error.category === "not-found")
+    );
+  });
   const link = (
     href: string,
     title: string,
@@ -307,19 +391,43 @@ export function TasksSidebar() {
             <ul className="tsk-nav-list">
               {[...labels]
                 .sort(([a], [b]) => a.localeCompare(b))
-                .map(([name, categories]) =>
-                  link(
-                    `/tasks/l/${encodeURIComponent(name)}`,
-                    `@${categories[0]?.name}`,
-                    <Tag size={16} aria-hidden="true" />,
-                    open.filter((task) =>
-                      task.labelIds.some((id) => categories.some((category) => category.id === id)),
-                    ).length,
-                  ),
-                )}
+                .map(([name, categories]) => {
+                  const href = `/tasks/l/${encodeURIComponent(name)}`;
+                  const count = open.filter((task) =>
+                    task.labelIds.some((id) => categories.some((category) => category.id === id)),
+                  ).length;
+                  return (
+                    <li key={name} className="tsk-project-row">
+                      <Link href={href} aria-current={path === href ? "page" : undefined}>
+                        <LabelDot colour={labelColour(name, tasks.projects)} />
+                        <span>@{categories[0]?.name}</span>
+                        <span role="img" className="tsk-count" aria-label={`${count} open tasks`}>
+                          {count}
+                        </span>
+                      </Link>
+                      <LabelColourPicker name={categories[0]?.name ?? name} menu />
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </>
+      )}
+      {favourites.length > 0 && (
+        <section aria-label="Favourites">
+          <h2 className="tsk-nav-heading">Favourites</h2>
+          <ul className="tsk-nav-list tsk-projects">
+            {favourites.map((project) => (
+              <ProjectRow
+                key={project.url}
+                project={project}
+                shared={sharedUrls.has(project.url)}
+                first={projects[0]?.url === project.url}
+                last={projects.at(-1)?.url === project.url}
+              />
+            ))}
+          </ul>
+        </section>
       )}
       <button
         type="button"
@@ -352,18 +460,23 @@ export function TasksSidebar() {
           <ul className="tsk-nav-list">
             {shared.map((project) => {
               const href = `/tasks/p/${encodeRef(project.url)}`;
-              const title =
-                tasks.projects.find((loaded) => loaded.url === project.url)?.tracker.title ??
-                project.title;
+              const loaded = tasks.projects.find((loaded) => loaded.url === project.url);
+              if (loaded)
+                return <ProjectRow key={project.url} project={loaded} first last shared />;
+              const title = project.title;
               return (
                 <li key={project.url} className="tsk-project-row">
-                  <span className="tsk-project-dot" aria-hidden="true" />
+                  <ProjectDot colour={undefined} />
                   <Link href={href} aria-current={path === href ? "page" : undefined}>
                     {title}
                   </Link>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <IconButton
+                        ref={(button) => {
+                          if (button) sharedActionButtons.current.set(project.url, button);
+                          else sharedActionButtons.current.delete(project.url);
+                        }}
                         className="tsk-project-actions"
                         label={`Project actions for ${title}`}
                         variant="ghost"
@@ -372,6 +485,12 @@ export function TasksSidebar() {
                       </IconButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
+                      {loaded && (
+                        <DeleteCompletedMenuItem
+                          project={loaded}
+                          onSelect={() => setClearShared(loaded)}
+                        />
+                      )}
                       <DropdownMenuItem
                         onSelect={() => {
                           tasks.cache.forgetSharedProject(project.url);
@@ -390,7 +509,16 @@ export function TasksSidebar() {
           </ul>
         </>
       )}
+      {clearShared && (
+        <DeleteCompletedDialog
+          project={clearShared}
+          open
+          onOpenChange={(open) => !open && setClearShared(undefined)}
+          returnFocus={() => sharedActionButtons.current.get(clearShared.url)?.focus()}
+        />
+      )}
       <div className="tsk-sidebar-footer">
+        <TasksImportDialog />
         {creating ? (
           <form
             onSubmit={(event) => {

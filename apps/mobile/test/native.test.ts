@@ -350,6 +350,39 @@ describe("iOS project", () => {
     expect(read("ios/App/Shared/ShareOutStore.swift")).not.toMatch(/import (Capacitor|UIKit)/);
   });
 
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the iOS PDF handoff, which previews read-only and deletes the file on close", () => {
+    expect(read("ios/App/App/MainViewController.swift")).toContain(
+      "bridge.registerPluginInstance(SuiteFilesPlugin())",
+    );
+    const source = read("ios/App/App/SuiteFilesPlugin.swift");
+    expect(source).toContain('jsName = "SuiteFiles"');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
+      expect(source).toContain(`CAPPluginMethod(name: "${method}"`);
+    }
+    expect(source).toContain("QLPreviewController.canPreview(file as NSURL)");
+    // Sign-out closes the viewer this plugin presented and empties the store (sst-8wx.18).
+    expect(source).toMatch(
+      /func pdfClear\(_ call: CAPPluginCall\) \{\s*queue\.async \{[\s\S]*?store\(\)\.clear\(\)[\s\S]*?DispatchQueue\.main\.async \{[\s\S]*?self\.close\(viewer\)/,
+    );
+    expect(source).toMatch(
+      /isBeingPresented, let coordinator = viewer\.transitionCoordinator[\s\S]*?presentingViewController\?\.dismiss\(animated: false\)/,
+    );
+    expect(source).toMatch(/editingModeFor previewItem[^}]*\.disabled/);
+    expect(source).toMatch(/previewControllerDidDismiss[\s\S]*release\(file\)/);
+    // A stale caller's refusal must not clear the live preview; expiry uses the monotonic clock.
+    expect(source).not.toMatch(/func reject[^}]*clear\(\)/);
+    expect(source).toContain("UIApplication.willEnterForegroundNotification");
+    expect(read("ios/App/App/PdfPreviewStore.swift")).not.toContain("Date()");
+    const pbxproj = read("ios/App/App.xcodeproj/project.pbxproj");
+    for (const file of [
+      "PdfPreviewStore.swift",
+      "SuiteFilesPlugin.swift",
+      "PdfPreviewStoreTests.swift",
+    ])
+      expect(pbxproj).toContain(`/* ${file} in Sources */`);
+  });
+
   test("replaces @capacitor/share on iOS so only committed staged files can be shared", () => {
     const main = read("ios/App/App/MainViewController.swift");
     // Registered after the staging plugin, and after Capacitor's own plugins have loaded.
@@ -438,6 +471,44 @@ describe("iOS project", () => {
   });
 });
 
+describe("release builds ignore the debug opt-in", () => {
+  // MOBILE_DEBUG=1 turns on webContentsDebuggingEnabled in the generated config; native code
+  // switches inspection back off unless the build itself is a debug build (sst-8wx.17).
+  test("Android disables WebView debugging unless the app is debuggable", () => {
+    const activity = read("android/app/src/main/java/org/jeswr/suite/MainActivity.java");
+    const load = activity.slice(activity.indexOf("protected void load()"));
+    const guard =
+      "if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {\n" +
+      "            WebView.setWebContentsDebuggingEnabled(false);\n        }";
+    expect(load).toContain(guard);
+    // After Capacitor applies the config, and before any early return.
+    expect(load.indexOf("super.load();")).toBeLessThan(load.indexOf(guard));
+    expect(load.indexOf(guard)).toBeLessThan(load.indexOf("usesProxyInjection()"));
+  });
+
+  test("iOS Release builds are never inspectable", () => {
+    const controller = read("ios/App/App/MainViewController.swift");
+    const didLoad = controller.slice(controller.indexOf("func capacitorDidLoad()"));
+    expect(didLoad).toMatch(
+      /#if !DEBUG\n(?:\s*\/\/.*\n)*\s*if #available\(iOS 16\.4, \*\) \{\n\s*webView\?\.isInspectable = false\n\s*\}\n\s*#endif/,
+    );
+    expect(didLoad.indexOf("#if !DEBUG")).toBeLessThan(didLoad.indexOf("registerPluginInstance"));
+    // DEBUG is defined for the Debug configurations only, in either flag spelling, and no Release
+    // configuration inherits settings from an xcconfig this test cannot see.
+    const project = read("ios/App/App.xcodeproj/project.pbxproj");
+    const release = [
+      ...project.matchAll(/\{\n\t\t\tisa = XCBuildConfiguration;[\s\S]*?name = (\w+);/g),
+    ]
+      .filter((m) => m[1] === "Release")
+      .map((m) => m[0]);
+    expect(release.length).toBeGreaterThan(0);
+    for (const config of release)
+      expect(config).not.toMatch(
+        /SWIFT_ACTIVE_COMPILATION_CONDITIONS[^;]*DEBUG|-D\W*DEBUG\b|\bDEBUG=1|baseConfigurationReference/,
+      );
+  });
+});
+
 describe("Android project", () => {
   const manifest = read("android/app/src/main/AndroidManifest.xml");
   const debugManifest = read("android/app/src/debug/AndroidManifest.xml");
@@ -450,7 +521,10 @@ describe("Android project", () => {
     const entries = [...paths.matchAll(/<([a-z-]+)\s+name="([^"]+)"\s+path="([^"]+)"\s*\/>/g)].map(
       (match) => match.slice(1),
     );
-    expect(entries).toEqual([["cache-path", "share_out", "share-out/"]]);
+    expect(entries).toEqual([
+      ["cache-path", "share_out", "share-out/"],
+      ["cache-path", "pdf_preview", "pdf-preview/"],
+    ]);
     expect(paths).not.toMatch(/<(?:external|root|files)-path/);
     expect(manifest).toContain('android:resource="@xml/file_paths"');
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Android manifest placeholder is literal.
@@ -461,6 +535,41 @@ describe("Android project", () => {
       expect(source).toContain(`public void ${method}(PluginCall call)`);
     }
     expect(source).toContain('result.put("uri", Uri.fromFile(file).toString())');
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  test("registers the PDF handoff, which opens a read-only FileProvider URI after a viewer check", () => {
+    expect(read("android/app/src/main/java/org/jeswr/suite/MainActivity.java")).toContain(
+      "registerPlugin(SuiteFilesPlugin.class)",
+    );
+    const source = read("android/app/src/main/java/org/jeswr/suite/SuiteFilesPlugin.java");
+    expect(source).toContain('@CapacitorPlugin(name = "SuiteFiles")');
+    for (const method of ["pdfBegin", "pdfChunk", "pdfOpen", "pdfClear"]) {
+      expect(source).toContain(`public void ${method}(PluginCall call)`);
+    }
+    expect(source).toContain('setDataAndType(uri, "application/pdf")');
+    expect(source).toContain("addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)");
+    expect(source).not.toContain("FLAG_GRANT_WRITE_URI_PERMISSION");
+    expect(source.indexOf("resolveActivity")).toBeLessThan(source.indexOf("startActivity"));
+    expect(source).toContain('"pdf-preview"');
+    // One store per process, swept on resume, a stale caller's refusal never clears the live
+    // preview, and expiry uses the monotonic clock.
+    expect(source).toContain("private static PdfPreviewStore store;");
+    expect(source).toMatch(/handleOnResume\(\)[\s\S]*sweep\(SystemClock\.elapsedRealtime\(\)\)/);
+    expect(source).not.toContain("currentTimeMillis");
+    // Only sign-out's pdfClear empties the whole store (sst-8wx.18). It first revokes every
+    // viewer grant under pdf-preview/, independently of the delete.
+    const clearCall =
+      /public void pdfClear\(PluginCall call\) \{\s*boolean revoked = false;\s*try \{[\s\S]*?\.path\(PREVIEW_PATH_NAME\)[\s\S]*?revokeUriPermission\(previews, Intent\.FLAG_GRANT_READ_URI_PERMISSION\);\s*revoked = true;\s*\} catch \(RuntimeException ignored\) \{[\s\S]*?\}\s*try \{\s*store\(\)\.clear\(\);[\s\S]*?if \(revoked\) call\.resolve\(\);\s*else call\.reject\([\s\S]*?\n {4}\}\n/;
+    expect(source).toContain('PREVIEW_PATH_NAME = "pdf_preview";');
+    expect(read("android/app/src/main/res/xml/file_paths.xml")).toContain(
+      '<cache-path name="pdf_preview" path="pdf-preview/" />',
+    );
+    expect(source).toMatch(clearCall);
+    expect(source.replace(clearCall, "")).not.toContain("store().clear()");
+    expect(manifest).toMatch(
+      /<queries>\s*<intent>\s*<action android:name="android.intent.action.VIEW" \/>\s*<data android:mimeType="application\/pdf" \/>\s*<\/intent>\s*<\/queries>/,
+    );
   });
 
   test("disables backup and cleartext in the main manifest", () => {

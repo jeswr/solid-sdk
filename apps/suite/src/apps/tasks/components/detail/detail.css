@@ -50,12 +50,38 @@
 .tsk-detail-description textarea {
   resize: vertical;
 }
+.tsk-detail a {
+  color: var(--primary);
+}
+.tsk-attachments {
+  margin-block: var(--space-6);
+}
+.tsk-attachments h3 {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+.tsk-attachments ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.tsk-attachments li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.tsk-attachments li a {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tsk-attachments [role="alert"] {
+  color: var(--destructive);
+}
 .tsk-detail-description-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-.tsk-detail a {
-  color: var(--primary);
 }
 .tsk-detail-subtasks {
   margin-block: var(--space-6);

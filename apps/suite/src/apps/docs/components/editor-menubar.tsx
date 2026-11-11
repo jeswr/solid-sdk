@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -15,13 +17,14 @@ import {
 } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import Link from "next/link";
-import { type ReactNode, useRef, useState } from "react";
+import { type ReactNode, useId, useRef, useState } from "react";
 import type { EditorAction } from "../editor/actions";
 import { clipboardAction } from "../editor/clipboard";
 import type { DownloadFormat } from "../editor/export-document";
 import { indentDocument, paragraphSpacing } from "../editor/formatting";
 import { keyboardLabel } from "../lib/editor/logic";
 import { DownloadMenu } from "./download-menu";
+import { VersionMenu, type VersionMenuProps } from "./version-menu";
 
 const MENUS = ["File", "Edit", "View", "Insert", "Format", "Tools", "Help"] as const;
 export const ZOOMS = [50, 75, 90, 100, 125, 150, 175, 200];
@@ -70,7 +73,7 @@ export function SpacingItems({
   );
 }
 
-export interface EditorMenubarProps {
+export interface EditorMenubarProps extends Partial<VersionMenuProps> {
   editor: Editor;
   actions: EditorAction[];
   mac: boolean;
@@ -88,6 +91,13 @@ export interface EditorMenubarProps {
   print: () => void;
   download: (format: DownloadFormat) => void;
   help: () => void;
+  suggesting?: boolean;
+  setSuggesting?: (value: boolean) => void;
+  resolveSuggestions?: (accept: boolean) => void;
+  addComment?: (() => void) | undefined;
+  commentReason?: string | undefined;
+  share: () => void;
+  shareDisabledReason: string | undefined;
 }
 
 /**
@@ -102,7 +112,11 @@ export function openMenuAfter(current: string | null, label: string, expanded: b
 
 /** Radix owns menu/submenu navigation and typeahead; this adds menubar traversal. */
 export function EditorMenubar(props: EditorMenubarProps) {
-  const { editor, actions, mac, readOnly } = props;
+  const { editor, actions, mac, readOnly, resolveSuggestions: resolveAll } = props;
+  const shareReasonId = useId();
+  const commentReasonId = useId();
+  const shareDisabledReason =
+    props.shareDisabledReason ?? (readOnly ? "Read-only documents cannot be shared." : undefined);
   const [open, setOpen] = useState<string | null>(null);
   const [tab, setTab] = useState(0);
   const root = useRef<HTMLDivElement>(null);
@@ -159,10 +173,30 @@ export function EditorMenubar(props: EditorMenubarProps) {
           <Link href="/docs">Open</Link>
         </DropdownMenuItem>
         {item("Make a copy", props.copy, "", props.draft)}
+        <DropdownMenuItem
+          disabled={!!shareDisabledReason}
+          title={shareDisabledReason}
+          aria-describedby={shareDisabledReason ? shareReasonId : undefined}
+          onSelect={choose(props.share)}
+        >
+          Share…
+        </DropdownMenuItem>
+        {shareDisabledReason && (
+          <span id={shareReasonId} className="su-sr-only">
+            {shareDisabledReason}
+          </span>
+        )}
         <DropdownMenuSeparator />
         <DownloadMenu download={props.download} print={props.print} />
         {item("Import to replace…", props.importFile)}
         {item("Rename", props.rename)}
+        {props.showHistory && props.nameVersion && (
+          <VersionMenu
+            showHistory={choose(props.showHistory)}
+            nameVersion={choose(props.nameVersion)}
+            versionReason={props.versionReason}
+          />
+        )}
         {item("Move to trash", props.remove, "", readOnly || props.draft)}
         <DropdownMenuSeparator />
         {item("Print", props.print, "Mod+P", false)}
@@ -213,6 +247,14 @@ export function EditorMenubar(props: EditorMenubarProps) {
     ),
     View: (
       <>
+        {!readOnly && props.setSuggesting && (
+          <DropdownMenuCheckboxItem
+            checked={props.suggesting ?? false}
+            onCheckedChange={props.setSuggesting}
+          >
+            Suggesting
+          </DropdownMenuCheckboxItem>
+        )}
         <DropdownMenuCheckboxItem checked={props.outline} onCheckedChange={props.setOutline}>
           Show outline
         </DropdownMenuCheckboxItem>
@@ -244,7 +286,28 @@ export function EditorMenubar(props: EditorMenubarProps) {
           )}
       </>
     ),
-    Insert: commands(["Insert image", "Insert table", "Link", "Horizontal rule", "Checklist"]),
+    Insert: (
+      <>
+        {commands(["Insert image", "Insert table", "Link", "Horizontal rule", "Checklist"])}
+        {props.addComment && (
+          <>
+            <DropdownMenuItem
+              disabled={!!props.commentReason}
+              title={props.commentReason}
+              aria-describedby={props.commentReason ? commentReasonId : undefined}
+              onSelect={choose(props.addComment)}
+            >
+              Comment <Kbd>{keyboardLabel("Mod+Alt+M", mac)}</Kbd>
+            </DropdownMenuItem>
+            {props.commentReason && (
+              <span id={commentReasonId} className="su-sr-only">
+                {props.commentReason}
+              </span>
+            )}
+          </>
+        )}
+      </>
+    ),
     Format: (
       <>
         {sub(
@@ -282,11 +345,27 @@ export function EditorMenubar(props: EditorMenubarProps) {
         {command("Clear formatting")}
       </>
     ),
-    Tools: item(
-      "Word count",
-      () => actions.find((action) => action.label === "Word count")?.run(),
-      "Mod+Shift+C",
-      false,
+    Tools: (
+      <>
+        {item(
+          "Word count",
+          () => actions.find((action) => action.label === "Word count")?.run(),
+          "Mod+Shift+C",
+          false,
+        )}
+        {!readOnly && resolveAll && (
+          <>
+            <DropdownMenuSeparator />
+            {item(
+              "Review current suggestion",
+              () => editor.view.dom.dispatchEvent(new Event("docs-review-suggestion")),
+              "Mod+Alt+Shift+A",
+            )}
+            {item("Accept all suggestions", () => resolveAll(true))}
+            {item("Reject all suggestions", () => resolveAll(false))}
+          </>
+        )}
+      </>
     ),
     Help: item("Keyboard shortcuts", props.help, "Mod+/", false),
   };

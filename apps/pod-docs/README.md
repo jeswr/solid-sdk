@@ -101,9 +101,9 @@ npm run gate  # lint + typecheck + coverage (100% lines/stmts/funcs) + build
 ```ts
 import { createDocsStore } from "@jeswr/pod-docs";
 
-// In production pass NO fetchImpl — @solid/reactive-authentication patches the
-// global fetch, so auth is automatic. Tests inject a fetch.
-const store = createDocsStore({ podRoot: "https://alice.pod/", webId });
+// Pass the session's authenticated fetch (for example pod-auth's `auth.fetch`).
+// Omit it and the store uses the unauthenticated global fetch.
+const store = createDocsStore({ podRoot: "https://alice.pod/", webId, fetchImpl: auth.fetch });
 
 const { url } = await store.create({ title: "My notes", body: "<p>hello</p>" });
 const doc = await store.read(url);                       // { url, etag, data }
@@ -117,8 +117,8 @@ const all = await store.list();
 A **framework-agnostic React** document browser, sitting on top of the data layer. React is an
 *optional peer* dependency, so a data-layer-only consumer never pulls it in. It renders only —
 all data flows through the data layer (`DocsStore`) — and takes the authenticated `fetch` as an
-**injected seam** (omit it and the global fetch that `@solid/reactive-authentication` patches in a
-real session is used; the interactive-login wiring is `create-solid-app`-gated). Document bodies
+**injected seam** (a host passes its session's `auth.fetch`; omit it and the unauthenticated global
+fetch is used). Document bodies
 are rendered as **escaped text** (never injected HTML) and edits are stored as a plain literal —
 the editor *engine* that interprets `pd:body` for a given format is a separate ADR.
 

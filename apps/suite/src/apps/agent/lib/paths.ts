@@ -70,6 +70,8 @@ export function agentPaths(workspace: string) {
   const paths = {
     accounts: at("accounts/"),
     descriptors: at("descriptors/"),
+    // The agent introduces itself at one fixed address, so finding its WebID costs one read.
+    agentIntroduction: at("descriptors/agent.ttl"),
     inbox: at("inbox/"),
     conversations: at("conversations/"),
     proposals: at("proposals/"),
@@ -78,6 +80,8 @@ export function agentPaths(workspace: string) {
     mandatesCurrent: at("mandates/current.ttl"),
     mandatesStatus: at("mandates/status.ttl"),
     control: at("control/"),
+    // Archive controls live apart from control/, so authority reads never page through them.
+    archive: at("archive/"),
     heartbeat: at("control/heartbeat.ttl"),
     outbox: at("outbox/"),
     audit: at("audit/"),

@@ -30,9 +30,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import type { WorkbookSummary } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
+import { ShareWorkbook } from "./share-workbook";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 
 function relativeTime(date: Date) {
@@ -45,12 +47,16 @@ function relativeTime(date: Date) {
 }
 
 export function SheetsList() {
+  const sharingConnection = useNeedsConnection();
   const service = useWorkbookService();
   const router = useRouter();
   const [rows, setRows] = useState<WorkbookSummary[]>();
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const [dialog, setDialog] = useState<{ kind: "rename" | "delete"; row: WorkbookSummary }>();
+  const [dialog, setDialog] = useState<{
+    kind: "rename" | "delete" | "share";
+    row: WorkbookSummary;
+  }>();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const trigger = useRef<HTMLElement | null>(null);
@@ -164,6 +170,12 @@ export function SheetsList() {
                           <Link href={workbookHref(row.container)}>Open</Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem
+                          disabled={sharingConnection.disabled}
+                          onSelect={() => setDialog({ kind: "share", row })}
+                        >
+                          Share
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onSelect={() => {
                             setName(row.title);
                             setDialog({ kind: "rename", row });
@@ -193,6 +205,16 @@ export function SheetsList() {
           </table>
         )}
       </section>
+      {dialog?.kind === "share" && (
+        <ShareWorkbook
+          container={dialog.row.container}
+          title={dialog.row.title}
+          onClose={() => {
+            setDialog(undefined);
+            trigger.current?.focus();
+          }}
+        />
+      )}
       <Dialog
         open={dialog?.kind === "rename"}
         onOpenChange={(open) => {

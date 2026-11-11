@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 import {
@@ -13,9 +14,9 @@ import {
   Kbd,
   toast,
 } from "@jeswr/suite-ui";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { ArrowLeft, ImagePlus, Share2, Star } from "lucide-react";
+import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -34,6 +35,8 @@ import { printDocument } from "../editor/print-document";
 import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
+import { useDocumentComments } from "../hooks/use-document-comments";
+import { useDocumentSharing } from "../hooks/use-document-sharing";
 import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
 import {
@@ -46,7 +49,9 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
-import { DocsError, DocsSidebar, DocumentSkeleton, Hint } from "./common";
+import { suggestionAction, suggestionKey } from "../lib/editor/suggestions";
+import { versionDisabledReason } from "../lib/editor/versions";
+import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { EditorMenubar } from "./editor-menubar";
 import { CountPopover, LinkPopover } from "./editor-popovers";
@@ -56,11 +61,16 @@ import { ImageUpload } from "./image-upload";
 import { ImportDialog } from "./import-dialog";
 import { InlineTitle } from "./inline-title";
 import { OutlinePane } from "./outline-pane";
-import { PageCanvas } from "./page-canvas";
 import { SaveIndicator } from "./save-indicator";
 import { SlashMenu, type SlashPosition } from "./slash-menu";
+import {
+  ResolveAllSuggestions,
+  SuggestionModeSwitch,
+  SuggestionPopover,
+} from "./suggestion-controls";
 import { TableActions } from "./table-actions";
 import { trashDocumentWithUndo } from "./trash-actions";
+import { VersionHistory } from "./version-history";
 export function DocumentEditor({
   session,
   resource,
@@ -109,11 +119,25 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const printed = useRef(false);
   const printAbort = useRef<AbortController | null>(null);
   const [importing, setImporting] = useState(false);
+  const [history, setHistory] = useState(false);
+  // Local to this mounted document; never written to Yjs or shared preferences.
+  const [suggesting, setSuggesting] = useState(false);
+  const [resolveAll, setResolveAll] = useState<boolean | null>(null);
+  const [namingVersion, setNamingVersion] = useState(false);
+  const closeHistory = useCallback(() => setHistory(false), []);
+  const closeNamingVersion = useCallback(() => setNamingVersion(false), []);
   const titleRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLAnchorElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const userEdited = useRef(false);
   const [title, setTitle] = useState(runtime.title);
+  const sharing = useDocumentSharing(
+    runtime.session,
+    runtime.stored?.url,
+    title,
+    runtime.online,
+    runtime.readOnly,
+  );
   const [revision, setRevision] = useState(0);
   const [, updateSelection] = useState(0);
   const [mac, setMac] = useState(false);
@@ -225,6 +249,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     },
     [runtime],
   );
+  const comments = useDocumentComments(runtime, editor);
+  const changeSuggesting = (enabled: boolean) => {
+    if (!editor?.isEditable || runtime.readOnly || history) return;
+    editor.view.dispatch(
+      editor.state.tr.setMeta(suggestionKey, { enabled, author: runtime.session.webId }),
+    );
+    setSuggesting(enabled);
+    focusDocument(editor);
+  };
   useEffect(() => {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform));
     // On a phone the outline would take half the screen; it starts hidden there.
@@ -258,6 +291,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   }, []);
   useEffect(() => {
     const outsideKeys = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.altKey &&
+        event.shiftKey &&
+        event.code === "KeyH"
+      ) {
+        event.preventDefault();
+        setHistory(true);
+      }
       if (
         event.key === "[" &&
         !(event.target as HTMLElement).closest("input,textarea,select,[contenteditable=true]")
@@ -316,6 +358,26 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     }
   };
   handlers.current.key = (event) => {
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.altKey &&
+      event.code === "KeyM" &&
+      // Windows reports AltGr as Ctrl+Alt; AltGr+M types a character (µ).
+      !event.getModifierState("AltGraph") &&
+      !history
+    ) {
+      event.preventDefault();
+      comments.add();
+      return true;
+    }
+    if (history) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeHistory();
+        return true;
+      }
+      return false;
+    }
     const action = editorShortcut(
       event.key,
       event.ctrlKey || event.metaKey,
@@ -395,7 +457,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             </span>
             <InlineTitle
               title={title}
-              readOnly={runtime.readOnly}
+              readOnly={runtime.readOnly || history}
               inputRef={titleRef}
               stage={(value) => {
                 setTitle(value);
@@ -442,12 +504,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 Why?
               </Button>
             )}
-            <Hint text="Sharing arrives with sign-in">
-              <Button disabled className="docs-share" aria-label="Share">
-                <Share2 aria-hidden="true" />
-                <span>Share</span>
-              </Button>
-            </Hint>
+            {sharing.button}
             <div
               className="docs-account"
               role="img"
@@ -488,7 +545,21 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             print={print}
             importFile={() => setImporting(true)}
             draft={!runtime.stored}
-            readOnly={runtime.readOnly}
+            readOnly={runtime.readOnly || history}
+            showHistory={() => setHistory(true)}
+            nameVersion={() => setNamingVersion(true)}
+            versionReason={versionDisabledReason(
+              !!runtime.stored,
+              runtime.readOnly,
+              runtime.online,
+            )}
+            suggesting={suggesting}
+            setSuggesting={changeSuggesting}
+            resolveSuggestions={setResolveAll}
+            addComment={comments.add}
+            commentReason={comments.reason}
+            share={sharing.open}
+            shareDisabledReason={sharing.disabledReason}
             copy={() =>
               void act(async () => {
                 await runtime.flush();
@@ -510,6 +581,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             help={() => setHelp(true)}
           />
         )}
+        {sharing.dialog}
         {importing && editor && (
           <ImportDialog
             replace
@@ -531,7 +603,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 progress,
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
-              editor.commands.setContent(imported.json);
+              // Tagged so suggesting mode neither blocks nor rewrites a whole-document import.
+              editor.chain().setMeta(suggestionAction, true).setContent(imported.json).run();
               return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />
@@ -540,7 +613,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         {runtime.readOnly && (
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}
-        {editor && !runtime.readOnly && (
+        {editor && !runtime.readOnly && !history && (
           <EditorToolbar
             editor={editor}
             actions={actions}
@@ -551,9 +624,11 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             setZoom={setZoom}
             outline={outline}
             toggleOutline={() => setOutline((value) => !value)}
+            modeControl={<SuggestionModeSwitch suggesting={suggesting} change={changeSuggesting} />}
           />
         )}
-        {find && editor && (
+        {editor && !history && comments.controls}
+        {find && editor && !history && (
           <FindBar
             editor={editor}
             revision={revision}
@@ -562,7 +637,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           />
         )}
         <div className="docs-writing-area">
-          {outline && (
+          {outline && !history && (
             <aside className="docs-outline-pane" aria-label="Document outline pane">
               <OutlinePane
                 editor={editor}
@@ -578,11 +653,23 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               />
             </aside>
           )}
-          <PageCanvas zoom={zoom} title={title}>
-            {editor ? <EditorContent editor={editor} /> : <DocumentSkeleton message="Syncing…" />}
-          </PageCanvas>
+          {editor ? (
+            <VersionHistory
+              runtime={runtime}
+              editor={editor}
+              title={title}
+              zoom={zoom}
+              open={history}
+              close={closeHistory}
+              naming={namingVersion}
+              closeNaming={closeNamingVersion}
+            />
+          ) : (
+            <DocumentSkeleton message="Syncing…" />
+          )}
+          {!history && comments.sidebar}
         </div>
-        {editor && !runtime.readOnly && (
+        {editor && !runtime.readOnly && !history && (
           <BubbleMenu
             editor={editor}
             updateDelay={160}
@@ -609,12 +696,20 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             </div>
           </BubbleMenu>
         )}
-        {slash && editor && (
+        {slash && editor && !history && (
           <SlashMenu
             editor={editor}
             position={slash}
             close={() => setSlash(null)}
             image={opens.image}
+          />
+        )}
+        {editor && !runtime.readOnly && !history && <SuggestionPopover editor={editor} />}
+        {editor && resolveAll !== null && !runtime.readOnly && !history && (
+          <ResolveAllSuggestions
+            editor={editor}
+            accept={resolveAll}
+            close={() => setResolveAll(null)}
           />
         )}
         {link && editor && <LinkPopover editor={editor} close={() => setLink(false)} />}

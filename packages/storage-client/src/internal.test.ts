@@ -1,6 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
 import { describe, expect, test } from "vitest";
-import { isWithin, MAX_PAGES, paginate, pathParent, throwIfAborted, toBytes } from "./internal.js";
+import {
+  isWithin,
+  MAX_PAGES,
+  paginate,
+  pathParent,
+  throwIfAborted,
+  toBytes,
+  validateKeepalive,
+} from "./internal.js";
 import type { Entry, Page } from "./types.js";
 
 const entry = (url: string): Entry => ({
@@ -9,6 +17,7 @@ const entry = (url: string): Entry => ({
   contentType: null,
   size: null,
   modified: null,
+  displayName: null,
   types: [],
 });
 
@@ -166,6 +175,7 @@ describe("round-2 regressions", () => {
       contentType: null,
       size: null,
       modified: null,
+      displayName: null,
       types: [],
     });
     const pages = paginate(
@@ -197,4 +207,9 @@ describe("toBytes", () => {
     expect(await toBytes(new Blob([expected]))).toEqual(expected);
     expect(await toBytes(new Blob([expected]).stream())).toEqual(expected);
   });
+});
+
+test("keepalive accepts an absent or null body as zero bytes", () => {
+  expect(() => validateKeepalive("POST", "https://pod.example/", undefined, true)).not.toThrow();
+  expect(() => validateKeepalive("POST", "https://pod.example/", null, true)).not.toThrow();
 });

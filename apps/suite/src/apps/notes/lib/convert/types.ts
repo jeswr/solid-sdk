@@ -52,7 +52,18 @@ export type NotesList =
       readonly attrs?: EmptyAttributes;
       readonly content: readonly NotesTaskItem[];
     };
-export type NotesBlock = NotesTextBlock | NotesList;
+export interface NotesImage {
+  readonly type: "image";
+  readonly attrs: {
+    readonly src: string;
+    readonly alt: string;
+    readonly title?: string | null;
+    readonly width?: number | null;
+    readonly height?: number | null;
+    readonly link?: LinkAttributes | null;
+  };
+}
+export type NotesBlock = NotesTextBlock | NotesList | NotesImage;
 export interface NotesDocument {
   readonly type: "doc";
   readonly attrs?: EmptyAttributes;

@@ -25,6 +25,12 @@
   --warning: oklch(0.62 0.14 75);
   --warning-foreground: oklch(0.2 0.05 70);
   --info: oklch(0.52 0.11 250);
+  /* Shared categorical palette from @jeswr/app-shell. */
+  --chart-1: oklch(0.56 0.1 200);
+  --chart-2: oklch(0.6 0.11 150);
+  --chart-3: oklch(0.62 0.13 60);
+  --chart-4: oklch(0.55 0.13 300);
+  --chart-5: oklch(0.58 0.14 20);
   --overlay: oklch(0.2 0.02 240 / 45%);
   --app-home: oklch(0.5 0.11 205);
   --app-home-soft: oklch(0.94 0.03 205);
@@ -72,6 +78,19 @@
   --app-permissions-soft: oklch(0.94 0.03 225);
   --presence-permissions: oklch(0.6 0.14 225);
   --glyph: oklch(1 0 0);
+  /* Stable schema:color values; project dots meet 3:1 on sidebar surfaces. */
+  --project-red: #b91c1c;
+  --project-orange: #c2410c;
+  --project-amber: #b45309;
+  --project-yellow: #a16207;
+  --project-lime: #4d7c0f;
+  --project-green: #15803d;
+  --project-teal: #0f766e;
+  --project-cyan: #0e7490;
+  --project-blue: #1d4ed8;
+  --project-violet: #6d28d9;
+  --project-purple: #7e22ce;
+  --project-pink: #be185d;
   --text-xs: 0.75rem;
   --lh-xs: 1rem;
   --weight-xs: 500;
@@ -177,6 +196,11 @@
   --warning: oklch(0.82 0.13 80);
   --warning-foreground: oklch(0.2 0.04 70);
   --info: oklch(0.76 0.1 250);
+  --chart-1: oklch(0.7 0.11 200);
+  --chart-2: oklch(0.72 0.12 150);
+  --chart-3: oklch(0.76 0.13 70);
+  --chart-4: oklch(0.7 0.13 300);
+  --chart-5: oklch(0.72 0.14 25);
   --overlay: oklch(0 0 0 / 60%);
   --app-home: oklch(0.74 0.1 205);
   --app-home-soft: oklch(0.3 0.05 205);
@@ -209,6 +233,18 @@
   --app-permissions: oklch(0.74 0.1 225);
   --app-permissions-soft: oklch(0.3 0.05 225);
   --glyph: oklch(0.16 0.012 240);
+  --project-red: #f87171;
+  --project-orange: #fb923c;
+  --project-amber: #fbbf24;
+  --project-yellow: #facc15;
+  --project-lime: #a3e635;
+  --project-green: #4ade80;
+  --project-teal: #2dd4bf;
+  --project-cyan: #22d3ee;
+  --project-blue: #60a5fa;
+  --project-violet: #a78bfa;
+  --project-purple: #c084fc;
+  --project-pink: #f472b6;
   --shadow-1: 0 0 0 1px var(--border);
   --elevation-1-fill: var(--surface-2);
   --shadow-2: 0 0 0 1px var(--border-strong);

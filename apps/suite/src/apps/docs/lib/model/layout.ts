@@ -44,6 +44,7 @@ export function docContainerUrls(slugOrResource: string, docsContainer?: string)
     updateLog: `${container}updates/`,
     assets: `${container}assets/`,
     comments: `${container}comments/`,
+    versions: `${container}versions/`,
   };
 }
 

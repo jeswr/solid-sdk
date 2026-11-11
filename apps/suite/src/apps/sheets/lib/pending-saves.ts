@@ -1,12 +1,15 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createAutosave } from "./autosave";
 import {
   type OpenedWorkbook,
   type Snapshot,
+  type SnapshotSaved,
   WorkbookConflictError,
   WorkbookPartialSaveError,
   type WorkbookService,
 } from "./contract";
+import { hasStatus } from "./workbook/resources";
 
 /** Application-lifetime writers. Browser events and I/O enter through injected seams. */
 export function createPendingSaves() {
@@ -28,6 +31,10 @@ export function createPendingSaves() {
     let dropped = false;
     let local = initial.snapshot;
     let read = () => local;
+    const savedListeners = new Set<SnapshotSaved>();
+    const acknowledge = (snapshot: Snapshot, revision: string) => {
+      for (const listener of savedListeners) listener(snapshot, revision);
+    };
     const listeners = new Set<() => void>();
     const publish = () => {
       for (const listener of listeners) listener();
@@ -45,6 +52,7 @@ export function createPendingSaves() {
       async save(snapshot, force) {
         if (dropped) return;
         const savingTitle = title;
+        const verifying = opened.version.pendingVerification;
         try {
           const result = await service.save(initial.container, snapshot, opened.version, {
             force,
@@ -52,18 +60,28 @@ export function createPendingSaves() {
           });
           if (dropped) return;
           opened = { ...opened, ...result, snapshot };
+          acknowledge(snapshot, result.version.snapshotEtag);
           storedTitle = result.metadata.title;
           if (title === savingTitle) title = storedTitle;
         } catch (error) {
           if (dropped) return;
-          if (error instanceof WorkbookPartialSaveError)
+          for (let cause = error; cause instanceof Error; cause = cause.cause) {
+            if (hasStatus(cause, 403)) opened = { ...opened, readOnly: true };
+          }
+          if (error instanceof WorkbookPartialSaveError) {
             opened = { ...opened, version: error.version };
+            // Verification failures can carry a previous write's ETag. Only a
+            // confirmed snapshot write in this attempt acknowledges this value.
+            if (!verifying && !error.version.pendingVerification?.snapshot)
+              acknowledge(snapshot, error.version.snapshotEtag);
+          }
           throw error;
         }
       },
     });
-    const flush = () => queue.flush().then(releaseIdle);
+    const flush = () => (opened.readOnly ? Promise.resolve() : queue.flush()).then(releaseIdle);
     const schedule = (next: () => Snapshot) => {
+      if (opened.readOnly) return;
       read = next;
       queue.schedule(() => {
         local = read();
@@ -80,6 +98,10 @@ export function createPendingSaves() {
       get dirty() {
         return queue.dirty;
       },
+      onSaved(listener: SnapshotSaved) {
+        savedListeners.add(listener);
+        return () => savedListeners.delete(listener);
+      },
       subscribe(listener: () => void) {
         listeners.add(listener);
         return () => {
@@ -90,7 +112,16 @@ export function createPendingSaves() {
         };
       },
       schedule,
+      setReadOnly(readOnly = true) {
+        if (!readOnly && !opened.readOnly) return;
+        opened = { ...opened, readOnly };
+        // Stop timers and capture the engine getter without discarding its pending edit.
+        // Restored Write resumes with the registry's current connectivity.
+        queue.setOnline(readOnly ? false : online);
+        if (readOnly) void queue.flush();
+      },
       rename(next: string) {
+        if (opened.readOnly) return;
         title = next.trim();
         // flush() captures any pending engine getter before writing the rename.
         schedule(read);
@@ -114,10 +145,13 @@ export function createPendingSaves() {
         dropped = true;
         queue.reset();
         listeners.clear();
+        savedListeners.clear();
       },
       flush,
-      retry: (force = false) => queue.retry(force).then(releaseIdle),
+      retry: (force = false) =>
+        (opened.readOnly ? Promise.resolve() : queue.retry(force)).then(releaseIdle),
       setOnline(value: boolean) {
+        if (opened.readOnly) return;
         queue.setOnline(value);
         void flush();
       },

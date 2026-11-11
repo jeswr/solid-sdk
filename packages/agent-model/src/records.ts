@@ -41,6 +41,13 @@ export const restrictionsSchema = z.strictObject({
   draft: z.boolean(),
   send: z.boolean(),
 });
+/** A control changes only the owner's named fields; omission preserves prior intent. */
+export const restrictionChangesSchema = restrictionsSchema
+  .partial()
+  .refine(
+    (value) => Object.values(value).some((field) => field !== undefined),
+    "at least one restriction field is required",
+  );
 /** Exact action terms; recipient identifiers are salted hashes, never handles. */
 export const actionIntentSchema = z.strictObject({
   operation: iri,
@@ -191,23 +198,46 @@ const controlStatement = z
   .strictObject({
     type: z.literal("control-statement"),
     id: iri,
-    kind: z.enum(["Halt", "Resume", "SetBindingState", "DispatchNow", "RevokeMandate", "Forget"]),
+    kind: z.enum([
+      "Halt",
+      "Resume",
+      "SetBindingState",
+      "DispatchNow",
+      "RevokeMandate",
+      "Forget",
+      "Archive",
+    ]),
     attributedTo: iri,
     createdAt: instant,
     expires: instant,
     target: iri.optional(),
     binding: nonempty.optional(),
     bindingState: bindingStateSchema.optional(),
+    restrictions: restrictionChangesSchema.optional(),
     proof,
   })
   .superRefine((value, ctx) => {
-    if (value.kind === "SetBindingState" && (!value.binding || !value.bindingState)) {
+    if (
+      value.kind === "SetBindingState" &&
+      (!value.binding || (!value.bindingState && !value.restrictions))
+    ) {
       ctx.addIssue({
         code: "custom",
-        message: "SetBindingState requires binding and bindingState",
+        message: "SetBindingState requires binding and a state or restrictions",
       });
     }
-    if (["DispatchNow", "RevokeMandate", "Forget"].includes(value.kind) && !value.target) {
+    if (value.restrictions !== undefined && value.kind !== "SetBindingState") {
+      ctx.addIssue({
+        code: "custom",
+        message: "restrictions are allowed only with SetBindingState",
+      });
+    }
+    if (
+      ["SetBindingState", "DispatchNow", "RevokeMandate", "Forget", "Archive"].includes(
+        value.kind,
+      ) &&
+      !value.target
+    ) {
       ctx.addIssue({ code: "custom", message: "control statement requires target" });
     }
   });
