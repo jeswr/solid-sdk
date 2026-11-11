@@ -277,6 +277,9 @@ describe("ChatWriter", () => {
     "channel-duplicate",
     "timestamp-invalid",
     "timestamp-invalid-date",
+    "timestamp-feb-30",
+    "timestamp-non-leap-feb-29",
+    "timestamp-hour-24",
     "timestamp-nozone",
     "timestamp-date",
     "timestamp-duplicate",
@@ -335,6 +338,24 @@ describe("ChatWriter", () => {
         [`${XSD}dateTime`, "2026-99-99T00:00:00Z"],
         LiteralFrom.datatypeTuple,
       );
+    if (
+      mutation === "timestamp-feb-30" ||
+      mutation === "timestamp-non-leap-feb-29" ||
+      mutation === "timestamp-hour-24"
+    )
+      OptionalAs.object(
+        doc,
+        PROV_GENERATED_AT_TIME,
+        [
+          `${XSD}dateTime`,
+          {
+            "timestamp-feb-30": "2026-02-30T00:00:00Z",
+            "timestamp-non-leap-feb-29": "2025-02-29T12:00:00+01:00",
+            "timestamp-hour-24": "2026-10-24T24:00:00Z",
+          }[mutation],
+        ],
+        LiteralFrom.datatypeTuple,
+      );
     if (mutation === "timestamp-date")
       OptionalAs.object(doc, PROV_GENERATED_AT_TIME, new Date(DAY1), LiteralFrom.date);
     if (mutation === "timestamp-duplicate")
@@ -348,6 +369,42 @@ describe("ChatWriter", () => {
     await expect(writer.get("claude", "thread-1")).rejects.toThrow();
     await expect(writer.list()).rejects.toThrow();
     expect(pod.reads.every((read) => read.startsWith(ROOT))).toBe(true);
+  });
+
+  it.each([
+    ["2024-02-29T23:59:59.5+14:00", "2024-02-29T09:59:59.500Z"],
+    ["2000-02-29T00:00:00Z", "2000-02-29T00:00:00.000Z"],
+    ["2026-12-31T23:59:59-12:00", "2027-01-01T11:59:59.000Z"],
+  ])("reads valid calendar timestamp %s", (value, iso) => {
+    const doc = new ConversationProvenanceDoc("https://pod.example/c#it", new Store(), DataFactory);
+    OptionalAs.object(
+      doc,
+      PROV_GENERATED_AT_TIME,
+      [`${XSD}dateTime`, value],
+      LiteralFrom.datatypeTuple,
+    );
+    expect(doc.generatedAt?.toISOString()).toBe(iso);
+  });
+
+  it.each([
+    "1900-02-29T00:00:00Z",
+    "2026-04-31T00:00:00Z",
+    "2026-13-01T00:00:00Z",
+    "2026-00-10T00:00:00Z",
+    "2026-01-00T00:00:00Z",
+    "2026-01-01T23:60:00Z",
+    "2026-01-01T23:00:60Z",
+    "2026-01-01T00:00:00+15:00",
+    "2026-01-01T00:00:00+01:60",
+  ])("rejects impossible calendar timestamp %s", (value) => {
+    const doc = new ConversationProvenanceDoc("https://pod.example/c#it", new Store(), DataFactory);
+    OptionalAs.object(
+      doc,
+      PROV_GENERATED_AT_TIME,
+      [`${XSD}dateTime`, value],
+      LiteralFrom.datatypeTuple,
+    );
+    expect(() => doc.generatedAt).toThrow("Invalid conversation provenance timestamp");
   });
 
   it("writes canonical AS2 and preserves immutable message IDs on re-save", async () => {

@@ -113,6 +113,9 @@ metadata records `prov:generatedAtTime` as an `xsd:dateTime` and
 `prov:wasAttributedTo <_conversation.ttl#account>`, a `prov:Agent` with the
 owner-chosen `foaf:accountName` string. Message attribution is unchanged.
 All provenance is written/read through `ConversationProvenanceDoc` typed accessors.
+These accessors are hand-written for now; they move into the generated chat-interop model
+when bead sst-m3nr flips this package to `@jeswr/federation-codegen` (the provenance shape is
+added to the chat-interop profile then).
 First metadata wins, including creation time, account and channel. Legacy records
 remain readable with absent provenance; replay does not backfill or replace them.
 Reads reject ambiguous provenance, non-string account/channel terms, invalid
