@@ -63,6 +63,10 @@ The push API accepts Solid-OIDC access tokens as `Authorization: DPoP <token>` w
 request-bound `DPoP: <proof>`. Issuer discovery, audience `solid`, WebID issuer endorsement,
 proof signature/method/public URL/time/token hash/key binding and shared replay protection
 are enforced. `RELAY_MOBILE_CLIENT_ID` must equal the token's `client_id`.
+Issuer discovery, JWKS and WebID profiles cache for ten minutes and share in-flight loads
+per URL within a verifier. An unknown token key can refresh its JWKS once a minute;
+concurrent refreshes share one fetch. Failed loads clear the in-flight promise and retain
+any previously cached value, so later attempts can retry under the existing throttle.
 
 - `POST /push/installations`: JSON `{ platform: "android" | "ios", pushToken,
   devicePublicKey, authSecret, deviceSigningKey }`, P2 token + device proof →

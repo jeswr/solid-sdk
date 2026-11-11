@@ -48,7 +48,10 @@ bounded to 64 KiB with unknown fields refused; signing JWKs are public P-256 key
 
 `createRelayOutboundFetch` uses the Node guard: DNS-pinned public HTTPS, at most
 three revalidated redirects, 256 KiB and five seconds including body reads. Discovery,
-JWKS and profile caches last ten minutes. Remote JSON-LD contexts are refused.
+JWKS and profile caches last ten minutes and share in-flight loads per URL within a verifier.
+Unknown token keys can refresh JWKS once a minute; concurrent refreshes share one fetch.
+Settled loads clear their in-flight promise, including failures, which retain the previous
+cached value and allow later retries under the existing throttle. Remote JSON-LD contexts are refused.
 Only tests enable `allowLoopbackForTests`; never read it from environment configuration.
 Both deployment entries call `productionRelay`, which requires NODE_ENV=production,
 rejects injected transports, and builds its own guard. Embedding tests may inject a
