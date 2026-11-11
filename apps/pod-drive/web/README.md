@@ -19,7 +19,7 @@ host only wires **auth + a pod root**.
 
 ```
 index.html → src/main.tsx
-  └─ <SessionProvider>            (src/auth/SessionProvider.tsx — the ONE auth seam)
+  └─ <SessionProvider>            (@jeswr/app-session/react)
        └─ <App>                   (src/App.tsx)
             ├─ logged out → <LoginScreen>          (shared account and provider card)
             └─ logged in  → <FileBrowser           (@jeswr/pod-drive/ui)
@@ -28,7 +28,9 @@ index.html → src/main.tsx
 
 ### Auth (standalone, no server)
 
-Drive uses one page-lifetime `@jeswr/pod-auth` core and the shared
+Drive configures `@jeswr/app-session` in `src/auth/pod-auth.ts`, with its app name and
+obsolete credential keys passed to the shared provider in `src/main.tsx`. The package
+owns one page-lifetime `@jeswr/pod-auth` core and the shared
 `@jeswr/suite-ui/sign-in` card. Recent accounts appear first; users can also enter
 an address, choose the home provider or another listed provider, or enter a custom
 provider address. Addresses are resolved through a pristine public fetch. A WebID
@@ -56,8 +58,8 @@ Only `callback.html` is registered as an OAuth redirect URI.
 
 ### How the drive root is derived from the session
 
-`<FileBrowser rootUrl />` needs only a **pod root**. The host derives it in
-`src/auth/session-derivation.ts`:
+`<FileBrowser rootUrl />` needs only a **pod root**. The shared `@jeswr/app-session`
+`deriveSession` helper derives it:
 
 - **pod root** = the **first `pim:storage`** advertised on the WebID profile (the
   canonical Solid "where my storage lives" signal). Fallback when a profile omits

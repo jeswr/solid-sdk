@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import type { DatasetCore } from "@rdfjs/types";
+import type { DatasetCore, Quad } from "@rdfjs/types";
 import type { IJsonLdParserOptions } from "jsonld-streaming-parser";
 import type { Store } from "n3";
 import type { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
@@ -59,6 +59,21 @@ export interface ParseRdfOptions {
   baseIRI?: string;
   /** Default-parser remote-context policy. Ignored with engine. Omit to refuse remote contexts. */
   documentLoader?: DocumentLoader;
+}
+
+/** Buffered N3-family parsing for callers with a synchronous read contract. */
+export interface ParseRdfSyncOptions
+  extends Pick<
+    ParseRdfOptions,
+    "baseIRI" | "signal" | "maxBytes" | "maxQuads" | "maxTermLength" | "maxTotalTermLength"
+  > {
+  /** Omit for n3's permissive Turtle/TriG/quad mode; specify to restrict the syntax. */
+  format?: Exclude<RdfMediaType, "application/ld+json">;
+  /** Throw to stop work; called before term/quad construction, each store insertion and return. */
+  check?: () => void;
+  /** Observe quads in document order, including duplicates, after syntax validation.
+   * A later check/insertion failure can still reject the operation; discard observations on failure. */
+  onQuad?: (quad: Quad) => void;
 }
 
 /** Options for {@link fetchRdf}. */
