@@ -275,6 +275,9 @@ export function isXsdDate(value: string): boolean {
  * malformed dateTime literals with every other malformed-literal drop; the field's
  * `requiredFailClosed` grading then decides admit/reject as usual.
  *
+ * A zoneless dateTime is read as UTC, never in the host's local time zone, so the
+ * same pod data yields the same instant on every machine.
+ *
  * A lexically-valid value JS `Date` cannot represent (outside its time range, or an
  * offset-timezoned `xsd:date`) also drops fail-closed:
  * `Date` is the surface type, and a value it cannot faithfully carry must never
@@ -301,9 +304,11 @@ function dateAs(datatypeIri: string): (term: TermWrapper) => Date {
       year < 0 || year > 9999
         ? `${year < 0 ? "-" : "+"}${String(Math.abs(year)).padStart(6, "0")}`
         : String(year).padStart(4, "0");
+    // A zoneless XSD value has no timezone; read it as UTC (as the xsd:date branch
+    // always has) so the instant never depends on the host's time zone.
     const lexical = isDate
       ? `${jsYear}-${m[2]}-${m[3]}T00:00:00${m[4] ?? "Z"}`
-      : jsYear + t.value.slice((m[1] as string).length);
+      : `${jsYear}${t.value.slice((m[1] as string).length)}${m[8] === undefined ? "Z" : ""}`;
     const d = new Date(lexical);
     if (!Number.isFinite(d.getTime())) {
       throw new Error("date/dateTime: value not representable as a JS Date");
