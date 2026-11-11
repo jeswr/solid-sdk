@@ -111,32 +111,37 @@ it("preserves identity across restarts, dates, object key ordering and renewed r
   expect(api.issues).toHaveLength(1);
 });
 
-it("finds a closed reference beyond the first issue page and ignores pull requests", async () => {
+it("recovers a closed reference with one search despite 10,000 newer issues and pull requests", async () => {
   const api = github();
   const h = await client();
   expect((await h.submit()).status).toBe(200);
   const original = api.issues[0];
   if (!original) throw new Error("Missing saved issue");
   original.state = "closed";
-  for (let i = 0; i < 100; i++)
+  for (let i = 0; i < 10_000; i++)
     api.issues.push({
       number: 124 + i,
-      body: original.body,
-      pull_request: {},
+      body: i % 2 ? "Unrelated demo feedback" : original.body,
+      ...(i % 2 ? {} : { pull_request: {} }),
     });
+  const calls = api.calls.length;
   const retry = await h.submit();
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ reference: 123 });
-  expect(api.calls.filter(({ url }) => url.includes("/issues?"))).toEqual([
-    {
-      url: "https://api.github.com/repos/private/feedback/issues?state=all&sort=created&direction=desc&per_page=100&page=1",
-      method: "GET",
-    },
-    {
-      url: "https://api.github.com/repos/private/feedback/issues?state=all&sort=created&direction=desc&per_page=100&page=2",
-      method: "GET",
-    },
-  ]);
+  expect(api.calls.length - calls).toBe(4); // Metadata, head, index, one search.
+  const searches = api.calls.filter(({ url }) => new URL(url).pathname === "/search/issues");
+  expect(searches).toHaveLength(1);
+  const search = new URL(searches[0]?.url ?? "");
+  expect(search.searchParams.get("q")).toBe(
+    `repo:private/feedback is:issue in:body "feedback-submission:${submissionId}"`,
+  );
+  expect(search.searchParams.get("per_page")).toBe("1");
+  expect(
+    api.calls.some(
+      ({ url, method }) =>
+        new URL(url).pathname === "/repos/private/feedback/issues" && method === "GET",
+    ),
+  ).toBe(false);
   expect(
     api.calls.filter(({ url, method }) => url.endsWith("/issues") && method === "POST"),
   ).toHaveLength(1);
@@ -183,22 +188,114 @@ it("recovers the reference after an issue was created but its response was lost"
   expect(api.issues).toHaveLength(1);
 });
 
-it("does not repeat an issue POST when a committed submission has no discoverable reference", async () => {
+it("resumes a committed submission without an issue, linking the original files after a restart", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
   const api = github();
   const h = await client();
   api.holdIssue(async () => {
     throw new Error("Issue creation failed");
   });
   expect((await h.submit()).status).toBe(502);
-  const retry = await h.submit();
-  expect(retry.status).toBe(503);
-  expect(retry.headers.get("retry-after")).toBe("60");
-  expect(await retry.json()).toEqual({ error: expect.stringContaining("download your feedback") });
+  api.holdIssue(async () => {});
+  vi.advanceTimersByTime(86_400_000);
+  const restarted = await client();
+  const calls = api.calls.length;
+  const retry = await restarted.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(api.calls.length - calls).toBe(5); // Recovery plus one issue POST, no new Git writes.
+  expect(api.records).toHaveLength(1);
+  expect(api.issues).toHaveLength(1);
+  expect(api.issues[0]?.body).toContain(`/feedback/2026-11-11/${submissionId}/submission.json`);
+  expect(
+    api.calls.filter(({ url, method }) => url.endsWith("/issues") && method === "POST"),
+  ).toHaveLength(2);
+});
+
+it("finishes issue creation when the successful ref update starts a cooldown", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  const api = github();
+  const h = await client();
+  api.lowBudget("ref");
+  const response = await h.submit();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ reference: 123 });
+  const calls = api.calls.length;
+  expect((await h.audio()).status).toBe(503);
+  expect(api.calls).toHaveLength(calls);
+  vi.advanceTimersByTime(120_000);
+  expect((await h.submit()).status).toBe(200);
+  expect(api.records).toHaveLength(1);
+  expect(api.issues).toHaveLength(1);
+});
+
+it("resumes an unattempted issue after the committed ref response was lost", async () => {
+  const api = github();
+  const h = await client();
+  api.loseRefResponse();
+  expect((await h.submit()).status).toBe(502);
   expect(api.records).toHaveLength(1);
   expect(api.issues).toHaveLength(0);
+  const restarted = await client();
+  const calls = api.calls.length;
+  const retry = await restarted.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(api.calls.length - calls).toBe(5);
+  expect(api.records).toHaveLength(1);
+  expect(api.issues).toHaveLength(1);
   expect(
     api.calls.filter(({ url, method }) => url.endsWith("/issues") && method === "POST"),
   ).toHaveLength(1);
+});
+
+it("shares a 30-second deadline across recovery search and resumed issue creation", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), ms);
+    return controller.signal;
+  });
+  const api = github();
+  const h = await client();
+  api.holdIssue(async () => {
+    throw new Error("Issue creation failed");
+  });
+  expect((await h.submit()).status).toBe(502);
+  api.holdIssue(async () => {});
+  let searches = 0;
+  let posts = 0;
+  vi.mocked(fetch).mockImplementation(async (input, options) => {
+    const path = new URL(String(input)).pathname;
+    if (path === "/search/issues" || (path.endsWith("/issues") && options?.method === "POST")) {
+      if (path === "/search/issues") searches++;
+      else posts++;
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          reject(new Error("GitHub request timed out"));
+        };
+        const timer = setTimeout(() => {
+          options?.signal?.removeEventListener("abort", abort);
+          resolve();
+        }, 20_000);
+        options?.signal?.addEventListener("abort", abort, { once: true });
+      });
+    }
+    return api.transport(input, options);
+  });
+  let status: number | undefined;
+  const retry = h.submit().then((response) => {
+    status = response.status;
+  });
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(searches).toBe(1);
+  expect(posts).toBe(1);
+  expect(status).toBe(502);
+  await retry;
+  expect(api.issues).toHaveLength(0);
 });
 
 it("returns a successful final issue response at budget 49 and blocks later calls until reset", async () => {

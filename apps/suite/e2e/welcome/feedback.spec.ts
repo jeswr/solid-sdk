@@ -283,14 +283,23 @@ test("a GitHub cooldown asks the participant to try later and preserves their do
   );
 });
 
-for (const outcome of ["lost response", "low final budget"] as const)
+for (const outcome of [
+  "lost response",
+  "resume without issue",
+  "low ref and final budget",
+] as const)
   test(`GitHub ${outcome} preserves one submission and its reference`, async ({ page }) => {
     const github = feedbackGithub();
     const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
     let submits = 0;
     let submissionId = "";
+    let firstCalls = 0;
     if (outcome === "lost response") github.loseIssueResponse();
-    else github.lowBudget();
+    else if (outcome === "resume without issue") github.loseRefResponse();
+    else {
+      github.lowBudget("ref");
+      github.lowBudget();
+    }
     await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
     await page.route("**/api/feedback/submit", async (route) => {
       const payload = route.request().postDataJSON();
@@ -313,6 +322,14 @@ for (const outcome of ["lost response", "low final budget"] as const)
           body: route.request().postData(),
         }),
       );
+      if (submits === 1) {
+        firstCalls = github.calls.length;
+        if (outcome === "lost response")
+          for (let i = 0; i < 10_000; i++)
+            github.issues.push({ number: 124 + i, body: "Unrelated demo feedback" });
+      } else {
+        expect(github.calls.length - firstCalls).toBe(outcome === "lost response" ? 4 : 5);
+      }
       await route.fulfill({
         status: response.status,
         headers: Object.fromEntries(response.headers),
@@ -323,13 +340,14 @@ for (const outcome of ["lost response", "low final budget"] as const)
     await page.getByRole("button", { name: "Just tell us", exact: true }).click();
     await page.getByLabel("Your answer", { exact: true }).fill("Alice found the demo confusing.");
     await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
-    if (outcome === "lost response") {
+    const retries = outcome === "lost response" || outcome === "resume without issue";
+    if (retries) {
       await expect(page.getByRole("main").getByRole("alert")).toContainText("Download my feedback");
       await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
     }
     await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText(`#${123}`);
-    expect(submits).toBe(outcome === "lost response" ? 2 : 1);
+    expect(submits).toBe(retries ? 2 : 1);
     expect(github.records).toHaveLength(1);
     expect(github.records[0]?.record.id).toBe(submissionId);
-    expect(github.issues).toHaveLength(1);
+    expect(github.issues).toHaveLength(outcome === "lost response" ? 10_001 : 1);
   });

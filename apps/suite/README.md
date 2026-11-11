@@ -50,10 +50,13 @@ Receipts from another submission, unknown/forged receipts and duplicate blob SHA
 Submissions create one atomic Git Data API commit containing all receipt audio blobs,
 `submission.json` and `summary.md` under `feedback/<yyyy-mm-dd>/<uuid>/`, then open an issue.
 The UUID is the client's submission ID. The same commit reserves it in
-`feedback/submissions/<uuid>.json` with a digest of the record and audio. Concurrent writers
-check this index against each branch head before committing; an ID cannot save different
-feedback (409). Identical retries recover the original reference from the issue's submission
-marker, including closed issues, without creating another directory or issue.
+`feedback/submissions/<uuid>.json` with a digest of the record and audio and the record directory.
+Concurrent writers check this index against each branch head before committing; an ID cannot
+save different feedback (409). Identical retries make one GitHub search scoped to the feedback repository
+and the issue body's submission marker, including closed issues and excluding pull requests.
+Recovery never paginates through the repository's issue history. If the search finds no issue,
+the store resumes issue creation using the original record directory, without another record commit.
+Overlapping issue creation within one instance returns 503 until the current request finishes.
 The store reads the private repo's default branch once and uses the current head tree as the
 base, preserving path segments in branch names such as `team/main`. A non-fast-forward 422
 re-reads the head and retries the tree/commit/ref update up to
@@ -64,11 +67,13 @@ repository membership. Issue labels are `feedback`, `pathway:guided` or `pathway
 returned to the participant. Participant Markdown and HTML are escaped and mentions neutralised;
 titles use plain text sanitisation. Full verbatim records remain in the private JSON file.
 The issue body stays under 60k characters with a closed transcript disclosure and an external
-full-record link. An issue failure may leave a committed record without an issue. Retries
-without a discoverable reference return 503 and preserve the download option: they never
-repeat an issue POST whose outcome may be uncertain. A maintainer must reconcile a record
-whose issue was never created. Abandoned uploads can
-leave unreferenced Git blobs; uploading a recording does not create an issue.
+full-record link. An issue failure may leave a committed record without an issue; participants
+can retry to recover its reference or resume creation. Recovery uses at most six GitHub calls
+(metadata, head, index, one search and up to two issue POSTs for the label fallback). Reads
+have 30-second timeouts; search and issue creation share one 30-second deadline. GitHub search
+indexing and in-memory coordination cannot guarantee exactly-once issue creation across
+instances or after an uncertain POST response. Abandoned uploads can leave unreferenced Git
+blobs; uploading a recording does not create an issue.
 
 All three POST routes require an allowed Origin, validate and rebuild inputs, and stream-read
 within body caps before parsing. The interviewer accepts at most 40 messages of 4000 characters,
@@ -83,9 +88,10 @@ continues with the plain guide while preserving its full transcript. Per visitor
 five submits per hour. IPv6 addresses share a /64 allowance. Each server instance caps 2000
 turns, 2000 audio uploads and 200 submissions per UTC day. **All these limits are per instance**;
 in-memory counters reset on restart and do not coordinate across instances.
-GitHub responses with fewer than 50 remaining requests or a 403/429 rate limit stop subsequent
-storage calls, without retrying. Successful responses still complete, including the final
-issue reference. Uploads and submissions share an instance cooldown
+GitHub responses with fewer than 50 remaining requests or a 403/429 rate limit start a cooldown.
+Uploads and new submissions check it before their first write. An admitted submission finishes
+its commit and issue creation even if a successful response starts the cooldown; an actual
+403/429 still fails without retrying. Uploads and submissions share an instance cooldown
 until the primary reset or `Retry-After` deadline (60 seconds when neither is available).
 The API returns a friendly 503 with `Retry-After`; the page asks participants to try later
 and keeps their answers and audio available through **Download my feedback**.

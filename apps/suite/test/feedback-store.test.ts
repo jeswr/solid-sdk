@@ -262,6 +262,38 @@ it("downloads JSON, Markdown and all audio in one archive", async () => {
 });
 
 afterEach(() => vi.useRealTimers());
+it("finishes the label fallback when its 422 response starts a low-budget cooldown", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+  vi.resetModules();
+  const { createGithubStore: freshStore } = await import("../src/feedback/store");
+  const transport = vi.fn<typeof fetch>();
+  initial(transport);
+  commitResponses(transport);
+  transport.mockResolvedValueOnce(
+    Response.json(
+      { message: "Label absent" },
+      {
+        status: 422,
+        headers: {
+          "x-ratelimit-remaining": "49",
+          "x-ratelimit-reset": String(Date.now() / 1000 + 120),
+        },
+      },
+    ),
+  );
+  transport.mockResolvedValueOnce(Response.json({ number: 15 }));
+  await expect(freshStore(env, transport).save(submission, [], submissionId)).resolves.toEqual({
+    reference: 15,
+  });
+  await expect(freshStore(env, transport).save(submission, [], submissionId)).rejects.toMatchObject(
+    {
+      status: 503,
+      retryAfter: 120,
+    },
+  );
+  expect(transport).toHaveBeenCalledTimes(12);
+});
 it("stops on a low GitHub budget and shares the reset cooldown across fresh stores", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));

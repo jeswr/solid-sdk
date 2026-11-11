@@ -11,7 +11,9 @@ export function feedbackGithub() {
   const issues: { number: number; body: string; state?: string; pull_request?: object }[] = [];
   let beforeIssue = async () => {};
   let issueHeaders = {};
+  let refHeaders = {};
   let loseIssueResponse = false;
+  let loseRefResponse = false;
   let conflicts = 0;
   const calls: { url: string; method: string | undefined }[] = [];
   const transport: typeof fetch = async (input, options) => {
@@ -55,7 +57,8 @@ export function feedbackGithub() {
         return Response.json({ message: "Update is not a fast forward" }, { status: 422 });
       }
       head = body.sha;
-      return Response.json({});
+      if (loseRefResponse) throw new Error("Connection lost after GitHub updated the ref");
+      return Response.json({}, { headers: refHeaders });
     }
     if (path === "/issues" && method === "POST") {
       await beforeIssue();
@@ -64,9 +67,15 @@ export function feedbackGithub() {
       if (loseIssueResponse) throw new Error("Connection lost after GitHub accepted the issue");
       return Response.json(issue, { status: 201, headers: issueHeaders });
     }
-    if (path === "/issues" && method === "GET") {
-      const offset = (Number(url.searchParams.get("page")) - 1) * 100;
-      return Response.json([...issues].reverse().slice(offset, offset + 100));
+    if (path === "/search/issues") {
+      const id = url.searchParams.get("q")?.match(/[a-f0-9-]{36}/)?.[0];
+      return Response.json({
+        incomplete_results: false,
+        items: issues.filter(
+          (issue) =>
+            !issue.pull_request && issue.body.endsWith(`<!-- feedback-submission:${id} -->`),
+        ),
+      });
     }
     throw new Error(`Unexpected GitHub request: ${method} ${url}`);
   };
@@ -88,14 +97,19 @@ export function feedbackGithub() {
     holdIssue(callback: () => Promise<void>) {
       beforeIssue = callback;
     },
-    lowBudget() {
-      issueHeaders = {
+    lowBudget(at: "issue" | "ref" = "issue") {
+      const headers = {
         "x-ratelimit-remaining": "49",
         "x-ratelimit-reset": String(Date.now() / 1000 + 120),
       };
+      if (at === "ref") refHeaders = headers;
+      else issueHeaders = headers;
     },
     loseIssueResponse() {
       loseIssueResponse = true;
+    },
+    loseRefResponse() {
+      loseRefResponse = true;
     },
   };
 }
