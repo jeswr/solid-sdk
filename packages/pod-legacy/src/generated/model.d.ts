@@ -45,7 +45,7 @@ export interface LegacyPlanData {
   "created": Date;
   "owner": string;
   "modified": Date;
-  "contactUrls": string[];
+  "contactUrls"?: string[];
   "inactivityMonths": number;
   "notifyMeBy": ("settings" | "tray")[];
   "warningDays": number[];

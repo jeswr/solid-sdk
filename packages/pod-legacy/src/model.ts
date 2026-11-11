@@ -2,8 +2,8 @@
 
 import { policyToRdf } from "@jeswr/solid-odrl";
 import { NS } from "@jeswr/suite-vocab";
-import type { DatasetCore } from "@rdfjs/types";
-import type { Store } from "n3";
+import type { DatasetCore, Term } from "@rdfjs/types";
+import { DataFactory, type Store } from "n3";
 import { entities } from "./generated/model.js";
 import { type LegacyContact, type LegacyPlan, planPolicy, validPlan } from "./plan.js";
 
@@ -28,9 +28,17 @@ export function buildPlan(url: string, plan: LegacyPlan): Store {
 /** Any invalid linked contact rejects the entire plan; remote contact nodes are never fetched. */
 export function parsePlan(url: string, dataset: DatasetCore): LegacyPlan | undefined {
   const data = entities.LegacyPlan.parse(url, dataset);
-  if (!data || data.contactUrls.some((id) => !id.startsWith(`${url}#contact-`))) return undefined;
+  if (!data || data.contactUrls?.some((id) => !id.startsWith(`${url}#contact-`))) return undefined;
+  // Optional generated sets filter malformed members. With conditional requiredness, reject
+  // any dropped contact term rather than evaluating a partially accepted enabled plan.
+  const wrapper = new entities.LegacyPlan.Wrapper(url, dataset, DataFactory);
+  if (
+    wrapper.dataset.match(wrapper as unknown as Term, DataFactory.namedNode(`${NS.LEGACY}contact`))
+      .size !== (data.contactUrls?.length ?? 0)
+  )
+    return undefined;
   const contacts: LegacyContact[] = [];
-  for (const id of data.contactUrls) {
+  for (const id of data.contactUrls ?? []) {
     const contact = entities.LegacyContact.parse(id, dataset);
     if (
       !contact ||

@@ -14,7 +14,8 @@ export class LegacyPrivacyError extends Error {
   }
 }
 export interface LegacySnapshot {
-  plan: LegacyPlan;
+  /** null denotes a verified empty placeholder, which can be filled with this ETag. */
+  plan: LegacyPlan | null;
   etag: string;
 }
 const missing = (error: unknown) => error instanceof StorageError && error.code === "not-found";
@@ -101,23 +102,54 @@ export function createLegacyStore(options: {
       throw new LegacyPrivacyError();
     }
   };
+  const load = async (): Promise<LegacySnapshot | null> => {
+    let read: Awaited<ReturnType<StorageClient["read"]>>;
+    try {
+      read = await storage.read(url, { accept: "text/turtle, application/ld+json;q=0.9" });
+    } catch (error) {
+      if (missing(error)) return null;
+      throw error;
+    }
+    // Probe at most the first nonempty chunk; do not buffer an unbounded raw body.
+    const reader = read.body?.getReader();
+    let empty = true;
+    if (reader) {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value.length) {
+            empty = false;
+            break;
+          }
+        }
+      } finally {
+        void reader.cancel().catch(() => {});
+      }
+    }
+    await privacy();
+    const etag = strong(read.etag);
+    if (empty) return { plan: null, etag };
+    // Keep parsing on the public storage RDF path, and tie both observations to one version.
+    const rdf = await storage.readRdf(url);
+    if (rdf.etag !== etag) throw new Error("The legacy plan changed. Reload before saving.");
+    const plan = parsePlan(url, rdf.dataset);
+    if (!plan || plan.owner !== owner || plan.storage !== root)
+      throw new Error("The saved legacy plan is invalid. Nothing will be shared.");
+    return { plan, etag };
+  };
   return {
     url,
-    async load(): Promise<LegacySnapshot | null> {
-      let read: Awaited<ReturnType<StorageClient["readRdf"]>>;
-      try {
-        read = await storage.readRdf(url);
-      } catch (error) {
-        if (missing(error)) return null;
-        throw error;
-      }
+    load,
+    async delete(expectedEtag: string): Promise<void> {
+      const etag = strong(expectedEtag);
       await privacy();
-      const plan = parsePlan(url, read.dataset);
-      if (!plan || plan.owner !== owner || plan.storage !== root)
-        throw new Error("The saved legacy plan is invalid. Nothing will be shared.");
-      return { plan, etag: strong(read.etag) };
+      await storage.delete(url, { ifMatch: etag });
     },
-    async save(plan: LegacyPlan, expectedEtag: string | null): Promise<LegacySnapshot> {
+    async save(
+      plan: LegacyPlan,
+      expectedEtag: string | null,
+    ): Promise<LegacySnapshot & { plan: LegacyPlan }> {
       if (plan.owner !== owner || plan.storage !== root)
         throw new TypeError("The plan belongs to another owner or storage");
       // Snapshot and validate before awaiting anything. No mutable input survives into the write.
@@ -147,8 +179,13 @@ export function createLegacyStore(options: {
       } else etag = strong(expectedEtag);
       await privacy();
       const result = await storage.write(url, body, { contentType: "text/turtle", ifMatch: etag });
-      // Reload on the next edit when the write response does not carry its own validator.
-      return { plan: snapshot, etag: result.etagSource === "response" ? strong(result.etag) : "" };
+      if (result.etagSource === "response" && result.etag) {
+        // A weak validator is no more usable than an absent one.
+        if (/^"[^"\r\n]+"$/.test(result.etag)) return { plan: snapshot, etag: result.etag };
+      }
+      const reloaded = await load();
+      if (!reloaded?.plan) throw new Error("The legacy plan changed. Reload before saving.");
+      return { ...reloaded, plan: reloaded.plan };
     },
   };
 }

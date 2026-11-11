@@ -15,7 +15,7 @@ export function grantPreview(plan: LegacyPlan): string[] {
     if (!targets.length) return [];
     const labels =
       contact.scope === "whole-pod"
-        ? "your whole pod"
+        ? `all selected top-level folders except settings (${[...new Set(targets)].map(folderName).join(" and ")})`
         : [...new Set(targets)].map(folderName).join(" and ");
     return [`If this happens, ${contact.displayName} would be able to read ${labels}.`];
   });

@@ -80,8 +80,7 @@ it("formats advisory warnings, deadlines, folder names and disabled previews", (
   expect(legacyWarning(p, new Date("2030-01-01"))).toBeNull();
   expect(grantPreview(p)).toEqual(["If this happens, Alex would be able to read Photos."]);
   p.contacts[0]!.scope = "whole-pod";
-  p.contacts[0]!.targets = [root];
-  expect(grantPreview(p)[0]).toContain("your whole pod");
+  expect(grantPreview(p)[0]).toContain("except settings (Photos)");
   p.contacts = [];
   expect(grantPreview(p)).toEqual([]);
   expect(folderName("https://example.org/")).toBe("Whole pod");
@@ -147,4 +146,86 @@ it("keeps invalid drafts out of previews and exposes save failures", async () =>
     expect(screen.getByRole("status").textContent).toContain("Make settings private"),
   );
   cleanup();
+});
+it.each([
+  `${root}settings/`,
+  `${root}settings/private/`,
+  `${root}%73ettings/`,
+  `${root}settings/legacy-plan.ttl`,
+  root,
+])("rejects the private folder target %s in the editor", (target) => {
+  render(h(LegacyEditor, { initial: plan(), folders: [], people: [], onSave: vi.fn() }));
+  fireEvent.change(screen.getByLabelText("Another folder IRI"), { target: { value: target } });
+  fireEvent.click(screen.getByRole("button", { name: "Include folder IRI" }));
+  expect(screen.getByRole("status").textContent).toContain(
+    "Settings and its contents are excluded",
+  );
+});
+it("whole-pod preview lists top-level folders and excludes settings, nested folders and the root", async () => {
+  const save = vi.fn(async (_plan: LegacyPlan) => {});
+  render(
+    h(LegacyEditor, {
+      initial: { ...plan(), contacts: [] },
+      folders: [
+        `${root}Photos/`,
+        `${root}Photos/Trips/`,
+        `${root}Documents/`,
+        `${root}settings/`,
+        `${root}settings/private/`,
+      ],
+      people: [],
+      onSave: save,
+    }),
+  );
+  fireEvent.change(screen.getByLabelText("Legacy contact WebID"), {
+    target: { value: "https://alex.example/#me" },
+  });
+  fireEvent.change(screen.getByLabelText("Display name"), { target: { value: "Alex" } });
+  fireEvent.change(screen.getByLabelText("Access scope"), { target: { value: "whole-pod" } });
+  fireEvent.click(screen.getByRole("button", { name: "Add legacy contact" }));
+  expect(screen.getByRole("region", { name: "Proposed access preview" }).textContent).toContain(
+    "except settings (Photos and Documents)",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(save.mock.calls[0]?.[0].contacts[0]?.targets).toEqual([
+    `${root}Photos/`,
+    `${root}Documents/`,
+  ]);
+});
+it("saves a disabled plan without contacts and offers conditional withdrawal", async () => {
+  const save = vi.fn(async (_plan: LegacyPlan) => {});
+  const remove = vi.fn(async () => {});
+  render(
+    h(LegacyEditor, { initial: plan(), folders: [], people: [], onSave: save, onDelete: remove }),
+  );
+  fireEvent.click(screen.getByLabelText("Enable legacy plan evaluation"));
+  fireEvent.click(screen.getByRole("button", { name: "Remove Alex" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(save.mock.calls[0]?.[0]).toMatchObject({ enabled: false, contacts: [] });
+  await waitFor(() => expect(screen.getByRole("status").textContent).toContain("saved"));
+  fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  await waitFor(() => expect(remove).toHaveBeenCalledOnce());
+  await waitFor(() => expect(screen.getByRole("status").textContent).toContain("deleted"));
+});
+it("keeps the plan editable after a delete conflict", async () => {
+  render(
+    h(LegacyEditor, {
+      initial: plan(),
+      folders: [],
+      people: [],
+      onSave: vi.fn(),
+      onDelete: async () => {
+        throw new Error("The plan changed. Reload before deleting.");
+      },
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
+  await waitFor(() =>
+    expect(screen.getByRole("status").textContent).toContain("Reload before deleting"),
+  );
+  expect(
+    (screen.getByRole("button", { name: "Save legacy plan" }) as HTMLButtonElement).disabled,
+  ).toBe(false);
 });

@@ -2,9 +2,11 @@
 import { evaluate, parsePolicy, policyToTurtle } from "@jeswr/solid-odrl";
 import { describe, expect, it } from "vitest";
 import {
+  boundedNow,
   DAY,
   dueDate,
   evaluatePlan,
+  isLegacyTarget,
   isWebId,
   type LegacyPlan,
   planPolicy,
@@ -141,7 +143,7 @@ describe("invalid records always fail closed", () => {
     { targets: [`${root}Photos/#x`] },
     { targets: [`${root}Photos/%25/`] },
     { targets: [root] },
-    { scope: "whole-pod", targets: [`${root}Photos/`] },
+    { scope: "whole-pod", targets: [`${root}Photos/Trips/`] },
     { scope: "whole-pod", targets: [root, root] },
   ])("rejects invalid contact %s", (fields) => {
     const p = plan();
@@ -167,8 +169,9 @@ it("previews read-only grants for whole pod and exact containers without applyin
     [`${root}Documents/`, ["read"], true],
   ]);
   p.contacts[0]!.scope = "whole-pod";
+  expect(proposedGrants(p).map((g) => g.target)).toEqual([`${root}Photos/`, `${root}Documents/`]);
   p.contacts[0]!.targets = [root];
-  expect(proposedGrants(p)[0]?.target).toBe(root);
+  expect(proposedGrants(p)).toEqual([]);
 });
 it("records activity only after 24h, never moves backward, and never mutates the source", () => {
   const p = plan();
@@ -227,4 +230,63 @@ it("refuses sparse arrays and URL parser failures", () => {
   const p = plan();
   p.contacts[0]!.targets = new Array(1);
   expect(validPlan(p)).toBe(false);
+});
+it.each([
+  root,
+  `${root}settings/`,
+  `${root}settings/private/`,
+  `${root}settings/legacy-plan.ttl`,
+  `${root}%73ettings/`,
+  `${root}SETTINGS/`,
+  `${root}%ZZ/`,
+  "not-an-iri",
+])("never proposes settings or an unsafe target %s", (target) => {
+  expect(isLegacyTarget(target, root)).toBe(false);
+  for (const scope of ["containers", "whole-pod"] as const) {
+    const p = plan();
+    p.contacts[0]!.scope = scope;
+    p.contacts[0]!.targets = [target];
+    expect(validPlan(p)).toBe(false);
+    expect(proposedGrants(p)).toEqual([]);
+  }
+});
+it("validates roots and preserves unrelated folder names", () => {
+  expect(isLegacyTarget(`${root}Photos/`, "invalid")).toBe(false);
+  expect(isLegacyTarget(`${root}settings-backup/`, root)).toBe(true);
+  expect(isLegacyTarget(`${root}Photos/Trips/`, root)).toBe(true);
+});
+it("allows empty contacts only while disabled", () => {
+  const p = { ...plan(), enabled: false, contacts: [] };
+  expect(validPlan(p)).toBe(true);
+  expect(evaluatePlan(p, new Date("2030-01-01")).state).toBe("disabled");
+  expect(proposedGrants(p)).toEqual([]);
+  expect(validPlan({ ...p, enabled: true })).toBe(false);
+});
+it("bounds fast heartbeat clocks at five minutes and refuses missing server time", () => {
+  const p = plan();
+  const server = new Date("2026-06-01T12:00:00Z");
+  const limit = new Date(server.getTime() + 300_000);
+  expect(recordActivity(p, new Date("2035-01-01"), server).lastActivity).toEqual(limit);
+  expect(recordActivity(p, limit, server).lastActivity).toEqual(limit);
+  expect(recordActivity(p, server, server).lastActivity).toEqual(server);
+  expect(recordActivity(p, server, new Date(NaN))).toBe(p);
+  expect(boundedNow(new Date(NaN), server).getTime()).toBeNaN();
+});
+it("ODRL container targets do not authorize descendants or settings", () => {
+  const p = plan();
+  p.contacts[0]!.scope = "whole-pod";
+  const policy = planPolicy(p, `${root}policy`);
+  for (const target of [
+    root,
+    `${root}Photos/photo.jpg`,
+    `${root}settings/`,
+    `${root}settings/legacy-plan.ttl`,
+  ])
+    expect(
+      evaluate(
+        policy,
+        { action: "read", target, agent: p.contacts[0]!.webId },
+        { now: new Date("2030-01-01") },
+      ).decision,
+    ).toBe("notApplicable");
 });

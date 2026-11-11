@@ -17,7 +17,8 @@
 legacy:LegacyPlanShape a sh:NodeShape ; sh:targetClass legacy:LegacyPlan ;
  sh:property [ sh:path dct:creator ; sh:name "owner" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
  sh:property [ sh:path schema:contentUrl ; sh:name "storage" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;  ] ;
- sh:property [ sh:path legacy:contact ; sh:name "contactUrls" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 50 ;  ] ;
+ # Disabled plans may have no contacts; enabled plans require one in facade policy.
+ sh:property [ sh:path legacy:contact ; sh:name "contactUrls" ; sh:nodeKind sh:IRI ; sh:minCount 0 ; sh:maxCount 50 ;  ] ;
  sh:property [ sh:path legacy:inactivityMonths ; sh:name "inactivityMonths" ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ; sh:maxInclusive 120000 ; ] ;
  sh:property [ sh:path legacy:warningDays ; sh:name "warningDays" ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 10 ; sh:minInclusive 1 ; sh:maxInclusive 36600 ; ] ;
  sh:property [ sh:path legacy:notifyMeBy ; sh:name "notifyMeBy" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 2 ; sh:in ( "settings" "tray" ) ; ] ;

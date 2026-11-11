@@ -6,12 +6,12 @@ import { legacyWarning } from "./presentation";
 import { useLegacy } from "./provider";
 export function LegacyBanner() {
   const { session } = useLegacy();
-  const [now, setNow] = useState(() => new Date());
+  const [, tick] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 60000);
+    const timer = setInterval(() => tick((value) => value + 1), 60000);
     return () => clearInterval(timer);
   }, []);
-  const message = session?.snapshot && legacyWarning(session.snapshot.plan, now);
+  const message = session?.snapshot?.plan && legacyWarning(session.snapshot.plan, session.now());
   if (!message) return null;
   return (
     <Alert>

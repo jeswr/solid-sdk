@@ -2,8 +2,10 @@
 export { buildPlan, entities, parsePlan, serializePlan } from "./model.js";
 export type { LegacyContact, LegacyPlan, PlanEvaluation, ProposedGrant } from "./plan.js";
 export {
+  boundedNow,
   dueDate,
   evaluatePlan,
+  isLegacyTarget,
   isWebId,
   planPolicy,
   proposedGrants,

@@ -1,12 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createRequire } from "node:module";
-import { createLegacyStore, type LegacyPlan, recordActivity } from "@jeswr/pod-legacy";
-import { createPodClient } from "@jeswr/storage-client";
+import {
+  createLegacyStore,
+  type LegacyPlan,
+  type LegacySnapshot,
+  recordActivity,
+} from "@jeswr/pod-legacy";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { LegacyBanner } from "../src/shell/legacy/banner";
 import { LegacyProvider, useLegacy } from "../src/shell/legacy/provider";
 import { addLocalNotification } from "../src/shell/notifications/local-store";
 import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
-import { deferred, h } from "./drive-ui-dom";
+import { act, deferred, h } from "./drive-ui-dom";
 
 const requireUi = createRequire(
   new URL("../../../packages/suite-ui/package.json", import.meta.url),
@@ -27,7 +33,11 @@ vi.mock("@jeswr/pod-legacy", async (original) => ({
 vi.mock("../src/shell/notifications/local-store", () => ({
   addLocalNotification: vi.fn(async () => {}),
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 const alice = {
   id: "legacy-alice",
   name: "Alice",
@@ -75,22 +85,28 @@ const tree = () => h(LegacyProvider, { children: h(Consumer) });
 beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.spyOn(window, "addEventListener");
   vi.useRealTimers();
   accounts.current = {
     active: alice,
     status: "ready",
     isActiveAccount: (id: string) => accounts.current.active?.id === id,
-    fetch: vi.fn(async () => new Response("")),
+    fetch: vi.fn(async () => new Response("", { headers: { date: now.toUTCString() } })),
   } as unknown as AccountsContextValue;
   vi.mocked(createPodClient).mockResolvedValue({ storage: {} } as Awaited<
     ReturnType<typeof createPodClient>
   >);
 });
-function store(snapshot: { plan: LegacyPlan; etag: string } | null) {
+function store(snapshot: LegacySnapshot | null) {
   const result = {
     url: `${alice.storageUrl}settings/legacy-plan.ttl`,
-    load: vi.fn(async () => snapshot),
+    load: vi.fn(async () => {
+      const options = vi.mocked(createLegacyStore).mock.calls.at(-1)?.[0];
+      await options?.fetch(`${alice.storageUrl}settings/legacy-plan.ttl`);
+      return snapshot;
+    }),
     save: vi.fn(async (p: LegacyPlan) => ({ plan: p, etag: '"new"' })),
+    delete: vi.fn(async () => {}),
   };
   vi.mocked(createLegacyStore).mockReturnValue(result);
   return result;
@@ -102,11 +118,23 @@ it("does not create a plan when none exists", async () => {
   expect(backend.save).not.toHaveBeenCalled();
   expect(addLocalNotification).not.toHaveBeenCalled();
 });
+async function interact() {
+  const handler = vi
+    .mocked(window.addEventListener)
+    .mock.calls.find(([type]) => type === "pointerdown")?.[1];
+  expect(handler).toBeTypeOf("function");
+  await act(async () => {
+    (handler as (event: Event) => void)({ isTrusted: true } as Event);
+  });
+}
 it("records existing activity once and queues an advisory warning without any access mutation", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(now);
   const backend = store({ plan: plan(), etag: '"old"' });
   render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  expect(backend.save).not.toHaveBeenCalled();
+  await interact();
   await waitFor(() => expect(backend.save).toHaveBeenCalledOnce());
   expect(backend.save).toHaveBeenCalledWith(recordActivity(plan(), now), '"old"');
   expect(addLocalNotification).toHaveBeenCalledWith(
@@ -125,6 +153,7 @@ it("does not rewrite a plan recorded less than 24 hours ago", async () => {
   const backend = store({ plan: p, etag: '"old"' });
   render(tree());
   await waitFor(() => expect(actions.session).toBeTruthy());
+  await interact();
   expect(backend.save).not.toHaveBeenCalled();
   vi.useRealTimers();
 });
@@ -166,6 +195,9 @@ it("notifies once when an open session later crosses a warning boundary", async 
   await waitFor(() => expect(actions.session).toBeTruthy());
   const callback = interval.mock.calls.find(([, delay]) => delay === 60000)?.[0];
   expect(typeof callback).toBe("function");
+  const elapsed = new Date("2026-11-01T12:00:00Z").getTime() - now.getTime();
+  const monotonic = performance.now();
+  vi.spyOn(performance, "now").mockReturnValue(monotonic + elapsed);
   vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
   (callback as () => void)();
   await waitFor(() => expect(addLocalNotification).toHaveBeenCalledOnce());
@@ -173,4 +205,100 @@ it("notifies once when an open session later crosses a warning boundary", async 
   expect(addLocalNotification).toHaveBeenCalledOnce();
   interval.mockRestore();
   vi.useRealTimers();
+});
+it("reloads the winner after a two-tab heartbeat 412 and skips the losing heartbeat", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+  const backend = store({ plan: plan(), etag: '"old"' });
+  backend.save.mockRejectedValueOnce(
+    new StorageError("precondition-failed", { method: "PUT", url: backend.url, status: 412 }),
+  );
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  backend.load.mockResolvedValue({
+    plan: { ...plan(), modified: now, lastActivity: now },
+    etag: '"winner"',
+  });
+  await interact();
+  await waitFor(() => expect(actions.session?.snapshot?.etag).toBe('"winner"'));
+  expect(actions.error).toBe("");
+  expect(backend.save).toHaveBeenCalledOnce();
+  await interact();
+  expect(backend.save).toHaveBeenCalledOnce();
+  await act(async () => {
+    await actions.session?.save({ ...plan(), enabled: false });
+  });
+  expect(backend.save.mock.calls[1]).toEqual([
+    { ...plan(), enabled: false, lastActivity: now },
+    '"winner"',
+  ]);
+});
+it("opens a recoverable placeholder and fills it conditionally", async () => {
+  const backend = store({ plan: null, etag: '"empty"' });
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  expect(backend.save).not.toHaveBeenCalled();
+  await act(async () => {
+    await actions.session?.save(plan());
+  });
+  expect(backend.save).toHaveBeenCalledWith(plan(), '"empty"');
+});
+it("recovers an interrupted first save in the same session", async () => {
+  const backend = store(null);
+  backend.save.mockRejectedValueOnce(new Error("offline after create"));
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  await expect(actions.session?.save(plan())).rejects.toThrow("offline");
+  backend.load.mockResolvedValueOnce({ plan: null, etag: '"placeholder"' });
+  await act(async () => {
+    await actions.session?.save(plan());
+  });
+  expect(backend.save).toHaveBeenLastCalledWith(plan(), '"placeholder"');
+});
+it("withdraws the plan with its current validator and fences stale deletion", async () => {
+  const backend = store({ plan: plan(), etag: '"current"' });
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  const session = actions.session!;
+  await act(async () => {
+    await session.delete();
+  });
+  expect(backend.delete).toHaveBeenCalledExactlyOnceWith('"current"');
+  expect(actions.session?.snapshot).toBeNull();
+  await session.delete();
+  expect(backend.delete).toHaveBeenCalledOnce();
+  accounts.current = { ...accounts.current, active: bob };
+  await expect(session.delete()).rejects.toThrow("account changed");
+});
+it.each([
+  "date",
+  "last-modified",
+])("bounds activity and the banner to the load response %s despite a fast device clock", async (header) => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2035-01-01"));
+  accounts.current.fetch = vi.fn(
+    async () => new Response("", { headers: { [header]: now.toUTCString() } }),
+  );
+  const backend = store({ plan: plan(), etag: '"old"' });
+  render(
+    h(LegacyProvider, {
+      children: [h(Consumer, { key: "consumer" }), h(LegacyBanner, { key: "banner" })],
+    }),
+  );
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  expect(screen.getByText(/You haven't been active/).textContent).toContain("30 days");
+  expect(screen.queryByText(/Your legacy plan is due/)).toBeNull();
+  await interact();
+  const heartbeat = backend.save.mock.calls[0]?.[0].lastActivity.getTime();
+  expect(heartbeat).toBeGreaterThanOrEqual(now.getTime() + 300_000);
+  expect(heartbeat).toBeLessThan(now.getTime() + 301_000);
+});
+it("refuses automatic heartbeat and warning evaluation without a valid server clock", async () => {
+  accounts.current.fetch = vi.fn(async () => new Response("", { headers: { date: "invalid" } }));
+  const backend = store({ plan: plan(), etag: '"old"' });
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  await interact();
+  expect(backend.save).not.toHaveBeenCalled();
+  expect(addLocalNotification).not.toHaveBeenCalled();
 });

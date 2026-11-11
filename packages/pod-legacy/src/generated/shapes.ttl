@@ -40,7 +40,7 @@ shapes:2eb5704d92296cc3fb9133a79f069684d61789c11ba72e0ff70cc25ee39d6ee7-LegacyCo
     sh:nodeKind sh:IRI;
     sh:path odrl:target.
 shapes:313df3981dfb8b8a9489c0d27d5fd60cb0e142889af1eebf43b5dab62c1d45fc-LegacyPlan-contact sh:maxCount 50;
-    sh:minCount 1;
+    sh:minCount 0;
     sh:name "contactUrls";
     sh:nodeKind sh:IRI;
     sh:path legacy:contact.

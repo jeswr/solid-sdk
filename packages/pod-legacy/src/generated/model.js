@@ -140,11 +140,9 @@ const manifest = {
           "predicate": "https://jeswr.org/ns/legacy#contact",
           "kind": "iri",
           "collection": "set",
-          "minCount": 1,
+          "minCount": 0,
           "maxCount": 50,
-          "guards": {
-            "requiredFailClosed": true
-          }
+          "guards": {}
         },
         {
           "name": "inactivityMonths",

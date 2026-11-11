@@ -47,6 +47,22 @@ function container(value: unknown): value is string {
     !/%(?:2f|5c|25)/i.test(url.pathname)
   );
 }
+/** Canonical in-pod folders only; settings and its encoded aliases are always private. */
+export function isLegacyTarget(target: unknown, root: string): target is string {
+  if (!container(root) || !container(target) || !target.startsWith(root) || target === root)
+    return false;
+  const relative = target.slice(root.length);
+  try {
+    return decodeURIComponent(relative.split("/")[0] as string).toLowerCase() !== "settings";
+  } catch {
+    return false;
+  }
+}
+/** Fail closed without server time; tolerate at most five minutes of fast local clock. */
+export function boundedNow(now: Date, serverNow: Date): Date {
+  if (!validDate(now) || !validDate(serverNow)) return new Date(NaN);
+  return new Date(Math.min(now.getTime(), serverNow.getTime() + 300_000));
+}
 /** Add calendar months in UTC, clamping month-end dates rather than rolling into the next month. */
 export function dueDate(plan: Pick<LegacyPlan, "lastActivity" | "inactivityMonths">): Date | null {
   if (
@@ -87,7 +103,7 @@ export function validPlan(plan: LegacyPlan): boolean {
     plan.notifyMeBy.length <= 2 &&
     Array.from(plan.notifyMeBy).every((v) => v === "settings" || v === "tray") &&
     Array.isArray(plan.contacts) &&
-    plan.contacts.length > 0 &&
+    (!plan.enabled || plan.contacts.length > 0) &&
     plan.contacts.length <= 50 &&
     Array.from(plan.contacts).every(
       (contact) =>
@@ -99,16 +115,12 @@ export function validPlan(plan: LegacyPlan): boolean {
         Array.isArray(contact.targets) &&
         contact.targets.length > 0 &&
         contact.targets.length <= 100 &&
-        Array.from(contact.targets).every(
-          (target) =>
-            container(target) &&
-            new URL(target).origin === new URL(plan.storage).origin &&
-            target.startsWith(plan.storage),
-        ) &&
+        Array.from(contact.targets).every((target) => isLegacyTarget(target, plan.storage)) &&
         (contact.scope === "whole-pod"
-          ? contact.targets.length === 1 && contact.targets[0] === plan.storage
-          : contact.scope === "containers" &&
-            Array.from(contact.targets).every((t) => t !== plan.storage)),
+          ? Array.from(contact.targets).every(
+              (t) => !t.slice(plan.storage.length, -1).includes("/"),
+            )
+          : contact.scope === "containers"),
     )
   );
 }
@@ -145,7 +157,8 @@ export function proposedGrants(plan: LegacyPlan): ProposedGrant[] {
   );
 }
 /** At least 24 hours between records; future timestamps and malformed plans stay untouched. */
-export function recordActivity(plan: LegacyPlan, now: Date): LegacyPlan {
+export function recordActivity(plan: LegacyPlan, now: Date, serverNow = now): LegacyPlan {
+  now = boundedNow(now, serverNow);
   if (
     !validPlan(plan) ||
     !validDate(now) ||

@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { fetchRdf } from "@jeswr/fetch-rdf";
-import { isWebId, type LegacyContact, type LegacyPlan, validPlan } from "@jeswr/pod-legacy";
+import {
+  isLegacyTarget,
+  isWebId,
+  type LegacyContact,
+  type LegacyPlan,
+  validPlan,
+} from "@jeswr/pod-legacy";
 import { Alert, AlertDescription, Button, Input } from "@jeswr/suite-ui";
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
@@ -73,11 +79,15 @@ export function LegacyEditor({
   folders,
   people,
   onSave,
+  onDelete,
+  now = () => new Date(),
 }: {
   initial: LegacyPlan;
   folders: string[];
   people: Person[];
   onSave(plan: LegacyPlan): Promise<void>;
+  onDelete?: (() => Promise<void>) | undefined;
+  now?: () => Date;
 }) {
   const [plan, setPlan] = useState(initial);
   const [webId, setWebId] = useState("");
@@ -87,14 +97,19 @@ export function LegacyEditor({
   const [folderIri, setFolderIri] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
-  const available = [...new Set([...folders, ...targets])];
+  const available = [...new Set([...folders, ...targets])].filter((target) =>
+    isLegacyTarget(target, plan.storage),
+  );
   const add = () => {
     const contact: LegacyContact = {
       webId,
       displayName: name.trim(),
       scope,
       mode: "read",
-      targets: scope === "whole-pod" ? [plan.storage] : targets,
+      targets:
+        scope === "whole-pod"
+          ? available.filter((target) => !target.slice(plan.storage.length, -1).includes("/"))
+          : targets,
     };
     const updated = { ...plan, contacts: [...plan.contacts, contact] };
     if (!validPlan(updated)) {
@@ -227,7 +242,7 @@ export function LegacyEditor({
             onChange={(e) => setScope(e.target.value as LegacyContact["scope"])}
           >
             <option value="containers">Pick folders</option>
-            <option value="whole-pod">Whole pod</option>
+            <option value="whole-pod">Whole pod except settings (listed top-level folders)</option>
           </select>
         </label>
         {scope === "containers" && (
@@ -260,20 +275,13 @@ export function LegacyEditor({
               variant="outline"
               onClick={() => {
                 try {
-                  const parsed = new URL(folderIri);
-                  if (
-                    !isWebId(folderIri) ||
-                    parsed.href !== folderIri ||
-                    parsed.hash ||
-                    parsed.search ||
-                    !folderIri.endsWith("/") ||
-                    !folderIri.startsWith(plan.storage)
-                  )
-                    throw new Error();
+                  if (!isLegacyTarget(folderIri, plan.storage)) throw new Error();
                   setTargets([...new Set([...targets, folderIri])]);
                   setFolderIri("");
                 } catch {
-                  setMessage("Enter a folder IRI inside your pod, ending with /.");
+                  setMessage(
+                    "Enter a folder IRI inside your pod, ending with /. Settings and its contents are excluded.",
+                  );
                 }
               }}
             >
@@ -298,7 +306,7 @@ export function LegacyEditor({
           onClick={() => {
             setSaving(true);
             setMessage("Saving…");
-            void onSave({ ...plan, modified: new Date() })
+            void onSave({ ...plan, modified: now() })
               .then(
                 () => setMessage("Legacy plan saved. Nothing has been shared."),
                 (error: unknown) =>
@@ -310,6 +318,29 @@ export function LegacyEditor({
           Save legacy plan
         </Button>
       </RequiresOnline>
+      {onDelete && (
+        <RequiresOnline>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true);
+              setMessage("Deleting…");
+              void onDelete()
+                .then(
+                  () => setMessage("Legacy plan deleted. Nothing has been shared."),
+                  (error: unknown) =>
+                    setMessage(
+                      error instanceof Error ? error.message : "Could not delete the plan.",
+                    ),
+                )
+                .finally(() => setSaving(false));
+            }}
+          >
+            Delete my legacy plan
+          </Button>
+        </RequiresOnline>
+      )}
       <p role="status" aria-live="polite">
         {message}
       </p>
@@ -378,7 +409,7 @@ export function LegacySettings() {
   }, [session]);
   if (!active) return null;
   const data = extra?.account === active ? extra : null;
-  const now = new Date();
+  const now = session?.now() ?? new Date();
   const initial: LegacyPlan = session?.snapshot?.plan ?? {
     owner: active.webId,
     storage: active.storageUrl,
@@ -402,11 +433,13 @@ export function LegacySettings() {
       {loading && <p role="status">Loading your private plan…</p>}
       {session && (
         <LegacyEditor
-          key={active.id}
+          key={`${active.id}:${session.snapshot?.plan ? "saved" : "empty"}`}
           initial={initial}
           folders={data?.folders ?? []}
           people={data?.people ?? []}
           onSave={session.save}
+          onDelete={session.snapshot ? session.delete : undefined}
+          now={session.now}
         />
       )}
     </div>

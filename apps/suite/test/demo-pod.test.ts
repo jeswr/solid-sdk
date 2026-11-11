@@ -48,6 +48,7 @@ describe("demo seed and binary fixtures", () => {
       expect(pod.has(url)).toBe(true);
       const response = await pod.fetch(url);
       expect(response.status).toBe(200);
+      expect(response.headers.get("date")).toBe(new Date(NOW).toUTCString());
       expect(response.headers.get("last-modified")).toBe(
         new Date(file.modified as number).toUTCString(),
       );
