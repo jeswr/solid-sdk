@@ -24,21 +24,23 @@
 | SC-PATCH-json | pass | pass | pass | pass | not-run |
 | SC-PATCH-rdf | pass | pass | pass | pass | not-run |
 | SC-PATCH-where | pass | pass | pass | pass | not-run |
-| SC-PREFS-create-update-412 | not-run | pass | pass | pass | not-run |
+| SC-PREFS-create-update-412 | pass | pass | pass | pass | not-run |
 | SC-RDF-jsonld | pass | pass | pass | pass | not-run |
 | SC-RDF-not-rdf | fail (assertion-failed) | pass | pass | pass | not-run |
 | SC-RDF-turtle | pass | pass | pass | pass | not-run |
-| SC-ROLES-commenter | not-run | pass | pass | pass | not-run |
-| SC-ROLES-editor | not-run | pass | pass | pass | not-run |
-| SC-ROLES-inherited | not-run | pass | pass | pass | not-run |
-| SC-ROLES-manager | not-run | pass | pass | pass | not-run |
+| SC-ROLES-commenter | pass | pass | pass | pass | not-run |
+| SC-ROLES-editor | pass | pass | pass | pass | not-run |
+| SC-ROLES-inherited | pass | pass | pass | pass | not-run |
+| SC-ROLES-manager | pass | pass | pass | pass | not-run |
 | SC-RW-create | pass | pass | pass | pass | not-run |
 | SC-RW-etag | pass | pass | pass | pass | not-run |
 | SC-RW-range-head-binary | pass | pass | pass | pass | not-run |
 | SC-RW-wildcard | pass | pass | pass | pass | not-run |
-| SC-TRASH-roundtrip | not-run | pass | pass | pass | not-run |
-| SC-TYPEINDEX-register-find | not-run | pass | pass | pass | not-run |
-| SC-VERSIONS-roundtrip | not-run | pass | pass | pass | not-run |
+| SC-TRASH-roundtrip | skip (target-lacks:trash) | pass | pass | pass | not-run |
+| SC-TRASH-roundtrip:absence:trash | pass | not-run | not-run | not-run | not-run |
+| SC-TYPEINDEX-register-find | pass | pass | pass | pass | not-run |
+| SC-VERSIONS-roundtrip | skip (target-lacks:versioning) | pass | pass | pass | not-run |
+| SC-VERSIONS-roundtrip:absence:versioning | pass | not-run | not-run | not-run | not-run |
 | SQ-8-TRASH-roundtrip | not-run | not-run | not-run | not-run | not-run |
 | SQ-8-VERSIONS-roundtrip | not-run | not-run | not-run | not-run | not-run |
 | claims:accessControl | pass | pass | pass | pass | not-run |
@@ -46,7 +48,7 @@
 | claims:pagination | not-run | pass | pass | pass | not-run |
 | claims:protocol | pass | pass | pass | pass | not-run |
 | claims:rdfConneg | not-run | pass | pass | pass | not-run |
-| claims:trash | not-run | pass | pass | pass | not-run |
-| claims:typeIndex | not-run | pass | pass | pass | not-run |
-| claims:versioning | not-run | pass | pass | pass | not-run |
+| claims:trash | pass | pass | pass | pass | not-run |
+| claims:typeIndex | pass | pass | pass | pass | not-run |
+| claims:versioning | pass | pass | pass | pass | not-run |
 | start | not-run | not-run | not-run | not-run | fail (start-failed:no-storage-link) |
