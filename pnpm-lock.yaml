@@ -2444,6 +2444,9 @@ importers:
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../../packages/solid-vc
+      '@jeswr/suite-native':
+        specifier: workspace:*
+        version: link:../../packages/suite-native
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui

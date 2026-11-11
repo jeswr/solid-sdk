@@ -40,6 +40,7 @@
     "@jeswr/solid-dav-bridge": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
+    "@jeswr/suite-native": "workspace:*",
     "@jeswr/suite-ui": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@jeswr/y-solid": "workspace:*",

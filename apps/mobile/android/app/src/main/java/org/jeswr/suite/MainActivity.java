@@ -29,6 +29,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SuitePushPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
+        registerPlugin(SuiteFilesPlugin.class);
         registerPlugin(SuiteSecureStorePlugin.class);
         super.onCreate(savedInstanceState);
     }

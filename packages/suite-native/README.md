@@ -15,8 +15,9 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | `stageFile(blob, { name, mimeType? }, plugin, limits?)`, `shareFiles(files, content, { staging, native })` | Stage already fetched bytes in bounded chunks, then share native file URIs. |
 | `createShareInbox(plugin)`, `validateShareBatch()` | Validated `ShareBatch`es from other apps, chunked size-checked file reads, acknowledgement. |
 | `createSecureStore(plugin)`, `refreshTokenKey({ issuer, webId, clientId })` | Validated native refresh-token storage, versioned writes, cancellable unlocks and session identity keys (MOB-P4 S11/S12). |
+| `openPdf(plugin, name, bytes, signal?)` | Drive's native "Open PDF" (MOB-P3 E5): checks the 25 MiB cap and `%PDF-` signature, sends 1 MiB base64 chunks to `SuiteFiles`, opens the platform viewer; aborting `signal` stops before the next native call. Failures are `PdfPreviewError` with code `too-large`, `not-pdf`, `no-viewer`, `cancelled` or `failed`. |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
-| `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
+| `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteFiles`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
 
 ```ts
 import { createNativeCodeDriver, isNativeApp, MOBILE_REDIRECT_URI } from "@jeswr/suite-native";
