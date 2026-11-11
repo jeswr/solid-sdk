@@ -19,6 +19,7 @@
   "packages": [
     "@jeswr/agent-authz-verifier",
     "@jeswr/agentic-legacy-bridge",
+    "@jeswr/app-session",
     "@jeswr/app-shell",
     "@jeswr/auth-solid",
     "create-solid-app",
@@ -72,6 +73,7 @@
     "@jeswr/pod-notifications",
     "@jeswr/pod-access",
     "@jeswr/suite-sdk",
+    "@jeswr/suite-charts",
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
     "@jeswr/pkg-memory",
@@ -97,6 +99,7 @@
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
+    "@jeswr/solid-environment",
     "@jeswr/pod-legacy"
   ],
   "applications": [

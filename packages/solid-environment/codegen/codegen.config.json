@@ -1,0 +1,82 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Codex GPT-6",
+  "shapesBase": "https://jeswr.org/ns/sectors/environment/shapes#",
+  "prefixes": {
+    "envr": "https://jeswr.org/ns/sectors/environment#",
+    "sosa": "http://www.w3.org/ns/sosa/",
+    "qudt": "http://qudt.org/schema/qudt/",
+    "unit": "http://qudt.org/vocab/unit/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "schema": "https://schema.org/"
+  },
+  "entities": [
+    {
+      "name": "Observation",
+      "kind": "composite",
+      "root": "observation",
+      "nodes": {
+        "observation": {
+          "targetClass": "http://www.w3.org/ns/sosa/Observation",
+          "fragment": "it",
+          "fields": {
+            "madeBySensor": {
+              "iriScheme": "http-https"
+            },
+            "observedProperty": {},
+            "hasFeatureOfInterest": {
+              "iriScheme": "http-https"
+            },
+            "resultTime": {}
+          },
+          "links": {
+            "hasResult": "result"
+          }
+        },
+        "result": {
+          "targetClass": "http://qudt.org/schema/qudt/QuantityValue",
+          "fragment": "result",
+          "fields": {
+            "numericValue": {},
+            "unit": {}
+          }
+        }
+      }
+    },
+    {
+      "name": "Sensor",
+      "kind": "composite",
+      "root": "sensor",
+      "nodes": {
+        "sensor": {
+          "targetClass": "http://www.w3.org/ns/sosa/Sensor",
+          "fragment": "sensor",
+          "fields": {
+            "label": {},
+            "manufacturer": {},
+            "model": {}
+          },
+          "links": {
+            "isHostedBy": "platform"
+          }
+        },
+        "platform": {
+          "targetClass": "http://www.w3.org/ns/sosa/Platform",
+          "fragment": "platform",
+          "fields": {
+            "label": {
+              "rename": "platformLabel"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Room",
+      "targetClass": "http://www.w3.org/ns/sosa/FeatureOfInterest",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}
