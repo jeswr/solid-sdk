@@ -10,7 +10,8 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 Read README.md and src/core/types.ts before changing the public contract. The package was
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
 app's compatibility shims. Hosts create an isolated createRegistry(config); never read
-process environment or install host-specific global configuration here.
+process environment or install host-specific global configuration here, except the Node CLI
+host may read CONNECTOR_VAULT_KEY for explicit --vault opt-in (CON-A1).
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed writes
@@ -122,7 +123,8 @@ interrupted relabeling cannot strand memberships. Preserve one run per connector
 
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
-changing the provisional MCP JSON schema. Never read process environment in this package;
+changing the provisional MCP JSON schema. Apart from CONNECTOR_VAULT_KEY in the CLI host,
+never read process environment in this package;
 use the 0600 owner-held config descriptor, with no symlink following. Reuse solid-dpop for
 Pod client credentials and preserve its guarded discovery, transport separation, nonce
 retries, memory-only cache, and redirect refusal. CON-12 owns the later pod-auth migration.
@@ -139,7 +141,8 @@ direct and proxy exchange: fail with a clear configuration error before opening 
 if missing. Register `http://127.0.0.1:<callbackPort>/oauth-callback` with the provider; never
 fall back to another port if binding fails. Validate Host, path, state,
 and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
-close the listener on completion, timeout, cancellation, and errors. Never persist tokens.
+close the listener on completion, timeout, cancellation, and errors. Access tokens remain
+memory-only; refresh credentials may use the injected CON-A1 encrypted vault.
 The state store requires an advertised in-container WAC ACL and installs owner-only grants
 before accessing JSON. Keep ETags and create-only writes; a failed import retains its prior
 successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
@@ -251,3 +254,25 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+
+CON-A1 exposes `./vault`: ConnectorTokenVault, key helpers, MemoryVaultStore and
+IndexedDbVaultStore. Keep it browser-safe and independent of mcp-oauth. Only `./node`
+exports FileVaultStore. Read the README's encrypted refresh vault contract before changes.
+Use WebCrypto AES-256-GCM, fresh 96-bit IVs, canonical `[1, connectorId, account]` AAD and
+strict version/base64url parsing. Never expose underlying errors/causes, tokens or key bytes.
+Preserve record, metadata, depth, node, ciphertext and store/list caps. Validate before
+stringifying untrusted input; project plain data without invoking custom getters/toJSON.
+Unknown record fields and credential-shaped metadata are refused. Files require private
+owner-held directories/files, no symlinks/hardlinks, bounded descriptor reads, exclusive
+temp + fsync + rename + directory fsync. IndexedDB elects/stores its non-extractable key
+transactionally alongside ciphertexts; wait for commit. Tests use a minimal structured-cloning
+IDB fake without dependencies.
+
+OAuth exchange/refresh accepts `{ vault, account, signal? }`; persist rotation before returning
+access tokens. `getOAuthToken` restores on later runs; `createOAuthSourceAuth` shares refresh
+and retries a GET once. `invalid_grant` deletes and raises typed `reauthorise`; other failures
+retain the record. Disconnect waits for in-flight refresh before deletion. Hosts serialize
+account mutations across sessions/processes. CLI persistence requires both --vault and
+CONNECTOR_VAULT_KEY; connectors[id].account defaults to default. Without both retain
+memory-only behavior. Use fixtures for hostile/error paths and assert secret-free errors.

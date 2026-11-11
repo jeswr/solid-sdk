@@ -72,11 +72,12 @@ export interface OAuthAppConfig {
   readonly basicAuthForToken?: boolean;
 }
 
-/** Tokens. **In memory only** — never persisted, never sent anywhere except the platform. */
+/** Access tokens stay in memory; only refresh credentials may enter an injected vault. */
 export interface TokenSet {
   readonly accessToken: string;
   readonly tokenType: string;
   readonly refreshToken?: string;
+  readonly scope?: string;
   /** Epoch ms when the access token expires, when the platform said. */
   readonly expiresAt?: number;
 }

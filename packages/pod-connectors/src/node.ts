@@ -15,3 +15,5 @@ export type { LoopbackLoginOptions, NodeOAuthConfig } from "./node/loopback.js";
 export { authorizeLoopback } from "./node/loopback.js";
 export { createClientCredentialsFetch } from "./node/pod-auth.js";
 export { createStateStore } from "./node/state.js";
+
+export { FileVaultStore } from "./node/vault-store.js";

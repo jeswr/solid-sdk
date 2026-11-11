@@ -3,8 +3,9 @@
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
-import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { env as nodeEnv, stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
+import { IntegrationAuthError } from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -12,17 +13,21 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
+import { createOAuthSourceAuth, getOAuthToken } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import type { ConnectorState, SourceAuth } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
+import { ConnectorTokenVault, importVaultKey } from "../vault.js";
 import { readNodeConfig } from "./config.js";
 import { NodeRuntimeError } from "./errors.js";
 import { authorizeLoopback } from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
 import { createStateStore } from "./state.js";
+import { FileVaultStore } from "./vault-store.js";
 
-const USAGE = "Usage: pod-connectors import <id> [--file <path>] [--since]\n";
+const USAGE =
+  "Usage: pod-connectors import <id> [--file <path>] [--since] [--vault <dir>]\nRefresh credentials are encrypted only with --vault and CONNECTOR_VAULT_KEY (canonical base64, 32 bytes).\n";
 
 /** Stable process exit codes; library users receive the code without terminating their host. */
 export const EXIT_CODES = { success: 0, import: 1, config: 2, auth: 3, cancelled: 130 } as const;
@@ -30,6 +35,8 @@ export const EXIT_CODES = { success: 0, import: 1, config: 2, auth: 3, cancelled
 /** Injectable Node host ports. Fixture SourceAuth bypasses interactive source login only. */
 export interface CliOptions {
   readonly configPath?: string;
+  /** Defaults to CONNECTOR_VAULT_KEY in the Node CLI host only. */
+  readonly vaultKey?: string;
   readonly stdout?: (message: string) => void;
   readonly stderr?: (message: string) => void;
   readonly podTransport?: typeof fetch;
@@ -44,22 +51,26 @@ export function parseImportArgs(args: readonly string[]): {
   id: string;
   file?: string;
   since: boolean;
+  vault?: string;
 } {
   const [command, id, ...flags] = args;
   if (command !== "import" || !id || !/^[a-z0-9-]+$/.test(id))
     throw new NodeRuntimeError("config", USAGE.trim());
   let file: string | undefined;
   let since = false;
+  let vault: string | undefined;
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i];
     if (flag === "--since" && !since) since = true;
     else if (flag === "--file" && !file && flags[i + 1] && !flags[i + 1]?.startsWith("--"))
       file = flags[++i];
+    else if (flag === "--vault" && !vault && flags[i + 1] && !flags[i + 1]?.startsWith("--"))
+      vault = flags[++i];
     else throw new NodeRuntimeError("config", USAGE.trim());
   }
   if (file && since)
     throw new NodeRuntimeError("config", "--since is only supported for API imports.");
-  return { id, file, since };
+  return { id, file, since, ...(vault && { vault }) };
 }
 
 export async function importFile(path: string, adapter: FileImportAdapter): Promise<ImportFile> {
@@ -190,15 +201,37 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         throw new NodeRuntimeError("auth", "This connector has no source OAuth configuration.");
       const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch);
       const sourceConfig = { ...adapter.oauth, ...config.connectors[command.id] };
-      const token = await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
-        openAuthorizationUrl:
-          options.openAuthorizationUrl ??
-          ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
+      if (sourceConfig.clientSecret) sourceConfig.tokenExchange = "public";
+      let vault: ConnectorTokenVault | undefined;
+      const encodedKey = options.vaultKey ?? nodeEnv.CONNECTOR_VAULT_KEY;
+      if (command.vault && encodedKey) {
+        try {
+          vault = new ConnectorTokenVault(
+            await importVaultKey(encodedKey),
+            new FileVaultStore(command.vault),
+          );
+        } catch {
+          throw new NodeRuntimeError("config", "Cannot initialize connector vault.");
+        }
+      }
+      const vaultOptions = {
+        vault,
+        account: sourceConfig.account ?? "default",
         signal: options.signal,
-      });
-      sourceAuth =
-        adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
-        createSourceAuth(command.id, adapter, token, sourceFetch);
+      };
+      const token =
+        (await getOAuthToken(command.id, sourceConfig, sourceFetch, vaultOptions)) ??
+        (await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+          ...vaultOptions,
+          openAuthorizationUrl:
+            options.openAuthorizationUrl ??
+            ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
+          signal: options.signal,
+        }));
+      sourceAuth = vault
+        ? createOAuthSourceAuth(adapter, sourceConfig, sourceFetch, { ...vaultOptions, token })
+        : (adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
+          createSourceAuth(command.id, adapter, token, sourceFetch));
     }
     let next: ConnectorState | undefined;
     const state = previous && !command.since ? { ...previous, cursor: undefined } : previous;
@@ -219,11 +252,12 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           mode: "live",
           sourceAuth,
         });
-    } catch {
+    } catch (error) {
       if (next) {
         // A full import still preserves the last successful checkpoint on failure.
         await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
       }
+      if (error instanceof IntegrationAuthError) throw error;
       throw new NodeRuntimeError(
         "import",
         "Import failed; the last successful checkpoint was retained.",
@@ -240,7 +274,14 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       ? new NodeRuntimeError("cancelled", "Import cancelled.")
       : error instanceof NodeRuntimeError
         ? error
-        : new NodeRuntimeError("import", "Import failed.");
+        : error instanceof IntegrationAuthError
+          ? new NodeRuntimeError(
+              "auth",
+              error.reason === "reauthorise"
+                ? "Reconnect this source account."
+                : "Source authentication failed.",
+            )
+          : new NodeRuntimeError("import", "Import failed.");
     stderr(`${failure.message}\n`);
     return EXIT_CODES[failure.kind];
   }

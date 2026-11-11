@@ -30,6 +30,7 @@ export type AuthFailureReason =
   | "popup-blocked"
   | "cancelled" // user closed the popup / denied the grant
   | "state-mismatch" // possible CSRF — always surfaced, never retried silently
+  | "reauthorise" // refresh credential revoked/expired; reconnect explicitly
   | "exchange-failed"; // token endpoint said no
 
 /** The OAuth dance failed before we ever had a token. */

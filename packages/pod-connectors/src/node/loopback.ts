@@ -7,11 +7,12 @@ import {
   exchangeCodeForToken,
   generatePkcePair,
   generateState,
+  type OAuthVaultOptions,
 } from "../core/oauth.js";
 import type { OAuthAppConfig, TokenSet } from "../core/types.js";
-import { httpsUrl, NodeRuntimeError, object, textValue, validateCallbackPort } from "./errors.js";
+import { httpsUrl, NodeRuntimeError, textValue, validateCallbackPort } from "./errors.js";
 
-/** Node source login supports installed-app secrets without persisting any token. */
+/** Node source login supports installed-app secrets and optional encrypted refresh storage. */
 export interface NodeOAuthConfig extends OAuthAppConfig {
   readonly clientSecret?: string;
   /** Fixed registered callback port; omitted selects an ephemeral port when supported. */
@@ -23,6 +24,8 @@ export interface LoopbackLoginOptions {
   readonly openAuthorizationUrl: (url: string) => void | Promise<void>;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
+  readonly vault?: OAuthVaultOptions["vault"];
+  readonly account?: string;
 }
 
 /** Source OAuth code + S256 PKCE, using an IPv4 loopback listener only. */
@@ -139,45 +142,10 @@ export async function authorizeLoopback(
     });
     const safeFetch = refuseRedirects(sourceFetch);
     const exchange: typeof fetch = async (input, init) => {
-      const body = new URLSearchParams(init?.body as string);
-      const headers = new Headers(init?.headers);
-      if (exchangeConfig.tokenExchange === "public") headers.set("accept", "application/json");
-      let requestBody: BodyInit = body;
-      if (config.clientSecret) {
-        if (config.tokenRequest === "basic-form" || config.tokenRequest === "basic-json") {
-          // The shared exchange adds a public client's secret to the form; Basic replaces it.
-          body.delete("client_secret");
-          headers.set(
-            "authorization",
-            `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
-          );
-          if (config.tokenRequest === "basic-json") {
-            headers.set("content-type", "application/json");
-            body.delete("client_id");
-            requestBody = JSON.stringify(Object.fromEntries(body));
-          }
-        } else body.set("client_secret", config.clientSecret);
-      }
       const response = await safeFetch(input, {
         ...init,
-        headers,
-        body: requestBody,
         signal: controller.signal,
       });
-      if (response.ok) {
-        const token = object(await response.clone().json());
-        textValue(token.access_token);
-        if (token.token_type !== undefined && String(token.token_type).toLowerCase() !== "bearer")
-          throw new Error("Invalid source token");
-        if (token.refresh_token !== undefined) textValue(token.refresh_token);
-        if (
-          token.expires_in !== undefined &&
-          (typeof token.expires_in !== "number" ||
-            !Number.isFinite(token.expires_in) ||
-            token.expires_in <= 0)
-        )
-          throw new Error("Invalid token expiry");
-      }
       return response;
     };
     return await exchangeCodeForToken(
@@ -185,6 +153,7 @@ export async function authorizeLoopback(
       exchangeConfig,
       { code, verifier, redirectUri },
       exchange,
+      { vault: options.vault, account: options.account ?? "default", signal: controller.signal },
     );
   } catch {
     if (options.signal?.aborted) throw new NodeRuntimeError("cancelled", "Import cancelled.");

@@ -33,7 +33,7 @@ and refuses redirects; pass a fifth argument to supply additional API origins ex
 Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
 pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. Pass the
 auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
-fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
+fetch for source API requests or token exchange. Access tokens stay in memory; hosts may inject the encrypted refresh vault. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
 `{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
 confines document reads, writes and every redirect hop to the connector container. Type
@@ -53,8 +53,9 @@ retains read preconditions for subsequent writes; explicit write conditions over
 Entry points:
 
 - `.`: contracts, runners, catalog, config factory, fetch-backed writer, errors.
-- `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
-- `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
+- `./oauth`: PKCE, refresh, vault-backed source sessions and popup flow (only `authorize` touches `window`).
+- `./vault`: browser-safe WebCrypto vault, memory/IndexedDB stores and key helpers.
+- `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE, state and file vault stores.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
@@ -239,6 +240,16 @@ size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI
 loads their entire upload. `text()` remains capped at 64 MiB. The whole-upload size limit
 applies only to adapters without `streaming: true`.
 
+Add `--vault <private-directory>` and set `CONNECTOR_VAULT_KEY` to canonical padded
+standard base64 encoding of exactly 32 random bytes to retain encrypted refresh credentials.
+Both settings are required; supplying only one keeps memory-only behavior. An invalid key
+with both settings fails closed. The CLI tries refresh before interactive login and persists
+rotation before using the access token. Revocation deletes the record and reports exit 3
+with a reconnect message; re-run explicitly to log in again. Set `connectors[id].account`
+to a stable provider account id or owner-chosen label (default `default`). Use a separate
+directory per owner/configuration and label per provider account. Changing either selects
+a different record. Access tokens, Pod credentials and client secrets remain in memory.
+
 The CLI reads `~/.config/solid-mcp/config.json` (W9 MCP-12's location). It refuses symlinks,
 non-regular files, another user's files, and any mode other than **0600**, including 0400.
 Set `chmod 600 ~/.config/solid-mcp/config.json`. The current MCP-12 spec has no JSON schema;
@@ -269,7 +280,8 @@ fragment is used and any redirect is refused. URLs use HTTPS. `readOnly: true` r
 import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-app
 `clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
 endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
-proxy mode is preserved. These secrets and all session/source tokens remain in memory.
+proxy mode is preserved. Client secrets and access tokens remain in memory; refresh
+credentials may use the optional encrypted vault described below.
 Direct exchanges request JSON token responses, including GitHub. The provider's `tokenRequest`
 selects form-post secrets (the default), HTTP Basic with a form body (Fitbit), or HTTP Basic
 with a JSON body (Notion) for a local secret. Proxy flows keep the shared form contract.
@@ -288,7 +300,9 @@ all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
 Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
 After source login, the CLI selects the adapter's optional `createSourceAuth` factory,
 falling back to the generic bearer transport. Spotify refreshes expired access tokens in
-memory through this factory. An explicit `options.sourceAuth` bypasses login and the factory.
+memory through this factory. With a vault configured, the CLI uses the shared OAuth source
+session so every rotation is persisted. An explicit `options.sourceAuth` bypasses login,
+the factory and vault wiring.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
@@ -738,3 +752,77 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+
+## Encrypted refresh vault (CON-A1)
+
+```ts
+import {
+  ConnectorTokenVault, importVaultKey,
+} from '@jeswr/pod-connectors/vault';
+import { FileVaultStore } from '@jeswr/pod-connectors/node';
+import { getOAuthToken, createOAuthSourceAuth } from '@jeswr/pod-connectors/oauth';
+
+// Node host: exact base64 from CONNECTOR_VAULT_KEY or a private key file.
+const vault = new ConnectorTokenVault(await importVaultKey(encodedKey), new FileVaultStore(directory));
+const options = { vault, account: 'work' };
+const token = await getOAuthToken(adapter.metadata.id, adapter.oauth, sourceFetch, options);
+// If undefined, use authorize/authorizeLoopback with the same vault/account options.
+const sourceAuth = createOAuthSourceAuth(adapter, adapter.oauth, sourceFetch, { ...options, token });
+// On explicit disconnect:
+await sourceAuth.disconnect();
+```
+
+A browser host imports only the browser-safe entry:
+
+```ts
+import { ConnectorTokenVault, IndexedDbVaultStore } from '@jeswr/pod-connectors/vault';
+
+// An owner-specific DB holds ciphertexts and its non-extractable CryptoKey.
+const store = new IndexedDbVaultStore('connector-vault-owner-label');
+const browserVault = new ConnectorTokenVault(await store.getOrCreateKey(), store);
+```
+
+`ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
+`delete(key)` and authenticated `list()` (keys only). Records contain `refreshToken`, epoch-ms
+`obtainedAt`, optional `scope`, `tokenType`, refresh-credential `expiresAt`, and `providerMeta`.
+Access-token expiry stays in the live `TokenSet`. Unknown record fields are rejected.
+Metadata is plain JSON with credential-shaped fields refused; keep secrets out of metadata
+and account labels. Connector ids are 1–64 lowercase ASCII letters/digits/hyphens, starting
+with a letter/digit; account labels are 1–256 well-formed UTF-16 code units without surrounding
+whitespace or ASCII controls. Refresh tokens are at most 16,384 code units, scope 4,096 and
+token type 64. Metadata is capped at 4 KiB UTF-8, 256 nodes and depth 8; plaintext at 32 KiB
+UTF-8, sealed input at 64 KiB characters and each store/list at 1,000 records. Bounds fail closed.
+
+WebCrypto AES-256-GCM uses fresh random 12-byte IVs, 128-bit tags and canonical
+`JSON.stringify([1, connectorId, account])` AAD. The sealed string is
+`1.<canonical-unpadded-base64url-IV>.<canonical-unpadded-base64url-ciphertext-and-tag>`.
+Parse, validation, authentication and storage failures all raise `ConnectorVaultError`
+with the same constant message and no underlying cause. Key helpers never read environment;
+only the Node CLI host reads `CONNECTOR_VAULT_KEY`. Imported keys and
+`generateBrowserVaultKey()` are non-extractable. Keep the original Node key safe: losing it
+requires reauthorisation. Hosts reading a key file must keep it private and pass its exact
+canonical base64 contents to `importVaultKey`, without whitespace/newline trimming.
+
+`VaultStore` receives canonical JSON `[connectorId, account]` ids and ciphertext strings.
+`MemoryVaultStore` is a bounded single-process fixture. `FileVaultStore` is exported only
+from `./node`: SHA-256 filenames, 0700 directories, 0600 files, owner checks, symlink and
+hardlink refusal, bounded descriptor reads, exclusive temporary files, file fsync, atomic
+rename and directory fsync. Existing group/world-accessible stores are refused, not repaired.
+Ancestor directories must be controlled by the host user or root; shared writable ancestors
+require the sticky bit. This prevents another user from replacing the private store's path.
+`IndexedDbVaultStore.getOrCreateKey()` elects one key in a read/write transaction and stores
+it via structured clone in the same database as records; writes resolve only after commit.
+Clearing that database removes both. Same-origin scripts can use a non-extractable key;
+hosts retain their origin/script security responsibilities.
+
+Pass `{ vault, account, signal? }` as the final argument to code exchange, `authorize`, or
+refresh helpers. `authorizeLoopback` accepts these in its options. `getOAuthToken` returns a
+live supplied token, refreshes saved credentials, or returns undefined for interactive login.
+`invalid_grant` deletes the saved credential and raises `IntegrationAuthError` with
+`reason: 'reauthorise'`; other failures retain it. `createOAuthSourceAuth` restores lazily,
+refreshes expired tokens, shares concurrent refreshes and retries a GET once after 401.
+`disconnect()` waits for pending refresh before deleting so it cannot repopulate the vault.
+Hosts must serialize refresh/login/disconnect per account across sessions/processes;
+atomic replacement does not provide distributed refresh ownership or key rotation.
+Tokens never enter the pod, localStorage, sessionStorage or cookies.
