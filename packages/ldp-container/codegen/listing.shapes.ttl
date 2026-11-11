@@ -1,0 +1,24 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Synthetic listing write profile, using standard LDP/DCT/POSIX terms.
+# All fields are sets: repeated entries may supply distinct values for one member.
+# Zero minima and no maxima preserve empty strings, optional metadata and empty listings.
+# Shape targets select wrapper definitions; buildListingDataset does not assert them.
+# rdf:type uses the generated wrapper's built-in types set. An explicit rdf:type
+# property shape fails closed admission (invalid-read-alias); see README.md.
+@prefix listing: <https://jeswr.org/ns/ldp-container/shapes#> .
+@prefix ldp: <http://www.w3.org/ns/ldp#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix posix: <http://www.w3.org/ns/posix/stat#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+listing:MemberShape a sh:NodeShape ;
+    sh:targetClass ldp:Resource ;
+    sh:property [ sh:path dct:title ; sh:datatype xsd:string ; sh:minCount 0 ] ;
+    sh:property [ sh:path dct:modified ; sh:datatype xsd:dateTime ; sh:minCount 0 ] ;
+    sh:property [ sh:path posix:size ; sh:datatype xsd:integer ; sh:minCount 0 ] ;
+    sh:property [ sh:path dct:format ; sh:datatype xsd:string ; sh:minCount 0 ] .
+
+listing:ContainerShape a sh:NodeShape ;
+    sh:targetClass ldp:Container ;
+    sh:property [ sh:path ldp:contains ; sh:nodeKind sh:IRI ; sh:minCount 0 ] .
