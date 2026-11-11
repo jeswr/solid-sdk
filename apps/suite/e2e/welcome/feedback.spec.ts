@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "@playwright/test";
+import { createFeedbackHandlers } from "../../src/feedback/server";
+import { createGithubStore } from "../../src/feedback/store";
+import { feedbackGithub } from "../../test/helpers/feedback-github";
 
 test("guided interview taps a scale, confirms read-back and submits", async ({ page }) => {
   let count = 0;
@@ -279,3 +282,54 @@ test("a GitHub cooldown asks the participant to try later and preserves their do
     "Alice found the demo confusing.",
   );
 });
+
+for (const outcome of ["lost response", "low final budget"] as const)
+  test(`GitHub ${outcome} preserves one submission and its reference`, async ({ page }) => {
+    const github = feedbackGithub();
+    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    let submits = 0;
+    let submissionId = "";
+    if (outcome === "lost response") github.loseIssueResponse();
+    else github.lowBudget();
+    await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+    await page.route("**/api/feedback/submit", async (route) => {
+      const payload = route.request().postDataJSON();
+      if (submissionId) expect(payload.submissionId).toBe(submissionId);
+      submissionId = payload.submissionId;
+      submits++;
+      // Exercise the real handlers/store over an injected GitHub transport.
+      const handlers = createFeedbackHandlers({
+        env,
+        store: createGithubStore(env, github.transport),
+        limiter: () => undefined,
+      });
+      const response = await handlers.submit(
+        new Request(route.request().url(), {
+          method: "POST",
+          headers: {
+            Origin: new URL(route.request().url()).origin,
+            "Content-Type": "application/json",
+          },
+          body: route.request().postData(),
+        }),
+      );
+      await route.fulfill({
+        status: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: await response.text(),
+      });
+    });
+    await page.goto("/feedback");
+    await page.getByRole("button", { name: "Just tell us", exact: true }).click();
+    await page.getByLabel("Your answer", { exact: true }).fill("Alice found the demo confusing.");
+    await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    if (outcome === "lost response") {
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("Download my feedback");
+      await page.getByRole("button", { name: "Submit what I've said so far", exact: true }).click();
+    }
+    await expect(page.getByRole("status").filter({ hasText: "Thanks" })).toContainText(`#${123}`);
+    expect(submits).toBe(outcome === "lost response" ? 2 : 1);
+    expect(github.records).toHaveLength(1);
+    expect(github.records[0]?.record.id).toBe(submissionId);
+    expect(github.issues).toHaveLength(1);
+  });

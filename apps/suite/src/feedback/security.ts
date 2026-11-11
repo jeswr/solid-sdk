@@ -181,7 +181,9 @@ export function createGithubBackoff(now = () => Date.now()) {
       const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
       // GitHub asks for at least a minute when a secondary limit has no retry header.
       until = Math.max(until, ...(deadlines.length ? deadlines : [t + 60_000]));
-      check();
+      // A successful response may contain the final issue reference. Preserve it;
+      // check() prevents the next API call from spending any more of the budget.
+      if (!response.ok) check();
     },
   };
 }

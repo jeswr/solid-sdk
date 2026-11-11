@@ -182,7 +182,7 @@ it("uploads one sniffed clip and submits only rebuilt JSON and verified receipts
   const response = await h.submit(request({ submissionId, record: submission, receipts: [saved] }));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ reference: 12 });
-  expect(save).toHaveBeenCalledWith(submission, [saved]);
+  expect(save).toHaveBeenCalledWith(submission, [saved], submissionId);
 });
 it("rejects audio spoofing, body overflow and forbidden origins before storage", async () => {
   const upload = vi.fn();

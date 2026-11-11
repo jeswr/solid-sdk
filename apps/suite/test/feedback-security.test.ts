@@ -128,6 +128,24 @@ it("preserves a healthy budget and distinguishes GitHub permission failures from
     await expect(backoff.observe(response)).resolves.toBeUndefined();
   expect(() => backoff.check()).not.toThrow();
 });
+it("records a low-budget cooldown without discarding a successful response", async () => {
+  let now = 1_800_000_000_000;
+  const backoff = createGithubBackoff(() => now);
+  await expect(
+    backoff.observe(
+      Response.json(
+        { number: 123 },
+        {
+          status: 201,
+          headers: { "x-ratelimit-remaining": "49", "x-ratelimit-reset": String(now / 1000 + 120) },
+        },
+      ),
+    ),
+  ).resolves.toBeUndefined();
+  expect(() => backoff.check()).toThrow(expect.objectContaining({ status: 503, retryAfter: 120 }));
+  now += 120_000;
+  expect(() => backoff.check()).not.toThrow();
+});
 it.each([
   { reset: 180, retry: 90 },
   { reset: 90, retry: 180 },

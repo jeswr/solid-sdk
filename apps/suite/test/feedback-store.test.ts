@@ -41,9 +41,16 @@ function commitResponses(
   conflict = false,
   nextHead = head,
   nextTree = baseTree,
+  writeBlobs = true,
 ) {
   transport.mockResolvedValueOnce(Response.json({ object: { sha: nextHead } }));
+  transport.mockResolvedValueOnce(Response.json({}, { status: 404 }));
   transport.mockResolvedValueOnce(Response.json({ tree: { sha: nextTree } }));
+  if (writeBlobs) {
+    transport.mockResolvedValueOnce(Response.json({ sha: head }));
+    transport.mockResolvedValueOnce(Response.json({ sha: baseTree }));
+    transport.mockResolvedValueOnce(Response.json({ sha: "e".repeat(40) }));
+  }
   transport.mockResolvedValueOnce(Response.json({ sha: treeSha }));
   transport.mockResolvedValueOnce(Response.json({ sha }));
   transport.mockResolvedValueOnce(
@@ -54,8 +61,6 @@ function commitResponses(
 }
 function initial(transport: ReturnType<typeof vi.fn<typeof fetch>>) {
   transport.mockResolvedValueOnce(Response.json(metadata));
-  transport.mockResolvedValueOnce(Response.json({ sha: head }));
-  transport.mockResolvedValueOnce(Response.json({ sha: baseTree }));
 }
 const bodies = (transport: ReturnType<typeof vi.fn<typeof fetch>>) =>
   transport.mock.calls.map(([, o]) => (o?.body ? JSON.parse(String(o.body)) : {}));
@@ -65,13 +70,8 @@ it("creates one atomic commit with audio, JSON and Markdown, then an issue with 
   commitResponses(transport);
   transport.mockResolvedValueOnce(new Response("label absent", { status: 422 }));
   transport.mockResolvedValueOnce(Response.json({ number: 12 }));
-  const store = createGithubStore(
-    env,
-    transport,
-    () => new Date("2026-11-11T12:00:00Z"),
-    () => "test-id",
-  );
-  expect(await store.save(submission, [receipt])).toEqual({ reference: 12 });
+  const store = createGithubStore(env, transport, () => new Date("2026-11-11T12:00:00Z"));
+  expect(await store.save(submission, [receipt], submissionId)).toEqual({ reference: 12 });
   expect(
     transport.mock.calls.map(([url, o]) => [
       String(url).replace("https://api.github.com/repos/private/feedback", ""),
@@ -79,10 +79,12 @@ it("creates one atomic commit with audio, JSON and Markdown, then an issue with 
     ]),
   ).toEqual([
     ["", "GET"],
-    ["/git/blobs", "POST"],
-    ["/git/blobs", "POST"],
     ["/git/ref/heads/team/main", "GET"],
+    [`/contents/feedback/submissions/${submissionId}.json?ref=${head}`, "GET"],
     [`/git/commits/${head}`, "GET"],
+    ["/git/blobs", "POST"],
+    ["/git/blobs", "POST"],
+    ["/git/blobs", "POST"],
     ["/git/trees", "POST"],
     ["/git/commits", "POST"],
     ["/git/refs/heads/team/main", "PATCH"],
@@ -90,43 +92,54 @@ it("creates one atomic commit with audio, JSON and Markdown, then an issue with 
     ["/issues", "POST"],
   ]);
   const data = bodies(transport);
-  const record = JSON.parse(Buffer.from(data[1].content, "base64").toString());
+  const record = JSON.parse(Buffer.from(data[4].content, "base64").toString());
   expect(record.transcript).toEqual(submission.transcript);
   expect(record.audio).toEqual([{ path: "audio-1.webm", sha, size: 2, ext: "webm" }]);
-  expect(Buffer.from(data[2].content, "base64").toString()).toContain("audio-1.webm");
-  expect(data[5]).toEqual({
+  expect(Buffer.from(data[5].content, "base64").toString()).toContain("audio-1.webm");
+  expect(data[7]).toEqual({
     base_tree: baseTree,
     tree: [
-      { path: "feedback/2026-11-11/test-id/audio-1.webm", sha, mode: "100644", type: "blob" },
       {
-        path: "feedback/2026-11-11/test-id/submission.json",
+        path: `feedback/2026-11-11/${submissionId}/audio-1.webm`,
+        sha,
+        mode: "100644",
+        type: "blob",
+      },
+      {
+        path: `feedback/2026-11-11/${submissionId}/submission.json`,
         sha: head,
         mode: "100644",
         type: "blob",
       },
       {
-        path: "feedback/2026-11-11/test-id/summary.md",
+        path: `feedback/2026-11-11/${submissionId}/summary.md`,
         sha: baseTree,
+        mode: "100644",
+        type: "blob",
+      },
+      {
+        path: `feedback/submissions/${submissionId}.json`,
+        sha: "e".repeat(40),
         mode: "100644",
         type: "blob",
       },
     ],
   });
-  expect(data[6]).toMatchObject({ tree: treeSha, parents: [head] });
-  expect(data[7]).toEqual({ sha, force: false });
-  expect(data[8].labels).toEqual(["feedback", "pathway:guided", "app:drive"]);
-  expect(data[9]).not.toHaveProperty("labels");
-  expect(data[9].title).toBe(plainTitle(`guided: ${submission.answers.summary}`));
-  expect(data[9].body).toContain(
-    `https://github.com/private/feedback/blob/${sha}/feedback/2026-11-11/test-id/audio-1.webm`,
+  expect(data[8]).toMatchObject({ tree: treeSha, parents: [head] });
+  expect(data[9]).toEqual({ sha, force: false });
+  expect(data[10].labels).toEqual(["feedback", "pathway:guided", "app:drive"]);
+  expect(data[11]).not.toHaveProperty("labels");
+  expect(data[11].title).toBe(plainTitle(`guided: ${submission.answers.summary}`));
+  expect(data[11].body).toContain(
+    `https://github.com/private/feedback/blob/${sha}/feedback/2026-11-11/${submissionId}/audio-1.webm`,
   );
-  expect(data[9].body).toContain("@\u200dteam");
-  expect(data[9].body).not.toContain("@team");
-  expect(data[9].body).not.toContain("<script>");
-  expect(data[9].body).not.toContain("![image]");
-  expect(data[9].body).toContain("&lt;/details&gt;");
-  expect(data[9].body).toContain("The suite is easy to use");
-  expect(data[9].body).toMatch(/<\/details>\n\nFull record:.*submission.json/);
+  expect(data[11].body).toContain("@\u200dteam");
+  expect(data[11].body).not.toContain("@team");
+  expect(data[11].body).not.toContain("<script>");
+  expect(data[11].body).not.toContain("![image]");
+  expect(data[11].body).toContain("&lt;/details&gt;");
+  expect(data[11].body).toContain("The suite is easy to use");
+  expect(data[11].body).toMatch(/<\/details>\n\nFull record:.*submission.json/);
 });
 it("uploads a base64 Git blob, signs its receipt and reads private repository metadata once", async () => {
   const transport = vi
@@ -145,17 +158,14 @@ it("uploads a base64 Git blob, signs its receipt and reads private repository me
   expect(verifyReceipts([uploaded], submissionId, env)).toEqual([uploaded]);
   expect(bodies(transport)[1]).toEqual({ content: "AQI=", encoding: "base64" });
   // Subsequent save uses cached metadata and the audio SHA without uploading it again.
-  transport
-    .mockResolvedValueOnce(Response.json({ sha: head }))
-    .mockResolvedValueOnce(Response.json({ sha: baseTree }));
   commitResponses(transport);
   transport.mockResolvedValueOnce(Response.json({ number: 1 }));
-  await store.save(submission, [uploaded]);
+  await store.save(submission, [uploaded], submissionId);
   expect(
     transport.mock.calls.filter(([url]) => String(url).endsWith("/private/feedback")),
   ).toHaveLength(1);
   expect(transport.mock.calls.filter(([url]) => String(url).endsWith("/git/blobs"))).toHaveLength(
-    3,
+    4,
   );
 });
 it("retries a competing branch update with a fresh head and tree, reusing blobs", async () => {
@@ -163,45 +173,54 @@ it("retries a competing branch update with a fresh head and tree, reusing blobs"
   const pause = vi.fn().mockResolvedValue(undefined);
   initial(transport);
   commitResponses(transport, true);
-  commitResponses(transport, false, "e".repeat(40), "f".repeat(40));
+  commitResponses(transport, false, "e".repeat(40), "f".repeat(40), false);
   transport.mockResolvedValueOnce(Response.json({ number: 2 }));
   await expect(
-    createGithubStore(env, transport, undefined, undefined, pause).save(submission, [receipt]),
+    createGithubStore(env, transport, undefined, pause).save(submission, [receipt], submissionId),
   ).resolves.toEqual({ reference: 2 });
   const data = bodies(transport);
-  expect(data[10].base_tree).toBe("f".repeat(40));
-  expect(data[11].parents).toEqual(["e".repeat(40)]);
+  expect(data[13].base_tree).toBe("f".repeat(40));
+  expect(data[14].parents).toEqual(["e".repeat(40)]);
   expect(pause).toHaveBeenCalledWith(expect.any(Number));
   expect(transport.mock.calls.filter(([url]) => String(url).endsWith("/git/blobs"))).toHaveLength(
-    2,
+    3,
   );
   expect(transport.mock.calls.at(-1)?.[0]).toContain("/issues");
 });
 it.each(["commit", "conflict", "ref"])("never opens an issue if the %s fails", async (kind) => {
   const transport = vi.fn<typeof fetch>();
   initial(transport);
-  if (kind === "conflict") for (let i = 0; i < 6; i++) commitResponses(transport, true);
+  if (kind === "conflict")
+    for (let i = 0; i < 6; i++) commitResponses(transport, true, head, baseTree, i === 0);
   else {
     transport.mockResolvedValueOnce(Response.json({ object: { sha: head } }));
+    transport.mockResolvedValueOnce(Response.json({}, { status: 404 }));
     transport.mockResolvedValueOnce(Response.json({ tree: { sha: baseTree } }));
+    transport.mockResolvedValueOnce(Response.json({ sha: head }));
+    transport.mockResolvedValueOnce(Response.json({ sha: baseTree }));
+    transport.mockResolvedValueOnce(Response.json({ sha: "e".repeat(40) }));
     transport.mockResolvedValueOnce(Response.json({ sha: treeSha }));
     if (kind === "ref") transport.mockResolvedValueOnce(Response.json({ sha }));
     transport.mockResolvedValueOnce(new Response("secret-token private/feedback", { status: 500 }));
   }
   const pause = vi.fn().mockResolvedValue(undefined);
   await expect(
-    createGithubStore(env, transport, undefined, undefined, pause).save(submission, [receipt]),
+    createGithubStore(env, transport, undefined, pause).save(submission, [receipt], submissionId),
   ).rejects.toThrow("couldn't finish saving");
   expect(transport.mock.calls.some(([url]) => String(url).endsWith("/issues"))).toBe(false);
   expect(pause).toHaveBeenCalledTimes(kind === "conflict" ? 5 : 0);
 });
 it("refuses missing config or a public repository before any writes", async () => {
   const transport = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ private: false }));
-  await expect(createGithubStore({}, transport).save(submission, [])).rejects.toMatchObject({
+  await expect(
+    createGithubStore({}, transport).save(submission, [], submissionId),
+  ).rejects.toMatchObject({
     status: 503,
   });
   expect(transport).not.toHaveBeenCalled();
-  await expect(createGithubStore(env, transport).save(submission, [])).rejects.toMatchObject({
+  await expect(
+    createGithubStore(env, transport).save(submission, [], submissionId),
+  ).rejects.toMatchObject({
     status: 503,
   });
   expect(transport).toHaveBeenCalledTimes(1);
@@ -254,7 +273,7 @@ it("stops on a low GitHub budget and shares the reset cooldown across fresh stor
     .mockResolvedValueOnce(Response.json(metadata))
     .mockResolvedValueOnce(
       Response.json(
-        { sha: head },
+        { object: { sha: head } },
         {
           headers: {
             "x-ratelimit-remaining": "49",
@@ -263,11 +282,13 @@ it("stops on a low GitHub budget and shares the reset cooldown across fresh stor
         },
       ),
     );
-  await expect(freshStore(env, transport).save(submission, [])).rejects.toMatchObject({
-    status: 503,
-    message: expect.stringContaining("try again later"),
-    retryAfter: 120,
-  });
+  await expect(freshStore(env, transport).save(submission, [], submissionId)).rejects.toMatchObject(
+    {
+      status: 503,
+      message: expect.stringContaining("try again later"),
+      retryAfter: 120,
+    },
+  );
   const audio = { bytes: new Uint8Array([1, 2]), ext: "webm" as const, type: "audio/webm" };
   await expect(freshStore(env, transport).upload(audio, submissionId)).rejects.toMatchObject({
     status: 503,
@@ -308,16 +329,23 @@ it.each([
       },
     ),
   );
-  const store = freshStore(env, transport, undefined, undefined, pause);
-  await expect(store.save(submission, [])).rejects.toMatchObject({ status: 503, retryAfter: wait });
-  await expect(freshStore(env, transport).save(submission, [])).rejects.toMatchObject({
+  const store = freshStore(env, transport, undefined, pause);
+  await expect(store.save(submission, [], submissionId)).rejects.toMatchObject({
     status: 503,
+    retryAfter: wait,
   });
-  expect(transport).toHaveBeenCalledTimes(9);
+  await expect(freshStore(env, transport).save(submission, [], submissionId)).rejects.toMatchObject(
+    {
+      status: 503,
+    },
+  );
+  expect(transport).toHaveBeenCalledTimes(11);
   expect(pause).not.toHaveBeenCalled();
   vi.advanceTimersByTime(wait * 1000);
   initial(transport);
   commitResponses(transport);
   transport.mockResolvedValueOnce(Response.json({ number: 14 }));
-  await expect(freshStore(env, transport).save(submission, [])).resolves.toEqual({ reference: 14 });
+  await expect(
+    freshStore(env, transport).save(submission, [], "22222222-2222-4222-8222-222222222222"),
+  ).resolves.toEqual({ reference: 14 });
 });

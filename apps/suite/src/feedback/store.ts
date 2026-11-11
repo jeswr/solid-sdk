@@ -1,14 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AudioFile } from "./audio";
 import { plainTitle, renderMarkdown } from "./markdown";
-import { type AudioReceipt, signReceipt } from "./receipts";
+import { type AudioReceipt, signReceipt, submissionIdSchema } from "./receipts";
 import { type FeedbackEnv, FeedbackError, githubBackoff } from "./security";
 import type { Submission } from "./validation";
 
 export interface FeedbackStore {
   upload(audio: AudioFile, submissionId: string): Promise<AudioReceipt>;
-  save(submission: Submission, audio: AudioReceipt[]): Promise<{ reference: number }>;
+  save(
+    submission: Submission,
+    audio: AudioReceipt[],
+    submissionId: string,
+  ): Promise<{ reference: number }>;
 }
 const failure = () =>
   new FeedbackError(
@@ -23,7 +27,6 @@ export function createGithubStore(
   env: FeedbackEnv,
   transport: typeof fetch = fetch,
   now = () => new Date(),
-  uuid: () => string = randomUUID,
   pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 ): FeedbackStore {
   const token = env.FEEDBACK_GITHUB_TOKEN?.trim();
@@ -93,42 +96,112 @@ export function createGithubStore(
         now().getTime(),
       );
     },
-    async save(submission, audio) {
+    async save(submission, audio, submissionId) {
+      const id = submissionIdSchema.parse(submissionId).toLowerCase();
+      // Identical requests must propose distinct commits: updating a ref to its
+      // current SHA is also successful and cannot act as an exclusive claim.
+      const writer = randomUUID();
       const { branch } = await metadata();
-      const id = uuid();
       const directory = `feedback/${now().toISOString().slice(0, 10)}/${id}`;
       const audioNames = audio.map((clip, i) => `audio-${i + 1}.${clip.ext}`);
-      const recordSha = await textBlob(
-        JSON.stringify(
-          {
-            ...submission,
-            id,
-            createdAt: now().toISOString(),
-            audio: audio.map(({ sha, size, ext }, i) => ({ path: audioNames[i], sha, size, ext })),
-          },
-          null,
-          2,
-        ),
+      const attachments = audio.map(({ sha, size, ext }, i) => ({
+        path: audioNames[i],
+        sha,
+        size,
+        ext,
+      }));
+      // Receipt signatures can be renewed; identity depends on the record and blobs.
+      const fingerprint = createHash("sha256")
+        .update(
+          JSON.stringify({ submission, audio: attachments }, (_key, value) =>
+            value && typeof value === "object" && !Array.isArray(value)
+              ? Object.fromEntries(
+                  Object.keys(value)
+                    .sort()
+                    .map((key) => [key, value[key]]),
+                )
+              : value,
+          ),
+        )
+        .digest("hex");
+      const indexPath = `feedback/submissions/${id}.json`;
+      const marker = `<!-- feedback-submission:${id} -->`;
+      const existingReference = async () => {
+        // Use the repository listing, including closed issues, rather than indexed search.
+        for (let page = 1; ; page++) {
+          const issues = await read(
+            `/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`,
+          );
+          if (!Array.isArray(issues)) throw failure();
+          const issue = issues.find(
+            (candidate) =>
+              !candidate.pull_request &&
+              typeof candidate.body === "string" &&
+              candidate.body.endsWith(marker),
+          );
+          if (issue && Number.isSafeInteger(issue.number) && issue.number > 0)
+            return { reference: issue.number as number };
+          if (issues.length < 100) break;
+        }
+        // Another worker may still be posting, or the previous worker may have lost
+        // the response. GitHub has no issue idempotency key: never post again here.
+        throw new FeedbackError(
+          503,
+          "Your feedback was saved but its reference isn't available yet. Please try again later, or download your feedback.",
+          60,
+        );
+      };
+      const recordText = JSON.stringify(
+        {
+          ...submission,
+          id,
+          createdAt: now().toISOString(),
+          audio: attachments,
+        },
+        null,
+        2,
       );
-      const summarySha = await textBlob(renderMarkdown(submission, audioNames));
-      const tree = [
-        ...audio.map((clip, i) => ({ path: `${directory}/${audioNames[i]}`, sha: clip.sha })),
-        { path: `${directory}/submission.json`, sha: recordSha },
-        { path: `${directory}/summary.md`, sha: summarySha },
-      ].map((entry) => ({ ...entry, mode: "100644", type: "blob" }));
+      const makeTree = async () => {
+        const recordSha = await textBlob(recordText);
+        const summarySha = await textBlob(renderMarkdown(submission, audioNames));
+        const indexSha = await textBlob(JSON.stringify({ fingerprint }));
+        return [
+          ...audio.map((clip, i) => ({ path: `${directory}/${audioNames[i]}`, sha: clip.sha })),
+          { path: `${directory}/submission.json`, sha: recordSha },
+          { path: `${directory}/summary.md`, sha: summarySha },
+          { path: indexPath, sha: indexSha },
+        ].map((entry) => ({ ...entry, mode: "100644", type: "blob" }));
+      };
+      let tree: Awaited<ReturnType<typeof makeTree>> | undefined;
       const ref = `heads/${branch.split("/").map(encodeURIComponent).join("/")}`;
       let commitSha = "";
       // A losing writer rebuilds on the new head; blobs stay immutable and are reused.
       for (let attempt = 0; attempt <= 5; attempt++) {
         const head = checkedSha((await read(`/git/ref/${ref}`)).object?.sha);
+        const existing = await call(`/contents/${indexPath}?ref=${head}`, "GET");
+        if (existing.ok) {
+          const data = await existing.json();
+          if (data.encoding !== "base64" || typeof data.content !== "string") throw failure();
+          const saved = JSON.parse(Buffer.from(data.content, "base64").toString("utf8"));
+          if (saved.fingerprint !== fingerprint)
+            throw new FeedbackError(
+              409,
+              "This submission ID has already been used for different feedback. Download your feedback to keep it.",
+            );
+          return existingReference();
+        }
+        if (existing.status !== 404) throw failure();
         const baseTree = checkedSha((await read(`/git/commits/${head}`)).tree?.sha);
+        // The index and record enter the branch together. Every competing writer
+        // checks the index again after a failed fast-forward, before opening an issue.
+        tree ??= await makeTree();
         const nextTree = checkedSha(
           (await read("/git/trees", "POST", { base_tree: baseTree, tree })).sha,
         );
         const commit = checkedSha(
           (
             await read("/git/commits", "POST", {
-              message: `Store pilot feedback ${id}`,
+              message: `Store pilot feedback ${id}\n\nFeedback-Writer: ${writer}`,
               tree: nextTree,
               parents: [head],
             })
@@ -155,10 +228,10 @@ export function createGithubStore(
         submission.answers.summary ?? submission.answers.general ?? "Pilot feedback",
       );
       const title = plainTitle(`${submission.pathway}: ${first}`);
-      const body = renderMarkdown(submission, audioNames.map(url), {
+      const body = `${renderMarkdown(submission, audioNames.map(url), {
         maxLength: 59_000,
         recordUrl: url("submission.json"),
-      });
+      })}\n\n${marker}`;
       const labels = [
         "feedback",
         `pathway:${submission.pathway}`,

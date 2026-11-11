@@ -209,7 +209,7 @@ export function createFeedbackHandlers(options: {
         const receipts = verifyReceipts(data.receipts, data.submissionId, env);
         if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
           throw new FeedbackError(400, "A recording is missing from the feedback.");
-        return json(await storage().save(submission, receipts));
+        return json(await storage().save(submission, receipts, data.submissionId));
       });
     },
   };
