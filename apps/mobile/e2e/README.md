@@ -283,8 +283,9 @@ The driver owns these seven scenarios, each with bounded readiness/result waits 
    arrange a private text file and verify its exact body. Require anonymous **401/403**.
    Serve `mobileClientIdDocument` at its exact local HTTPS client ID, dereferenceable by CSS.
 2. Build the real `build:native` export with `NEXT_PUBLIC_APP_BASE_URL=https://localhost`,
-   `NEXT_PUBLIC_PUBLIC_SUITE_URL=https://localhost:8443`, and
-   `NEXT_PUBLIC_CLIENT_ID_URL=https://localhost:8443/.well-known/solid-client-id-mobile.jsonld`.
+   `NEXT_PUBLIC_PUBLIC_SUITE_URL=https://127.0.0.1:8443`, and
+   `NEXT_PUBLIC_CLIENT_ID_URL=https://127.0.0.1:8443/.well-known/solid-client-id-mobile.jsonld`.
+   CSS uses the IP literal because bundled builds refuse every other `localhost` origin.
    Sync with `SUITE_MODE=bundled MOBILE_DEBUG=1`, verify no remote `server.url`, compile
    `assembleDebug`, and retain a separate APK in the private temporary directory. No production
    defaults change; the existing `org.jeswr.suite:/oauth/callback` scheme remains registered.

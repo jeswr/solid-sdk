@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // CSS dependency isolation and account controls follow suite/e2e/shell-css/server.mjs.
 import assert from "node:assert/strict";
@@ -52,7 +53,9 @@ async function moduleState() {
   };
 }
 
-export const ORIGIN = "https://localhost:8443";
+// An IP-literal host, not localhost: bundled builds refuse every localhost origin other than the
+// app's own https://localhost (SuiteWebViewClient.isOtherLocalOrigin), so CSS cannot share the name.
+export const ORIGIN = "https://127.0.0.1:8443";
 export const CLIENT_ID = `${ORIGIN}/.well-known/solid-client-id-mobile.jsonld`;
 export const PRIVATE_BODY = 'MOB-07 private resource\nExact bytes: quotes " and unicode café.\n';
 
