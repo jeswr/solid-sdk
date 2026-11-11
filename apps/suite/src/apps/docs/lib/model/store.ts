@@ -3,24 +3,13 @@
 // CRUD and LDP listing ported from apps/pod-docs/src/store.ts.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { refuseRedirects } from "@jeswr/guarded-fetch";
-import { termsEqual } from "@jeswr/suite-vocab";
-import { Container, ContainerDataset } from "@solid/object";
-import { DataFactory, Store } from "n3";
-import { applyUpdate, Doc } from "yjs";
 import {
   type BuildDocumentInput,
   buildDocument,
   DocumentDoc,
   type PodDocument,
   parseDocument,
-} from "./document.js";
-import {
-  OutOfScopeError,
-  ResourceReadError,
-  ResourceWriteError,
-  TitleConflictError,
-} from "./errors.js";
-import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
+} from "@jeswr/solid-docs/document";
 import {
   DOCS_SLUG,
   docContainerUrls,
@@ -28,11 +17,22 @@ import {
   isDirectChild,
   LEGACY_DOCS_SLUG,
   toSlug,
-} from "./layout.js";
+} from "@jeswr/solid-docs/layout";
+import { DOCUMENT_CLASS, NS, PREFIXES } from "@jeswr/solid-docs/vocab";
+import { termsEqual } from "@jeswr/suite-vocab";
+import { Container, ContainerDataset } from "@solid/object";
+import { DataFactory, Store } from "n3";
+import { applyUpdate, Doc } from "yjs";
+import {
+  OutOfScopeError,
+  ResourceReadError,
+  ResourceWriteError,
+  TitleConflictError,
+} from "./errors.js";
+import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
 import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
 import { DocumentUpdateStore } from "./update-store.js";
-import { DOCUMENT_CLASS, NS, PREFIXES } from "./vocab.js";
 
 export interface StoredDocument {
   url: string;

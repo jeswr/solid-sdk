@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import {
   Button,
   Dialog,
@@ -17,7 +18,6 @@ import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { suggestionAction } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
-import { docContainerUrls } from "../lib/model/layout";
 import { type DocumentVersion, DocumentVersionStore, versionError } from "../lib/model/versions";
 import { Hint } from "./common";
 import { PageCanvas } from "./page-canvas";

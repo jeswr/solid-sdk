@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+
+import { buildDocument } from "@jeswr/solid-docs/document";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralFrom,
@@ -12,8 +15,6 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
-import { buildDocument } from "../../apps/docs/lib/model/document";
-import { docContainerUrls } from "../../apps/docs/lib/model/layout";
 import { DEMO_ROOT } from "./constants";
 import type { DemoSeedFile } from "./pod";
 

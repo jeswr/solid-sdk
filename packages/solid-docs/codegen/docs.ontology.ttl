@@ -1,0 +1,50 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Local declarations describe existing app terms; no new instance-data IRIs.
+@prefix pd: <https://jeswr.org/ns/pod-docs#> .
+@prefix legacy: <https://w3id.org/jeswr/pod-docs#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix schema: <https://schema.org/> .
+@prefix oldschema: <http://schema.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+pd:Document a owl:Class ; rdfs:label "Document" ; rdfs:comment "Existing Docs document metadata." .
+prov:Entity a owl:Class ; rdfs:label "Revision" ; rdfs:comment "Existing Docs revision metadata." .
+oa:Annotation a owl:Class ; rdfs:label "Annotation" ; rdfs:comment "Existing Docs annotation metadata." .
+oa:TextQuoteSelector a owl:Class ; rdfs:label "Quote" ; rdfs:comment "Existing Docs quote metadata." .
+dct:identifier a owl:DatatypeProperty ; rdfs:label "instanceId" ; rdfs:comment "Existing Docs instanceId field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+dct:title a owl:DatatypeProperty ; rdfs:label "title" ; rdfs:comment "Existing Docs title field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pd:body a owl:DatatypeProperty ; rdfs:label "body" ; rdfs:comment "Existing Docs body field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pd:format a owl:DatatypeProperty ; rdfs:label "format" ; rdfs:comment "Existing Docs format field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+dct:created a owl:DatatypeProperty ; rdfs:label "created" ; rdfs:comment "Existing Docs created field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+dct:modified a owl:DatatypeProperty ; rdfs:label "modified" ; rdfs:comment "Existing Docs modified field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+dct:creator a owl:ObjectProperty ; rdfs:label "creator" ; rdfs:comment "Existing Docs creator field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:updateLog a owl:ObjectProperty ; rdfs:label "updateLog" ; rdfs:comment "Existing Docs updateLog field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:assets a owl:ObjectProperty ; rdfs:label "assets" ; rdfs:comment "Existing Docs assets field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:comments a owl:ObjectProperty ; rdfs:label "comments" ; rdfs:comment "Existing Docs comments field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:currentRevision a owl:ObjectProperty ; rdfs:label "currentRevision" ; rdfs:comment "Existing Docs currentRevision field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:wordCount a owl:DatatypeProperty ; rdfs:label "wordCount" ; rdfs:comment "Existing Docs wordCount field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:integer .
+prov:wasDerivedFrom a owl:ObjectProperty ; rdfs:label "wasDerivedFrom" ; rdfs:comment "Existing Docs wasDerivedFrom field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+rdfs:label a owl:DatatypeProperty ; rdfs:label "label" ; rdfs:comment "Existing Docs label field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+prov:generatedAtTime a owl:DatatypeProperty ; rdfs:label "generatedAt" ; rdfs:comment "Existing Docs generatedAt field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+prov:wasAttributedTo a owl:ObjectProperty ; rdfs:label "attributedTo" ; rdfs:comment "Existing Docs attributedTo field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+prov:wasRevisionOf a owl:ObjectProperty ; rdfs:label "wasRevisionOf" ; rdfs:comment "Existing Docs wasRevisionOf field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:snapshot a owl:ObjectProperty ; rdfs:label "snapshot" ; rdfs:comment "Existing Docs snapshot field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:versionKind a owl:DatatypeProperty ; rdfs:label "kind" ; rdfs:comment "Existing Docs kind field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+oa:bodyValue a owl:DatatypeProperty ; rdfs:label "text" ; rdfs:comment "Existing Docs text field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+oa:motivatedBy a owl:ObjectProperty ; rdfs:label "motivation" ; rdfs:comment "Existing Docs motivation field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+oa:hasTarget a owl:ObjectProperty ; rdfs:label "target" ; rdfs:comment "Existing Docs target field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+oa:hasSource a owl:ObjectProperty ; rdfs:label "source" ; rdfs:comment "Existing Docs source field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+oa:hasSelector a owl:ObjectProperty ; rdfs:label "selector" ; rdfs:comment "Existing Docs selector field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:anchorStart a owl:DatatypeProperty ; rdfs:label "start" ; rdfs:comment "Existing Docs start field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pd:anchorEnd a owl:DatatypeProperty ; rdfs:label "end" ; rdfs:comment "Existing Docs end field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+pd:resolved a owl:DatatypeProperty ; rdfs:label "resolved" ; rdfs:comment "Existing Docs resolved field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:boolean .
+pd:resolvedBy a owl:ObjectProperty ; rdfs:label "resolvedBy" ; rdfs:comment "Existing Docs resolvedBy field." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+pd:resolvedAt a owl:DatatypeProperty ; rdfs:label "resolvedAt" ; rdfs:comment "Existing Docs resolvedAt field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+oa:exact a owl:DatatypeProperty ; rdfs:label "exact" ; rdfs:comment "Existing Docs exact field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+oa:prefix a owl:DatatypeProperty ; rdfs:label "prefix" ; rdfs:comment "Existing Docs prefix field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+oa:suffix a owl:DatatypeProperty ; rdfs:label "suffix" ; rdfs:comment "Existing Docs suffix field." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .

@@ -1,0 +1,26 @@
+{
+  "extends": "//",
+  "files": {
+    "includes": ["**", "!!src/generated"]
+  },
+  "overrides": [
+    {
+      "includes": [
+        "test/document.test.ts",
+        "test/model.test.ts",
+        "test/vocab.test.ts",
+        "test/helpers.ts"
+      ],
+      "formatter": {
+        "enabled": false
+      },
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "off"
+          }
+        }
+      }
+    }
+  ]
+}
