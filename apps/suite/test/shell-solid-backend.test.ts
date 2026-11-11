@@ -735,7 +735,7 @@ describe("Solid shell over pod-auth", () => {
     // A provider hint cannot name the account, so it refuses rather than replace the grant.
     h.auth.restore.mockClear();
     await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
-      new SignInError("account-active"),
+      new SignInError("session-elsewhere"),
     );
     expect(h.auth.restore).not.toHaveBeenCalled();
     // The exact WebID adopts the newer grant for the same account instead of replacing it.
@@ -774,7 +774,7 @@ describe("Solid shell over pod-auth", () => {
       { issuer: bob.issuer },
     ])("refuses %o without calling login or replacing the owner", async (hint) => {
       const h = await skippedSignOut();
-      await expect(h.backend.signIn(hint)).rejects.toEqual(new SignInError("account-active"));
+      await expect(h.backend.signIn(hint)).rejects.toEqual(new SignInError("session-elsewhere"));
       expect(h.auth.login).not.toHaveBeenCalled();
       expect(h.auth.restore).not.toHaveBeenCalled();
       expect(h.auth.logout).not.toHaveBeenCalled();
@@ -804,7 +804,7 @@ describe("Solid shell over pod-auth", () => {
         return alice;
       });
       await expect(h.backend.signIn({ webId: bob.webId })).rejects.toEqual(
-        new SignInError("account-active"),
+        new SignInError("session-elsewhere"),
       );
       expect(h.auth.login).not.toHaveBeenCalled();
       expect(await h.backend.restore()).toBeNull();
@@ -820,14 +820,28 @@ describe("Solid shell over pod-auth", () => {
       expect(h.auth.login).toHaveBeenCalledOnce();
     });
 
-    it("refuses when a remembered session cannot be restored but is still remembered", async () => {
+    it("lets the named account replace its own unrestorable grant, but refuses a provider hint", async () => {
       const h = await skippedSignOut();
-      h.auth.restore.mockResolvedValueOnce(null);
+      h.auth.restore.mockResolvedValue(null);
+      await expect(h.backend.signIn({ issuer: bob.issuer })).rejects.toEqual(
+        new SignInError("session-elsewhere"),
+      );
+      expect(h.auth.restore).not.toHaveBeenCalled();
+      await h.backend.signIn({ webId: bob.webId });
+      expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: bob.webId }, expect.anything());
+    });
+
+    it("refuses when an unrestorable pointer changes to another account", async () => {
+      const h = await skippedSignOut();
+      h.auth.restore.mockImplementationOnce(async () => {
+        h.setIdentity(alice);
+        return null;
+      });
       await expect(h.backend.signIn({ webId: bob.webId })).rejects.toEqual(
-        new SignInError("account-active"),
+        new SignInError("session-elsewhere"),
       );
       expect(h.auth.login).not.toHaveBeenCalled();
-      expect(await h.auth.identity()).toEqual(bobIdentity);
+      expect(await h.auth.identity()).toEqual(alice);
     });
 
     it("cancels while reading the remembered session without restoring or logging in", async () => {
@@ -873,9 +887,41 @@ describe("Solid shell over pod-auth", () => {
     h.auth.restore.mockResolvedValueOnce(null);
     h.auth.remembered.mockResolvedValue([{ webId: bob.webId, issuer: bob.issuer }]);
     await expect(h.backend.signIn({ webId: alice.webId })).rejects.toEqual(
-      new SignInError("account-active"),
+      new SignInError("session-elsewhere"),
     );
     expect(h.auth.login).not.toHaveBeenCalled();
+  });
+
+  it("recovers from a persistent non-invalid_grant restore failure with the exact WebID", async () => {
+    const h = harness();
+    // An invalid_client-style refresh failure keeps the pointer, returns null and emits no expiry.
+    h.auth.restore.mockResolvedValue(null);
+    h.auth.remembered.mockResolvedValue([{ webId: alice.webId, issuer: alice.issuer }]);
+    expect(await h.backend.restore()).toBeNull();
+    await expect(h.backend.signIn({ issuer: alice.issuer })).rejects.toEqual(
+      new SignInError("session-elsewhere"),
+    );
+    expect(h.auth.login).not.toHaveBeenCalled();
+    const account = await h.backend.signIn({ webId: alice.webId });
+    expect(account.webId).toBe(alice.webId);
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: alice.webId }, expect.anything());
+    expect(h.auth.logout).not.toHaveBeenCalled();
+    expect((await h.backend.fetchFor(account)(account.storageUrl)).ok).toBe(true);
+  });
+
+  it("continues to login when the adopted session expires during restore", async () => {
+    const h = harness();
+    h.setIdentity(alice);
+    // This tab's restore missed the session; adoption's restore then hits invalid_grant, which
+    // clears the pointer and emits expiry.
+    h.auth.restore.mockResolvedValueOnce(null).mockImplementationOnce(async () => {
+      h.setIdentity(null);
+      h.emit("expired");
+      return null;
+    });
+    expect((await h.backend.signIn({ webId: alice.webId })).webId).toBe(alice.webId);
+    expect(h.auth.restore).toHaveBeenCalledTimes(2);
+    expect(h.auth.login).toHaveBeenCalledOnce();
   });
 
   it("clears this tab even if retirement rejects after attempting cleanup", async () => {

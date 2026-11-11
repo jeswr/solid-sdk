@@ -276,10 +276,12 @@ export class SolidBackend implements SessionBackend {
   }
 
   /**
-   * Returns null only when no session is remembered, so login cannot overwrite another owner.
-   * A remembered session is restored and returned without login only when a WebID hint names
-   * it exactly. A provider hint cannot identify the account, so it never lands in another
-   * account's session, even on a shared issuer; it and any other mismatch are refused.
+   * Returns null when login cannot overwrite another owner: nothing is remembered, or a WebID
+   * hint names every remembered session and it cannot be restored, so the same account replaces
+   * its own unusable grant. A remembered session is restored and returned without login only
+   * when a WebID hint names it exactly. A provider hint cannot identify the account, so it never
+   * lands in another account's session, even on a shared issuer; it and any other mismatch are
+   * refused with `session-elsewhere`, because this tab shows no account to sign out.
    */
   async #adoptLiveSession(
     core: PodAuth,
@@ -297,18 +299,22 @@ export class SolidBackend implements SessionBackend {
     const remembered = await core.remembered();
     current();
     if (remembered.length === 0) return null;
-    if (!remembered.every(matches)) throw new SignInError("account-active");
+    if (!remembered.every(matches)) throw new SignInError("session-elsewhere");
     const session = this.#sessionVersion;
     const identity = await core.restore();
-    current(session);
+    current();
     if (!identity) {
-      // The remembered session could not be restored. Login may proceed only once it is gone.
+      // pod-auth keeps the pointer after refresh failures other than invalid_grant, and an
+      // expiry emitted during restore advances the session counter, so no session fence
+      // applies here. Login may proceed once the pointer is gone or still names only this
+      // WebID; a pointer that changed to another account still refuses.
       const remaining = await core.remembered();
-      current(session);
-      if (remaining.length === 0) return null;
-      throw new SignInError("account-active");
+      current();
+      if (remaining.every(matches)) return null;
+      throw new SignInError("session-elsewhere");
     }
-    if (!matches(identity)) throw new SignInError("account-active");
+    current(session);
+    if (!matches(identity)) throw new SignInError("session-elsewhere");
     const account = await this.#mapAccount(identity, started, session);
     current(session);
     this.#account = account;

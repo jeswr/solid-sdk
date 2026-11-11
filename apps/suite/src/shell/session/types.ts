@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 export interface SuiteAccount {
   id: string;
   webId: string;
@@ -38,6 +39,8 @@ const signInMessages = {
   cancelled: "Sign-in was cancelled.",
   "popup-blocked": "Allow popups for Solid Suite, then try signing in again.",
   "account-active": "Sign out of your current Solid account before signing in to another account.",
+  "session-elsewhere":
+    "A Solid session from another tab is still active. Sign in with that account's WebID, or sign out in that tab.",
   "in-progress": "A sign-in is already in progress.",
   "invalid-identity": "This account needs a WebID and one pod storage to use Solid Suite.",
   failed: "We couldn't sign you in. Please try again.",

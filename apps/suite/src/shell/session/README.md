@@ -23,13 +23,20 @@ another tab may remain active. Existing fetch handles and delayed restore or sig
 cannot revive the removed shell session.
 
 A sign-in while this backend holds no account, including after a skipped sign-out, never
-calls login over another tab's live session, because a new grant would replace that tab's
-stored owner. Login proceeds only when `remembered()` is empty. A remembered session is
-restored and returned without login only when a WebID hint names its WebID exactly. A
-provider hint cannot identify the account, so it refuses with `account-active` whenever a
-session is remembered, even on a shared issuer: an explicit sign-in never lands in a
-different account. Any other remembered session, or one that cannot be restored while
-still remembered, also refuses with `account-active`.
+calls login over another account's live session, because a new grant would replace that
+tab's stored owner. Login proceeds when `remembered()` is empty. A remembered session is
+restored and returned without login only when a WebID hint names its WebID exactly. If that
+session cannot be restored (pod-auth keeps the pointer after refresh failures other than
+`invalid_grant`, such as `invalid_client`), login proceeds only while the pointer is gone or
+still names that WebID, so the same account replaces its own unusable grant. An expiry
+emitted during that restore does not cancel the sign-in.
+
+A provider hint cannot identify the account, so it is refused whenever a session is
+remembered, even on a shared issuer: an explicit sign-in never lands in a different account.
+These refusals, and a WebID hint for a different remembered account, use the
+`session-elsewhere` code rather than `account-active`, because this tab shows no account to
+sign out. Its message asks the user to sign in with that account's WebID or sign out in the
+other tab.
 
 The policy for explicitly signing out a remembered row without an accepted Identity snapshot
 is unchanged: the backend passes the row's WebID and issuer to pod-auth without inventing a
