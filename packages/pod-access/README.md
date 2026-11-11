@@ -820,6 +820,16 @@ Inbox children and `settings/access-records/` must be owner-write-only; public A
 is fine. A deterministic hash is an idempotency key, not an authenticity proof for requester-writable
 snapshots. Resume only as an explicit user-confirmed decision, never an automatic inbox sweep.
 
+For public profile reads, reuse `publicHttpsUrl(url)` (returns the validated URL or throws) and
+`publicTransport(publicFetch, signal?)`. Supply an explicit pristine unauthenticated fetch;
+the wrapper forces omitted credentials and refused redirects, rejects 3xx responses, and bounds
+successful response bodies to `MAX_NOTIFICATION_BYTES` (256 KiB), even without Content-Length.
+It does not remove caller-provided authentication headers or undo a fetch that adds credentials;
+never supply those headers or an authenticated fetch. The URL check has the DNS limitation above.
+`requireStrongEtag(etag)` throws for missing, weak or malformed validators before a conditional
+update. `roleFor(modes)` returns `editor` for Write, otherwise `viewer` for Read, and refuses
+append-only/empty modes. It is the same mapping used by decisions, including merged targets.
+
 The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vocabulary constants,
 `MAX_MEMBERS`, `MAX_NOTIFICATION_BYTES`, `deriveGrantId`, public option/result types, and canonical/legacy
 accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n3.Writer`.

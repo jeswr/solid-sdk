@@ -2,9 +2,9 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { ACCM, decide, FOAF, listRequests } from "@jeswr/pod-access/requests-solid";
+import { ACCM, decide, FOAF, listRequests, SOLID } from "@jeswr/pod-access/requests-solid";
 import { policyToRdf } from "@jeswr/solid-odrl";
-import { LiteralFrom, NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
+import { LiteralFrom, NamedNodeFrom, OptionalAs, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DataFactory, Store } from "n3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -49,7 +49,7 @@ async function claimApproval(pod: PodStub) {
 }
 function renderInbox(pod: PodStub, onChanged = () => {}, webId = OWNER) {
   return render(
-    <SessionProvider session={{ webId, fetch: pod.fetch }}>
+    <SessionProvider session={{ webId, fetch: pod.fetch, publicFetch: fetch }}>
       <InboxView inboxUrl={INBOX} storageRoot={POD} onChanged={onChanged} />
     </SessionProvider>,
   );
@@ -58,6 +58,7 @@ async function review() {
   const button = await screen.findByText("Review & approve…");
   await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
+  await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
 }
 async function status(pod: PodStub, expected: string) {
   await waitFor(async () => expect((await entry(pod)).status).toBe(expected));
@@ -73,8 +74,8 @@ describe("InboxView using requests-solid", () => {
     const pod = buildPod();
     renderInbox(pod);
     await screen.findByText("Pending");
-    expect(screen.getByText("Individual data: Can view")).toBeInTheDocument();
-    expect(screen.getByText("app.example#it")).toBeVisible();
+    expect(screen.getByText("Individual")).toBeInTheDocument();
+    expect(screen.getByText("app.example")).toBeVisible();
     expect(screen.getByText("Service Provision")).toBeInTheDocument();
     expect(screen.getByText(/2027-01-01/)).toBeInTheDocument();
     expect(pod.log.some((call) => call.url.startsWith("https://app.example/"))).toBe(false);
@@ -128,7 +129,7 @@ describe("InboxView using requests-solid", () => {
           headers: { "content-type": "text/turtle" },
         }),
       );
-    const session = { webId: OWNER, fetch: pod.fetch };
+    const session = { webId: OWNER, fetch: pod.fetch, publicFetch: fetch };
     const view = (identity: typeof session) => (
       <SessionProvider session={identity}>
         <InboxView inboxUrl={INBOX} storageRoot={POD} onChanged={() => {}} />
@@ -146,29 +147,52 @@ describe("InboxView using requests-solid", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 
-  it("shows each type's granted role, including write's read and append access, without a union", async () => {
+  it("previews the combined Editor grant when read and write types resolve to the same container", async () => {
     const pod = buildPod();
-    const rules = [
-      [CONTACTS_CLASS, "read"],
-      ["https://example.org/Notes", "write"],
-      ["https://example.org/Events", "append"],
-      ["https://example.org/Bookmarks", "append"],
-      ["https://example.org/Bookmarks", "read"],
-    ] as const;
-    const dataset = new Store(
-      policyToRdf({
-        id: REQUEST,
-        type: "Offer",
-        assignee: REQUESTER,
-        permissions: rules.map(([target, action]) => ({ type: "permission", target, action })),
-      }),
+    const notes = "https://example.org/Notes";
+    pod.seed(
+      REQUEST,
+      await toTurtle(
+        new Store(
+          policyToRdf({
+            id: REQUEST,
+            type: "Offer",
+            assignee: REQUESTER,
+            permissions: [
+              { type: "permission", target: CONTACTS_CLASS, action: "read" },
+              { type: "permission", target: notes, action: "write" },
+            ],
+          }),
+        ),
+      ),
     );
-    pod.seed(REQUEST, await toTurtle(dataset));
+    const indexUrl = `${POD}settings/publicTypeIndex.ttl`;
+    const index = await parseRdf(pod.body(indexUrl) ?? "", "text/turtle");
+    SetFrom.subjectPredicate(
+      new TermWrapper(`${indexUrl}#contacts`, index, DataFactory),
+      SOLID.forClass,
+      (term) => term.value,
+      NamedNodeFrom.string,
+    ).add(notes);
+    pod.seed(indexUrl, await toTurtle(index));
     renderInbox(pod);
-    expect(await screen.findByText("Individual data: Can view")).toBeInTheDocument();
-    expect(screen.getByText("Notes data: Can edit (view, add and change)")).toBeInTheDocument();
-    expect(screen.getByText("Events data: Cannot approve add-only access")).toBeInTheDocument();
-    expect(screen.getByText("Bookmarks data: Can view")).toBeInTheDocument();
+    await review();
+    const preview = screen.getByTestId("approve-preview");
+    expect(preview.querySelectorAll("li")).toHaveLength(2);
+    for (const name of ["alice", "carol"])
+      expect(preview).toHaveTextContent(
+        `/contacts/${name}.ttl: Can edit (view, add and change) — No expiry`,
+      );
+    expect(preview).not.toHaveTextContent("Can view");
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
+    fireEvent.click(screen.getByTestId("confirm-approve"));
+    await status(pod, "approved");
+    const acl = await readEffectiveAcl(ALICE, POD, pod.fetch);
+    expect(acl.entries.find((entry) => entry.agents.includes(REQUESTER))?.modes).toEqual([
+      "Read",
+      "Write",
+      "Append",
+    ]);
   });
 
   it("approves with an off-storage owner WebID using only the public transport for that profile", async () => {
@@ -253,6 +277,137 @@ describe("InboxView using requests-solid", () => {
     expect(await listReceipts(RECEIPTS, pod.fetch)).toHaveLength(1);
   });
 
+  it.each([
+    "http://192.168.1.1/private/name#me",
+    "http://localhost:8080/private/name#me",
+    "http://public.example/private/name#me",
+    "https://192.168.1.1/private/name#me",
+    "https://router.local/private/name#me",
+  ])("shows only the host of rejected requester %s without a profile fetch", async (requester) => {
+    const pod = buildPod();
+    pod.seed(
+      REQUEST,
+      await toTurtle(
+        new Store(
+          policyToRdf({
+            id: REQUEST,
+            type: "Offer",
+            assignee: requester,
+            permissions: [{ type: "permission", target: CONTACTS_CLASS, action: "read" }],
+          }),
+        ),
+      ),
+    );
+    renderInbox(pod);
+    await screen.findByText("Pending");
+    const label = screen.getByTitle(new URL(requester).host);
+    expect(label).toHaveTextContent(new URL(requester).host);
+    expect(label).not.toHaveTextContent("private/name");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(pod.log.some((call) => call.url.startsWith(new URL(requester).origin))).toBe(false);
+  });
+
+  it("refuses a stale preview before writing, shows the changed targets and requires fresh confirmation", async () => {
+    const pod = buildPod();
+    const onChanged = vi.fn();
+    renderInbox(pod, onChanged);
+    await review();
+    expect(screen.getByTestId("approve-preview")).toHaveTextContent(
+      "/contacts/alice.ttl: Can view",
+    );
+    const indexUrl = `${POD}settings/publicTypeIndex.ttl`;
+    const index = await parseRdf(pod.body(indexUrl) ?? "", "text/turtle");
+    const reg = new TermWrapper(`${indexUrl}#contacts`, index, DataFactory);
+    OptionalAs.object(reg, SOLID.instanceContainer, undefined, NamedNodeFrom.string);
+    OptionalAs.object(reg, SOLID.instance, `${POD}docs/report.ttl`, NamedNodeFrom.string);
+    pod.seed(indexUrl, await toTurtle(index));
+    fireEvent.click(screen.getByTestId("confirm-approve"));
+    await screen.findByText(/Access changed since your review/);
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    const preview = screen.getByTestId("approve-preview");
+    expect(preview).toHaveTextContent("Previous preview");
+    expect(preview).toHaveTextContent("/contacts/alice.ttl: Can view");
+    expect(preview).toHaveTextContent("Current preview");
+    expect(preview).toHaveTextContent("/docs/report.ttl: Can view — No expiry");
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
+    expect(onChanged).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("confirm-approve"));
+    await status(pod, "approved");
+    await screen.findByText("Saved");
+    expect(pod.has(`${ALICE}.acl`)).toBe(false);
+    const acl = await readEffectiveAcl(`${POD}docs/report.ttl`, POD, pod.fetch);
+    expect(acl.entries.some((entry) => entry.agents.includes(REQUESTER))).toBe(true);
+  });
+
+  it("shows a preview error, prevents approval and permits a read-only retry", async () => {
+    const pod = buildPod();
+    const indexUrl = `${POD}settings/publicTypeIndex.ttl`;
+    const index = pod.body(indexUrl);
+    pod.delete(indexUrl);
+    renderInbox(pod);
+    const review = await screen.findByText("Review & approve…");
+    await waitFor(() => expect(review).toBeEnabled());
+    fireEvent.click(review);
+    await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("owner registration");
+    expect(screen.getByTestId("confirm-approve")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("confirm-approve"));
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
+    pod.seed(indexUrl, index ?? "");
+    fireEvent.click(screen.getByText("Retry preview"));
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("approve-preview")).toHaveTextContent(
+      "/contacts/alice.ttl: Can view — No expiry",
+    );
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("shows the preview's fresh recipient and purpose when the listed request changes", async () => {
+    const pod = buildPod();
+    renderInbox(pod);
+    const reviewButton = await screen.findByText("Review & approve…");
+    await waitFor(() => expect(reviewButton).toBeEnabled());
+    const requester = "https://updated.example/profile#app";
+    pod.seed(
+      REQUEST,
+      await toTurtle(
+        new Store(
+          policyToRdf({
+            id: REQUEST,
+            type: "Offer",
+            assignee: requester,
+            permissions: [
+              {
+                type: "permission",
+                target: CONTACTS_CLASS,
+                action: "read",
+                constraints: [
+                  {
+                    leftOperand: "purpose",
+                    operator: "eq",
+                    rightOperand: "https://w3id.org/dpv#Research",
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    fireEvent.click(reviewButton);
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    const preview = screen.getByTestId("approve-preview");
+    expect(preview).toHaveTextContent("Recipient: updated.example");
+    expect(preview).toHaveTextContent("Purpose: Research");
+    expect(preview).not.toHaveTextContent("Service Provision");
+    fireEvent.click(screen.getByTestId("confirm-approve"));
+    await status(pod, "approved");
+    const acl = await readEffectiveAcl(ALICE, POD, pod.fetch);
+    expect(acl.entries.some((entry) => entry.agents.includes(requester))).toBe(true);
+    expect(acl.entries.some((entry) => entry.agents.includes(REQUESTER))).toBe(false);
+  });
+
   it("keeps a malformed message visible without breaking the inbox", async () => {
     const pod = buildPod();
     pod.seed(`${INBOX}junk.ttl`, "@@@ definitely not turtle");
@@ -280,6 +435,8 @@ describe("InboxView using requests-solid", () => {
     expect(screen.queryByText(/evil.example/)).not.toBeInTheDocument();
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
     fireEvent.click(resume);
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    fireEvent.click(screen.getByTestId("confirm-approve"));
     await status(pod, "approved");
     expect(pod.log.some((call) => call.url.endsWith("publicTypeIndex.ttl"))).toBe(false);
     expect(pod.has(`${ALICE}.acl`)).toBe(true);
@@ -292,9 +449,7 @@ describe("InboxView using requests-solid", () => {
     const resume = await screen.findByText("Finish saved approval");
     await waitFor(() => expect(resume).toBeEnabled());
     fireEvent.click(resume);
-    await waitFor(() =>
-      expect(screen.getByTestId("saving-indicator")).toHaveTextContent("never recorded"),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("never recorded"));
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
     expect(pod.log.some((call) => call.url.startsWith("https://evil.example/"))).toBe(false);
   });
@@ -358,7 +513,7 @@ describe("InboxView using requests-solid", () => {
   it("explains when the profile has no inbox", () => {
     const pod = buildPod();
     render(
-      <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>
+      <SessionProvider session={{ webId: OWNER, fetch: pod.fetch, publicFetch: pod.fetch }}>
         <InboxView inboxUrl={null} storageRoot={POD} onChanged={() => {}} />
       </SessionProvider>,
     );

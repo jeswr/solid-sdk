@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
@@ -40,6 +41,8 @@ const seam = vi.hoisted(() => ({
 vi.mock("../../src/auth/controller.js", () => ({
   buildController: () => ({
     authenticatedFetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+      (seam.fetch as SolidFetch)(input, init)) as SolidFetch,
+    publicFetch: ((input: RequestInfo | URL, init?: RequestInit) =>
       (seam.fetch as SolidFetch)(input, init)) as SolidFetch,
     logout: async () => undefined,
   }),

@@ -4,7 +4,6 @@
 // whole approval pipeline rests on (If-Match / If-None-Match / 412 mapping).
 import { describe, expect, it } from "vitest";
 import {
-  credentialFreeFetch,
   isHttpUrl,
   PreconditionFailedError,
   putIfMatch,
@@ -74,32 +73,6 @@ describe("putIfMatch", () => {
     await expect(putIfMatch(URL_A, "x", '"v1"', pod.fetch)).rejects.toBeInstanceOf(
       WriteFailedError,
     );
-  });
-});
-
-describe("credentialFreeFetch", () => {
-  it.each([
-    "request",
-    "init",
-  ])("omits credentials and strips auth from %s headers", async (source) => {
-    const pod = createPodStub();
-    const headers = { authorization: "Bearer owner", dpop: "owner proof", accept: "text/turtle" };
-    pod.intercept = (_method, _url, init) => {
-      expect(init?.credentials).toBe("omit");
-      expect(init?.redirect).toBe("error");
-      const sent = new Headers(init?.headers);
-      expect(sent.has("authorization")).toBe(false);
-      expect(sent.has("dpop")).toBe(false);
-      expect(sent.get("accept")).toBe("text/turtle");
-      return new Response(null, { status: 404 });
-    };
-    const publicFetch = credentialFreeFetch(pod.fetch);
-    if (source === "request") {
-      await publicFetch(new Request(URL_A, { headers, credentials: "include" }));
-    } else {
-      await publicFetch(URL_A, { headers, credentials: "include" });
-    }
-    expect(pod.log).toHaveLength(1);
   });
 });
 

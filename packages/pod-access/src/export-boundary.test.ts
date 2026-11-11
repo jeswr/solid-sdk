@@ -84,6 +84,7 @@ describe("public export boundary", () => {
         "DecisionPreviewConflictError", "MAX_MEMBERS", "MAX_NOTIFICATION_BYTES", "RequestConflictError",
         "UnsupportedAccessModelError", "accessModel", "accmAliases", "accmTerm", "canonicalizeAccmDataset",
         "decide", "deriveGrantId", "listRequests", "previewDecision",
+        "publicHttpsUrl", "publicTransport", "requireStrongEtag", "roleFor",
       ].sort());
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);

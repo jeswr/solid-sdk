@@ -73,7 +73,7 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
 
     await screen.findByText("Pending", undefined, FIND);
     expect((await screen.findAllByText("Clinic App", undefined, FIND)).length).toBeGreaterThan(0);
-    expect(screen.getByText("Health data: Can view")).toBeInTheDocument();
+    expect(screen.getByText("Health")).toBeInTheDocument();
     expect(screen.getByText("Care Coordination")).toBeInTheDocument();
     expect(screen.getByText("2026-08-09T00:00:00Z")).toBeInTheDocument();
 
@@ -82,8 +82,9 @@ describe("DemoApp — the four ?demo views render the Ada & Bex fixtures", () =>
     await waitFor(() => expect(review).toBeEnabled());
     fireEvent.click(review);
     const preview = await screen.findByTestId("approve-preview", undefined, FIND);
+    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
     expect(preview).toHaveTextContent("Health");
-    expect(preview).toHaveTextContent("concrete resources are pinned when you approve");
+    expect(preview).toHaveTextContent("Can view — No expiry");
     expect(screen.getByTestId("confirm-approve")).toHaveTextContent("Approve request");
   });
 
@@ -155,7 +156,9 @@ describe("DemoApp — actions are inert (read-only fixture pod, no writes)", () 
     const review = await screen.findByText("Review & approve…", undefined, FIND);
     await waitFor(() => expect(review).toBeEnabled());
     fireEvent.click(review);
-    fireEvent.click(await screen.findByTestId("confirm-approve", undefined, FIND));
+    const confirm = await screen.findByTestId("confirm-approve", undefined, FIND);
+    await waitFor(() => expect(confirm).toBeEnabled(), FIND);
+    fireEvent.click(confirm);
 
     // The optimistic flip reverts and the demo refusal surfaces in the UI.
     await waitFor(

@@ -37,8 +37,10 @@ Phase 1 (the proposal's P2): it works **entirely against existing pod surfaces**
   Parsing is lenient — inbox contents are untrusted RDF; a malformed message
   drops fields or is listed as unparseable, never breaking the inbox.
 - **Approve / deny** — `@jeswr/pod-access/requests-solid` owns listing,
-  resolution, decisions and recovery; the UI reviews requested data classes and
-  calls `decide` once for each confirmed action. The package seals owner-only
+  resolution, decisions and recovery; `previewDecision` shows each concrete target,
+  its combined role and recorded expiry before approval. The UI passes that preview as
+  `decide`'s expected pin; changes refuse and show the previous and refreshed targets for
+  another confirmation. The package seals owner-only
   `settings/access-records/`, pins concrete targets in per-generation decision
   records, and resumes only those records; ACP and unknown storage models show
   that approval is unavailable.
@@ -63,6 +65,9 @@ over `@solid/reactive-authentication` (authorization-code + PKCE + DPoP popup;
 Document URL to override the client identity; without it or `APP_ORIGIN`, dynamic
 registration is used (dev fallback). All data access flows through an injectable
 authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
+Display names use the controller's pristine `publicFetch` through the SDK's public HTTPS,
+redirect and byte-limit policy. Rejected requester URLs show only their host without a fetch.
+Name caches are scoped to the session WebID, cleared on logout, and retry failed reads next load.
 
 From the monorepo root (Node 24), build for hosting with:
 

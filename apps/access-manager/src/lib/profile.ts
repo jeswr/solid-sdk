@@ -2,11 +2,12 @@
 // AUTHORED-BY Claude Fable 5
 //
 // Requester-profile resolution for the inbox + dashboard: WebID → display name
-// + storage root. SSRF-conscious: only http(s) IRIs are ever dereferenced, the
-// fetch goes through the INJECTED seam (credential-free for inbox names),
+// + storage root. Foreign display profiles use the SDK's public HTTPS policy,
+// bounded reader and explicit pristine public fetch. Owner discovery uses the session seam,
 // and every typed read of the FOREIGN profile is guarded (a
 // malformed profile degrades to the WebID string, never throws into the view).
 
+import { publicHttpsUrl, publicTransport } from "@jeswr/pod-access/requests-solid";
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
 import { isHttpUrl, readRdf, type SolidFetch } from "./http.js";
@@ -20,33 +21,45 @@ export interface AgentDisplay {
   resolved: boolean;
 }
 
-let cache = new WeakMap<SolidFetch, Map<string, Promise<AgentDisplay>>>();
+let cache = new WeakMap<SolidFetch, Map<string, Map<string, Promise<AgentDisplay>>>>();
 
-/** Resolve (and memoise) a display name for an agent WebID. */
-export function resolveAgentDisplay(webId: string, fetchFn: SolidFetch): Promise<AgentDisplay> {
-  let names = cache.get(fetchFn);
+/** Resolve a public display name, scoped to the viewer. Supply only a pristine public fetch. */
+export function resolveAgentDisplay(
+  webId: string,
+  fetchFn: SolidFetch,
+  sessionWebId: string,
+): Promise<AgentDisplay> {
+  let accounts = cache.get(fetchFn);
+  if (!accounts) {
+    accounts = new Map();
+    cache.set(fetchFn, accounts);
+  }
+  let names = accounts.get(sessionWebId);
   if (!names) {
     names = new Map();
-    cache.set(fetchFn, names);
+    accounts.set(sessionWebId, names);
   }
   let hit = names.get(webId);
   if (!hit) {
-    hit = doResolve(webId, fetchFn);
+    const entries = names;
+    hit = doResolve(webId, fetchFn).then((display) => {
+      if (!display.resolved) entries.delete(webId);
+      return display;
+    });
     names.set(webId, hit);
   }
   return hit;
 }
 
-/** Test hook: drop the memo (module-level cache would leak across tests). */
+/** Drop resolved names on logout/account changes, and between tests. */
 export function clearAgentDisplayCache(): void {
   cache = new WeakMap();
 }
 
 async function doResolve(webId: string, fetchFn: SolidFetch): Promise<AgentDisplay> {
   const fallback: AgentDisplay = { webId, name: webId, resolved: false };
-  if (!isHttpUrl(webId)) return fallback;
   try {
-    const read = await readRdf(webId, fetchFn);
+    const read = await readRdf(publicHttpsUrl(webId), publicTransport(fetchFn));
     if (!read) return fallback;
     const agent = new Agent(webId, read.dataset, DataFactory);
     const name = tryRead(() => agent.name) ?? undefined;

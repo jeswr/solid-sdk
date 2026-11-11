@@ -105,7 +105,7 @@ export function HistoryView({
             .filter((g) => g.revokedAt === undefined)
             .map((g) => (
               <li key={g.url} className="grant">
-                {g.agent ? <AgentLabel agent={g.agent} fetchFn={session.fetch} /> : "Unknown agent"}
+                {g.agent ? <AgentLabel agent={g.agent} /> : "Unknown agent"}
                 <span> — {g.modes.join(", ") || "?"} on </span>
                 <span>{g.targets.length} resource(s)</span>
                 {g.purpose ? <span> for {classLabel(g.purpose)}</span> : null}
@@ -144,9 +144,7 @@ export function HistoryView({
             {receipts.map((r) => (
               <tr key={r.url} className={`receipt ${statusLabel(r.status).toLowerCase()}`}>
                 <td>{statusLabel(r.status)}</td>
-                <td>
-                  {r.recipient ? <AgentLabel agent={r.recipient} fetchFn={session.fetch} /> : "—"}
-                </td>
+                <td>{r.recipient ? <AgentLabel agent={r.recipient} /> : "—"}</td>
                 <td>{r.purpose ? classLabel(r.purpose) : "—"}</td>
                 <td title={r.targets.map((t) => resourceLabel(t, storageRoot)).join("\n")}>
                   {r.targets.length}

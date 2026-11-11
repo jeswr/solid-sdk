@@ -14,22 +14,11 @@
 // re-reads and reconciles on — never a swallowed error.
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { requireStrongEtag } from "@jeswr/pod-access/requests-solid";
 import type { DatasetCore } from "@rdfjs/types";
 
 /** The injectable authenticated-fetch seam. */
 export type SolidFetch = typeof fetch;
-
-/** Public profile/notification transport, separate from the authenticated session fetch. */
-export function credentialFreeFetch(fetchFn: SolidFetch): SolidFetch {
-  return (input, init) => {
-    const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
-    );
-    headers.delete("authorization");
-    headers.delete("dpop");
-    return fetchFn(input, { ...init, headers, credentials: "omit", redirect: "error" });
-  };
-}
 
 /** A read RDF resource + the validator needed for a conditional write. */
 export interface ReadRdf {
@@ -113,11 +102,8 @@ export async function putIfMatch(
   etag: string | null,
   fetchFn: SolidFetch,
 ): Promise<void> {
-  // requests-solid's requireStrongEtag is private; keep the same validator rule here.
-  if (etag === null || !/^"[^"\r\n]*"$/.test(etag)) {
-    throw new Error("This edit cannot be saved safely: the server did not provide a strong ETag.");
-  }
-  const headers = { "content-type": "text/turtle", "if-match": etag };
+  requireStrongEtag(etag);
+  const headers = { "content-type": "text/turtle", "if-match": etag as string };
   const res = await fetchFn(url, { method: "PUT", headers, body: turtle });
   if (res.status === 412) throw new PreconditionFailedError(url);
   if (!res.ok) throw new WriteFailedError(url, res.status);

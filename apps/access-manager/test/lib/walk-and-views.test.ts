@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // Storage walk (progressive, bounded, .acl-skipping, degrades on errors) +
 // dashboard aggregations (by-resource / by-agent, public flagged, owner
@@ -155,21 +156,21 @@ describe("type-index grouping", () => {
 describe("profile resolution", () => {
   it("resolves a display name; caches; refuses non-http WebIDs", async () => {
     const pod = buildPod();
-    const display = await resolveAgentDisplay(OWNER, pod.fetch);
+    const display = await resolveAgentDisplay(OWNER, pod.fetch, OWNER);
     expect(display.name).toBe("Owner O.");
     expect(display.resolved).toBe(true);
     const requestsBefore = pod.log.length;
-    await resolveAgentDisplay(OWNER, pod.fetch);
+    await resolveAgentDisplay(OWNER, pod.fetch, OWNER);
     expect(pod.log.length).toBe(requestsBefore); // memoised
 
-    const evil = await resolveAgentDisplay("file:///etc/passwd", pod.fetch);
+    const evil = await resolveAgentDisplay("file:///etc/passwd", pod.fetch, OWNER);
     expect(evil.resolved).toBe(false);
     expect(evil.name).toBe("file:///etc/passwd");
   });
 
   it("an unreachable / malformed profile degrades to the WebID", async () => {
     const pod = buildPod();
-    const display = await resolveAgentDisplay("https://gone.example/p#me", pod.fetch);
+    const display = await resolveAgentDisplay("https://gone.example/p#me", pod.fetch, OWNER);
     expect(display.resolved).toBe(false);
     expect(display.name).toBe("https://gone.example/p#me");
   });

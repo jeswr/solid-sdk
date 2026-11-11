@@ -156,7 +156,7 @@ export function DashboardView({
         {showResource ? (
           <span className="resource-name">{resourceLabel(url, storageRoot)}</span>
         ) : (
-          <AgentLabel agent={line.agent} fetchFn={session.fetch} />
+          <AgentLabel agent={line.agent} />
         )}
         <ModeBadges modes={modes} />
         {line.inherited ? (
@@ -238,7 +238,7 @@ export function DashboardView({
           {agents.map((a) => (
             <li key={a.agent} className="agent-holding">
               <div className="agent-head">
-                <AgentLabel agent={a.agent} fetchFn={session.fetch} />
+                <AgentLabel agent={a.agent} />
                 <span className="count">{a.resources.length} resource(s)</span>
               </div>
               <ul className="share-lines">

@@ -27,7 +27,9 @@ async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
 
 function withSession(pod: PodStub, ui: React.ReactNode) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>{ui}</SessionProvider>,
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch, publicFetch: pod.fetch }}>
+      {ui}
+    </SessionProvider>,
   );
 }
 

@@ -26,7 +26,7 @@ async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
 
 function renderDashboard(pod: PodStub, nodes: WalkedNode[], onChanged = () => {}) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch, publicFetch: pod.fetch }}>
       <DashboardView nodes={nodes} storageRoot={POD} walking={false} onChanged={onChanged} />
     </SessionProvider>,
   );
