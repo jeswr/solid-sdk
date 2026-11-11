@@ -155,6 +155,7 @@ describe("Univer engine adapter", () => {
     "sheet.mutation.set-frozen",
     "sheet.mutation.add-worksheet-merge",
     "sheet.mutation.remove-worksheet-merge",
+    "sheet.mutation.insert-row",
   ])("marks persisted user mutation %s dirty, including after reload", async (id) => {
     const engine = await mount();
     const change = vi.fn();

@@ -44,7 +44,8 @@ export function readCharts(
     const parsed = chartSpecSchema.safeParse(entry);
     try {
       if (!parsed.success || charts.some((chart) => chart.id === parsed.data.id)) throw new Error();
-      if (validateSource) chartSource(snapshot, parsed.data.sheetId, parsed.data.range);
+      if (validateSource)
+        parsed.data.range = chartSource(snapshot, parsed.data.sheetId, parsed.data.range).range.a1;
       charts.push(parsed.data);
     } catch {
       issues.push(`Ignored invalid chart entry ${index + 1}`);

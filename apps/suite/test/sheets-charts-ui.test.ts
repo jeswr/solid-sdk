@@ -122,7 +122,10 @@ it("inserts, validates, edits and deletes charts with native controls and focus 
   await fill("Data range (A1)", "A1:Z10");
   await submit();
   expect(document.querySelector('[role="alert"]')?.textContent).toContain("beyond this sheet");
-  await fill("Data range (A1)", "A1:B3");
+  await fill("Data range (A1)", "Other!A1:B3");
+  await submit();
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("this chart's sheet");
+  await fill("Data range (A1)", "'Data'!A1:B3");
   await fill("Series from", "rows");
   await click(document.querySelector('input[type="checkbox"]') as Element);
   await submit();
@@ -133,14 +136,17 @@ it("inserts, validates, edits and deletes charts with native controls and focus 
     type: "line",
     series: "rows",
     legend: false,
+    range: "A1:B3",
   });
   expect(document.activeElement).toBe(button("Insert chart"));
   const edits = document.querySelectorAll<HTMLButtonElement>(".sht-chart-heading button");
   await click(edits[1] as Element);
   await fill("Chart title", "Edited revenue");
   await fill("Chart type", "pie");
+  await fill("Data range (A1)", "'Data'!$A$1:$B$3");
   await submit();
   expect(readCharts(f.engine.snapshot()).charts[1]?.title).toBe("Edited revenue");
+  expect(readCharts(f.engine.snapshot()).charts[1]?.range).toBe("$A$1:$B$3");
   await click(document.querySelectorAll(".sht-chart-heading button")[1] as Element);
   await click(button("Delete chart"));
   expect(readCharts(f.engine.snapshot()).charts.map((s) => s.id)).toEqual(["other"]);

@@ -5,6 +5,7 @@ import {
   chartModel,
   detectHeaders,
   numeric,
+  type SvgChartModel,
   seriesColour,
 } from "../src/apps/sheets/lib/charts/model";
 import { chartSource, chartValues, parseChartRange } from "../src/apps/sheets/lib/charts/range";
@@ -44,6 +45,17 @@ const source = (): Snapshot => ({
     },
   },
 });
+
+function expectFiniteGeometry(model: SvgChartModel) {
+  for (const item of [...model.marks, ...model.labels]) {
+    for (const value of Object.values(item)) {
+      if (typeof value === "number") expect(Number.isFinite(value)).toBe(true);
+    }
+  }
+  for (const mark of model.marks) {
+    if (mark.kind === "path") expect(mark.d).not.toMatch(/NaN|Infinity/);
+  }
+}
 
 describe("chart A1 sources", () => {
   it("parses absolute cells and sheet-qualified rectangles", () => {
@@ -170,13 +182,26 @@ describe("headers and numeric data", () => {
 });
 
 describe("pure SVG models", () => {
+  it.each([NaN, Infinity, -Infinity])("detects non-finite numeric geometry %s directly", (x) => {
+    const model = chartModel(spec, values);
+    model.marks.push({ kind: "circle", x, y: 1, radius: 1, colour: seriesColour(0) });
+    expect(() => expectFiniteGeometry(model)).toThrow();
+    model.marks.pop();
+    model.labels.push({ x: 1, y: x, text: "Bad geometry" });
+    expect(() => expectFiniteGeometry(model)).toThrow();
+  });
+  it("detects non-finite coordinates in generated path strings separately", () => {
+    const model = chartModel(spec, values);
+    model.marks.push({ kind: "path", d: "MNaN Infinity", fill: false, colour: seriesColour(0) });
+    expect(() => expectFiniteGeometry(model)).toThrow();
+  });
   it.each(chartTypes)("renders %s, empty, nonnumeric, zero and negative sources", (type) => {
     const chart = { ...spec, type };
     const model = chartModel(chart, values);
     expect(model.title).toBe("Sales");
     expect(model.description).toContain("Sales: 3 values, -10 to 20.");
     expect(model.marks.length).toBeGreaterThan(0);
-    expect(JSON.stringify(model)).not.toMatch(/NaN|Infinity/);
+    expectFiniteGeometry(model);
     expect(chartModel(chart, []).empty).toBe(true);
     expect(
       chartModel(chart, [
@@ -190,26 +215,25 @@ describe("pure SVG models", () => {
     ]);
     expect(zero.title).toBe(`${type} chart`);
     expect(zero.legend).toEqual([]);
-    expect(JSON.stringify(zero)).not.toMatch(/NaN|Infinity/);
+    expectFiniteGeometry(zero);
     const negatives = chartModel(chart, [
       [-1, -2],
       [-3, -4],
     ]);
     expect(negatives.empty).toBe(type === "pie");
+    expectFiniteGeometry(negatives);
     expect(
       chartModel({ ...chart, legend: false }, [
         [2, 10],
         [1, null],
       ]).legend,
     ).toEqual([]);
-    expect(
-      JSON.stringify(
-        chartModel(chart, [
-          [Number.MAX_VALUE, -Number.MAX_VALUE],
-          [1, 0],
-        ]),
-      ),
-    ).not.toMatch(/NaN|Infinity/);
+    expectFiniteGeometry(
+      chartModel(chart, [
+        [Number.MAX_VALUE, -Number.MAX_VALUE],
+        [1, 0],
+      ]),
+    );
   });
   it("draws columns and bars across zero and retains independent series", () => {
     const columns = chartModel(spec, values);
@@ -287,6 +311,74 @@ it("validates versioned specs through the real workbook create/save/open path", 
   expect(readCharts(copy.snapshot).charts).toEqual([changed]);
   await h.service.save(book.container, withCharts(opened.snapshot, []), opened.version);
   expect(readCharts((await h.service.open(book.container)).snapshot).charts).toEqual([]);
+});
+
+it("normalizes a qualified source before a sheet rename, save and reopen", async () => {
+  const h = await harness();
+  const book = await h.service.create({
+    title: "Stable chart source",
+    snapshot: withCharts(snapshot(), [{ ...spec, range: "'Data'!A1:B3" }]),
+  });
+  expect(readCharts(book.snapshot).charts[0]?.range).toBe("A1:B3");
+  const renamed = structuredClone(book.snapshot);
+  const sheet = (renamed.sheets as Record<string, Snapshot>).data as Snapshot;
+  sheet.name = "Renamed data";
+  await h.service.save(book.container, renamed, book.version);
+  const reopened = await h.service.open(book.container);
+  expect(readCharts(reopened.snapshot).charts).toEqual([{ ...spec, range: "A1:B3" }]);
+  expect(chartValues(reopened.snapshot, "data", "A1:B3")).toEqual(
+    chartValues(book.snapshot, "data", "A1:B3"),
+  );
+});
+
+it.each([
+  '{"version":1,"entries":[{"title":1e309}]}',
+  '{"version":1e309,"entries":[]}',
+  '{"version":1,"entries":[],"extra":1e309}',
+])("discards malformed chart metadata %s before strict workbook validation", async (metadata) => {
+  const h = await harness();
+  const book = await h.service.create({ title: "Existing cells", snapshot: snapshot() });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    await h.fetch(`${book.container}workbook.json`, {
+      method: "PUT",
+      body: JSON.stringify(book.snapshot).replace(/}$/, `,"charts":${metadata}}`),
+    });
+    const opened = await h.service.open(book.container);
+    expect(readCharts(opened.snapshot).charts).toEqual([]);
+    expect(chartValues(opened.snapshot, "data", "A1:B2")).toEqual([
+      ["Label", "Amount"],
+      ["Text, quoted", "42.5"],
+    ]);
+    expect(opened.snapshot.sheets).toEqual(book.snapshot.sheets);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it("retains valid charts beside overflowing metadata and rejects non-finite workbook cells", async () => {
+  const h = await harness();
+  const book = await h.service.create({ title: "Strict cells", snapshot: snapshot() });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const stored = JSON.stringify(withCharts(book.snapshot, [spec])).replace(
+      '"entries":[',
+      '"entries":[{"title":1e309},',
+    );
+    await h.fetch(`${book.container}workbook.json`, { method: "PUT", body: stored });
+    expect(readCharts((await h.service.open(book.container)).snapshot).charts).toEqual([spec]);
+    await h.fetch(`${book.container}workbook.json`, {
+      method: "PUT",
+      body: stored.replace('"v":"42.5"', '"v":1e309'),
+    });
+    await expect(h.storage.loadSnapshot(book.container)).rejects.toThrow("JSON");
+    for (const json of ["null", "[]", "1", "{"]) {
+      await h.fetch(`${book.container}workbook.json`, { method: "PUT", body: json });
+      await expect(h.storage.loadSnapshot(book.container)).rejects.toThrow();
+    }
+  } finally {
+    warn.mockRestore();
+  }
 });
 
 it("ignores and reports invalid entries without losing valid charts or the sheet", async () => {

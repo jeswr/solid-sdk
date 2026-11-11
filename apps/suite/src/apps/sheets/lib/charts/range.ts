@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Snapshot } from "../model/snapshot";
+import { shiftReference } from "../refs/edits";
+import type { StructuralEdit } from "../refs/model";
 import { formatA1, parseA1 } from "../refs/notation";
+import type { ChartSpec } from "./spec";
 
 /** Bounded, rectangular chart sources. Sheet identity is stored separately from its name. */
 export function parseChartRange(text: string) {
@@ -44,4 +47,19 @@ export function chartValues(snapshot: Snapshot, sheetId: string, text: string): 
       (_, column) => cells?.[range.startRow + row]?.[range.startColumn + column]?.v ?? null,
     ),
   );
+}
+
+/** Follow structural edits by sheet ID, including absolute references. Deleted sources disappear. */
+export function shiftChartRanges(
+  charts: ChartSpec[],
+  sheetId: string,
+  edit: Omit<StructuralEdit, "sheet">,
+): ChartSpec[] {
+  return charts.flatMap((chart) => {
+    if (chart.sheetId !== sheetId) return [chart];
+    const { rows, columns } = parseA1(chart.range);
+    // Identity was resolved above. Reference helpers use a local context, never an ID as a name.
+    const shifted = shiftReference({ rows, columns }, { ...edit, sheet: "source" }, "source");
+    return shifted === null ? [] : [{ ...chart, range: formatA1(shifted) }];
+  });
 }

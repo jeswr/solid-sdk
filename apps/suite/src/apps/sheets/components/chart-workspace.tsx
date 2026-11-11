@@ -216,7 +216,8 @@ export function ChartWorkspace({
                   return;
                 }
                 try {
-                  chartSource(current, draft.sheetId, draft.range);
+                  // The qualifier is an editor check; stable sheet identity owns saved sources.
+                  parsed.data.range = chartSource(current, draft.sheetId, draft.range).range.a1;
                 } catch (failure) {
                   setError((failure as Error).message);
                   return;

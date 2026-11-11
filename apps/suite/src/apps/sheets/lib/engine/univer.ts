@@ -13,8 +13,18 @@ import {
   LocaleType,
   mergeLocales,
 } from "@univerjs/presets";
+import {
+  type IInsertRowMutationParams,
+  InsertColMutation,
+  InsertRowMutation,
+  RemoveColMutation,
+  RemoveRowMutation,
+} from "@univerjs/sheets";
+import { shiftChartRanges } from "../charts/range";
+import { readCharts, withCharts } from "../charts/spec";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
+import type { StructuralEdit } from "../refs/model";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
@@ -34,6 +44,13 @@ const PERSISTED_FORMULA_MUTATIONS = new Set([
 // state. Its params are keyed by unit id, so the unitId check below drops it too; this
 // names it explicitly. CF viewport and style caches update without mutations.
 const RECOMPUTE_MUTATIONS = new Set(["sheet.mutation.data-validation-formula-mark-dirty"]);
+
+const CHART_REFERENCE_MUTATIONS = new Map<string, Pick<StructuralEdit, "axis" | "kind">>([
+  [InsertRowMutation.id, { axis: "row", kind: "insert" }],
+  [InsertColMutation.id, { axis: "column", kind: "insert" }],
+  [RemoveRowMutation.id, { axis: "row", kind: "delete" }],
+  [RemoveColMutation.id, { axis: "column", kind: "delete" }],
+]);
 
 export const mountUniver: MountEngine = async (container, options) => {
   const { univer, univerAPI } = createUniver({
@@ -98,6 +115,20 @@ export const mountUniver: MountEngine = async (container, options) => {
       return;
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
+    const edit = CHART_REFERENCE_MUTATIONS.get(event.id);
+    if (edit && charts !== undefined) {
+      const { subUnitId, range } = event.params as IInsertRowMutationParams;
+      const start = edit.axis === "row" ? range.startRow : range.startColumn;
+      const end = edit.axis === "row" ? range.endRow : range.endColumn;
+      charts = withCharts(
+        {},
+        shiftChartRanges(readCharts({ charts }).charts, subUnitId, {
+          ...edit,
+          index: start + 1,
+          count: end - start + 1,
+        }),
+      ).charts;
+    }
     editedSinceLoad = true;
     notify();
   });
