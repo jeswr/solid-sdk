@@ -238,7 +238,7 @@ it("keeps newer optimistic edits after an older failure, rolls back failures and
   f.breakStorage(true);
   await act(() => money.refresh());
   expect(money.status).toBe("error");
-  expect(money.transactions).toEqual([]);
+  expect(money.transactions.some((row) => row.id === f.rowId)).toBe(true);
   f.breakStorage(false);
   await act(() => money.refresh());
   expect(money.status).toBe("ready");
@@ -247,7 +247,7 @@ it("renders first-use actions and validates a transaction dialog without writing
   const empty = await setup(true);
   await screen(empty, h(AccountsScreen, { overviewPage: true }));
   expect(empty.app.host.textContent).toContain("Add an account");
-  expect(empty.app.host.textContent).toContain("Import a statement");
+  expect(empty.app.host.textContent).toContain("No accounts yet");
   await empty.app.unmount();
   const f = await setup();
   await screen(f, h(LedgerScreen, { accountId: f.id }));

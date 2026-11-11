@@ -8,7 +8,7 @@ export default function Page() {
       fallback={
         <>
           <h1>Budget</h1>
-          <LoadingSkeleton preset="table" />
+          <LoadingSkeleton preset="table" label="Loading budget" />
         </>
       }
     >

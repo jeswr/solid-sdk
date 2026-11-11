@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
   DataTable,
   EmptyState,
+  ErrorState,
   FilterChips,
   IconButton,
   Input,
@@ -25,6 +27,7 @@ import {
   TransactionDialog,
   TransferDialog,
 } from "./money-forms";
+import { focusMoneyHeading } from "./money-states";
 
 function rangeFor(preset: string, today: string): Range {
   const now = new Date(`${today}T00:00:00Z`);
@@ -75,18 +78,40 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
   if (!account)
     return (
       <>
-        <h1>Account not found</h1>
+        <h1>
+          {money.problems?.some((problem) => problem.url === accountId.split("#")[0])
+            ? "Couldn't read this account"
+            : "Account not found"}
+        </h1>
         <section className="mon-panel">
-          <h2>Choose an account</h2>
-          <EmptyState
-            title="This account isn't here"
-            body="Open one of your accounts from the overview."
-            primaryAction={
-              <Button asChild>
-                <Link href="/money">Go to overview</Link>
+          {money.problems?.some((problem) => problem.url === accountId.split("#")[0]) ? (
+            <ErrorState error="unknown">
+              <p>We couldn't read this account from your pod.</p>
+              <Button
+                onClick={async () => {
+                  await money.refresh();
+                  focusMoneyHeading();
+                }}
+              >
+                Retry
               </Button>
-            }
-          />
+            </ErrorState>
+          ) : (
+            <>
+              <h2>Choose an account</h2>
+              <EmptyState
+                title="This account isn't here"
+                body="Add an account or choose an existing account to see its transactions."
+                primaryAction={
+                  <Button asChild>
+                    <Link href="/money/accounts">
+                      {money.accounts.length ? "Choose an account" : "Add an account"}
+                    </Link>
+                  </Button>
+                }
+              />
+            </>
+          )}
         </section>
       </>
     );
@@ -235,21 +260,36 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
         )}
         {!rows.length ? (
           <EmptyState
-            title="No transactions in this view"
-            body="Try another date range, import a statement, or add a transaction."
+            variant={
+              money.transactions.some((row) => row.account === accountId)
+                ? "filtered-empty"
+                : "first-use"
+            }
+            title={
+              money.transactions.some((row) => row.account === accountId)
+                ? "No transactions match this view"
+                : "No transactions yet"
+            }
+            body={
+              money.transactions.some((row) => row.account === accountId)
+                ? "Try another date range or clear your filters."
+                : "Add a transaction to start tracking money in and out of this account."
+            }
             primaryAction={<Button onClick={() => setAdd(true)}>Add transaction</Button>}
             secondaryAction={
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setPresets(["90"]);
-                  setCategory(undefined);
-                  setSign("all");
-                  setQuery("");
-                }}
-              >
-                Clear filters
-              </Button>
+              money.transactions.some((row) => row.account === accountId) && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPresets(["90"]);
+                    setCategory(undefined);
+                    setSign("all");
+                    setQuery("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )
             }
           />
         ) : (
