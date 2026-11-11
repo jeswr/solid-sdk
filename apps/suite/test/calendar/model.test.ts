@@ -65,6 +65,39 @@ const event: CalendarEvent = {
 const item = (data: CalendarEvent) => ({ url, etag: '"v1"', data });
 
 describe("typed RDF model", () => {
+  it("round-trips an optional event zone through typed accessors and Turtle", async () => {
+    const zoned = { ...event, timeZone: "America/New_York" };
+    const ds = buildEvent(url, event);
+    const original = await serializeDataset(ds);
+    const doc = new EventDoc(`${url}#it`, ds, DataFactory);
+    doc.timeZone = zoned.timeZone;
+    expect(parseEvent(url, await deserializeDataset(await serializeDataset(ds), url))).toEqual(
+      zoned,
+    );
+    expect(doc.text(`${NS.SCHEDULING}timeZone`)).toBe(zoned.timeZone);
+    doc.timeZone = undefined;
+    expect(doc.timeZone).toBeUndefined();
+    expect(await serializeDataset(ds)).toBe(original);
+    expect(parseEvent(url, buildEvent(url, zoned))).toEqual(zoned);
+  });
+  it("keeps zone-free event serialization unchanged", async () => {
+    expect(
+      await serializeDataset(buildEvent(url, { name: "Plain", start: "2026-03-01" })),
+    ).toMatchInlineSnapshot(`
+      "@prefix schema: <https://schema.org/>.
+      @prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+      @prefix dct: <http://purl.org/dc/terms/>.
+      @prefix solid: <http://www.w3.org/ns/solid/terms#>.
+
+      <https://pod.example/calendar/work/event.ttl#it> a sched:CalendarEvent, schema:Event;
+          schema:name "Plain";
+          sched:summary "Plain";
+          schema:startDate "2026-03-01"^^xsd:date;
+          sched:startTime "2026-03-01"^^xsd:date.
+      "
+    `);
+  });
   it("round-trips event, recurrence and both reminder kinds through Turtle", async () => {
     const ds = buildEvent(url, event);
     const parsed = parseEvent(url, await deserializeDataset(await serializeDataset(ds), url));
@@ -239,6 +272,27 @@ describe("typed RDF model", () => {
 });
 
 describe("validation", () => {
+  it.each(["UTC", "America/New_York", "Europe/London"])("accepts IANA zone %s", (timeZone) => {
+    expect(() => validateEvent({ ...event, timeZone })).not.toThrow();
+  });
+  it.each([
+    "Unknown/Zone",
+    "",
+    "+01:00",
+    "-05:00",
+    "America/New_York\n",
+    "Europe/London\u0000",
+    "Europe/London\u007f",
+    "Europe/London\u0085",
+    null,
+  ])("rejects invalid event zone %j on writing and reading", (timeZone) => {
+    expect(() => buildEvent(url, { ...event, timeZone } as CalendarEvent)).toThrow(
+      "Invalid IANA time zone",
+    );
+    const ds = buildEvent(url, event);
+    new EventDoc(`${url}#it`, ds, DataFactory).timeZone = String(timeZone);
+    expect(() => parseEvent(url, ds)).toThrow("Invalid IANA time zone");
+  });
   it("validates civil dates without rollover", () => {
     expect(asDate("2024-02-29").toISOString()).toBe("2024-02-29T00:00:00.000Z");
     for (const value of ["2026-02-29", "2026-13-01", "2026-1-01", new Date(NaN)])
@@ -291,6 +345,27 @@ describe("validation", () => {
 });
 
 describe("recurrence and reminders", () => {
+  it.each([
+    ["2026-03-01T14:00Z", ["2026-03-01T14:00Z", "2026-03-08T13:00Z", "2026-03-15T13:00Z"]],
+    ["2026-10-25T13:00Z", ["2026-10-25T13:00Z", "2026-11-01T14:00Z", "2026-11-08T14:00Z"]],
+  ] as const)("keeps New York 09:00 across DST from %s while viewed in London", (start, instants) => {
+    const series: CalendarEvent = {
+      name: "New York weekly",
+      start: date(start),
+      end: new Date(+date(start) + 3600000),
+      timeZone: "America/New_York",
+      recurrence: { frequency: "WEEKLY", count: 3 },
+    };
+    const range = [date("2026-01-01Z"), date("2027-01-01Z")] as const;
+    const expanded = expandEvent(series, ...range, "Europe/London");
+    expect(expanded.map((event) => event.start)).toEqual(instants.map(date));
+    expect(expandEvent(series, ...range, "Asia/Tokyo")).toEqual(expanded);
+    for (const occurrence of expanded) {
+      expect(wallClock(asDate(occurrence.start), "America/New_York").getUTCHours()).toBe(9);
+      expect(+asDate(occurrence.end as Date) - +asDate(occurrence.start)).toBe(3600000);
+      expect(occurrence.timeZone).toBe(series.timeZone);
+    }
+  });
   it("expands explicit weekdays and month selectors", () => {
     expect(
       toRRule({ frequency: "WEEKLY", byDay: ["MO", "WE"], count: 4 }, "2026-03-02")

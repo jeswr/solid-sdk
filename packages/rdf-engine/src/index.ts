@@ -3,6 +3,10 @@
 import { createEngine, type Runtime } from "./engine.js";
 import type { RdfEngine, RdfEngineOptions } from "./types.js";
 
+export type { Quad } from "@rdfjs/types";
+// Share the engine's existing RDF factory with index feeders without another dependency.
+export { DataFactory } from "n3";
+
 export {
   FormGraphUnsupportedError,
   PolicyIdentifierCollisionError,

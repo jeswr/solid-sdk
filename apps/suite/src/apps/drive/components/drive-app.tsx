@@ -4,7 +4,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
- * Drive's app frame: the account session, Drive state, the interim suite
+ * Drive's app frame: the account session, Drive state, the shared suite
  * frame with Drive's sidebar, the details pane, dialogs, preview, upload dock,
  * toasts and Drive-scope keyboard shortcuts (04-drive §8).
  */
@@ -12,8 +12,8 @@
 import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
 import { measureUsage, purgeExpired, trashFolderOf } from "../lib/operations/operations";
 import { DriveFocusBoundary } from "../state/app-focus";
 import { DriveProvider, DriveRootDiscoveryError, useDrive } from "../state/drive-context";
@@ -27,7 +27,7 @@ import { DriveSidebar, NewMenu } from "./sidebar";
 import { UploadDock } from "./upload-dock";
 
 function DriveChrome({ children }: { children: ReactNode }) {
-  const { client, driveRoot, rootError, changes, invalidate } = useDrive();
+  const { client, driveRoot, rootError, retryRoot, changes, invalidate } = useDrive();
   const ui = useDriveUi();
   const [usage, setUsage] = useState<number>();
   const [usageFailed, setUsageFailed] = useState(false);
@@ -119,7 +119,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
   }, [currentFolder, requestUpload, openDialog, setDetailsOpen]);
 
   return (
-    <SuiteFrame
+    <AppFrame
       app="drive"
       sidebar={
         <DriveSidebar
@@ -146,13 +146,13 @@ function DriveChrome({ children }: { children: ReactNode }) {
     >
       {rootError ? (
         <div className="drv-state" role="alert">
-          <h1>Can't open your Drive</h1>
+          <AppHeading>Can't open your Drive</AppHeading>
           <p>
             {rootError instanceof DriveRootDiscoveryError
               ? rootError.message
               : errorMessage(rootError, "The storage didn't respond.")}
           </p>
-          <Button variant="outline" onClick={() => location.reload()}>
+          <Button variant="outline" onClick={retryRoot}>
             Retry
           </Button>
         </div>
@@ -165,7 +165,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
       <UploadDock />
       <DriveDialogs />
       <PreviewDialog />
-    </SuiteFrame>
+    </AppFrame>
   );
 }
 
@@ -174,7 +174,7 @@ function SessionGate({ children }: { children: ReactNode }) {
   if (state.status === "signed-out") {
     return (
       <div className="drv-boot" role="status">
-        <h1>Sign in to open your Drive</h1>
+        <AppHeading>Sign in to open your Drive</AppHeading>
         <p>Sign-in is not available in this preview build.</p>
       </div>
     );
@@ -189,7 +189,7 @@ function SessionGate({ children }: { children: ReactNode }) {
   if (state.status === "error") {
     return (
       <div className="drv-boot" role="alert">
-        <h1>Can't open your Drive</h1>
+        <AppHeading>Can't open your Drive</AppHeading>
         <p>
           {state.mode === "extension"
             ? "This browser couldn't open your pod through the Solid extension."
@@ -212,11 +212,13 @@ function SessionGate({ children }: { children: ReactNode }) {
 
 export function DriveApp({ children }: { children: ReactNode }) {
   return (
-    <PodSessionProvider>
-      <DriveFocusBoundary>
-        <SessionGate>{children}</SessionGate>
-        <Toaster position="bottom-center" />
-      </DriveFocusBoundary>
-    </PodSessionProvider>
+    <AppSessionGuard>
+      <PodSessionProvider>
+        <DriveFocusBoundary>
+          <SessionGate>{children}</SessionGate>
+          <Toaster position="bottom-center" />
+        </DriveFocusBoundary>
+      </PodSessionProvider>
+    </AppSessionGuard>
   );
 }

@@ -41,6 +41,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       {...props}
+      toastOptions={{
+        ...props.toastOptions,
+        classNames: {
+          // Sonner's own dark-theme button colours fail AA contrast on the popover surface.
+          actionButton: "bg-primary! text-primary-foreground!",
+          cancelButton: "bg-secondary! text-secondary-foreground!",
+          ...props.toastOptions?.classNames,
+        },
+      }}
     />
   );
 };

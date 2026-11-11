@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
@@ -19,6 +21,8 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     "u",
     "s",
     "strike",
+    "ins",
+    "del",
     "sub",
     "sup",
     "mark",
@@ -57,6 +61,14 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     parseStyleAttributes: false,
     transformTags: {
       "*": (tagName, attribs) => {
+        if (
+          (tagName === "ins" || tagName === "del") &&
+          Object.keys(attribs).some((key) => key.startsWith("data-suggestion-"))
+        ) {
+          // A span with no attributes unwraps the external revision semantics,
+          // retaining text without importing authorship or a strike mark.
+          return { tagName: "span", attribs: {} };
+        }
         if (/^h[4-6]$/.test(tagName)) tagName = "h3";
         if (!allowedTags.includes(tagName)) reportSkipped(skipped, "Unsupported HTML");
         const style = sanitiseStyles(attribs.style ?? "");

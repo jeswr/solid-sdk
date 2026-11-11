@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Structural MCP DESIGN §3 seam; compatible with @jeswr/solid-mcp's PodPort. */
 export interface PodPort {
   readonly root: string;
   readonly webId: string;
   read(url: string): Promise<{ body: Uint8Array; contentType: string; etag?: string }>;
+  /** Unique, unanchored server-advertised WAC ACL, including on HTTP 404. ACP is unsupported. */
+  head?(url: string): Promise<{ acl?: string }>;
   list(container: string): Promise<{ url: string; isContainer: boolean }[]>;
   write(
     url: string,

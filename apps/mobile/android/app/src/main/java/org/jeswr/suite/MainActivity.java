@@ -3,6 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 package org.jeswr.suite;
 
+import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.webkit.WebView;
@@ -28,6 +29,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SuitePushPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
+        registerPlugin(SuiteFilesPlugin.class);
         registerPlugin(SuiteSecureStorePlugin.class);
         super.onCreate(savedInstanceState);
     }
@@ -40,6 +42,12 @@ public class MainActivity extends BridgeActivity {
             return;
         }
         super.load();
+        // MOBILE_DEBUG=1 writes webContentsDebuggingEnabled into capacitor.config.json and Capacitor
+        // has just applied it process-wide. A release build must never honour it, whatever config
+        // was bundled, so the installed app's debuggable flag decides (sst-8wx.17).
+        if ((getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) == 0) {
+            WebView.setWebContentsDebuggingEnabled(false);
+        }
         WebView webView = bridge.getWebView();
         if (usesProxyInjection()) {
             // addDocumentStartJavaScript threw and Capacitor fell back to the proxy: fail closed.

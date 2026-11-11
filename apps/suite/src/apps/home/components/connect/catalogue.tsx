@@ -4,6 +4,7 @@ import { FilterChips } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import { filterCatalogue } from "../../lib/connect/catalogue";
 import { relativeSync } from "../../lib/connect/copy";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
@@ -63,7 +64,7 @@ export function ConnectCatalogue() {
   return (
     <div className="hm-connect hm-connect-page">
       <header>
-        <h1>Connect services</h1>
+        <AppHeading>Connect services</AppHeading>
         <p>Bring your data from other services into your pod.</p>
       </header>
       {/* Always mounted, so going offline is announced when the note appears. */}

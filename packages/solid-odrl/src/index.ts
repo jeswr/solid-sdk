@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * `@jeswr/solid-odrl` — express + evaluate ODRL usage-control policies for Solid
  * resources and agent interactions (M3 of the agentic-Solid roadmap: "ODRL contract
@@ -112,6 +113,7 @@ export {
   ODRL_ACTIONS,
   ODRL_GRANT_USE,
   ODRL_INLINE_CONTEXT,
+  ODRL_IS_PART_OF,
   ODRL_NEXT_POLICY,
   ODRL_TRANSFER,
   ODRLD,

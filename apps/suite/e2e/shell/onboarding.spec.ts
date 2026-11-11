@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, test } from "@playwright/test";
@@ -12,7 +13,7 @@ const demoAccount = {
   kind: "demo",
 };
 const PREFS_KEY = `suite.prefs.v1.${demoAccount.id}`;
-const START = /\/drive(\/my)?$/;
+const START = /\/home$/;
 
 async function accessible(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
@@ -106,7 +107,7 @@ test("every step keeps Skip, and the theme follows the appearance preference", a
     "href",
     "/drive/my",
   );
-  await expect(page.getByRole("link", { name: /^Start fresh/ })).toHaveAttribute("href", "/drive");
+  await expect(page.getByRole("link", { name: /^Start fresh/ })).toHaveAttribute("href", "/home");
   await capture(page, "onboarding-data", info.project.name);
   await page.getByRole("link", { name: /^Import files/ }).click();
   await expect(page).toHaveURL(/\/drive\/my$/);

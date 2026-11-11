@@ -114,7 +114,7 @@ function Rail({ app }: { app: SuiteAppId }) {
   );
 }
 
-function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
+export function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["search"]> }) {
   const router = useRouter();
   const [value, setValue] = useState(search.query ?? "");
   useEffect(() => setValue(search.query ?? ""), [search.query]);

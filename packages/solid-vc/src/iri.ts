@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // IRI hardening for the n3.Writer / RDFC serialisation path.
@@ -97,7 +98,7 @@
 //                     front, so a strip-divergent http(s) value that `safeHttpIri`
 //                     rejected can NOT be resurrected by the did:/urn: fallback.
 
-import { escapeIri } from "@jeswr/rdf-serialize";
+import { escapeIri, safeHttpIri as sharedSafeHttpIri } from "@jeswr/rdf-serialize";
 
 /**
  * `escapeIri` — the scheme-agnostic Turtle-IRIREF injection-neutraliser — now lives
@@ -145,61 +146,13 @@ function hasUrlStripDivergence(value: string): boolean {
 }
 
 /**
- * VALIDATE + harden a value that must be an http(s) IRI, LEXICAL-PRESERVING, with the
- * VALIDATED string byte-identical to the RETURNED string.
- *
- * Returns `undefined` (⇒ the caller DROPS the triple) when the value:
- *  - is not a string; or
- *  - is STRIP-DIVERGENT — it carries a byte `new URL` would silently trim/strip
- *    (leading/trailing control-or-space, or an embedded tab/LF/CR), so it is not in
- *    its exact lexical form; or
- *  - is not a parseable http(s) URL once escaped; or
- *  - has NO authority (empty/absent host — `https:///foo`, `http:////foo`,
- *    authority-less `https:example.com`, `https://?x`), which is a malformed,
- *    non-dereferenceable http(s) IRI.
- *
- * For a valid value the ORIGINAL lexical form is preserved byte-for-byte (default
- * port, host case, empty path, percent-encoding all kept — NO `new URL().href`
- * canonicalisation); injection is neutralised by `escapeIri`, which percent-encodes
- * the full Turtle-IRIREF forbidden set (C0 controls + space + `<>"{}|^` + backtick +
- * backslash), a superset of the breakout characters.
- *
- * CRITICAL: the value validated by `new URL()` is the ESCAPED (returned) string, NOT
- * the raw input — so validated-string === returned-string. Validating `new URL(value)`
- * while returning `escapeIri(value)` was the fixed mismatch (suite-tracker-c77v): the
- * URL parser strips bytes that `escapeIri` percent-encodes, so the checked and the
- * signed IRIs diverged. `new URL` is used ONLY to VALIDATE (reject a non-http(s) scheme
- * / unparseable value) — its canonicalised `.href` is intentionally discarded. This
- * keeps the single suite-wide lexical-preserving IRI invariant (see the module header):
- * the signed RDF lowering, the JSON-LD projection, and any external W3C verifier all
- * agree on the issuer/type/relatedResource IRI bytes.
+ * Preserve VC's rejection of URL-strip-divergent input, then delegate to the
+ * audited lexical HTTP guard. See QUESTIONS.md Q1 and the differential tests.
+ * @deprecated Import from @jeswr/rdf-serialize, retaining the VC strip-divergence pre-check.
  */
 export function safeHttpIri(value: string | undefined): string | undefined {
-  if (typeof value !== "string") return undefined;
-  // FAIL CLOSED on any input `new URL` would TRIM or STRIP: if the parser silently
-  // removes an edge control-or-space or an embedded tab/LF/CR, the string it VALIDATES
-  // differs from the string we EMIT into the signed graph. Require the exact lexical
-  // form (see hasUrlStripDivergence).
-  if (hasUrlStripDivergence(value)) return undefined;
-  // Neutralise injection LEXICALLY, then validate THE RETURNED STRING — `new URL(escaped)`,
-  // never `new URL(value)` — so validated === returned. `.href` is discarded (lexical identity).
-  const escaped = escapeIri(value);
-  let u: URL;
-  try {
-    u = new URL(escaped);
-  } catch {
-    return undefined;
-  }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return undefined;
-  // Require a NON-EMPTY authority. An http(s) IRI with no host — `https:///foo`,
-  // `http:////foo`, authority-less `https:example.com`, or `https://?x` — parses under
-  // `new URL` but is malformed: signing an issuer / verificationMethod with no
-  // dereferenceable authority is a fail-OPEN. Reject it HERE (the lexical
-  // `[^/?#]`-after-`//` test rejects the empty/absent authority, `u.host === ""` is
-  // belt-and-suspenders) so it is not returned as a usable http(s) IRI. Aligns with the
-  // canonical `@jeswr/rdf-serialize` safeHttpIri authority clause.
-  if (!/^https?:\/\/[^/?#]/i.test(escaped) || u.host === "") return undefined;
-  return escaped;
+  if (typeof value === "string" && hasUrlStripDivergence(value)) return undefined;
+  return sharedSafeHttpIri(value);
 }
 
 /** Whether a string is an absolute IRI (an RFC-3986 scheme followed by `:`). */

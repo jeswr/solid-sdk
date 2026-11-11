@@ -40,14 +40,17 @@ function Frame({
   sidebarContent,
   detailsContent,
   characterShortcuts,
+  controlledDetails,
 }: {
   initial?: ShellPreferences;
   hasDetails?: boolean;
   sidebarContent?: ReactNode;
   detailsContent?: ReactNode;
   characterShortcuts?: boolean;
+  controlledDetails?: boolean;
 }) {
   const [preferences, setPreferences] = useState(initial);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   return (
     <ShellFrame
       pageTitle="My Drive"
@@ -70,6 +73,7 @@ function Frame({
               title: "Budget",
               metadata: [{ label: "Owner", value: "You" }],
               children: detailsContent,
+              ...(controlledDetails ? { open: detailsOpen, onOpenChange: setDetailsOpen } : {}),
             },
           }
         : {})}
@@ -89,6 +93,11 @@ function Frame({
         setPreferences(value);
       }}
     >
+      {controlledDetails && (
+        <button type="button" aria-pressed={detailsOpen} onClick={() => setDetailsOpen(true)}>
+          Show app details
+        </button>
+      )}
       <p>Files saved to your pod</p>
       <textarea aria-label="Editor" />
     </ShellFrame>
@@ -124,6 +133,39 @@ async function accessible() {
 }
 
 describe("shell layout", () => {
+  it("gives controlled details priority over a saved sidebar and syncs switching sheets", () => {
+    desktop = false;
+    render(<Frame controlledDetails initial={{ sidebarOpen: true, detailsOpen: false }} />);
+    const show = screen.getByRole("button", { name: "Show app details", hidden: true });
+    expect(screen.getByRole("dialog", { name: "Drive sections" })).toBeTruthy();
+    // An app can open details programmatically while a saved sidebar sheet is active.
+    fireEvent.click(show);
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Details" })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Details" }), { key: "[" });
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Drive sections" })).toBeTruthy();
+    expect(show.getAttribute("aria-pressed")).toBe("false");
+  });
+  it.each([
+    false,
+    true,
+  ])("opens, closes through the shell and reopens controlled details (desktop: %s)", async (wide) => {
+    desktop = wide;
+    render(<Frame controlledDetails initial={{ sidebarOpen: false, detailsOpen: false }} />);
+    const show = screen.getByRole("button", { name: "Show app details" });
+    expect(screen.queryByRole("complementary")).toBeNull();
+    fireEvent.click(show);
+    expect(screen.getByRole("complementary", { name: "Budget" })).toBeTruthy();
+    expect(show.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Close details" }));
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
+    expect(show.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(show);
+    expect(screen.getByRole("complementary", { name: "Budget" })).toBeTruthy();
+    expect(show.getAttribute("aria-pressed")).toBe("true");
+    expect(update.mock.calls.every(([value]) => value.detailsOpen === false)).toBe(true);
+  });
   it("shows TopBar and DetailsPane tooltips along the keyboard path without toggling regions", async () => {
     render(<Frame />);
     const user = userEvent.setup();

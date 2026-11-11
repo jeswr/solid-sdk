@@ -1,6 +1,6 @@
 ---
 name: pod-access
-description: Use when maintaining @jeswr/pod-access Solid WAC/ACP or LWS ODRL sharing, access grants and requests, offline policy translation, bounded access proofs or notification delivery.
+description: Use when maintaining @jeswr/pod-access Solid WAC/ACP or LWS ODRL sharing, access grants and requests, offline policy translation, bounded access proofs or notification delivery and inbox reading.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -110,7 +110,7 @@ The migrator owns HTTP, public group snapshots, review decisions, effective targ
 scope checks, conditional persistence and execution. Serializing a translated policy alone does
 not establish safe migration. Run its regression suite when changing the translation core.
 
-## Notification delivery
+## Notification delivery and reading
 
 `createNotify({ fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
 `notify(agentWebId, activity)`. Supply the pod-auth fetch and an explicit actor WebID.
@@ -118,13 +118,25 @@ Builders return templates without actor: `shareNotification`, `assignmentAnnounc
 `mentionNotification`, `roomInvitation`. Preserve Tasks §5.7's assignment summary exactly.
 Delivery failures return structured values and never throw. Do not change permissions here.
 
-Discovery caches exact recipient WebIDs for ten minutes within a notifier instance; recreate
-the notifier on account/session changes. Known LWS recipients use `recipientProtocol(webId)`;
+Discovery caches exact WebIDs for ten minutes, shared by notifiers/readers with identical
+fetch, pinningFetch and clock functions. Supply fresh transport wrappers on account/session changes. Known LWS recipients use `recipientProtocol(webId)`;
 never infer the recipient's protocol from the sender's storage. LWS media types also short-circuit.
 Only one unambiguous NamedNode inbox on the exact WebID subject is accepted. Profiles and
 inboxes use public HTTPS and refuse redirects. Node hostname targets require an authenticated
 `pinningFetch`; never silently label an ordinary auth fetch as DNS-pinned. Browsers retain the
 guard's documented DNS limitation. All parsing goes through fetch-rdf, with remote contexts refused.
+
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` wraps the client reader.
+`inbox(webId)` returns the owner's inbox or null, including LWS profiles. `list(inboxUrl,
+{ signal? })` returns `InboxNotification[]` newest first, undated last, deterministic URL ties.
+Reuse the shared pure scope/parser/ordering helpers and discovery cache; never import the
+Node transport into the client entry. Fetch at most maxItems children (default 50) with at
+most six requests active. Refuse foreign/outside/nested/query/fragment/encoded-slash members.
+Unreadable members are skipped; container 401/403/404 and parse failures return []; other
+container failures reject. Aborts reject with AbortError and start no further requests.
+There is no mark-read/delete API. `notificationKind(n)` maps Announce share summaries before
+Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
+every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
 
 For `./requests-solid`, preserve resolve-once target pinning before the Approving CAS, deterministic
 grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-only snapshot recovery.

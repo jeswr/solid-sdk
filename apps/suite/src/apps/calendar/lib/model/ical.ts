@@ -2,9 +2,16 @@
 // AUTHORED-BY Codex GPT-6
 // Calendar-only port of Pod Manager ical.ts: TEXT escaping, unfolding and UTF-8 folding.
 import { RRule } from "rrule";
+import { dateLine } from "../ics/dates";
 import { fromWallClock, wallClock } from "./recurrence";
 import type { CalendarDate, CalendarEvent, RecurrenceRule, Reminder, Weekday } from "./types";
-import { asDate, durationMilliseconds, validateEvent, validateRule } from "./validation";
+import {
+  asDate,
+  durationMilliseconds,
+  validateEvent,
+  validateRule,
+  validateTimeZone,
+} from "./validation";
 
 function escapeText(value: string): string {
   return value
@@ -113,9 +120,16 @@ export function exportICal(opts: {
     "CALSCALE:GREGORIAN",
   ];
   const prop = (name: string, value: string) => lines.push(`${name}:${escapeText(value)}`);
-  const dateProp = (name: string, value: CalendarDate) => {
+  const dateProp = (name: string, value: CalendarDate, timeZone?: string) => {
     if (typeof value === "string") lines.push(`${name};VALUE=DATE:${formatICalDate(value)}`);
-    else {
+    else if (timeZone !== undefined) {
+      const wall = wallClock(value, timeZone);
+      // Local ICS times select the first overlap instant. Never silently change a later one.
+      if (+fromWallClock(wall, timeZone) !== +value)
+        throw new TypeError("TZID export cannot represent a later overlap instant");
+      formatICalDate(wall);
+      lines.push(dateLine(name, { value: wall.toISOString().slice(0, 19), tzid: timeZone }));
+    } else {
       // We cannot supply VTIMEZONE definitions or encode later overlap instants
       // in local ICS time. Reject instead of changing a named-zone schedule.
       if (zone !== "UTC")
@@ -134,8 +148,8 @@ export function exportICal(opts: {
     const stamp = new Date(Math.floor(+(opts.now ?? new Date()) / 1000) * 1000);
     lines.push(`DTSTAMP:${formatICalDate(stamp)}`);
     prop("SUMMARY", event.name);
-    dateProp("DTSTART", event.start);
-    if (event.end !== undefined) dateProp("DTEND", event.end);
+    dateProp("DTSTART", event.start, event.timeZone);
+    if (event.end !== undefined) dateProp("DTEND", event.end, event.timeZone);
     if (event.location !== undefined) prop("LOCATION", event.location);
     if (event.description !== undefined) prop("DESCRIPTION", event.description);
     if (event.recurrence) {
@@ -148,7 +162,7 @@ export function exportICal(opts: {
       for (const date of event.recurrence.exceptDate ?? []) {
         if (typeof date !== typeof event.start)
           throw new TypeError("ICS DTSTART and EXDATE must use the same date kind");
-        dateProp("EXDATE", date);
+        dateProp("EXDATE", date, event.timeZone);
       }
     }
     for (const reminder of event.reminders ?? []) {
@@ -177,7 +191,7 @@ interface Property {
 }
 export interface ImportedICal {
   events: CalendarEvent[];
-  /** TZID contexts aligned with events. Keep alongside the series until timezone persistence is specified. */
+  /** Source TZIDs aligned with events, also persisted as each event's timeZone. */
   timeZones: (string | undefined)[];
   warnings: string[];
   skipped: number;
@@ -268,9 +282,13 @@ function parseEventProperties(
     throw new TypeError("Unsupported ICS event property");
   const start = get("DTSTART");
   if (!start) throw new TypeError("ICS event needs DTSTART");
-  const zone = (p: Property) => /(?:^|;)TZID="?([^;"\r\n]+)"?/i.exec(p.params)?.[1];
+  const zone = (p: Property) => /(?:^|;)TZID="?([^;"]*)"?/i.exec(p.params)?.[1];
+  const timeZone = zone(start);
+  if (timeZone !== undefined) validateTimeZone(timeZone);
   const date = (p: Property): CalendarDate => {
-    const value = parseICalDate(p.value, zone(p) ?? floatingTimeZone);
+    const timeZone = zone(p);
+    if (timeZone !== undefined) validateTimeZone(timeZone);
+    const value = parseICalDate(p.value, timeZone ?? floatingTimeZone);
     if (/(?:^|;)VALUE=DATE(?:;|$)/i.test(p.params) !== (typeof value === "string"))
       throw new TypeError("ICS date kind mismatch");
     return value;
@@ -305,6 +323,7 @@ function parseEventProperties(
   const event: CalendarEvent = {
     name: unescapeText(get("SUMMARY")?.value ?? ""),
     start: date(start),
+    timeZone,
     end: end ? date(end) : undefined,
     location: get("LOCATION") && unescapeText((get("LOCATION") as Property).value),
     description: get("DESCRIPTION") && unescapeText((get("DESCRIPTION") as Property).value),
@@ -323,5 +342,5 @@ function parseEventProperties(
   )
     throw new TypeError("Unsupported recurring ICS DTSTART in a timezone gap");
   validateEvent(event);
-  return { event, timeZone: zone(start) };
+  return { event, timeZone };
 }

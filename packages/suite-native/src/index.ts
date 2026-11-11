@@ -26,6 +26,16 @@ export {
   SuiteNativeError,
   UserCancelledError,
 } from "./errors.js";
+export {
+  clearPdfPreviews,
+  openPdf,
+  PDF_PREVIEW_CHUNK_BYTES,
+  PDF_PREVIEW_MAX_BYTES,
+  PDF_PREVIEW_NAME_CODE_POINTS,
+  PdfPreviewError,
+  type PdfPreviewErrorCode,
+  type PdfPreviewPlugin,
+} from "./pdf-preview.js";
 export { type CapacitorRuntime, isNativeApp, type Platform, platform } from "./platform.js";
 export {
   createSecureStore,

@@ -28,6 +28,15 @@ export function signInProviders(): SignInProvider[] {
   ];
 }
 
+/** The providers a WebID lists, named from the directory where it knows them. */
+export function issuerChoiceProviders(issuers: readonly string[]): SignInProvider[] {
+  const known = signInProviders();
+  return issuers.map((issuer, index) => {
+    const match = known.find((provider) => sameIssuer(provider.issuer, issuer));
+    return match ?? { id: `listed-${index}`, issuer, name: new URL(issuer).host };
+  });
+}
+
 export function LoginScreen() {
   const {
     loginWithAddress,
@@ -40,16 +49,23 @@ export function LoginScreen() {
     recentProviders,
     retry,
     startupFailed,
+    issuerChoice: choice,
   } = useSession();
   return (
     <main className="login-screen">
       <fieldset className="login-sign-in" disabled={!ready}>
         <legend className="sr-only">Drive sign-in</legend>
         <SignInCard
+          key={choice ? `choice:${choice.webId}` : "sign-in"}
           accountsTitle="Choose an account"
-          subtitle="to continue to Drive"
+          subtitle={
+            choice
+              ? `Choose the provider for ${new URL(choice.webId).host}`
+              : "to continue to Drive"
+          }
           title="Sign in"
-          providers={signInProviders()}
+          defaultView={choice ? "sign-in" : undefined}
+          providers={choice ? issuerChoiceProviders(choice.issuers) : signInProviders()}
           recentAccounts={recentAccounts}
           recentProviders={recentProviders}
           pending={pending}

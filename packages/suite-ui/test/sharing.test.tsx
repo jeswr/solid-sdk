@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { Dialog } from "radix-ui";
 import { useEffect, useState } from "react";
@@ -409,6 +410,38 @@ describe("people validation", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it("lets Tab leave empty suggestions without the dialog stealing focus on blur", async () => {
+    const user = userEvent.setup();
+    render(
+      <Dialog.Root defaultOpen>
+        <Dialog.Portal>
+          <Dialog.Content onOpenAutoFocus={(event) => event.preventDefault()}>
+            <Dialog.Title>Share a file</Dialog.Title>
+            <Dialog.Description>Choose who can access this file.</Dialog.Description>
+            <Picker people={[]} />
+            <select aria-label="Who can access">
+              <option>Restricted</option>
+            </select>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>,
+    );
+    const input = screen.getByRole("combobox", { name: "Add people" });
+    act(() => input.focus());
+    expect(screen.getByText("No more contacts. Enter an account ID to add someone.")).toBeDefined();
+    // Chromium can deliver mutations between native Tab's blur and its next focus.
+    // Removing a suggestion status here makes Radix focus the dialog and restart Tab.
+    await act(async () => input.blur());
+    expect(document.activeElement).toBe(document.body);
+    act(() => input.focus());
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Add person" }));
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Who can access" }));
+    await user.tab({ shift: true });
+    await user.tab({ shift: true });
+    expect(document.activeElement).toBe(input);
   });
   it("makes sharing read-only offline and explains why", () => {
     render(<Picker state={{ kind: "offline", cached: true }} />);
