@@ -10,6 +10,7 @@ import {
   type ControlStatementClaims,
   issueControlStatement,
   readControlClaims,
+  readControlVerificationMethod,
   verifyControlStatement,
 } from "../src/index.js";
 import { Node, node, RDF_TYPE, readProof, trig, writeProof } from "../src/rdf.js";
@@ -92,6 +93,13 @@ it.each([
   expect(await readControlClaims(doc, claims.id)).toEqual(claims);
   const { claims: graph } = readProof(await parseRdf(doc, "application/trig"), claims.id);
   expect(fromRdf(graph, claims.id)).toEqual({ type: "control-statement", ...claims });
+});
+it("reads the proof's verification method for key management, and nothing from unsigned input", async () => {
+  const doc = await issueControlStatement(statement, key, NOW);
+  const method = await readControlVerificationMethod(doc, statement.id);
+  expect(method).toBe(key.verificationMethod);
+  expect(await readControlVerificationMethod(doc, "https://other.example/control")).toBeUndefined();
+  expect(await readControlVerificationMethod("not trig", statement.id)).toBeUndefined();
 });
 it("round trips Halt and Resume without optional claims", async () => {
   for (const kind of ["Halt", "Resume"] as const) {

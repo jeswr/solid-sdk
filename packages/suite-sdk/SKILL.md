@@ -3,7 +3,7 @@ name: suite-sdk
 description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-sdk
 
@@ -13,6 +13,11 @@ pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell
 Do not infer that the other planned SDK facade APIs are implemented.
 
 ## Offline (`./offline`)
+
+Also re-export `createPageCache`, `PageCache`, `PageCacheOptions`, `purgeForWebId`
+and `cacheProvenance` from solid-offline. These are thin exports: cache policy stays
+in solid-offline. Native consumers supply their existing live session fence, create/start
+after commit, and purge on account switch and every sign-out path. Web keeps its worker.
 
 Re-export `createOutbox`, `withOutbox`, `mergeRdf`, all outbox types and `useOfflineStatus`
 from solid-offline. `useOutbox(outbox: Outbox | null)` returns

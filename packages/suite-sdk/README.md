@@ -1,3 +1,4 @@
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/suite-sdk
@@ -40,6 +41,12 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 `typecheck` and `test` scripts; tests enforce 100% coverage.
 
 ## Offline (`SDK-APP-08`)
+
+The same entry re-exports `createPageCache`, `PageCache`, `PageCacheOptions`,
+`purgeForWebId` and `cacheProvenance` for native session integration (MOB-P3e).
+The caller supplies the bounded session fetch and live `usable()` fence, starts change
+subscriptions after commit, and purges on account switch/logout. See the
+[page cache contract](../solid-offline/README.md#native-page-cache-mob-p3e).
 
 `@jeswr/suite-sdk/offline` re-exports `createOutbox`, `withOutbox`, `mergeRdf`, the outbox
 types and `useOfflineStatus`. `useOutbox(outbox: Outbox | null)` returns
