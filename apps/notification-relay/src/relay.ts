@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { Identity } from "./auth.js";
+import { createPushApi } from "./push.js";
+import type { PushSink } from "./push-payload.js";
 import { createResourceTokenVerifier, mobileClientPolicy } from "./resource-auth.js";
 import { createWebhookVerifier, safeUrl } from "./signatures.js";
 import { InMemoryRelayStore, type RelayStore } from "./store.js";
@@ -55,6 +58,11 @@ export function createRelay(options: {
   /** Push routes remain closed until the mobile Client ID Document is configured. */
   mobileClientId?: string;
   store?: RelayStore;
+  pushSink?: PushSink;
+  /** Push admission limits; see createPushApi. */
+  maxPushInstallations?: number;
+  unattachedPushLifetimeMs?: number;
+  maxPushInstallationsPerWebId?: number;
   allowedOrigins?: readonly string[];
   now?: () => number;
   allowInsecureLoopback?: boolean;
@@ -63,10 +71,11 @@ export function createRelay(options: {
   if (base.pathname !== "/" || base.search || base.hash)
     throw new Error("Relay URL must be an origin");
   const now = options.now ?? Date.now;
+  const store = options.store ?? new InMemoryRelayStore(now);
   const verifyResourceToken = createResourceTokenVerifier({
     publicUrl: base.origin,
     outboundFetch: options.fetch,
-    store: options.store ?? new InMemoryRelayStore(now),
+    store,
     now,
     allowLoopbackForTests: options.allowInsecureLoopback,
   });
@@ -78,6 +87,28 @@ export function createRelay(options: {
     now,
     allowLoopback: options.allowInsecureLoopback,
   });
+  const push = createPushApi({
+    publicOrigin: base.origin,
+    store,
+    now,
+    pushSink: options.pushSink,
+    allowLoopback: options.allowInsecureLoopback,
+    maxInstallations: options.maxPushInstallations,
+    unattachedLifetimeMs: options.unattachedPushLifetimeMs,
+    maxInstallationsPerWebId: options.maxPushInstallationsPerWebId,
+    verifyResourceToken,
+    verifyWebhook: verify,
+    authorize: async (request) => {
+      if (!pushPolicy) throw new Error("Push is not configured");
+      const identity = await verifyResourceToken(request);
+      if (!pushPolicy(identity)) throw new Error("Unauthorized");
+      return identity;
+    },
+  });
+  const sweep = setInterval(() => {
+    void push.expire().catch(() => {});
+  }, 60_000);
+  sweep.unref();
   const registrations = new Map<string, Registration>();
   let stopped = false;
   function drop(id: string, registration: Registration) {
@@ -123,29 +154,8 @@ export function createRelay(options: {
         );
         return respond(204);
       }
-      if (url.pathname.startsWith("/push/")) {
-        // All skeletons fail closed on tokens for now; P3 adds device-only cleanup auth.
-        try {
-          // No outbound discovery at all until the mobile Client ID Document is configured.
-          if (!pushPolicy) throw new Error("Push is not configured");
-          if (!pushPolicy(await verifyResourceToken(request))) throw new Error("Unauthorized");
-        } catch {
-          headers.set("www-authenticate", "DPoP");
-          return respond(401);
-        }
-        const routes: [string, RegExp][] = [
-          ["POST", /^\/push\/installations$/u],
-          ["PATCH", /^\/push\/installations\/[^/]+$/u],
-          ["DELETE", /^\/push\/installations\/[^/]+$/u],
-          ["POST", /^\/push\/installations\/[^/]+\/activate$/u],
-          ["PUT", /^\/push\/registrations\/[^/]+$/u],
-          ["DELETE", /^\/push\/registrations\/[^/]+$/u],
-          ["POST", /^\/push\/registrations\/[^/]+\/rotate-inbox$/u],
-        ];
-        if (routes.some(([method, path]) => method === request.method && path.test(url.pathname)))
-          return respond(501);
-        return respond(404);
-      }
+      if (url.pathname.startsWith("/push/") || /^\/inbox\/[^/]+\/[^/]+$/u.test(url.pathname))
+        return push.handle(request, headers);
       if (url.pathname === "/register" && request.method === "POST" && !url.search) {
         const bearer = /^Bearer (\S+)$/u.exec(request.headers.get("authorization") ?? "");
         if (!bearer) return respond(401);
@@ -287,8 +297,10 @@ export function createRelay(options: {
   };
   return {
     handle,
+    invalidatePush: push.invalidate,
     close() {
       stopped = true;
+      clearInterval(sweep);
       for (const [id, registration] of registrations) drop(id, registration);
     },
   };

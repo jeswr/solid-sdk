@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import CryptoKit
 import Foundation
 import Security
@@ -95,15 +96,26 @@ final class PushSigningKey {
     }
 }
 
-/// JWS payload bytes match Android. Hash the exact UTF-8 request body; timestamp is native Unix seconds.
+/// installation-proof+jwt: the exact header and sorted claims the relay verifier admits, byte-identical
+/// to Android. htu is the request URL with no query; jti is fresh per proof so the relay rejects replays.
+/// Hash the exact UTF-8 request body; iat is native Unix seconds.
 enum PushProof {
+    static let header = "{\"alg\":\"ES256\",\"typ\":\"installation-proof+jwt\"}"
     static func sign(method: String, url: String, body: String, timestamp: Int, signer: (Data) throws -> Data) throws -> String {
+        var nonce = Data(count: 16)
+        let status = nonce.withUnsafeMutableBytes { SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }
+        guard status == errSecSuccess else { throw PushCrypto.Failure.invalid }
+        return try sign(method: method, url: url, body: body, timestamp: timestamp, jti: PushCrypto.b64(nonce), signer: signer)
+    }
+    static func sign(method: String, url: String, body: String, timestamp: Int, jti: String, signer: (Data) throws -> Data) throws -> String {
         guard method.range(of: "\\A[A-Z]{1,16}\\z", options: .regularExpression) != nil,
               url.utf8.count <= 2048, let parsed = URLComponents(string: url), parsed.scheme == "https", parsed.host != nil,
-              parsed.user == nil, parsed.password == nil, parsed.fragment == nil, body.utf8.count <= 65536, timestamp >= 0 else { throw PushCrypto.Failure.invalid }
-        let claims: [String: Any] = ["bodyHash": PushCrypto.b64(Data(SHA256.hash(data: Data(body.utf8)))),
-                                   "method": method, "timestamp": timestamp, "url": url]
-        let input = PushCrypto.b64(Data("{\"alg\":\"ES256\"}".utf8)) + "." +
+              parsed.user == nil, parsed.password == nil, parsed.percentEncodedQuery == nil, parsed.fragment == nil,
+              body.utf8.count <= 65536, timestamp >= 0,
+              jti.range(of: "\\A[A-Za-z0-9_-]{1,128}\\z", options: .regularExpression) != nil else { throw PushCrypto.Failure.invalid }
+        let claims: [String: Any] = ["body_sha256": PushCrypto.b64(Data(SHA256.hash(data: Data(body.utf8)))),
+                                     "htm": method, "htu": url, "iat": timestamp, "jti": jti]
+        let input = PushCrypto.b64(Data(header.utf8)) + "." +
             PushCrypto.b64(try JSONSerialization.data(withJSONObject: claims, options: [.sortedKeys, .withoutEscapingSlashes]))
         let signature = try signer(Data(input.utf8))
         guard signature.count == 64 else { throw PushCrypto.Failure.invalid }

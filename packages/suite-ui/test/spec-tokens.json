@@ -513,6 +513,102 @@
     "tag": "graphic"
   },
   {
+    "name": "--project-red",
+    "light": "#b91c1c",
+    "dark": "#f87171",
+    "use": "red project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-orange",
+    "light": "#c2410c",
+    "dark": "#fb923c",
+    "use": "orange project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-amber",
+    "light": "#b45309",
+    "dark": "#fbbf24",
+    "use": "amber project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-yellow",
+    "light": "#a16207",
+    "dark": "#facc15",
+    "use": "yellow project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-lime",
+    "light": "#4d7c0f",
+    "dark": "#a3e635",
+    "use": "lime project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-green",
+    "light": "#15803d",
+    "dark": "#4ade80",
+    "use": "green project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-teal",
+    "light": "#0f766e",
+    "dark": "#2dd4bf",
+    "use": "teal project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-cyan",
+    "light": "#0e7490",
+    "dark": "#22d3ee",
+    "use": "cyan project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-blue",
+    "light": "#1d4ed8",
+    "dark": "#60a5fa",
+    "use": "blue project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-violet",
+    "light": "#6d28d9",
+    "dark": "#a78bfa",
+    "use": "violet project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-purple",
+    "light": "#7e22ce",
+    "dark": "#c084fc",
+    "use": "purple project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
+    "name": "--project-pink",
+    "light": "#be185d",
+    "dark": "#f472b6",
+    "use": "pink project identifier dot and colour swatch; 3:1 on sidebar surfaces",
+    "category": "colour",
+    "tag": "graphic"
+  },
+  {
     "name": "--text-xs",
     "light": "0.75rem",
     "dark": "0.75rem",

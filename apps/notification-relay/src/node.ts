@@ -33,6 +33,7 @@ export function nodeHandler(relay: ReturnType<typeof createRelay>, publicUrl: st
             "content-type",
             "authorization",
             "dpop",
+            "installation-proof",
             "host",
           ].includes(name)
         ) {

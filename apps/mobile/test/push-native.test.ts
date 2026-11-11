@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 
@@ -190,4 +191,39 @@ test("Android requests Firebase's current token and records service rotations wi
   expect(plugin).toContain(
     'args.containsKey("pushToken") ? PushJson.string(args.get("pushToken")) : null',
   );
+});
+
+test("both native proof signers share one relay-verified interop fixture", () => {
+  const input = /[\w-]{40,}\.[\w-]{40,}/u;
+  const android = read("android/app/src/test/java/org/jeswr/suite/PushProofTest.java").match(
+    new RegExp(`String expected = "(${input.source})"`, "u"),
+  )?.[1];
+  const ios = read("ios/App/AppTests/PushProofTests.swift").match(
+    new RegExp(`let expected = "(${input.source})"`, "u"),
+  )?.[1];
+  const relay = read("../notification-relay/src/device-proof-interop.test.ts");
+  expect(android).toBeDefined();
+  expect(ios).toBe(android);
+  expect(relay).toContain(`"${android}"`);
+  for (const signer of [
+    "android/app/src/main/java/org/jeswr/suite/PushProof.java",
+    "ios/App/App/PushSigningKey.swift",
+  ])
+    expect(read(signer)).toContain('installation-proof+jwt\\"}"');
+});
+
+test("relay and both native decryptors share the exact encrypted challenge and activity fixtures", () => {
+  const files = [
+    "../notification-relay/src/push-payload-interop.test.ts",
+    "android/app/src/test/java/org/jeswr/suite/PushPayloadInteropTest.java",
+    "ios/App/AppTests/PushCryptoTests.swift",
+  ].map(read);
+  for (const name of ["challengeCiphertext", "activityCiphertext"]) {
+    const fixtures = files.map(
+      (source) => source.match(new RegExp(`${name} =\\s*"([A-Za-z0-9_-]+)"`, "u"))?.[1],
+    );
+    expect(fixtures[0]).toMatch(/^[A-Za-z0-9_-]{820}$/u);
+    expect(fixtures[1]).toBe(fixtures[0]);
+    expect(fixtures[2]).toBe(fixtures[0]);
+  }
 });

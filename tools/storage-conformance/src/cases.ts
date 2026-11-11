@@ -3,8 +3,11 @@
 import assert from "node:assert/strict";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { StorageError, type WriteResult } from "@jeswr/storage-client";
+import { appCases } from "./app-cases.js";
 import { container, entries, etag, text } from "./case-helpers.js";
 import { extendedCases } from "./extended-cases.js";
+import { optionalServiceCases } from "./optional-cases.js";
+import { roleCases } from "./role-cases.js";
 import { assertIsomorphic, expectStorageError } from "./testing.js";
 import type { ConformanceCase, SupportProbe } from "./types.js";
 
@@ -445,4 +448,7 @@ export const storageCases: readonly ConformanceCase[] = [
   ...deletion,
   ...errors,
   ...extendedCases(moveProbe),
+  ...roleCases(),
+  ...optionalServiceCases,
+  ...appCases,
 ];

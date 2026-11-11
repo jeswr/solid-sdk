@@ -3,7 +3,7 @@
   "name": "@jeswr/suite-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Suite notification and search facades. Experimental, AI-agent-generated.",
+  "description": "Suite notification, search and preferences facades. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": false,
@@ -19,6 +19,14 @@
     "./search": {
       "types": "./dist/search/index.d.ts",
       "default": "./dist/search/index.js"
+    },
+    "./preferences": {
+      "types": "./dist/preferences/index.d.ts",
+      "default": "./dist/preferences/index.js"
+    },
+    "./offline": {
+      "types": "./dist/offline.d.ts",
+      "default": "./dist/offline.js"
     }
   },
   "files": [
@@ -41,6 +49,7 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
+    "@jeswr/solid-offline": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*"
   },
@@ -52,6 +61,7 @@
     "@types/node": "^25.9.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "fake-indexeddb": "6.2.5",
     "jsdom": "^26.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

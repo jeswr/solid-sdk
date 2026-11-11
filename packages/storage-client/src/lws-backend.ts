@@ -158,6 +158,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       protocol: "lws",
       id: storage,
       root,
+      owner: null,
       descriptionUrl: null,
       services: [],
       capabilities: [],
@@ -274,6 +275,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       const kind = hasType(types, "Container") ? "container" : "resource";
       items.push({
         url: id,
+        displayName: typeof item.title === "string" ? item.title : null,
         kind,
         contentType:
           kind !== "container" && typeof item.format === "string" && MEDIA_TYPE.test(item.format)

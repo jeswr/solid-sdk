@@ -60,7 +60,7 @@ const families = [
   ],
   ["approvals", "approval", readers.readApprovals],
   ["control", "control-statement", readers.readControl],
-  ["audit", "audit-entry", readers.readAudit],
+  // The audit range reader has its own bounded, sequence-ordered tests in agent-audit.test.ts.
   ["inbox/direct/account", "inbound-message", (c: ReadersClient) => readers.readInbox(c, "direct")],
 ] as const;
 type ReadersClient = ReturnType<typeof createAgentClient>;
@@ -93,14 +93,9 @@ it.each(
       try {
         await new Promise<void>((resolve) => setImmediate(resolve));
         if (url.endsWith(".triage.ttl")) return new Response(null, { status: 404 });
-        const seq = Number(url.slice(url.lastIndexOf("/") + 1).replace(".ttl", ""));
         const body =
           template?.replaceAll(templateId, url) ??
-          (await recordToTurtle({
-            ...exampleRecords[type],
-            id: url,
-            ...(type === "audit-entry" ? { seq } : {}),
-          }));
+          (await recordToTurtle({ ...exampleRecords[type], id: url }));
         return new Response(body, {
           headers: { "content-type": template ? "application/trig" : "text/turtle" },
         });

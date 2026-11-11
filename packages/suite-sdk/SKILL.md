@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk notifications, server/local search, LocalIndex feeders, useSearch, useNotify, or useInbox integration with PodAuthProvider.
+description: Use when working on @jeswr/suite-sdk notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -8,8 +8,25 @@ description: Use when working on @jeswr/suite-sdk notifications, server/local se
 # @jeswr/suite-sdk
 
 The root exposes SDK-APP-07's `useNotify()`, `useInbox()` and notification builders. SDK-APP-09's
-search facade lives at `@jeswr/suite-sdk/search`; application shell wiring is separate.
+search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's pod-backed preferences live at
+`@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
+
+## Offline (`./offline`)
+
+Re-export `createOutbox`, `withOutbox`, `mergeRdf`, all outbox types and `useOfflineStatus`
+from solid-offline. `useOutbox(outbox: Outbox | null)` returns
+`{ pending, conflicts, retry, retryAll, resolve, replay }`. Cache the combined snapshot between
+events: solid-offline's getters return fresh arrays. Subscribe to both `change` and `conflict`,
+refresh after subscription to cover hydration/render races, and unsubscribe on replacement or
+unmount. Server rendering and null use empty snapshots; null actions are inert. Actions remain
+stable until the outbox changes and propagate failures. `retryAll()` delegates to `retry()`.
+
+The caller owns the per-WebID outbox and authenticated StorageClient. Never create another auth
+path here. Replay only during that account's active session, cancel on sign-out/switch, and
+preserve unsent writes (close releases listeners; purge is explicit). Replay after resolving a
+conflict to resume held operations. Read `packages/solid-offline/SKILL.md` for queue opt-in,
+conflict-copy and merge behavior. Keep this hook's tests at 100% coverage.
 
 Read `packages/pod-access/SKILL.md` for notification API details. Use `PodAuthProvider` from
 `@jeswr/pod-auth/react`; never create another auth session or modify credentials in this facade.
@@ -69,3 +86,61 @@ values may be inline objects. Abort on replacement/unmount and ignore late succe
 even when the supplied implementation ignores its signal. Do not add app shell integration here.
 
 Run `lint`, dependency-first `build`, `typecheck` and `test`; coverage thresholds are 100%.
+
+## Preferences (`./preferences`, SDK-APP-11)
+
+`const usePreferences = createPreferences({ storage, typeIndex, webId, profile?, ensureOwnerOnly? })`
+returns a callable hook with `flush(): Promise<void>` and `dispose(): void`.
+`usePreferences<T>(key, schema, defaultValue)` returns `{ value, set, loading, pending, error }`.
+`schema` is structural `{ parse(unknown): T }`, compatible with zod; no zod dependency.
+The default is required. Values/defaults must be JSON; sets reject lossy values and payloads over
+64 KiB UTF-8 with `PreferencesError` (`invalid-json`, `too-large`). Keys match
+`[a-z0-9][a-z0-9.-]{0,63}`; camelCase names such as `recentSearches` must become `recentsearches`.
+Schema/JSON read failures return the default and warn once per key per store.
+
+Create one factory per authenticated session using the existing StorageClient and TypeIndex;
+create no auth session or implicit discovery client. Dispose it on logout, identity/fetch/client
+replacement, and same-account re-login; retained setters reject `session-changed`.
+Hook effects activate I/O only after commit; key/account changes fence retained setters, and
+disposal aborts/fences reads and writes even when an underlying transport ignores cancellation.
+Disposing a store is permanent. It leaves its WebID-scoped durable pending values for a later
+session of that same WebID. Memory, database keys/envelopes and `suite-prefs` channel messages
+include both WebID and storage root. Foreign/malformed messages are ignored.
+
+Read `pim:preferencesFile` on the exact WebID subject and use its directory. Otherwise resolve
+`pim:ConfigurationFile` through the Type Index, or create `settings` and register the returned
+container URL. Use `suite/<encoded-key>.json` on Solid. LWS identifiers are server-assigned:
+creation uses type links for ConfigurationFile, the suite container
+(`https://jeswr.org/ns/suite/preferences`), and each key (that IRI plus `/` and the encoded key).
+Listings rediscover the actual returned suite/file URLs; never predict LWS identifiers from Slugs.
+Ambiguous locations and out-of-storage pointers fail closed. Pass `profile` (a parsed
+StorageClient `RdfReadResult`) when the WebID profile is outside the selected storage. Missing or
+non-RDF native LWS profiles have no RDF preference pointer; other profile errors propagate.
+
+The public SDK has no profile-pointer reader or exported owner-only container provisioner.
+Small local equivalents read the parsed profile and use pod-access's `ownerPolicy` and `writeWac`
+for WAC. Provision the suite before any JSON access: an owner-only ACL is created only when the
+container has no ACL of its own; an existing ACL (for example one the owner changed to share
+settings) is never rewritten. Use only the advertised ACL URL and conditional
+storage operations, never guessed ACL suffixes. For ACP/LWS, pass an idempotent
+`ensureOwnerOnly(url, signal)` that provisions/verifies private container and descendant access
+using the deployment's trusted access model. Unsupported defaults refuse before JSON writes.
+Only a successfully provisioned suite is reused within the store.
+
+Files use `application/json`, observed ETags for updates, exact-name `create` (If-None-Match: *)
+on Solid and typed POST creation on LWS. One write runs at a time; concurrent setters coalesce
+to the latest whole value per key. On 412 (or a Solid create-name conflict), re-read and retry
+once with the local whole value winning; another conflict sets error and retains pending data.
+`set(next | updater)` optimistically changes memory, persists pending JSON in IndexedDB, and
+attempts delivery. Validation/session errors reject; persistence/transport errors populate
+`error` and keep `pending`. Awaiting an offline set means it is queued, not delivered.
+
+SDK-APP-08's outbox is pending: the internal `ReplayQueue` in `src/preferences/cache.ts` isolates
+the temporary durable latest-per-key queue. Replay runs on the next committed mount/explicit
+flush and on `online`, ordered by each key's latest set sequence. Acknowledgements compare tokens
+and cannot clear a newer pending value; stale persistence cannot replace a newer record.
+IndexedDB absence falls back to memory (no restart durability). BroadcastChannel absence disables
+tab updates. Test preferences source with real memory Solid/LWS operations and fake-indexeddb;
+keep the explicit `src/preferences/**` 100% statement/branch/function/line threshold.
+
+Public API changes must update this skill and README together.

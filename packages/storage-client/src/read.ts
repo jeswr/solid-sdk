@@ -19,7 +19,7 @@ import type { AuthFetch, RdfReadResult, ReadResult, StorageClient } from "./type
 
 /** RFC 6838 type/subtype without parameters. */
 export const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
-const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+export const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 
 /** Preserve protocol headers while allowing request-local transport markers. */
@@ -183,7 +183,18 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     ): Promise<RdfReadResult> {
       const headers: Record<string, string> = { Accept: RDF_ACCEPT };
       if (opts.ifNoneMatch !== undefined) headers["If-None-Match"] = opts.ifNoneMatch;
-      const result = await get(url, headers, opts.signal);
+      const result = await get(url, headers, opts.signal).catch((error: unknown) => {
+        // RDF negotiation can fail with 406, or CSS's 501 when no converter is available.
+        if (error instanceof StorageError && (error.status === 406 || error.status === 501)) {
+          throw new StorageError("not-rdf", {
+            status: error.status,
+            url: error.url,
+            method: error.method,
+            problem: error.problem,
+          });
+        }
+        throw error;
+      });
       if (result.status === 304) {
         return {
           url: result.url,

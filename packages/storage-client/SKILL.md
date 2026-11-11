@@ -173,8 +173,10 @@ Solid read side (ADR-003 §6):
   `list()` before pagination checks aborts, so even an already-aborted signal cannot expose raw
   container credentials in errors. Pagination receives only the canonical container and cursors.
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
-  reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
-  RDF (`unsupported` when none is advertised).
+  reports a non-RDF or unparsable body as `not-rdf`. On both HTTP backends, its GET also maps
+  406 or 501 to `not-rdf`, preserving status, URL, method and problem details; other operations
+  retain their usual HTTP error mapping. `metadata` reads the `describedby` document as RDF
+  (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
   `parseWacAllow`). Both backends parse authoritative Link headers with explicit overflow rejection:
   at most **64 KiB UTF-8 per combined field value**, **1,024 nonempty members** (including malformed
@@ -185,6 +187,32 @@ Solid read side (ADR-003 §6):
   can use partial results. Exact limits are accepted.
   Repeated relation tokens within one member add only one target per relation; separate members
   retain their order and duplicates. Targets append without copying earlier entries.
+
+### Keepalive writes and display names
+
+`WriteOptions` and `CreateOptions` accept `keepalive?: boolean`, forwarded to the injected
+fetch for `write`, `writeRdf` and `create`. Browsers cap keepalive bodies at **64 KiB**.
+The client measures encoded bytes (UTF-8 for strings, the view's byte length for Uint8Array,
+and Blob.size), accepts exactly 65,536 bytes and rejects larger or unknown-size bodies with
+non-retryable `StorageError('bad-request')` before sending. ReadableStreams and Blobs without
+a known finite size are refused with keepalive. Callers can fall back to their outbox.
+Omitting keepalive retains ordinary streaming and upload behavior; the memory backend
+applies the same body-size check.
+
+`MetadataOp.title?: string` carries a display title when the server chooses a different
+identifier from the requested name. On LWS, an add writes RFC 9264's `title` target attribute;
+adding an existing href with a title updates that attribute and retains the others. On Solid,
+an add sets `dct:title` on the anchor in its describedby document, through the existing N3
+Patch builder. Empty titles are valid. A remove still removes matching hrefs on LWS; on
+Solid, supplying title also removes that exact title literal from the anchor. Use the
+metadata document's ETag for these edits.
+
+Every listing `Entry` now has `displayName: string | null`: LWS reads the listing target's
+`title`, Solid reads the member's `dct:title` in the container listing. Missing or malformed
+fields are null; no extra metadata requests are made. `displayNameOf(entry)`, exported from
+both the package root and `./helpers`, returns `displayName ?? decodedLastPathSegment`.
+It removes a container's trailing slash before choosing the segment and keeps the raw segment
+when percent decoding fails. An empty displayName remains empty.
 
 ## LWS read side
 
@@ -235,7 +263,8 @@ Rules the memory backend enforces, and the real backends must match:
   graphs are refused (422) for Turtle / N-Triples resources, and `writeRdf` throws a TypeError
   rather than labelling graph blocks as Turtle.
   `where` is `unsupported` in memory. JSON Patch applies to JSON resources only.
-- Solid moves are copy+delete emulation (new URL, capped at 2 000 resources). LWS moves need
+- Solid moves are copy+delete emulation (new URL, capped at 2 000 resources) and drop ACLs.
+  ACL-preserving moves belong to pod-access (SDK-APP-04). LWS moves need
   MoveResource (`unsupported` with `feature: 'move'` otherwise), and the server picks the name.
 - LWS `setMetadata` refuses the server-managed rels `linkset`, `type` and `up`. Solid rels that are
   not IRIs map to `http://www.iana.org/assignments/relation/<rel>`.

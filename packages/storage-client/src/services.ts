@@ -101,6 +101,7 @@ export async function postTrash(
   signal: AbortSignal | undefined,
   inspect: (method: string, url: string, response: Response) => unknown = (method, url, response) =>
     linksOf(response, url, method),
+  keepalive?: boolean,
 ): Promise<WriteResult> {
   const endpoint = serviceUrl(storage, "POST", url);
   const command = trashCommand(body);
@@ -119,6 +120,8 @@ export async function postTrash(
     { "Content-Type": "application/json" },
     signal,
     JSON.stringify(command),
+    false,
+    keepalive,
   );
   inspect("POST", endpoint, response);
   if (response.status >= 400) return failed("POST", endpoint, response, signal);

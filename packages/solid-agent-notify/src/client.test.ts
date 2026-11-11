@@ -21,7 +21,10 @@ function transport() {
       init?.method === "POST" ? new Response(null, { status: 201 }) : profile(),
     );
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 test.each([
   "Announce",
@@ -31,6 +34,9 @@ test.each([
   "Create",
 ] as const)("sends %s as JSON-LD through the supplied authenticated transport", async (type) => {
   const fetch = transport();
+  // Without an injected clock, as:published is the send time from Date.now.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-11T12:00:00.000Z"));
   const notify = createNotifyClient({ fetch });
   await expect(
     notify(webId, {
@@ -54,6 +60,7 @@ test.each([
     type,
     target: "https://pod.example/tracker#this",
     summary: "Alice assigned you 'Pay \"rent\"'\n💡",
+    published: "2026-11-11T12:00:00.000Z",
   });
 });
 
@@ -72,7 +79,12 @@ test("shares concurrent discovery, caches for exactly ten minutes, and retries e
   expect(JSON.parse(fetch.mock.calls[1]?.[1]?.body as string)).toEqual({
     "@context": "https://www.w3.org/ns/activitystreams",
     ...activity,
+    published: "1970-01-01T00:00:00.000Z",
   });
+  // Each POST is stamped at its own send time by the injected clock.
+  expect(JSON.parse(fetch.mock.calls[5]?.[1]?.body as string).published).toBe(
+    new Date(ttl).toISOString(),
+  );
 });
 
 test("caches missing inboxes, expires them, and isolates clocks and exact WebID subjects", async () => {

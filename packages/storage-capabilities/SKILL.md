@@ -46,6 +46,13 @@ or delete each known storage id from a persistent cache; there is no `clear()` m
 See [LWS app differences](../../skills/lws-vs-solid/SKILL.md) for cross-protocol decisions.
 
 
+`StorageDescription.owner: string | null` is advisory owner metadata: the Solid root's
+`solid:owner` IRI or the LWS CID's top-level `controller`. Only absolute HTTP(S) IRIs are
+accepted; missing, malformed, non-IRI or non-HTTP(S) values yield null. Verification method
+controllers do not supply the storage owner. Probe-only descriptions and assumed Solid roots
+have owner null. Owner data never authorizes a fetch. Parsed caches are versioned so older
+records without this field are rediscovered before reuse.
+
 T-010 implements the ADR-002 vocabulary and type contracts, plus internal Link/probe-header parsers.
 T-011 adds `parseLwsDescription(json, storageUrl, requestUrl)` and `CapabilitiesError` at the root.
 T-012 adds the internal Solid description dataset mapper in `src/solid-description.ts`.
@@ -87,7 +94,7 @@ Pass ordered raw header pairs when response evidence order matters; a `Headers` 
 already have sorted/combined the fields. Network probing belongs to the resolver task.
 
 `parseSolidDescription(dataset, rootUrl)` implements ADR-002 step 5c and returns only
-`{ services, capabilities }`. Parse RDF bytes with `@jeswr/fetch-rdf`'s `parseRdf` first,
+`{ services, capabilities, owner }`. Parse RDF bytes with `@jeswr/fetch-rdf`'s `parseRdf` first,
 using the description URL as `baseIRI`; remote JSON-LD contexts need an explicit loader.
 The tests supply the notifications context offline. The mapper finds `notify:subscription`
 on any subject, but reads `did:service`, `lws:capability`, and ACQ endpoints only on `rootUrl`.

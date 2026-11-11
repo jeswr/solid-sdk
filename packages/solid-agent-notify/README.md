@@ -38,7 +38,8 @@ pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
 ten minutes per transport/clock scope, and POSTs ActivityStreams JSON-LD through the caller's fetch.
 Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'`, `actor`, `object`, optional
-`target` and `summary`. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
+`target` and `summary`; the POSTed body also carries `published` (the send time from `clock`, default
+`Date.now`, as an ISO string) so readers can date and order items. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
 Reasons are `no-inbox`, `forbidden` (401/403), `lws-no-ldn`, and `network` (other failures).
 
 The client entry avoids the root API's Node transport/config imports. Its egress boundary is
