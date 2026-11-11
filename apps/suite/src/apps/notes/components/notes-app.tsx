@@ -87,8 +87,11 @@ function NotesRoutes() {
 }
 function NotesChrome({ children }: { children: ReactNode }) {
   const { store, session, refresh, prefs, updatePrefs, notes, openNote } = useNotesContext();
-  useNoteReminders(session.webId, notes, (note) =>
-    openNote(note, document.getElementById("main-content") ?? document.body),
+  useNoteReminders(
+    session.webId,
+    notes,
+    (note) => openNote(note, document.getElementById("main-content") ?? document.body),
+    store,
   );
   useEffect(() => {
     const key = `suite.notes.purged.${session.webId}.${store.containers.active}`;

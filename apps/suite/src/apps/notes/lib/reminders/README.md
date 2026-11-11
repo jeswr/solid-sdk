@@ -5,17 +5,17 @@ Claims use this identifier and the trigger time. Text saves, archive/unarchive a
 trigger edits preserve the identifier; removing and setting a reminder creates a
 new one. Trash removes the reminder.
 
-Legacy reminders without an identifier initially use the note URL and trigger time.
-Before a text save or move first assigns a UUID, the store copies any existing
-claim to the UUID key. It retains the URL claim for pages still showing the old
-snapshot. A failed durable migration prevents the save and can be retried.
-Creation metadata is never an identity.
+The pod is the source of identity. For an external reminder without an identifier,
+the scheduler first saves one with If-Match; on 412 it re-reads the winning note.
+Other failures fall back to the URL and trigger time for best-effort delivery.
+An ordinary save or move that identifies an overdue reminder records it as delivered
+locally, without waiting for storage. IndexedDB failures never block pod writes.
 
 IndexedDB keeps one record per reminder key, either pending (owner and a
 30-second expiry) or delivered. Only the claim owner can complete or release a
-pending record. Cancelled delivery releases the record; abandoned claims expire.
+pending record. Ownership and expiry are checked immediately before notification.
+Cancelled delivery releases the record; abandoned claims expire.
 Rejected tabs discard their local reservation and recheck on subsequent ticks.
-Migrated pending records settle together under their original owner.
 
 Retention removes delivered records older than thirty days and bounds each
 account's history to 2,000 entries. An older caller does not discard a newer

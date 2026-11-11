@@ -3,7 +3,6 @@ import { LiteralFrom, OptionalAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { documentSubject } from "../src/apps/docs/lib/model/document";
-import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { NS } from "../src/apps/docs/lib/model/vocab";
 import { buildNote, type Note, NoteDoc, parseNote, SCHED } from "../src/apps/notes/lib/model/note";
 import { notesPreferencesSchema } from "../src/apps/notes/lib/model/prefs";
@@ -14,10 +13,7 @@ import {
   reminderInput,
   reminderPreset,
 } from "../src/apps/notes/lib/reminders/dates";
-import {
-  createBrowserFiredStore,
-  createMemoryFiredStore,
-} from "../src/apps/notes/lib/reminders/fired-store";
+import { createMemoryFiredStore } from "../src/apps/notes/lib/reminders/fired-store";
 import {
   createReminderScheduler,
   MAX_REMINDER_DELAY,
@@ -315,48 +311,6 @@ describe("reminder scheduler", () => {
     expect(s.notify).toHaveBeenCalledTimes(2);
   });
 
-  it.each([
-    "text save",
-    "archive",
-  ])("migrates a real legacy reminder claim before its first %s", async (action) => {
-    const pod = createDemoPod({ root: "https://pod.example/" });
-    const s = fixture();
-    const store = createNotesStore({
-      podRoot: "https://pod.example/",
-      webId: "https://pod.example/#me",
-      fetch: pod.fetch,
-      fired: s.fired,
-    });
-    const data = buildNote(URL, { title: "Legacy", reminder: NOW, now: NOW });
-    const doc = new NoteDoc(documentSubject(URL), data, DataFactory);
-    doc.created = undefined;
-    doc.reminderId = undefined;
-    await writeRdf(URL, data, { createOnly: true, fetchImpl: pod.fetch });
-    const legacy = (await store.read(URL)) as NonNullable<Awaited<ReturnType<typeof store.read>>>;
-    expect(legacy.created).toBeUndefined();
-    expect(legacy.reminderId).toBeUndefined();
-    expect(
-      data.match(
-        DataFactory.namedNode(`${URL}#reminder`),
-        DataFactory.namedNode(`${NS.DCT}identifier`),
-      ).size,
-    ).toBe(0);
-    await s.scheduler.tick([legacy], NOW.getTime());
-    const saved =
-      action === "text save" ? await store.save(legacy, { title: "Edited" }, legacy.etag) : legacy;
-    if (action === "text save") {
-      expect(saved.reminderId).toBeTruthy();
-      await s.scheduler.tick([saved], NOW.getTime());
-    }
-    const archived = await store.archive(saved);
-    expect(archived.reminderId).toBeTruthy();
-    await s.scheduler.tick([archived], NOW.getTime());
-    const restored = await store.unarchive(archived);
-    expect(restored.reminderId).toBe(archived.reminderId);
-    await s.scheduler.tick([restored], NOW.getTime());
-    expect(s.notify).toHaveBeenCalledExactlyOnceWith(legacy);
-  });
-
   it("falls back to distinct URLs for legacy reminders, accepting a repeat after a move", async () => {
     const s = fixture();
     await s.scheduler.tick([due, { ...due, url: "legacy-two" }], NOW.getTime());
@@ -373,44 +327,4 @@ describe("reminder scheduler", () => {
     await createReminderScheduler({ fired, notify: delivered }).tick([due], NOW.getTime());
     expect(delivered).toHaveBeenCalledExactlyOnceWith(due);
   });
-});
-
-it("copies the browser's delivered legacy claim before the conditional save and retains it after failure", async () => {
-  const account = "https://pod.example/#legacy-browser-save";
-  const pod = createDemoPod({ root: "https://pod.example/" });
-  const data = buildNote(URL, { title: "Legacy", reminder: NOW, now: NOW });
-  new NoteDoc(documentSubject(URL), data, DataFactory).reminderId = undefined;
-  await writeRdf(URL, data, { createOnly: true, fetchImpl: pod.fetch });
-  const fired = createBrowserFiredStore(account);
-  const notify = vi.fn();
-  const scheduler = createReminderScheduler({ fired, notify });
-  const store = createNotesStore({
-    podRoot: "https://pod.example/",
-    webId: account,
-    fetch: pod.fetch,
-  });
-  const legacy = (await store.read(URL)) as NonNullable<Awaited<ReturnType<typeof store.read>>>;
-  await scheduler.tick([legacy], NOW.getTime());
-  const migrate = vi.fn().mockRejectedValue(new Error("migration failed"));
-  const guarded = createNotesStore({
-    podRoot: "https://pod.example/",
-    webId: account,
-    fetch: pod.fetch,
-    fired: { ...fired, migrate },
-  });
-  await expect(guarded.save(legacy, { title: "Edited" }, legacy.etag)).rejects.toThrow(
-    "migration failed",
-  );
-  expect(await store.read(URL)).toMatchObject({
-    etag: legacy.etag,
-    reminderId: undefined,
-    title: "Legacy",
-  });
-  const saved = await store.save(legacy, { title: "Edited" }, legacy.etag);
-  expect(migrate).toHaveBeenCalledTimes(1);
-  await scheduler.tick([saved], NOW.getTime());
-  // Exercise the store's default account-scoped browser history, too.
-  const archived = await store.archive(saved);
-  await scheduler.tick([archived], NOW.getTime());
-  expect(notify).toHaveBeenCalledExactlyOnceWith(legacy);
 });

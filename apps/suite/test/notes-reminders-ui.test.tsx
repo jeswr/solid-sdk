@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { DataFactory } from "n3";
 import { type ReactNode, StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { StoredNote } from "../src/apps/notes/lib/model/store";
+import { documentSubject } from "../src/apps/docs/lib/model/document";
+import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
+import { buildNote, NoteDoc } from "../src/apps/notes/lib/model/note";
+import type { NotesStore, StoredNote } from "../src/apps/notes/lib/model/store";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
 import * as firedStores from "../src/apps/notes/lib/reminders/fired-store";
 import { reminderKey } from "../src/apps/notes/lib/reminders/scheduler";
@@ -52,6 +57,7 @@ let serial = 0;
 function note(input: Partial<StoredNote> = {}): StoredNote {
   return {
     url: `https://pod.example/notes/reminder-${++serial}.ttl`,
+    reminderId: `reminder-${serial}`,
     title: "Remember",
     body: "<p>Body</p>",
     labels: [],
@@ -374,9 +380,35 @@ function Scheduler({
   account?: string;
   open: (note: StoredNote) => void;
 }) {
-  useNoteReminders(account, notes, open);
+  useNoteReminders(account, notes, open, mocks.context.store as NotesStore);
   return null;
 }
+
+it("identifies an external reminder on the pod before the mounted scheduler delivers it", async () => {
+  const pod = createDemoPod({ root: "https://pod.example/" });
+  const url = "https://pod.example/notes/external-reminder.ttl";
+  const dataset = buildNote(url, { title: "External reminder", reminder: NOW });
+  new NoteDoc(documentSubject(url), dataset, DataFactory).reminderId = undefined;
+  await writeRdf(url, dataset, { createOnly: true, fetchImpl: pod.fetch });
+  const store = createNotesStore({
+    podRoot: "https://pod.example/",
+    webId: "https://pod.example/#mounted-external",
+    fetch: pod.fetch,
+  });
+  mocks.context.store = store;
+  const external = (await store.read(url)) as StoredNote;
+  const open = vi.fn();
+  const ui = await mount(h(Scheduler, { notes: [external], account: "mounted-external", open }));
+  const saved = (await store.read(url)) as StoredNote;
+  expect(saved.reminderId).toBeTruthy();
+  expect(saved.etag).not.toBe(external.etag);
+  expect(mocks.toast).toHaveBeenCalledExactlyOnceWith("External reminder", expect.anything());
+  await act(() => mocks.toast.mock.calls[0]?.[1].action.onClick());
+  expect(open).toHaveBeenCalledWith(
+    expect.objectContaining({ etag: saved.etag, reminderId: saved.reminderId }),
+  );
+  await ui.unmount();
+});
 
 it("toasts a due reminder with Open, suppresses reload delivery, and picks up changed sources", async () => {
   const due = note({ reminder: NOW.toISOString() });

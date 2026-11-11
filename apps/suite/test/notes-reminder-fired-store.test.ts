@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createRequire } from "node:module";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Note } from "../src/apps/notes/lib/model/note";
 import {
   CLAIM_TTL,
@@ -16,6 +16,8 @@ const { IDBFactory } = createRequire(
 )("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
 const NOW = Date.parse("2026-11-11T12:00:00Z");
 const DAY = 86_400_000;
+beforeEach(() => vi.useFakeTimers({ toFake: ["Date"], now: NOW }));
+afterEach(() => vi.useRealTimers());
 const due: Note = {
   url: "https://pod.example/notes/reminder.ttl",
   title: "Remember",
@@ -131,7 +133,6 @@ describe("Notes atomic fired claims", () => {
       records.some(([key]) => ["expired", `key-${MAX_FIRED_REMINDERS - 1}`].includes(key)),
     ).toBe(false);
     expect(await store.claim("key-0", NOW)).toBe(false);
-    await store.migrate("new", "moved-new");
     expect(await history(factory)).toHaveLength(MAX_FIRED_REMINDERS);
     expect(await store.claim("key-0", NOW + 30 * DAY)).toBe(true);
   });
@@ -276,46 +277,41 @@ it("revalidates independent page reservations when an abandoned durable claim ex
   const scheduler = createReminderScheduler({ fired, notify });
   await scheduler.tick([due], NOW);
   expect(notify).not.toHaveBeenCalled();
+  vi.setSystemTime(NOW + CLAIM_TTL);
   await scheduler.tick([due], NOW + CLAIM_TTL);
   await abandoned.release(key, "abandoned");
   await scheduler.tick([due], NOW + 2 * CLAIM_TTL);
   expect(notify).toHaveBeenCalledExactlyOnceWith(due);
 });
 
-it.each([
-  "memory",
-  "indexedDB",
-])("migrates delivered and pending %s claims without losing their owner", async (kind) => {
+it.each(["memory", "indexedDB"])("records overdue identities as delivered in %s", async (kind) => {
   const store =
     kind === "memory"
       ? createMemoryFiredStore()
       : createIndexedDbFiredStore("alice", new IDBFactory());
-  await store.migrate("missing", "new");
-  await store.claim("old", NOW, "owner");
-  await store.migrate("old", "new");
-  await store.deliver("old", NOW, "owner");
-  expect(await store.claim("new", NOW + CLAIM_TTL)).toBe(false);
-  await store.migrate("old", "new");
-  await store.migrate("old", "third");
-  expect(await store.claim("third", NOW)).toBe(false);
-  await store.claim("cancelled", NOW, "cancelled");
-  await store.migrate("cancelled", "moved");
-  await store.release("cancelled", "cancelled");
-  expect(await store.claim("moved", NOW, "retry")).toBe(true);
+  await store.markDelivered("identified", NOW);
+  expect(await store.claim("identified", NOW)).toBe(false);
+  expect(await store.owns("identified", NOW)).toBe(false);
+  expect(await store.owns("missing", NOW)).toBe(false);
+  await store.claim("pending", NOW, "owner");
+  expect(await store.owns("pending", NOW, "other")).toBe(false);
+  expect(await store.owns("pending", NOW, "owner")).toBe(true);
+  expect(await store.owns("pending", NOW + CLAIM_TTL, "owner")).toBe(false);
+  await store.claim("default", NOW);
+  expect(await store.owns("default", NOW)).toBe(true);
 });
 
-it("migrates durable and page delivery history together before saving a legacy identity", async () => {
+it("records an overdue identity in independent durable and page stores", async () => {
   const factory = new IDBFactory();
   const memory = createMemoryFiredStore();
-  const durable = createIndexedDbFiredStore("alice", factory);
-  const fired = createBrowserFiredStore("alice", memory, durable);
-  await fired.claim("legacy", NOW, "owner");
-  await fired.deliver("legacy", NOW, "owner");
-  await fired.migrate("legacy", "identified");
-  expect(await memory.claim("identified", NOW, "another")).toBe(false);
-  expect(
-    await createIndexedDbFiredStore("alice", factory).claim("identified", NOW, "another"),
-  ).toBe(false);
+  const fired = createBrowserFiredStore(
+    "alice",
+    memory,
+    createIndexedDbFiredStore("alice", factory),
+  );
+  await fired.markDelivered("identified", NOW);
+  expect(await memory.claim("identified", NOW)).toBe(false);
+  expect(await createIndexedDbFiredStore("alice", factory).claim("identified", NOW)).toBe(false);
 });
 
 it("keeps fallback deliveries deduplicated when durable completion and cancellation fail", async () => {
@@ -325,25 +321,87 @@ it("keeps fallback deliveries deduplicated when durable completion and cancellat
     claim: vi.fn().mockRejectedValue(failure),
     deliver: vi.fn().mockRejectedValue(failure),
     release: vi.fn().mockRejectedValue(failure),
-    migrate: vi.fn().mockRejectedValue(failure),
+    owns: vi.fn().mockRejectedValue(failure),
+    markDelivered: vi.fn().mockRejectedValue(failure),
   };
   const fired = createBrowserFiredStore("fallback", memory, durable);
   expect(await fired.claim("cancelled", NOW, "owner")).toBe(true);
+  expect(await fired.owns("cancelled", NOW, "owner")).toBe(true);
   await fired.release("cancelled", "owner");
   expect(await fired.claim("cancelled", NOW, "retry")).toBe(true);
   await fired.deliver("cancelled", NOW, "retry");
   expect(await fired.claim("cancelled", NOW + CLAIM_TTL, "third")).toBe(false);
-  await expect(fired.migrate("cancelled", "identified")).rejects.toBe(failure);
-  // A failed durable migration must not pretend it has migrated page history.
-  expect(await memory.claim("identified", NOW, "another")).toBe(true);
+  await fired.markDelivered("identified", NOW);
+  expect(await memory.claim("identified", NOW, "another")).toBe(false);
 });
 
-it("migrates page history when IndexedDB is absent", async () => {
+it("records page history when IndexedDB is absent", async () => {
   const memory = createMemoryFiredStore();
-  const fired = createBrowserFiredStore("memory-migration", memory, memory);
-  await fired.claim("legacy", NOW, "owner");
-  await fired.migrate("legacy", "identified");
-  await fired.deliver("legacy", NOW, "owner");
-  expect(await fired.claim("identified", NOW + CLAIM_TTL, "another")).toBe(false);
-  await fired.release("identified", "another");
+  const fired = createBrowserFiredStore("memory-only", memory, memory);
+  await fired.markDelivered("identified", NOW);
+  expect(await fired.claim("identified", NOW, "another")).toBe(false);
+  expect(await fired.owns("identified", NOW, "another")).toBe(false);
+  await fired.claim("pending", NOW, "owner");
+  expect(await fired.owns("pending", NOW, "owner")).toBe(true);
+  await fired.release("pending", "owner");
+});
+
+it("skips an expired owner when its claim result resumes after another page delivered", async () => {
+  const factory = new IDBFactory();
+  const durable = createIndexedDbFiredStore("alice", factory);
+  let resume!: () => void;
+  let committed!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    resume = resolve;
+  });
+  const claimed = new Promise<void>((resolve) => {
+    committed = resolve;
+  });
+  const first = createBrowserFiredStore("alice", createMemoryFiredStore(), {
+    ...durable,
+    async claim(key, now, owner) {
+      const result = await durable.claim(key, now, owner);
+      committed();
+      await gate;
+      return result;
+    },
+  });
+  const second = createBrowserFiredStore(
+    "alice",
+    createMemoryFiredStore(),
+    createIndexedDbFiredStore("alice", factory),
+  );
+  const notifyA = vi.fn();
+  const notifyB = vi.fn();
+  const a = createReminderScheduler({ fired: first, notify: notifyA }).tick([due], NOW);
+  await claimed;
+  vi.setSystemTime(NOW + CLAIM_TTL);
+  await createReminderScheduler({ fired: second, notify: notifyB }).tick([due], Date.now());
+  resume();
+  await a;
+  expect(notifyA).not.toHaveBeenCalled();
+  expect(notifyB).toHaveBeenCalledExactlyOnceWith(due);
+});
+
+it("checks durable ownership and the clock again after a delayed lease validation", async () => {
+  const factory = new IDBFactory();
+  const durable = createIndexedDbFiredStore("alice", factory);
+  const memory = createMemoryFiredStore();
+  const fired = createBrowserFiredStore("alice", memory, durable);
+  await fired.claim("key", NOW, "a");
+  await durable.release("key", "a");
+  await durable.claim("key", NOW, "b");
+  expect(await fired.owns("key", NOW, "a")).toBe(false);
+  const notify = vi.fn();
+  await createReminderScheduler({
+    fired: {
+      ...fired,
+      async owns() {
+        vi.setSystemTime(NOW + CLAIM_TTL);
+        return true;
+      },
+    },
+    notify,
+  }).tick([due], NOW);
+  expect(notify).not.toHaveBeenCalled();
 });

@@ -227,20 +227,39 @@ export class NotesStore {
     };
   }
 
-  private async identify(note: Note): Promise<Note> {
-    if (!note.reminder || note.reminderId) return note;
-    const identified = { ...note, reminderId: crypto.randomUUID() };
-    await (this.fired ?? createBrowserFiredStore(this.webId)).migrate(
-      reminderKey(note),
-      reminderKey(identified),
-    );
-    return identified;
+  private recordOverdueIdentity(previous: Note, saved: Note): void {
+    if (!previous.reminder || previous.reminderId || !saved.reminderId || !saved.reminder) return;
+    const now = this.now().getTime();
+    if (Date.parse(saved.reminder) > now) return;
+    // The pod write has already succeeded. Local storage must never delay it.
+    void (async () => {
+      await (this.fired ?? createBrowserFiredStore(this.webId)).markDelivered(
+        reminderKey(saved),
+        now,
+      );
+    })().catch(() => {});
   }
 
   async save(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
+    const saved = await this.write(note, input, etag);
+    this.recordOverdueIdentity(note, saved);
+    return saved;
+  }
+
+  /** The scheduler identifies through the same guarded write, then claims delivery. */
+  async identifyReminder(note: StoredNote): Promise<StoredNote | undefined> {
+    if (note.reminderId) return note;
+    try {
+      return await this.write(note, {}, note.etag);
+    } catch (error) {
+      if (error instanceof NoteConflictError) return this.read(note.url);
+      throw error;
+    }
+  }
+
+  private async write(note: Note, input: NoteChanges, etag: string | null): Promise<StoredNote> {
     this.scope(note.url, note.location);
-    const identified = await this.identify(note);
-    const dataset = buildNote(note.url, { ...this.input(identified), ...input });
+    const dataset = buildNote(note.url, { ...this.input(note), ...input });
     try {
       const written = await writeRdf(note.url, dataset, {
         etag,
@@ -291,7 +310,6 @@ export class NotesStore {
     this.validator(note.url, note.etag);
     const sourceEtag = note.etag;
     await this.ensureContainers();
-    const identified = await this.identify(note);
     const filename = new URL(note.url).pathname.split("/").at(-1) as string;
     const moved = await this.allocate(this.containers[state.status], filename, (url) => {
       // Relink every entity, including foreign/imported IDs, without carrying a
@@ -305,7 +323,7 @@ export class NotesStore {
       for (const [index, revision] of revisions.entries())
         revision.wasRevisionOf = revisions[index + 1]?.id;
       const dataset = buildNote(url, {
-        ...this.input(identified),
+        ...this.input(note),
         priorRevisions: revisions,
         now: new Date(revisions[0]?.generatedAt ?? note.modified ?? this.now()),
         reminder: state.status === "trashed" ? null : note.reminder,
@@ -315,6 +333,7 @@ export class NotesStore {
       new NoteDoc(documentSubject(url), dataset, DataFactory).modified = this.now();
       return dataset;
     });
+    this.recordOverdueIdentity(note, moved);
     try {
       await this.remove(note.url, sourceEtag);
     } catch (error) {

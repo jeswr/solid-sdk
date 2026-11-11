@@ -2,7 +2,7 @@
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import { useEffect, useRef } from "react";
-import type { StoredNote } from "../lib/model/store";
+import type { NotesStore, StoredNote } from "../lib/model/store";
 import { createBrowserFiredStore } from "../lib/reminders/fired-store";
 import { createReminderScheduler, reminderKey } from "../lib/reminders/scheduler";
 
@@ -41,6 +41,7 @@ export function useNoteReminders(
   account: string,
   notes: readonly StoredNote[],
   open: (note: StoredNote) => void,
+  store: NotesStore,
 ): void {
   const latest = useRef({ notes, open });
   latest.current = { notes, open };
@@ -49,6 +50,7 @@ export function useNoteReminders(
     let active = true;
     const scheduler = createReminderScheduler({
       fired: createBrowserFiredStore(account),
+      identify: (note) => store.identifyReminder(note as StoredNote),
       notify: (note) => {
         if (!active) return false;
         const title = note.title || "Untitled note";
@@ -99,7 +101,7 @@ export function useNoteReminders(
       clearInterval(interval);
       document.removeEventListener("visibilitychange", run);
     };
-  }, [account]);
+  }, [account, store]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new note list must reschedule the next due time
   useEffect(() => {
     check.current();

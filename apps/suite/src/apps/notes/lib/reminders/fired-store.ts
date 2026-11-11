@@ -12,10 +12,11 @@ type History = [string, Record | number][];
 export interface FiredReminderStore {
   /** A pending claim excludes other owners only until release or expiry. */
   claim(key: string, now: number, owner?: string): Promise<boolean>;
+  owns(key: string, now: number, owner?: string): Promise<boolean>;
   deliver(key: string, now: number, owner?: string): Promise<void>;
   release(key: string, owner?: string): Promise<void>;
-  /** Copy history before assigning a legacy reminder its persisted identity. */
-  migrate(from: string, to: string): Promise<void>;
+  /** Best-effort suppression when a save identifies an already overdue reminder. */
+  markDelivered(key: string, now: number): Promise<void>;
 }
 
 function prune(history: History, now: number): Map<string, Record> {
@@ -49,17 +50,17 @@ function operations(update: Update): FiredReminderStore {
         return true;
       }, now);
     },
+    owns(key, now, owner = ownerFor(key)) {
+      return update((history) => {
+        const record = history.get(key);
+        return record?.state === "pending" && record.owner === owner;
+      }, now);
+    },
     async deliver(key, now, owner = ownerFor(key)) {
       await update((history) => {
         const record = history.get(key);
         if (record?.state !== "pending" || record.owner !== owner) return false;
-        // A migrated pending claim has the same owner. Settle both keys so an
-        // older page snapshot and the saved UUID agree on the delivery outcome.
-        for (const [key, record] of history) {
-          if (record.state === "pending" && record.owner === owner) {
-            history.set(key, { state: "delivered", time: now });
-          }
-        }
+        history.set(key, { state: "delivered", time: now });
         return true;
       });
     },
@@ -67,20 +68,15 @@ function operations(update: Update): FiredReminderStore {
       await update((history) => {
         const record = history.get(key);
         if (record?.state !== "pending" || record.owner !== owner) return false;
-        for (const [key, record] of history) {
-          if (record.state === "pending" && record.owner === owner) {
-            history.delete(key);
-          }
-        }
+        history.delete(key);
         return true;
       });
     },
-    async migrate(from, to) {
+    async markDelivered(key, now) {
       await update((history) => {
-        const record = history.get(from);
-        if (record && history.get(to)?.state !== "delivered") history.set(to, record);
+        history.set(key, { state: "delivered", time: now });
         return true;
-      });
+      }, now);
     },
   };
 }
@@ -168,15 +164,21 @@ export function createBrowserFiredStore(
       await memory.deliver(key, now, owner);
       if (durable !== memory) await durable.deliver(key, now, owner).catch(() => {});
     },
+    async owns(key, now, owner) {
+      if (!(await memory.owns(key, now, owner))) return false;
+      try {
+        return durable === memory || (await durable.owns(key, now, owner));
+      } catch {
+        return true;
+      }
+    },
     async release(key, owner) {
       if (durable !== memory) await durable.release(key, owner).catch(() => {});
       await memory.release(key, owner);
     },
-    async migrate(from, to) {
-      // With working durable storage, migration must commit BEFORE the pod save.
-      // A failed migration leaves the legacy resource unchanged and retryable.
-      if (durable !== memory) await durable.migrate(from, to);
-      await memory.migrate(from, to);
+    async markDelivered(key, now) {
+      await memory.markDelivered(key, now);
+      if (durable !== memory) await durable.markDelivered(key, now).catch(() => {});
     },
   };
 }
