@@ -47,7 +47,7 @@ export function validateTransaction(value: Transaction): void {
   iri(value.account);
   instant(value.postingTime);
   validateMoney(value);
-  if (!hasText(value.description)) throw new TypeError("Transaction description is required");
+  if (!value.description.trim()) throw new TypeError("Transaction description is required");
   for (const optional of [
     value.category,
     value.payee,

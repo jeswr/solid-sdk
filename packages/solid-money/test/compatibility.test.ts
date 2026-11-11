@@ -106,6 +106,16 @@ it("rejects text that is empty once control characters are stripped, before writ
   expect(document.dataset.size).toBe(0);
 });
 
+it("still reads control-only text that older clients stored", async () => {
+  const document = new MoneyDocument();
+  putTransaction(document, row);
+  const loaded = await parseMoney(
+    (await serialiseMoney(document)).replace(`"${row.description}"`, '"\\u0001"'),
+    base,
+  );
+  expect(loaded.transactions()[0]?.description).toBe("\u0001");
+});
+
 it("rejects a blank-node balance root that previously projected", async () => {
   const document = await parseMoney(
     `_:b a <${V.balanceClass}>; <${V.balanceAccount}> <${account}> .`,

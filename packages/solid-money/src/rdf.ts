@@ -72,6 +72,8 @@ export function putBalance(document: MoneyDocument, value: Balance): void {
 }
 export function putTransaction(document: MoneyDocument, value: Transaction): void {
   validateTransaction(value);
+  // Writes check the text that survives control-character stripping; reads keep trim().
+  if (!hasText(value.description)) throw new TypeError("Transaction description is required");
   const node = document.node(value.id);
   if (node.types.has(V.transferClass))
     throw new TypeError("Transfer legs must be changed together");
@@ -81,6 +83,7 @@ export function putTransaction(document: MoneyDocument, value: Transaction): voi
 }
 export function putCategories(document: MoneyDocument, values: readonly Category[]): void {
   categoryTree(values);
+  if (values.some((value) => !hasText(value.label))) throw new TypeError("Invalid category");
   for (const value of values) {
     writeCore(document, value.id, "Category", entities.Category.build(value.id, value));
   }
