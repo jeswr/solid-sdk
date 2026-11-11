@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
-// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Drive operations over a {@link DriveClient} (04-drive §4, §5.2–5.4): uploads
  * with conflict policies, new folder, rename, move, make a copy, the
@@ -10,7 +9,6 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
-import type { QueueingStorageClient } from "@jeswr/suite-sdk/offline";
 import { Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
 import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
@@ -23,7 +21,6 @@ import {
   type DriveItem,
   DrivePartialFailureError,
   isMissingItem,
-  isUnansweredNetworkFailure,
   type MoveResult,
   nameOf,
   parentOf,
@@ -210,27 +207,11 @@ export async function createFolder(
   client: DriveClient,
   parentUrl: string,
   rawName: string,
-  outbox?: { storage: QueueingStorageClient; onQueued: () => void },
 ): Promise<string> {
   const name = normalizeUploadName(rawName, "folder");
   const url = childUrl(parentUrl, name, true);
-  if (!outbox || navigator.onLine !== false) {
-    try {
-      await client.createFolder(url, { kind: "inherit-verified" });
-      return url;
-    } catch (error) {
-      if (!outbox || !isUnansweredNetworkFailure(error)) throw error;
-    }
-  }
-  // Named container creation is create-only (If-None-Match: * on Solid).
-  // Both StorageClient and withOutbox reject a slash in the name itself.
-  const result = await outbox.storage.create(parentUrl, null, {
-    name,
-    kind: "container",
-    offline: "queue",
-  });
-  if (result.queued) outbox.onQueued();
-  return result.url;
+  await client.createFolder(url, { kind: "inherit-verified" });
+  return url;
 }
 
 /** Whether a rename changes the extension chain (04-drive §2.9 prompt). */

@@ -46,6 +46,7 @@ import { encodeRef } from "@/lib/refs";
 import { AppHeading } from "@/shell/app-frame";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { resolveContentType } from "../lib/files/resolve-content-type";
+import { decodePreviewText } from "../lib/files/text";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
@@ -174,7 +175,10 @@ function useLoadedFile(
         const slice = blob.size > TEXT_LIMIT ? blob.slice(0, TEXT_LIMIT) : blob;
         return {
           status: "text",
-          text: await slice.text(),
+          ...decodePreviewText(
+            new Uint8Array(await slice.arrayBuffer()),
+            versioned?.contentType ?? blob.type,
+          ),
           truncated: blob.size > TEXT_LIMIT,
           etag: versioned?.etag,
           writable: versioned?.writable,
@@ -610,6 +614,7 @@ export function PreviewPage({
   parent: string | undefined;
 }) {
   const { driveRoot } = useDrive();
+  const { mayLeavePreview } = useDriveUi();
   const { item = initial, status } = useLiveResource(initial);
   const back = !parent || parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`;
   return (
@@ -623,7 +628,14 @@ export function PreviewPage({
       <PreviewHeader
         item={item}
         leading={
-          <Link href={back} className="drv-back" aria-label="Back to folder">
+          <Link
+            href={back}
+            className="drv-back"
+            aria-label="Back to folder"
+            onClick={(event) => {
+              if (!mayLeavePreview()) event.preventDefault();
+            }}
+          >
             <ArrowLeft aria-hidden="true" size={18} />
           </Link>
         }

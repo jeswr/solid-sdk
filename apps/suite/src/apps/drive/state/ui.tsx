@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
-// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -27,7 +26,6 @@ import {
 } from "react";
 import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
 import { encodeRef } from "@/lib/refs";
-import { useOutboxSession } from "@/shell/sync/outbox-context";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
 import {
@@ -89,6 +87,9 @@ interface DriveUiValue {
   readonly restoreDialogFocus: (event: Event) => void;
   readonly preview: PreviewState | undefined;
   readonly setPreview: (preview: PreviewState | undefined) => void;
+  /** Editors register their dismissal check for dialog and page navigation. */
+  readonly registerPreviewGuard: (guard: () => boolean) => () => void;
+  readonly mayLeavePreview: () => boolean;
   readonly detailsOpen: boolean;
   readonly setDetailsOpen: (open: boolean | ((open: boolean) => boolean)) => void;
   /** Current Details targets, chosen by selection or explicitly opened. */
@@ -182,7 +183,24 @@ export function captureDriveFocusRemoval(subtree?: Element | null) {
 
 export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
-  const [preview, setPreview] = useState<PreviewState>();
+  const [preview, setPreviewState] = useState<PreviewState>();
+  const previewGuards = useRef(new Set<() => boolean>());
+  const registerPreviewGuard = useCallback((guard: () => boolean) => {
+    previewGuards.current.add(guard);
+    return () => {
+      previewGuards.current.delete(guard);
+    };
+  }, []);
+  const mayLeavePreview = useCallback(
+    () => [...previewGuards.current].every((guard) => guard()),
+    [],
+  );
+  const setPreview = useCallback(
+    (next: PreviewState | undefined) => {
+      if (mayLeavePreview()) setPreviewState(next);
+    },
+    [mayLeavePreview],
+  );
   const [detailsOpen, setDetailsOpenState] = useState(false);
   const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
   const detailsFocus = useRef<HTMLElement | null>(null);
@@ -266,6 +284,8 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
       restoreDialogFocus,
       preview,
       setPreview,
+      registerPreviewGuard,
+      mayLeavePreview,
       detailsOpen,
       setDetailsOpen,
       detailsItems,
@@ -279,6 +299,9 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
     [
       dialog,
       preview,
+      setPreview,
+      registerPreviewGuard,
+      mayLeavePreview,
       detailsOpen,
       detailsItems,
       uploadRequest,
@@ -481,7 +504,6 @@ export function useDriveActions() {
     [setDetailsItems],
   );
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
-  const storage = useOutboxSession()?.storage;
   const router = useRouter();
 
   const starred = useMemo(() => new Set(prefs.starred), [prefs.starred]);
@@ -748,32 +770,16 @@ export function useDriveActions() {
     async (parent: string, name: string) => {
       if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
-        let queued = false;
-        const url = await createFolder(
-          client,
-          parent,
-          name,
-          storage
-            ? {
-                storage,
-                onQueued: () => {
-                  queued = true;
-                },
-              }
-            : undefined,
-        );
-        if (queued) toast.success("Saved on this device. It will sync when you're back online.");
-        else {
-          invalidate(url);
-          toast.success(`Created ${nameOf(url)}`);
-        }
+        const url = await createFolder(client, parent, name);
+        invalidate(url);
+        toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
         reportFailure(error, "Couldn't create the folder", client, invalidate);
         return undefined;
       }
     },
-    [client, invalidate, session.storageUrl, storage],
+    [client, invalidate, session.storageUrl],
   );
 
   const restore = useCallback(

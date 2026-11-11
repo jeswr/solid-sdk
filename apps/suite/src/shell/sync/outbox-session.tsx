@@ -2,13 +2,25 @@
 "use client";
 
 import { createPodClient, type StorageClient } from "@jeswr/storage-client";
-import { createOutbox, withOutbox } from "@jeswr/suite-sdk/offline";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  createOutbox,
+  type Outbox,
+  type QueueingStorageClient,
+  withOutbox,
+} from "@jeswr/suite-sdk/offline";
+import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from "react";
 import { createRealOutbox, outboxTransport } from "../lib/real-outbox";
 import { useAccounts } from "../session/accounts-provider";
-import { OutboxSessionContext as Context, type OutboxSession } from "./outbox-context";
+import type { SuiteAccount } from "../session/types";
 
-export { useOutboxSession } from "./outbox-context";
+interface OutboxSession {
+  account: SuiteAccount;
+  outbox: Outbox;
+  adapter: ReturnType<typeof createRealOutbox>;
+  storage: QueueingStorageClient | null;
+  signal: AbortSignal;
+}
+const Context = createContext<OutboxSession | null>(null);
 
 /** Own the queue's listeners and client for exactly the active shell session. Never purge. */
 export function OutboxSessionProvider({ children }: { children: ReactNode }) {
@@ -71,4 +83,8 @@ export function OutboxSessionProvider({ children }: { children: ReactNode }) {
   }, [account, ready]);
   const current = ready && session?.account === account && !session.signal.aborted ? session : null;
   return <Context.Provider value={current}>{children}</Context.Provider>;
+}
+
+export function useOutboxSession() {
+  return useContext(Context);
 }

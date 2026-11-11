@@ -1,14 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import { StorageError } from "@jeswr/storage-client";
 import { Button, toast } from "@jeswr/suite-ui";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { useOutboxSession } from "@/shell/sync/outbox-context";
 import { DriveError, type DriveItem } from "../lib/client/client";
 import { discoveryOptions, type ResourceAssertion } from "../lib/client/commit";
 import { isOwnStorage } from "../lib/client/ownership";
 import { useDrive } from "../state/drive-context";
+import { useDriveUi } from "../state/ui";
 
 export interface PreviewText {
   text: string;
@@ -16,6 +15,8 @@ export interface PreviewText {
   etag?: string | undefined;
   contentType?: string | undefined;
   writable?: boolean | undefined;
+  editableEncoding?: boolean | undefined;
+  declaredCharset?: boolean | undefined;
   verifyHeaders?: ResourceAssertion["verifyHeaders"] | undefined;
 }
 
@@ -32,7 +33,7 @@ export function TextPreview({
   reload: () => void;
 }) {
   const { client, session, invalidate } = useDrive();
-  const storage = useOutboxSession()?.storage;
+  const { registerPreviewGuard } = useDriveUi();
   const [local, setLocal] = useState<PreviewText>();
   const current = local ?? value;
   const [editing, setEditing] = useState(false);
@@ -46,6 +47,33 @@ export function TextPreview({
   const live = useRef(true);
   const busy = useRef(false);
   const label = useId();
+  const [online, setOnline] = useState(() => navigator.onLine !== false);
+  const dirty = editing && draft !== current?.text;
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine !== false);
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+  useLayoutEffect(
+    () =>
+      registerPreviewGuard(
+        () => !busy.current && (!dirty || window.confirm("Discard your changes?")),
+      ),
+    [registerPreviewGuard, dirty],
+  );
+  useEffect(() => {
+    if (!dirty && !saving) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [dirty, saving]);
   useEffect(() => {
     live.current = true;
     return () => {
@@ -63,6 +91,7 @@ export function TextPreview({
   if (!current) return fallback;
   const writable =
     current.writable === true &&
+    current.editableEncoding === true &&
     !current.truncated &&
     item.kind === "file" &&
     (item.size ?? 0) <= 1024 * 1024 &&
@@ -71,6 +100,11 @@ export function TextPreview({
   const etag = current.etag;
   const strong = etag !== undefined && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
   const noValidator = "Reload this file to get a current version before saving.";
+  const disabledReason = !online
+    ? "You're offline. Reconnect to save."
+    : !strong
+      ? noValidator
+      : undefined;
   const finish = () => {
     restoreFocus.current = true;
     setEditing(false);
@@ -83,37 +117,28 @@ export function TextPreview({
     finish();
   };
   const save = async () => {
-    if (!writable || !strong || busy.current || conflict) return;
+    if (!writable || !strong || navigator.onLine === false || busy.current || conflict) return;
     busy.current = true;
     setSaving(true);
     setError(undefined);
     try {
-      const contentType = current.contentType as string;
-      const result = await (storage
-        ? storage.write(item.url, draft, { contentType, ifMatch: etag, offline: "queue" })
-        : client.write(
-            item.url,
-            draft,
-            { contentType, ifMatch: etag, ...discoveryOptions(current) },
-            { kind: "protect-ancestors" },
-          ));
+      const contentType = `${current.contentType}${current.declaredCharset ? "; charset=utf-8" : ""}`;
+      const result = await client.write(
+        item.url,
+        draft,
+        { contentType, ifMatch: etag, ...discoveryOptions(current) },
+        { kind: "protect-ancestors" },
+      );
       if (!live.current) {
         return;
       }
       setLocal({ ...current, text: draft, etag: result.etag ?? undefined });
       finish();
-      if ("queued" in result && result.queued)
-        toast.success("Saved on this device. It will sync when you're back online.");
-      else {
-        toast.success("Saved");
-        invalidate(item.url);
-      }
+      toast.success("Saved");
+      invalidate(item.url);
     } catch (cause) {
       if (!live.current) return;
-      if (
-        (cause instanceof StorageError && cause.code === "precondition-failed") ||
-        (cause instanceof DriveError && cause.status === 412)
-      ) {
+      if (cause instanceof DriveError && cause.status === 412) {
         setConflict(true);
         setError("This file changed since you opened it");
       } else setError("Couldn't save this file. Your changes are still here.");
@@ -150,12 +175,12 @@ export function TextPreview({
             disabled={saving}
             onChange={(event) => setDraft(event.target.value)}
           />
-          {!strong ? <p id={`${label}-reason`}>{noValidator}</p> : null}
+          {disabledReason ? <p id={`${label}-reason`}>{disabledReason}</p> : null}
           {error ? <p role="alert">{error}</p> : null}
           <div className="drv-text-editor-actions">
             <Button
-              disabled={!strong || saving || conflict}
-              aria-describedby={!strong ? `${label}-reason` : undefined}
+              disabled={!strong || !online || saving || conflict}
+              aria-describedby={disabledReason ? `${label}-reason` : undefined}
               type="submit"
             >
               {saving ? "Saving…" : "Save"}

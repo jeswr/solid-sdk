@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
-// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -22,7 +21,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useOutboxSession } from "@/shell/sync/outbox-context";
 import { boundedRead } from "../../../lib/session/bounded-read";
 import type { PodSession } from "../../../lib/session/pod-session";
 import { ResourceWriteError } from "../../docs/lib/model/errors";
@@ -142,7 +140,6 @@ async function resolveDriveRootAttempt(
 }
 
 export function DriveProvider({ session, children }: { session: PodSession; children: ReactNode }) {
-  const outbox = useOutboxSession()?.adapter;
   const { confirmAccess, dialog } = useAccessConfirmation();
   const [driveRoot, setDriveRoot] = useState<string>();
   const [rootError, setRootError] = useState<unknown>();
@@ -212,19 +209,6 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
-
-  useEffect(() => {
-    if (!outbox) return;
-    let synced = outbox.getSnapshot().lastSyncedAt;
-    return outbox.subscribe(() => {
-      const next = outbox.getSnapshot().lastSyncedAt;
-      if (next === synced) return;
-      synced = next;
-      // Real sessions otherwise refresh on focus. Refresh after replay as well,
-      // while queueing or retrying alone must not disturb an offline listing.
-      invalidate(session.storageUrl);
-    });
-  }, [outbox, session.storageUrl, invalidate]);
 
   useEffect(() => {
     let live = true;

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex
-// AUTHORED-BY Codex GPT-6.1-Sol
 
 import {
   type CommitChecks,
@@ -45,13 +44,9 @@ export function rethrowPendingDeletion(error: unknown): void {
 }
 
 /** Accepted/ambiguous deletes must settle before either endpoint can be reused. */
-export function deletionControl(
-  http: typeof fetch,
-  error: (status: number, url: string) => Error,
-  ledgerIdentity = http,
-) {
-  const pending = deletionLedger(ledgerIdentity);
-  const protection = protectionLedger(ledgerIdentity);
+export function deletionControl(http: typeof fetch, error: (status: number, url: string) => Error) {
+  const pending = deletionLedger(http);
+  const protection = protectionLedger(http);
   const refusal = (status: number, url: string) => {
     const rejected = error(status, url);
     refusedRequests.add(rejected);
