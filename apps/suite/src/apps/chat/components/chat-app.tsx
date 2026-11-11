@@ -30,6 +30,7 @@ import {
   useRooms,
   useUnread,
 } from "../state/chat-context";
+import { Invitations } from "./invitations";
 import { ChatSearchField } from "./search-field";
 
 export function ChatFailure({ error, retry }: { error: unknown; retry: () => void }) {
@@ -124,6 +125,7 @@ function Sidebar() {
           New room
         </Link>
       </Button>
+      <Invitations />
       {renderAsync({
         loading: !rooms.data && rooms.status === "loading" && (
           <LoadingSkeleton preset="list" count={3} />

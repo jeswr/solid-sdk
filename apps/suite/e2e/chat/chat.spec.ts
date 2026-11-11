@@ -279,3 +279,45 @@ test("keeps offline sends queued and supports multiline text and the edit shortc
   await composer.press("L");
   await expect(composer).toHaveValue("Line one\nL");
 });
+
+// The demo has one user and an LDN inbox. Seed an Offer through its fixture fetch;
+// actual cross-user delivery is covered by the two-user CSS suite (sst-rn91).
+test("demo inbox offers appear in Chat and dismiss locally", async ({ page }) => {
+  await createRoom(page, "Invited book club");
+  const roomUrl = page.url();
+  await page.evaluate(async () => {
+    const pod = window.__suiteDemoPod;
+    if (!pod) throw new Error("Demo pod fixture is unavailable");
+    const root = "https://alice.demo.pod/";
+    const room = `${root}chat/rooms/invited-book-club/`;
+    const profile = await (await pod.fetch(`${root}profile/card`)).text();
+    if (!profile.includes("inbox")) throw new Error("Demo profile no longer advertises an inbox");
+    const inbox = await pod.fetch(`${root}inbox/`);
+    if (!inbox.ok) throw new Error("Demo inbox cannot be read");
+    await pod.fetch(`${root}chat/rooms.ttl`, { method: "DELETE" });
+    const posted = await pod.fetch(`${root}inbox/`, {
+      method: "POST",
+      headers: { "content-type": "text/turtle" },
+      body: `@prefix as: <https://www.w3.org/ns/activitystreams#>. <#it> a as:Offer; as:object <${room}>; as:actor <https://bob.example.org/profile/card#me>.`,
+    });
+    if (!posted.ok) throw new Error("Demo inbox refused the fixture Offer");
+  });
+  await page.goto("/chat");
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  const invitations = page.getByRole("region", { name: "Invitations", exact: true });
+  await expect(
+    invitations.getByRole("link", { name: "Invited book club", exact: true }),
+  ).toHaveAttribute("href", new URL(roomUrl).pathname);
+  await expect(invitations).toContainText("From bob.example.org");
+  await invitations.getByRole("link").click();
+  await expect(page.getByRole("button", { name: "Join room", exact: true })).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await invitations.getByRole("button", { name: "Dismiss", exact: true }).click();
+  await expect(invitations).toBeHidden();
+  await page.reload();
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await expect(invitations).toBeHidden();
+});

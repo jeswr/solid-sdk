@@ -48,6 +48,7 @@ import {
   type SearchSnippet,
 } from "../search";
 import { aggregateReactions, type ReactionSummary } from "../timeline";
+import { deliverInvitations, type InvitationDelivery, readInvitations } from "./invitations";
 import { PreferencesStore } from "./preferences-store";
 
 export interface Room {
@@ -58,6 +59,9 @@ export interface Room {
   created: string | undefined;
   isDirect: boolean;
   lastActivity?: Date;
+}
+export interface CreatedRoom extends Room {
+  invitations: InvitationDelivery[];
 }
 export type JoinedRoom = Room | { url: string; error: unknown };
 export interface Message extends ChatMessage {
@@ -147,14 +151,14 @@ export class ChatClient {
   private readonly resolvedNames = new Map<string, string>();
   private joinedCache: JoinedRoom[] | undefined;
   constructor(
-    fetch: typeof globalThis.fetch,
+    private readonly sessionFetch: typeof globalThis.fetch,
     readonly storageUrl: string,
     readonly webId: string,
     private readonly publicFetch: typeof globalThis.fetch = globalThis.fetch,
     displayName?: string,
   ) {
     this.fetch = createPodScopedFetch(roomContainer(storageUrl), {
-      fetch: refuseRedirects(fetch),
+      fetch: refuseRedirects(sessionFetch),
       maxRedirects: 0,
     });
     httpIri(webId);
@@ -473,23 +477,65 @@ export class ChatClient {
       await copyMessageTask(this.fetch, this.storageUrl, this.webId, message, task);
     }
   }
-  async createRoom({ name, members }: { name: string; members: readonly string[] }): Promise<Room> {
+  invitations({ signal }: { signal?: AbortSignal | undefined } = {}) {
+    return readInvitations(this.sessionFetch, this.fetch, this.storageUrl, this.webId, signal);
+  }
+  private async invited(room: Room, signal?: AbortSignal): Promise<CreatedRoom> {
+    return {
+      ...room,
+      invitations: await deliverInvitations(
+        this.sessionFetch,
+        this.webId,
+        room,
+        this.resolvedNames.get(this.webId) ?? this.webId,
+        signal,
+      ),
+    };
+  }
+  async createRoom({
+    name,
+    members,
+    signal,
+  }: {
+    name: string;
+    members: readonly string[];
+    signal?: AbortSignal;
+  }): Promise<CreatedRoom> {
+    signal?.throwIfAborted();
     const base = slug(name);
     // Deterministic DM addresses are reserved: a named room never occupies one.
-    return this.create(/^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base, name, members);
+    return this.invited(
+      await this.create(
+        /^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base,
+        name,
+        members,
+        signal,
+      ),
+      signal,
+    );
   }
-  private async create(baseSlug: string, name: string, members: readonly string[]): Promise<Room> {
+  private async create(
+    baseSlug: string,
+    name: string,
+    members: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<Room> {
     for (let suffix = 1; ; suffix++) {
       const extension = suffix === 1 ? "" : `-${suffix}`;
       const candidate = `${baseSlug.slice(0, 48 - extension.length).replace(/-$/, "")}${extension}`;
       let document: Awaited<ReturnType<typeof createModelRoom>>;
       try {
-        document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
-          name,
-          members,
-          creator: this.webId,
-          created: new Date(),
-        });
+        document = await createModelRoom(
+          abortableFetch(this.fetch, signal),
+          this.storageUrl,
+          candidate,
+          {
+            name,
+            members,
+            creator: this.webId,
+            created: new Date(),
+          },
+        );
       } catch (error) {
         if (error instanceof ChatIoError && error.status === 412) continue;
         throw error;
@@ -502,7 +548,11 @@ export class ChatClient {
       );
     }
   }
-  async createDirect(webId: string): Promise<Room> {
+  async createDirect(
+    webId: string,
+    { signal }: { signal?: AbortSignal } = {},
+  ): Promise<CreatedRoom> {
+    signal?.throwIfAborted();
     httpIri(webId);
     const people = [...new Set([this.webId, webId])].sort();
     if (people.length !== 2) throw new ChatModelError("invalid-input");
@@ -512,7 +562,7 @@ export class ChatClient {
         room.isDirect &&
         people.every((person) => room.members.includes(person)),
     );
-    if (existing) return existing as Room;
+    if (existing) return { ...(existing as Room), invitations: [] };
     const digest = await crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(JSON.stringify(people)),
@@ -524,13 +574,20 @@ export class ChatClient {
     const candidate = `dm-${hash}`;
     const url = `${roomContainer(this.storageUrl)}chat/rooms/${candidate}/`;
     let room: Room;
+    let created = false;
     try {
-      const document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
-        name: "",
-        members: people,
-        creator: this.webId,
-        created: new Date(),
-      });
+      const document = await createModelRoom(
+        abortableFetch(this.fetch, signal),
+        this.storageUrl,
+        candidate,
+        {
+          name: "",
+          members: people,
+          creator: this.webId,
+          created: new Date(),
+        },
+      );
+      created = true;
       room = roomResult(
         url,
         readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
@@ -556,7 +613,7 @@ export class ChatClient {
         throw new ChatClientError("direct-room-collision");
     }
     await this.join(url);
-    return room;
+    return created ? this.invited(room, signal) : { ...room, invitations: [] };
   }
   private async directWinner(url: string): Promise<Room> {
     // The container is claimed before its ACL/index are written. Give the winner

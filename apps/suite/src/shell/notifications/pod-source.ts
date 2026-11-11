@@ -35,6 +35,12 @@ function notificationHref(notification: InboxNotification): string | undefined {
     if (kind === "assignment") return `/tasks/inbox?task=${encodeRef(object)}`;
     const document = new URL(object);
     document.hash = "";
+    if (kind === "invitation") {
+      const room = document.pathname.endsWith("/index.ttl")
+        ? new URL("./", document).href
+        : document.href;
+      return `/chat/r/${encodeRef(room)}`;
+    }
     // The same references used by Drive and shell search; encodeRef permits only http(s).
     return `/drive/${document.pathname.endsWith("/") ? "f" : "p"}/${encodeRef(document.href)}`;
   } catch {

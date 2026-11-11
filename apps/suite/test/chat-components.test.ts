@@ -775,3 +775,74 @@ it("opens a room with no invitees immediately instead of showing the invite step
   );
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Invite people");
 });
+
+it("offers a non-blocking Copy link toast when a new member cannot be notified", async () => {
+  const { toast } = await import("@jeswr/suite-ui");
+  const pod = createDemoPod({ root: ROOT });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  vi.stubGlobal("location", new URL("https://suite.example/"));
+  try {
+    await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+    await fill(
+      document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement,
+      "Invited room",
+    );
+    await fill(
+      document.querySelector('[role="combobox"]') as HTMLInputElement,
+      "https://bob.example.org/profile/card#me",
+    );
+    await click(document.querySelector(".su-picker-input button") as HTMLElement);
+    await click(document.querySelector('button[type="submit"]') as HTMLElement);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Invite people");
+    const notice = toast.getHistory().at(-1);
+    if (!notice || !("title" in notice)) throw new Error("Missing delivery notice");
+    const title = typeof notice.title === "function" ? notice.title() : notice.title;
+    expect(renderToStaticMarkup(h("div", null, title))).toContain(
+      "notify 1 member. Share the invite link instead.",
+    );
+    const action = notice?.action;
+    if (!action || typeof action !== "object" || !("onClick" in action))
+      throw new Error("Missing toast action");
+    expect(action.label).toBe("Copy link");
+    await act(() =>
+      action.onClick({ defaultPrevented: false } as Parameters<typeof action.onClick>[0]),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      `https://suite.example/chat/r/${encodeRef(`${ROOT}chat/rooms/invited-room/`)}`,
+    );
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+    Reflect.deleteProperty(globalThis, "location");
+  }
+});
+
+it("aborts room creation on unmount and fences late navigation", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const pending = deferred<Awaited<ReturnType<ChatClient["createRoom"]>>>();
+  const create = vi.spyOn(ChatClient.prototype, "createRoom").mockReturnValue(pending.promise);
+  const view = await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+  await fill(
+    document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement,
+    "Late room",
+  );
+  await click(document.querySelector('button[type="submit"]') as HTMLElement);
+  const signal = create.mock.calls[0]?.[0].signal;
+  expect(signal?.aborted).toBe(false);
+  await view.unmount();
+  expect(signal?.aborted).toBe(true);
+  await act(() =>
+    pending.resolve({
+      url: ROOM,
+      name: "Late room",
+      members: [ME],
+      creator: ME,
+      created: undefined,
+      isDirect: false,
+      invitations: [],
+    }),
+  );
+  expect(routing.replace).not.toHaveBeenCalled();
+});

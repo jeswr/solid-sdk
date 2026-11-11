@@ -4,8 +4,9 @@
 # Chat client
 
 `new ChatClient(fetch, storageUrl, webId, publicFetch = globalThis.fetch, displayName?)` is the framework-free application facade.
-All RDF operations delegate to `../model`. The authenticated transport permanently stays inside
-the storage origin and path; room and day fetches refuse redirects;
+All RDF operations delegate to `../model`. Room and day transport stays inside
+the storage origin and path and refuses redirects. LDN discovery/delivery uses the session fetch
+through pod-access’s public-HTTPS, redirect-refusing guard;
 preference transport is isolated in `preferences-store.ts` until the SDK preference API lands.
 
 - Joined room failures remain navigable error rows. Day pages retain tombstone placeholders
@@ -24,6 +25,27 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   joined DMs reopen. Colliding DM creators load and verify the winner's exact membership,
   with bounded retries while its index is being written; they never suffix a DM.
   Named rooms fold to ASCII slugs with collision suffixes.
+- Newly created rooms and DMs send a pod-access AS2 `Offer` to each distinct member except
+  the creator, after ACL, index and owner join succeed. The object is the room **container URL**,
+  matching `Room.url`, `inviteLink` and `join`; incoming `index.ttl#it` subjects normalize to that
+  container. `createRoom({ name, members, signal? })` and `createDirect(webId, { signal? })`
+  return `Room & { invitations: { webId, delivered, reason? }[] }`. Delivery uses the session
+  fetch, at most four active recipients, and no retries. Failures (including cancellation after
+  creation) are values; the new-room dialog offers a toast with Copy link. Leaving the form
+  aborts its pending work and fences late navigation/toasts. Reopened, competing
+  and resumed DMs return an empty delivery list and never re-invite.
+- `invitations({ signal? })` reads the current WebID's LDN inbox through pod-access and the
+  session fetch. It reads at most 200 inbox children, keeps Offers with HTTP(S) room containers
+  or canonical index subjects, omits joined rooms, and returns at most 50 distinct rooms,
+  newest first. A missing inbox is empty; inbox listing errors propagate. The sidebar loads
+  metadata through `room()`, falls back to “Room invitation” on unavailable indexes (including
+  403), and routes to the existing Join flow. Room reads retain the client's pod scope.
+  Actors remain sender claims: labels always say “From <host>”, with no profile requests.
+  Dismissals retain at most 200 container URLs in guarded localStorage keyed by WebID; inbox
+  resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
+  Mount/revision refreshes and focus refreshes (30-second throttle)
+  expose failures as a small inline retry. The demo inbox e2e seeds an Offer at fixture level;
+  two-user delivery belongs to sst-rn91.
 - `chat.lastRead` lives in `settings/chat-preferences.json`, with schema validation,
   conditional writes and one conflict merge using monotonic markers. Unread counts cover
   the newest seven-day page, excluding own messages, deletions and edit revisions.

@@ -113,7 +113,15 @@ it.each([
     "/drive/p/",
     "https://pod.example/file.ttl",
   ],
-  ["http://pod.example/folder/", "Offer", undefined, "/drive/f/", "http://pod.example/folder/"],
+  ["http://pod.example/folder/", "Offer", undefined, "/chat/r/", "http://pod.example/folder/"],
+  ["http://pod.example/folder/", "Announce", undefined, "/drive/f/", "http://pod.example/folder/"],
+  [
+    "https://pod.example/chat/rooms/team/index.ttl#it",
+    "Offer",
+    undefined,
+    "/chat/r/",
+    "https://pod.example/chat/rooms/team/",
+  ],
   [
     "https://pod.example/tasks.ttl#one",
     "Announce",
@@ -141,8 +149,9 @@ it.each([
   "invalid",
   "urn:task:1",
 ])("omits unsafe or unmappable hrefs: %s", async (object) => {
-  list.mockResolvedValue([item({ object })]);
-  expect((await source().list(signal()))[0]).not.toHaveProperty("href");
+  list.mockResolvedValue([item({ object }), item({ type: "Offer", object })]);
+  for (const notification of await source().list(signal()))
+    expect(notification).not.toHaveProperty("href");
 });
 
 it("passes the authenticated fetch and clock to one reader, and the listing signal on each refresh", async () => {

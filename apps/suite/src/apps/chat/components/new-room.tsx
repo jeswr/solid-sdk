@@ -20,7 +20,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { Room } from "../lib/client";
 import { useChat, useReadPreferences, useRooms } from "../state/chat-context";
@@ -45,6 +45,8 @@ export function NewRoomPage() {
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Room>();
   const id = useId();
+  const creation = useRef<AbortController | null>(null);
+  useEffect(() => () => creation.current?.abort(), []);
   const close = () => {
     const room = created?.url ?? backgroundRoom;
     if (room) router.replace(`/chat/r/${encodeRef(room)}`);
@@ -78,7 +80,7 @@ export function NewRoomPage() {
               <Label htmlFor={`${id}-link`}>Invite link</Label>
               <Input id={`${id}-link`} value={link} readOnly />
               <p>
-                Invitations use a link on this storage. People need to sign in with an account that
+                Invitations are sent to members’ inboxes when available. People need an account that
                 has access.
               </p>
               <DialogFooter>
@@ -110,16 +112,41 @@ export function NewRoomPage() {
                   return;
                 }
                 setBusy(true);
+                creation.current?.abort();
+                const controller = new AbortController();
+                creation.current = controller;
                 void (
                   tab === "dm"
-                    ? client.createDirect(people[0]?.webId as string)
+                    ? client.createDirect(people[0]?.webId as string, { signal: controller.signal })
                     : client.createRoom({
                         name: name.trim(),
                         members: people.map((person) => person.webId),
+                        signal: controller.signal,
                       })
                 )
                   .then(
                     (room) => {
+                      if (controller.signal.aborted) return;
+                      const failed = room.invitations.filter(
+                        (invitation) => !invitation.delivered,
+                      ).length;
+                      if (failed)
+                        toast(
+                          `Couldn't notify ${failed} member${failed === 1 ? "" : "s"}. Share the invite link instead.`,
+                          {
+                            action: {
+                              label: "Copy link",
+                              onClick: () => {
+                                void navigator.clipboard
+                                  .writeText(client.inviteLink(room.url, location.origin))
+                                  .then(
+                                    () => toast.success("Invite link copied"),
+                                    () => toast.error("Couldn't copy invite link"),
+                                  );
+                              },
+                            },
+                          },
+                        );
                       if (
                         (tab === "room" && people.length === 0) ||
                         (tab === "dm" && rooms.data?.some((joined) => joined.url === room.url))
@@ -128,12 +155,16 @@ export function NewRoomPage() {
                       else setCreated(room);
                       invalidate();
                     },
-                    () =>
-                      setError(
-                        "Couldn't create this conversation. Check the details and try again.",
-                      ),
+                    () => {
+                      if (!controller.signal.aborted)
+                        setError(
+                          "Couldn't create this conversation. Check the details and try again.",
+                        );
+                    },
                   )
-                  .finally(() => setBusy(false));
+                  .finally(() => {
+                    if (!controller.signal.aborted) setBusy(false);
+                  });
               }}
             >
               <Tabs
