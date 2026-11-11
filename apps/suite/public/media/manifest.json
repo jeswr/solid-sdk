@@ -1,0 +1,31 @@
+{
+  "videos": [
+    {
+      "id": "tour",
+      "title": "A tour of the Solid Suite",
+      "blurb": "What the suite is for, and a walk through Home, Drive, Docs, Tasks, Calendar, Contacts and Permissions on a demo pod.",
+      "src": "/media/suite-tour.mp4",
+      "captions": "/media/suite-tour.vtt",
+      "transcript": "/media/suite-tour.transcript.md",
+      "poster": "/media/suite-tour.jpg",
+      "chapters": [
+        { "start": 0, "title": "Your apps, your pod" },
+        { "start": 23, "title": "Getting started" },
+        { "start": 37, "title": "Home" },
+        { "start": 50, "title": "Drive" },
+        { "start": 72, "title": "Docs" },
+        { "start": 100, "title": "Tasks" },
+        { "start": 114, "title": "Calendar and contacts" },
+        { "start": 129, "title": "And more on the way" },
+        { "start": 148, "title": "Who can see what" },
+        { "start": 167, "title": "Built in the open" }
+      ]
+    },
+    {
+      "id": "take-part",
+      "title": "How to take part and give feedback",
+      "blurb": "How the guided walkthrough works, and how to give feedback by talking or typing, in a guided interview or a quick note."
+    }
+  ],
+  "clips": []
+}
