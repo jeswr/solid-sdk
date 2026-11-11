@@ -1,4 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -54,6 +57,7 @@ export function ProjectSwitcher({
   active: TrackerLocation;
   onSwitch: (tracker: TrackerLocation) => void;
 }) {
+  const podFetch = usePodFetch();
   const [projects, setProjects] = useState<Project[]>([]);
   const [newOpen, setNewOpen] = useState(false);
   const [name, setName] = useState("");
@@ -61,11 +65,11 @@ export function ProjectSwitcher({
 
   const load = useCallback(async () => {
     try {
-      const urls = await listProjects(webId, storageUrl);
+      const urls = await listProjects(webId, storageUrl, podFetch);
       const titled = await Promise.all(
         urls.map(async (url) => {
           try {
-            const info = await new Repository(url).info();
+            const info = await new Repository(url, podFetch).info();
             return { url, title: info.title ?? titleFromUrl(url) };
           } catch {
             return { url, title: titleFromUrl(url) };
@@ -76,7 +80,7 @@ export function ProjectSwitcher({
     } catch {
       /* discovery is sugar — switching still works via the default project */
     }
-  }, [webId, storageUrl]);
+  }, [webId, storageUrl, podFetch]);
 
   useEffect(() => {
     // Mount fetch; setState only runs after the awaits inside load().
@@ -93,7 +97,7 @@ export function ProjectSwitcher({
   const submit = async () => {
     setCreating(true);
     try {
-      const url = await createProject(webId, storageUrl, name);
+      const url = await createProject(webId, storageUrl, name, podFetch);
       toast.success(`Project "${name.trim()}" created`);
       setNewOpen(false);
       setName("");

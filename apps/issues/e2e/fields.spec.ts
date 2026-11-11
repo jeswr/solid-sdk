@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 /**
  * Custom-fields e2e: define fields on the tracker, set values from the issue
  * form, read them back in the detail view — all persisted in the pod.
@@ -51,8 +52,8 @@ test.describe("Custom fields", () => {
 
     // Values survive a reload (they live in the pod, not the session).
     await page.reload();
-    await page.getByLabel(/your webid/i).fill(account.webId).catch(() => {});
-    await page.getByRole("button", { name: /sign in/i }).click().catch(() => {});
+    await page.getByLabel(/^webid$/i).fill(account.webId).catch(() => {});
+    await page.getByRole("button", { name: /^continue$/i }).click().catch(() => {});
     await expect(page.getByRole("heading", { name: "Field-bearing issue" })).toBeVisible({ timeout: 30_000 });
     await page.getByRole("heading", { name: "Field-bearing issue" }).click();
     await expect(page.getByRole("dialog").getByText("ACME Corp")).toBeVisible();

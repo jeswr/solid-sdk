@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 /**
  * LDN inbox reader (Linked Data Notifications — https://www.w3.org/TR/ldn/).
@@ -9,7 +10,7 @@
  *
  *   1. reads `ldp:inbox` from the profile,
  *   2. SSRF-validates it is one of the user's OWN pod storages (own-pod.ts) —
- *      we never attach the user's auth-patched `fetch` to a foreign origin,
+ *      we never attach the user's explicit authenticated `fetch` to a foreign origin,
  *   3. lists the inbox container's `ldp:contains` members,
  *   4. fetches + parses each notification (own-pod-validated likewise), and
  *   5. returns them newest-first.

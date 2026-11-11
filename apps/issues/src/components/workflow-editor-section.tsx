@@ -1,5 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -107,6 +110,7 @@ export function WorkflowEditorSection({
    */
   onSaved?: () => void;
 }) {
+  const podFetch = usePodFetch();
   // The editable working copy. Re-seeded whenever the loaded workflow changes
   // (a fresh dialog open / a save → reload). The loaded workflow may be the
   // deep-frozen DEFAULT_WORKFLOW, so the editor only ever holds clones (every
@@ -239,7 +243,7 @@ export function WorkflowEditorSection({
     // workflow persistence and trip the partial-save recovery (roborev job).
     try {
       // (Labels trimmed above; validation has already guaranteed no label is blank.)
-      const repo = new Repository(trackerUrl);
+      const repo = new Repository(trackerUrl, podFetch);
       // Plan the migration against the FRESHEST issue data (re-read live refs here,
       // not the edit-time snapshot — closing the moved-in-after-remove race) and
       // ONLY for states removed by THIS edit (an unrelated unknown/imported status
@@ -333,7 +337,7 @@ export function WorkflowEditorSection({
     setReloadPending(true); // lock
     setReloadFailed(false); // in-flight: hide the failed banner until/unless it fails again
     try {
-      const fresh = await new Repository(trackerUrl).workflowStrict();
+      const fresh = await new Repository(trackerUrl, podFetch).workflowStrict();
       setDraft(fresh);
       setBaseline(fresh); // the re-read is now the confirmed planning baseline
       setDirty(false);

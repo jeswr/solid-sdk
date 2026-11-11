@@ -1,4 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -36,13 +39,14 @@ export function OpenTrackerDialog({
   onOpenChange: (open: boolean) => void;
   onOpen: (tracker: TrackerLocation) => void;
 }) {
+  const podFetch = usePodFetch();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { webId: "" } });
 
   const submit = async (values: FormValues) => {
     setError(null);
     try {
-      const tracker = await resolveTracker(values.webId.trim());
+      const tracker = await resolveTracker(values.webId.trim(), podFetch);
       onOpen(tracker);
       onOpenChange(false);
       form.reset({ webId: "" });

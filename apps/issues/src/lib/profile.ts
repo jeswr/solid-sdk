@@ -1,3 +1,5 @@
+// AUTHORED-BY GPT-6.1 Sol
+import { publicFetch } from "@jeswr/app-session";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { WebIdDataset } from "@solid/object";
 import { DataFactory } from "n3";
@@ -16,11 +18,10 @@ export interface SolidProfile {
 }
 
 /**
- * Dereference a WebID and read its profile. `fetchImpl` is for tests only —
- * production omits it so the auth-patched global `fetch` is used (AGENTS.md
- * §Reading data); passing a fetch bypasses the 401→login upgrade.
+ * Dereference a WebID with an explicit transport. Public display reads use
+ * app-session publicFetch; tracker discovery receives the session fetch.
  */
-export async function loadProfile(webId: string, fetchImpl?: typeof fetch): Promise<SolidProfile> {
+export async function loadProfile(webId: string, fetchImpl: typeof fetch = publicFetch): Promise<SolidProfile> {
   const { dataset } = await fetchRdf(webId, { headers: { "cache-control": "no-cache" }, ...(fetchImpl ? { fetch: fetchImpl } : {}) });
   const agent = new WebIdDataset(dataset, DataFactory).mainSubject;
   return {
@@ -56,7 +57,7 @@ export async function resolveTracker(webId: string, fetchImpl?: typeof fetch): P
   const registered = await resolveTrackerFromTypeIndex(webId, fetchImpl);
   if (registered) return { ownerWebId: webId, trackerUrl: registered };
 
-  const profile = await loadProfile(webId, fetchImpl);
+  const profile = await loadProfile(webId, publicFetch);
   const storage = profile.storageUrls[0];
   if (!storage) throw new NoStorageError(webId);
   return { ownerWebId: webId, trackerUrl: trackerDocumentUrl(storage) };

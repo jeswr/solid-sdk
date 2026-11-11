@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 /**
  * Workspaces e2e: a second project is its own tracker in the pod — issues are
  * isolated per project, the switcher moves between them, and the choice
@@ -54,8 +55,8 @@ test.describe("Workspaces (multiple projects)", () => {
     await expect(page.getByRole("heading", { name: "Redesign-only issue" })).toBeVisible({ timeout: 15_000 });
 
     await page.reload();
-    await page.getByLabel(/your webid/i).fill(account.webId).catch(() => {});
-    await page.getByRole("button", { name: /sign in/i }).click().catch(() => {});
+    await page.getByLabel(/^webid$/i).fill(account.webId).catch(() => {});
+    await page.getByRole("button", { name: /^continue$/i }).click().catch(() => {});
     await expect(page.getByRole("heading", { name: "Redesign-only issue" })).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("button", { name: /switch project/i })).toContainText(/website redesign/i);
   });

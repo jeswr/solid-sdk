@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 /**
  * app-origin.ts — the single source of truth for the deployment ORIGIN that the
@@ -37,7 +38,7 @@ export function normaliseOrigin(value: string): string {
  * to `DEFAULT_APP_ORIGIN` for local dev. Used by the clientid.jsonld route so a
  * static export bakes the correct origin into `client_id` / `redirect_uris` /
  * `client_uri`. (At runtime the browser still recomputes the same values from
- * `location.href` — see session-context.tsx — so the two never drift on a
+ * `location.origin` — see pod-auth.ts — so the two never drift on a
  * correctly-configured deploy.)
  */
 export function buildOrigin(): string {

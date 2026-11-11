@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { act, cleanup, renderHook } from "@testing-library/react";
@@ -5,14 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { IssueRecord } from "./repository";
 import { useIssues } from "./use-issues";
 
-const { list, watch, channels } = vi.hoisted(() => ({
+const { list, watch, channels, authFetch, constructors } = vi.hoisted(() => ({
+  authFetch: vi.fn<typeof fetch>(),
+  constructors: vi.fn(),
   list: vi.fn(),
   watch: vi.fn(),
   channels: [] as { topic: string; onChange: () => void; close: ReturnType<typeof vi.fn> }[],
 }));
 
+vi.mock("./session-context", () => ({ usePodFetch: () => authFetch }));
 vi.mock("./repository", () => ({
   Repository: class {
+    constructor(...args: unknown[]) { constructors(...args); }
     containerUrl = "https://pod.example/alice/tracker/issues/";
     list = list;
     async listSprints() { return []; }
@@ -55,7 +60,8 @@ describe("useIssues live subscriptions", () => {
   it("refreshes an existing issue from its own topic without a container event", async () => {
     const { result } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
     await act(async () => {});
-    expect(watch).toHaveBeenCalledWith(CONTAINER, expect.any(Function), { ownStorageUrls: OWN });
+    expect(watch).toHaveBeenCalledWith(CONTAINER, expect.any(Function), { ownStorageUrls: OWN, fetch: authFetch });
+    expect(constructors).toHaveBeenCalledWith(TRACKER, authFetch, WEBID);
     const resource = channels.findLast((channel) => channel.topic === issue("one").url);
     expect(resource).toBeDefined();
     list.mockResolvedValue({ issues: [issue("one", "in-progress")], canCreate: true });
@@ -227,7 +233,7 @@ describe("useIssues live subscriptions", () => {
     const reads = list.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(list).toHaveBeenCalledTimes(reads);
-    expect(watch).toHaveBeenLastCalledWith(issue("one").url, expect.any(Function), { ownStorageUrls: next.own });
+    expect(watch).toHaveBeenLastCalledWith(issue("one").url, expect.any(Function), { ownStorageUrls: next.own, fetch: authFetch });
     unmount();
     expect(channels.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
   });

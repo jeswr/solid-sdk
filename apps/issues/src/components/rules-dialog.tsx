@@ -1,5 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Claude Opus 4.8
 "use client";
+
+import { usePodFetch } from "@/lib/session-context";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -119,6 +122,7 @@ export function RulesDialog({
   teamMembers: string[];
   onSaved?: () => void;
 }) {
+  const podFetch = usePodFetch();
   const [rules, setRules] = useState<RuleDef[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -129,7 +133,7 @@ export function RulesDialog({
     let cancelled = false;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
-    const repo = new Repository(trackerUrl);
+    const repo = new Repository(trackerUrl, podFetch);
     repo
       .rules()
       .then(async (existing) => {
@@ -154,17 +158,17 @@ export function RulesDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, trackerUrl]);
+  }, [open, trackerUrl, podFetch]);
 
   const reload = async () => {
-    setRules(await new Repository(trackerUrl).rules());
+    setRules(await new Repository(trackerUrl, podFetch).rules());
     onSaved?.();
   };
 
   const toggle = async (rule: RuleDef, enabled: boolean) => {
     setBusy(true);
     try {
-      await new Repository(trackerUrl).defineRule({ ...rule, enabled });
+      await new Repository(trackerUrl, podFetch).defineRule({ ...rule, enabled });
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update the rule.");
@@ -176,7 +180,7 @@ export function RulesDialog({
   const remove = async (iri: string) => {
     setBusy(true);
     try {
-      await new Repository(trackerUrl).removeRule(iri);
+      await new Repository(trackerUrl, podFetch).removeRule(iri);
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not remove the rule.");
@@ -199,7 +203,7 @@ export function RulesDialog({
     }
     setBusy(true);
     try {
-      await new Repository(trackerUrl).defineRule({
+      await new Repository(trackerUrl, podFetch).defineRule({
         enabled: true,
         trigger: draft.trigger,
         action: draft.action,

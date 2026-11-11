@@ -1,6 +1,8 @@
+// AUTHORED-BY GPT-6.1 Sol
 "use client";
 
 import { useEffect, useState } from "react";
+import { publicFetch } from "@jeswr/app-session";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { WebIdDataset } from "@solid/object";
 import { DataFactory } from "n3";
@@ -33,12 +35,12 @@ export const initialsOf = (name: string): string =>
 const cache = new Map<string, Promise<Person>>();
 
 /** Fetch (cached) a WebID's display profile. Never rejects — falls back to the host. */
-export function getPerson(webId: string, fetchImpl?: typeof fetch): Promise<Person> {
+export function getPerson(webId: string, fetchImpl: typeof fetch = publicFetch): Promise<Person> {
   const cached = cache.get(webId);
   if (cached) return cached;
   const pending = (async (): Promise<Person> => {
     try {
-      const { dataset } = await fetchRdf(webId, fetchImpl ? { fetch: fetchImpl } : undefined);
+      const { dataset } = await fetchRdf(webId, { fetch: fetchImpl });
       const agent = new WebIdDataset(dataset, DataFactory).mainSubject;
       return { webId, name: agent?.name ?? shortWebId(webId), avatarUrl: agent?.photoUrl ?? undefined };
     } catch {

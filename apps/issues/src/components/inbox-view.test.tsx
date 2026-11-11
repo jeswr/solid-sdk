@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -9,6 +10,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { InboxNotification } from "@/lib/inbox";
 
+const authFetch = vi.hoisted(() => vi.fn<typeof fetch>());
+vi.mock("@/lib/session-context", () => ({ usePodFetch: () => authFetch }));
 const readInbox = vi.fn();
 vi.mock("@/lib/inbox", () => ({ readInbox: (...args: unknown[]) => readInbox(...args) }));
 
@@ -52,7 +55,7 @@ describe("InboxView", () => {
     expect(screen.getByText("announced")).toBeTruthy();
     expect(screen.getByText(/bob\.example/)).toBeTruthy();
     // readInbox was called with the WebID + own-storage allow-list (SSRF guard).
-    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN);
+    expect(readInbox).toHaveBeenCalledWith(WEBID, OWN, authFetch);
   });
 
   it("shows the empty state when the profile advertises no own-pod inbox", async () => {
