@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { boardLanes, laneFor } from "../../src/apps/tasks/lib/board/swimlanes";
-import { dropMessage } from "../../src/apps/tasks/lib/dnd/announce";
+import { dropMessage, overMessage } from "../../src/apps/tasks/lib/dnd/announce";
 import {
   isPlaced,
   moveTarget,
@@ -94,23 +94,57 @@ describe("board swimlanes", () => {
       url: tasks[1]?.url,
     });
   });
-  it("announces named, unassigned and label lane moves", () => {
-    const task = view("Task", { labelIds: ["red"] });
-    for (const [lane, suffix] of [
-      [{ group: "priority", value: "1" }, " P1."],
-      [{ group: "assignee", value: "bob" }, " bob."],
-      [{ group: "assignee", value: "" }, " Unassigned."],
-      [{ group: "label", value: "red" }, "position 1."],
+  it("names priority, assignee and label destinations on hover and drop", () => {
+    const names = [
+      {
+        url: view("Task").projectUrl,
+        title: "Project",
+        sections: [{ id: "done", name: "Done" }],
+        labels: [{ id: "red", name: "Red" }],
+      },
+    ];
+    for (const [lane, name] of [
+      [{ group: "priority", value: "1" }, "P1"],
+      [{ group: "priority", value: "2" }, "P2"],
+      [{ group: "assignee", value: "bob" }, "bob"],
+      [{ group: "assignee", value: "" }, "Unassigned"],
+      [{ group: "label", value: "red" }, "Red"],
+      [{ group: "label", value: "" }, "No label"],
+      [{ group: "label", value: "unknown" }, "unknown"],
     ] as const) {
-      const plan = planDrop(
-        task,
-        { kind: "section", projectUrl: task.projectUrl, sectionId: "done", at: "end", lane },
-        [task],
-        { flat: true },
+      const task = view("Task", { labelIds: [lane.value] });
+      const target = {
+        kind: "section",
+        projectUrl: task.projectUrl,
+        sectionId: "done",
+        at: "end",
+        lane,
+      } as const;
+      const destination = view("Destination");
+      expect(overMessage(task, target, [task], names)).toBe(`'Task' is over Done in ${name}.`);
+      expect(
+        overMessage(
+          task,
+          {
+            kind: "task",
+            url: destination.url,
+            container: target,
+            placement: "after",
+          },
+          [task, destination],
+          names,
+        ),
+      ).toBe(`'Task' is after 'Destination' in ${name}.`);
+      const plan = planDrop(task, target, [task], { flat: true });
+      expect(dropMessage(task, plan, [task], names, true, true)).toBe(
+        `Moved 'Task' to Done in ${name}, position 1.`,
       );
-      expect(dropMessage(task, plan, [task], [], true, true)).toMatch(
-        new RegExp(`${suffix.replaceAll(".", "\\.")}$`),
-      );
+      if (lane.group === "label" && lane.value === "red") {
+        expect(overMessage(task, target, [task], [])).toBe("'Task' is over No section in red.");
+        expect(dropMessage(task, plan, [task], names, false, true)).toBe(
+          "Moved 'Task' to Done in Red.",
+        );
+      }
     }
   });
 });

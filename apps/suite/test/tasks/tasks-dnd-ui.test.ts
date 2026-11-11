@@ -53,7 +53,7 @@ function layout() {
   ) {
     const order = [
       ...document.querySelectorAll<HTMLElement>(
-        "[data-tsk-row], .tsk-card, .tsk-board-body, .tsk-section-header, div:has(> .tsk-add-row)",
+        "[data-tsk-row]:not(button), .tsk-card, .tsk-board-body, .tsk-section-header, div:has(> .tsk-add-row)",
       ),
     ];
     const index = order.indexOf(this);
@@ -90,6 +90,55 @@ afterEach(() => {
 });
 
 describe("keyboard drag and drop", () => {
+  it.each([
+    ["priority", "body"],
+    ["priority", "card"],
+    ["assignee", "body"],
+    ["assignee", "card"],
+  ] as const)("names the destination row when keyboard dragging onto a %s lane %s", async (group, target) => {
+    pathname = "/tasks/p/inbox/board";
+    const result = await frameCache();
+    cache = result.cache;
+    const bob = "https://bob.test/profile#me";
+    await cache.createTask(result.inbox, { title: "Moving", priority: "high" });
+    await cache.createTask(result.inbox, {
+      title: "Destination",
+      priority: "medium",
+      assignee: bob,
+    });
+    localStorage.setItem(
+      "suite.tasks.prefs",
+      JSON.stringify({ boardGrouping: { [encodeRef(result.inbox.url)]: group } }),
+    );
+    layout();
+    const { host } = await mount(h(TasksDnd, null, h(BoardView, { projectUrl: result.inbox.url })));
+    const handle = host.querySelector<HTMLElement>("[aria-label=\"Move 'Moving'\"]");
+    if (!handle) throw new Error("Missing drag handle");
+    await act(() => handle.focus());
+    await code("Space");
+    await code("ArrowUp");
+    const origin = group === "priority" ? "P1" : "Unassigned";
+    expect(liveRegion()).toBe(`'Moving' is over No section in ${origin}.`);
+    // Pass the origin card to enter the next lane's empty body, then its card.
+    await code("ArrowDown");
+    await code("ArrowDown");
+    const destination = group === "priority" ? "P2" : bob;
+    expect(liveRegion()).toBe(`'Moving' is over No section in ${destination}.`);
+    if (target === "card") {
+      await code("ArrowDown");
+      expect(liveRegion()).toBe(`'Moving' is before 'Destination' in ${destination}.`);
+    }
+    await code("Space");
+    await settle();
+    expect(dropStatus()).toBe(
+      `Moved 'Moving' to No section in ${destination}, position ${target === "card" ? 1 : 2}.`,
+    );
+    const moved = cache.getSnapshot().views.find((task) => task.title === "Moving");
+    expect(group === "priority" ? moved?.priority : moved?.assignee).toBe(
+      group === "priority" ? 2 : bob,
+    );
+  });
+
   it.each([
     "priority",
     "assignee",

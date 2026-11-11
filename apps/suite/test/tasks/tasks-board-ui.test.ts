@@ -167,10 +167,10 @@ describe("project board", () => {
     expect(host.querySelector('.tsk-swimlane[aria-label="P4"] .tsk-card-title')?.textContent).toBe(
       "Task",
     );
-    await key(
-      host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]") as HTMLElement,
-      "Enter",
-    );
+    const trigger = host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]");
+    if (!trigger) throw new Error("Missing task menu");
+    await act(() => trigger.focus());
+    await key(trigger, "Enter");
     await key(byText('[role="menuitem"]', "Move to row…"), "ArrowRight");
     await act(() =>
       vi.waitFor(() => expect(document.querySelector('[role="menuitemradio"]')).toBeTruthy()),
@@ -184,6 +184,13 @@ describe("project board", () => {
     expect(host.querySelector('.tsk-swimlane[aria-label="P1"] .tsk-card-title')?.textContent).toBe(
       "Task",
     );
+    const movedTrigger = host.querySelector<HTMLElement>(
+      '.tsk-swimlane[aria-label="P1"] button[aria-label="Actions for \'Task\'"]',
+    );
+    expect(trigger.isConnected).toBe(false);
+    expect(movedTrigger).toBeTruthy();
+    await act(() => vi.waitFor(() => expect(document.activeElement).toBe(movedTrigger)));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(status(host)).toContain("P1");
   });
 
@@ -223,10 +230,10 @@ describe("project board", () => {
     );
     const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
     for (const name of [bob, "Unassigned"]) {
-      await key(
-        host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]") as HTMLElement,
-        "Enter",
-      );
+      const trigger = host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]");
+      if (!trigger) throw new Error("Missing task menu");
+      await act(() => trigger.focus());
+      await key(trigger, "Enter");
       await key(byText('[role="menuitem"]', "Move to row…"), "ArrowRight");
       await act(() =>
         vi.waitFor(() => expect(document.querySelector('[role="menuitemradio"]')).toBeTruthy()),
@@ -239,6 +246,13 @@ describe("project board", () => {
       expect(
         host.querySelector(`.tsk-swimlane[aria-label="${name}"] .tsk-card-title`)?.textContent,
       ).toBe("Task");
+      const movedTrigger = host.querySelector<HTMLElement>(
+        `.tsk-swimlane[aria-label="${name}"] button[aria-label="Actions for 'Task'"]`,
+      );
+      expect(trigger.isConnected).toBe(false);
+      expect(movedTrigger).toBeTruthy();
+      await act(() => vi.waitFor(() => expect(document.activeElement).toBe(movedTrigger)));
+      expect(document.querySelector('[role="menu"]')).toBeNull();
       expect(status(host)).toContain(name);
     }
   });

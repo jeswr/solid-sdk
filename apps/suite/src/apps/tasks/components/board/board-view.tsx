@@ -100,7 +100,11 @@ function BoardCard({
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <IconButton label={`Actions for '${task.title}'`} variant="ghost">
+            <IconButton
+              label={`Actions for '${task.title}'`}
+              variant="ghost"
+              data-tsk-row={task.url}
+            >
               <Ellipsis size={18} aria-hidden="true" />
             </IconButton>
           </DropdownMenuTrigger>

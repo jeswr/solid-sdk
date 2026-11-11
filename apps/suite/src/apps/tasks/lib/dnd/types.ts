@@ -92,4 +92,5 @@ export interface ProjectName {
     readonly name: string;
     readonly wipLimit?: number | undefined;
   }[];
+  readonly labels?: readonly { readonly id: string; readonly name: string }[] | undefined;
 }
