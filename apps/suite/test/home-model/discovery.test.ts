@@ -15,6 +15,44 @@ import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
   it.each([
+    "A Quiet Weekend",
+    "The Garden",
+  ])("discovers separate imported subjects even when the second title is %s", async (secondTitle) => {
+    const url = `${STORAGE}integrations/netflix/media/viewing-history.ttl`;
+    const fetch = fixtureFetch({
+      [`${STORAGE}integrations/`]: "<> ldp:contains <netflix/> .",
+      [`${STORAGE}integrations/netflix/`]: "<> ldp:contains <media/> .",
+      [`${STORAGE}integrations/netflix/media/`]: "<> ldp:contains <viewing-history.ttl> .",
+      [url]: `<> prov:wasGeneratedBy <../runs.ttl#run> .
+          <#first> a schema:WatchAction, schema:Movie ; schema:name "The Garden" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .
+          <#second> a schema:WatchAction ; schema:name "${secondTitle}" ;
+            prov:wasGeneratedBy <../runs.ttl#run>, <../runs.ttl#previous> .
+          <#helper> a schema:Movie ; schema:name "Mapped helper" .
+          <#source> a prov:Activity ; prov:wasGeneratedBy <../runs.ttl#run> .
+          [] a schema:Movie ; prov:wasGeneratedBy <../runs.ttl#run> .
+          <https://foreign.example/movie> a schema:Movie ; schema:name "Linked movie" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .`,
+    });
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      // Both routes must fetch the document only once and keep both records.
+      typeIndex: [{ forClass: `${NS.SCHEMA}WatchAction`, instance: `${url}#second` }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.title).sort()).toEqual(
+      ["The Garden", secondTitle].sort(),
+    );
+    expect(new Set(result.items.map((item) => item.subject.value))).toEqual(
+      new Set([`${url}#first`, `${url}#second`]),
+    );
+    expect(result.items.every((item) => item.url === url)).toBe(true);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+  });
+
+  it.each([
     "http",
     "https",
   ])("deduplicates %s URLs across parsed indexes and container listings", async (scheme) => {

@@ -5,6 +5,7 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
+import { DataFactory } from "n3";
 import { classificationForType, classifySubject, hasProfileContactDetails } from "./classify";
 import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
 import { type Classification, type DataCategory, DOMAINS, UNCATEGORISED } from "./domains";
@@ -20,6 +21,13 @@ export interface DomainItem extends Classification {
   containerUrl: string;
   dataset: DatasetCore;
   etag: string | null;
+}
+
+/** Multiple records can share a document; profile views can also share a subject. */
+export function domainItemKey(item: DomainItem): string {
+  // Binary listing subjects may be URL aliases for the same file.
+  const subject = item.dataType?.id === "files" ? item.url : item.subject.value;
+  return JSON.stringify([item.url, item.subject.termType, subject, item.dataType?.id]);
 }
 
 export interface DiscoveryOptions extends DiscoveryBudgetOptions {
@@ -74,7 +82,7 @@ function resourceUrl(value: string): string {
 }
 
 /**
- * Merge Type Index hits and suite containers, classify actual primary subjects, dedupe URLs.
+ * Merge Type Index hits and suite containers, classify records, dedupe document/subject/type.
  * Known folders may not exist (404); permission, network and parse failures are retained.
  * Integrations are walked recursively; ordinary folders contribute direct non-container children.
  * Results carry validators so the later SDK adapter can cache by container ETag.
@@ -109,30 +117,51 @@ export async function discoverDomainItems(
   const listedModified = new Map<string, string>();
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
-    const node =
+    // Connector collections stamp their records with import provenance. Enumerate
+    // those local, classified subjects instead of choosing just one from the file.
+    // Unstamped documents retain primary-subject discovery; profiles use the WebID.
+    const imported = new Map<string, ReturnType<typeof subjectOf>>();
+    for (const { subject } of dataset.match(
+      null,
+      DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`),
+    )) {
+      if (
+        subject.termType !== "NamedNode" ||
+        subject.value === url ||
+        resourceUrl(subject.value) !== url
+      )
+        continue;
+      const node = subjectOf(dataset, subject);
+      if (classifySubject(node, webId).dataType) imported.set(subject.value, node);
+    }
+    const nodes =
       webId && url === resourceUrl(webId)
-        ? subjectOf(dataset, webId)
-        : primarySubject(dataset, url);
-    if (!node || dataset.match(TermAs.term(node)).size === 0) return;
-    const classified = classifySubject(node, webId);
-    const modifiedAt = node.modified;
-    const item: DomainItem = {
-      ...classified,
-      url,
-      subject: TermAs.term(node),
-      dataset,
-      etag,
-      containerUrl: parent,
-      title: node.name ?? nameFromUrl(url),
-      ...(modifiedAt ? { modified: modifiedAt } : {}),
-    };
-    result.items.push(item);
-    if (hasProfileContactDetails(node, webId)) {
-      result.items.push({
-        ...item,
-        ...classificationForType("contact-details"),
-        title: "Contact details",
-      });
+        ? [subjectOf(dataset, webId)]
+        : imported.size
+          ? [...imported.values()]
+          : [primarySubject(dataset, url)];
+    for (const node of nodes) {
+      if (!node || dataset.match(TermAs.term(node)).size === 0) continue;
+      const classified = classifySubject(node, webId);
+      const modifiedAt = node.modified;
+      const item: DomainItem = {
+        ...classified,
+        url,
+        subject: TermAs.term(node),
+        dataset,
+        etag,
+        containerUrl: parent,
+        title: node.name ?? nameFromUrl(url),
+        ...(modifiedAt ? { modified: modifiedAt } : {}),
+      };
+      result.items.push(item);
+      if (hasProfileContactDetails(node, webId)) {
+        result.items.push({
+          ...item,
+          ...classificationForType("contact-details"),
+          title: "Contact details",
+        });
+      }
     }
   };
 
@@ -263,7 +292,7 @@ export async function discoverDomainItems(
     const modified = item.modified ?? listedModified.get(item.url);
     if (modified) item.modified = modified;
     if (category.id === "all" || item.domain.id === category.id)
-      unique.set(`${item.url}|${item.dataType?.id}`, item);
+      unique.set(domainItemKey(item), item);
   }
   let fileCount = 0;
   result.items = sortItems([...unique.values()]).filter(

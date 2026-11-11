@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
@@ -12,6 +13,7 @@ import {
   type DomainItem,
   type DomainItems,
   discoverDomainItems,
+  domainItemKey,
   sortItems,
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
@@ -87,8 +89,7 @@ function reconcileItems(
    */
   visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
 ): DomainItem[] {
-  const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
-  const items = new Map(result.items.map((item) => [key(item), item]));
+  const items = new Map(result.items.map((item) => [domainItemKey(item), item]));
   for (const item of previous) {
     const failedRead = failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
@@ -97,11 +98,11 @@ function reconcileItems(
       (!result.listings.has(item.containerUrl) ||
         result.listings.get(item.containerUrl)?.has(item.url));
     if (
-      !items.has(key(item)) &&
+      !items.has(domainItemKey(item)) &&
       (failedRead || unvisited) &&
       !unavailable.some((url) => affectsItem(url, item))
     )
-      items.set(key(item), item);
+      items.set(domainItemKey(item), item);
   }
   return sortItems([...items.values()]);
 }
