@@ -62,12 +62,14 @@ export function MailSidebar() {
   return (
     <div className="mail-sidebar">
       <div>
-        <Button disabled aria-describedby={reasonId} title="Sending needs a connected mail account">
-          <Pencil size={18} aria-hidden="true" />
-          Compose
+        <Button asChild aria-describedby={reasonId}>
+          <Link href="/mail/compose">
+            <Pencil size={18} aria-hidden="true" />
+            Compose
+          </Link>
         </Button>
         <p id={reasonId} className="mail-muted">
-          Sending needs a connected mail account
+          Drafts save to your pod. Sending needs a connected mail account.
         </p>
       </div>
       {accounts.status === "error" ? (
