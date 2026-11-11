@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 /**
@@ -101,7 +102,7 @@ function readFileText(file: File): Promise<string> {
 }
 
 export function useGenetics(): GeneticsState & GeneticsActions {
-  const { status, store, storageRoot, webId, authedFetch } = useSession();
+  const { status, store, storageRoot, webId, storage } = useSession();
   const [summary, setSummary] = useState<StoredGeneticSummary | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
@@ -118,10 +119,10 @@ export function useGenetics(): GeneticsState & GeneticsActions {
     // Cross-session hydration: if the cache is empty but a summary exists on the
     // pod (a prior session on another device), pull it down and cache it as synced.
     // Gated on a FULLY-authed session (never fire a remote read with a half-wired or
-    // just-signed-out `authedFetch`). Fail-safe — a 404 / offline yields undefined
+    // just-signed-out `storage`). Fail-safe — a 404 / offline yields undefined
     // and leaves the empty state.
-    if (!cached && status === "authed" && storageRoot && webId) {
-      const remote = await readGeneticSummary({ authedFetch, webId, storageRoot });
+    if (!cached && status === "authed" && storageRoot && webId && storage) {
+      const remote = await readGeneticSummary({ storage, webId, storageRoot });
       // Re-check the cache AFTER the async read: if the user saved a new local
       // summary while the read was in flight, do NOT overwrite it with the older
       // remote record — hydrate only if the cache is STILL empty.
@@ -144,7 +145,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
         setSummary(record);
       }
     }
-  }, [status, store, storageRoot, webId, authedFetch]);
+  }, [status, store, storageRoot, webId, storage]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
@@ -196,7 +197,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       // not even to the local cache. The model's builder enforces the same rule at
       // the write boundary; this is the belt-and-braces UI-side guard.
       if (consentGiven !== true) throw new ConsentRequiredError();
-      if (!store || !storageRoot || !webId) throw new NotSignedInError();
+      if (!store || !storageRoot || !webId || !storage) throw new NotSignedInError();
       const record: StoredGeneticSummary = {
         kind: "genetic",
         url: geneticsSummaryUrl(storageRoot),
@@ -212,7 +213,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       };
       await store.putGeneticSummary(record);
       setSummary(record);
-      const ctx = { authedFetch, webId, storageRoot };
+      const ctx = { storage, webId, storageRoot };
       const syncing = (async () => {
         try {
           await syncGeneticSummary(ctx, record);
@@ -228,7 +229,7 @@ export function useGenetics(): GeneticsState & GeneticsActions {
       })();
       return { summary: record, syncing };
     },
-    [store, storageRoot, webId, authedFetch],
+    [store, storageRoot, webId, storage],
   );
 
   return { summary, loaded, refresh, buildManualPreview, buildFilePreview, save };

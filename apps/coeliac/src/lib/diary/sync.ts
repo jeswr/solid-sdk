@@ -1,10 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Flush the optimistic outbox to the pod (UX invariant #2 — writes persist
  * asynchronously; the cache is the source of truth for the UI). Each pending
  * record is serialised via `@jeswr/solid-health-diary` and PUT under the
  * ACL-protected diary root; success flips it to `synced`, a failure to `error`
- * (retried next flush). ALL writes go through the injected authed fetch; the diary
+ * (retried next flush). All writes go through the injected StorageClient; the diary
  * root's owner-only ACL is ensured (written first) before any resource write.
  */
 import {
@@ -21,20 +22,21 @@ import type {
   StoredProtocol,
   StoredSymptom,
 } from "../cache/diary-store";
+import type { PodStorage } from "../pod/client";
 import { writeGeneticSummary } from "../genetics/summary";
 import { ensureDiaryReady, putResource } from "../pod/pod-fs";
 import { storedConclusionToData, storedProtocolToData } from "../protocol/persist";
 
 /** The authed context a flush needs. */
 export interface SyncContext {
-  authedFetch: typeof globalThis.fetch;
+  storage: PodStorage;
   webId: string;
   storageRoot: string;
 }
 
 /** Serialise + PUT one meal to the pod (ACL ensured first). */
 export async function syncMeal(ctx: SyncContext, meal: StoredMeal): Promise<void> {
-  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  await ensureDiaryReady(ctx.storage, ctx.storageRoot, ctx.webId);
   const body = await serializeMeal(meal.url, {
     startTime: new Date(meal.startTime),
     created: new Date(meal.createdAt),
@@ -46,12 +48,12 @@ export async function syncMeal(ctx: SyncContext, meal: StoredMeal): Promise<void
     items: meal.items,
     exposures: meal.exposures,
   });
-  await putResource(ctx.authedFetch, meal.url, body);
+  await putResource(ctx.storage, meal.url, body);
 }
 
 /** Serialise + PUT one symptom to the pod (ACL ensured first). */
 export async function syncSymptom(ctx: SyncContext, symptom: StoredSymptom): Promise<void> {
-  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  await ensureDiaryReady(ctx.storage, ctx.storageRoot, ctx.webId);
   const body = await serializeSymptom(symptom.url, {
     symptomType: symptom.symptomType,
     onset: new Date(symptom.onset),
@@ -60,26 +62,26 @@ export async function syncSymptom(ctx: SyncContext, symptom: StoredSymptom): Pro
     note: symptom.note,
     patient: ctx.webId,
   });
-  await putResource(ctx.authedFetch, symptom.url, body);
+  await putResource(ctx.storage, symptom.url, body);
 }
 
 /** Serialise + PUT one elimination protocol to the pod (ACL ensured first). */
 export async function syncProtocol(ctx: SyncContext, protocol: StoredProtocol): Promise<void> {
-  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  await ensureDiaryReady(ctx.storage, ctx.storageRoot, ctx.webId);
   const data = storedProtocolToData(protocol);
   const body = await serializeProtocol(protocol.url, { ...data, patient: data.patient ?? ctx.webId });
-  await putResource(ctx.authedFetch, protocol.url, body);
+  await putResource(ctx.storage, protocol.url, body);
 }
 
 /** Serialise + PUT one tolerance conclusion to the pod (ACL ensured first). */
 export async function syncConclusion(ctx: SyncContext, conclusion: StoredConclusion): Promise<void> {
-  await ensureDiaryReady(ctx.authedFetch, ctx.storageRoot, ctx.webId);
+  await ensureDiaryReady(ctx.storage, ctx.storageRoot, ctx.webId);
   const data = storedConclusionToData(conclusion);
   const body = await serializeToleranceConclusion(conclusion.url, {
     ...data,
     patient: data.patient ?? ctx.webId,
   });
-  await putResource(ctx.authedFetch, conclusion.url, body);
+  await putResource(ctx.storage, conclusion.url, body);
 }
 
 /**
@@ -93,7 +95,7 @@ export async function syncGeneticSummary(
   summary: StoredGeneticSummary,
 ): Promise<void> {
   await writeGeneticSummary(
-    { authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot },
+    { storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot },
     {
       markers: summary.markers,
       interpretation: summary.interpretation,

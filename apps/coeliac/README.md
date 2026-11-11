@@ -1,8 +1,31 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # coeliac-app
 
 A privacy-first food-and-symptom diary for coeliac disease and other food intolerances. Log meals, exposures, and symptoms; the app helps surface likely trigger patterns, run structured elimination protocols, and shape a personalised diet plan — while keeping all of your health data in your own [Solid](https://solidproject.org/) pod rather than on someone else's server. The diary is written with the reusable [`@jeswr/solid-health-diary`](https://github.com/jeswr/solid-health-diary) model (the shared `diet:` sector of the @jeswr federation vocabulary), so it stays portable and readable by other pod-native apps.
 
 > **Status: under active development.** This is an experimental, AI-assisted build — not a finished or production-ready product, and **not medical advice**. Consult a qualified healthcare professional about diagnosis, testing, and any dietary change.
+
+## Pod data layer
+
+Each authenticated session lazily creates one `StorageClient` through the root
+`@jeswr/storage-client` factory, using the authenticated fetch wrapped in
+`createPodScopedFetch`. The client is shared by diary/outbox writes, genetics,
+OFF and knowledge caches, community publishing, and private Type Index I/O.
+WebID storage-root discovery precedes client creation. Failed client discovery
+can retry on the next operation without blocking the local cache or outbox.
+
+The existing Solid layout and owner-only WAC ACLs remain: the reviewed
+`buildOwnerOnlyAcl` builder supplies ACL content, and StorageClient persists it
+before descendant data. Conditional updates preserve the observed ETag and
+surface 412 failures. Existing unconditional Solid upserts explicitly use the
+SDK's `ifMatch: "*"`; container creation uses `create` and tolerates existing-name
+conflicts. HTTP write failures retain the UI's `PodWriteError` messages and keep
+the SDK error as their cause. Cache and Type Index failures remain best-effort.
+
+Tests inject `@jeswr/storage-client/memory` clients, including real conditional
+write conflicts and ACL ordering. The session test harness records memory-client
+operations; public API requests use a separate stub fetch. Routing regression
+tests disable network fetch and require successful memory-storage round-trips.
 
 ## Getting Started
 
