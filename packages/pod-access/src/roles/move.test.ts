@@ -1016,6 +1016,44 @@ test("an ambiguous content commit retains the protected copy when its old valida
   expect(await (await f.storage.read(from)).text()).toBe("secret");
 });
 
+test("a placeholder ETag seen only by a follow-up HEAD is never used to write or delete", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const create = required(vi.mocked(f.storage.create).getMockImplementation());
+  vi.spyOn(f.storage, "create").mockImplementationOnce(async (...args) => {
+    const { etagSource: _own, ...result } = await create(...args);
+    return { ...result, etagSource: "follow-up" };
+  });
+  const remove = vi.spyOn(f.storage, "delete");
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "rollback-failed",
+    cause: { errors: [expect.anything(), expect.objectContaining({ code: "conflict" })] },
+  });
+  expect(f.storage.write).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(await ownBob(`${f.target}file`, f.options)).toMatchObject({ role: "viewer" });
+  expect(await (await f.storage.read(from)).text()).toBe("secret");
+});
+
+test("a content ETag without response provenance keeps the copy on rollback", async () => {
+  const f = await setup();
+  const from = await f.item();
+  const write = required(vi.mocked(f.storage.write).getMockImplementation());
+  vi.spyOn(f.storage, "write").mockImplementationOnce(async (...args) => {
+    const { etagSource: _own, ...result } = await write(...args);
+    // Another writer changes the source, so staging fails after the copy has content.
+    await write(from, "changed", { contentType: "text/plain", ifMatch: "*" });
+    return result;
+  });
+  const remove = vi.spyOn(f.storage, "delete");
+  await expect(movePreservingAccess(f.storage, from, f.target, f.options)).rejects.toMatchObject({
+    step: "rollback-failed",
+  });
+  expect(remove).not.toHaveBeenCalled();
+  expect(await (await f.storage.read(`${f.target}file`)).text()).toBe("secret");
+  expect(await (await f.storage.read(from)).text()).toBe("changed");
+});
+
 test("cleanup continues after a child failure and retains its protected ancestor", async () => {
   const f = await setup();
   const from = await f.item("tree", [manager, selection()], true);

@@ -65,6 +65,10 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
 - `setMetadata` takes the metadata document's ETag from `storage.metadata(url)`, rather than
   the content ETag. A write result may have `etag: null` if a committed mutation omitted it
   and its follow-up HEAD failed; read again before the next conditional mutation.
+  `etagSource` says where a write result's ETag came from: `"response"` is the mutation's own
+  validator; `"follow-up"` came from a later HEAD and may already be another writer's version.
+  Use only a `"response"` ETag as `ifMatch` when a follow-up write or delete must not clobber
+  a concurrent update.
 - With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
   a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
   identifier. Without a name, both use POST. Always use the returned `url`, including after

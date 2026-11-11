@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { moveDestination, moveGrants, planMoveGrants, readGrants, setGrants } from "./client.js";
 import { isRoleError } from "./errors.js";
 import { scoped } from "./http.js";
@@ -95,6 +95,10 @@ interface Copy {
   url: string;
   container: boolean;
   etag: string | null;
+}
+/** The mutation's own validator, or null when the backend observed it with a later read. */
+function ownEtag(result: WriteResult): string | null {
+  return result.etagSource === "response" ? result.etag : null;
 }
 function equalRows(a: RoleGrant[], b: RoleGrant[]): boolean {
   const keys = (rows: RoleGrant[]) => rows.map((g) => JSON.stringify([g.agent, g.role])).sort();
@@ -294,11 +298,12 @@ export async function movePreservingAccess(
           contentType: type,
           ...io,
         });
-        const copy = { url: created.url, container: item.container, etag: created.etag };
+        // Only the mutation response's own ETag names our version. A follow-up HEAD may have
+        // seen another writer's update, so a copy without one is kept, never written or deleted.
+        const copy = { url: created.url, container: item.container, etag: ownEtag(created) };
         copies.push(copy);
         if (created.url !== url)
           throw moveError(url, "Placeholder returned a different URL", "conflict");
-        const placeholderEtag = strongEtag(created.etag, url);
         await unchanged(storage, item, opts, signal);
         if (item.own.ownEtag !== undefined) {
           await apply(url, item.grants, opts);
@@ -318,11 +323,10 @@ export async function movePreservingAccess(
         if (read) {
           const written = await storage.write(url, read.body ?? "", {
             contentType: type,
-            ifMatch: placeholderEtag,
+            ifMatch: strongEtag(copy.etag, url),
             ...io,
           });
-          copy.etag = written.etag;
-          strongEtag(written.etag, url);
+          copy.etag = ownEtag(written);
         }
       } finally {
         // Cancellation must not wait for a transport that still owns/locks this stream.
@@ -355,6 +359,10 @@ export async function movePreservingAccess(
   } catch (error) {
     const failures: unknown[] = [];
     for (const copy of [...copies].reverse()) {
+      if (!copy.container && copy.etag === null) {
+        failures.push(moveError(copy.url, "Copy kept: no validator for its own write", "conflict"));
+        continue;
+      }
       try {
         const validator = copy.container
           ? await emptyContainerEtag(storage, copy.url)
