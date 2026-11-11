@@ -38,8 +38,8 @@
  *
  * BROWSER ISOLATION. This module is a SEPARATE entry (`./node`) and is the ONLY place
  * `undici` / `node:*` builtins are imported. The default `.` entry (`./index.ts`) and its
- * `./guard.ts` remain free of `undici` and of any top-level `node:` import, so the browser
- * bundle is unaffected. Do NOT import undici elsewhere.
+ * `./guard.ts` have no static undici or top-level `node:` imports, so browser bundles
+ * remain unaffected. The root guard lazily loads undici only for Node hostname pinning.
  */
 import type { LookupAddress } from "node:dns";
 import { lookup as dnsLookupCb } from "node:dns";

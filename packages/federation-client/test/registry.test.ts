@@ -30,6 +30,8 @@ import {
 
 /** A dnsLookup that resolves every host to a public address (so the guard passes). */
 const PUBLIC_DNS: DnsLookup = async () => [{ address: "93.184.216.34", family: 4 }];
+// These inert fetch stubs open no sockets and cannot consume an undici dispatcher.
+const STUB_GUARD = { dnsLookup: PUBLIC_DNS, requireDnsPinning: false };
 
 /** Build a stub `fetch` returning the given Turtle body with HTTP 200. */
 function stubFetch(body: string, status = 200): typeof globalThis.fetch {
@@ -44,7 +46,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("lists every membership with its registry-asserted status + trust flag", async () => {
     const { members, valid } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(REGISTRY_TWO_MEMBERS),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toHaveLength(2);
     // Both memberships are WELL-FORMED (Suspended is a valid status, just not a
@@ -68,7 +70,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("lets a caller filter to currently-trusted (Active) members", async () => {
     const { members } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(REGISTRY_TWO_MEMBERS),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     const trusted = members.filter((m) => m.trusted).map((m) => m.id);
     expect(trusted).toEqual([APP_MUSIC]);
@@ -77,7 +79,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("verifies each membership independently — flags an invalid one", async () => {
     const { members } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(REGISTRY_BAD_MEMBERSHIP),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toHaveLength(1);
     const m = members[0];
@@ -94,7 +96,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("returns no members for a registry with none (but stays a found registry)", async () => {
     const { members, issues } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(REGISTRY_EMPTY),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toEqual([]);
     // The registry exists but lists nothing — a no-membership document-level issue.
@@ -104,7 +106,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("surfaces a document with no fedreg:Registry node as a document-level issue", async () => {
     const { members, valid, issues } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(NO_REGISTRY),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toEqual([]);
     expect(valid).toBe(false);
@@ -115,7 +117,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("surfaces a fetch failure as a document-level issue (not a silent empty list)", async () => {
     const { members, valid, issues } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch("", 404),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toEqual([]);
     expect(valid).toBe(false);
@@ -126,7 +128,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
   it("surfaces malformed registry RDF as a document-level parse failure", async () => {
     const { members, valid, issues } = await discoverFromRegistry(REGISTRY_URL, {
       fetch: stubFetch(MALFORMED_TURTLE),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(members).toEqual([]);
     expect(valid).toBe(false);
@@ -145,7 +147,7 @@ describe("discoverFromRegistry — registry-asserted memberships", () => {
     }) as typeof globalThis.fetch;
     const { members, valid, issues } = await discoverFromRegistry("https://127.0.0.1/federation", {
       fetch: recordingFetch,
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     // The guard's SsrfError is mapped by the registry to a document-level fetch/parse
     // issue (it does not throw out of discoverFromRegistry).
@@ -162,7 +164,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("resolves the advertised spec-versions + supported sectors", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(STORAGE_DUAL_READ),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(true);
     expect(res.id).toBe(STORAGE_URL);
@@ -174,7 +176,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("accepts an exactly-advertised version and rejects others (exact-IRI semantics)", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(STORAGE_DUAL_READ),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     // Dual-read window: both old + new accepted.
     expect(res.accepts(SPEC_SCHED_100)).toBe(true);
@@ -188,7 +190,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("computes the unsupported gap an app must close before writing", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(STORAGE_DUAL_READ),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     const gap = res.unsupported([SPEC_SCHED_110, SPEC_SCHED_200]);
     expect(gap).toEqual([SPEC_SCHED_200]);
@@ -198,7 +200,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("fails closed for a storage missing acceptsSpec — accepts NOTHING", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(STORAGE_NO_SPEC),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(false);
     expect(res.acceptsSpec).toEqual([]);
@@ -210,7 +212,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("fails closed for a fetch failure — accepts NOTHING", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch("", 500),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(false);
     expect(res.acceptsSpec).toEqual([]);
@@ -222,7 +224,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
     // Gating on result.valid means we must NOT advertise that version (round-2 Medium).
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(STORAGE_INVALID_WITH_SPEC),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(false);
     // Even though the raw doc listed acceptsSpec #1.0.0, an unverifiable storage
@@ -235,7 +237,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
   it("fails closed for malformed storage RDF — accepts NOTHING", async () => {
     const res = await resolveStorageSpecVersion(STORAGE_URL, {
       fetch: stubFetch(MALFORMED_TURTLE),
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(false);
     expect(res.accepts(SPEC_SCHED_100)).toBe(false);
@@ -254,7 +256,7 @@ describe("resolveStorageSpecVersion — storage spec-version advertisement", () 
     }) as typeof globalThis.fetch;
     const res = await resolveStorageSpecVersion("https://169.254.169.254/storage", {
       fetch: recordingFetch,
-      guard: { dnsLookup: PUBLIC_DNS },
+      guard: STUB_GUARD,
     });
     expect(res.valid).toBe(false);
     expect(res.accepts(SPEC_SCHED_100)).toBe(false);

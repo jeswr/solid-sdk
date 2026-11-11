@@ -282,6 +282,8 @@ async function readIdentityRdf(
     }
   }
   const guarded = createGuardedFetch({
+    // Browser session fetch owns DNS and opaque redirects; it cannot use an undici dispatcher.
+    requireDnsPinning: false,
     allowLoopback: options.allowInsecureLoopback === true,
     fetch: async (input, init) => {
       const hop = identityDocumentUrl(String(input), options);

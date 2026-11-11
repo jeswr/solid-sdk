@@ -7,8 +7,9 @@
  * top-level `import` of any `node:` builtin (the IP-literal classifier is the pure-JS
  * `classifyIpLiteral`, and the only `node:dns/promises` use is a LAZY `await import(...)`
  * reached ONLY on the Node branch). A browser bundler resolves + tree-shakes it with no
- * polyfill shim. The full DNS-pinning closure of the rebinding window lives in the SEPARATE
- * Node-only `./node` entry, which is the ONLY place `undici` / `node:*` are imported.
+ * polyfill shim. On the Node branch the default transport lazily loads undici and pins
+ * each hostname request to that hop's validated DNS answers. The separate `./node` entry
+ * also supplies a connect-time validating dispatcher and additional Node transport options.
  *
  * Consolidated from the four suite copies; the consolidated guard is a strict SUPERSET of
  * every defence any one of them had. On every request AND every redirect hop it:
@@ -116,10 +117,11 @@ export interface GuardOptions {
   readonly beforeDispatch?: () => void;
   /**
    * The underlying `fetch` to issue the (guarded, `redirect:"manual"`) requests with.
-   * Defaults to `globalThis.fetch`. Pass an authenticated fetch here — the guard threads it
-   * through unchanged. A plain auth/custom `fetch` does NOT, by itself, pin DNS, so supplying
-   * it does NOT satisfy {@link GuardOptions.requireDnsPinning}; pass {@link
-   * GuardOptions.pinningFetch} for that.
+   * Defaults to a lazily loaded undici fetch for DNS-pinned Node hostname requests and
+   * `globalThis.fetch` otherwise. A custom/authenticated fetch does not establish DNS
+   * pinning: Node hostname requests refuse it by default. Supply {@link
+   * GuardOptions.pinningFetch}, or explicitly accept the rebinding window with
+   * `requireDnsPinning: false`.
    */
   readonly fetch?: typeof globalThis.fetch;
   /**
@@ -137,8 +139,9 @@ export interface GuardOptions {
    * A DNS lookup for hostname classification — selects the guard BRANCH. Defaults to Node's
    * `dns/promises.lookup(host, { all: true })` when running on Node (the NODE branch: full
    * DNS-resolve + every-record-public + rebinding mitigation). Pass `null` to FORCE the
-   * DNS-less branch (a syntactic guard). Injected in tests to drive the rebinding cases
-   * (Node branch) and the DNS-less cases (`null`) deterministically.
+   * DNS-less branch (a syntactic guard). On a Node server, hostname requests still need
+   * `pinningFetch` or an explicit `requireDnsPinning: false`. Injected in tests to drive
+   * rebinding and DNS-less cases deterministically.
    */
   readonly dnsLookup?: DnsLookup | null;
   /** Maximum response body size in bytes (default 1 MiB). Declared over-cap rejected up front. */
@@ -161,17 +164,17 @@ export interface GuardOptions {
    * GuardOptions.requireDnsPinning} is set, since a socket cannot be pinned without a
    * resolver. Regardless of this flag, `localhost` / `*.local` NAMES, private/loopback/
    * metadata IP LITERALS, and `http:` to a non-loopback name are ALWAYS refused. Default
-   * `false`. Inert on the Node branch (DNS is always available there).
+   * `false`. Does not disable Node pinning, even when `dnsLookup: null` is forced.
    */
   readonly allowUnresolvedHosts?: boolean;
   /**
-   * **DNS-rebinding posture (security-strict).** When `true`, the guard **refuses a hostname
-   * target unless a {@link GuardOptions.pinningFetch} was supplied** — the explicit, branded
-   * pinning attestation. A hostname through the default `globalThis.fetch` OR a plain
-   * (non-pinning) {@link GuardOptions.fetch} is rejected. IP-literal targets (no rebinding
-   * window) are always allowed. Default `false` — the usable best-effort posture (DNS
-   * validation + redirect re-validation, documented residual window). Set `true` (plus
-   * `pinningFetch`, e.g. the `./node` entry) for a hardened deployment.
+   * Require a DNS-pinned transport for hostname requests. Defaults to `true` on the
+   * DNS-resolving Node branch: the built-in transport pins that hop's validated answers;
+   * a custom {@link GuardOptions.fetch} must instead be supplied as an explicitly attested
+   * {@link GuardOptions.pinningFetch}. Set `false` to opt into the weaker, separate
+   * validation/connect DNS lookups (DNS rebinding remains possible). IP literals need no
+   * pinning. DNS-less browser/edge defaults are unchanged; explicitly setting `true` there
+   * requires {@link GuardOptions.allowUnresolvedHosts} to accept the no-resolver residual.
    */
   readonly requireDnsPinning?: boolean;
   /**
@@ -208,6 +211,53 @@ const DEFAULT_MAX_REDIRECTS = 5;
  * (gated by `hasNodeDns()`).
  */
 const NODE_DNS_SPECIFIER = ["node:dns", "promises"].join("/");
+// Keep undici opaque to browser bundlers, just like the DNS probe above. It is an
+// existing runtime dependency; failure to load it on Node must fail closed.
+const NODE_FETCH_SPECIFIER = ["un", "dici"].join("");
+let nodeFetchModule: Promise<typeof import("undici")> | undefined;
+
+interface PinnedTarget {
+  readonly hostname: string;
+  readonly addresses: ResolvedAddress[];
+}
+
+/** Prepare the Node transport before the synchronous authority fence. */
+async function pinnedTransport(target: PinnedTarget): Promise<typeof globalThis.fetch> {
+  nodeFetchModule ??= import(/* @vite-ignore */ NODE_FETCH_SPECIFIER);
+  const { Agent, fetch } = await nodeFetchModule;
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const agent = new Agent({
+      connect: {
+        lookup(hostname, options, callback) {
+          // Match dns.lookup's asynchronous callback contract so the connector installs
+          // its socket error handlers before a connection attempt can fail.
+          queueMicrotask(() => {
+            if (hostname !== target.hostname) {
+              callback(new SsrfError("Pinning refused an unexpected connection hostname."), [], 0);
+              return;
+            }
+            // Return fresh records: neither the resolver nor the connector can mutate the pin.
+            const addresses = target.addresses.map((address) => ({ ...address }));
+            if (options.all) callback(null, addresses);
+            else callback(null, addresses[0]?.address ?? "", addresses[0]?.family ?? 0);
+          });
+        },
+      },
+    });
+    try {
+      return (await fetch(
+        input as string,
+        {
+          ...init,
+          redirect: "manual",
+          dispatcher: agent,
+        } as never,
+      )) as unknown as Response;
+    } finally {
+      void agent.close().catch(() => {});
+    }
+  }) as typeof globalThis.fetch;
+}
 
 /**
  * Marker error thrown by {@link loadNodeDnsLookup} when the `node:dns/promises` MODULE itself
@@ -317,6 +367,8 @@ class SsrfGuard {
   private readonly allowUnresolvedHosts: boolean;
   private readonly requireDnsPinning: boolean;
   private readonly havePinningFetch: boolean;
+  private readonly haveCustomFetch: boolean;
+  private readonly explicitRequireDnsPinning: boolean;
   private readonly isBrowser: boolean;
   private readonly usingDefaultNodeLookup: boolean;
   private readonly hostnameDenylist: readonly string[];
@@ -327,6 +379,8 @@ class SsrfGuard {
   constructor(options: GuardOptions) {
     this.beforeDispatch = options.beforeDispatch;
     this.havePinningFetch = options.pinningFetch !== undefined;
+    this.haveCustomFetch = options.fetch !== undefined;
+    this.explicitRequireDnsPinning = options.requireDnsPinning === true;
     this.isBrowser = isBrowserContext();
     this.fetcher = options.pinningFetch ?? options.fetch ?? globalThis.fetch;
     this.injectedLookup = options.dnsLookup === null ? undefined : (options.dnsLookup ?? undefined);
@@ -344,7 +398,7 @@ class SsrfGuard {
     validateLimit("timeoutMs", this.timeoutMs, false);
     this.allowLoopback = options.allowLoopback ?? false;
     this.allowUnresolvedHosts = options.allowUnresolvedHosts ?? false;
-    this.requireDnsPinning = options.requireDnsPinning ?? false;
+    this.requireDnsPinning = options.requireDnsPinning ?? hasNodeDns();
     this.hostnameDenylist = options.hostnameDenylist ?? DEFAULT_HOSTNAME_DENYLIST;
     this.allowedContentTypes = options.allowedContentTypes
       ? options.allowedContentTypes.map((t) => t.toLowerCase())
@@ -396,7 +450,21 @@ class SsrfGuard {
       }
       seen.add(currentUrl);
       this.throwIfAborted(currentUrl, controller);
-      await this.waitFor(this.assertAllowed(currentUrl, prevWasHttps), currentUrl, controller);
+      const target = await this.waitFor(
+        this.assertAllowed(currentUrl, prevWasHttps),
+        currentUrl,
+        controller,
+      );
+      let fetcher = this.fetcher;
+      if (target) {
+        try {
+          fetcher = await this.waitFor(pinnedTransport(target), currentUrl, controller);
+        } catch (cause) {
+          throw new SsrfError(
+            `DNS-pinning transport unavailable for ${sanitizeUrl(currentUrl)}: ${message(cause)}`,
+          );
+        }
+      }
       // A late DNS result must never start a transport after the deadline/caller abort.
       this.throwIfAborted(currentUrl, controller);
 
@@ -409,7 +477,7 @@ class SsrfGuard {
       this.beforeDispatch?.();
       let res: Response;
       try {
-        res = await this.fetcher(currentUrl, dispatchInit);
+        res = await fetcher(currentUrl, dispatchInit);
       } catch (cause) {
         // Raw errors can retain secret-bearing URLs in their stack, cause or custom fields.
         // Keep only the sanitised diagnostic in our message, including on timeout.
@@ -582,7 +650,7 @@ class SsrfGuard {
    * with no userinfo, an allowed port, a non-denied host, and a host allowed by the active
    * branch. `prevWasHttps` rejects a scheme-downgrade redirect (https → http).
    */
-  async assertAllowed(rawUrl: string, prevWasHttps = false): Promise<void> {
+  async assertAllowed(rawUrl: string, prevWasHttps = false): Promise<PinnedTarget | undefined> {
     let url: URL;
     try {
       url = new URL(rawUrl);
@@ -649,13 +717,11 @@ class SsrfGuard {
       return;
     }
 
-    // --- NODE branch: a resolver IS available. The DNS-rebinding fail-closed posture fires
-    // BEFORE any host query (no DNS leak for a request the strict posture will refuse): a
-    // HOSTNAME (validated but, on plain fetch, not socket-pinned) is refused under
-    // `requireDnsPinning` unless a branded `pinningFetch` was supplied.
-    if (this.requireDnsPinning && !this.havePinningFetch) {
+    // A custom fetch may ignore undici dispatchers. Refuse before querying DNS unless
+    // the caller attests it pins, or explicitly accepts the weaker posture.
+    if (this.requireDnsPinning && !this.havePinningFetch && this.haveCustomFetch) {
       throw new SsrfError(
-        `URL refused — requireDnsPinning is set and "${hostname}" is a hostname, which cannot be DNS-pinned without an explicit pinningFetch. Pass a pinningFetch (asserted to pin DNS), or use an IP literal.`,
+        `URL refused — requireDnsPinning requires an explicit pinningFetch for a custom fetch to "${hostname}". Supply a DNS-pinning transport, omit fetch to use the built-in pinned transport, or explicitly set requireDnsPinning: false to accept DNS rebinding.`,
       );
     }
     let resolved: ResolvedAddress[];
@@ -668,6 +734,12 @@ class SsrfGuard {
       throw new SsrfError(`Host resolved to no addresses: ${hostname}.`);
     }
     this.assertResolvedAddressesAllowed(url, hostname, resolved);
+    if (this.requireDnsPinning && !this.havePinningFetch) {
+      return {
+        hostname,
+        addresses: resolved.map(({ address, family }) => ({ address, family })),
+      };
+    }
   }
 
   /** Port gate: in production an explicit port must be 443 (https). Inert under allowLoopback. */
@@ -697,11 +769,26 @@ class SsrfGuard {
   private assertDnslessHostnameAllowed(protocol: string, hostname: string): void {
     const lower = hostname.toLowerCase().replace(/\.$/, "");
 
+    // Forcing dnsLookup:null on a Node server must not silently turn pinning off.
+    // A failed capability probe, real browsers and DNS-less edge runtimes retain
+    // their existing policy below; an intentionally unpinned Node transport must opt out.
+    if (
+      this.requireDnsPinning &&
+      hasNodeDns() &&
+      !this.isBrowser &&
+      !this.usingDefaultNodeLookup &&
+      !this.havePinningFetch
+    ) {
+      throw new SsrfError(
+        `URL refused — requireDnsPinning cannot pin "${hostname}" with DNS disabled on Node. Supply a pinningFetch or explicitly set requireDnsPinning: false to accept DNS rebinding.`,
+      );
+    }
+
     // STRICT-PINNING GATE FIRST: requireDnsPinning asks for a socket pinned to a validated
     // address, impossible without a resolver. Fails closed for EVERY DNS-less hostname target
     // — incl. a loopback name — unless the caller accepted the residual via allowUnresolvedHosts.
     // Runs BEFORE any allow path so the allowLoopback dev hatch cannot bypass the strict posture.
-    if (this.requireDnsPinning && !this.allowUnresolvedHosts) {
+    if (this.explicitRequireDnsPinning && !this.allowUnresolvedHosts) {
       throw new SsrfError(
         `URL refused — requireDnsPinning is set but no DNS resolver is available in this runtime to pin "${hostname}". A browser cannot pin a socket; set allowUnresolvedHosts to accept the residual, or run on Node with a pinningFetch.`,
       );

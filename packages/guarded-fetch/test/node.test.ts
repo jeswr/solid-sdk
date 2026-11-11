@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent as UndiciAgent, fetch as undiciFetch } from "undici";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { SsrfError } from "../src/index.js";
+import { createGuardedFetch, SsrfError } from "../src/index.js";
 import {
   createNodeGuardedFetch,
   createPinningDispatcher,
@@ -93,6 +93,20 @@ afterEach(async () => {
 });
 
 describe("createNodeGuardedFetch — connect-time pin (end-to-end)", () => {
+  it("the root default pins the validated answer through the real undici socket connector", async () => {
+    let lookups = 0;
+    const fetch = createGuardedFetch({
+      allowLoopback: true,
+      dnsLookup: async () => {
+        lookups += 1;
+        return [{ address: lookups === 1 ? "127.0.0.1" : "10.0.0.7", family: 4 }];
+      },
+    });
+    const response = await fetch(`http://root-pinning.example:${goodPort}/registry`);
+    expect(await response.text()).toBe(goodBody);
+    expect(lookups).toBe(1);
+  });
+
   it("accepts a public-resolving host and pins to the validated address", async () => {
     const resolveAll: ResolveAll = async () => [{ address: "127.0.0.1", family: 4 }];
     const fetchImpl = createNodeGuardedFetch({ allowLoopback: true, resolveAll });

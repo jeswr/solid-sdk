@@ -8,7 +8,7 @@
 A `fetch`-compatible SSRF, DNS-rebinding, redirect, timeout, and response-size guard for
 attacker-influenced URLs.
 
-> Experimental and security-critical. Prefer the DNS-pinning Node.js entry for server-side fetches.
+> Experimental and security-critical. Node hostname requests require DNS pinning by default.
 
 ## Install
 
@@ -31,12 +31,38 @@ const guardedFetch = createNodeGuardedFetch({
 const response = await guardedFetch("https://registry.example/catalog.json");
 ```
 
-The default entry is browser-safe with no top-level `node:*` imports. On Node it lazily
-imports `node:dns/promises` to validate every resolved address. This validation and the
-transport's connection use separate DNS lookups, leaving a DNS-rebinding window between
-validation and connect. Set `requireDnsPinning: true` with an explicitly DNS-pinning
-`pinningFetch`, or use `@jeswr/guarded-fetch/node`, which pins validated DNS results to
-the connection. `requireDnsPinning` defaults to `false` in the root entry.
+The root entry (`createGuardedFetch()` / `guardedFetch()`) is browser-safe with no
+top-level `node:*` or undici imports. On Node, hostname requests now default to
+`requireDnsPinning: true`: the guard lazily loads its existing undici dependency,
+validates every DNS answer, and connects through a per-hop dispatcher pinned to those
+answers. The socket never resolves the hostname again. Redirects receive fresh validation
+and a fresh pin; TLS still verifies the original hostname. A caller-provided dispatcher
+cannot replace the pin, and a missing undici transport fails closed. The separate
+`@jeswr/guarded-fetch/node` entry remains available for a connect-time validating
+dispatcher, custom resolver and private CA options.
+
+For authenticated/custom transports, supply `pinningFetch` only when that transport
+actually pins DNS. A plain `fetch` option cannot establish that property and is refused
+for Node hostname requests by default. This is a breaking change for Node callers that
+previously injected an unpinned fetch. The explicit weaker-posture opt-out is
+`requireDnsPinning: false`:
+
+```ts
+const weakerFetch = createGuardedFetch({
+  fetch: customFetch,
+  // This transport cannot pin DNS. Accept the validation/connect DNS-rebinding window.
+  requireDnsPinning: false,
+});
+```
+
+This opt-out restores separate validation/connect DNS lookups; private answers at
+validation time are still refused, but a rebinding answer at connect time can bypass
+that check. `allowUnresolvedHosts` does not disable Node pinning; forcing `dnsLookup: null`
+on a Node server also requires a pinning transport or the explicit weaker opt-out.
+IP-literal requests need no DNS pin. Browser and DNS-less edge defaults are unchanged:
+browsers use syntactic checks; other DNS-less runtimes require `allowUnresolvedHosts`.
+`assertSafeUrl` only validates a URL and does not create a dispatcher or protect a later
+independent fetch. See the [workspace caller audit](docs/dns-pinning-callers.md).
 
 `beforeDispatch?: () => void` is an optional synchronous authority fence on guard
 construction. It runs after each awaited destination/DNS check, immediately before
