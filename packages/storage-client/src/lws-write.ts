@@ -259,10 +259,14 @@ export function lwsWrites(
     signal?: AbortSignal,
   ): Promise<WriteResult> {
     discard(response.body);
+    const own = response.headers.get("etag");
+    const observed = await etag(url, own, signal);
     return {
       url,
-      etag: await etag(url, response.headers.get("etag"), signal),
+      etag: observed,
       created: response.status === 201,
+      ...(own !== null ? { etagSource: "response" as const } : {}),
+      ...(own === null && observed !== null ? { etagSource: "follow-up" as const } : {}),
     };
   }
   async function remove(url: string, ifMatch: string, signal?: AbortSignal) {

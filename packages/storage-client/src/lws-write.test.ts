@@ -107,6 +107,7 @@ describe("LWS PUT and POST fixture replay", () => {
       url: URL,
       etag: '"written"',
       created: false,
+      etagSource: "response",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
@@ -165,7 +166,12 @@ describe("LWS PUT and POST fixture replay", () => {
           { rel: "related", target: "urn:other" },
         ],
       }),
-    ).toEqual({ url: `${ROOT}opaque-id`, etag: '"created"', created: true });
+    ).toEqual({
+      url: `${ROOT}opaque-id`,
+      etag: '"created"',
+      created: true,
+      etagSource: "follow-up",
+    });
     expect(calls.map(({ method }) => method)).toEqual(["POST", "HEAD"]);
     expect(calls[0]?.headers.get("slug")).toBe("suggested.txt");
     expect(calls[0]?.headers.get("link")).toBe(
@@ -199,6 +205,7 @@ describe("LWS PUT and POST fixture replay", () => {
       url: `${ROOT}opaque-id`,
       etag: tag,
       created: true,
+      etagSource: "response",
     });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.headers.get("slug")).toBe(encodeURIComponent(name));
@@ -215,6 +222,7 @@ describe("LWS PUT and POST fixture replay", () => {
       url: childUrl,
       etag: '"child"',
       created: true,
+      etagSource: "response",
     });
     expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
       `POST ${NOTES}`,
@@ -491,7 +499,7 @@ describe("LWS JSON, raw and RDF patches", () => {
         { kind: "json", ops: [{ op: "replace", path: "/a", value: 2 }] },
         { ifMatch: tag },
       ),
-    ).toEqual({ url: URL, etag: '"patched"', created: false });
+    ).toEqual({ url: URL, etag: '"patched"', created: false, etagSource: "response" });
     expect(calls[0]?.body).toBe('[{"op":"replace","path":"/a","value":2}]');
     expect(calls[0]?.headers.get("content-type")).toBe("application/json-patch+json");
     expect(calls[0]?.headers.get("if-match")).toBe(tag);
@@ -820,6 +828,7 @@ describe("LWS JSON, raw and RDF patches", () => {
         url: URL,
         etag: '"written"',
         created: false,
+        etagSource: "response",
       });
       expect(calls.map(({ method }) => method)).toEqual(["GET", "PUT"]);
       expect(calls[1]?.headers.get("if-match")).toBe(tag);

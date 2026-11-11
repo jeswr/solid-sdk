@@ -198,7 +198,15 @@ const controlStatement = z
   .strictObject({
     type: z.literal("control-statement"),
     id: iri,
-    kind: z.enum(["Halt", "Resume", "SetBindingState", "DispatchNow", "RevokeMandate", "Forget"]),
+    kind: z.enum([
+      "Halt",
+      "Resume",
+      "SetBindingState",
+      "DispatchNow",
+      "RevokeMandate",
+      "Forget",
+      "Archive",
+    ]),
     attributedTo: iri,
     createdAt: instant,
     expires: instant,
@@ -225,7 +233,9 @@ const controlStatement = z
       });
     }
     if (
-      ["SetBindingState", "DispatchNow", "RevokeMandate", "Forget"].includes(value.kind) &&
+      ["SetBindingState", "DispatchNow", "RevokeMandate", "Forget", "Archive"].includes(
+        value.kind,
+      ) &&
       !value.target
     ) {
       ctx.addIssue({ code: "custom", message: "control statement requires target" });

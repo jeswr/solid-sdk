@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 import { daemonDouble } from "./daemon-double";
 
 async function accessible(page: Page, info: TestInfo, state: string) {
@@ -16,6 +17,7 @@ async function accessible(page: Page, info: TestInfo, state: string) {
   await page.screenshot({ path: `${path}/${state}-${info.project.name}.png`, fullPage: true });
 }
 async function open(page: Page, route = "approvals") {
+  await seedDemoSession(page);
   await page.goto(`/agent/${route}`);
   await page.waitForFunction(() => !!window.__suiteDemoPod);
   await expect(

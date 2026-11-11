@@ -6,6 +6,12 @@ export { addGrant, grantsWithRoles, readGrants, removeGrant, setGrants } from ".
 export { isRoleError } from "./errors.js";
 export { modesToRole, rolesToModes } from "./mapping.js";
 export type {
+  MovePreservingAccessError,
+  MovePreservingAccessOptions,
+  MovePreservingAccessResult,
+} from "./move.js";
+export { movePreservingAccess } from "./move.js";
+export type {
   AgentRef,
   GrantMutationOptions,
   GrantSnapshot,
