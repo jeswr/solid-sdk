@@ -423,7 +423,7 @@ test("bounds every fetch, disables redirects, combines cancellation and retains 
   });
 });
 
-test("a forbidden discovery closes instead of polling", async () => {
+test("a forbidden watched topic during discovery closes instead of polling", async () => {
   vi.useFakeTimers();
   const f = fixture();
   f.fetch.mockResolvedValue(new Response(null, { status: 403 }));
@@ -436,6 +436,43 @@ test("a forbidden discovery closes instead of polling", async () => {
   await vi.advanceTimersByTimeAsync(60_000);
   expect(f.onInvalidate).not.toHaveBeenCalled();
   expect(vi.getTimerCount()).toBe(0);
+  await watch.close();
+});
+
+test("a forbidden ancestor probe falls back to refresh hints for a shared topic", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const topic = `${root}issues/team/`;
+  f.fetch.mockImplementation(async (input) =>
+    String(input) === topic
+      ? new Response(null, { status: 200 })
+      : new Response(null, { status: 403 }),
+  );
+  f.discover.mockImplementationOnce(async (options) => {
+    expect((await options.fetch(topic, { method: "HEAD" })).status).toBe(200);
+    expect((await options.fetch(`${root}issues/`, { method: "HEAD" })).status).toBe(403);
+    throw new Error("Forbidden ancestor");
+  });
+  const watch = watchInvalidations({ ...f.options, topics: [topic], pollIntervalMs: 25_000 });
+  await watch.ready;
+  await vi.advanceTimersByTimeAsync(25_000);
+  expect(f.onInvalidate).toHaveBeenCalledWith({ type: "Update", object: topic });
+  await vi.advanceTimersByTimeAsync(25_000);
+  expect(f.onInvalidate).toHaveBeenCalledTimes(2);
+  await watch.close();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+test("a forbidden response after discovery still closes the watch", async () => {
+  const f = fixture(["websocket"]);
+  const sub = new SubscriptionController([root]);
+  vi.spyOn(pushModule, "createPushChannel").mockReturnValue(sub);
+  const watch = watchInvalidations(f.options);
+  await watch.ready;
+  const fetch = f.discover.mock.calls[0]?.[0].fetch as typeof globalThis.fetch;
+  f.fetch.mockResolvedValue(new Response(null, { status: 403 }));
+  await fetch(`${root}subscribe`, { method: "POST" });
+  await expect(fetch(root)).rejects.toThrow();
   await watch.close();
 });
 

@@ -124,9 +124,15 @@ export function watchInvalidations(options: WatchInvalidationsOptions): Invalida
           : {}),
       });
       if (response.redirected) throw new TypeError("Notification redirect refused");
-      if (!deleting && response.status === 403) await close();
+      // A 403 on a watched topic, a subscription or a poll ends the watch. During discovery,
+      // a 403 on an ancestor or description probe (a shared tracker inside an unshared pod)
+      // only means discovery failed, so refresh hints keep the readable topics current.
+      if (!deleting && response.status === 403 && (!discovering || topicHrefs.has(url)))
+        await close();
       return response;
     };
+    const topicHrefs = new Set(topics.map((topic) => new URL(topic).href));
+    let discovering = true;
     let pod: PodClient;
     try {
       pod = await createPodClient({
@@ -138,6 +144,8 @@ export function watchInvalidations(options: WatchInvalidationsOptions): Invalida
     } catch {
       refreshWithoutDiscovery();
       return;
+    } finally {
+      discovering = false;
     }
     if (abort.signal.aborted) return;
     // A server's claimed storage boundary never grants access beyond caller scope.
