@@ -10,11 +10,10 @@ import {
   listRequests,
   previewDecision,
   RequestConflictError,
-  roleFor,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { publicFetchFor, useSession } from "../auth/SessionContext.js";
+import { publicFetchFor, type Session, useSession } from "../auth/SessionContext.js";
 import { classLabel } from "../lib/type-index.js";
 import { AgentLabel, resourceLabel, SavingIndicator, useOptimistic } from "./bits.jsx";
 
@@ -38,7 +37,7 @@ function TargetPreview({ preview }: { preview: DecisionPreview }) {
         {preview.targets.map((target) => (
           <li key={target.url}>
             {resourceLabel(target.url, preview.storage)}:{" "}
-            {roleFor(target.modes) === "editor" ? "Can edit (view, add and change)" : "Can view"}
+            {target.role === "editor" ? "Can edit (view, add and change)" : "Can view"}
             {" — "}
             {preview.expiresAt ? `Recorded until ${preview.expiresAt}` : "No expiry"}
           </li>
@@ -160,7 +159,11 @@ export function InboxView({
 }) {
   const session = useSession();
   const publicFetch = publicFetchFor(session);
-  const [requests, setRequests] = useState<AccessRequestEntry[]>([]);
+  const [listing, setListing] = useState<{
+    session: Session;
+    requests: AccessRequestEntry[];
+  } | null>(null);
+  const requests = listing?.session === session ? listing.requests : [];
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [previousPreview, setPreviousPreview] = useState<DecisionPreview | null>(null);
@@ -179,7 +182,7 @@ export function InboxView({
     activeRead.current?.abort();
     const controller = new AbortController();
     activeRead.current = controller;
-    setRequests([]);
+    setListing(null);
     setConfirming(null);
     setPreviousPreview(null);
     setCanApprove(false);
@@ -191,7 +194,7 @@ export function InboxView({
     const options = { fetch: session.fetch, webId: session.webId, storage: storageRoot };
     void listRequests({ ...options, inbox: inboxUrl, signal: controller.signal })
       .then((entries) => {
-        if (!controller.signal.aborted) setRequests(entries);
+        if (!controller.signal.aborted) setListing({ session, requests: entries });
       })
       .catch(() => {
         if (!controller.signal.aborted) setNotice("The inbox could not be read.");

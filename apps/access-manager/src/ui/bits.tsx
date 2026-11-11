@@ -96,13 +96,13 @@ export function AgentLabel({ agent, showHost = false }: { agent: string; showHos
       : null;
   useEffect(() => {
     if (agent === PUBLIC_AGENT || agent === AUTHENTICATED_AGENT) return;
-    let cancelled = false;
-    resolveAgentDisplay(agent, fetchFn, sessionWebId).then((d) => {
-      if (!cancelled && d.resolved && d.name !== agent)
+    const controller = new AbortController();
+    resolveAgentDisplay(agent, fetchFn, sessionWebId, controller.signal).then((d) => {
+      if (!controller.signal.aborted && d.resolved && d.name !== agent)
         setDisplay({ agent, fetchFn, sessionWebId, name: d.name });
     });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [agent, fetchFn, sessionWebId]);
 
@@ -119,7 +119,7 @@ export function AgentLabel({ agent, showHost = false }: { agent: string; showHos
   return (
     <span className="agent" title={showHost ? new URL(agent).host : agent}>
       {name ? <span>{name}</span> : showHost ? new URL(agent).host : shortenWebId(agent)}
-      {showHost && name ? <span className="agent-host"> ({new URL(agent).host})</span> : null}
+      {name ? <span className="agent-host"> ({new URL(agent).host})</span> : null}
     </span>
   );
 }

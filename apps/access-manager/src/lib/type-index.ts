@@ -11,6 +11,7 @@
 import { RDFS, SOLID } from "@jeswr/pod-access/requests-solid";
 import type { DatasetCore } from "@rdfjs/types";
 import { readRdf, type SolidFetch } from "./http.js";
+import { readPublicProfile } from "./profile.js";
 import { objectIri, objectIris, objectLiteral, subjectsOfType, tryRead } from "./rdf.js";
 import type { WalkedNode } from "./storage-walk.js";
 
@@ -35,12 +36,14 @@ export function classLabel(classIri: string): string {
   return tail.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
-/** Read both type indexes advertised by the profile (either may be absent). */
+/** Read the public profile without credentials, then its indexes with the storage fetch. */
 export async function readTypeRegistrations(
   webId: string,
   fetchFn: SolidFetch,
+  publicFetch: SolidFetch,
+  signal?: AbortSignal,
 ): Promise<TypeRegistration[]> {
-  const profile = await readRdf(webId, fetchFn);
+  const profile = await readPublicProfile(webId, publicFetch, signal);
   if (!profile) return [];
   const out: TypeRegistration[] = [];
   const indexes: { url: string; visibility: "public" | "private" }[] = [];

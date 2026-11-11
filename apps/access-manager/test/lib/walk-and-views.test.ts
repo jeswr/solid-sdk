@@ -99,7 +99,7 @@ describe("byResource / byAgent", () => {
 describe("type-index grouping", () => {
   it("reads registrations and groups walked nodes into data classes", async () => {
     const pod = buildPod();
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     expect(regs).toHaveLength(1);
     expect(regs[0]?.forClass).toBe(CONTACTS_CLASS);
     expect(regs[0]?.visibility).toBe("public");
@@ -119,7 +119,7 @@ describe("type-index grouping", () => {
 <#contacts> a solid:TypeRegistration ; solid:forClass vcard:Individual ;
   solid:instanceContainer <${POD}contacts/> .`,
     );
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     expect(regs).toHaveLength(1);
   });
 
@@ -136,7 +136,7 @@ describe("type-index grouping", () => {
   acl:accessTo <${POD}contacts/> ; acl:default <${POD}contacts/> ;
   acl:mode acl:Read .`,
     );
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     const nodes = await walkAll(pod);
     const { groups } = groupByDataClass(nodes, regs);
     const group = groups[0];

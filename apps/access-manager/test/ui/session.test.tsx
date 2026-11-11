@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { FOAF } from "@jeswr/pod-access/requests-solid";
 import type { LoginController } from "@jeswr/solid-elements";
 import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DataFactory, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { publicFetchFor, SessionProvider } from "../../src/auth/SessionContext.js";
@@ -57,9 +57,59 @@ async function profile(name: string) {
   return new Response(await toTurtle(dataset), { headers: { "content-type": "text/turtle" } });
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 describe("display identity and public session transport", () => {
+  it("shows the profile's host alongside a self-chosen name even without showHost", async () => {
+    const publicFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(await profile("Trusted clinic"));
+    render(
+      <SessionProvider session={{ webId: OWNER, fetch: vi.fn(), publicFetch }}>
+        <AgentLabel agent={BOB} />
+      </SessionProvider>,
+    );
+    const name = await screen.findByText("Trusted clinic");
+    expect(name.parentElement).toHaveTextContent(`Trusted clinic (${new URL(BOB).host})`);
+  });
+
+  it.each([
+    "unmount",
+    "timeout",
+  ])("aborts a display fetch on %s and retries on remount", async (reason) => {
+    vi.useFakeTimers();
+    const publicFetch = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce(await profile("Recovered"));
+    const session = { webId: OWNER, fetch: vi.fn(), publicFetch };
+    const view = (mounted: boolean) => (
+      <SessionProvider session={session}>
+        {mounted ? <AgentLabel agent={BOB} /> : null}
+      </SessionProvider>
+    );
+    const rendered = render(view(true));
+    const signal = publicFetch.mock.calls[0]?.[1]?.signal;
+    expect(signal?.aborted).toBe(false);
+    if (reason === "timeout") {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+    }
+    rendered.rerender(view(false));
+    expect(signal?.aborted).toBe(true);
+    rendered.rerender(view(true));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText("Recovered")).toBeVisible();
+    expect(publicFetch).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("uses the controller's pristine public fetch and clears cached names on logout", async () => {
     const patchedGlobal = vi
       .spyOn(globalThis, "fetch")

@@ -4,7 +4,8 @@
 // DataClassView (grouping + per-class access summary) and HistoryView
 // (receipts audit trail + revoke through the UI).
 import "@testing-library/jest-dom/vitest";
-import { DPV, decide, listRequests, ODRL, RDF } from "@jeswr/pod-access/requests-solid";
+import { DPV, decide, FOAF, listRequests, ODRL, RDF } from "@jeswr/pod-access/requests-solid";
+import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import { toTurtle } from "../../src/lib/rdf.js";
 import type { WalkedNode } from "../../src/lib/storage-walk.js";
 import { walkStorage } from "../../src/lib/storage-walk.js";
 import { readTypeRegistrations } from "../../src/lib/type-index.js";
+import { DashboardView } from "../../src/ui/DashboardView.jsx";
 import { DataClassView } from "../../src/ui/DataClassView.jsx";
 import { HistoryView } from "../../src/ui/HistoryView.jsx";
 import { buildPod, INBOX, OWNER, POD, REQUESTER } from "../fixtures.js";
@@ -33,11 +35,55 @@ function withSession(pod: PodStub, ui: React.ReactNode) {
   );
 }
 
+describe("profile name provenance", () => {
+  it.each([
+    "Dashboard",
+    "History",
+    "DataClass",
+  ])("shows the requester host beside its self-chosen name in %s", async (view) => {
+    const pod = buildPod();
+    const options = { fetch: pod.fetch, webId: OWNER, storage: POD };
+    const request = (await listRequests({ ...options, inbox: INBOX }))[0];
+    if (!request) throw new Error("missing request");
+    await decide(request, { approve: true }, options);
+    const dataset = new Store();
+    OptionalAs.object(
+      new TermWrapper(REQUESTER, dataset, DataFactory),
+      FOAF.name,
+      "Trusted clinic",
+      LiteralFrom.string,
+    );
+    const profileUrl = new URL(REQUESTER);
+    profileUrl.hash = "";
+    pod.seed(profileUrl.href, await toTurtle(dataset));
+    const nodes = await walkAll(pod);
+    const registrations = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
+    withSession(
+      pod,
+      view === "Dashboard" ? (
+        <DashboardView nodes={nodes} storageRoot={POD} walking={false} onChanged={() => {}} />
+      ) : view === "History" ? (
+        <HistoryView storageRoot={POD} onChanged={() => {}} />
+      ) : (
+        <DataClassView
+          nodes={nodes}
+          registrations={registrations}
+          storageRoot={POD}
+          walking={false}
+        />
+      ),
+    );
+    for (const name of await screen.findAllByText("Trusted clinic")) {
+      expect(name.parentElement).toHaveTextContent("Trusted clinic (app.example)");
+    }
+  });
+});
+
 describe("DataClassView", () => {
   it("groups resources into classes and summarises access", async () => {
     const pod = buildPod();
     const nodes = await walkAll(pod);
-    const registrations = await readTypeRegistrations(OWNER, pod.fetch);
+    const registrations = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     withSession(
       pod,
       <DataClassView

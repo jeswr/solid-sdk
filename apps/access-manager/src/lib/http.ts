@@ -1,12 +1,11 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-// HTTP helpers for dashboard edits and history; requests use the package transport.
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
-// The HTTP seam of the whole app. EVERY pod interaction goes through an
-// injectable `SolidFetch` (the authenticated fetch handed down from the login
-// controller), so every view and every pipeline is unit-testable against a
-// stubbed in-memory pod — no live server needed for the gate.
+// Dashboard/history reads and conditional writes use an injected session fetch
+// directly. readRdf has no byte limit: the SDK exports no bounded reader for
+// authenticated storage reads. Public profile callers supply the SDK's bounded
+// public transport, and the request inbox/decision pipeline uses the SDK transport.
 //
 // Writes are ALWAYS conditional (the suite CAS discipline, proposal §3.5):
 //   - `putIfMatch`     — update guarded by the ETag from the read (lost race → 412)

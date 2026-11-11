@@ -2,12 +2,14 @@
 import { FOAF, MAX_NOTIFICATION_BYTES } from "@jeswr/pod-access/requests-solid";
 import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearAgentDisplayCache, resolveAgentDisplay } from "../../src/lib/profile.js";
 import { toTurtle } from "../../src/lib/rdf.js";
 
 const AGENT = "https://app.example/profile#me";
 const OWNER = "https://owner.example/profile#me";
+
+afterEach(() => vi.useRealTimers());
 
 async function profile(name: string) {
   const dataset = new Store();
@@ -21,6 +23,86 @@ async function profile(name: string) {
 }
 
 describe("public display profiles", () => {
+  it("aborts a stalled lookup after 10 s, drops it from the cache and retries", async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValueOnce(await profile("After timeout"));
+    const lookup = resolveAgentDisplay(AGENT, fetchFn, OWNER);
+    const signal = fetchFn.mock.calls[0]?.[1]?.signal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal?.aborted).toBe(true);
+    expect((await lookup).resolved).toBe(false);
+    expect((await resolveAgentDisplay(AGENT, fetchFn, OWNER)).name).toBe("After timeout");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("aborts on cancellation and keeps a replacement lookup cached after the old one settles", async () => {
+    vi.useFakeTimers();
+    let finishFirst: (response: Response) => void = () => {};
+    const fetchFn = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(await profile("Replacement"));
+    const controller = new AbortController();
+    const first = resolveAgentDisplay(AGENT, fetchFn, OWNER, controller.signal);
+    controller.abort();
+    const replacement = resolveAgentDisplay(AGENT, fetchFn, OWNER);
+    expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect((await first).resolved).toBe(false);
+    expect((await replacement).name).toBe("Replacement");
+    finishFirst(await profile("Abandoned"));
+    expect((await resolveAgentDisplay(AGENT, fetchFn, OWNER)).name).toBe("Replacement");
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("shares a pending lookup and aborts only when its last reader leaves", async () => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn<typeof fetch>(() => new Promise(() => {}));
+    const first = new AbortController();
+    const second = new AbortController();
+    const one = resolveAgentDisplay(AGENT, fetchFn, OWNER, first.signal);
+    const two = resolveAgentDisplay(AGENT, fetchFn, OWNER, second.signal);
+    expect(fetchFn).toHaveBeenCalledOnce();
+    first.abort();
+    expect((await one).resolved).toBe(false);
+    expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+    second.abort();
+    expect((await two).resolved).toBe(false);
+    expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not start an already-aborted lookup or retain a deadline after success", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    controller.abort();
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValueOnce(await profile("Cached"));
+    expect((await resolveAgentDisplay(AGENT, fetchFn, OWNER, controller.signal)).resolved).toBe(
+      false,
+    );
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect((await resolveAgentDisplay(AGENT, fetchFn, OWNER)).name).toBe("Cached");
+    const signal = fetchFn.mock.calls[0]?.[1]?.signal;
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(signal?.aborted).toBe(false);
+    expect((await resolveAgentDisplay(AGENT, fetchFn, OWNER)).name).toBe("Cached");
+    expect(fetchFn).toHaveBeenCalledOnce();
+  });
+
   it.each([
     "http://public.example/profile#me",
     "http://192.168.1.1/profile#me",

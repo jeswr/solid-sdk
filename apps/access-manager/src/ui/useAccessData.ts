@@ -4,11 +4,11 @@
 // The app's data-loading hook: resolve the storage root(s) from the profile
 // (NEVER silently picking one of several — the user chooses), then walk the
 // tree progressively (nodes stream into state as discovered) and read the type
-// registrations. Pure orchestration over the lib; everything flows through the
-// injected session fetch.
+// registrations. Public profiles use the pristine public fetch; storage reads
+// use the injected session fetch.
 
 import { useCallback, useEffect, useState } from "react";
-import type { Session } from "../auth/SessionContext.js";
+import { publicFetchFor, type Session } from "../auth/SessionContext.js";
 import { discoverInbox, storageRoots } from "../lib/profile.js";
 import { type WalkedNode, walkStorage } from "../lib/storage-walk.js";
 import { readTypeRegistrations, type TypeRegistration } from "../lib/type-index.js";
@@ -41,29 +41,29 @@ export function useAccessData(session: Session): AccessData {
 
   // Storage discovery (once per identity).
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     setStorages([]);
     setStorageRoot(null);
     setError(null);
-    storageRoots(session.webId, session.fetch)
+    storageRoots(session.webId, publicFetchFor(session), controller.signal)
       .then((roots) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         setStorages(roots);
         if (roots.length === 1 && roots[0] !== undefined) setStorageRoot(roots[0]);
         if (roots.length === 0) setError("Your WebID profile advertises no pim:storage.");
       })
       .catch(() => {
-        if (!cancelled) setError("Could not read your WebID profile.");
+        if (!controller.signal.aborted) setError("Could not read your WebID profile.");
       });
-    discoverInbox(session.webId, session.fetch)
+    discoverInbox(session.webId, publicFetchFor(session), controller.signal)
       .then((url) => {
-        if (!cancelled) setInboxUrl(url ?? null);
+        if (!controller.signal.aborted) setInboxUrl(url ?? null);
       })
       .catch(() => {
-        if (!cancelled) setInboxUrl(null);
+        if (!controller.signal.aborted) setInboxUrl(null);
       });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [session]);
 
@@ -72,9 +72,10 @@ export function useAccessData(session: Session): AccessData {
     void generation; // the refresh trigger — bumping it re-runs the walk
     if (!storageRoot) return;
     let cancelled = false;
+    const controller = new AbortController();
     setNodes([]);
     setWalking(true);
-    readTypeRegistrations(session.webId, session.fetch)
+    readTypeRegistrations(session.webId, session.fetch, publicFetchFor(session), controller.signal)
       .then((regs) => {
         if (!cancelled) setRegistrations(regs);
       })
@@ -95,6 +96,7 @@ export function useAccessData(session: Session): AccessData {
     })();
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [session, storageRoot, generation]);
 

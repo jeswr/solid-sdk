@@ -1,5 +1,5 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // App root: logged out → <jeswr-login-panel> (suite login + silent session
 // restore); logged in → the @jeswr/app-shell chrome (theme / account menu /

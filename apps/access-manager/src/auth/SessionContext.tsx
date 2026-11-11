@@ -6,7 +6,6 @@
 // the session from context and passes `session.fetch` into the data layer, so
 // UI tests inject a stubbed session and never touch real auth.
 
-import { publicTransport } from "@jeswr/pod-access/requests-solid";
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 import type { SolidFetch } from "../lib/http.js";
@@ -21,11 +20,11 @@ export interface Session {
 
 const publicTransports = new WeakMap<Session, SolidFetch>();
 
-/** A stable, credential-free transport for the lifetime of this session. */
+/** Stable pristine public fetch per session; the SDK applies public transport policy once. */
 export function publicFetchFor(session: Session): SolidFetch {
   let transport = publicTransports.get(session);
   if (!transport) {
-    transport = publicTransport(session.publicFetch);
+    transport = (input, init) => session.publicFetch(input, init);
     publicTransports.set(session, transport);
   }
   return transport;
