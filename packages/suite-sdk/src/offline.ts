@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import type { ConflictRecord, Outbox, OutboxItem } from "@jeswr/solid-offline/outbox";
@@ -7,13 +8,22 @@ import { useMemo, useSyncExternalStore } from "react";
 export { mergeRdf } from "@jeswr/solid-offline/merge";
 export type {
   ConflictRecord,
+  GuardedDelivery,
+  GuardPolicy,
+  JsonValue,
   Outbox,
+  OutboxGuard,
   OutboxItem,
   OutboxOperation,
   QueueingStorageClient,
   QueueingWriteResult,
+  QueueOption,
+  ReplayDelegate,
   ReplayOptions,
 } from "@jeswr/solid-offline/outbox";
+// Guarded writes and resolutions require a session-local registerDelegate registration.
+// Trusted registerGuardPolicy requirements survive stripped record metadata within the session.
+// Snapshots expose guard tags and blocking reasons; assertions stay private to delegates.
 export { createOutbox, withOutbox } from "@jeswr/solid-offline/outbox";
 export type { UseOfflineStatusResult } from "@jeswr/solid-offline/react";
 export { useOfflineStatus } from "@jeswr/solid-offline/react";
