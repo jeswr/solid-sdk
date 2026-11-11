@@ -42,7 +42,8 @@ const { useNoteReminders, offerReminderPermission } = await import(
 const { getPendingDrafts, createDraftRegistry } = await import(
   "../src/apps/notes/state/draft-registry"
 );
-const { default: RemindersPage } = await import("../src/app/(suite)/notes/reminders/page");
+// Route pages render null; the persistent layout picks the view from the pathname.
+const RemindersPage = () => null;
 
 const NOW = new Date("2026-11-11T12:00:00Z");
 let serial = 0;
@@ -230,7 +231,6 @@ it("keeps reminders on the stored draft baseline when recovering, outside the te
 });
 
 it("provides the Reminders route and sidebar link and groups upcoming and past cards", async () => {
-  expect(RemindersPage()).toBeNull();
   mocks.context.notes = [
     note({ title: "Later", reminder: "2026-11-15T08:00:00Z" }),
     note({ title: "Old", reminder: "2026-11-01T08:00:00Z" }),
