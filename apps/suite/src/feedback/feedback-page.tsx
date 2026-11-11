@@ -413,8 +413,11 @@ export function FeedbackPage() {
       const saved: AudioReceipt[] = [];
       for (const [i, clip] of clipsRef.current.entries()) {
         const receipt = receipts.current[i];
+        // Re-upload ten minutes early, so a device clock running slow cannot send expired receipts.
         const expires = Number(receipt?.sig.split(".")[0] ?? 0);
-        saved.push(receipt && expires > Date.now() ? receipt : await uploadRecording(clip, i));
+        saved.push(
+          receipt && expires - 10 * 60_000 > Date.now() ? receipt : await uploadRecording(clip, i),
+        );
       }
       const r = await fetch(`${feedbackApiBase()}/api/feedback/submit`, {
         method: "POST",

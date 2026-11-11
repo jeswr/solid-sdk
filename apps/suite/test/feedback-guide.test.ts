@@ -162,9 +162,18 @@ it("coerces updates, ignores unknown ids and invalid ratings, and retains answer
     apps: ["drive", "tasks"],
     summary: "Their own words",
   });
-  expect(coerceUpdates([{ id: "apps", value: "" }])).toEqual({ apps: [] });
-  expect(() => coerceUpdates([{ id: "apps", value: "unknown" }])).toThrow();
-  expect(() => coerceUpdates([{ id: "summary", value: "x".repeat(4001) }])).toThrow();
+  // A value the model got wrong is dropped field by field, never failing the turn.
+  expect(coerceUpdates([{ id: "apps", value: "" }])).toEqual({});
+  expect(coerceUpdates([{ id: "apps", value: "unknown" }])).toEqual({});
+  expect(coerceUpdates([{ id: "summary", value: "x".repeat(4001) }])).toEqual({});
+  expect(
+    coerceUpdates([
+      { id: "apps", value: "Drive|docs|nonsense" },
+      { id: "confirmed", value: "Yes" },
+      { id: "seq_docs", value: "4" },
+    ]),
+  ).toEqual({ apps: ["drive", "docs"], confirmed: "yes", seq_docs: 4 });
+  expect(coerceUpdates([{ id: "confirmed", value: "maybe" }])).toEqual({});
 });
 it("keeps the first and newest messages under a 24k total input budget without breaking alternation", () => {
   const messages = Array.from({ length: 40 }, (_, i) => ({

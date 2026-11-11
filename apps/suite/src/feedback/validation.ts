@@ -36,29 +36,45 @@ export type Message = z.infer<typeof messageSchema>;
 export function validateAnswers(input: unknown): Answers {
   return answersSchema.parse(input) as Answers;
 }
-/** Convert the small model wire format, then apply the existing answer constraints. */
+/** Map a model-written option (its value or its label, any case) to the option value. */
+function optionValue(id: string, raw: string): string | undefined {
+  const wanted = raw.trim().toLowerCase();
+  const option = questionById(id)?.options?.find(
+    (o) => o.value.toLowerCase() === wanted || o.label.toLowerCase() === wanted,
+  );
+  return option?.value;
+}
+/**
+ * Convert the small model wire format, then apply the existing answer constraints field by
+ * field. A value the model got wrong is dropped (the interviewer asks again) instead of
+ * failing the whole turn.
+ */
 export function coerceUpdates(updates: { id: string; value: string }[]): Answers {
   const answers: Answers = {};
   for (const { id, value } of updates) {
     const q = questionById(id);
     if (!q && id !== "summary") continue;
-    if (value === "(skipped)") answers[id] = value;
+    let candidate: Answers[string];
+    if (value === "(skipped)") candidate = value;
     else if (q?.type === "scale") {
       const number = Number(value.trim());
       // Refuse fractional, non-numeric and out-of-range ratings rather than inventing one.
       if (!value.trim() || !Number.isInteger(number) || number < 1 || number > (q.max ?? 7))
         continue;
-      answers[id] = number;
+      candidate = number;
     } else if (q?.type === "multi") {
-      answers[id] = [
-        ...new Set(
-          value
-            .split("|")
-            .map((v) => v.trim())
-            .filter(Boolean),
-        ),
-      ];
-    } else answers[id] = value;
+      const picked = value
+        .split("|")
+        .map((v) => optionValue(id, v))
+        .filter((v): v is string => v !== undefined);
+      if (!picked.length) continue;
+      candidate = [...new Set(picked)];
+    } else if (q?.type === "choice") {
+      const picked = optionValue(id, value);
+      if (!picked) continue;
+      candidate = picked;
+    } else candidate = value;
+    if (answerFields[id]?.safeParse(candidate).success) answers[id] = candidate;
   }
   return validateAnswers(answers);
 }
