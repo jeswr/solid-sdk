@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6
 /**
  * WebID cache scoping (§7) — the single source of truth for namespacing every
  * persistent store by identity.
@@ -8,7 +9,8 @@
  *   Both persistent stores are namespaced by a short, stable hash of the WebID:
  *     - the IndexedDB metadata DB  → `solid-offline:<webId-hash>`
  *     - the Cache API bytes cache  → `solid-offline-cache:<webId-hash>`
- *   The hash is only a *namespacing discriminator*, not a security boundary: the
+ *   The full encoded WebID follows the hash, so hash collisions cannot share a store.
+ *   This namespace is not an origin security boundary: the
  *   real boundary is the browser's origin isolation. Scoping by identity on top
  *   of that means logout-purge can drop exactly one identity's stores, and two
  *   identities sharing a device/origin never observe each other's cached bytes
@@ -61,7 +63,8 @@ export function scopeHash(webId: string): string {
 
 /** The per-identity scope discriminator (`anonymous` or the WebID hash). */
 export function scopeFor(webId: string | undefined): string {
-  return webId ? scopeHash(webId) : ANONYMOUS_SCOPE;
+  // The full identity prevents a 32-bit hash collision from crossing accounts.
+  return webId ? `${scopeHash(webId)}:${encodeURIComponent(webId)}` : ANONYMOUS_SCOPE;
 }
 
 /** The per-identity IndexedDB metadata DB name (`solid-offline:<hash>`). */

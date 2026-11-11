@@ -64,6 +64,21 @@ CSRF-protected consent decision, then call the trusted `authorize(request, sessi
 API. This API is server-only: never accept a session identity supplied by an HTTP client.
 The consent callback receives independent snapshots, so mutation cannot change the issued grant.
 
+The optional `grantCreated({ grant, client, redirectUri, issuedAt }): Promise<void>` hook runs
+once per approved grant, after `grants.put` completes and before any authorization code is
+stored. `grant` and `client` are independent snapshots typed as `Readonly<Grant>` and
+`Readonly<Client>`; `issuedAt` is the grant creation time in seconds. Await required connection
+record persistence in this hook. Denial never calls it. A hook failure prevents code issuance,
+attempts session-wide grant revocation and broker retirement, and redirects to the validated
+client URI with `error=server_error`, the original `state`, and `iss`. Cleanup failures retain
+that same error response; any persisted session-revocation intent remains authoritative.
+
+`await oauth.revokeGrant(grantId)` is a trusted server-only API for session-wide revocation.
+Unknown IDs are no-ops. Repeated calls are safe, retry credential cleanup and never restore a
+grant. Existing access tokens fail verification with `invalid_token`, and code/refresh
+exchanges fail with `invalid_grant`, for every grant bound to the retired pod session.
+Store or broker failures reject the call; retry it to finish cleanup.
+
 Refresh families expire absolutely thirty days after consent. Each successful refresh replaces
 the presented refresh token. Replaying a code or refresh token revokes its entire family.
 `/revoke` also revokes the family for either kind of token and returns 200 for unknown tokens.

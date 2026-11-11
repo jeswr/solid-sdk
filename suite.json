@@ -97,7 +97,8 @@
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
-    "@jeswr/solid-scheduling"
+    "@jeswr/solid-scheduling",
+    "@jeswr/solid-environment"
   ],
   "applications": [
     {
