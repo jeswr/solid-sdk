@@ -33,12 +33,19 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
-import { type SheetEngine, type Snapshot, WorkbookNotFoundError } from "../lib/contract";
+import {
+  type SheetEngine,
+  type Snapshot,
+  WorkbookLinkError,
+  WorkbookNotFoundError,
+} from "../lib/contract";
 import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
+import { ShareWorkbook } from "./share-workbook";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 import "@univerjs/preset-sheets-core/lib/index.css";
 import "@univerjs/preset-sheets-conditional-formatting/lib/index.css";
@@ -74,10 +81,12 @@ function Grid({
   snapshot,
   onChange,
   engineRef,
+  readOnly,
 }: {
   snapshot: Snapshot;
   onChange: (read: () => Snapshot) => void;
   engineRef: { current: SheetEngine | null };
+  readOnly: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const latestSnapshot = useRef(snapshot);
@@ -87,6 +96,11 @@ function Grid({
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const viewOnly = useRef(readOnly);
+  viewOnly.current = readOnly;
+  useEffect(() => {
+    engineRef.current?.setReadOnly(readOnly);
+  }, [readOnly, engineRef]);
   useEffect(() => {
     dark.current = resolvedTheme === "dark";
     engineRef.current?.setDark(dark.current);
@@ -105,6 +119,7 @@ function Grid({
         snapshot: latestSnapshot.current,
         dark: dark.current,
         compact: matchMedia("(max-width: 639px)").matches,
+        readOnly: viewOnly.current,
       });
       if (!live) {
         engine.dispose();
@@ -112,8 +127,11 @@ function Grid({
       }
       engineRef.current = engine;
       engine.setDark(dark.current);
+      engine.setReadOnly(viewOnly.current);
       const active = engine;
-      unsubscribe = engine.onChange(() => onChange(() => active.snapshot()));
+      unsubscribe = engine.onChange(() => {
+        if (!viewOnly.current) onChange(() => active.snapshot());
+      });
       if (process.env.NEXT_PUBLIC_DEV_FIXTURES === "1") window.__sheetsEngine = engine;
       setReady(true);
     })().catch(() => {
@@ -159,13 +177,14 @@ function Grid({
 
 export function SheetEditor({ container }: { container: string }) {
   const state = useWorkbook(container);
+  const sharingConnection = useNeedsConnection();
   const service = useWorkbookService();
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [dialog, setDialog] = useState<"import" | "delete">();
+  const [dialog, setDialog] = useState<"import" | "delete" | "share">();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
@@ -223,6 +242,7 @@ export function SheetEditor({ container }: { container: string }) {
     return (
       <div className="sht-state" role="alert">
         <h1>Couldn't open this spreadsheet</h1>
+        {state.error instanceof WorkbookLinkError && <p>{state.error.message}</p>}
         <Button onClick={state.retryOpen}>Retry</Button>
         <Link href="/sheets">Back to spreadsheets</Link>
       </div>
@@ -242,12 +262,12 @@ export function SheetEditor({ container }: { container: string }) {
               label="Spreadsheet title"
               value={title}
               onCommit={state.rename}
-              disabled={!state.workbook}
+              disabled={!state.workbook || state.readOnly}
               validate={(value) => (value.trim() ? undefined : "Enter a name")}
             />
             <div className="sht-save" aria-live="polite">
-              <span>{statusText[state.status]}</span>
-              {state.status === "error" && (
+              <span>{state.readOnly ? "View only" : statusText[state.status]}</span>
+              {state.status === "error" && !state.readOnly && (
                 <Button variant="ghost" size="sm" onClick={() => void state.retry()}>
                   Retry
                 </Button>
@@ -269,7 +289,9 @@ export function SheetEditor({ container }: { container: string }) {
               <DropdownMenuItem asChild>
                 <Link href="/sheets/new">New spreadsheet</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog("import")}>Import CSV</DropdownMenuItem>
+              <DropdownMenuItem disabled={state.readOnly} onSelect={() => setDialog("import")}>
+                Import CSV
+              </DropdownMenuItem>
               <DropdownMenuItem onSelect={download}>Download current sheet as CSV</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void downloadExcel()}>
                 Download as Excel (.xlsx)
@@ -288,7 +310,9 @@ export function SheetEditor({ container }: { container: string }) {
               >
                 Make a copy
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setDialog("delete")}>Delete</DropdownMenuItem>
+              <DropdownMenuItem disabled={state.readOnly} onSelect={() => setDialog("delete")}>
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <TooltipProvider>
@@ -296,12 +320,23 @@ export function SheetEditor({ container }: { container: string }) {
               <TooltipTrigger asChild>
                 {/* biome-ignore lint/a11y/noNoninteractiveTabindex: focusable wrapper gives keyboard users the disabled control's tooltip */}
                 <span tabIndex={0}>
-                  <Button disabled variant="outline">
+                  <Button
+                    disabled={!state.workbook || state.readOnly || sharingConnection.disabled}
+                    variant="outline"
+                    aria-haspopup="dialog"
+                    onClick={() => setDialog("share")}
+                  >
                     Share
                   </Button>
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Sharing arrives with the suite shell</TooltipContent>
+              <TooltipContent>
+                {sharingConnection.disabled
+                  ? sharingConnection.reason
+                  : state.readOnly
+                    ? "Ask the owner to change sharing"
+                    : "Share this spreadsheet and all its sheets"}
+              </TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -315,6 +350,7 @@ export function SheetEditor({ container }: { container: string }) {
             snapshot={state.workbook.snapshot}
             onChange={state.scheduleSave}
             engineRef={engine}
+            readOnly={state.readOnly}
           />
         ) : (
           <div className="sht-skeleton" role="status" aria-label="Opening spreadsheet">
@@ -323,6 +359,9 @@ export function SheetEditor({ container }: { container: string }) {
           </div>
         )}
       </div>
+      {dialog === "share" && (
+        <ShareWorkbook container={container} title={title} onClose={() => setDialog(undefined)} />
+      )}
       <Dialog
         open={dialog === "import"}
         onOpenChange={(open) => {
@@ -362,7 +401,9 @@ export function SheetEditor({ container }: { container: string }) {
               Replace current sheet
             </label>
           </fieldset>
-          <Button onClick={() => input.current?.click()}>Choose CSV file</Button>
+          <Button disabled={state.readOnly} onClick={() => input.current?.click()}>
+            Choose CSV file
+          </Button>
           <input
             ref={input}
             className="sr-only"
@@ -373,7 +414,7 @@ export function SheetEditor({ container }: { container: string }) {
             onChange={async (event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
-              if (!file) return;
+              if (!file || state.readOnly) return;
               try {
                 engine.current?.importCsv(await file.text(), {
                   mode,
@@ -406,7 +447,7 @@ export function SheetEditor({ container }: { container: string }) {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              disabled={busy}
+              disabled={busy || state.readOnly}
               onClick={(event) => {
                 event.preventDefault();
                 void action(async () => {
@@ -422,7 +463,7 @@ export function SheetEditor({ container }: { container: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <AlertDialog open={state.status === "conflict"}>
+      <AlertDialog open={state.status === "conflict" && !state.readOnly}>
         <AlertDialogContent
           onOpenAutoFocus={(event) => {
             event.preventDefault();

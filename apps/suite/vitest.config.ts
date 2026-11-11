@@ -61,6 +61,7 @@ export default defineConfig({
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/sheets/lib/autosave.ts",
         "src/apps/sheets/lib/pending-saves.ts",
+        "src/apps/sheets/lib/sharing.ts",
         "src/apps/sheets/hooks/use-workbook.ts",
         "src/apps/sheets/lib/engine/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
