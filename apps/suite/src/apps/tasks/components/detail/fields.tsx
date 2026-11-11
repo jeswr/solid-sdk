@@ -29,9 +29,11 @@ import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail
 import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
+import { labelColour } from "../../lib/views/label-colours";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
 import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
+import { LabelDot } from "../label-chip";
 
 export function localDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -246,7 +248,11 @@ function LabelsField({
     <div className="tsk-detail-stack">
       <TagInput
         label="Labels"
-        options={[...names].map(([id, label]) => ({ id, label }))}
+        options={[...names].map(([id, label]) => ({
+          id,
+          label,
+          icon: <LabelDot colour={labelColour(id, tasks.projects)} />,
+        }))}
         value={selected}
         onChange={(keys) => {
           void setLabels(keys);

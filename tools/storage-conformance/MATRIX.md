@@ -26,12 +26,14 @@
 | SC-PATCH-where | pass | pass | pass | pass | not-run |
 | SC-PREFS-create-update-412 | pass | pass | pass | pass | not-run |
 | SC-RDF-jsonld | pass | pass | pass | pass | not-run |
-| SC-RDF-not-rdf | fail (assertion-failed) | pass | pass | pass | not-run |
+| SC-RDF-not-rdf | pass | pass | pass | pass | not-run |
 | SC-RDF-turtle | pass | pass | pass | pass | not-run |
 | SC-ROLES-commenter | pass | pass | pass | pass | not-run |
 | SC-ROLES-editor | pass | pass | pass | pass | not-run |
 | SC-ROLES-inherited | pass | pass | pass | pass | not-run |
 | SC-ROLES-manager | pass | pass | pass | pass | not-run |
+| SC-ROLES-movePreservingAccess | pass | skip (target-lacks:move) | pass | pass | not-run |
+| SC-ROLES-movePreservingAccess:absence:move | not-run | pass | not-run | not-run | not-run |
 | SC-RW-create | pass | pass | pass | pass | not-run |
 | SC-RW-etag | pass | pass | pass | pass | not-run |
 | SC-RW-range-head-binary | pass | pass | pass | pass | not-run |

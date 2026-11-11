@@ -304,11 +304,71 @@
   }
 }
 
-/* Charts use a strip so their controls do not depend on Univer's canvas coordinates. */
 .sht-editor {
+  position: relative;
   display: flex;
   flex-direction: column;
 }
+.sht-comment-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.sht-editor > .sht-grid-region {
+  flex: 1;
+}
+.sht-editor:has(.sht-comments) > .sht-grid-region {
+  width: calc(100% - min(360px, 85%));
+}
+.sht-comments {
+  position: absolute;
+  inset-block: 40px 0;
+  inset-inline-end: 0;
+  width: min(360px, 85%);
+  overflow: auto;
+  padding: var(--space-3);
+  border-inline-start: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
+.sht-comments ul {
+  list-style: none;
+  padding: 0;
+}
+.sht-comments li {
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-block: var(--space-2);
+}
+.sht-comments .sht-comment-active {
+  border-color: var(--primary);
+  background: var(--surface-2);
+}
+.sht-comment-body {
+  overflow-wrap: anywhere;
+}
+.sht-comment-body p {
+  white-space: pre-wrap;
+}
+.sht-comment-body time {
+  display: block;
+  color: var(--foreground-muted);
+}
+.sht-comments textarea {
+  display: block;
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+/* Charts use a strip so their controls do not depend on Univer's canvas coordinates. */
 .sht-grid-region {
   flex: 1;
 }

@@ -448,7 +448,7 @@ export const storageCases: readonly ConformanceCase[] = [
   ...deletion,
   ...errors,
   ...extendedCases(moveProbe),
-  ...roleCases(),
+  ...roleCases(moveProbe),
   ...optionalServiceCases,
   ...appCases,
 ];

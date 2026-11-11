@@ -375,6 +375,41 @@ async function revokeStatus(
     }
   }
 }
+/**
+ * Before an approval key is revoked: re-sign the permission status list with this device's key
+ * when `from` signed it, keeping every revocation bit and the validity window. Without this the
+ * list stops verifying once `from` leaves the profile, and new permissions can't be granted.
+ */
+export async function migrateStatusList(
+  client: AgentClient,
+  session: Session,
+  from: string,
+  now = new Date(),
+): Promise<boolean> {
+  const list = await readStatus(client, session, now);
+  if (!list || ![list.vc.proof].flat().some((proof) => proof?.verificationMethod === from))
+    return false;
+  const { proof: _proof, ...unsigned } = list.vc;
+  await withApprovalKey(session, async (key) => {
+    const signed = await issue({
+      credential: unsigned,
+      key,
+      suite: new DataIntegritySuite("ecdsa-rdfc-2019"),
+      options: { created: now },
+    });
+    await client.replace(
+      client.paths.mandatesStatus,
+      await statusListCredentialToTurtle(signed),
+      list.etag,
+      "application/trig",
+    );
+  });
+  // The copy must verify under the current profile before the old key goes.
+  const copy = await readStatus(client, session, now);
+  if (!copy || [copy.vc.proof].flat().some((proof) => proof?.verificationMethod === from))
+    throw new Error("Couldn't re-sign your permission status, so the key was kept. Try again.");
+  return true;
+}
 export async function revokeMandate(client: AgentClient, session: Session, now = new Date()) {
   const current = await currentCredential(client);
   if (!current) throw new Error("There are no current permissions to stop.");

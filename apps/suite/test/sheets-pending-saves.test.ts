@@ -66,7 +66,10 @@ describe("pending workbook saves", () => {
       return original(...args);
     });
     const detach = entry.subscribe(() => {});
-    entry.schedule(() => snapshot("First\nedit"));
+    const firstSnapshot = snapshot("First\nedit");
+    const saved = vi.fn();
+    entry.onSaved(saved);
+    entry.schedule(() => firstSnapshot);
     const saving = entry.flush();
     await Promise.resolve();
     const latest = snapshot("Latest\nedit");
@@ -76,6 +79,10 @@ describe("pending workbook saves", () => {
     await saving;
     await entry.flush();
     expect(calls).toHaveBeenCalledTimes(2);
+    expect(saved).toHaveBeenCalledTimes(2);
+    expect(saved.mock.calls[0]?.[0]).toBe(firstSnapshot);
+    expect(saved.mock.calls[0]?.[1]).toBe(calls.mock.calls[1]?.[2].snapshotEtag);
+    expect(saved.mock.calls[1]?.[0]).toBe(latest);
     expect(calls.mock.calls[1]?.[2].snapshotEtag).not.toBe(book.version.snapshotEtag);
     expect((await h.service.open(book.container)).snapshot).toEqual(latest);
     expect(registry.get(book.container)).toBeUndefined();
@@ -86,6 +93,8 @@ describe("pending workbook saves", () => {
     const detach = entry.subscribe(() => {});
     const save = vi.spyOn(h.service, "save");
     const changed = snapshot("Partial\nedit");
+    const saved = vi.fn();
+    const stopSaved = entry.onSaved(saved);
     entry.schedule(() => changed);
     h.setHook((call) =>
       call.method === "PUT" && call.url.endsWith("1.jsonld")
@@ -97,15 +106,54 @@ describe("pending workbook saves", () => {
     expect(first).toBeInstanceOf(WorkbookPartialSaveError);
     if (!(first instanceof WorkbookPartialSaveError)) throw first;
     expect(entry.workbook.version).toEqual(first.version);
+    expect(saved).toHaveBeenCalledExactlyOnceWith(changed, first.version.snapshotEtag);
     expect(entry.status).toBe("error");
     h.setHook(() => undefined);
     await entry.retry();
     expect(save.mock.calls[1]?.[2]).toEqual(first.version);
     expect(save.mock.calls[1]?.[3]?.force).toBe(false);
     expect(entry.status).toBe("saved");
+    stopSaved();
     detach();
     await entry.flush();
     expect((await h.service.open(book.container)).snapshot).toEqual(changed);
+  });
+
+  it.each([
+    "workbook.json",
+    "index.ttl",
+  ])("does not associate a failed %s verification's old ETag with newer edits", async (resource) => {
+    const { h, entry } = await setup();
+    const detach = entry.subscribe(() => {});
+    const saved = vi.fn();
+    const stopSaved = entry.onSaved(saved);
+    let written = false;
+    h.setHook(async (call) => {
+      if (!call.url.endsWith(resource)) return;
+      if (call.method === "PUT") {
+        const response = await h.pod.fetch(call.url, call.init);
+        response.headers.delete("etag");
+        written = true;
+        return response;
+      }
+      if (written) return new Response(null, { status: 503 });
+    });
+    entry.schedule(() => snapshot("First\nedit"));
+    await entry.flush();
+    expect(entry.status).toBe("error");
+    expect(saved).toHaveBeenCalledTimes(resource === "workbook.json" ? 0 : 1);
+    saved.mockClear();
+    const latest = snapshot("Latest\nedit");
+    entry.schedule(() => latest);
+    await entry.retry();
+    expect(entry.status).toBe("error");
+    expect(saved).not.toHaveBeenCalled();
+    h.setHook(() => undefined);
+    await entry.retry();
+    expect(saved).toHaveBeenCalledExactlyOnceWith(latest, entry.workbook.version.snapshotEtag);
+    stopSaved();
+    detach();
+    await entry.flush();
   });
 
   it("preserves detached conflicts for reopen, never retries on reconnect, and can Keep mine", async () => {

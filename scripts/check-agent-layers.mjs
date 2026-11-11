@@ -220,7 +220,19 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
   // that one pre-existing edge stays allowed. New agent code reaches models only via the gateway.
   const legacyPilotActor =
     ctx.project === "personal-agent" && name === "@anthropic-ai/claude-agent-sdk";
-  if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway" && !legacyPilotActor)
+  // Maintainer-directed pilot feedback is a server-side interview, outside the agent stack.
+  // Admit only its concrete SDK module and manifest edge; browser and other app imports stay forbidden.
+  const feedbackInterviewSdk =
+    target === "@anthropic-ai/sdk" &&
+    ctx.packageName === "@jeswr/app-suite" &&
+    ((manifest && ctx.path === "apps/suite/package.json") ||
+      (!manifest && ctx.path === "apps/suite/src/feedback/server.ts"));
+  if (
+    modelSdks.includes(name) &&
+    ctx.project !== "agent-model-gateway" &&
+    !legacyPilotActor &&
+    !feedbackInterviewSdk
+  )
     failures.push("model SDKs are gateway-only");
   if (ctx.project === "agent-model-gateway" && name === agent("audit"))
     failures.push("gateway must not import agent-audit");

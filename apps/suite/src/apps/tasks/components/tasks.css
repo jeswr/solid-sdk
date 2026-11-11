@@ -33,6 +33,52 @@
 .tsk-project-chip {
   gap: 4px;
 }
+.tsk-label-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  vertical-align: middle;
+}
+.tsk-label-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--foreground);
+}
+.suite-tag-label > .tsk-label-dot {
+  margin-inline-end: 4px;
+}
+.tsk-label-filter {
+  margin-block: 12px;
+}
+.tsk-label-filter ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tsk-label-filter a {
+  min-height: 44px;
+  padding-inline: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  text-decoration: none;
+  font-size: var(--text-sm);
+}
+.tsk-label-filter a:hover {
+  background: var(--surface-2);
+}
+.tsk-label-filter a[aria-current="page"] {
+  border-color: var(--primary);
+}
+.tsk-label-filter a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
 @media (pointer: coarse) {
   .tsk-colour-popover {
     width: 260px;
@@ -445,6 +491,11 @@
 }
 
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+.tsk-attachment-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 .tsk-composer {
   display: grid;
   gap: 12px;

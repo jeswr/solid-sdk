@@ -20,6 +20,10 @@ uses ETags, retries at most three conflicts, and refuses unreadable indexes or
 missing validators. A missing index is created owner-private. The registration
 uses `solid:instance` to identify `<storage>/agent/` as `agent:AgentWorkspace`.
 Provisioning the preferences/profile links remains the host's responsibility.
+On every start, after the owner-only workspace ACL and before any inbox content, the
+daemon writes `agent/descriptors/agent.ttl`: an `agent:ImplementationDescription` whose
+`agent:describes` is the configured agent WebID. The owner's app reads the agent's
+identity (the mandate subject) only from that resource.
 
 Each enabled account is processed serially, including accounts sharing a binding:
 

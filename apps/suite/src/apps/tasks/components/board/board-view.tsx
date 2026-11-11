@@ -21,6 +21,7 @@ import { formatDue, isOverdue } from "../../lib/format/due";
 import { classifyError } from "../../lib/model/errors";
 import type { StoredProject } from "../../lib/model/store";
 import type { Category } from "../../lib/model/tracker";
+import { labelColour } from "../../lib/views/label-colours";
 import { projectGroups, type Row } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
 import { completeTask, deleteTask } from "../../state/actions";
@@ -31,6 +32,8 @@ import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
 import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
+import { LabelChip } from "../label-chip";
+import { LabelFilterBar } from "../label-filter-bar";
 import { MoveMenuItems } from "../move-menu";
 import { ProjectDot } from "../project-dot";
 import { TaskCheck, useCompleting } from "../task-check";
@@ -137,9 +140,11 @@ function BoardCard({
         )}
         <TaskProgress tasks={tasks.views} id={task.id} />
         {labels.slice(0, 3).map((label) => (
-          <span className="tsk-chip" key={label.id}>
-            @{label.name}
-          </span>
+          <LabelChip
+            key={label.id}
+            name={label.name}
+            colour={labelColour(label.name, tasks.projects)}
+          />
         ))}
         {labels.length > 3 && <span>+{labels.length - 3}</span>}
         {task.priority < 4 && <span className="tsk-sr-only">Priority P{task.priority}</span>}
@@ -300,6 +305,7 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
           )}
         </h1>
       </header>
+      <LabelFilterBar projectUrl={projectUrl} />
       {renderAsync({
         loading:
           tasks.status === "loading" ||

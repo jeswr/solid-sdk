@@ -11,6 +11,7 @@
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
+import { fetchOrGuarded } from "./internal/default-fetch.js";
 import { classifyFetchError, describeError } from "./internal/errors.js";
 import type { AgentDiscovery, AgentPointer, VerificationResult } from "./types.js";
 import { verifyDataset } from "./verify.js";
@@ -24,16 +25,15 @@ export interface DiscoverOptions {
    *
    * SECURITY — this fetch is the SSRF boundary. `discoverAgent` follows the
    * agent-pointer IRI read from a (possibly untrusted) WebID profile and fetches
-   * it. In a **server / Node** context the default `globalThis.fetch` is NOT
-   * SSRF-guarded, so a hostile profile could point the second fetch at an
-   * internal address (e.g. cloud metadata). Callers resolving UNTRUSTED WebIDs on
-   * a server SHOULD inject an SSRF-guarded fetch (e.g. `@jeswr/guarded-fetch`'s
-   * node fetch, with DNS-pinning). In a browser, CORS only limits which
-   * cross-origin RESPONSES your code can read — it does not stop the request
-   * being issued to an internal target — so treat untrusted browser-side
-   * discovery as only partially guarded. (This is distinct from the
-   * subject-binding spoofing guard, which prevents a descriptor from *claiming* a
-   * different agent IRI, not SSRF.)
+   * it. When omitted under Node, both fetches use `@jeswr/guarded-fetch`'s
+   * DNS-pinned fetch (loaded lazily), which refuses private, loopback and
+   * link-local targets (including via redirects) and bounds body size and time.
+   * In a browser the default is `globalThis.fetch`: CORS only limits which
+   * responses a page can read, not which requests it issues, so untrusted
+   * browser-side discovery is only partially guarded. An injected fetch replaces
+   * either default, so it must enforce its own SSRF policy when the WebID is
+   * untrusted. (This is distinct from the subject-binding spoofing guard, which
+   * prevents a descriptor from *claiming* a different agent IRI, not SSRF.)
    *
    * Independently of the injected fetch, `discoverAgent` REJECTS (skips) any
    * pointer whose object is not a well-formed absolute http(s) IRI — `file:`,
@@ -87,7 +87,7 @@ export async function discoverAgent(
   if (!webId) {
     throw new TypeError("discoverAgent: webId is required.");
   }
-  const fetchOpts = options.fetch ? { fetch: options.fetch } : {};
+  const fetchOpts = { fetch: await fetchOrGuarded(options.fetch) };
 
   let profileDataset: import("@rdfjs/types").DatasetCore;
   try {

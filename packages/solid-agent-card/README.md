@@ -8,7 +8,12 @@ Build and discover machine-readable agent descriptors anchored to a Solid WebID.
 One descriptor produces an A2A Agent Card and an RDF Agent Description, while WebID pointers make
 the agent discoverable from its owner.
 
-> Experimental. Server-side discovery of untrusted URLs requires an SSRF-guarded fetch.
+> Experimental. Without an injected `fetch`, discovery and verification under Node use
+> `@jeswr/guarded-fetch`'s DNS-pinned fetch, loaded lazily, which refuses private, loopback
+> and link-local targets (including via redirects). In a browser the default is
+> `globalThis.fetch`; CORS limits what a page can read, not which requests it issues, so
+> browser discovery of untrusted WebIDs is only partially guarded. An injected `fetch`
+> replaces either default, so it must enforce its own SSRF policy for untrusted URLs.
 
 ## Install
 
