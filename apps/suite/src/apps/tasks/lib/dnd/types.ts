@@ -62,6 +62,8 @@ export type DropPlan =
 
 /** What a listing knows beyond its visible rows. */
 export interface PlanOptions {
+  /** Board cards share one ordering level per section and retain their RDF parent links. */
+  readonly flat?: boolean | undefined;
   /**
    * Every task of the project, closed ones included (visible rows hide them
    * when show-completed is off); nesting checks children against these.

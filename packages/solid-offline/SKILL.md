@@ -45,6 +45,14 @@ Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry.
   it replace or evict a cached GET body. Keep the bounded negative-cache behavior for 403/404 GETs.
 - Respect `Vary`; normalize supported RDF reads to the canonical accept value without collapsing genuinely different variants.
 - On an online hit, serve immediately and conditionally revalidate. A `304` refreshes metadata; a changed `200` replaces bytes and broadcasts an update.
+- Tag readable in-scope pod GET responses with `X-Solid-Offline-Cache`, exported as
+  `CACHE_PROVENANCE_HEADER`. `cacheProvenance(response)` returns `'hit' | 'miss' | 'stale' | null`
+  without reading the body. Network bytes are `miss`, even when HTTP policy prevents storage;
+  synchronous 304-confirmed bytes and negative entries within their bounded TTL are `hit`.
+  Offline positive-cache reads and immediate SWR bytes are `stale`, including when background
+  validation fails, is skipped, or later succeeds. Keep the legacy offline `X-Offline` marker.
+  Decorate cloned responses only, never cached entries. Leave out-of-scope requests, HEAD,
+  app-shell responses, and opaque/opaque-redirect or status-zero responses unchanged.
 - Treat notification `state`/ETag equality as a fast no-op, not a universal correctness assumption. Reconcile after disconnects.
 - Bound warming by resource count, bytes, depth, and concurrency. Acknowledge the worker budget session before intercepted StorageClient reads, retain HEAD size evidence, and validate streams before Cache.put; never retry guarded failures outside the budget. Prune unreadable subtrees and avoid eager caching of large binary bodies.
 - Keep app-shell caches versioned and separate from pod-data caches. Cache only explicitly declared public shell URLs.

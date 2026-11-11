@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { exportJWK, generateKeyPair, type JWTHeaderParameters, SignJWT } from "jose";
 import { vi } from "vitest";
 import { sha256 } from "../src/device-proof.js";
-import type { PushSink } from "../src/push.js";
+import type { PushSink } from "../src/push-payload.js";
 import { createRelay } from "../src/relay.js";
 import { InMemoryRelayStore } from "../src/store.js";
 import { epoch } from "./fixtures.js";
@@ -113,6 +113,8 @@ export async function pushFixture(overrides: Partial<Parameters<typeof createRel
     ],
   });
   const state = () => store.transaction((state) => state);
+  const challenges = () =>
+    send.mock.calls.map(([, payload]) => payload).filter((payload) => payload.kind === "challenge");
   return {
     ...resource,
     options,
@@ -125,6 +127,7 @@ export async function pushFixture(overrides: Partial<Parameters<typeof createRel
     create,
     registration,
     state,
+    challenges,
     time(value: number) {
       clock = value;
       resource.time(value);

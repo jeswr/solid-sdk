@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Claude Opus 5.5
 // Drive sharing through the SDK role layer (@jeswr/pod-access/roles) against the demo pod.
@@ -17,7 +18,6 @@ import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
 import {
   applySharing,
-  FOLDER_READ_ONLY,
   loadError,
   loadSharing,
   SharingConflictError,
@@ -597,29 +597,53 @@ it("returns read-only access for a non-owner", async () => {
   expect(snapshot.readOnly).toBeUndefined();
 });
 
-it("keeps folder sharing read-only because SDK writes would not reach descendants", async () => {
-  const env = await setup();
+it.each([
+  "wac",
+  "acp",
+] as const)("edits %s folders for people and general access without writing descendants", async (model) => {
+  const env = await setup(model);
   const folder = `${FOLDER}nested/`;
+  const child = `${folder}independent.txt`;
   await env.pod.fetch(folder, { method: "PUT" });
-  const doc = document("wac", false, folder);
-  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+  await env.pod.fetch(child, { method: "PUT", body: "independent" });
+  const doc = document(model, false, folder);
+  const ownChild = document(model, false, child);
+  if (model === "wac") {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = folder;
+    authorization(ownChild, ALICE, ["Read", "Write", "Control"]);
+  } else {
+    policy(doc, ALICE, ["Read", "Write", "Control"]);
+    const members = document(model, true, folder);
+    policy(members, ALICE, ["Read", "Write", "Control"], folder);
+    for (const quad of members.dataset) doc.dataset.add(quad);
+    policy(ownChild, ALICE, ["Read", "Write", "Control"]);
+  }
   await writeDoc(env, doc);
-  const snapshot = await loadSharing(env.session, folder);
-  expect(snapshot).toMatchObject({
-    canManage: false,
-    readOnly: FOLDER_READ_ONLY,
-    contentsDiffer: false,
-  });
-  expect(snapshot.state.people.map((p) => [p.webId, p.role])).toEqual([[ALICE, "owner"]]);
-  env.fetch.mockClear();
-  await expect(
-    applySharing(env.session, snapshot, {
+  await writeDoc(env, ownChild);
+  const childBytes = await (await env.pod.fetch(ownChild.source)).text();
+  let snapshot = await loadSharing(env.session, folder);
+  expect(snapshot.canManage).toBe(true);
+  for (const role of ["editor", "viewer"] as const) {
+    snapshot = await applySharing(env.session, snapshot, {
       ...snapshot.state,
-      people: [...snapshot.state.people, { webId: BOB, role: "viewer" }],
-    }),
-  ).rejects.toThrow(FOLDER_READ_ONLY);
-  expect(env.fetch).not.toHaveBeenCalled();
-  expect((await loadSharing({ ...env.session, webId: BOB }, folder)).readOnly).toBeUndefined();
+      people: [...snapshot.state.people.filter((p) => p.webId !== BOB), { webId: BOB, role }],
+      link: role,
+      public: "viewer",
+    });
+    const reopened = await loadSharing(env.session, folder);
+    expect(reopened.state.people.find((p) => p.webId === BOB)?.role).toBe(role);
+    expect(reopened.state.link).toBe(role);
+  }
+  snapshot = await applySharing(env.session, snapshot, {
+    people: snapshot.state.people.filter((p) => p.webId !== BOB),
+    link: "none",
+    public: "none",
+  });
+  expect(snapshot.state.people.map((p) => p.webId)).toEqual([ALICE]);
+  expect(snapshot.state.link).toBe("none");
+  expect(env.puts().every(([url]) => String(url) === doc.source)).toBe(true);
+  expect(await (await env.pod.fetch(ownChild.source)).text()).toBe(childBytes);
+  expect((await loadSharing({ ...env.session, webId: BOB }, folder)).canManage).toBe(false);
 });
 
 it("projects SDK grants and fails closed for principals the dialog cannot show", () => {
@@ -972,7 +996,7 @@ it("fails closed on unmappable access inherited from the parent folder", async (
 it.each([
   ["a person", BOB],
   ["the public", PUBLIC],
-] as const)("flags a folder whose default-only rules share its contents with %s", async (_, who) => {
+] as const)("refuses a folder whose default-only rules share its contents with %s", async (_, who) => {
   const env = await setup();
   const folder = `${FOLDER}drop/`;
   await env.pod.fetch(folder, { method: "PUT" });
@@ -982,11 +1006,22 @@ it.each([
   properties(rule).values(`${ACL}accessTo`).clear();
   rule.default = folder;
   await writeDoc(env, doc);
-  const snapshot = await loadSharing(env.session, folder);
-  expect(snapshot.state).toMatchObject({ people: [{ webId: ALICE }], link: "none" });
-  expect(snapshot.contentsDiffer).toBe(true);
-  expect(accessSummary(snapshot, ALICE)).toBe("Access unknown");
-  expect(accessSummary({ ...snapshot, contentsDiffer: false }, ALICE)).toBe("Only you");
+  await expect(loadSharing(env.session, folder)).rejects.toMatchObject({
+    message: expect.stringContaining("different sharing for the folder and its contents"),
+    cause: { code: "partial-scope" },
+  });
+  // The independent verifier still flags unequal scopes, even without a projected member row.
+  const capture = { resource: folder, url: doc.source, dataset: doc.dataset };
+  expect(
+    await verifyAccess(folder, "folder", async () => [capture], [
+      {
+        agent: { type: "webid", id: ALICE },
+        role: "manager",
+        inherited: false,
+        source: doc.source,
+      },
+    ]),
+  ).toEqual({ contentsDiffer: true });
   // A file inside inherits that access, and its own dialog shows it.
   await env.pod.fetch(`${folder}upload.txt`, { method: "PUT", body: "x" });
   const child = await loadSharing(env.session, `${folder}upload.txt`);
@@ -1000,7 +1035,9 @@ it("flags an ACP folder whose member access differs from its own", async () => {
   const doc = document("acp", false, folder);
   policy(doc, ALICE, ["Read", "Write", "Control"]);
   await writeDoc(env, doc);
-  expect((await loadSharing(env.session, folder)).contentsDiffer).toBe(true);
+  await expect(loadSharing(env.session, folder)).rejects.toMatchObject({
+    cause: { code: "partial-scope" },
+  });
   const both = document("acp", false, folder);
   policy(both, ALICE, ["Read", "Write", "Control"]);
   const members = document("acp", true, folder);
