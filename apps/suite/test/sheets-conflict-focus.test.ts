@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { withCharts } from "../src/apps/sheets/lib/charts/spec";
 import type {
   MountEngine,
   SheetEngine,
@@ -58,7 +59,7 @@ function fakeEngine(initial: Snapshot) {
     dispose: vi.fn(),
     exportCsv: vi.fn(() => ""),
     activeSheet: vi.fn(() => ({ id: "data", name: "Data" })),
-    importCsv: vi.fn(),
+    importCsv: vi.fn(() => ({ status: "imported" as const })),
   };
   return engine;
 }
@@ -100,13 +101,43 @@ it("loads the remote snapshot into a mounted engine and returns conflict focus t
   const { book, remote, entry } = await conflict();
   const editor = await mount(h(SheetEditor, { container: book.container }));
   const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].commentsLoading).toBe(true);
   expect(document.activeElement?.textContent).toBe("Load their version");
   await click(button(document, "Load their version"));
-  expect(engine.load).toHaveBeenCalledWith(remote);
+  expect(engine.load).toHaveBeenCalledWith(remote, entry.workbook.version.snapshotEtag);
   expect(engine.snapshot()).toEqual(remote);
   expect(entry.workbook.snapshot).toEqual(remote);
   expect(entry.status).toBe("saved");
   await vi.waitFor(() => expect(document.activeElement).toBe(button(editor.host, "File")));
+  await editor.unmount();
+});
+
+it("acknowledges saved workbook revisions for both renames and engine edits", async () => {
+  const { book } = await setup();
+  mocks.mount.mockImplementationOnce(async (_host, options) => ({
+    ...fakeEngine(options.snapshot),
+    setWorkbookRevision: vi.fn(),
+  }));
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const engine = await mocks.mount.mock.results[0]?.value;
+  expect(mocks.mount.mock.calls[0]?.[1].workbookRevision).toBe(book.version.snapshotEtag);
+  const entry = pendingSaves.get(book.container);
+  await act(async () => {
+    entry?.rename("Renamed before editing");
+    await entry?.flush();
+  });
+  expect(engine.setWorkbookRevision).toHaveBeenCalledWith(
+    entry?.workbook.version.snapshotEtag,
+    book.snapshot,
+  );
+  await act(async () => {
+    vi.mocked(engine.onChange).mock.calls[0]?.[0]();
+    await entry?.flush();
+  });
+  expect(engine.setWorkbookRevision).toHaveBeenLastCalledWith(
+    entry?.workbook.version.snapshotEtag,
+    engine.snapshot(),
+  );
   await editor.unmount();
 });
 
@@ -353,6 +384,22 @@ it.each([
 
 it("shows View only, disables engine editing and skips autosave for a reader", async () => {
   const { book, pod, service, setHook } = await setup();
+  const chartSnapshot = withCharts(book.snapshot, [
+    {
+      id: "chart",
+      sheetId: "data",
+      range: "A1:B2",
+      type: "column",
+      title: "Shared chart",
+      legend: true,
+      series: "columns",
+    },
+  ]);
+  await service.save(book.container, chartSnapshot, book.version);
+  mocks.mount.mockImplementationOnce(async (_host, options) => ({
+    ...fakeEngine(options.snapshot),
+    setCharts: vi.fn(),
+  }));
   setHook(async (call) => {
     if (call.method !== "GET" || !call.url.startsWith(book.container)) return undefined;
     const response = await pod.fetch(call.url, call.init);
@@ -367,6 +414,16 @@ it("shows View only, disables engine editing and skips autosave for a reader", a
   expect(engine.setReadOnly).toHaveBeenCalledWith(true);
   expect(editor.host.textContent).toContain("View only");
   expect(button(editor.host, "Share").disabled).toBe(true);
+  await vi.waitFor(async () => {
+    await act(() => {});
+    expect(editor.host.querySelector("svg title")?.textContent).toBe("Shared chart");
+  });
+  expect(button(editor.host, "Insert chart").disabled).toBe(true);
+  expect(button(editor.host, "Edit chart").disabled).toBe(true);
+  await click(button(editor.host, "Insert chart"));
+  await click(button(editor.host, "Edit chart"));
+  expect(editor.host.querySelector('[aria-label="Chart editor"]')).toBeNull();
+  expect(engine.setCharts).not.toHaveBeenCalled();
   await act(async () => {
     vi.mocked(engine.onChange).mock.calls[0]?.[0]();
     window.dispatchEvent(new Event("pagehide"));

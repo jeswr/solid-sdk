@@ -103,7 +103,7 @@ complete graph signature, exact owner attribution and expiry, and returns either
 `key`, `signature`, `attribution`, `expired` or `malformed`. SetBindingState requires
 target, binding, and either bindingState or restrictions. Restriction-only changes omit
 bindingState so a concurrent disconnect remains effective. Restrictions carry one or more optional typed booleans
-(read, triage, draft and send); only supplied fields change, and are forbidden for every other control kind. DispatchNow, RevokeMandate and Forget require a target.
+(read, triage, draft and send); only supplied fields change, and are forbidden for every other control kind. DispatchNow, RevokeMandate, Forget and Archive require a target.
 Control claims are decoded through agent-model's strict RDF mapping, including literal
 datatypes, language tags, and cardinalities. Approval claims retain their issued mapping:
 `approves` is an IRI; `termsDigest`, `expires`, and `decision` are `xsd:string` literals

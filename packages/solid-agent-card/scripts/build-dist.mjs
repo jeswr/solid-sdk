@@ -10,7 +10,7 @@
  * or Zod type import. dist/ is built here and committed only in the mirrors.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -35,6 +35,7 @@ const EXTERNAL = [
   "@rdfjs/types",
   "jsonld-streaming-parser",
   "content-type",
+  "undici",
 ];
 
 function emitDeclarations(buildDir) {
@@ -117,6 +118,10 @@ async function main(buildDir = outdir) {
     outdir: buildDir,
     bundle: true,
     format: "esm",
+    // The lazily imported Node guard (undici, node:dns) stays in its own chunk, so
+    // importing the entry never loads it.
+    splitting: true,
+    chunkNames: "chunks/[name]-[hash]",
     platform: "node",
     target: "node24",
     external: EXTERNAL,
@@ -125,7 +130,14 @@ async function main(buildDir = outdir) {
     logLevel: "warning",
   });
 
-  for (const entry of ["index", "render-card"]) {
+  const outputs = [
+    "index",
+    "render-card",
+    ...readdirSync(join(buildDir, "chunks"))
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => `chunks/${file.slice(0, -3)}`),
+  ];
+  for (const entry of outputs) {
     const indexFile = join(buildDir, `${entry}.js`);
     const mapFile = join(buildDir, `${entry}.js.map`);
     // Normalize esbuild's module comments and sourcemap sources before shipping.

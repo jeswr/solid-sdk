@@ -5,6 +5,7 @@ import * as access from "@jeswr/pod-access";
 import * as roles from "@jeswr/pod-access/roles";
 import {
   addGrant,
+  movePreservingAccess,
   type Role,
   type RoleGrant,
   readGrants,
@@ -14,7 +15,7 @@ import {
 } from "@jeswr/pod-access/roles";
 import { container, etag, text } from "./case-helpers.js";
 import { expectStorageError } from "./testing.js";
-import type { ConformanceCase, RunningTarget } from "./types.js";
+import type { ConformanceCase, RunningTarget, SupportProbe } from "./types.js";
 
 const FRIEND = "https://identity.example/bob#me";
 const agent = { type: "webid" as const, id: FRIEND };
@@ -240,6 +241,53 @@ const inherited: ConformanceCase = {
 };
 
 /** App roles exercise documents, comments and inherited provenance. */
-export function roleCases(): readonly ConformanceCase[] {
-  return [...(["commenter", "editor", "manager"] as const).map(roundtrip), inherited];
+export function roleCases(moveProbe: SupportProbe): readonly ConformanceCase[] {
+  const move: ConformanceCase = {
+    id: "SC-ROLES-movePreservingAccess",
+    // Like the other role cases, access control is exercised on every target; CSS does not
+    // advertise the accessControl feature, so requiring it would misreport a missing claim.
+    requires: ["move"],
+    checks: { move: moveProbe },
+    async run(target) {
+      const parent = await container(target, "roles-move-source");
+      const destination = await container(target, "roles-move-destination");
+      const item = await text(target.storage, parent);
+      const opts = options(target);
+      if (target.storage.protocol === "lws") {
+        await lwsAccess(target).share(item.url, { agent: FRIEND, modes: ["read"] }, {});
+      } else {
+        applied(await addGrant([item.url], grant("viewer"), opts), item.url);
+      }
+      const result = await movePreservingAccess(target.storage, item.url, destination, {
+        ...opts,
+        name: "moved.txt",
+      });
+      assert.equal(result.preserved, true);
+      assert.deepEqual(result.dropped, []);
+      if (target.storage.protocol === "lws") {
+        assert(
+          (await lwsAccess(target).grants(result.url)).some(
+            (entry) =>
+              entry.agent === FRIEND && entry.modes.length === 1 && entry.modes[0] === "read",
+          ),
+        );
+      } else {
+        assert(
+          (await readGrants(result.url, opts)).grants.some(
+            (entry) =>
+              entry.agent.type === "webid" &&
+              entry.agent.id === FRIEND &&
+              entry.role === "viewer" &&
+              !entry.inherited,
+          ),
+        );
+      }
+      if (!target.storage.features.move.detail.native) assert.notEqual(result.url, item.url);
+      const members = [];
+      for await (const entry of target.storage.listAll(destination)) members.push(entry.url);
+      assert(members.includes(result.url), "Destination listing must contain the moved resource");
+      await expectStorageError(target.storage.head(item.url), "not-found");
+    },
+  };
+  return [...(["commenter", "editor", "manager"] as const).map(roundtrip), inherited, move];
 }

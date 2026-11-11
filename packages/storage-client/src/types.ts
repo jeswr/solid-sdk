@@ -115,6 +115,13 @@ export interface WriteResult {
   url: string;
   etag: string | null;
   created: boolean;
+  /**
+   * Where `etag` came from. `"response"`: the mutation response's own ETag, so it names the
+   * version this call wrote. `"follow-up"`: a later HEAD observed it, so it may already be a
+   * concurrent writer's version. Absent: the backend does not say. Only a `"response"` ETag is
+   * safe as `ifMatch` for a follow-up write or delete that must not clobber someone else.
+   */
+  etagSource?: "response" | "follow-up";
 }
 
 export type JsonPatchOp = {

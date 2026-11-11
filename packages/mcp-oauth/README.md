@@ -108,6 +108,15 @@ malformed discovery, transport failures and issuer mismatches never trigger fall
 OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
 in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
 
+LWS storages are answered by exchanging the session's verified ID token, under pod-auth's
+exchange rule. The resource must be inside a stored root, and the authorization server must
+be on the issuer's origin, a storage root's origin, or listed in `lwsAuthorizationServers`.
+A container realm must be inside a stored root. Any other realm is read as a storage
+description (pod-auth's `storageDescriptionRoots`, without credentials or redirects): it must
+share the resource's origin and advertise a container root that is inside a stored root and
+contains the resource, so a description can never widen the token audience. The broker's transport also refuses any token-exchange POST to another
+origin, so a trusted server's metadata cannot redirect the ID token either.
+
 `complete()` consumes pending login state atomically and returns only `{ id, webId }`. The
 refresh token and private DPoP JWK stay in the vault; access/ID tokens stay in process memory.
 `fetchFor(id)` returns a fetch that checks durable session liveness on every call, permits only

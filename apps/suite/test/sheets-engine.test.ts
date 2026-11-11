@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ChartSpec, withCharts } from "../src/apps/sheets/lib/charts/spec";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 
 const mock = vi.hoisted(() => {
@@ -12,13 +13,24 @@ const mock = vi.hoisted(() => {
     params?: { unitId?: string };
     options?: { fromChangeset?: boolean; fromFormula?: boolean };
   }) => void;
+  const events = new Map<string, () => void>();
+  const selectionSubscription = { unsubscribe: vi.fn() };
+  const sheetSubscription = { dispose: vi.fn() };
+  const range = { getRow: () => 2, getColumn: () => 1 };
+  const sheet = { getRange: vi.fn((cell: string) => cell), setActiveRange: vi.fn() };
   const subscription = { dispose: vi.fn() };
+  let selection: string | null = "B2:C4";
+  let calculated: () => void;
+  const calculation = { dispose: vi.fn() };
   const workbook = {
     getId: () => "book",
+    getActiveCell: vi.fn(() => range as typeof range | null),
+    getSheetBySheetId: vi.fn((id: string) => (id === "data" ? sheet : null)),
     save: () => data,
     getActiveSheet: () => ({
       getSheetId: () => active,
       getSheetName: () => (data.sheets as Record<string, { name: string }>)[active]?.name,
+      getActiveRange: () => (selection === null ? null : { getA1Notation: () => selection }),
     }),
     setEditable: vi.fn(),
     setActiveSheet: vi.fn((id: string) => {
@@ -26,7 +38,17 @@ const mock = vi.hoisted(() => {
     }),
   };
   const api = {
-    Event: { CommandExecuted: "executed" },
+    Event: {
+      CommandExecuted: "executed",
+      SelectionChanged: "selection",
+      ActiveSheetChanged: "sheet",
+    },
+    getFormula: () => ({
+      calculationResultApplied: (callback: () => void) => {
+        calculated = callback;
+        return calculation;
+      },
+    }),
     createWorkbook: vi.fn((next: Record<string, unknown>) => {
       data = next;
       active = "data";
@@ -35,16 +57,58 @@ const mock = vi.hoisted(() => {
     disposeUnit: vi.fn(),
     toggleDarkMode: vi.fn(),
     addEvent: vi.fn((_name: string, callback: typeof handler) => {
-      handler = callback;
-      return subscription;
+      if (_name === "executed") {
+        handler = callback;
+        return subscription;
+      }
+      events.set(_name, callback as unknown as () => void);
+      return _name === "selection" ? selectionSubscription : sheetSubscription;
     }),
   };
-  const univer = { dispose: vi.fn() };
+  const interceptor = {
+    interceptCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    interceptAfterCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  };
+  const commandService = {
+    registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+    beforeCommandExecuted: vi.fn(() => ({ dispose: vi.fn() })),
+  };
+  const univer = {
+    dispose: vi.fn(),
+    // biome-ignore lint/style/useNamingConvention: Univer API
+    __getInjector: () => ({
+      get: (token: string) =>
+        token === "command-service"
+          ? commandService
+          : token === "selections"
+            ? {
+                // biome-ignore lint/style/useNamingConvention: Univer observable
+                selectionChanged$: {
+                  subscribe: (callback: () => void) => {
+                    events.set("selection", callback);
+                    return selectionSubscription;
+                  },
+                },
+              }
+            : interceptor,
+    }),
+  };
   return {
     api,
     workbook,
+    sheet,
+    range,
+    selectionSubscription,
+    sheetSubscription,
+    select: () => events.get("selection")?.(),
+    activate: () => events.get("sheet")?.(),
     univer,
     subscription,
+    calculation,
+    calculated: () => calculated(),
+    selectRange: (range: string | null) => {
+      selection = range;
+    },
     emit: (event: Parameters<typeof handler>[0]) => handler(event),
     create: vi.fn(() => ({ univer, univerAPI: api })),
     preset: vi.fn((_options: unknown) => ({ plugins: ["core"] })),
@@ -66,6 +130,14 @@ vi.mock("@univerjs/preset-sheets-conditional-formatting", () => ({
 }));
 vi.mock("@univerjs/preset-sheets-conditional-formatting/locales/en-US", () => ({
   default: { conditionalFormatting: "Conditional formatting" },
+}));
+vi.mock("@univerjs/core", async (original) => ({
+  ...(await original<typeof import("@univerjs/core")>()),
+  ICommandService: "command-service",
+}));
+vi.mock("@univerjs/sheets", () => ({
+  SheetInterceptorService: "sheet-interceptors",
+  SheetsSelectionsService: "selections",
 }));
 vi.mock("@univerjs/presets", () => ({
   CommandType: { MUTATION: 1 },
@@ -142,6 +214,7 @@ describe("Univer engine adapter", () => {
     "sheet.mutation.set-frozen",
     "sheet.mutation.add-worksheet-merge",
     "sheet.mutation.remove-worksheet-merge",
+    "sheet.mutation.insert-row",
   ])("marks persisted user mutation %s dirty, including after reload", async (id) => {
     const engine = await mount();
     const change = vi.fn();
@@ -336,6 +409,59 @@ describe("Univer engine adapter", () => {
   });
 });
 
+it("retains app chart specs on snapshots, CSV import and reload and exposes the current selection", async () => {
+  const engine = await mount();
+  expect(engine.selection?.()).toEqual({ sheetId: "data", range: "B2:C4" });
+  mock.selectRange(null);
+  expect(engine.selection?.().range).toBe("A1");
+  mock.selectRange("B2:C4");
+  const changed = vi.fn();
+  const values = vi.fn();
+  engine.onChange(changed);
+  const off = engine.onValuesChange?.(values);
+  const charts = { version: 1, entries: [{ id: "chart" }] };
+  engine.setCharts?.(charts);
+  charts.entries[0] = { id: "changed outside" };
+  await Promise.resolve();
+  expect(changed).toHaveBeenCalledOnce();
+  expect(values).toHaveBeenCalledOnce();
+  const saved = engine.snapshot();
+  expect(saved.charts).toEqual({ version: 1, entries: [{ id: "chart" }] });
+  engine.importCsv("Value\n1", { mode: "replace-active" });
+  expect(engine.snapshot().charts).toEqual(saved.charts);
+  engine.load(saved);
+  expect(engine.snapshot().charts).toEqual(saved.charts);
+  const fromMount = await (await loadEngine())({} as HTMLElement, {
+    snapshot: saved,
+    dark: false,
+    compact: false,
+  });
+  expect(fromMount.snapshot().charts).toEqual(saved.charts);
+  fromMount.dispose();
+  off?.();
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it("refreshes chart values after applied formula results without another autosave", async () => {
+  const engine = await mount();
+  const changed = vi.fn();
+  const values = vi.fn();
+  engine.onChange(changed);
+  engine.onValuesChange?.(values);
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  expect(changed).not.toHaveBeenCalled();
+  mock.api.disposeUnit.mockImplementationOnce(() => mock.calculated());
+  engine.load(initial());
+  expect(values).toHaveBeenCalledOnce();
+  engine.dispose();
+  mock.calculated();
+  expect(values).toHaveBeenCalledOnce();
+  expect(mock.calculation.dispose).toHaveBeenCalledOnce();
+});
+
 it("enforces view-only access at mount, after reload and after losing write access", async () => {
   const engine = await (await loadEngine())({} as HTMLElement, {
     snapshot: initial(),
@@ -346,7 +472,10 @@ it("enforces view-only access at mount, after reload and after losing write acce
   expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
   const change = vi.fn();
   engine.onChange(change);
-  engine.importCsv("Blocked", { mode: "replace-active" });
+  expect(engine.importCsv("Blocked", { mode: "replace-active" })).toEqual({
+    status: "blocked",
+    reason: "read-only",
+  });
   mock.emit(mutation);
   await Promise.resolve();
   expect(engine.snapshot()).toEqual(initial());
@@ -362,6 +491,263 @@ it("enforces view-only access at mount, after reload and after losing write acce
   engine.setReadOnly(false);
   mock.emit(mutation);
   await Promise.resolve();
+  expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it("holds editing from mount through comment loading without overriding access or dropping registered anchors", async () => {
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: initial(),
+    dark: false,
+    compact: true,
+    commentsLoading: true,
+  });
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.setReadOnly(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.load(initial());
+  expect(engine.importCsv("Blocked", { mode: "replace-active" })).toEqual({
+    status: "blocked",
+    reason: "comments-loading",
+  });
+  expect(engine.snapshot()).toEqual(initial());
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "B3", deleted: false } });
+  engine.setCommentsLoading?.(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(true);
+  await Promise.resolve();
+  expect(change).toHaveBeenCalledOnce();
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { root: { sheetId: "data", cell: "B3" } },
+  });
+  engine.setCommentsLoading?.(true);
+  engine.setReadOnly(true);
+  engine.setCommentsLoading?.(false);
+  expect(mock.workbook.setEditable).toHaveBeenLastCalledWith(false);
+  engine.dispose();
+});
+
+it("bridges cell selections and structural events without the comments preset", async () => {
+  const engine = await mount();
+  const select = vi.fn();
+  const structure = vi.fn();
+  const offSelect = engine.onSelection?.(select);
+  const offStructure = engine.onStructure?.(structure);
+  expect(engine.selectedCell?.()).toEqual({ sheetId: "data", cell: "B3", deleted: false });
+  mock.select();
+  mock.activate();
+  expect(select).toHaveBeenCalledTimes(2);
+  engine.selectCell?.({ sheetId: "data", cell: "D5", deleted: false });
+  expect(mock.sheet.setActiveRange).toHaveBeenCalledWith("D5");
+  engine.selectCell?.({ sheetId: "data", cell: "D5", deleted: true });
+  engine.selectCell?.({ sheetId: "missing", cell: "D5", deleted: false });
+  expect(mock.sheet.setActiveRange).toHaveBeenCalledOnce();
+  mock.workbook.getActiveCell.mockReturnValueOnce(null);
+  expect(engine.selectedCell?.()).toBeUndefined();
+  mock.emit({
+    ...mutation,
+    id: "sheet.mutation.insert-row",
+    params: {
+      unitId: "book",
+      subUnitId: "data",
+      range: { startRow: 2, endRow: 3 },
+    } as typeof mutation.params,
+  });
+  expect(structure).toHaveBeenCalledWith({
+    sheet: "data",
+    axis: "row",
+    kind: "insert",
+    index: 3,
+    count: 2,
+  });
+  offSelect?.();
+  offStructure?.();
+  mock.select();
+  mock.emit({
+    ...mutation,
+    id: "sheet.mutation.remove-rows",
+    params: {
+      unitId: "book",
+      subUnitId: "data",
+      range: { startRow: 2, endRow: 3 },
+    } as typeof mutation.params,
+  });
+  expect(select).toHaveBeenCalledTimes(3);
+  expect(structure).toHaveBeenCalledOnce();
+  engine.dispose();
+  expect(mock.selectionSubscription.unsubscribe).toHaveBeenCalledOnce();
+  expect(mock.sheetSubscription.dispose).toHaveBeenCalledOnce();
+});
+
+it("ignores unrelated interceptor commands and missing structural checkpoints, and preserves registered addresses", async () => {
+  const engine = await mount();
+  // Access the exact interceptor registered by the adapter, without mocking its behavior.
+  const injector = mock.univer.__getInjector();
+  const interceptors = injector.get("sheet-interceptors") as {
+    interceptCommand: ReturnType<typeof vi.fn>;
+    interceptAfterCommand: ReturnType<typeof vi.fn>;
+  };
+  const before = interceptors.interceptCommand.mock.calls.at(-1)?.[0] as {
+    getMutations(command: { id: string; params?: { unitId: string } }): unknown;
+  };
+  const after = interceptors.interceptAfterCommand.mock.calls.at(-1)?.[0] as typeof before;
+  expect(
+    before.getMutations({ id: "sheet.command.remove-row", params: { unitId: "other" } }),
+  ).toEqual({ redos: [], undos: [] });
+  expect(before.getMutations({ id: "sheet.command.format", params: { unitId: "book" } })).toEqual({
+    redos: [],
+    undos: [],
+  });
+  expect(after.getMutations({ id: "sheet.command.format" })).toEqual({ redos: [], undos: [] });
+  expect(after.getMutations({ id: "sheet.command.remove-row" })).toEqual({ redos: [], undos: [] });
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "B3", deleted: false } });
+  engine.registerCommentAnchors?.({ root: { sheetId: "data", cell: "Z9", deleted: false } });
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { root: { sheetId: "data", cell: "B3" } },
+  });
+  engine.setReadOnly(true);
+  expect(
+    before.getMutations({ id: "sheet.command.remove-row", params: { unitId: "book" } }),
+  ).toEqual({ redos: [], undos: [] });
+  engine.registerCommentAnchors?.({ other: { sheetId: "data", cell: "C4", deleted: false } });
+  engine.dispose();
+});
+
+it("registers a persisted draft on view-only workbooks without scheduling a workbook write", async () => {
+  const engine = await mount();
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.setReadOnly(true);
+  const draft = engine.trackCommentDraft?.({ sheetId: "data", cell: "B3", deleted: false });
+  draft?.commit("view-only-thread");
+  await Promise.resolve();
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { "view-only-thread": { sheetId: "data", cell: "B3" } },
+  });
+  expect(change).not.toHaveBeenCalled();
+  draft?.dispose();
+  engine.dispose();
+});
+
+it("accepts revision acknowledgements only for snapshots from the active mount", async () => {
+  const engine = await mount();
+  expect(engine.commentRevision?.()).toBeUndefined();
+  const saved = engine.snapshot();
+  engine.setWorkbookRevision?.("", saved);
+  engine.setWorkbookRevision?.('"foreign"', initial());
+  expect(engine.commentRevision?.()).toBeUndefined();
+  engine.setWorkbookRevision?.('"saved"', saved);
+  expect(engine.commentRevision?.()).toBe('"saved"');
+  engine.load(initial(), '"reloaded"');
+  engine.setWorkbookRevision?.('"stale-save"', saved);
+  expect(engine.commentRevision?.()).toBe('"reloaded"');
+  engine.registerCommentAnchors?.(
+    { older: { sheetId: "data", cell: "B3", deleted: false } },
+    "snapshot",
+    { older: '"saved"' },
+  );
+  expect(engine.snapshot().commentAnchors).toEqual({
+    version: 1,
+    anchors: { older: { sheetId: "data", cell: "B3" } },
+  });
+  const active = engine.snapshot();
+  engine.dispose();
+  engine.setWorkbookRevision?.('"disposed"', active);
+  expect(engine.commentRevision?.()).toBe('"reloaded"');
+});
+
+it.each([
+  "insert",
+  "edit",
+  "delete",
+] as const)("blocks chart %s in view-only snapshots and suppresses queued saves after losing write access", async (operation) => {
+  const chart: ChartSpec = {
+    id: "chart",
+    sheetId: "data",
+    range: "A1:B3",
+    type: "column",
+    title: "Revenue",
+    legend: true,
+    series: "columns",
+  };
+  const data = withCharts(initial(), operation === "insert" ? [] : [chart]);
+  const next = withCharts(
+    initial(),
+    operation === "delete" ? [] : [{ ...chart, title: "Changed revenue" }],
+  ).charts;
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: data,
+    dark: false,
+    compact: false,
+    readOnly: true,
+  });
+  const change = vi.fn();
+  engine.onChange(change);
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).not.toHaveBeenCalled();
+  engine.load(data);
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  engine.setCharts?.(next);
+  expect(engine.snapshot().charts).toEqual(next);
+  engine.setReadOnly(true);
+  engine.setCharts?.(data.charts);
+  await Promise.resolve();
+  expect(engine.snapshot().charts).toEqual(next);
+  expect(change).not.toHaveBeenCalled();
+  engine.setReadOnly(false);
+  engine.setCharts?.(data.charts);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).toHaveBeenCalledOnce();
+  engine.dispose();
+});
+
+it.each([
+  "insert",
+  "edit",
+  "delete",
+] as const)("blocks chart %s while comments load and releases the lock", async (operation) => {
+  const chart: ChartSpec = {
+    id: "chart",
+    sheetId: "data",
+    range: "A1:B3",
+    type: "column",
+    title: "Values",
+    legend: true,
+    series: "columns",
+  };
+  const data = operation === "insert" ? initial() : withCharts(initial(), [chart]);
+  const engine = await (await loadEngine())({} as HTMLElement, {
+    snapshot: data,
+    dark: false,
+    compact: true,
+    commentsLoading: true,
+  });
+  const change = vi.fn();
+  engine.onChange(change);
+  const next = withCharts(
+    {},
+    operation === "delete" ? [] : [{ ...chart, title: "New title" }],
+  ).charts;
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot()).toEqual(data);
+  expect(change).not.toHaveBeenCalled();
+  engine.setCommentsLoading?.(false);
+  engine.setCharts?.(next);
+  await Promise.resolve();
+  expect(engine.snapshot().charts).toEqual(next);
   expect(change).toHaveBeenCalledOnce();
   engine.dispose();
 });

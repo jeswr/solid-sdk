@@ -42,12 +42,21 @@ export interface TaskDetails extends Omit<TaskData, "rank" | "priority"> {
   categoryTypes?: string[] | undefined;
   recurrence?: RecurrenceRule | undefined;
   reminders?: Reminder[] | undefined;
+  attachments?: string[] | undefined;
   /** Durable identities of committed recurring completions; retained across later edits. */
   completionOperations?: string[] | undefined;
+  /** Original calendar UID, retained for project-local re-import deduplication. */
+  calendarUid?: string | undefined;
 }
 export class TaskItem extends Task {
   private get extra() {
     return node(this.id, this.dataset);
+  }
+  get calendarUid(): string | undefined {
+    return this.extra.text(`${NS.DCT}identifier`);
+  }
+  set calendarUid(value: string | undefined) {
+    this.extra.setText(`${NS.DCT}identifier`, value);
   }
   get allDay(): string | undefined {
     for (const predicate of aliases(`${SCHED}dueTime`))
@@ -95,6 +104,24 @@ export class TaskItem extends Task {
   set reminders(value: Reminder[]) {
     writeReminders(this.extra, value, this.dueDate);
   }
+  get attachments(): string[] {
+    const values = new Set<string>();
+    for (const predicate of aliases(`${SCHEMA}associatedMedia`))
+      for (const value of this.extra.nodes(predicate)) {
+        if (value.termType !== "NamedNode") continue;
+        try {
+          values.add(requireHttp(value.value));
+        } catch {
+          // Foreign or malformed stored links are never exposed as navigation targets.
+        }
+      }
+    return [...values];
+  }
+  set attachments(value: readonly string[]) {
+    const values = value.map(requireHttp);
+    this.extra.clear(`${SCHEMA}associatedMedia`);
+    for (const iri of values) this.extra.iris(`${SCHEMA}associatedMedia`).add(iri);
+  }
   get completionOperations(): Set<string> {
     return this.extra.iris(`${SCHED}completionOperation`);
   }
@@ -133,6 +160,7 @@ export function validateTask(data: TaskDetails): void {
     ...(data.blockedBy ?? []),
     ...(data.relatesTo ?? []),
     ...(data.completionOperations ?? []),
+    ...(data.attachments ?? []),
   ])
     if (iri !== undefined) requireHttp(iri);
   if (data.rank !== undefined && !Number.isFinite(data.rank))
@@ -150,12 +178,18 @@ export function createTask(url: string, data: TaskDetails): Store {
   const { rank, priority, ...base } = data;
   const dataset = buildTask(url, base);
   const task = new TaskItem(`${url}#it`, dataset, DataFactory);
+  // Historical imports may be closed without a known completion time.
+  if (data.state === "closed") task.endedAt = data.endedAt;
   task.rank = rank;
   task.priority = priority;
+  task.calendarUid = data.calendarUid;
+  // The shared builder treats an empty description as absent; exchange preserves it.
+  task.description = data.description;
   for (const type of data.categoryTypes ?? []) task.types.add(type);
   task.allDay = data.allDay;
   task.recurrence = data.recurrence;
   task.reminders = data.reminders ?? [];
+  task.attachments = data.attachments ?? [];
   for (const operation of data.completionOperations ?? []) task.completionOperations.add(operation);
   return dataset;
 }
@@ -174,7 +208,9 @@ export function taskDetails(url: string, dataset: DatasetCore): TaskDetails | un
     ),
     recurrence: task.recurrence,
     reminders: task.reminders,
+    attachments: task.attachments,
     completionOperations: [...task.completionOperations],
+    calendarUid: task.calendarUid,
   };
 }
 /** Pure §5.5 plan. The store/hook applies both conditional writes and retains its undo snapshot. */
@@ -209,6 +245,7 @@ export function planCompletion(
     endedAt: now,
     modified: now,
     clonedFrom: originalId,
+    calendarUid: undefined,
     recurrence: undefined,
     reminders: [],
     completionOperations: [],

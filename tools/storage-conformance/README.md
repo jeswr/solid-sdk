@@ -106,6 +106,9 @@ SC-ROLES exercises commenter/editor/manager reads, additive grants, removal, JSO
 snapshots, stale snapshots and idempotent full-set replay. Comments use their own container.
 Inherited WAC/ACP rows retain their governing source and must not edit ancestors. ODRL managers
 and inherited grants must be refused with `unsupported`, as SDK-APP-04 specifies.
+`SC-ROLES-movePreservingAccess` requires move and accessControl, grants Bob viewer, moves
+with the SDK helper to another container, and checks the own grant and old URL’s disappearance.
+Memory LWS proves move absence and skips this case because MoveResource is not advertised.
 SC-TRASH restores content and protocol-specific identity, then purges it. SC-VERSIONS checks
 immutable history, conditional writes, restore and refusal of unrelated version resources.
 The sparq CLI also runs SQ-8 aliases sharing these exact run functions and absence checks.
@@ -125,9 +128,6 @@ refresh replaces memory evidence and preserves previous CSS/sparq evidence. New 
 remain `not-run` until the socket-enabled CI/manual target is run.
 
 Current integration limitations:
-
-- `movePreservingAccess` conformance lands with SDK-APP-04 alongside the
-  `pod-access/roles` helper. The current suite excludes that case.
 
 - CSS's root description advertises notification services but no patch/access-control entries.
   OPTIONS supplies neither ACL nor WAC-Allow, so discovery reports accessControl unknown and
@@ -150,3 +150,12 @@ Current integration limitations:
 
 The move operation in SC-ERR remains a capability-gating witness. NOTIFY/AUTH/ACCESS/SYNC and
 the LWS HTTP target belong to later tasks.
+
+
+`pnpm --filter @jeswr/storage-conformance run test:registration` runs the separate SDK-APP-05
+integration lane after dependency-first builds. It reuses cssTarget.start() and the pinned CSS
+7.2.0 file configuration, creates a fresh username through pod-auth/registration, drives real
+password login/WebID selection/OIDC consent through a local UI driver, checks the RDF names,
+and proves the returned Identity's PodAuth session reads an owner-only pod (anonymous 401/403).
+It has no skips or environment gate and requires permission to open loopback sockets. This lane
+is separate from offline unit tests, as required by ADR-009.

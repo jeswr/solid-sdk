@@ -6,6 +6,7 @@ import { useState } from "react";
 import { type CompletedGroup, completedGroups } from "../../lib/views/completed";
 import { useNow } from "../../state/clock";
 import { useTasks } from "../../state/tasks-context";
+import { DeleteCompletedButton } from "../delete-completed";
 import { CrossProjectView } from "./cross-project-view";
 import { ViewGroup } from "./view-group";
 
@@ -14,6 +15,7 @@ export function CompletedView() {
   const now = useNow();
   const [projectUrl, setProjectUrl] = useState<string>();
   const [page, setPage] = useState(0);
+  const project = tasks.projects.find((item) => item.url === projectUrl);
   const groups: CompletedGroup[] = [];
   let hasMore = false;
   for (let index = 0; index <= page; index++) {
@@ -41,6 +43,7 @@ export function CompletedView() {
       emptyTitle="Nothing completed yet"
       emptyBody="Completed tasks will show up here"
       emptyIcon={<CircleCheck size={24} strokeWidth={1.5} aria-hidden="true" />}
+      actions={project && <DeleteCompletedButton project={project} />}
       toolbar={
         <FilterChips
           label="Filter by project"

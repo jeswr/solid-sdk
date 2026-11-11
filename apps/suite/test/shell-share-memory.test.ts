@@ -17,6 +17,30 @@ const initial: SharingState = {
 };
 const signal = () => new AbortController().signal;
 describe("memory sharing", () => {
+  it("enforces narrow-only person and general changes against the policy being mutated", async () => {
+    const adapter = new MemorySharingAdapter(initial, 0);
+    const friend = "https://example.org/friend";
+    await expect(
+      adapter.setPerson("one", friend, "viewer", { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await adapter.setPerson("one", friend, "viewer");
+    await expect(
+      adapter.setPerson("one", friend, "editor", { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await adapter.setPerson("one", friend, "viewer", { narrowOnly: true });
+    await adapter.setPerson("one", friend, null, { narrowOnly: true });
+    await expect(
+      adapter.setGeneral("one", { mode: "link" }, { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await adapter.setGeneral("one", { mode: "link" });
+    await expect(
+      adapter.setGeneral("one", { mode: "link", role: "editor" }, { narrowOnly: true }),
+    ).rejects.toMatchObject({ code: "would-grant" });
+    await adapter.setGeneral("one", { mode: "link" }, { narrowOnly: true });
+    await adapter.setGeneral("one", { mode: "restricted" }, { narrowOnly: true });
+    expect((await adapter.load("one", signal())).general.mode).toBe("restricted");
+    expect((await adapter.load("one", signal())).people).toEqual(initial.people);
+  });
   it("isolates resources and snapshots, writes roles/duration/general, notifies and requests", async () => {
     const adapter = new MemorySharingAdapter(initial, 0);
     const loaded = await adapter.load("one", signal());

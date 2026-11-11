@@ -14,6 +14,7 @@ import { accountBinding } from "../../src/apps/agent/lib/accounts";
 import { loadedRecords, readAccounts, readControl } from "../../src/apps/agent/lib/readers";
 import { createAgentVerifier } from "../../src/apps/agent/lib/verify";
 import { DEMO_ROOT, DEMO_WEBID } from "../../src/lib/demo-pod/constants";
+import { seedDemoSession } from "../demo-session";
 import { daemonDouble } from "./daemon-double";
 
 async function registryFixture(page: Page) {
@@ -56,6 +57,7 @@ async function registryFixture(page: Page) {
 }
 
 async function setup(page: Page) {
+  await seedDemoSession(page);
   await page.goto("/agent/settings");
   await page.waitForFunction(() => !!window.__suiteDemoPod);
   await page.getByRole("button", { name: "Set up this device", exact: true }).click();

@@ -25,9 +25,7 @@ test("signed-out entry shows welcome, sign-in links and an optional demo", async
 }, info) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/welcome$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Your documents, files and tasks — kept in a pod you control",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Try the Solid Suite");
   await expect(page.getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute(
     "href",
     "/signin",

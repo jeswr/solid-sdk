@@ -26,7 +26,6 @@ import {
   useState,
 } from "react";
 import { NATIVE_SAVE_LIMIT, saveNatively } from "@/lib/native/save-file";
-import { encodeRef } from "@/lib/refs";
 import { PUBLIC_SUITE_URL } from "../../../lib/urls";
 import { DriveAccessError } from "../lib/client/access";
 import {
@@ -41,6 +40,7 @@ import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import { hrefFor } from "../lib/files/urls";
 import { docsHref, isDocsDocument } from "../lib/open-with/docs";
 import {
   childUrl,
@@ -419,12 +419,7 @@ function failureMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-/** The Drive URL that opens `item`: folders navigate, files preview. */
-export function hrefFor(item: Pick<DriveItem, "url" | "kind">): string {
-  return item.kind === "folder"
-    ? `/drive/f/${encodeRef(item.url)}`
-    : `/drive/p/${encodeRef(item.url)}`;
-}
+export { hrefFor } from "../lib/files/urls";
 
 /** Follow stars to an item's new URL, including the descendants of a moved folder. */
 export function repointStarred(

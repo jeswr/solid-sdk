@@ -80,6 +80,8 @@ export function agentPaths(workspace: string) {
     mandatesCurrent: at("mandates/current.ttl"),
     mandatesStatus: at("mandates/status.ttl"),
     control: at("control/"),
+    // Archive controls live apart from control/, so authority reads never page through them.
+    archive: at("archive/"),
     heartbeat: at("control/heartbeat.ttl"),
     outbox: at("outbox/"),
     audit: at("audit/"),

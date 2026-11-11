@@ -38,9 +38,10 @@ discovery. Never interpret authentication/precondition/network errors as absence
 must reuse `optionalServiceCases` run functions, prerequisites and checks unchanged.
 Solid role cases use readGrants/addGrant/removeGrant/setGrants, including inherited source
 provenance and snapshot replay. ODRL uses the public access client; manager and inheritance
-must refuse as SDK-APP-04 specifies. `movePreservingAccess` conformance lands with SDK-APP-04
-alongside the SDK helper; exclude that case until then. Keep the all-green memory integration
-assertions and never replace the missing SDK helper locally.
+must refuse as SDK-APP-04 specifies. `SC-ROLES-movePreservingAccess` requires move and accessControl,
+uses the SDK helper and checks Bob’s own viewer grant and source disappearance after moving.
+Unavailable move/accessControl require companion absence probes. Keep the all-green memory integration
+assertions and never replace the SDK helper locally.
 SC-PREFS tests JSON create/update/stale-412 directly until the preferences facade exists.
 SC-TYPEINDEX uses Solid registrations or real LWS QUERY, never client-side container crawling.
 Matrix generation retains catalog/app feature rows even when reports have no evidence;
@@ -80,3 +81,10 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+
+SDK-APP-05 registration integration lives in `integration/registration.test.ts` and runs with
+`pnpm run test:registration` after dependency-first builds. It reuses cssTarget.start(), drives
+real CSS password/OIDC UI controls without mocking the protocol engine, and checks RDF names
+plus authenticated private-pod access. Preserve its anonymous 401/403 witness and finally cleanup.
+It is a separate socket-based lane per ADR-009, with no skips or environment opt-in flag.

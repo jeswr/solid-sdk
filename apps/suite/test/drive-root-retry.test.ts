@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { beforeEach, expect, it, vi } from "vitest";
 import { ResourceWriteError } from "../src/apps/docs/lib/model/errors";
 import { BootstrapIdentityError } from "../src/apps/drive/lib/client/bootstrap";
@@ -11,13 +12,14 @@ import { act, h, mount } from "./drive-ui-dom";
 const discovery = vi.hoisted(() => vi.fn());
 const ensure = vi.hoisted(() => vi.fn());
 const createFolder = vi.hoisted(() => vi.fn());
+const recheckDeletions = vi.hoisted(() => vi.fn());
 vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: discovery,
   ensureTypeRegistrations: ensure,
 }));
 vi.mock("../src/apps/drive/lib/client/client", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  createSolidDriveClient: () => ({ recheckDeletions: async () => [], createFolder }),
+  createSolidDriveClient: () => ({ recheckDeletions, createFolder }),
 }));
 
 const session: PodSession = {
@@ -30,6 +32,21 @@ const session: PodSession = {
   subscribe: () => () => {},
 };
 beforeEach(() => vi.resetAllMocks());
+
+it("discovers a share destination without provisioning or registering anything", async () => {
+  discovery.mockResolvedValue([]);
+  let drive!: ReturnType<typeof useDrive>;
+  function Probe() {
+    drive = useDrive();
+    return null;
+  }
+  await mount(h(DriveProvider, { session, provision: false, children: h(Probe) }));
+  expect(drive.driveRoot).toBe("https://pod.example/drive/");
+  expect(createFolder).not.toHaveBeenCalled();
+  expect(ensure).not.toHaveBeenCalled();
+  expect(recheckDeletions).not.toHaveBeenCalled();
+  expect(session.fetch).not.toHaveBeenCalled();
+});
 
 it("retries failed discovery in the current session and clears its error", async () => {
   discovery.mockRejectedValueOnce(new Error("Storage unavailable"));

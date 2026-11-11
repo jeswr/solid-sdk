@@ -335,3 +335,6 @@ current verified OIDC ID token (URI `sub` and matching client `azp`) for a stora
 Bearer token. Exchanged tokens stay in
 memory; a missing or expired ID token fails closed. The broker must enforce resource scope
 and session liveness on its injected transport, including discovery, exchange and Bearer retries.
+Pass `trustAuthorizationServer` to decide which authorization servers may receive the ID token;
+without it, any server listed in a resource's RFC 9728 metadata is trusted, so brokers should
+always set it.

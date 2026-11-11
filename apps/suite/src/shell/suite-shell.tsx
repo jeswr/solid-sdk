@@ -20,6 +20,7 @@ import { OfflinePill } from "@jeswr/suite-ui/sync";
 import { useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
+import { WalkthroughDock } from "@/welcome/walkthrough";
 import { AccountMenu } from "./account/account-menu";
 import { useSuiteEnvironment } from "./environment";
 import { parseRailPreferences } from "./lib/preferences";
@@ -138,7 +139,14 @@ function Frame({
         topBar={{
           appName: app.name,
           context,
-          actions,
+          actions: (
+            <>
+              {actions}
+              <a className="suite-feedback-link" href="/feedback">
+                Give feedback
+              </a>
+            </>
+          ),
           account: <div className="shell-mobile-account">{account}</div>,
           bell: <NotificationsBell mobile />,
           offlinePill: <OfflinePill snapshot={sync} onOpen={() => setSyncOpen(true)} />,
@@ -159,6 +167,7 @@ function Frame({
         {children}
       </ShellFrame>
       <ShellSyncSheet open={syncOpen} onOpenChange={setSyncOpen} />
+      <WalkthroughDock />
     </RailPreferencesProvider>
   );
 }

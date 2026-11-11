@@ -23,6 +23,8 @@ export const TERM_DEFINITIONS = {
   ActionProposal:
     "An executable proposal with exact action intent, rendered preview, provenance and lifecycle state.",
   AgentWorkspace: "Private agent workspace registered in the owner private type index.",
+  Archive:
+    "Control kind hiding the referenced inbound message from triage queues; the message itself is kept.",
   AgreementRecord:
     "Documentary record relating an identified offer, the accepting message and the exact terms digest (A8).",
   Approval:
@@ -35,7 +37,7 @@ export const TERM_DEFINITIONS = {
     "One coherent mechanism combination (integrity, authentication, representation, authorisation, binding).",
   Confirmation: "The confirmation-record type (owner-only; the Actor cannot write these).",
   ControlStatement:
-    "Owner control statement to halt, resume, change a binding, dispatch, revoke or forget; requires external proof verification.",
+    "Owner control statement to halt, resume, change a binding, dispatch, revoke, forget or archive; requires external proof verification.",
   DispatchNow: "Control kind requesting dispatch of a specific proposal through the executor.",
   EvidenceLedger:
     "An append-only hash-chained log kept by one agent. Integrity of the retained entries does not establish completeness (CT-10).",

@@ -12,6 +12,7 @@ import {
 import { loadedRecords, readControl } from "../../src/apps/agent/lib/readers";
 import { createAgentVerifier } from "../../src/apps/agent/lib/verify";
 import { DEMO_WEBID } from "../../src/lib/demo-pod/constants";
+import { seedDemoSession } from "../demo-session";
 import { daemonDouble } from "./daemon-double";
 
 async function accessible(page: Page, info: TestInfo, name: string) {
@@ -26,6 +27,7 @@ async function accessible(page: Page, info: TestInfo, name: string) {
   await page.screenshot({ path: `${directory}/${name}-${info.project.name}.png`, fullPage: true });
 }
 async function open(page: Page) {
+  await seedDemoSession(page);
   await page.goto("/agent/permissions");
   await expect(
     page.getByRole("heading", { name: "Current permission", exact: true }),
