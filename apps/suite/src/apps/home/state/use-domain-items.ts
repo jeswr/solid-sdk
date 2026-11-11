@@ -101,7 +101,10 @@ function reconcileItems(
     perDocument.set(item.url, (perDocument.get(item.url) ?? 0) + 1);
   }
   for (const item of previous) {
-    const failedRead = failures.some((failure) => affectsItem(failure.url, item));
+    // A successful read of the item's own document is authoritative: an ancestor
+    // listing failure must not bring back a record that document no longer holds.
+    const failedRead =
+      !visitedFor(item).has(item.url) && failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
       preserveUnvisited(item) &&
       !visitedFor(item).has(item.url) &&

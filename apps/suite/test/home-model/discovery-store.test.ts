@@ -57,6 +57,26 @@ it("keeps one document card for blank-node records across parses and ancestor fa
   }
 });
 
+// A record removed from its document used to come back whenever an ancestor listing failed.
+it("drops a removed record after its document is reread, despite an ancestor failure", async () => {
+  const both = `<#garden> a schema:WatchAction; schema:name "The Garden"; prov:wasGeneratedBy <../runs.ttl#run>.
+    <#weekend> a schema:WatchAction; schema:name "A Quiet Weekend"; prov:wasGeneratedBy <../runs.ttl#run>.`;
+  const { store, fixtures } = setup({ [url]: both });
+  await store.refresh();
+  const titles = () =>
+    store
+      .getSnapshot()
+      .items.filter((item) => item.url === url)
+      .map((item) => item.title)
+      .sort();
+  expect(titles()).toEqual(["A Quiet Weekend", "The Garden"]);
+  fixtures[url] =
+    '<#garden> a schema:WatchAction; schema:name "The Garden"; prov:wasGeneratedBy <../runs.ttl#run>.';
+  fixtures[`${STORAGE}integrations/`] = 503;
+  await store.refresh();
+  expect(titles()).toEqual(["The Garden"]);
+});
+
 it("caps a 5,000-record history before preparing views and finishes within five seconds", async () => {
   const { store } = setup({
     [url]: Array.from(
