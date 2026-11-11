@@ -472,7 +472,7 @@ describe("chart references through real Univer structural command history", () =
     }
   });
 
-  it("restores exact sources across multiple history entries while preserving later chart edits and deletion", async () => {
+  it("restores unedited sources across multiple history entries while preserving other chart edits and deletion", async () => {
     const initial = chartSnapshot();
     const engine = await mountUniver({} as HTMLElement, {
       snapshot: initial,
@@ -499,10 +499,12 @@ describe("chart references through real Univer structural command history", () =
       expect(readCharts(engine.snapshot()).charts[0]?.range).toBeNull();
       const edited = readCharts(engine.snapshot())
         .charts.filter((spec) => spec.id !== "absolute")
-        .map((spec) => ({ ...spec, title: "Edited later", legend: false }));
+        .map((spec) =>
+          spec.id === "other" ? { ...spec, title: "Edited later", legend: false } : spec,
+        );
       engine.setCharts?.(withCharts({}, edited).charts);
       const expected = (range: string | null) => [
-        { ...chart, range, title: "Edited later", legend: false },
+        { ...chart, range },
         { ...readCharts(initial).charts[2], title: "Edited later", legend: false },
       ];
       for (const range of [null, "A1:B3", "A1:B4"]) {
@@ -520,14 +522,148 @@ describe("chart references through real Univer structural command history", () =
   });
 
   it.each([
-    ["row", "delete", 7, 1, "A1:B4"],
-    ["row", "delete", 0, 1, "A1:B3"],
-    ["row", "delete", 0, 4, null],
-    ["row", "insert", 0, 1, "A2:B5"],
-    ["column", "delete", 0, 1, "A1:A4"],
-    ["column", "delete", 0, 2, null],
-    ["column", "insert", 0, 1, "B1:C4"],
-  ] as const)("preserves later chart sources through undo and redo of %s %s at %i, count %i", async (axis, kind, index, count, expectedRange) => {
+    "title",
+    "recreated",
+  ] as const)("invalidates lost-source restoration after a chart is %s edited", async (edit) => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      expect(
+        await injector
+          .get(headless.core.ICommandService)
+          .executeCommand(headless.sheets.RemoveRowCommand.id, {
+            unitId: initial.id,
+            subUnitId: "data",
+            range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 5 },
+          }),
+      ).toBe(true);
+      const edited = readCharts(engine.snapshot()).charts;
+      if (edit === "title") edited[0] = { ...(edited[0] as ChartSpec), title: "Edited later" };
+      else
+        engine.setCharts?.(
+          withCharts(
+            {},
+            edited.filter((spec) => spec.id !== chart.id),
+          ).charts,
+        );
+      engine.setCharts?.(withCharts({}, edited).charts);
+      const expectSource = (range: string) => {
+        const saved = engine.snapshot();
+        const spec = readCharts(saved).charts[0] as ChartSpec;
+        expect(spec).toEqual({ ...edited[0], range });
+        expect(chartValues(saved, spec.sheetId, spec.range)).toEqual(chartCells.slice(1));
+      };
+      expect(await current.univerAPI.undo()).toBe(true);
+      expectSource("A2:B4");
+      expect(await current.univerAPI.redo()).toBe(true);
+      expectSource("A1:B3");
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it("shifts a manually edited source equal to a historical source through undo and redo", async () => {
+    const initial = chartSnapshot();
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      const commands = injector.get(headless.core.ICommandService);
+      const expectSource = (range: string, values: unknown[][]) => {
+        const saved = engine.snapshot();
+        const spec = readCharts(saved).charts[0] as ChartSpec;
+        expect(spec.range).toBe(range);
+        expect(chartValues(saved, spec.sheetId, spec.range)).toEqual(values);
+      };
+      expect(
+        await commands.executeCommand(headless.sheets.RemoveRowCommand.id, {
+          unitId: initial.id,
+          subUnitId: "data",
+          range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 5 },
+        }),
+      ).toBe(true);
+      expectSource("A1:B3", chartCells.slice(1));
+      const edited = readCharts(engine.snapshot()).charts.map((spec) =>
+        spec.id === chart.id ? { ...spec, range: chart.range } : spec,
+      );
+      engine.setCharts?.(withCharts({}, edited).charts);
+      const values = [...chartCells.slice(1), [null, null]];
+      expectSource("A1:B4", values);
+      expect(await current.univerAPI.undo()).toBe(true);
+      expectSource("A2:B5", values);
+      expect(await current.univerAPI.redo()).toBe(true);
+      expectSource("A1:B4", values);
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it.each([
+    ["row", "A2:B5"],
+    ["column", "B1:C4"],
+  ] as const)("shifts a chart created after a %s insertion through undo and redo with its values", async (axis, insertedRange) => {
+    const initial = snapshot("Month,Value\nJan,10\nFeb,20\nMar,30");
+    const engine = await mountUniver({} as HTMLElement, {
+      snapshot: initial,
+      dark: false,
+      compact: true,
+    });
+    try {
+      const current = headless.current as ReturnType<typeof headless.create>;
+      const injector = current.univer.__getInjector();
+      injector.get(headless.core.IUniverInstanceService).focusUnit(initial.id as string);
+      const commands = injector.get(headless.core.ICommandService);
+      expect(
+        await commands.executeCommand(
+          axis === "row"
+            ? headless.sheets.InsertRowCommand.id
+            : headless.sheets.InsertColCommand.id,
+          {
+            unitId: initial.id,
+            subUnitId: "data",
+            direction: axis === "row" ? headless.core.Direction.UP : headless.core.Direction.LEFT,
+            range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+          },
+        ),
+      ).toBe(true);
+      engine.setCharts?.(withCharts({}, [{ ...chart, range: insertedRange }]).charts);
+      const expectSource = (range: string) => {
+        const saved = engine.snapshot();
+        const spec = readCharts(saved).charts[0] as ChartSpec;
+        expect(spec.range).toBe(range);
+        expect(chartValues(saved, spec.sheetId, spec.range)).toEqual(chartCells);
+      };
+      expectSource(insertedRange);
+      expect(await current.univerAPI.undo()).toBe(true);
+      expectSource("A1:B4");
+      expect(await current.univerAPI.redo()).toBe(true);
+      expectSource(insertedRange);
+    } finally {
+      engine.dispose();
+    }
+  });
+
+  it.each([
+    ["row", "delete", 7, 1, "A1:B4", "D1:E4", "D1:E4"],
+    ["row", "delete", 0, 1, "A1:B3", "D2:E5", "D1:E4"],
+    ["row", "delete", 0, 4, null, "D5:E8", "D1:E4"],
+    ["row", "insert", 0, 1, "A2:B5", "D1:E3", "D2:E4"],
+    ["column", "delete", 0, 1, "A1:A4", "E1:F4", "D1:E4"],
+    ["column", "delete", 0, 2, null, "F1:G4", "D1:E4"],
+    ["column", "insert", 0, 1, "B1:C4", "C1:D4", "D1:E4"],
+  ] as const)("shifts later chart sources through undo and redo of %s %s at %i, count %i", async (axis, kind, index, count, expectedRange, undoRange, redoRange) => {
     const initial = chartSnapshot();
     const engine = await mountUniver({} as HTMLElement, {
       snapshot: initial,
@@ -566,7 +702,7 @@ describe("chart references through real Univer structural command history", () =
       expect(readCharts(engine.snapshot()).charts).toEqual(edited);
       expect(await current.univerAPI.undo()).toBe(true);
       const restored = readCharts(initial).charts.map((spec) =>
-        spec.id === "chart" ? { ...spec, range: "D1:E4" } : spec,
+        spec.id === "chart" ? { ...spec, range: undoRange } : spec,
       );
       expect(readCharts(engine.snapshot()).charts).toEqual(restored);
       expect(chartValues(engine.snapshot(), "data", chart.range)).toEqual(chartCells);
@@ -576,7 +712,9 @@ describe("chart references through real Univer structural command history", () =
       );
       engine.setCharts?.(withCharts({}, moved).charts);
       expect(await current.univerAPI.redo()).toBe(true);
-      expect(readCharts(engine.snapshot()).charts).toEqual(moved);
+      expect(readCharts(engine.snapshot()).charts).toEqual(
+        moved.map((spec) => (spec.id === "chart" ? { ...spec, range: redoRange } : spec)),
+      );
     } finally {
       engine.dispose();
     }

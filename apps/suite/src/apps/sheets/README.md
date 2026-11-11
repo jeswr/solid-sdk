@@ -34,9 +34,12 @@ results, and the editor uses native labelled keyboard controls.
 entries: [...] }`. Zod validates the collection and each entry on save/load; invalid entries
 (including unknown versions, duplicate IDs, and missing/out-of-bounds sources) are ignored
 and reported as content-free console warnings. Legacy snapshots need no migration.
-Row/column commands record exact chart sources in Univer's undo/redo history. Fully deleted
-sources stay saved with `range: null` and show “Data range deleted”; undo restores the original
-source, including deleted boundaries. Source validity is independent of the rendering budget:
-ranges above 10,000 cells remain saved and show “Range too large to chart” until reduced.
+Row/column mutations shift chart sources during forward edits, undo and redo, including charts
+created after a command. Commands that clip or delete a source record its original range and
+the chart's revision. Undo restores that range only while the revision is unchanged; every
+manual chart edit (including title or legend changes) increments its revision. Fully deleted
+sources stay saved with `range: null` and show “Data range deleted”. Source validity is
+independent of the rendering budget: ranges above 10,000 cells remain saved and show
+“Range too large to chart” until reduced.
 Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
 is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.

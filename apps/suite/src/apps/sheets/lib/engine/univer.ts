@@ -24,7 +24,7 @@ import {
   RemoveRowMutation,
   SheetInterceptorService,
 } from "@univerjs/sheets";
-import { shiftChartRanges } from "../charts/range";
+import { parseChartRange, shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
@@ -55,21 +55,18 @@ const CHART_REFERENCE_MUTATIONS = new Map<string, Pick<StructuralEdit, "axis" | 
   [RemoveRowMutation.id, { axis: "row", kind: "delete" }],
   [RemoveColMutation.id, { axis: "column", kind: "delete" }],
 ]);
-const CHART_REFERENCE_COMMANDS = new Set([
-  "sheet.command.insert-row",
-  "sheet.command.insert-col",
+const CHART_SOURCE_DELETE_COMMANDS = new Set([
   "sheet.command.remove-row",
   "sheet.command.remove-col",
 ]);
 const RESTORE_CHART_SOURCES = "sheets.mutation.restore-chart-sources";
 interface ChartSources {
   unitId: string;
-  redo: boolean;
   sources: {
     id: string;
     sheetId: string;
-    before: ChartSpec["range"];
-    after: ChartSpec["range"];
+    range: ChartSpec["range"];
+    revision: number;
   }[];
 }
 
@@ -103,6 +100,8 @@ export const mountUniver: MountEngine = async (container, options) => {
   });
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
   let charts = options.snapshot.charts;
+  // Structural shifts never change revisions; manual replacements do, including deletion.
+  const chartRevisions = new Map<string, number>();
   const listeners = new Set<() => void>();
   const valueListeners = new Set<() => void>();
   let disposed = false;
@@ -128,25 +127,26 @@ export const mountUniver: MountEngine = async (container, options) => {
     handler: (_accessor, params: ChartSources) => {
       if (params.unitId !== workbook.getId() || charts === undefined) return false;
       const sources = new Map(params.sources.map((source) => [source.id, source]));
-      // Only restore sources still owned by this history entry. Later chart edits survive.
+      // Inverse mutations already shifted every chart. Recover lost boundaries only
+      // for charts that have not been manually edited since the original command.
       charts = withCharts(
         {},
         readCharts({ charts }).charts.map((chart) => {
           const source = sources.get(chart.id);
           return source?.sheetId === chart.sheetId &&
-            chart.range === (params.redo ? source.before : source.after)
-            ? { ...chart, range: params.redo ? source.after : source.before }
+            source.revision === (chartRevisions.get(chart.id) ?? 0)
+            ? { ...chart, range: source.range }
             : chart;
         }),
       ).charts;
       return true;
     },
   });
-  const sourcesBefore = new WeakMap<object, Map<string, ChartSpec>>();
+  const sourcesBefore = new WeakMap<object, Map<string, ChartSources["sources"][number]>>();
   const captureSources = (command: ICommandInfo) => {
     const params = command.params as IInsertRowMutationParams | undefined;
     if (
-      !CHART_REFERENCE_COMMANDS.has(command.id) ||
+      !CHART_SOURCE_DELETE_COMMANDS.has(command.id) ||
       params?.unitId !== workbook.getId() ||
       charts === undefined
     )
@@ -156,7 +156,15 @@ export const mountUniver: MountEngine = async (container, options) => {
       new Map(
         readCharts({ charts })
           .charts.filter((chart) => chart.sheetId === params.subUnitId)
-          .map((chart) => [chart.id, chart]),
+          .map((chart) => [
+            chart.id,
+            {
+              id: chart.id,
+              sheetId: chart.sheetId,
+              range: chart.range,
+              revision: chartRevisions.get(chart.id) ?? 0,
+            },
+          ]),
       ),
     );
   };
@@ -177,15 +185,23 @@ export const mountUniver: MountEngine = async (container, options) => {
       sourcesBefore.delete(params);
       const sources = readCharts({ charts } as Snapshot).charts.flatMap((chart) => {
         const previous = before.get(chart.id);
-        return previous && previous.range !== chart.range
-          ? [{ id: chart.id, sheetId: chart.sheetId, before: previous.range, after: chart.range }]
-          : [];
+        if (!previous || previous.range === null) return [];
+        if (chart.range !== null) {
+          const original = parseChartRange(previous.range);
+          const current = parseChartRange(chart.range);
+          // A translation loses no information; only a smaller rectangle needs recovery.
+          if (
+            current.endRow - current.startRow === original.endRow - original.startRow &&
+            current.endColumn - current.startColumn === original.endColumn - original.startColumn
+          )
+            return [];
+        }
+        return [previous];
       });
-      const restore = (redo: boolean): IMutationInfo[] =>
-        sources.length
-          ? [{ id: RESTORE_CHART_SOURCES, params: { unitId: params.unitId, sources, redo } }]
-          : [];
-      return { undos: restore(false), redos: restore(true) };
+      const undos: IMutationInfo[] = sources.length
+        ? [{ id: RESTORE_CHART_SOURCES, params: { unitId: params.unitId, sources } }]
+        : [];
+      return { undos, redos: [] };
     },
   });
   const calculation = univerAPI.getFormula().calculationResultApplied(() => {
@@ -204,13 +220,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = CHART_REFERENCE_MUTATIONS.get(event.id);
-    // History restores exact sources conditionally; an inverse shift would spoil that comparison.
-    if (
-      edit &&
-      charts !== undefined &&
-      event.params?.trigger !== "univer.command.undo" &&
-      event.params?.trigger !== "univer.command.redo"
-    ) {
+    if (edit && charts !== undefined) {
       const { subUnitId, range } = event.params as IInsertRowMutationParams;
       const start = edit.axis === "row" ? range.startRow : range.startColumn;
       const end = edit.axis === "row" ? range.endRow : range.endColumn;
@@ -249,6 +259,18 @@ export const mountUniver: MountEngine = async (container, options) => {
   };
   return {
     setCharts(value) {
+      const previous = new Map(
+        readCharts({ charts } as Snapshot).charts.map((chart) => [chart.id, JSON.stringify(chart)]),
+      );
+      const next = new Map(
+        readCharts({ charts: value }).charts.map((chart) => [chart.id, JSON.stringify(chart)]),
+      );
+      // Compare the full spec so even a title/legend edit invalidates old restorations.
+      // Keep tombstones so removing and recreating an ID cannot revive its history.
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (previous.get(id) !== next.get(id))
+          chartRevisions.set(id, (chartRevisions.get(id) ?? 0) + 1);
+      }
       charts = JSON.parse(JSON.stringify(value));
       notify();
     },
