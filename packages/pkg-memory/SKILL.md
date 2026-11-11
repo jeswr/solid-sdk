@@ -5,14 +5,21 @@ description: Use when building, serializing, parsing or classifying PKG nanopubl
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # PKG nanopublications
 
 Use `createFactAssertion` for structured facts, `buildNanopublications` for batches,
 `serializeNanopublications` for TriG, and `parseNanopublications` to read it back.
-For imported exports, `parseNanopublications(text, { invalid: "skip", baseIRI? })`
-adds a value-free `skipped: [{ id, errorClass }]` report and retains only whole valid
-envelopes and batch graphs needed by kept nanopubs. Default calls remain atomic;
+For imported exports, use `parseNanopublicationsTolerant(text, { baseIRI? })` for an
+explicit `Promise<TolerantNanopublications>` return type. The existing
+`parseNanopublications(text, { invalid: "skip", baseIRI? })` overload stays compatible.
+Both add a value-free `skipped: [{ id, errorClass }]` report and `affected: string[]`,
+and retain only whole valid envelopes and batch graphs needed by kept nanopubs,
+including typed `pkg:correspondenceBatch` context on retractions. Envelopes whose
+graph names include skipped IDs are dropped transitively (`SharedGraphWithSkipped`)
+to prevent incomplete heads surviving sharing. Falsy or non-Error validation names
+are reported as `Error`. Default calls remain atomic;
 syntax and metadata errors still throw. Do not widen the literal parity set during
 projection work. Use `createNanopubProvenanceReader(value)` for per-projection batch
 source graph caching, with no cache surviving into another read.
@@ -29,6 +36,12 @@ Supply source digests explicitly; this data-model package never reads source fil
 Use `classifyNanopublications` for derived belief views; acting on a fact also
 requires Current validity. Preserve graph-scoped provenance when assertions are
 shared. Past/revised claims stay in history; Mentioned is never an inference input.
+Keep `affected` through filtering/projection: it contains retained nanopub IDs
+targeted by IRI revision/contradiction objects in skipped head/provenance/pubinfo
+graphs, resolving both nanopub and assertion targets, including retraction links.
+Never read literals as update targets. Affected claims classify as `might` with
+`affectedBySkipped: true`; a UI can say “a later update to this could not be read”.
+This context is not persisted in RDF and is lost when only retained graphs are serialized.
 
 The `paymentCard` template stores only the brand, the last four ASCII digits, the
 expiry month (`gYearMonth`) and an optional billing-address IRI. It never stores a

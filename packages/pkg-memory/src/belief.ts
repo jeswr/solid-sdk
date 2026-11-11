@@ -9,6 +9,8 @@ export type Belief = "definitely" | "might" | "mentioned" | "past";
 /** A derived view; no belief triples are persisted into the nanopub. */
 export interface ClassifiedNanopublication extends Nanopublication {
   belief: Belief;
+  /** A later update could not be read; this claim must not be treated as definite. */
+  affectedBySkipped?: true;
   corroboration: number;
   replacedBy: string[];
 }
@@ -16,6 +18,7 @@ const past = new Set(["Superseded", "Historical", "Retracted"]);
 
 /** Classify with graph-scoped provenance and cross-batch revision/contradiction links. */
 export function classifyNanopublications(value: Nanopublications): ClassifiedNanopublication[] {
+  const affected = new Set(value.affected);
   const nanopubs = [...new Map(value.nanopubs.map((np) => [np.id, np])).values()];
   const byId = new Map(nanopubs.map((np) => [np.id, np]));
   const byAssertion = new Map<string, Nanopublication[]>();
@@ -60,7 +63,8 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       np.contradicts.some((target) => !byAssertion.has(target) || liveAssertions.has(target)) ||
       contradictedByLive.has(np.assertionId);
     let belief: Belief;
-    if (inactive.has(np.id)) belief = "past";
+    if (affected.has(np.id)) belief = "might";
+    else if (inactive.has(np.id)) belief = "past";
     else if (np.epistemic === "Mentioned") belief = "mentioned";
     else if (np.validity === "Contradicted") belief = "might";
     else if (np.epistemic === "Documented") belief = "definitely";
@@ -73,6 +77,7 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
     return {
       ...np,
       belief,
+      ...(affected.has(np.id) ? { affectedBySkipped: true as const } : {}),
       corroboration: (byAssertion.get(np.assertionId) as Nanopublication[]).length,
       replacedBy: [...(replacements.get(np.id) ?? [])].sort(),
     };

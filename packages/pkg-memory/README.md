@@ -289,16 +289,37 @@ the explicit construction-time owner identity without I/O for owner-checked cons
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-Tolerant import is opt-in: `parseNanopublications(text, { invalid: "skip", baseIRI? })`
-returns the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]`. Existing calls,
+<!-- AUTHORED-BY Codex GPT-6 -->
+Tolerant import is opt-in: `parseNanopublicationsTolerant(text, { baseIRI? })`
+returns `Promise<TolerantNanopublications>` without overload ambiguity. The compatible
+`parseNanopublications(text, { invalid: "skip", baseIRI? })` overload remains available.
+Both return the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]` and
+`affected: string[]`. Existing calls,
 including the string baseIRI overload, retain atomic behaviour. Each complete
 head/assertion/provenance/pubinfo envelope is validated once per graph; invalid shared
-assertions drop every user. Referenced batch source/entity graphs must also validate.
+assertions drop every user. Referenced batch source/entity graphs must also validate,
+including retraction context declared by `pkg:correspondenceBatch`, read with the
+same typed helper as the store. Malformed correspondence declarations still throw.
 Only graphs referenced by retained nanopubs survive, including their batch graphs.
+Envelopes referencing a skipped nanopub ID as any graph name are also dropped with
+`SharedGraphWithSkipped`, transitively. No skipped head survives via sharing, so a
+nonempty retained result round-trips through the atomic serializer/parser.
 All-skipped input returns an empty dataset and nanopub list. Malformed TriG, absent
 heads and malformed metadata still throw. Reports contain only nanopub IDs and error
-class names, never rejected values, datatypes or diagnostic messages. The supported
-literal parity set is unchanged (double/dateTimeStamp remain excluded).
+class names, never rejected values, datatypes or diagnostic messages. The
+validation error name defaults to `Error` for a non-Error throw or a falsy Error name.
+The supported literal parity set is unchanged (double/dateTimeStamp remain excluded).
+
+For each skipped envelope, only IRI objects of `prov:wasRevisionOf` and
+`pkg:contradicts` in its head/provenance/pubinfo graphs are collected; literals and
+blank nodes never supply targets. Both envelope and assertion targets (including
+the store's retraction links) resolve to retained nanopub IDs in `affected`, once
+per ID. `classifyNanopublications` marks these claims `belief: "might"` and
+`affectedBySkipped: true`, preventing a skipped update from reviving an old fact as
+definite. Consumers can display “a later update to this could not be read”. Preserve
+the optional `Nanopublications.affected` field through filtering/projection. It is
+derived context and is not serialized into RDF; serializing only retained graphs
+loses it. All-skipped input has an empty `affected` list.
 
 `createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation
 batch graph cache. Use it when projecting many nanopubs; the uncached

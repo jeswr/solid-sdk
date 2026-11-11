@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type {
   Belief,
   EpistemicStatus,
@@ -37,6 +38,8 @@ export interface HealthFactBase {
   code?: HealthCode;
   period: HealthPeriod;
   belief: Belief;
+  /** A later update could not be read; display the uncertainty alongside belief "might". */
+  affectedBySkipped?: true;
   validity: ValidityStatus;
   epistemic: EpistemicStatus;
   hedge?: string;

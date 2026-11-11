@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
+import { correspondenceBatches } from "./correspondence.js";
 import { canonicalizeAssertion, messageId, pkgId } from "./ids.js";
 import {
   dateTime,
@@ -140,6 +141,8 @@ export interface Nanopublication {
 export interface Nanopublications {
   dataset: Store;
   nanopubs: Nanopublication[];
+  /** Retained nanopub IDs targeted by updates that tolerant parsing could not read. */
+  affected?: string[];
 }
 
 function known<T extends string>(value: string, values: readonly T[]): T {
@@ -495,6 +498,15 @@ export interface SkippedNanopublication {
 }
 export interface TolerantNanopublications extends Nanopublications {
   skipped: SkippedNanopublication[];
+  affected: string[];
+}
+
+/** Explicit tolerant entry point, including an unambiguous return type for callers. */
+export function parseNanopublicationsTolerant(
+  trig: string,
+  options?: Omit<ParseNanopublicationsOptions, "invalid">,
+): Promise<TolerantNanopublications> {
+  return parseNanopublications(trig, { ...options, invalid: "skip" });
 }
 
 /** Parse TriG and read metadata only from each nanopub's linked graphs. */
@@ -528,7 +540,7 @@ export async function parseNanopublications(
           for (const term of [q.subject, q.predicate, q.object, q.graph]) validateTermSafety(term);
         validateLiterals(contents);
       } catch (error) {
-        errorClass = (error as Error).name;
+        errorClass = error instanceof Error && error.name ? error.name : "Error";
       }
       errors.set(name, errorClass);
     }
@@ -536,7 +548,7 @@ export async function parseNanopublications(
   };
   const nanopubs: Nanopublication[] = [];
   const skipped: SkippedNanopublication[] = [];
-  const retained = new Set<string>();
+  const envelopes = new Map<string, string[]>();
   for (const id of nanopubIds(dataset)) {
     const headError = validate(id);
     if (headError) {
@@ -556,18 +568,60 @@ export async function parseNanopublications(
       continue;
     }
     const np = readNanopublication(dataset, id);
-    const batchGraphs = ["sources", "entities"].map((kind) => pkgId("batch", np.batch, kind));
+    const batchGraphs = [...correspondenceBatches(np, dataset)].flatMap((batch) =>
+      ["sources", "entities"].map((kind) => pkgId("batch", batch, kind)),
+    );
     errorClass = batchGraphs.map(validate).find((name) => name !== undefined);
     if (errorClass) {
       skipped.push({ id, errorClass });
       continue;
     }
     nanopubs.push(np);
-    for (const name of [...names, ...batchGraphs]) retained.add(name);
+    envelopes.set(id, [...names, ...batchGraphs]);
   }
+  // A kept graph must never resurrect a skipped head, including through a chain
+  // of shared graphs. Index users once so the closure remains linear.
+  const kept = new Map(nanopubs.map((np) => [np.id, np]));
+  const users = new Map<string, string[]>();
+  for (const [id, names] of envelopes)
+    for (const name of names) {
+      const ids = users.get(name) ?? [];
+      ids.push(id);
+      users.set(name, ids);
+    }
+  for (const { id } of skipped)
+    for (const user of users.get(id) ?? [])
+      if (kept.delete(user)) skipped.push({ id: user, errorClass: "SharedGraphWithSkipped" });
+
+  // Read only IRI update targets from skipped metadata, without decoding any
+  // rejected literals. Resolve both envelope and assertion targets to kept IDs.
+  const targets = new Set<string>();
+  for (const { id } of skipped) {
+    const head = new RdfNode(df.namedNode(id), graph(dataset, id));
+    const metadata = new Set([
+      id,
+      ...["hasProvenance", "hasPublicationInfo"].flatMap((predicate) =>
+        [...head.terms(NS.np + predicate)]
+          .filter((term) => term.termType === "NamedNode")
+          .map((term) => term.value),
+      ),
+    ]);
+    for (const name of metadata)
+      for (const q of dataset.match(null, null, null, df.namedNode(name)))
+        if (
+          (q.predicate.value === `${NS.prov}wasRevisionOf` ||
+            q.predicate.value === `${NS.pkg}contradicts`) &&
+          q.object.termType === "NamedNode"
+        )
+          targets.add(q.object.value);
+  }
+  const retained = new Set([...kept.keys()].flatMap((id) => envelopes.get(id) as string[]));
   return {
     dataset: new Store([...dataset].filter((q) => retained.has(q.graph.value))),
-    nanopubs,
+    nanopubs: [...kept.values()],
     skipped,
+    affected: [...kept.values()]
+      .filter((np) => targets.has(np.id) || targets.has(np.assertionId))
+      .map((np) => np.id),
   };
 }
