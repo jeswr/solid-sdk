@@ -1,0 +1,13 @@
+{
+  "videos": {
+    "tour": {
+      "id": "tour",
+      "title": "A tour of the Solid Suite",
+      "summary": "What the suite is for, the apps you can try today, and how you decide who can see your data.",
+      "file": "suite-walkthrough.mp4",
+      "captions": "suite-walkthrough.vtt",
+      "duration": 201
+    }
+  },
+  "clips": []
+}
