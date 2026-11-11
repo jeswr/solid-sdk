@@ -29,7 +29,8 @@ export function SharedPage() {
         resultCount={items.length}
       />
       <p className="hm-muted">
-        Newest first. Sender and role are reported by the share announcement.
+        Newest first. Resource origins are shown first. Announcement senders and roles are
+        unverified.
       </p>
       {data.error ? (
         <p role="alert">
@@ -44,6 +45,7 @@ export function SharedPage() {
       ) : items.length ? (
         <SharedList
           items={items}
+          storageUrl={data.storageUrl}
           remove={(url) => {
             data.remove(url);
             setRemoved("Removed from Shared with me");

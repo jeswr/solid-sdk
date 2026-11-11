@@ -171,18 +171,32 @@ Public API changes must update this skill and README together.
 ## Shared items (`./shared`, sst-iool)
 
 `sharedItemsFromInbox` projects only share Announce notifications into `SharedItem` records.
-Sender and role metadata are unverified assertions; no grants or resource reads occur.
-`classifySharedItem({ url, name?, contentType?, rdfTypes? })` chooses docs, sheets, notes,
-tasks, calendar, photos, music or drive, in order of media type, RDF type, extension and path.
-Subtype kinds identify photo albums, music albums/playlists and calendar events.
-`isSuiteDocsDocument` preserves Drive's direct-child native Docs scope.
-`mergeSharedItems(...sources)` deduplicates exact URLs newest first (undated last), fills
-missing metadata and prefers explicit names/apps to inferred values. Inputs are never mutated.
-`latestSharedEntries` is Drive's generic latest-opened deduper.
+Sender, title and role are unverified assertions. `fromAnotherPod` flags an actor origin that
+is different from the resource origin; callers display the resource origin first and label
+announcement senders and roles as unverified. No grants or resource reads occur here.
+
+`resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly? })`
+is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
+`@jeswr/suite-vocab` IRIs (including known legacy aliases), never arbitrary local names.
+MIME, filename and path hints supply display classifications. Shared routes require native
+formats and routers that can open shared resources: native Tasks tracker documents, and native
+Docs documents / Sheets containers on the current storage origin. Other shared resources use
+Drive preview. Callers set `previewOnly` for unverified inbox resources on another origin or
+with mismatched actor/resource origins. Document references omit fragments; Tasks search keeps
+the task subject. `classifySharedItem` delegates to this resolver. `sharedApps` exports the
+runtime list underlying `SharedApp`.
+
+`isDirectChild` is the common fail-closed document layout check; `isSuiteDocsDocument` applies
+it to Drive's native Docs scope. `mergeSharedItems(...sources)` deduplicates exact URLs newest
+first (undated last), fills missing fields, and prefers names from local app/open sources over
+inbox titles regardless of date. Inputs are never mutated. `latestSharedEntries` preserves
+Drive's stable insertion order for equal dates and its existing NaN comparison behavior.
 
 Storage belongs to callers: `sharedAccountKey` keeps Tasks' encoded WebID key convention,
 `parseSharedEntries` validates stored lists, and `sharedItemsForAccount` prevents fallback
-memory from crossing accounts. `hideSharedItem`, `removeSharedItem`, `visibleSharedItems`
-and `isSharedUrlEntry` implement local removals without changing resource permissions or
-inbox contents. Persist hidden URL entries separately for each WebID; reject stale callbacks
-on session replacement. No helper performs I/O.
+memory from crossing accounts. `hideSharedItem` stores `{ url, hiddenAt }`; `visibleSharedItems`
+suppresses only records with no `sharedAt`/`openedAt` later than `hiddenAt`. Persist hidden
+entries per WebID, validate with `isHiddenSharedItem`, and clear them when the user reopens a
+resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
+stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic
+URL-list helpers. No helper performs I/O.

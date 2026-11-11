@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifySharedItem,
   hideSharedItem,
+  isHiddenSharedItem,
   isSharedItemUrl,
   isSharedUrlEntry,
   isSuiteDocsDocument,
@@ -29,69 +30,22 @@ const item = (fields: Partial<SharedItem> = {}): SharedItem => ({
 });
 
 describe("classification", () => {
-  it.each([
-    ["sheets", "spreadsheet", "text/csv", "SpreadsheetDigitalDocument", "xlsx", "sheets"],
-    ["notes", "note", "application/vnd.jeswr.note", "Note", "note", "notes"],
-    ["tasks", "task-list", "application/vnd.jeswr.tasks", "Tracker", "todo", "tasks"],
-    ["calendar", "calendar", "text/calendar", "Calendar", "ics", "calendar"],
-    ["photos", "photo", "image/jpeg", "ImageObject", "png", "photos"],
-    ["music", "audio", "audio/mpeg", "MusicRecording", "mp3", "music"],
-    ["docs", "document", "text/markdown", "Document", "docx", "docs"],
-  ])("routes %s by media type, RDF type, extension and decoded path", (app, kind, mime, type, extension, path) => {
-    const expected = { app, kind };
+  it("uses the canonical resolver and rejects spoofed namespaces", () => {
     expect(
-      classifySharedItem({ url, contentType: ` ${mime.toUpperCase()}; charset=utf-8` }),
-    ).toEqual(expected);
-    expect(
-      classifySharedItem({ url, rdfTypes: ["unknown", `https://example/ns#${type}`] }),
-    ).toEqual(expected);
-    expect(classifySharedItem({ url: `https://pod.example/file.${extension}` })).toEqual(expected);
-    expect(
-      classifySharedItem({ url: `https://pod.example/file.${extension}`, name: "Friendly title" }),
-    ).toEqual(expected);
+      classifySharedItem({ url, rdfTypes: ["https://schema.org/SpreadsheetDigitalDocument"] }),
+    ).toEqual({ app: "sheets", kind: "spreadsheet" });
     expect(
       classifySharedItem({
-        url: "https://pod.example/file",
-        name: `File.${extension.toUpperCase()}`,
+        url: "https://pod.example/item",
+        rdfTypes: ["https://evil.example/Task"],
       }),
-    ).toEqual(expected);
-    expect(classifySharedItem({ url: `https://pod.example/${path}/%66ile.ttl` })).toEqual(expected);
-  });
-  it.each([
-    ["photos", "album", "PhotoAlbum", "photos/albums/party.ttl"],
-    ["calendar", "event", "CalendarEvent", "calendar/personal/dinner.ttl"],
-    ["music", "playlist", "MusicPlaylist", "music/playlists/mix.ttl"],
-    ["music", "album", "MusicAlbum", "music/albums/record.ttl"],
-  ])("preserves %s %s deep-link kinds", (app, kind, type, path) => {
-    expect(classifySharedItem({ url: `https://pod.example/${path}` })).toEqual({ app, kind });
+    ).toEqual({ app: "drive", kind: "file" });
     expect(
       classifySharedItem({
-        url: "https://pod.example/unknown.ttl",
-        rdfTypes: [`https://schema.org/${type}`],
-      }),
-    ).toEqual({ app, kind });
-  });
-  it("prefers explicit types to filenames, paths and broad Document types", () => {
-    expect(classifySharedItem({ url, name: "song.mp3", contentType: "text/csv" }).app).toBe(
-      "sheets",
-    );
-    expect(
-      classifySharedItem({
-        url,
-        rdfTypes: ["https://schema.org/Document", "https://schema.org/SpreadsheetDigitalDocument"],
+        url: "https://pod.example/item",
+        rdfTypes: ["http://xmlns.com/foaf/0.1/Person"],
       }).app,
-    ).toBe("sheets");
-    expect(classifySharedItem({ url, name: "photo.jpg" }).app).toBe("photos");
-    expect(classifySharedItem({ url, contentType: "", rdfTypes: [] }).app).toBe("docs");
-    expect(classifySharedItem({ url: "https://example/unknown.bin" })).toEqual({
-      app: "drive",
-      kind: "file",
-    });
-    expect(classifySharedItem({ url: "https://example/folder/" })).toEqual({
-      app: "drive",
-      kind: "folder",
-    });
-    expect(classifySharedItem({ url: "https://example/%FF" }).app).toBe("drive");
+    ).toBe("drive");
     expect(classifySharedItem({ url: "javascript:alert(1)" }).app).toBe("drive");
   });
   it("extracts names without trusting protocols or malformed escapes", () => {
@@ -146,6 +100,7 @@ it("projects only share announcements, tolerating missing metadata and untrusted
       app: "docs",
       kind: "document",
       sharedBy: "Bob",
+      fromAnotherPod: true,
       sharedAt: "2026-01-02T00:00:00Z",
       role: "Editor",
       source: "inbox",
@@ -189,7 +144,7 @@ it("merges exact URLs newest first and keeps richer fields without mutating inpu
   const newest = item({ sharedAt: "2026-02-01", role: "Editor", source: "inbox" });
   const other = item({ url: "https://z.example/undated", sharedAt: "bad" });
   expect(mergeSharedItems([oldest, other], [newest, item({ url: "javascript:alert(1)" })])).toEqual(
-    [{ ...oldest, sharedAt: newest.sharedAt, role: "Editor", source: "inbox" }, other],
+    [{ ...oldest, sharedAt: newest.sharedAt, role: "Editor" }, other],
   );
   expect(oldest.role).toBe("Viewer");
   expect(newest.name).toBe("plan.ttl");
@@ -211,7 +166,7 @@ it("merges exact URLs newest first and keeps richer fields without mutating inpu
   ).toEqual(["https://a.example/undated", other.url]);
 });
 
-it("shares Drive's latest-entry selection and deterministic undated order", () => {
+it("preserves Drive's stable insertion order and NaN date comparisons", () => {
   const entries = [
     item({ sharedAt: "2026-02-01" }),
     item({ sharedAt: "2026-01-01" }),
@@ -223,7 +178,7 @@ it("shares Drive's latest-entry selection and deterministic undated order", () =
       [item({ url: "https://z.example/" }), item({ url: "https://a.example/", sharedAt: "bad" })],
       (entry) => entry.sharedAt,
     ).map((entry) => entry.url),
-  ).toEqual(["https://a.example/", "https://z.example/"]);
+  ).toEqual(["https://z.example/", "https://a.example/"]);
   expect(latestSharedEntries([], () => undefined)).toEqual([]);
 });
 
@@ -250,12 +205,85 @@ describe("account-scoped removal lists", () => {
   });
   it("hides safely and removes without modifying the input or resource permissions", () => {
     const items = [item(), item({ url: "https://other.example/a" })];
-    const hidden = hideSharedItem([], url);
-    expect(hideSharedItem(hidden, url)).toEqual(hidden);
+    const hidden = hideSharedItem([], url, "2026-11-11");
+    expect(hideSharedItem(hidden, url, "2026-11-11")).toEqual(hidden);
     expect(hideSharedItem(hidden, "bad")).toEqual(hidden);
     expect(visibleSharedItems(items, hidden)).toEqual([items[1]]);
     expect(removeSharedItem(items, url)).toEqual([items[1]]);
     expect(items).toHaveLength(2);
-    expect(hidden).toEqual([{ url }]);
+    expect(hidden).toEqual([{ url, hiddenAt: "2026-11-11" }]);
   });
+});
+
+it("hides only opens and announcements at or before hiddenAt", () => {
+  const hidden = hideSharedItem([], url, "2026-01-02");
+  for (const fields of [
+    {},
+    { sharedAt: "bad" },
+    { sharedAt: "2026-01-01" },
+    { openedAt: "2026-01-02" },
+    { sharedAt: "2026-01-02" },
+  ])
+    expect(visibleSharedItems([{ url, ...fields }], hidden)).toEqual([]);
+  for (const fields of [
+    { sharedAt: "2026-01-03" },
+    { openedAt: "2026-01-03" },
+    { openedAt: new Date("2026-01-03") },
+  ])
+    expect(visibleSharedItems([{ url, ...fields }], hidden)).toHaveLength(1);
+  expect(isHiddenSharedItem(hidden[0])).toBe(true);
+  for (const value of [null, { url }, { url, hiddenAt: 123 }, { url, hiddenAt: "bad" }])
+    expect(isHiddenSharedItem(value)).toBe(false);
+});
+it("preserves equal-date insertion order and never replaces a NaN-dated Drive entry", () => {
+  const entries = [
+    item({ url: "https://z.example/", sharedAt: "2026-01-01" }),
+    item({ url: "https://a.example/", sharedAt: "2026-01-01" }),
+  ];
+  expect(latestSharedEntries(entries, (x) => x.sharedAt)).toEqual(entries);
+  for (const dates of [
+    ["bad", "2026-01-01"],
+    ["2026-01-01", "bad"],
+    ["2026-01-01", undefined],
+    [undefined, "2026-01-01"],
+  ]) {
+    const first = item({ sharedAt: dates[0] });
+    expect(
+      latestSharedEntries([first, item({ sharedAt: dates[1], name: "later" })], (x) => x.sharedAt),
+    ).toEqual([first]);
+  }
+});
+it("keeps trusted names over a newer spoof and identifies foreign actor origins", () => {
+  for (const source of ["app", "opened"] as const) {
+    const trusted = item({ source, name: "Real title", sharedAt: "2026-01-01" });
+    const spoof = item({ source: "inbox", name: "Spoof", sharedAt: "2026-02-01" });
+    expect(mergeSharedItems([trusted, spoof])[0]).toMatchObject({ name: "Real title", source });
+    expect(mergeSharedItems([{ ...trusted, sharedAt: "2026-03-01" }, spoof])[0]?.name).toBe(
+      "Real title",
+    );
+  }
+  for (const [actor, foreign] of [
+    ["https://bob.example/#me", false],
+    ["https://evil.example/#me", true],
+  ] as const) {
+    expect(
+      sharedItemsFromInbox([
+        {
+          url: "https://a.example/inbox/1",
+          type: "Announce",
+          summary: "Shared with you as Viewer",
+          object: url,
+          actor,
+        },
+      ])[0]?.fromAnotherPod,
+    ).toBe(foreign);
+  }
+});
+
+it("keeps insertion order for missing Drive dates and tolerates invalid Dates in visibility", () => {
+  const entries = [item({ url: "https://z.example/" }), item({ url: "https://a.example/" })];
+  expect(latestSharedEntries(entries, (x) => x.sharedAt)).toEqual(entries);
+  expect(visibleSharedItems([{ url, openedAt: new Date("bad") }], hideSharedItem([], url))).toEqual(
+    [],
+  );
 });

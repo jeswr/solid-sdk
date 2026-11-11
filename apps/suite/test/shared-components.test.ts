@@ -5,6 +5,7 @@ import { act, h, mount } from "./drive-ui-dom";
 
 const state = vi.hoisted(() => ({
   items: [] as SharedItem[],
+  storageUrl: "https://bob.example/",
   loading: false,
   error: false,
   remove: vi.fn(),
@@ -47,6 +48,9 @@ afterEach(() => vi.restoreAllMocks());
 it("Home shows the latest five with real links and the shared page filters and removes", async () => {
   const card = await mount(h(SharedCard));
   expect(card.host.querySelectorAll("li")).toHaveLength(5);
+  expect(card.host.querySelector("li p")?.textContent).toMatch(/^https:\/\/bob.example/);
+  expect(card.host.textContent).toContain("Sender (unverified): bob.example");
+  expect(card.host.textContent).toContain("Editor (unverified)");
   expect(card.host.querySelector('a[href="/shared"]')?.textContent).toBe("View all shared items");
   await card.unmount();
   const view = await mount(h(SharedPage));
@@ -64,7 +68,7 @@ it("Home shows the latest five with real links and the shared page filters and r
       ?.click(),
   );
   expect(view.host.querySelectorAll("li")).toHaveLength(1);
-  expect(view.host.querySelector('a[href^="/sheets/s/"]')).not.toBeNull();
+  expect(view.host.querySelector('a[href^="/docs/d/"]')).not.toBeNull();
   await act(async () =>
     buttons()
       .find((b) => b.textContent === "Remove")
@@ -103,7 +107,7 @@ it("keeps hidden items per account, handles disabled storage, and fences retaine
   const view = await mount(h(Probe));
   const retained = current.remove;
   await act(async () => current.remove("https://bob.example/a"));
-  expect(current.hidden).toEqual([{ url: "https://bob.example/a" }]);
+  expect(current.hidden).toEqual([{ url: "https://bob.example/a", hiddenAt: expect.any(String) }]);
   expect(localStorage.getItem(sharedAccountKey(owner))).toContain("https://bob.example/a");
   owner = "shared-test-bob";
   await view.render(h(Probe));
@@ -115,11 +119,27 @@ it("keeps hidden items per account, handles disabled storage, and fences retaine
     throw new Error("blocked");
   });
   await act(async () => current.remove("https://bob.example/b"));
-  expect(current.hidden).toEqual([{ url: "https://bob.example/b" }]);
+  expect(current.hidden).toEqual([{ url: "https://bob.example/b", hiddenAt: expect.any(String) }]);
   await view.unmount();
   const old = current.remove;
   await act(async () => old("https://bob.example/c"));
   expect(localStorage.getItem(sharedAccountKey("shared-test-alice"))).not.toContain(
     "should-not-hide",
   );
+});
+
+it("Home flags a claimed sender on a different pod and previews the resource", async () => {
+  state.items = [
+    {
+      ...(state.items[0] as SharedItem),
+      sharedBy: "https://evil.example/#me",
+      fromAnotherPod: true,
+    },
+  ];
+  const view = await mount(h(SharedCard));
+  expect(view.host.querySelector("li p")?.textContent).toMatch(/^https:\/\/bob.example/);
+  expect(view.host.textContent).toContain("Sender (unverified): evil.example");
+  expect(view.host.textContent).toContain("from another pod");
+  expect(view.host.querySelector('li a[href^="/drive/p/"]')).not.toBeNull();
+  await view.unmount();
 });

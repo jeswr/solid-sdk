@@ -4,26 +4,64 @@ import { describe, expect, it } from "vitest";
 import { encodeRef } from "../src/lib/refs";
 import { openedSharedItems, sharedItemHref, sharedSender } from "../src/lib/shared/items";
 
-const url = "https://bob.example/docs/plan.ttl";
-const item: SharedItem = { url, name: "Plan", app: "docs", kind: "document", source: "inbox" };
+const storage = "https://bob.example/";
+const url = `${storage}docs/plan.ttl`;
+const item: SharedItem = { url, name: "Plan", app: "docs", kind: "document", source: "opened" };
 
 describe("shared item presentation", () => {
   it.each([
-    ["docs", "document", `/docs/d/${encodeRef(url)}`],
-    ["sheets", "spreadsheet", `/sheets/s/${encodeRef(url)}`],
-    ["notes", "note", `/notes/n/${encodeRef(url)}`],
-    ["tasks", "task-list", `/tasks/p/${encodeRef(url)}`],
-    ["photos", "photo", `/photos/p/${encodeRef(url)}`],
-    ["photos", "album", `/photos/a/${encodeRef(url)}`],
-    ["calendar", "event", `/calendar/e/${encodeRef(url)}`],
-    ["calendar", "calendar", `/calendar/week?calendar=${encodeRef(url)}`],
-    ["music", "audio", "/music/search?q=Plan"],
-    ["music", "playlist", `/music/p/${encodeRef(url)}`],
-    ["music", "album", `/music/a/${encodeRef(url)}`],
-    ["drive", "file", `/drive/p/${encodeRef(url)}`],
-    ["drive", "folder", `/drive/f/${encodeRef(url)}`],
-  ] as const)("uses %s's existing route for %s", (app, kind, href) => {
-    expect(sharedItemHref({ ...item, app, kind })).toBe(href);
+    ["docs/plan.ttl", "docs/d"],
+    ["sheets/budget/", "sheets/s"],
+    ["tasks/team.ttl", "tasks/p"],
+    ["docs/file.md", "drive/p"],
+    ["docs/file.docx", "drive/p"],
+    ["docs/file.txt", "drive/p"],
+    ["docs/file.html", "drive/p"],
+    ["sheets/data.csv", "drive/p"],
+    ["sheets/data.xlsx", "drive/p"],
+    ["notes/n.ttl", "drive/p"],
+    ["photos/p.jpg", "drive/p"],
+    ["photos/albums/p.ttl", "drive/p"],
+    ["calendar/a.ics", "drive/p"],
+    ["calendar/personal/a.ttl", "drive/p"],
+    ["music/a.mp3", "drive/p"],
+    ["music/playlists/a.ttl", "drive/p"],
+    ["music/albums/a.ttl", "drive/p"],
+    ["file.bin", "drive/p"],
+    ["folder/", "drive/f"],
+  ])("opens %s in a capable destination", (path, route) => {
+    const resource = `${storage}${path}`;
+    expect(sharedItemHref({ ...item, url: `${resource}#it` }, storage)).toBe(
+      `/${route}/${encodeRef(resource)}`,
+    );
+  });
+  it("uses canonical Tasks metadata for arbitrary tracker URLs", () => {
+    expect(
+      sharedItemHref(
+        {
+          ...item,
+          url: `${storage}home.ttl`,
+          app: "tasks",
+          rdfTypes: ["http://www.w3.org/2005/01/wf/flow#Tracker"],
+        },
+        storage,
+      ),
+    ).toBe(`/tasks/p/${encodeRef(`${storage}home.ttl`)}`);
+  });
+  it("previews foreign-origin and mismatched-actor announcements; titles cannot choose a route", () => {
+    expect(sharedItemHref({ ...item, source: "inbox" }, "https://alice.example/")).toBe(
+      `/drive/p/${encodeRef(url)}`,
+    );
+    expect(sharedItemHref({ ...item, source: "inbox", fromAnotherPod: true }, storage)).toBe(
+      `/drive/p/${encodeRef(url)}`,
+    );
+    expect(sharedItemHref({ ...item, source: "inbox" })).toBe(`/drive/p/${encodeRef(url)}`);
+    expect(sharedItemHref({ ...item, source: "inbox", fromAnotherPod: false }, storage)).toBe(
+      `/docs/d/${encodeRef(url)}`,
+    );
+    expect(
+      sharedItemHref({ ...item, url: `${storage}file.bin`, name: "docs/secret.ttl" }, storage),
+    ).toBe(`/drive/p/${encodeRef(`${storage}file.bin`)}`);
   });
   it("projects Drive's legacy entries and explicit metadata", () => {
     expect(openedSharedItems([{ url, openedAt: "2026-01-01" }])[0]).toMatchObject({
@@ -36,7 +74,7 @@ describe("shared item presentation", () => {
       openedSharedItems([
         { url, name: "Budget", contentType: "text/csv", openedAt: "2026-01-01" },
       ])[0],
-    ).toMatchObject({ name: "Budget", app: "sheets" });
+    ).toMatchObject({ name: "Budget", app: "sheets", contentType: "text/csv" });
   });
   it("uses sender assertions without fetching profiles", () => {
     expect(sharedSender(undefined)).toBe("Unknown sender");

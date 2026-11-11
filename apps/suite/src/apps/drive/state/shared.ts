@@ -2,6 +2,7 @@
 "use client";
 import { latestSharedEntries } from "@jeswr/suite-sdk/shared";
 import { useCallback } from "react";
+import { clearHiddenSharedForAccount } from "@/lib/shared/hidden";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
 import { resolveContentType } from "../lib/files/resolve-content-type";
@@ -25,6 +26,7 @@ export function useRecordSharedOpen() {
   return useCallback(
     (item: DriveItem) => {
       if (isOwnStorage(item.url, session.storageUrl)) return;
+      clearHiddenSharedForAccount(session.webId, item.url);
       const entry = {
         url: item.url,
         name: item.name,
@@ -39,6 +41,6 @@ export function useRecordSharedOpen() {
         openedShared: latestShared([...current.openedShared, entry]),
       }));
     },
-    [session.storageUrl, updatePrefs],
+    [session.storageUrl, session.webId, updatePrefs],
   );
 }

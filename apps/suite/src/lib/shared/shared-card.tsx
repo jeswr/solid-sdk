@@ -19,7 +19,7 @@ export function SharedCard() {
       {data.loading ? (
         <p role="status">Loading shared items…</p>
       ) : data.items.length ? (
-        <SharedList items={data.items.slice(0, 5)} />
+        <SharedList items={data.items.slice(0, 5)} storageUrl={data.storageUrl} />
       ) : (
         <p className="hm-muted">
           {data.error ? "Couldn't load shared announcements." : "Nothing shared with you yet."}

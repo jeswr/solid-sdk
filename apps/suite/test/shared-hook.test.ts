@@ -10,6 +10,9 @@ vi.mock("@jeswr/pod-access/notify", async (original) => ({
   createInboxReader: () => reader,
 }));
 
+import { sharedAccountKey } from "@jeswr/suite-sdk/shared";
+import { setPreferencesIdentity, useTasksPreferences } from "../src/apps/tasks/state/preferences";
+import { hideSharedForAccount } from "../src/lib/shared/hidden";
 import { useSharedItems } from "../src/lib/shared/use-shared-items";
 
 const note: InboxNotification = {
@@ -83,5 +86,78 @@ it("clears stale account data immediately and discards late success and failure"
   await act(async () => result.refresh());
   expect(result.error).toBe(false);
   expect(result.items).toEqual([]);
+  await view.unmount();
+});
+
+it("filters storage refreshes to this WebID's Tasks and Drive keys", async () => {
+  const view = await mount(h(Probe));
+  const count = reader.inbox.mock.calls.length;
+  for (const key of [
+    "unrelated",
+    "suite.drive.prefs.someone-else",
+    "suite.tasks.shared:someone-else",
+    null,
+  ]) {
+    await act(async () => window.dispatchEvent(new window.StorageEvent("storage", { key })));
+  }
+  expect(reader.inbox).toHaveBeenCalledTimes(count);
+  for (const key of [
+    `suite.drive.prefs.${session.webId}`,
+    `suite.tasks.shared:${encodeURIComponent(session.webId)}`,
+  ]) {
+    await act(async () => window.dispatchEvent(new window.StorageEvent("storage", { key })));
+  }
+  expect(reader.inbox).toHaveBeenCalledTimes(count + 2);
+  await view.unmount();
+});
+it("hides Tasks through its removal flow and a reopened project returns", async () => {
+  const project = { url: "https://bob.example/tasks/team.ttl", title: "Team" };
+  localStorage.setItem(
+    `suite.tasks.shared:${encodeURIComponent(session.webId)}`,
+    JSON.stringify([project]),
+  );
+  setPreferencesIdentity(session.webId);
+  let preferences!: ReturnType<typeof useTasksPreferences>;
+  function TasksProbe() {
+    preferences = useTasksPreferences();
+    return null;
+  }
+  const tasks = await mount(h(TasksProbe));
+  const view = await mount(h(Probe));
+  expect(result.items.some((item) => item.url === project.url)).toBe(true);
+  await act(async () => result.remove(project.url));
+  expect(preferences.preferences.sharedProjects).toEqual([]);
+  expect(result.items.some((item) => item.url === project.url)).toBe(false);
+  expect(JSON.parse(localStorage.getItem(sharedAccountKey(session.webId)) ?? "[]")).toContainEqual({
+    url: project.url,
+    hiddenAt: expect.any(String),
+  });
+  await act(async () => preferences.dispatch({ type: "sharedProject", ...project }));
+  expect(result.items.some((item) => item.url === project.url)).toBe(true);
+  expect(JSON.parse(localStorage.getItem(sharedAccountKey(session.webId)) ?? "[]")).toEqual([]);
+  // A repeated dispatch also clears a hide even when the reducer preserves the list identity.
+  await act(async () => hideSharedForAccount(session.webId, project.url));
+  expect(result.items.some((item) => item.url === project.url)).toBe(false);
+  await act(async () => preferences.dispatch({ type: "sharedProject", ...project }));
+  expect(result.items.some((item) => item.url === project.url)).toBe(true);
+  await view.unmount();
+  await tasks.unmount();
+  setPreferencesIdentity(undefined);
+});
+it("rejects a removal retained across session changes and a later reshare returns", async () => {
+  const view = await mount(h(Probe));
+  const retained = result.remove;
+  const owner = session.webId;
+  session = makeSession("shared-hook-other");
+  await view.render(h(Probe));
+  await act(async () => retained(note.object as string));
+  expect(localStorage.getItem(sharedAccountKey(owner))).toBeNull();
+  await act(async () => result.remove(note.object as string));
+  expect(result.items).toEqual([]);
+  reader.list.mockResolvedValue([
+    { ...note, published: new Date(Date.now() + 60_000).toISOString() },
+  ]);
+  await act(async () => result.refresh());
+  expect(result.items).toHaveLength(1);
   await view.unmount();
 });

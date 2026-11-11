@@ -294,12 +294,13 @@ export function TasksSidebar() {
   const shared = visibleSharedItems(preferences.sharedProjects, hidden).filter(
     (project) => !tasks.cache.isOwnProject(project.url),
   );
-  const sharedUrls = new Set(shared.map((project) => project.url));
+  const sharedUrls = new Set(preferences.sharedProjects.map((project) => project.url));
+  const isShared = (url: string) => sharedUrls.has(url) || !tasks.cache.isOwnProject(url);
   const projects = tasks.projects.filter(
-    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+    (project) => project.url !== tasks.inboxUrl && !isShared(project.url),
   );
   // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
-  const favourites = tasks.projects.filter((project) => {
+  const favourites = visibleSharedItems(tasks.projects, hidden).filter((project) => {
     const error = tasks.tasks[project.url]?.error;
     return (
       preferences.favourites.includes(project.url) &&
@@ -426,7 +427,7 @@ export function TasksSidebar() {
               <ProjectRow
                 key={project.url}
                 project={project}
-                shared={sharedUrls.has(project.url)}
+                shared={isShared(project.url)}
                 first={projects[0]?.url === project.url}
                 last={projects.at(-1)?.url === project.url}
               />

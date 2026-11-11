@@ -3,7 +3,7 @@
 "use client";
 import { sharedAccountKey, sharedItemsForAccount } from "@jeswr/suite-sdk/shared";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { hideSharedForAccount } from "@/lib/shared/hidden";
+import { clearHiddenSharedForAccount, hideSharedForAccount } from "@/lib/shared/hidden";
 import {
   defaultPreferences,
   type PreferenceAction,
@@ -117,11 +117,20 @@ export function useTasksPreferences() {
       if ((shared || favourite) && !identity) return;
       // A menu callback retained across an account switch cannot write to the new account.
       if ((shared || favourite) && owner !== identity) return;
+      if (action.type === "removeSharedProject" && identity) {
+        removeSharedProjectForAccount(identity, action.url);
+        return;
+      }
       const next = preferencesReducer(snapshot, action);
+      if (
+        action.type === "sharedProject" &&
+        identity &&
+        next.sharedProjects.some((p) => p.url === action.url)
+      )
+        clearHiddenSharedForAccount(identity, action.url);
       if (next === snapshot) return;
       snapshot = next;
-      if (action.type === "removeSharedProject" && identity)
-        hideSharedForAccount(identity, action.url);
+
       try {
         if (shared && identity)
           window.localStorage.setItem(
@@ -148,4 +157,39 @@ export function useTasksPreferences() {
     [owner],
   );
   return { preferences, dispatch };
+}
+
+/** Notify every mounted Tasks cache before removing its account preference entry. */
+const removalListeners = new Set<(owner: string, url: string) => void>();
+export function subscribeSharedProjectRemoval(listener: (owner: string, url: string) => void) {
+  removalListeners.add(listener);
+  return () => {
+    removalListeners.delete(listener);
+  };
+}
+export function removeSharedProjectForAccount(owner: string, url: string) {
+  for (const listener of removalListeners) listener(owner, url);
+  const projects =
+    identity === owner
+      ? snapshot.sharedProjects
+      : (() => {
+          try {
+            return parseSharedProjects(localStorage.getItem(sharedProjectsKey(owner)));
+          } catch {
+            return [];
+          }
+        })();
+  const next = preferencesReducer(
+    { ...defaultPreferences, sharedProjects: projects },
+    { type: "removeSharedProject", url },
+  );
+  hideSharedForAccount(owner, url);
+  if (identity === owner) snapshot = { ...snapshot, sharedProjects: next.sharedProjects };
+  try {
+    localStorage.setItem(sharedProjectsKey(owner), JSON.stringify(next.sharedProjects));
+  } catch {
+    /* Account memory remains usable when storage is unavailable. */
+  }
+  emit();
+  window.dispatchEvent(new Event("suite-shared-change"));
 }

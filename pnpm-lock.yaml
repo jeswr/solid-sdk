@@ -5881,6 +5881,9 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1

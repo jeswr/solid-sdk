@@ -1,15 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type InboxNotification, notificationKind } from "@jeswr/pod-access/notify";
 
-export type SharedApp =
-  | "docs"
-  | "sheets"
-  | "notes"
-  | "tasks"
-  | "calendar"
-  | "photos"
-  | "music"
-  | "drive";
+import { isDirectChild, resolveSuiteResource, type SharedApp } from "./resource.js";
+
+export { isDirectChild, resolveSuiteResource, type SharedApp, sharedApps } from "./resource.js";
 export interface SharedItem {
   url: string;
   name: string;
@@ -20,6 +14,10 @@ export interface SharedItem {
   sharedAt?: string;
   role?: string;
   source: "inbox" | "opened" | "app";
+  contentType?: string;
+  rdfTypes?: readonly string[];
+  /** An unverified announcement actor claims a resource on a different origin. */
+  fromAnotherPod?: boolean;
 }
 export interface SharedItemHints {
   url: string;
@@ -47,147 +45,17 @@ export function sharedItemName(value: string): string {
   }
 }
 
-const rules: readonly {
-  app: SharedApp;
-  kind: string;
-  mime: RegExp;
-  type: RegExp;
-  extension: RegExp;
-  path: RegExp;
-}[] = [
-  {
-    app: "sheets",
-    kind: "spreadsheet",
-    mime: /(?:spreadsheet|excel|text\/csv)/,
-    type: /(?:#|\/)(?:Spreadsheet|SpreadsheetDigitalDocument)$/,
-    extension: /\.(?:csv|xlsx?|ods)$/,
-    path: /(?:^|\/)(?:sheets|pod-sheets)(?:\/|$)/,
-  },
-  {
-    app: "notes",
-    kind: "note",
-    mime: /^application\/vnd\.jeswr\.note$/,
-    type: /(?:#|\/)(?:Note|TextDigitalDocument)$/,
-    extension: /\.note$/,
-    path: /(?:^|\/)(?:notes|pod-notes)(?:\/|$)/,
-  },
-  {
-    app: "tasks",
-    kind: "task-list",
-    mime: /^application\/vnd\.jeswr\.tasks$/,
-    type: /(?:#|\/)(?:Tracker|TaskList|Task|Vtodo)$/,
-    extension: /\.(?:todo|vtodo)$/,
-    path: /(?:^|\/)(?:tasks|pod-tasks)(?:\/|$)/,
-  },
-  {
-    app: "calendar",
-    kind: "calendar",
-    mime: /^text\/calendar$/,
-    type: /(?:#|\/)(?:Calendar|CalendarEvent|Vcalendar|Vevent)$/,
-    extension: /\.ics$/,
-    path: /(?:^|\/)(?:calendar|calendars|pod-calendar)(?:\/|$)/,
-  },
-  {
-    app: "photos",
-    kind: "photo",
-    mime: /^image\//,
-    type: /(?:#|\/)(?:ImageObject|Photograph|Photo|PhotoAlbum)$/,
-    extension: /\.(?:avif|gif|heic|jpe?g|png|svg|webp)$/,
-    path: /(?:^|\/)(?:photos|pod-photos)(?:\/|$)/,
-  },
-  {
-    app: "music",
-    kind: "audio",
-    mime: /^audio\//,
-    type: /(?:#|\/)(?:MusicRecording|MusicAlbum|MusicPlaylist|AudioObject|Track)$/,
-    extension: /\.(?:aac|flac|m4a|mp3|ogg|opus|wav)$/,
-    path: /(?:^|\/)(?:music|pod-music)(?:\/|$)/,
-  },
-  {
-    app: "docs",
-    kind: "document",
-    mime: /^(?:text\/(?:plain|markdown|html)|application\/(?:msword|rtf|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.oasis\.opendocument\.text))$/,
-    type: /(?:#|\/)(?:Document|DigitalDocument)$/,
-    extension: /\.(?:docx?|md|markdown|odt|rtf|txt|html?)$/,
-    path: /(?:^|\/)(?:docs|pod-docs)(?:\/|$)/,
-  },
-];
-
-const subtypes: readonly { app: SharedApp; kind: string; type: RegExp; path: RegExp }[] = [
-  {
-    app: "photos",
-    kind: "album",
-    type: /(?:#|\/)PhotoAlbum$/,
-    path: /(?:^|\/)(?:photos|pod-photos)\/albums\/[^/]+(?:\.ttl|\/)$/,
-  },
-  {
-    app: "calendar",
-    kind: "event",
-    type: /(?:#|\/)(?:CalendarEvent|Vevent)$/,
-    path: /(?:^|\/)(?:calendar|calendars|pod-calendar)\/[^/]+\/[^/]+\.ttl$/,
-  },
-  {
-    app: "music",
-    kind: "playlist",
-    type: /(?:#|\/)MusicPlaylist$/,
-    path: /(?:^|\/)(?:music|pod-music)\/playlists\/[^/]+(?:\.ttl|\/)$/,
-  },
-  {
-    app: "music",
-    kind: "album",
-    type: /(?:#|\/)MusicAlbum$/,
-    path: /(?:^|\/)(?:music|pod-music)\/albums\/[^/]+(?:\.ttl|\/)$/,
-  },
-];
-
-/** Explicit media/RDF metadata wins over filename, then decoded path hints. */
+/** Classification is shared with shell search; RDF types use canonical vocabulary IRIs. */
 export function classifySharedItem(hints: SharedItemHints): Pick<SharedItem, "app" | "kind"> {
   if (!isSharedItemUrl(hints.url)) return { app: "drive", kind: "file" };
-  const url = new URL(hints.url);
-  const mime = hints.contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
-  const typed =
-    rules.find((rule) => rule.mime.test(mime)) ??
-    rules.find((rule) => hints.rdfTypes?.some((type) => rule.type.test(type)));
-  let path = url.pathname;
-  try {
-    path = decodeURIComponent(path);
-  } catch {
-    /* Keep malformed encodings opaque. */
-  }
-  const name = (hints.name ?? path).toLowerCase();
-  const rule =
-    typed ??
-    rules.find((rule) => rule.extension.test(name)) ??
-    rules.find((rule) => rule.extension.test(path.toLowerCase())) ??
-    rules.find((rule) => rule.path.test(path.toLowerCase()));
-  const subtype = subtypes.find(
-    (subtype) =>
-      subtype.app === rule?.app &&
-      (hints.rdfTypes?.some((type) => subtype.type.test(type)) ||
-        subtype.path.test(path.toLowerCase())),
-  );
-  return rule
-    ? { app: rule.app, kind: subtype?.kind ?? rule.kind }
-    : { app: "drive", kind: path.endsWith("/") ? "folder" : "file" };
+  const { app, kind } = resolveSuiteResource(hints, { encodeRef: (url) => url });
+  return { app: app === "contacts" ? "drive" : app, kind };
 }
 
 /** Drive's native Docs scope: direct .ttl children of docs/ or legacy pod-docs/. */
 export function isSuiteDocsDocument(url: string, storageUrl: string): boolean {
   if (!isSharedItemUrl(url) || !isSharedItemUrl(storageUrl) || !url.endsWith(".ttl")) return false;
-  const parsed = new URL(url);
-  return ["docs/", "pod-docs/"].some((slug) => {
-    const parent = new URL(slug, storageUrl);
-    const rest = parsed.pathname.slice(parent.pathname.length);
-    return (
-      parsed.origin === parent.origin &&
-      parsed.pathname.startsWith(parent.pathname) &&
-      !parsed.search &&
-      !parsed.hash &&
-      !!rest &&
-      !rest.includes("/") &&
-      !/%2f|%5c/i.test(rest)
-    );
-  });
+  return ["docs/", "pod-docs/"].some((slug) => isDirectChild(url, new URL(slug, storageUrl).href));
 }
 
 /** Only the suite share Announce shape; assignments, mentions and invitations stay separate. */
@@ -206,7 +74,14 @@ export function sharedItemsFromInbox(notifications: readonly InboxNotification[]
           url: notification.object,
           name: notification.content?.trim() || sharedItemName(notification.object),
           ...classifySharedItem({ url: notification.object }),
-          ...(notification.actor ? { sharedBy: notification.actor } : {}),
+          ...(notification.actor
+            ? {
+                sharedBy: notification.actor,
+                fromAnotherPod:
+                  !isSharedItemUrl(notification.actor) ||
+                  new URL(notification.actor).origin !== new URL(notification.object).origin,
+              }
+            : {}),
           ...(Number.isFinite(Date.parse(notification.published ?? ""))
             ? { sharedAt: notification.published }
             : {}),
@@ -218,12 +93,12 @@ export function sharedItemsFromInbox(notifications: readonly InboxNotification[]
   );
 }
 
-function timestamp(value: string | undefined): number {
-  const date = Date.parse(value ?? "");
+function timestamp(value: string | Date | undefined): number {
+  const date = value instanceof Date ? value.getTime() : Date.parse(value ?? "");
   return Number.isFinite(date) ? date : -Infinity;
 }
 
-/** Extracted from Drive: latest occurrence wins, later entry wins equal dates, undated last. */
+/** Preserve Drive's insertion order for ties and its original NaN comparisons. */
 export function latestSharedEntries<T extends { url: string }>(
   entries: readonly T[],
   date: (entry: T) => string | undefined,
@@ -231,12 +106,10 @@ export function latestSharedEntries<T extends { url: string }>(
   const latest = new Map<string, T>();
   for (const entry of entries) {
     const previous = latest.get(entry.url);
-    if (!previous || timestamp(date(entry)) >= timestamp(date(previous)))
+    if (!previous || Date.parse(date(entry) ?? "") >= Date.parse(date(previous) ?? ""))
       latest.set(entry.url, entry);
   }
-  return [...latest.values()].sort(
-    (a, b) => timestamp(date(b)) - timestamp(date(a)) || a.url.localeCompare(b.url),
-  );
+  return [...latest.values()].sort((a, b) => Date.parse(date(b) ?? "") - Date.parse(date(a) ?? ""));
 }
 
 /** Newest metadata wins conflicts; fill missing fields and inferred names/apps from richer sources. */
@@ -255,10 +128,17 @@ export function mergeSharedItems(...sources: readonly (readonly SharedItem[])[])
     merged.set(item.url, {
       ...item,
       ...previous,
+      // Local app/open metadata outranks every unverified inbox title, regardless of date.
       name:
-        previous.name.trim() && previous.name !== sharedItemName(previous.url)
-          ? previous.name
-          : item.name || previous.name,
+        previous.source === "inbox" && item.source !== "inbox"
+          ? item.name
+          : previous.source !== "inbox" && item.source === "inbox"
+            ? previous.name
+            : previous.name.trim() && previous.name !== sharedItemName(previous.url)
+              ? previous.name
+              : item.name || previous.name,
+      source: previous.source === "inbox" ? item.source : previous.source,
+      fromAnotherPod: previous.fromAnotherPod || item.fromAnotherPod,
       ...(previous.app === "drive" && item.app !== "drive"
         ? { app: item.app, kind: item.kind }
         : {}),
@@ -300,15 +180,36 @@ export function sharedItemsForAccount<T>(
 export function removeSharedItem<T extends { url: string }>(items: readonly T[], url: string): T[] {
   return items.filter((item) => item.url !== url);
 }
-export function hideSharedItem(hidden: readonly { url: string }[], url: string): { url: string }[] {
-  return isSharedItemUrl(url) ? [...removeSharedItem(hidden, url), { url }] : [...hidden];
+export interface HiddenSharedItem {
+  url: string;
+  hiddenAt: string;
 }
-export function visibleSharedItems<T extends { url: string }>(
-  items: readonly T[],
-  hidden: readonly { url: string }[],
-): T[] {
-  const urls = new Set(hidden.map((item) => item.url));
-  return items.filter((item) => !urls.has(item.url));
+export function hideSharedItem(
+  hidden: readonly HiddenSharedItem[],
+  url: string,
+  hiddenAt = new Date().toISOString(),
+): HiddenSharedItem[] {
+  return isSharedItemUrl(url) ? [...removeSharedItem(hidden, url), { url, hiddenAt }] : [...hidden];
+}
+export function visibleSharedItems<
+  T extends { url: string; sharedAt?: string; openedAt?: string | Date },
+>(items: readonly T[], hidden: readonly HiddenSharedItem[]): T[] {
+  const dates = new Map(hidden.map((item) => [item.url, timestamp(item.hiddenAt)]));
+  return items.filter((item) => {
+    const hiddenAt = dates.get(item.url);
+    return (
+      hiddenAt === undefined ||
+      Math.max(timestamp(item.sharedAt), timestamp(item.openedAt)) > hiddenAt
+    );
+  });
+}
+export function isHiddenSharedItem(value: unknown): value is HiddenSharedItem {
+  return (
+    isSharedUrlEntry(value) &&
+    "hiddenAt" in value &&
+    typeof value.hiddenAt === "string" &&
+    Number.isFinite(Date.parse(value.hiddenAt))
+  );
 }
 export function isSharedUrlEntry(value: unknown): value is { url: string } {
   return (

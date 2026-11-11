@@ -1,30 +1,32 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import {
+  type HiddenSharedItem,
   hideSharedItem,
-  isSharedUrlEntry,
+  isHiddenSharedItem,
   parseSharedEntries,
+  removeSharedItem,
   sharedAccountKey,
 } from "@jeswr/suite-sdk/shared";
 import { useCallback, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
-const empty: readonly { url: string }[] = [];
+const empty: readonly HiddenSharedItem[] = [];
 const snapshots = new Map<
   string,
-  { raw: string | null; unsaved?: boolean; items: readonly { url: string }[] }
+  { raw: string | null; unsaved?: boolean; items: readonly HiddenSharedItem[] }
 >();
 const listeners = new Set<() => void>();
 function notify() {
   for (const listener of listeners) listener();
 }
-function read(owner: string): readonly { url: string }[] {
+function read(owner: string): readonly HiddenSharedItem[] {
   try {
     const cached = snapshots.get(owner);
     if (cached?.unsaved) return cached.items;
     const raw = localStorage.getItem(sharedAccountKey(owner));
     const previous = snapshots.get(owner);
     if (previous?.raw === raw) return previous.items;
-    const items = parseSharedEntries(raw, isSharedUrlEntry);
+    const items = parseSharedEntries(raw, isHiddenSharedItem);
     snapshots.set(owner, { raw, items });
     return items;
   } catch {
@@ -41,7 +43,12 @@ function subscribe(listener: () => void) {
 }
 /** Local removal only: no resource deletion, revocation or inbox mutation. */
 export function hideSharedForAccount(owner: string, url: string) {
-  const items = hideSharedItem(read(owner), url);
+  write(owner, hideSharedItem(read(owner), url));
+}
+export function clearHiddenSharedForAccount(owner: string, url: string) {
+  write(owner, removeSharedItem(read(owner), url));
+}
+function write(owner: string, items: readonly HiddenSharedItem[]) {
   const raw = JSON.stringify(items);
   let unsaved = false;
   try {

@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+
+import { sharedAccountKey } from "@jeswr/suite-sdk/shared";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DRIVE_ROOT_CLASS } from "../src/apps/drive/lib/constants";
 import { encodeRef } from "../src/lib/refs";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { hideSharedForAccount } from "../src/lib/shared/hidden";
 import { act, click, h, key, mount } from "./drive-ui-dom";
 import { OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
@@ -351,4 +354,21 @@ it("does not overlay a hydrated URL onto a newer versioned listing or another UR
   expect(withHydratedMetadata(env.drive().client, newer)).toBe(newer);
   const unversioned = { url: `${PUBLIC}other`, name: "other", kind: "file" as const };
   expect(withHydratedMetadata(env.drive().client, unversioned)).toBe(unversioned);
+});
+
+it("hides a shared Drive item and reopening its link clears the hide and restores Shared", async () => {
+  const env = await setup(false);
+  const url = `${PUBLIC}placeholder`;
+  route.ref = encodeRef(url);
+  const view = await mount(env.tree(h(PreviewRouteView)));
+  await view.render(env.tree(h(SharedView)));
+  expect(urls(view.host)).toContain(url);
+  const owner = env.drive().session.webId;
+  await act(async () => hideSharedForAccount(owner, url));
+  expect(urls(view.host)).not.toContain(url);
+  await view.render(env.tree(h(PreviewRouteView)));
+  expect(JSON.parse(localStorage.getItem(sharedAccountKey(owner)) ?? "[]")).toEqual([]);
+  await view.render(env.tree(h(SharedView)));
+  expect(urls(view.host)).toContain(url);
+  await view.unmount();
 });
