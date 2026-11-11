@@ -114,30 +114,38 @@ const account = z
       value.channelHandleHash !== undefined || value.inventory?.channelHandles.length === 0,
     "an account without a handle must have an empty inventory handle list",
   );
-const channelCapability = z.strictObject({
-  type: z.literal("channel-capability"),
-  id: iri,
-  channel: nonempty,
-  binding: nonempty,
-  carriage: nonempty,
-  description: text.optional(),
-  structuredPayload: z.boolean(),
-  endToEndEncrypted: z.boolean(),
-  federated: z.boolean().optional(),
-  deliveryReceipts: z.boolean(),
-  historyWindow: z
-    .string()
-    .max(128)
-    .regex(
-      /^P(?=\d|T\d)(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/,
-    ),
-  maxMessageBytes: count,
-  sendSupported: z.boolean(),
-  costPerMessage: money,
-  rateLimit: z.strictObject({ perRecipient: count, perDay: count }),
-  credentialState: bindingStateSchema,
-  lastIngest: instant.optional(),
-});
+const channelCapability = z
+  .strictObject({
+    type: z.literal("channel-capability"),
+    id: iri,
+    channel: nonempty,
+    binding: nonempty,
+    carriage: nonempty,
+    /** Account-specific observations must identify their account, never imply shared grants. */
+    account: iri.optional(),
+    grantedScopes: z.array(nonempty.max(2048)).max(512).optional(),
+    description: text.optional(),
+    structuredPayload: z.boolean(),
+    endToEndEncrypted: z.boolean(),
+    federated: z.boolean().optional(),
+    deliveryReceipts: z.boolean(),
+    historyWindow: z
+      .string()
+      .max(128)
+      .regex(
+        /^P(?=\d|T\d)(?:\d+Y)?(?:\d+M)?(?:\d+D)?(?:T(?=\d)(?:\d+H)?(?:\d+M)?(?:\d+(?:\.\d+)?S)?)?$/,
+      ),
+    maxMessageBytes: count,
+    sendSupported: z.boolean(),
+    costPerMessage: money,
+    rateLimit: z.strictObject({ perRecipient: count, perDay: count }),
+    credentialState: bindingStateSchema,
+    lastIngest: instant.optional(),
+  })
+  .refine(
+    (value) => value.grantedScopes === undefined || value.account !== undefined,
+    "granted scopes require an account reference",
+  );
 const inboundMessage = z.strictObject({
   type: z.literal("inbound-message"),
   id: iri,

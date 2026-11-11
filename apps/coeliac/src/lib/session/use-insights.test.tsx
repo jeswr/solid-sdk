@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Sonnet 5
 /**
  * The session-race guard on the background trigger-class persist (roborev
@@ -108,7 +109,6 @@ describe("useInsights — session-race guard on the background trigger-class per
         webId,
         storageRoot: "https://alice.example/",
         store,
-        authedFetch: (...a) => globalThis.fetch(...a),
         publicFetch: (...a) => globalThis.fetch(...a),
       },
     };
@@ -174,7 +174,6 @@ describe("useInsights — session-race guard on the background trigger-class per
       webId,
       storageRoot: "https://alice.example/",
       store,
-      authedFetch: (...a) => globalThis.fetch(...a),
       publicFetch: (...a) => globalThis.fetch(...a),
     };
     function Wrapper({ children }: { children: ReactNode }) {
@@ -227,7 +226,6 @@ describe("useInsights — session-race guard on the background trigger-class per
         webId,
         storageRoot: "https://alice.example/",
         store,
-        authedFetch: (...a) => globalThis.fetch(...a),
         publicFetch: (...a) => globalThis.fetch(...a),
       },
     };
