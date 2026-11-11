@@ -1,8 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { beforeEach, expect, it, vi } from "vitest";
 import { MAX_GENERATIONS, plannedTasks, sendToTasks } from "../src/apps/notes/lib/tasks-handoff";
+import { NS, node, Store, serialize } from "../src/apps/tasks/lib/model/rdf";
+import { TaskStore } from "../src/apps/tasks/lib/model/store";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
+import { Pod, storage, webId } from "./tasks/pod";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -274,13 +278,142 @@ it("probes an item's later addresses past completed or different tasks", async (
   expect(result).toEqual({ created: 1, existing: 2, failed: [tasks[3], tasks[4]] });
 });
 
-it("gives up on an item after the last generation", async () => {
+it.each(["completed", "foreign"])("gives up after the last %s generation", async (kind) => {
   const store = sink({
     createTask: vi.fn().mockRejectedValue(conflict),
-    readTask: vi.fn(async () => ({ task: { title: "Old", state: "closed" } })),
+    readTask: vi.fn(async () => {
+      if (kind === "foreign") throw new TypeError("Expected a wf:Task.");
+      return { task: { title: "Old", state: "closed" } };
+    }),
   });
   const result = await sendToTasks(store as never, [{ id: "a", title: "Old" }], session.webId);
   expect(store.createTask).toHaveBeenCalledTimes(MAX_GENERATIONS);
   expect(store.createTask.mock.lastCall?.[2]).toBe(`a-${MAX_GENERATIONS}`);
   expect(result.failed).toHaveLength(1);
+});
+
+it("matches the full bounded address exactly, with an open state and the same title", async () => {
+  const listed = (id: string, title: string, state = "open") => ({
+    url: `${inbox.tracker.stateStore}${id}.ttl`,
+    task: { title, state },
+  });
+  const store = sink({
+    listTasks: vi.fn(async () => [
+      listed("a", "First", "closed"),
+      listed("a-2", "Edited"),
+      listed(`a-${MAX_GENERATIONS}`, "First"),
+      listed("b-1", "Second"),
+      listed(`b-${MAX_GENERATIONS + 1}`, "Second"),
+      listed("b-2-extra", "Second"),
+      { ...listed("b", "Second"), url: "https://other.example/b.ttl" },
+    ]),
+  });
+  const result = await sendToTasks(
+    store as never,
+    [
+      { id: "a", title: "First" },
+      { id: "b", title: "Second" },
+    ],
+    session.webId,
+  );
+  expect(result).toEqual({ created: 1, existing: 1, failed: [] });
+  expect(store.createTask.mock.calls.map((call) => call[2])).toEqual(["b"]);
+});
+
+it.each([
+  new TypeError("Unexpected RDF response"),
+  Object.assign(new Error("Access denied"), { status: 403 }),
+  Object.assign(new Error("Deleted during read"), { status: 404 }),
+])("keeps read failures retryable instead of treating them as foreign resources: %s", async (error) => {
+  const store = sink({
+    createTask: vi.fn().mockRejectedValue(conflict),
+    readTask: vi.fn().mockRejectedValue(error),
+  });
+  const tasks = [{ id: "a", title: "Buy milk" }];
+  expect(await sendToTasks(store as never, tasks, session.webId)).toEqual({
+    created: 0,
+    existing: 0,
+    failed: tasks,
+  });
+  expect(store.createTask).toHaveBeenCalledOnce();
+});
+
+it("finds a committed later generation after a lost response and deletion of an earlier task", async () => {
+  const pod = new Pod();
+  const tasks = plannedTasks([{ text: "Buy milk", checked: false }], "groceries.ttl");
+  const base = `${storage}tasks/projects/inbox/${tasks[0]?.id}`;
+  let loseResponse = false;
+  const options = {
+    storage,
+    webId,
+    typeIndex: false,
+    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
+    fetch: (async (input, init) => {
+      const response = await pod.fetch(input, init);
+      if (loseResponse && init?.method === "PUT" && String(input) === `${base}-2.ttl`) {
+        loseResponse = false;
+        throw new Error("Response lost after commit");
+      }
+      return response;
+    }) as typeof fetch,
+  };
+  const store = new TaskStore(options);
+  expect(await sendToTasks(store, tasks, webId)).toEqual({ created: 1, existing: 0, failed: [] });
+  const completed = await store.updateTask(await store.readTask(`${base}.ttl`), (task) => {
+    task.state = "closed";
+  });
+  loseResponse = true;
+  expect(await sendToTasks(store, tasks, webId)).toEqual({
+    created: 0,
+    existing: 0,
+    failed: tasks,
+  });
+  expect(pod.files.has(`${base}-2.ttl`)).toBe(true);
+  await store.deleteTask(completed);
+
+  const writes = pod.mutations().length;
+  const reopened = new TaskStore(options);
+  expect(await sendToTasks(reopened, tasks, webId)).toEqual({
+    created: 0,
+    existing: 1,
+    failed: [],
+  });
+  expect(
+    (await reopened.listTasks(`${storage}tasks/projects/inbox/`)).map((task) => task.url),
+  ).toEqual([`${base}-2.ttl`]);
+  expect(
+    pod
+      .mutations()
+      .slice(writes)
+      .some((request) => request.url === `${base}.ttl`),
+  ).toBe(false);
+});
+
+it("skips a foreign resource without overwriting it, and finds the created task on retry", async () => {
+  const pod = new Pod();
+  const store = new TaskStore({
+    storage,
+    webId,
+    fetch: pod.fetch,
+    typeIndex: false,
+    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
+  });
+  const project = await store.bootstrapInbox();
+  const tasks = plannedTasks([{ text: "Buy milk", checked: false }], "groceries.ttl");
+  const base = `${project.tracker.stateStore}${tasks[0]?.id}`;
+  const dataset = new Store();
+  node(`${base}.ttl#it`, dataset).setText(`${NS.DCT}title`, "Foreign document");
+  const body = await serialize(dataset);
+  pod.seed(`${base}.ttl`, body);
+
+  expect(await sendToTasks(store, tasks, webId)).toEqual({ created: 1, existing: 0, failed: [] });
+  expect(pod.files.get(`${base}.ttl`)?.body).toBe(body);
+  expect((await store.readTask(`${base}-2.ttl`)).task.title).toBe("Buy milk");
+  expect(await sendToTasks(store, tasks, webId)).toEqual({ created: 0, existing: 1, failed: [] });
+  const attempts = pod.requests.filter(
+    (request) => request.url === `${base}.ttl` && request.method === "PUT",
+  );
+  expect(attempts).toHaveLength(1);
+  expect(attempts[0]?.headers.get("If-None-Match")).toBe("*");
+  expect(pod.files.get(`${base}.ttl`)?.body).toBe(body);
 });
