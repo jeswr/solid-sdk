@@ -103,6 +103,42 @@ without a mutable shared index; it is intended for small chat collections.
 Containers with missing conversation metadata are skipped as incomplete saves;
 permission, transport and message-read errors still propagate.
 
+### Redaction
+
+`redactSecrets` runs on every stored title and message and again on transcript export.
+Following Jesse's 10 November 2026 decision (sst-5ax.36), assignment redaction replaces
+only secret values with `[REDACTED]`, including env values. Names, operators, quotes and
+surrounding code stay: `const apiKey = "abc123"; const total = a + b;` becomes
+`const apiKey = "[REDACTED]"; const total = a + b;`. Ordinary assignments, comparisons,
+keyword arguments, loops and Markdown survive byte-for-byte unless they contain a
+credential. The rule errs toward redaction.
+
+Secret-looking names match these case-insensitive substrings: `token`, `secret`,
+`password`, `passwd`, `pwd`, `passphrase`, `pass`, `credential`, `creds`, `auth`,
+`cookie`, `session`, `bearer`, `signature`, `salt`, `dsn`, plus `connectionstring`
+and `connstr` after joining word parts. This covers `client_secret`, `access_token`,
+`refreshToken`, `connection_string` and `conn_str`. `key` must be a whole word part,
+split on underscores, hyphens, dots or camelCase/acronym boundaries: `KEY`, `API_KEY`,
+`apiKey`, `private_key` and `key_count` redact; `monkey` and `keyboard` survive.
+`auth` skips `author` and `authority` but still matches `authorization`/`authorisation`.
+A bare TypeScript type after `name:` (`token: string`, `password: string | null`) is
+treated as code and kept; a quoted `"string"` value still redacts.
+
+The value rule covers shell assignments/exports, `=`/`:`/`:=` code and object keys
+(including quoted JSON keys), CLI flags (`--password value`, `--token=value`), and
+URL query parameters. Compact env lines starting with an optionally indented/exported
+`UPPER_SNAKE_CASE=` name redact regardless of the name, covering `DATABASE_URL` and
+`STRIPE_LIVE`; lowercase or spaced neutral code assignments stay. URL userinfo
+passwords also redact. Quoted values include embedded newlines, escapes and unfinished
+final quotes; unquoted values stop at whitespace, `;`, `,`, `)`, `}` or `]` and include
+escaped whitespace and backslash continuations. Query values also stop at `&`, `#`,
+quotes, backticks and angle brackets. Following code and lines stay.
+
+The existing PEM private-key, `sk-`, GitHub, AWS key-ID, JWT and `Authorization:`
+header rules run first with their existing markers. Redaction is pure, emits no
+diagnostics containing input, and produces a fixpoint, so derived message IDs stay
+stable when capture and storage both redact. Value scanning takes linear time.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)
