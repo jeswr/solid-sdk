@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 /** Public photo model over generated fields; EXIF normalization remains domain policy. */
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
@@ -55,8 +56,19 @@ export function parsePhoto(
   subject = `${documentUrl(itemUrl)}#it`,
 ): Photo | undefined {
   subject = httpIri(subject);
-  const core =
-    entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset);
+  return photoFromCore(
+    dataset,
+    subject,
+    entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset),
+  );
+}
+
+/** Project an already-parsed core once, so scans do not re-run class recognition. */
+function photoFromCore(
+  dataset: DatasetCore,
+  subject: string,
+  core: ReturnType<typeof entities.Photograph.parse>,
+): Photo | undefined {
   if (!core) return undefined;
   const doc = new PhotographDoc(subject, dataset, DataFactory);
   const created = core.created?.toISOString();
@@ -114,9 +126,9 @@ export function parsePhotos(
     if (quad.subject.termType === "NamedNode") subjects.add(quad.subject.value);
   }
   return [...subjects].sort().flatMap((subject) => {
-    const recognized =
+    const core =
       entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset);
-    const photo = recognized ? parsePhoto(itemUrl, dataset, subject) : undefined;
+    const photo = core ? photoFromCore(dataset, httpIri(subject), core) : undefined;
     return photo ? [{ subject, photo }] : [];
   });
 }

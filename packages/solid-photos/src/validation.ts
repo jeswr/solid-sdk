@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-// AUTHORED-BY Codex GPT-6.1-Sol
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { exifDateToIso } from "./exif.js";
 
