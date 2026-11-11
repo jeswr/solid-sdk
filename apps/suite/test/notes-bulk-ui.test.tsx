@@ -53,7 +53,9 @@ vi.mock("../src/apps/notes/components/capture-bar", async (original) => {
 const { NotesGrid } = await import("../src/apps/notes/components/notes-grid");
 const { ShortcutsProvider } = await import("../src/shell/shortcuts/provider");
 const { SuiteFrame } = await import("../src/components/interim-shell/suite-frame");
-const { SHORTCUTS_SETTING_KEY } = await import("../src/shell/lib/shortcut-settings");
+const { SHORTCUTS_SETTING_KEY, setCharacterShortcutsEnabled } = await import(
+  "../src/shell/lib/shortcut-settings"
+);
 const saved = (title: string, location: StoredNote["location"] = "active"): StoredNote => ({
   url: `https://pod.example/notes/${title}.ttl`,
   title,
@@ -540,6 +542,52 @@ it("keeps the interim frame's search shortcut from taking focus out of help", as
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   await key(document.body, "/");
   expect(document.activeElement?.getAttribute("data-global-search")).not.toBeNull();
+});
+
+it.each([
+  "c",
+  "/",
+])("respects the help setting for %s with the real capture bar and suite frame", async (shortcut) => {
+  mocks.realCapture = true;
+  await mount(
+    h(ShortcutsProvider, {
+      children: h(SuiteFrame, {
+        app: "notes",
+        sidebar: null,
+        search: { placeholder: "Search notes", action: "/notes/search", scopeLabel: "in Notes" },
+        children: h(NotesGrid),
+      }),
+    }),
+  );
+  const main = document.getElementById("main-content") as HTMLElement;
+  const capture = document.querySelector(".notes-capture") as HTMLElement;
+  await act(() => main.focus());
+  await key(main, "?", true);
+  const help = document.querySelector('[role="dialog"]') as HTMLElement;
+  const toggle = help.querySelector<HTMLInputElement>('input[type="checkbox"]') as HTMLInputElement;
+  expect(toggle.closest("label")?.textContent).toContain("Use single-key shortcuts");
+  expect(toggle.checked).toBe(true);
+  await click(toggle);
+  expect(toggle.checked).toBe(false);
+  expect(localStorage.getItem(SHORTCUTS_SETTING_KEY)).toBe("off");
+  await key(help, "Escape");
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  await act(() => main.focus());
+  expect(document.activeElement).toBe(main);
+
+  await key(main, shortcut);
+  expect(document.activeElement).toBe(main);
+  expect(capture.hasAttribute("data-expanded")).toBe(false);
+  expect(mocks.context.create).not.toHaveBeenCalled();
+
+  await act(() => setCharacterShortcutsEnabled(true, localStorage, window));
+  await key(main, shortcut);
+  if (shortcut === "c") {
+    expect(capture.getAttribute("data-expanded")).toBe("true");
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Note text");
+  } else {
+    expect(document.activeElement).toBe(document.querySelector("[data-global-search]"));
+  }
 });
 
 it("keeps the single-note sharing remedy on a refused bulk move", async () => {

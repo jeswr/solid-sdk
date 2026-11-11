@@ -34,6 +34,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
 import { isEditableTarget } from "@/shell/lib/shortcuts";
 import { WalkthroughDock } from "@/welcome/walkthrough";
 
@@ -184,7 +185,7 @@ export function SuiteFrame({
         document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open]')
       )
         return;
-      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && characterShortcutsEnabled()) {
         const input = document.querySelector<HTMLInputElement>("[data-global-search]");
         if (input) {
           event.preventDefault();
