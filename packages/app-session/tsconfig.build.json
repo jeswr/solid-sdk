@@ -1,0 +1,7 @@
+// AUTHORED-BY GPT-6.1 Sol
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": false, "outDir": "dist", "rootDir": "src" },
+  "include": ["src"],
+  "exclude": ["test"]
+}
