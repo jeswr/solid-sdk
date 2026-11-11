@@ -13,8 +13,11 @@ import {
   LocaleType,
   mergeLocales,
 } from "@univerjs/presets";
+import { type CellAnchor, commentStructuralEdit } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
 import { serializeSnapshot } from "../model/snapshot";
+import type { StructuralEdit } from "../refs/model";
+import { indexToColumn } from "../refs/notation";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
@@ -66,6 +69,28 @@ export const mountUniver: MountEngine = async (container, options) => {
   let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
   let readOnly = options.readOnly ?? false;
   workbook.setEditable(!readOnly);
+  const selections = new Set<(anchor: CellAnchor | undefined) => void>();
+  const structures = new Set<(edit: StructuralEdit) => void>();
+  const selectedCell = (): CellAnchor | undefined => {
+    const range = workbook.getActiveCell();
+    if (!range) return undefined;
+    return {
+      sheetId: workbook.getActiveSheet().getSheetId(),
+      cell: `${indexToColumn(range.getColumn() + 1)}${range.getRow() + 1}`,
+      deleted: false,
+    };
+  };
+  const selectionChanged = () => {
+    for (const listener of selections) listener(selectedCell());
+  };
+  const selectionSubscription = univerAPI.addEvent(
+    univerAPI.Event.SelectionChanged,
+    selectionChanged,
+  );
+  const sheetSubscription = univerAPI.addEvent(
+    univerAPI.Event.ActiveSheetChanged,
+    selectionChanged,
+  );
   const listeners = new Set<() => void>();
   let disposed = false;
   let loading = false;
@@ -95,6 +120,8 @@ export const mountUniver: MountEngine = async (container, options) => {
       return;
     // Initial formula calculation belongs to loading, including its asynchronous results.
     if (event.options?.fromFormula && !editedSinceLoad) return;
+    const edit = commentStructuralEdit(event.id, event.params);
+    if (edit) for (const listener of structures) listener(edit);
     editedSinceLoad = true;
     notify();
   });
@@ -120,6 +147,23 @@ export const mountUniver: MountEngine = async (container, options) => {
   return {
     load,
     snapshot,
+    selectedCell,
+    selectCell(anchor) {
+      if (anchor.deleted) return;
+      const sheet = workbook.getSheetBySheetId(anchor.sheetId);
+      if (!sheet) return;
+      workbook.setActiveSheet(anchor.sheetId);
+      sheet.setActiveRange(sheet.getRange(anchor.cell));
+      selectionChanged();
+    },
+    onSelection(listener) {
+      selections.add(listener);
+      return () => selections.delete(listener);
+    },
+    onStructure(listener) {
+      structures.add(listener);
+      return () => structures.delete(listener);
+    },
     onChange(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -176,6 +220,10 @@ export const mountUniver: MountEngine = async (container, options) => {
       disposed = true;
       ++generation;
       subscription.dispose();
+      selectionSubscription.dispose();
+      sheetSubscription.dispose();
+      selections.clear();
+      structures.clear();
       listeners.clear();
       univer.dispose();
     },

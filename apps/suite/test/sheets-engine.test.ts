@@ -12,9 +12,16 @@ const mock = vi.hoisted(() => {
     params?: { unitId?: string };
     options?: { fromChangeset?: boolean; fromFormula?: boolean };
   }) => void;
+  const events = new Map<string, () => void>();
+  const selectionSubscription = { dispose: vi.fn() };
+  const sheetSubscription = { dispose: vi.fn() };
+  const range = { getRow: () => 2, getColumn: () => 1 };
+  const sheet = { getRange: vi.fn((cell: string) => cell), setActiveRange: vi.fn() };
   const subscription = { dispose: vi.fn() };
   const workbook = {
     getId: () => "book",
+    getActiveCell: vi.fn(() => range as typeof range | null),
+    getSheetBySheetId: vi.fn((id: string) => (id === "data" ? sheet : null)),
     save: () => data,
     getActiveSheet: () => ({
       getSheetId: () => active,
@@ -26,7 +33,11 @@ const mock = vi.hoisted(() => {
     }),
   };
   const api = {
-    Event: { CommandExecuted: "executed" },
+    Event: {
+      CommandExecuted: "executed",
+      SelectionChanged: "selection",
+      ActiveSheetChanged: "sheet",
+    },
     createWorkbook: vi.fn((next: Record<string, unknown>) => {
       data = next;
       active = "data";
@@ -35,14 +46,24 @@ const mock = vi.hoisted(() => {
     disposeUnit: vi.fn(),
     toggleDarkMode: vi.fn(),
     addEvent: vi.fn((_name: string, callback: typeof handler) => {
-      handler = callback;
-      return subscription;
+      if (_name === "executed") {
+        handler = callback;
+        return subscription;
+      }
+      events.set(_name, callback as unknown as () => void);
+      return _name === "selection" ? selectionSubscription : sheetSubscription;
     }),
   };
   const univer = { dispose: vi.fn() };
   return {
     api,
     workbook,
+    sheet,
+    range,
+    selectionSubscription,
+    sheetSubscription,
+    select: () => events.get("selection")?.(),
+    activate: () => events.get("sheet")?.(),
     univer,
     subscription,
     emit: (event: Parameters<typeof handler>[0]) => handler(event),
@@ -364,4 +385,56 @@ it("enforces view-only access at mount, after reload and after losing write acce
   await Promise.resolve();
   expect(change).toHaveBeenCalledOnce();
   engine.dispose();
+});
+
+it("bridges cell selections and structural events without the comments preset", async () => {
+  const engine = await mount();
+  const select = vi.fn();
+  const structure = vi.fn();
+  const offSelect = engine.onSelection?.(select);
+  const offStructure = engine.onStructure?.(structure);
+  expect(engine.selectedCell?.()).toEqual({ sheetId: "data", cell: "B3", deleted: false });
+  mock.select();
+  mock.activate();
+  expect(select).toHaveBeenCalledTimes(2);
+  engine.selectCell?.({ sheetId: "data", cell: "D5", deleted: false });
+  expect(mock.sheet.setActiveRange).toHaveBeenCalledWith("D5");
+  engine.selectCell?.({ sheetId: "data", cell: "D5", deleted: true });
+  engine.selectCell?.({ sheetId: "missing", cell: "D5", deleted: false });
+  expect(mock.sheet.setActiveRange).toHaveBeenCalledOnce();
+  mock.workbook.getActiveCell.mockReturnValueOnce(null);
+  expect(engine.selectedCell?.()).toBeUndefined();
+  mock.emit({
+    ...mutation,
+    id: "sheet.mutation.insert-row",
+    params: {
+      unitId: "book",
+      subUnitId: "data",
+      range: { startRow: 2, endRow: 3 },
+    } as typeof mutation.params,
+  });
+  expect(structure).toHaveBeenCalledWith({
+    sheet: "data",
+    axis: "row",
+    kind: "insert",
+    index: 3,
+    count: 2,
+  });
+  offSelect?.();
+  offStructure?.();
+  mock.select();
+  mock.emit({
+    ...mutation,
+    id: "sheet.mutation.remove-rows",
+    params: {
+      unitId: "book",
+      subUnitId: "data",
+      range: { startRow: 2, endRow: 3 },
+    } as typeof mutation.params,
+  });
+  expect(select).toHaveBeenCalledTimes(3);
+  expect(structure).toHaveBeenCalledOnce();
+  engine.dispose();
+  expect(mock.selectionSubscription.dispose).toHaveBeenCalledOnce();
+  expect(mock.sheetSubscription.dispose).toHaveBeenCalledOnce();
 });

@@ -19,8 +19,10 @@
  * Both are interfaces so the UI can be exercised against fakes in unit tests.
  */
 
+import type { CellAnchor } from "./comments/selector";
 import type { WorkbookMetadata } from "./model/rdf";
 import type { Snapshot } from "./model/snapshot";
+import type { StructuralEdit } from "./refs/model";
 
 export type { Snapshot, WorkbookMetadata };
 
@@ -180,6 +182,10 @@ export interface ActiveSheet {
 }
 
 export interface SheetEngine {
+  selectedCell?(): CellAnchor | undefined;
+  selectCell?(anchor: CellAnchor): void;
+  onSelection?(listener: (anchor: CellAnchor | undefined) => void): () => void;
+  onStructure?(listener: (edit: StructuralEdit) => void): () => void;
   /** Replace the whole workbook (e.g. "reload theirs" after a conflict). Does not fire `onChange`. */
   load(snapshot: Snapshot): void;
   /** The current workbook as a JSON-safe snapshot (passes `serializeSnapshot`). */

@@ -45,6 +45,7 @@ import {
 import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
+import { WorkbookComments } from "./cell-comments";
 import { ShareWorkbook } from "./share-workbook";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
 import "@univerjs/preset-sheets-core/lib/index.css";
@@ -82,7 +83,9 @@ function Grid({
   onChange,
   engineRef,
   readOnly,
+  onReady,
 }: {
+  onReady: (engine: SheetEngine | null) => void;
   snapshot: Snapshot;
   onChange: (read: () => Snapshot) => void;
   engineRef: { current: SheetEngine | null };
@@ -126,6 +129,7 @@ function Grid({
         return;
       }
       engineRef.current = engine;
+      onReady(engine);
       engine.setDark(dark.current);
       engine.setReadOnly(viewOnly.current);
       const active = engine;
@@ -142,9 +146,10 @@ function Grid({
       unsubscribe?.();
       if (window.__sheetsEngine === engine) delete window.__sheetsEngine;
       engineRef.current = null;
+      onReady(null);
       engine?.dispose();
     };
-  }, [engineRef, onChange, attempt]);
+  }, [engineRef, onChange, onReady, attempt]);
   return (
     <section
       className="sht-grid-region"
@@ -181,6 +186,7 @@ export function SheetEditor({ container }: { container: string }) {
   const service = useWorkbookService();
   const router = useRouter();
   const engine = useRef<SheetEngine | null>(null);
+  const [commentEngine, setCommentEngine] = useState<SheetEngine | null>(null);
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -344,12 +350,14 @@ export function SheetEditor({ container }: { container: string }) {
     >
       <div className="sht-editor">
         <h1 className="sr-only">{title}</h1>
+        {state.workbook && <WorkbookComments container={container} engine={commentEngine} />}
         {state.workbook ? (
           <Grid
             key={grid?.revision ?? 0}
             snapshot={state.workbook.snapshot}
             onChange={state.scheduleSave}
             engineRef={engine}
+            onReady={setCommentEngine}
             readOnly={state.readOnly}
           />
         ) : (
