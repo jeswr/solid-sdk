@@ -2451,6 +2451,9 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-events':
+        specifier: workspace:*
+        version: link:../../packages/solid-events
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
@@ -4869,6 +4872,34 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@22.20.1)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@22.20.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-events:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
 
   packages/solid-federation-vocab:
     devDependencies:

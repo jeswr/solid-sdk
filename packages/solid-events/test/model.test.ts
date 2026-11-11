@@ -1,0 +1,146 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+import { describe, expect, it } from "vitest";
+import {
+  EVENT_STATUS,
+  type EventData,
+  entities,
+  eventDocumentUrl,
+  RSVP_RESPONSE,
+  type RsvpData,
+  validateEvent,
+  validateInvitee,
+  validateRsvp,
+} from "../src/index.js";
+export const event: EventData = {
+  name: "Lantern supper",
+  startDate: new Date("2027-02-01T18:00:00Z"),
+  organizer: "https://host.example/profile#me",
+  eventStatus: EVENT_STATUS.scheduled,
+  guestListVisible: false,
+  visibility: "link",
+  publication: "published",
+  created: new Date("2026-11-11T12:00:00Z"),
+  modified: new Date("2026-11-11T12:00:00Z"),
+};
+export const rsvp: RsvpData = {
+  agent: "https://guest.example/profile#me",
+  event: "https://host.example/events/1/index.ttl#it",
+  response: RSVP_RESPONSE.yes,
+  additionalGuests: 1,
+  repliedAt: new Date("2026-11-12T12:00:00Z"),
+};
+describe("generated independent entities", () => {
+  it("round-trips every invitation property and schema.org IRI enums", async () => {
+    const data = {
+      ...event,
+      description: "Plain <b>text</b>",
+      endDate: new Date("2027-02-01T21:00:00Z"),
+      location: "Glasshouse",
+      address: "12 Lantern Lane",
+      onlineUrl: "https://meeting.example/room",
+      image: "https://images.example/cover.jpg",
+      capacity: 12,
+      rsvpDeadline: new Date("2027-01-31T12:00:00Z"),
+    };
+    expect(
+      await entities.Event.parseDocument(
+        "https://host.example/event",
+        await entities.Event.serialize("https://host.example/event", data),
+      ),
+    ).toEqual(data);
+    expect(() => validateEvent(data)).not.toThrow();
+  });
+  it("round-trips RSVP alone and named guest records", async () => {
+    const data = {
+      ...rsvp,
+      displayName: "Cleo Wren",
+      guestKey: "a-random-guest",
+      comment: "Pudding!",
+    };
+    expect(
+      await entities.Rsvp.parseDocument(
+        "https://host.example/reply",
+        await entities.Rsvp.serialize("https://host.example/reply", data),
+      ),
+    ).toEqual(data);
+    expect(() => validateRsvp(data)).not.toThrow();
+    const invitee = {
+      webId: rsvp.agent,
+      displayName: "Cleo",
+      event: rsvp.event,
+      invitedAt: rsvp.repliedAt,
+    };
+    expect(
+      await entities.Invitee.parseDocument(
+        "https://host.example/invitee",
+        await entities.Invitee.serialize("https://host.example/invitee", invitee),
+      ),
+    ).toEqual(invitee);
+    expect(() => validateInvitee(invitee)).not.toThrow();
+    expect(() =>
+      validateInvitee({ event: rsvp.event, invitedAt: rsvp.repliedAt, displayName: "Cleo" }),
+    ).not.toThrow();
+  });
+  it("does not accept a missing MUST or invalid IRI enum", () => {
+    expect(
+      entities.Event.parse(
+        "https://host.example/e",
+        entities.Event.build("https://host.example/e", { ...event, name: "" }),
+      ),
+    ).toBeUndefined();
+    expect(
+      entities.Rsvp.parse(
+        "https://host.example/r",
+        entities.Rsvp.build("https://host.example/r", {
+          ...rsvp,
+          response: "bad" as RsvpData["response"],
+        }),
+      ),
+    ).toBeUndefined();
+    expect(() => entities.Event.subject("relative")).toThrow();
+  });
+});
+describe("domain validation", () => {
+  it.each([
+    "file:///etc/passwd",
+    "https://user:secret@pod.example/e",
+    "https://pod.example/e?q=1",
+    "https://pod.example/evil>iri",
+    "relative",
+  ])("refuses unsafe event URL %s", (url) => expect(() => eventDocumentUrl(url)).toThrow());
+  it("accepts http(s) and strips the entity fragment", () => {
+    expect(eventDocumentUrl("https://pod.example/e#it")).toBe("https://pod.example/e");
+    expect(eventDocumentUrl("http://pod.example/e")).toBe("http://pod.example/e");
+  });
+  it.each([
+    { name: " " },
+    { startDate: new Date("invalid") },
+    { endDate: new Date("invalid") },
+    { endDate: event.startDate },
+    { rsvpDeadline: new Date("invalid") },
+    { rsvpDeadline: new Date("2030-01-01T00:00:00Z") },
+    { capacity: -1 },
+    { capacity: 1.5 },
+    { capacity: 1000001 },
+    { onlineUrl: "javascript:alert(1)" },
+    { image: "https://user:secret@images.example/a" },
+    { organizer: "bad" },
+  ])("rejects malformed event %j", (patch) =>
+    expect(() => validateEvent({ ...event, ...patch })).toThrow());
+  it("supports zero capacity, optional end and a deadline at the start", () =>
+    expect(() =>
+      validateEvent({ ...event, capacity: 0, rsvpDeadline: event.startDate }),
+    ).not.toThrow());
+  it("requires named guest identity without a WebID", () => {
+    expect(() => validateRsvp({ ...rsvp, agent: undefined })).toThrow();
+    expect(() =>
+      validateRsvp({ ...rsvp, agent: undefined, displayName: "Cleo", guestKey: "receipt" }),
+    ).not.toThrow();
+    expect(() => validateRsvp({ ...rsvp, additionalGuests: -1 })).toThrow();
+    expect(() => validateRsvp({ ...rsvp, agent: "javascript:evil" })).toThrow();
+    expect(() => validateInvitee({ event: rsvp.event, invitedAt: rsvp.repliedAt })).toThrow();
+    expect(() =>
+      validateInvitee({ event: rsvp.event, invitedAt: rsvp.repliedAt, webId: "file:///tmp/me" }),
+    ).toThrow();
+  });
+});
