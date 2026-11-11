@@ -1,9 +1,5 @@
-// AUTHORED-BY Claude Opus 5.5
-import type { Metadata } from "next";
-import { PlannedApp } from "@/apps/planned/planned-app";
-
-export const metadata: Metadata = { title: "Insights · Solid Suite" };
-
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+import { Overview } from "@/apps/insights/components/views";
 export default function Page() {
-  return <PlannedApp app="insights" />;
+  return <Overview />;
 }

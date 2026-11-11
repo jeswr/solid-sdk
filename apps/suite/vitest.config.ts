@@ -179,6 +179,8 @@ export default defineConfig({
         "src/apps/photos/lib/data/**/*.ts",
         "src/apps/sheets/lib/workbook/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
+        "src/apps/insights/lib/**/*.ts",
+        "src/apps/insights/state/**/*.tsx",
       ],
       exclude: ["src/apps/contacts/state/**/*.tsx"],
       reporter: ["text", "json", "json-summary"],
