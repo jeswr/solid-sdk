@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-native
 
@@ -18,6 +19,7 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | `openPdf(plugin, name, bytes, signal?)` | Drive's native "Open PDF" (MOB-P3 E5): checks the 25 MiB cap and `%PDF-` signature, sends 1 MiB base64 chunks to `SuiteFiles`, opens the platform viewer; aborting `signal` stops before the next native call. Failures are `PdfPreviewError` with code `too-large`, `not-pdf`, `no-viewer`, `cancelled` or `failed`. |
 | `clearPdfPreviews(plugin)` | Call on sign-out or account switch: drops any transfer, closes QuickLook on iOS and deletes every cached preview file. Failures are `PdfPreviewError` with code `failed`. |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
+| `validatePredecessorOrigins(value)` | Pure validation of a predecessor-origin migration plan; preserves order and duplicates for caller policy. |
 | `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteFiles`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
 
 ```ts
@@ -122,3 +124,14 @@ responses reject with `SecureStoreError("failed")`. The method takes no origin, 
 other arguments. Native startup performs the migration from the signed bundle's predecessor
 list before starting the bridge; JavaScript cannot initiate it or clear another namespace.
 Remote builds return false. The journal survives interruption and app restarts until consumed.
+
+`validatePredecessorOrigins(value)` accepts an array of at most 32 canonical HTTPS origin strings:
+no credentials, path (including a trailing slash), query, fragment, port zero, `localhost` or
+`.localhost` subdomain. Non-default ports from 1 to 65535 are allowed; an explicit `:443` is
+non-canonical and rejected. Empty plans are valid. It returns `{ valid: true, origins: string[] }`
+or `{ valid: false, reason: "list" | "origin" }`, without mutating or normalising the input or
+including it in errors. Validation covers the entire original list before duplicate handling:
+the suite build script deduplicates in first-seen order; mobile bundle checks reject duplicates.
+The root export has no Capacitor import and resolves to compiled `dist/index.js` in Node build
+scripts. Build workspace dependencies first, for example with
+`pnpm turbo run build --filter=@jeswr/app-suite^... --filter=@jeswr/app-mobile^...`.

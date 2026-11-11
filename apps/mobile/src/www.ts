@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY GPT-5.6 Codex
 import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
 import { type MobileEnv, suiteMode, suiteOrigin } from "./config.ts";
 
 const escapeXml = (value: string) =>
@@ -81,22 +82,9 @@ export function checkBundle(exportDir: URL): void {
   if (clientId?.protocol !== "https:" || clientId.username || clientId.password) {
     throw new Error("The suite export's Client ID URL must be https");
   }
-  if (!Array.isArray(info.predecessorOrigins) || info.predecessorOrigins.length > 32)
-    throw new Error("Invalid predecessorOrigins");
-  for (const entry of info.predecessorOrigins) {
-    const url = typeof entry === "string" ? URL.parse(entry) : null;
-    if (
-      url?.protocol !== "https:" ||
-      url.origin !== entry ||
-      url.username ||
-      url.password ||
-      url.port === "0" ||
-      url.hostname === "localhost" ||
-      url.hostname.endsWith(".localhost")
-    )
-      throw new Error("Invalid predecessorOrigins");
-  }
-  if (new Set(info.predecessorOrigins).size !== info.predecessorOrigins.length)
+  const predecessors = validatePredecessorOrigins(info.predecessorOrigins);
+  if (!predecessors.valid) throw new Error("Invalid predecessorOrigins");
+  if (new Set(predecessors.origins).size !== predecessors.origins.length)
     throw new Error("Duplicate predecessorOrigins");
   for (const name of ["route-manifest.json", "404.html", "index.html"]) {
     if (!existsSync(file(name))) throw new Error(`The suite export has no ${name}`);

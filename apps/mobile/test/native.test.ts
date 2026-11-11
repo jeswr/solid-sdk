@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, test } from "vitest";
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
+import { describe, expect, test, vi } from "vitest";
 import { DEFAULT_SUITE_URL } from "../src/config.ts";
 import {
   checkBundle,
@@ -15,6 +16,8 @@ import {
   withAppBoundDomain,
   withLocalNetworking,
 } from "../src/www.ts";
+
+vi.mock("@jeswr/suite-native", { spy: true });
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -197,6 +200,23 @@ describe("iOS project", () => {
         );
       }));
 
+    test.each([
+      "list",
+      "origin",
+    ] as const)("refuses a plan rejected by the SDK for %s validation", (reason) =>
+      withRoot((root) => {
+        const dir = exportTree(root, good);
+        vi.mocked(validatePredecessorOrigins).mockReturnValueOnce({ valid: false, reason });
+        expect(() => checkBundle(pathToFileURL(`${dir}/`))).toThrow(/^Invalid predecessorOrigins$/);
+        expect(validatePredecessorOrigins).toHaveBeenLastCalledWith(good.predecessorOrigins);
+      }));
+
+    test("accepts an intentional empty predecessor plan", () =>
+      withRoot((root) => {
+        const dir = exportTree(root, { ...good, predecessorOrigins: [] });
+        expect(() => checkBundle(pathToFileURL(`${dir}/`))).not.toThrow();
+      }));
+
     test.each<[string, Record<string, unknown>, string, string]>([
       ["a web export", { ...good, target: "web" }, "", "native target"],
       ["an http Client ID", { ...good, clientIdUrl: "http://suite.example/id" }, "", "https"],
@@ -210,36 +230,20 @@ describe("iOS project", () => {
         "predecessorOrigins",
       ],
       [
-        "path predecessor",
-        { ...good, predecessorOrigins: ["https://suite.example/path"] },
+        "duplicate predecessors",
+        { ...good, predecessorOrigins: ["https://old.example", "https://old.example"] },
         "",
-        "predecessorOrigins",
+        "Duplicate predecessorOrigins",
       ],
-      ...[
-        undefined,
-        null,
-        {},
-        "https://old.example",
-        [true],
-        ["https://old.example/"],
-        ["http://old.example"],
-        ["https://u@old.example"],
-        ["https://old.example?"],
-        ["https://old.example#"],
-        ["https://localhost"],
-        ["capacitor://localhost"],
-        ["https://old.example", "https://old.example"],
-        ["https://old.example:0"],
-        ["https://old.example", "https://bad.example/path"],
-      ].map(
-        (predecessorOrigins) =>
-          [
-            "invalid predecessor plan",
-            { ...good, predecessorOrigins },
-            "",
-            "predecessorOrigins",
-          ] as [string, Record<string, unknown>, string, string],
-      ),
+      [
+        "an invalid origin after duplicate predecessors",
+        {
+          ...good,
+          predecessorOrigins: ["https://old.example", "https://old.example", "https://localhost"],
+        },
+        "",
+        "Invalid predecessorOrigins",
+      ],
       ["no route manifest", good, "route-manifest.json", "route-manifest.json"],
       ["no 404 page", good, "404.html", "404.html"],
     ])("refuses %s", (_, info, skip, message) =>

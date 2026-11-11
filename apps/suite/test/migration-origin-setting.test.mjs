@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6
-import { expect, it } from "vitest";
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
+import { expect, it, vi } from "vitest";
 import { nativeSettings } from "../scripts/native-settings.mjs";
+
+vi.mock("@jeswr/suite-native", { spy: true });
 
 it("bakes the public remote origin by default without changing production URLs", () => {
   expect(nativeSettings({})).toEqual({
@@ -29,42 +32,32 @@ it("deduplicates explicit predecessor origins and allows an intentional empty li
 });
 
 it.each([
-  "http://old.example",
-  "capacitor://localhost",
-  "https://localhost",
-  "https://a.localhost",
-  "https://old.example/",
-  "https://old.example/path",
-  "https://old.example/../",
-  "https://old.example?",
-  "https://old.example#",
-  "https://user@old.example",
-  "https://user:secret@old.example",
-  " https://old.example",
-  "https://old.example\n",
-  "https://old.example\\path",
-  "https://OLD.example",
-  "https://old.example:443",
-  "https://old.example:0",
-  "https://old.example:65536",
-  "file:///etc/passwd",
-  "",
-  null,
-  1,
-  {},
-])("rejects the entire plan containing hostile entry %j", (entry) => {
-  expect(() =>
-    nativeSettings({ PREDECESSOR_ORIGINS: JSON.stringify(["https://valid.example", entry]) }),
-  ).toThrow();
+  ["list", "PREDECESSOR_ORIGINS must be a JSON array of https origins"],
+  ["origin", "PREDECESSOR_ORIGINS must contain canonical remote https origins"],
+])("preserves the caller error when the SDK rejects a %s", (reason, message) => {
+  const origins = ["https://old.example", "https://old.example"];
+  vi.mocked(validatePredecessorOrigins).mockReturnValueOnce({ valid: false, reason });
+  expect(() => nativeSettings({ PREDECESSOR_ORIGINS: JSON.stringify(origins) })).toThrow(message);
+  expect(validatePredecessorOrigins).toHaveBeenLastCalledWith(origins);
 });
 
-it.each([
-  "",
-  "{",
-  "null",
-  "{}",
-  '"https://old.example"',
-  JSON.stringify(Array(33).fill("https://old.example")),
-])("rejects malformed or unbounded setting %s", (setting) => {
-  expect(() => nativeSettings({ PREDECESSOR_ORIGINS: setting })).toThrow();
+it("validates the original plan before deduplicating", () => {
+  expect(() =>
+    nativeSettings({ PREDECESSOR_ORIGINS: JSON.stringify(Array(33).fill("https://old.example")) }),
+  ).toThrow("PREDECESSOR_ORIGINS must be a JSON array of https origins");
+  expect(() =>
+    nativeSettings({
+      PREDECESSOR_ORIGINS: JSON.stringify([
+        "https://old.example",
+        "https://old.example",
+        "https://localhost",
+      ]),
+    }),
+  ).toThrow("PREDECESSOR_ORIGINS must contain canonical remote https origins");
+});
+
+it("rejects malformed predecessor JSON before calling the SDK", () => {
+  vi.mocked(validatePredecessorOrigins).mockClear();
+  expect(() => nativeSettings({ PREDECESSOR_ORIGINS: "[" })).toThrow(SyntaxError);
+  expect(validatePredecessorOrigins).not.toHaveBeenCalled();
 });

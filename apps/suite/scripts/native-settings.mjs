@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
 import { clientIdDocumentUrl, publicBaseUrl } from "../src/lib/public-url.ts";
 
 export function nativeSettings(env) {
@@ -23,25 +24,13 @@ export function nativeSettings(env) {
     env.PREDECESSOR_ORIGINS === undefined
       ? [new URL(publicSuiteUrl).origin]
       : JSON.parse(env.PREDECESSOR_ORIGINS);
-  if (!Array.isArray(predecessors) || predecessors.length > 32)
-    throw new Error("PREDECESSOR_ORIGINS must be a JSON array of https origins");
-  const predecessorOrigins = [
-    ...new Set(
-      predecessors.map((value) => {
-        const url = typeof value === "string" ? URL.parse(value) : null;
-        if (
-          url?.protocol !== "https:" ||
-          url.origin !== value ||
-          url.username ||
-          url.password ||
-          url.port === "0" ||
-          url.hostname === "localhost" ||
-          url.hostname.endsWith(".localhost")
-        )
-          throw new Error("PREDECESSOR_ORIGINS must contain canonical remote https origins");
-        return value;
-      }),
-    ),
-  ];
+  const plan = validatePredecessorOrigins(predecessors);
+  if (!plan.valid)
+    throw new Error(
+      plan.reason === "list"
+        ? "PREDECESSOR_ORIGINS must be a JSON array of https origins"
+        : "PREDECESSOR_ORIGINS must contain canonical remote https origins",
+    );
+  const predecessorOrigins = [...new Set(plan.origins)];
   return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl, predecessorOrigins };
 }

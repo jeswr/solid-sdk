@@ -3,6 +3,7 @@ name: suite-native
 description: Use when working on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, refresh-token secure store, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-native
 
@@ -126,3 +127,14 @@ Read `solid-suite-planning/specs/mobile/P4-SECURE-STORE.md` completely before ch
   `build-info.json.predecessorOrigins` plan. Check every artifact even with completion markers,
   persist notice intent before deletion, and preserve the current namespace and share inbox.
   Keep JVM/XCTest isolation, interruption and malformed-plan tests with changes to this seam.
+
+- Use the pure root export `validatePredecessorOrigins(value)` for JavaScript migration-plan
+  validation. It returns `{ valid: true, origins: string[] }` or
+  `{ valid: false, reason: "list" | "origin" }`. Reject non-arrays, lists over 32 entries,
+  non-string or non-canonical HTTPS origins, credentials, port zero, `localhost` and `.localhost`
+  subdomains. Non-default ports 1–65535 are valid; explicit `:443` is non-canonical. Empty lists
+  are valid. Preserve order and duplicates; callers apply their own duplicate policy only after
+  the complete plan passes. Keep exhaustive shared-rule tests here and thin caller wiring tests.
+- Node build scripts import `@jeswr/suite-native` through compiled `dist/index.js`, never source
+  paths. Both apps already declare `workspace:*`; build their dependencies first with
+  `pnpm turbo run build --filter=@jeswr/app-suite^... --filter=@jeswr/app-mobile^...`.

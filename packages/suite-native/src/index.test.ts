@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { expect, test, vi } from "vitest";
 import * as api from "./index.js";
 
@@ -40,6 +41,7 @@ test("the root entry point exposes the runtime API without importing Capacitor",
     "share",
     "shareFiles",
     "stageFile",
+    "validatePredecessorOrigins",
     "validateShareBatch",
   ]);
   expect(new api.UserCancelledError("x")).toBeInstanceOf(api.SuiteNativeError);
