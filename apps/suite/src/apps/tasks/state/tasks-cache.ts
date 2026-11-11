@@ -12,6 +12,7 @@ import { createTracker, type TaskTracker } from "../lib/model/tracker";
 import { runBulk } from "../lib/views/bulk";
 import { completedHistoryToKeep, completedParentsToKeep } from "../lib/views/clear-completed";
 import { type CompletionPlan, planComplete, planUndo } from "../lib/views/completion";
+import { type FilterQuery, serializeFilterQuery } from "../lib/views/filter-query";
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
@@ -1733,6 +1734,24 @@ export class TasksCache {
       return running;
     };
     return run;
+  }
+  /** Personal filters always live on the user's Inbox, including when a shared project is open. */
+  saveFilter(name: string, query: FilterQuery, iri?: string) {
+    const payload = serializeFilterQuery(query);
+    const inbox = this.snapshot.projects.find((project) => project.url === this.inboxUrl);
+    if (!inbox) return Promise.resolve(undefined);
+    let target = "";
+    changeProject(inbox, (tracker) => {
+      target = tracker.defineSavedView(name, payload, iri).iri;
+    });
+    return this.updateProject(inbox, (tracker) => {
+      tracker.defineSavedView(name, payload, target);
+    }).then((project) => project?.tracker.savedViews.find((view) => view.iri === target));
+  }
+  removeFilter(iri: string) {
+    const inbox = this.snapshot.projects.find((project) => project.url === this.inboxUrl);
+    if (!inbox) return Promise.resolve(undefined);
+    return this.updateProject(inbox, (tracker) => tracker.removeSavedView(iri));
   }
   updateProject(
     project: StoredProject,
