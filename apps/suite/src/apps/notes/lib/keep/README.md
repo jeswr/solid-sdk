@@ -61,3 +61,12 @@ unknown fields, and malformed Unicode fail with `INVALID_KEEP_NOTE`.
 Invalid/out-of-range timestamps use `INVALID_TIMESTAMP`; unsafe attachment
 references use `UNSAFE_ATTACHMENT_PATH`. Unsupported fields are rejected at
 every object level. These are plain TypeScript helpers with no dependencies.
+
+The import planner optionally receives the selected folder’s files keyed by
+relative path. It resolves each attachment relative to its JSON file and accepts
+only the shared Docs image MIME types and 20 MB limit. Missing or unsupported
+files remain in Takeout and are counted in the review. The folder import uploads
+accepted images to `notes/media/` before creating the note, marking them
+decorative because Takeout supplies no description. Descriptions can be edited
+in Notes. Attachment-only notes are included when image bytes are available.
+Choosing only JSON files cannot import the attachments.

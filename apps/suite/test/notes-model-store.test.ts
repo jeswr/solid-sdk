@@ -717,8 +717,11 @@ it("never deletes a replacement at the confirmed trash URL", async () => {
   await expect(s.store.deleteForever(confirmed.url, confirmed.etag)).rejects.toBeInstanceOf(
     NoteConflictError,
   );
-  expect(s.calls).toEqual([{ url: confirmed.url, method: "DELETE", headers: expect.any(Headers) }]);
-  expect(s.calls[0]?.headers.get("if-match")).toBe(confirmed.etag);
+  expect(s.calls).toEqual([
+    { url: confirmed.url, method: "GET", headers: expect.any(Headers) },
+    { url: confirmed.url, method: "DELETE", headers: expect.any(Headers) },
+  ]);
+  expect(s.calls[1]?.headers.get("if-match")).toBe(confirmed.etag);
   expect(await s.store.read(replacement.url)).toEqual(replacement);
 });
 

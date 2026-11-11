@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
-import { validLink } from "../../../docs/lib/editor/logic";
+import { validateImage, validLink } from "../../../docs/lib/editor/logic";
 import type { NoteColour } from "../model/prefs";
 import type { NoteChanges } from "../model/store";
 import { captureTitle, escapeHtml, taskListHtml } from "../ui/capture";
@@ -39,11 +40,12 @@ export const KEEP_SKIP_REASONS: Record<
   UNSAFE_ATTACHMENT_PATH: "Has an attachment Notes can't safely read",
   duplicate: "Already in Notes",
   empty: "Has no text to import",
-  attachmentsOnly: "Only has images or recordings, which Notes can't store yet",
+  attachmentsOnly: "Only has images or recordings that are unavailable or unsupported",
 };
 
 export interface KeepImportItem {
   readonly fileName: string;
+  readonly images?: readonly Blob[];
   readonly input: Required<NoteChanges>;
   readonly pinned: boolean;
   readonly colour: NoteColour;
@@ -56,7 +58,7 @@ export interface KeepImportPlan {
   readonly trashed: number;
   /** Non-JSON files in the selection, such as the HTML copies and images Takeout adds. */
   readonly ignored: number;
-  /** Attachment files referenced by the ready notes; Notes can't store them yet. */
+  /** Unavailable or unsupported attachment files referenced by the ready notes. */
   readonly attachments: number;
   /** Ready notes with an unknown colour or a link that is not a web address. */
   readonly adjusted: number;
@@ -129,17 +131,22 @@ export function keepDraftToNote(
 
 /** Identifies a note by its title, body and labels, to spot notes imported before. */
 export const keepFingerprint = (note: { title: string; body: string; labels: readonly string[] }) =>
-  JSON.stringify([note.title.trim(), note.body, [...note.labels].sort()]);
+  JSON.stringify([
+    note.title.trim(),
+    note.body.replace(/<img\b[^>]*>/gi, ""),
+    [...note.labels].sort(),
+  ]);
 
 /**
  * Parse a Takeout selection and decide what to import. Only `.json` files are read,
- * notes from Keep's Trash and notes with no text are left out, and a note whose title,
+ * notes from Keep's Trash and notes with no text or available images are left out, and a note whose title,
  * body and labels already match an existing note is skipped, so choosing the same files
  * twice does not duplicate them.
  */
 export function planKeepImport(
   files: readonly KeepNoteFile[],
   existing: readonly { title: string; body: string; labels: readonly string[] }[],
+  media: ReadonlyMap<string, File> = new Map(),
 ): KeepImportPlan {
   const json = files.filter((file) => /\.json$/i.test(file.fileName));
   if (json.length > MAX_KEEP_BATCH_FILES)
@@ -172,7 +179,23 @@ export function planKeepImport(
       trashed++;
       continue;
     }
-    if (!item.input.title && !item.input.body) {
+    const images = result.draft.attachments.flatMap((attachment) => {
+      const directory = fileName.slice(0, fileName.lastIndexOf("/") + 1);
+      const path = (directory + attachment.filePath.replace(/\\/g, "/"))
+        .split("/")
+        .filter((part) => part !== ".")
+        .join("/");
+      const file = media.get(path);
+      if (!file || (file.type && file.type !== attachment.mimetype)) return [];
+      const blob = new Blob([file], { type: attachment.mimetype });
+      return validateImage(blob) ? [] : [blob];
+    });
+    if (images.length) Object.assign(item, { images });
+    if (images.length && !item.input.title && !item.input.body)
+      item.input.title = captureTitle(
+        fileName.slice(fileName.lastIndexOf("/") + 1).replace(/\.json$/i, "") || "Image note",
+      );
+    if (!item.input.title && !item.input.body && !images.length) {
       skipped.push({
         fileName,
         reason: result.draft.attachments.length
@@ -187,7 +210,7 @@ export function planKeepImport(
       continue;
     }
     seen.add(key);
-    attachments += result.draft.attachments.length;
+    attachments += result.draft.attachments.length - images.length;
     if (result.warnings.some((warning) => warning.code !== "TEXT_CONTENT_IGNORED")) adjusted++;
     ready.push(item);
   }
