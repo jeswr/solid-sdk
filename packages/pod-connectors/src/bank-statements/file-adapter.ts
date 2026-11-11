@@ -120,10 +120,8 @@ export function createBankStatementsFileAdapter(
           if (txn.bank) inv.postingTime = txn.postingTime;
           else if (txn.date) inv.dateCreated = txn.date;
           inv.identifier = txn.sourceId;
-          inv.fee =
-            txn.fee !== undefined && amountKey(txn.fee) !== "0"
-              ? `${txn.fee} ${txn.currency}`
-              : undefined;
+          if (txn.fee !== undefined && amountKey(txn.fee) !== "0")
+            inv.fee = `${txn.fee} ${txn.currency}`;
           if (txn.accountKey) {
             const account = new BankAccount(
               `${doc}#account-${accountSlug}`,
