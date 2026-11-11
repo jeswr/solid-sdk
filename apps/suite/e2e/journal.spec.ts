@@ -53,6 +53,7 @@ for (const width of [375, 768, 1280])
         buffer: Buffer.from(HILLS_PNG),
       });
       await editor.getByRole("button", { name: "Preview", exact: true }).click();
+      await expect(editor.getByRole("heading", { name: "Remember this", level: 3 })).toBeVisible();
       await expect(
         editor.getByRole("region", { name: "Markdown preview" }).locator("strong"),
       ).toHaveText("time");

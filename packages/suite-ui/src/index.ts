@@ -44,6 +44,7 @@ export {
   previewKind,
 } from "./components/preview-pane.js";
 export * from "./components/render-async.js";
+export { SafeMarkdown, type SafeMarkdownProps } from "./components/safe-markdown.js";
 export {
   type SurfaceError,
   type SurfaceState,

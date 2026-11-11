@@ -69,7 +69,7 @@ export function markdownToPlainText(markdown: string): string {
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\[[^\]]*\]/g, "$1")
     .replace(/^\s*\[[^\]]+\]:.*$/gm, "")
-    .replace(/<[^>]*>/g, "")
+    .replace(/<\/?[a-zA-Z][^>]*>/g, "")
     .replace(/^\s{0,3}(?:#{1,6}\s+|>\s*|[-+*]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/gm, "")
     .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
     .replace(/\\([\\`*_{}[\]()#+.!>-])/g, "$1")

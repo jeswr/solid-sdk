@@ -8,7 +8,8 @@ import { entryEntity } from "../src/model.js";
 import { protectJournal } from "../src/privacy.js";
 import { createJournalStore, openJournal, validatePhoto } from "../src/store.js";
 
-vi.mock("../src/privacy.js", () => ({
+vi.mock("../src/privacy.js", async (original) => ({
+  ...(await original<typeof import("../src/privacy.js")>()),
   protectJournal: vi.fn(async () => {}),
   verifyJournalResource: vi.fn(async () => {}),
 }));
@@ -131,6 +132,7 @@ it("accepts only bounded inert photo types and confines all attachment URLs", as
     `${store.container}../profile/card`,
     `${store.container}photo.png?x=1`,
     `${store.container}photo.png#x`,
+    `${store.container}nested/photo.png`,
     store.container,
   ])
     await expect(store.photo(url)).rejects.toThrow();

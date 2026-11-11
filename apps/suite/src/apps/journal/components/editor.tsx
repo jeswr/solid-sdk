@@ -17,11 +17,11 @@ import {
   DialogTitle,
   Input,
   Label,
+  SafeMarkdown,
   Textarea,
 } from "@jeswr/suite-ui";
 import { useState } from "react";
 import { useJournal } from "../state/journal-context";
-import { Markdown } from "./markdown";
 
 function dateInput(date: Date) {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -146,7 +146,9 @@ export function Editor({
           </div>
           {preview ? (
             <section className="jn-preview" aria-label="Markdown preview">
-              <Markdown text={text || "Your preview will appear here."} />
+              <SafeMarkdown className="jn-prose">
+                {text || "Your preview will appear here."}
+              </SafeMarkdown>
             </section>
           ) : (
             <Textarea

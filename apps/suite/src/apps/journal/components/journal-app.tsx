@@ -7,7 +7,15 @@ import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-sessio
 import { AppFrame, AppSessionGuard } from "@/shell/app-frame";
 import { JournalProvider } from "../state/journal-context";
 
-function Boot({ error, retry }: { error: boolean; retry?: () => void }) {
+function Boot({
+  error,
+  retry,
+  makePrivate,
+}: {
+  error: boolean;
+  retry?: () => void;
+  makePrivate?: () => void;
+}) {
   return (
     <div className="jn-page">
       {error ? (
@@ -16,6 +24,14 @@ function Boot({ error, retry }: { error: boolean; retry?: () => void }) {
             We couldn't open your private journal. Check your connection and that Journal storage is
             private.
           </p>
+          {makePrivate && (
+            <>
+              <p>
+                This removes other people's access to the journal folder and its inherited entries.
+              </p>
+              <Button onClick={makePrivate}>Make my journal private</Button>
+            </>
+          )}
         </ErrorState>
       ) : (
         <LoadingSkeleton preset="list" label="Opening your journal" />
@@ -37,7 +53,9 @@ function SessionGate({ children }: { children: ReactNode }) {
     <JournalProvider
       key={`${state.session.webId}:${state.session.storageUrl}`}
       session={state.session}
-      fallback={(error, retry) => <Boot error={error} retry={retry} />}
+      fallback={(error, retry, makePrivate) => (
+        <Boot error={error} retry={retry} {...(makePrivate ? { makePrivate } : {})} />
+      )}
     >
       <AppFrame
         app="journal"

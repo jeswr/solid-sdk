@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type { EntryData, JournalEntry, JournalStore } from "@jeswr/solid-journal";
+import {
+  type EntryData,
+  type JournalEntry,
+  JournalPrivacyError,
+  type JournalStore,
+} from "@jeswr/solid-journal";
 import { expect, it, vi } from "vitest";
 import { JournalController } from "../src/apps/journal/state/journal-controller";
 
@@ -20,6 +25,7 @@ function fixture() {
   const store: JournalStore = {
     container: "https://pod.example/journal/",
     initialize: vi.fn(async () => {}),
+    makePrivate: vi.fn(async () => {}),
     list: vi.fn(async () => [...server.values()]),
     save: vi.fn(async (value, existing) => {
       const saved = {
@@ -38,7 +44,7 @@ function fixture() {
   };
   const failed = vi.fn();
   const controller = new JournalController(store, failed);
-  return { store, failed, controller };
+  return { store, failed, controller, server };
 }
 it("loads, notifies subscribers and stops notifying after unsubscribe", async () => {
   const { controller } = fixture();
@@ -195,4 +201,144 @@ it("retains uploaded photo references when a later upload fails, then retries on
   expect(
     controller.getSnapshot().entries.find((entry) => entry.url.endsWith("new.ttl"))?.images,
   ).toEqual(["https://pod.example/journal/first.png", "https://pod.example/journal/second.png"]);
+});
+
+it("uses the editor's ETag after a notification refresh, for saves and deletes", async () => {
+  const { store, controller, server } = fixture();
+  await controller.load();
+  const changed = { ...original, text: "Another device's words", etag: '"remote"' };
+  server.set(original.url, changed);
+  await controller.load();
+  controller.save({ ...data, text: "My draft" }, original);
+  await controller.settled();
+  expect(vi.mocked(store.save).mock.calls[0]?.[1]?.etag).toBe(original.etag);
+  controller.remove(original);
+  await controller.settled();
+  // Only our confirmed save may advance the validator, never the remote refresh.
+  expect(vi.mocked(store.remove).mock.calls[0]?.[0].etag).toBe('"2"');
+});
+
+it("retains conflicts and photos through retry, then conditionally overwrites only on explicit choice", async () => {
+  const { store, controller, server } = fixture();
+  await controller.load();
+  const changed = { ...original, text: "Other device", etag: '"remote"' };
+  server.set(original.url, changed);
+  vi.mocked(store.save).mockRejectedValueOnce({ code: "precondition-failed" });
+  const photo = new Blob(["photo"], { type: "image/png" });
+  controller.save({ ...data, text: "My words" }, original, [photo]);
+  await controller.settled();
+  expect(controller.getSnapshot().entries).toEqual([changed]);
+  const conflict = controller.getSnapshot().failed[0];
+  expect(conflict).toMatchObject({
+    conflict: true,
+    data: { text: "My words", images: [expect.any(String)] },
+  });
+  controller.retryFailed();
+  await controller.settled();
+  expect(store.save).toHaveBeenCalledOnce();
+  expect(controller.getSnapshot().failed).toEqual([conflict]);
+  controller.overwriteFailed(conflict?.id ?? -1);
+  await controller.settled();
+  expect(vi.mocked(store.save).mock.calls[1]?.[1]).toEqual(changed);
+  expect(store.attach).toHaveBeenCalledOnce();
+  expect(controller.getSnapshot().entries[0]?.text).toBe("My words");
+  expect(controller.getSnapshot().failed).toEqual([]);
+});
+
+it("blocks queued edits after a conflict and allows Discard mine without writing", async () => {
+  const { store, controller } = fixture();
+  await controller.load();
+  vi.mocked(store.save).mockRejectedValueOnce({ code: "precondition-failed" });
+  controller.save({ ...data, text: "First" }, original);
+  controller.save({ ...data, text: "Latest words" }, original);
+  await controller.settled();
+  expect(store.save).toHaveBeenCalledOnce();
+  expect(controller.getSnapshot().failed.map((edit) => edit.conflict)).toEqual([true, true]);
+  for (const edit of controller.getSnapshot().failed) controller.discardFailed(edit.id);
+  controller.overwriteFailed(-1);
+  expect(controller.getSnapshot().failed).toEqual([]);
+  expect(controller.getSnapshot().entries).toEqual([original]);
+  expect(store.save).toHaveBeenCalledOnce();
+});
+
+it("keeps a repeated overwrite conflict and never retries it automatically", async () => {
+  const { store, controller } = fixture();
+  await controller.load();
+  vi.mocked(store.save).mockRejectedValue({ code: "precondition-failed" });
+  controller.save(data, original);
+  await controller.settled();
+  controller.overwriteFailed(controller.getSnapshot().failed[0]?.id ?? -1);
+  await controller.settled();
+  expect(controller.getSnapshot().failed[0]?.conflict).toBe(true);
+  controller.retryFailed();
+  await controller.settled();
+  expect(store.save).toHaveBeenCalledTimes(2);
+});
+
+it("reports skipped private entries and exposes explicit container repair", async () => {
+  const { store, controller, failed } = fixture();
+  vi.mocked(store.list).mockImplementationOnce(async (options) => {
+    options?.onPrivacySkip?.(original.url);
+    return [];
+  });
+  await controller.load();
+  expect(controller.getSnapshot().skipped).toBe(1);
+  vi.mocked(store.list).mockRejectedValueOnce(new JournalPrivacyError("shared", undefined, true));
+  await controller.load();
+  expect(controller.getSnapshot()).toMatchObject({ entries: [], needsPrivacy: true });
+  await controller.makePrivate();
+  expect(store.makePrivate).toHaveBeenCalledOnce();
+  expect(controller.getSnapshot()).toMatchObject({ skipped: 0, needsPrivacy: false });
+  vi.mocked(store.makePrivate).mockRejectedValueOnce(new Error("offline"));
+  await controller.makePrivate();
+  expect(failed).toHaveBeenCalledOnce();
+});
+
+it("preserves a conflict as an edit if the remote entry disappears during explicit overwrite", async () => {
+  const { store, controller, server } = fixture();
+  await controller.load();
+  vi.mocked(store.save).mockRejectedValueOnce({ code: "precondition-failed" });
+  controller.save(data, original);
+  await controller.settled();
+  server.delete(original.url);
+  controller.overwriteFailed(controller.getSnapshot().failed[0]?.id ?? -1);
+  await controller.settled();
+  expect(controller.getSnapshot().failed[0]).toMatchObject({
+    conflict: true,
+    existing: original,
+    data,
+  });
+  controller.retryFailed();
+  await controller.settled();
+  expect(store.save).toHaveBeenCalledOnce();
+});
+
+it("keeps the original validator on a normal failed-save retry after a remote refresh", async () => {
+  const { store, controller, server } = fixture();
+  await controller.load();
+  vi.mocked(store.save).mockRejectedValueOnce(new Error("network"));
+  controller.save(data, original);
+  server.set(original.url, { ...original, etag: '"remote"' });
+  await controller.settled();
+  controller.retryFailed();
+  await controller.settled();
+  expect(vi.mocked(store.save).mock.calls[1]?.[1]?.etag).toBe(original.etag);
+});
+
+it("retains delete conflicts until explicit overwrite uses the refreshed validator", async () => {
+  const { store, controller, server } = fixture();
+  await controller.load();
+  vi.mocked(store.remove).mockRejectedValueOnce({ code: "precondition-failed" });
+  controller.remove(original);
+  const changed = { ...original, etag: '"remote"' };
+  server.set(original.url, changed);
+  await controller.settled();
+  expect(controller.getSnapshot().failed[0]).toMatchObject({ data: null, conflict: true });
+  controller.retryFailed();
+  await controller.settled();
+  expect(store.remove).toHaveBeenCalledOnce();
+  controller.overwriteFailed(controller.getSnapshot().failed[0]?.id ?? -1);
+  await controller.settled();
+  expect(vi.mocked(store.remove).mock.calls[1]?.[0]).toEqual(changed);
+  expect(controller.getSnapshot().entries).toEqual([]);
 });

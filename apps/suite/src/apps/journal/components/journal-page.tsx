@@ -22,6 +22,7 @@ import {
   Input,
   Label,
   LoadingSkeleton,
+  SafeMarkdown,
 } from "@jeswr/suite-ui";
 import { BookOpen, CalendarDays, Download, LockKeyhole, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -30,11 +31,11 @@ import { useConnectionState } from "@/shell/sync/connection-state";
 import { useJournal } from "../state/journal-context";
 import { JournalCalendar } from "./calendar";
 import { Editor } from "./editor";
-import { Markdown } from "./markdown";
 import { Photo } from "./photo";
 
 export function JournalPage() {
-  const { entries, loading, error, saving, failed, controller } = useJournal();
+  const { entries, loading, error, saving, failed, skipped, needsPrivacy, controller } =
+    useJournal();
   const connection = useConnectionState();
   const [now, setNow] = useState(() => new Date());
   const newDraftStarted = useRef(false);
@@ -124,7 +125,9 @@ export function JournalPage() {
           <Button
             variant="outline"
             onClick={download}
-            disabled={loading || error || saving > 0 || failed.length > 0 || !entries.length}
+            disabled={
+              loading || error || skipped > 0 || saving > 0 || failed.length > 0 || !entries.length
+            }
           >
             <Download size={16} aria-hidden="true" />
             Export Markdown
@@ -151,7 +154,25 @@ export function JournalPage() {
       {failed.length > 0 && (
         <div className="jn-notice" role="alert">
           <p>Your unsaved words and attachments are kept in this tab.</p>
-          <Button onClick={() => controller.retryFailed()}>Retry unsaved changes</Button>
+          {failed.some((edit) => !edit.conflict) && (
+            <Button onClick={() => controller.retryFailed()}>Retry unsaved changes</Button>
+          )}
+          {failed
+            .filter((edit) => edit.conflict)
+            .map((edit) => (
+              <section
+                key={edit.id}
+                aria-label={`Conflict: ${edit.data?.title || "Untitled entry"}`}
+              >
+                <p>This entry changed on another device. Your version is kept below.</p>
+                {edit.data && <SafeMarkdown className="jn-prose">{edit.data.text}</SafeMarkdown>}
+                {!edit.data && <p>Your change: delete this entry.</p>}
+                <Button onClick={() => controller.overwriteFailed(edit.id)}>Overwrite</Button>
+                <Button variant="outline" onClick={() => controller.discardFailed(edit.id)}>
+                  Discard mine
+                </Button>
+              </section>
+            ))}
           <Button
             variant="outline"
             onClick={() => {
@@ -170,6 +191,13 @@ export function JournalPage() {
           >
             Download unsaved words
           </Button>
+        </div>
+      )}
+      {skipped > 0 && (
+        <div className="jn-notice" role="alert">
+          {skipped} {skipped === 1 ? "entry was" : "entries were"} left out because private access
+          couldn't be verified. Check their permissions in Drive. Export is paused until all entries
+          are private.
         </div>
       )}
       <div className="jn-overview">
@@ -261,6 +289,15 @@ export function JournalPage() {
             We couldn't refresh your journal. Reconnect and try again. Export is paused until all
             entries are available.
           </p>
+          {needsPrivacy && (
+            <Button
+              onClick={() => {
+                void controller.makePrivate();
+              }}
+            >
+              Make my journal private
+            </Button>
+          )}
         </ErrorState>
       ) : view === "calendar" ? (
         <JournalCalendar
@@ -399,7 +436,7 @@ export function JournalPage() {
                   {[selected.location, selected.weather].filter(Boolean).join(" · ")}
                 </span>
               </div>
-              <Markdown text={selected.text} />
+              <SafeMarkdown className="jn-prose">{selected.text}</SafeMarkdown>
               {selected.images?.map((url, index) => (
                 <Photo key={url} url={url} number={index + 1} />
               ))}

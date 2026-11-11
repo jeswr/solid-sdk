@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import type { JournalStore } from "@jeswr/solid-journal";
+import { JournalPrivacyError, type JournalStore } from "@jeswr/solid-journal";
 import { toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -27,19 +27,23 @@ export function JournalProvider({
 }: {
   session: PodSession;
   children: ReactNode;
-  fallback: (error: boolean, retry: () => void) => ReactNode;
+  fallback: (error: boolean, retry: () => void, makePrivate?: () => void) => ReactNode;
 }) {
   const [value, setValue] = useState<JournalContextValue | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [repair, setRepair] = useState<JournalStore | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries setup
   useEffect(() => {
     let live = true;
     setValue(null);
     setError(false);
+    setRepair(null);
     let stop: (() => void) | undefined;
+    let opening: JournalStore | undefined;
     void (async () => {
       const store = await openJournalData(session);
+      opening = store;
       await store.initialize();
       await ensureSample(session, store);
       if (!live) return;
@@ -53,8 +57,12 @@ export function JournalProvider({
         if (url.startsWith(store.container) && !controller.getSnapshot().saving)
           void controller.load();
       });
-    })().catch(() => {
-      if (live) setError(true);
+    })().catch((cause) => {
+      if (live) {
+        setError(true);
+        if (cause instanceof JournalPrivacyError && cause.canMakePrivate && opening)
+          setRepair(opening);
+      }
     });
     return () => {
       live = false;
@@ -64,7 +72,22 @@ export function JournalProvider({
   return value ? (
     <Context value={value}>{children}</Context>
   ) : (
-    fallback(error, () => setAttempt((n) => n + 1))
+    fallback(
+      error,
+      () => setAttempt((n) => n + 1),
+      repair
+        ? () => {
+            setError(false);
+            void repair.makePrivate().then(
+              () => setAttempt((n) => n + 1),
+              () => {
+                setError(true);
+                toast.error("Couldn't make your journal private. Reconnect and try again.");
+              },
+            );
+          }
+        : undefined,
+    )
   );
 }
 export function useJournal() {

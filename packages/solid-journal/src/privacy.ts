@@ -3,7 +3,15 @@ import { type EffectivePolicy, readWac } from "@jeswr/pod-access";
 import { type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 
-export class JournalPrivacyError extends Error {}
+export class JournalPrivacyError extends Error {
+  constructor(
+    message: string,
+    options?: ErrorOptions,
+    readonly canMakePrivate = false,
+  ) {
+    super(message, options);
+  }
+}
 
 export function isOwnerOnly(grants: readonly RoleGrant[], owner: string): boolean {
   return (
@@ -30,20 +38,40 @@ export function isOwnerOnlyPolicy(policy: EffectivePolicy, owner: string): boole
     )
   );
 }
-async function ownPolicy(storage: StorageClient, url: string, owner: string, required: boolean) {
+async function ownPolicy(storage: StorageClient, url: string) {
   const head = await storage.head(url);
   const endpoints = head.links.get("acl");
   if (endpoints?.length !== 1)
     throw new JournalPrivacyError("Couldn't verify private journal access");
   const endpoint = endpoints[0]?.target as string;
+  if (!storage.isWithinStorage(endpoint))
+    throw new JournalPrivacyError("Couldn't verify private journal access");
   try {
     const read = await storage.readRdf(endpoint);
-    if (!isOwnerOnlyPolicy(readWac(read.dataset, url, endpoint, "css", true), owner))
-      throw new JournalPrivacyError("Journal access includes another person or public access");
+    return readWac(read.dataset, url, endpoint, "css", true);
   } catch (error) {
-    if (!required && error instanceof StorageError && error.code === "not-found") return;
+    if (error instanceof StorageError && error.code === "not-found") return null;
     throw error;
   }
+}
+
+/** Nearest WAC defaults govern a missing own ACL; resource-only parent rules do not. */
+async function inheritedPolicy(
+  storage: StorageClient,
+  container: string,
+): Promise<EffectivePolicy> {
+  let ancestor = container;
+  for (let depth = 0; depth < 64 && ancestor !== storage.root; depth++) {
+    ancestor = new URL("../", ancestor).href;
+    if (!storage.isWithinStorage(ancestor)) break;
+    const policy = await ownPolicy(storage, ancestor);
+    if (policy)
+      return {
+        ...policy,
+        grants: policy.grants.filter((grant) => grant.appliesTo !== "resource"),
+      };
+  }
+  throw new JournalPrivacyError("Couldn't verify inherited journal access");
 }
 
 /** WAC only until the SDK exposes an equally complete effective ACP privacy proof. */
@@ -52,7 +80,7 @@ export async function protectJournal(
   container: string,
   owner: string,
   fetch: typeof globalThis.fetch,
-  newlyCreated = false,
+  seal = false,
 ): Promise<void> {
   const options = {
     fetch,
@@ -62,13 +90,16 @@ export async function protectJournal(
     model: "wac" as const,
   };
   const snapshot = await readGrants(container, options);
-  if (!newlyCreated) {
-    if (!isOwnerOnly(snapshot.grants, owner))
+  if (!seal) {
+    const own = await ownPolicy(storage, container);
+    const policy = own ?? (await inheritedPolicy(storage, container));
+    if (!isOwnerOnly(snapshot.grants, owner) || !isOwnerOnlyPolicy(policy, owner))
       throw new JournalPrivacyError(
-        "Journal storage is shared. Make it private in Permissions before opening it.",
+        "Journal storage is shared. Make your journal private before opening it.",
+        undefined,
+        true,
       );
-    await ownPolicy(storage, container, owner, true);
-    return;
+    if (own) return;
   }
   const result = await setGrants(
     [container],
@@ -82,7 +113,9 @@ export async function protectJournal(
   const verified = await readGrants(container, options);
   if (!isOwnerOnly(verified.grants, owner))
     throw new JournalPrivacyError("Couldn't verify private journal access");
-  await ownPolicy(storage, container, owner, true);
+  const policy = await ownPolicy(storage, container);
+  if (!policy || !isOwnerOnlyPolicy(policy, owner))
+    throw new JournalPrivacyError("Couldn't verify private journal access");
 }
 
 export async function verifyJournalResource(
@@ -91,15 +124,17 @@ export async function verifyJournalResource(
   owner: string,
   fetch: typeof globalThis.fetch,
 ): Promise<void> {
-  const snapshot = await readGrants(url, {
-    fetch,
-    root: storage.root,
-    kind: "resource",
-    model: "wac",
-  });
-  if (!isOwnerOnly(snapshot.grants, owner))
+  // The caller has verified the container once. Only an own ACL can override its defaults.
+  const policy = await ownPolicy(storage, url);
+  if (policy && !isOwnerOnlyPolicy(policy, owner))
     throw new JournalPrivacyError(
       "This journal entry is shared. Make it private before opening it.",
     );
-  await ownPolicy(storage, url, owner, false);
+  // Existing overrides must also pass the SDK's model/placement checks. Missing ACLs
+  // inherit the already verified folder and need no repeated ancestor discovery.
+  if (policy) {
+    const snapshot = await readGrants(url, { fetch, root: storage.root, model: "wac" });
+    if (!isOwnerOnly(snapshot.grants, owner))
+      throw new JournalPrivacyError("Couldn't verify private journal entry access");
+  }
 }

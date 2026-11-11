@@ -3,7 +3,13 @@ import { type EntryData, entities } from "./generated/model.js";
 
 export type { EntryData } from "./generated/model.js";
 export type Mood = NonNullable<EntryData["mood"]>;
-export const MOODS = ["awful", "bad", "okay", "good", "great"] as const;
+export const MOODS = [
+  "awful",
+  "bad",
+  "okay",
+  "good",
+  "great",
+] as const satisfies readonly NonNullable<EntryData["mood"]>[];
 export const ENTRY_CLASS = "https://jeswr.org/ns/journal#Entry";
 export const entryEntity = entities.Entry;
 

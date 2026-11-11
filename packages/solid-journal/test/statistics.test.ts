@@ -54,6 +54,8 @@ it("removes Markdown formatting without rendering active HTML; counts words and 
   ).toContain("let value = 1 ref # escaped &");
   expect(wordCount("It's a well-loved café. 42!")).toBe(5);
   expect(wordCount("   ")).toBe(0);
+  expect(markdownToPlainText("a < b and c > d")).toBe("a < b and c > d");
+  expect(markdownToPlainText("a <2 and 3> b <em>real tags</em>")).toBe("a <2 and 3> b real tags");
   expect(excerpt("**hello**", 10)).toBe("hello");
   expect(excerpt("🌱hello", 2)).toBe("🌱h…");
   expect(excerpt("hello there", 6)).toBe("hello…");

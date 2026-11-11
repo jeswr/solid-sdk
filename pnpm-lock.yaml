@@ -4976,6 +4976,12 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@jeswr/federation-codegen':
         specifier: workspace:*

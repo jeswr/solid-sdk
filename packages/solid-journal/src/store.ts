@@ -10,7 +10,7 @@ import {
   serializeEntry,
   validateEntry,
 } from "./model.js";
-import { protectJournal, verifyJournalResource } from "./privacy.js";
+import { JournalPrivacyError, protectJournal, verifyJournalResource } from "./privacy.js";
 
 export interface JournalEntry extends EntryData {
   url: string;
@@ -19,7 +19,8 @@ export interface JournalEntry extends EntryData {
 export interface JournalStore {
   readonly container: string;
   initialize(): Promise<void>;
-  list(): Promise<JournalEntry[]>;
+  makePrivate(): Promise<void>;
+  list(options?: { onPrivacySkip?: (url: string) => void }): Promise<JournalEntry[]>;
   save(data: EntryData, existing?: JournalEntry): Promise<JournalEntry>;
   remove(entry: JournalEntry): Promise<void>;
   attach(file: Blob): Promise<string>;
@@ -43,7 +44,12 @@ export function createJournalStore(
   const privacy = (created = false) => protectJournal(storage, container, owner, fetch, created);
   const owned = (url: string) => {
     const canonical = assertWithinPodScope(container, url, { allowRoot: false });
-    if (canonical !== url || new URL(url).search || new URL(url).hash)
+    if (
+      canonical !== url ||
+      new URL(url).search ||
+      new URL(url).hash ||
+      new URL(".", url).href !== container
+    )
       throw new TypeError("Resource is outside your journal");
   };
   return {
@@ -69,20 +75,40 @@ export function createJournalStore(
       await privacy(created);
       await index.register(ENTRY_CLASS, { container }, { index: "private" });
     },
-    async list() {
+    async makePrivate() {
+      await privacy(true);
+    },
+    async list(options) {
       await privacy();
       const entries: JournalEntry[] = [];
+      const load = async (url: string) => {
+        try {
+          await verifyJournalResource(storage, url, owner, fetch);
+        } catch (error) {
+          if (!(error instanceof JournalPrivacyError)) throw error;
+          // Without a reporting consumer, refuse an incomplete export/list entirely.
+          if (!options?.onPrivacySkip) throw error;
+          options.onPrivacySkip(url);
+          return;
+        }
+        const read = await storage.readRdf(url);
+        if (read.dataset.size === 0) return; // An interrupted creation has no journal content.
+        const data = entryEntity.parse(url, read.dataset);
+        if (!data)
+          throw new Error("A journal entry couldn't be read. Your data has not been changed.");
+        entries.push({ ...data, url, etag: read.etag });
+      };
+      let batch: string[] = [];
       for await (const item of storage.listAll(container, { maxBytes: 4 * 1024 * 1024 })) {
         if (item.kind === "container" || !new URL(item.url).pathname.endsWith(".ttl")) continue;
         owned(item.url);
-        await verifyJournalResource(storage, item.url, owner, fetch);
-        const read = await storage.readRdf(item.url);
-        if (read.dataset.size === 0) continue; // An interrupted creation has no journal content.
-        const data = entryEntity.parse(item.url, read.dataset);
-        if (!data)
-          throw new Error("A journal entry couldn't be read. Your data has not been changed.");
-        entries.push({ ...data, url: item.url, etag: read.etag });
+        batch.push(item.url);
+        if (batch.length === 6) {
+          await Promise.all(batch.map(load));
+          batch = [];
+        }
       }
+      await Promise.all(batch.map(load));
       return entries.sort(
         (a, b) => b.created.getTime() - a.created.getTime() || a.url.localeCompare(b.url),
       );

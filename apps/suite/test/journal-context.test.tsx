@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // @vitest-environment jsdom
-import type { JournalStore } from "@jeswr/solid-journal";
+import { JournalPrivacyError, type JournalStore } from "@jeswr/solid-journal";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -35,6 +35,7 @@ beforeEach(() => {
   store = {
     container: "https://pod.example/journal/",
     initialize: vi.fn(async () => {}),
+    makePrivate: vi.fn(async () => {}),
     list: vi.fn(async () => []),
     save: vi.fn(),
     remove: vi.fn(),
@@ -53,9 +54,9 @@ async function render() {
     root.render(
       <JournalProvider
         session={session}
-        fallback={(error, retry) => (
-          <button type="button" onClick={retry}>
-            {error ? "Retry opening" : "Opening"}
+        fallback={(error, retry, makePrivate) => (
+          <button type="button" onClick={makePrivate ?? retry}>
+            {error ? (makePrivate ? "Make my journal private" : "Retry opening") : "Opening"}
           </button>
         )}
       >
@@ -100,4 +101,29 @@ it("doesn't install subscriptions after unmounting during setup", async () => {
 });
 it("requires a context", () => {
   expect(() => renderToString(<Probe />)).toThrow("Journal provider");
+});
+
+it("offers explicit privacy repair without seeding or reading shared content", async () => {
+  vi.mocked(store.initialize).mockRejectedValueOnce(
+    new JournalPrivacyError("shared", undefined, true),
+  );
+  await render();
+  expect(host.textContent).toBe("Make my journal private");
+  expect(store.makePrivate).not.toHaveBeenCalled();
+  expect(ensureSample).not.toHaveBeenCalled();
+  expect(store.list).not.toHaveBeenCalled();
+  await act(async () => host.querySelector("button")?.click());
+  expect(store.makePrivate).toHaveBeenCalledOnce();
+  expect(host.textContent).toBe("0 entries");
+});
+
+it("retains the repair action when making private fails", async () => {
+  vi.mocked(store.initialize).mockRejectedValueOnce(
+    new JournalPrivacyError("shared", undefined, true),
+  );
+  vi.mocked(store.makePrivate).mockRejectedValueOnce(new Error("offline"));
+  await render();
+  await act(async () => host.querySelector("button")?.click());
+  expect(host.textContent).toBe("Make my journal private");
+  expect(ensureSample).not.toHaveBeenCalled();
 });
