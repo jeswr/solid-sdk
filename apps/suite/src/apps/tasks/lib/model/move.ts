@@ -25,7 +25,7 @@ export class TaskMove {
   readonly references = new Map<string, StoredTask>();
   private plan!: ReferenceMove[];
   private copies: ResourceCopy[] | undefined;
-  private readonly copyAttempts = new Map<string, ResourceCopy>();
+  private readonly copyAttempts = new Map<string, Resource>();
   private rollingBack = false;
   private replan = false;
   private result: StoredTask | undefined;
@@ -107,45 +107,41 @@ export class TaskMove {
   }
 
   private async reconcileCopy(copy: ResourceCopy, latest: ResourceCopy): Promise<void> {
+    // Confirmation is final: later source or destination edits never authorize a PUT.
+    if (copy.destination.etag !== undefined) return;
     const url = copy.destination.url;
     const attempted = this.copyAttempts.get(url);
     if (attempted) {
-      // A lost PUT and read-back leave the old ETag unusable. Confirm that exact
-      // attempt before considering a source revision that may have arrived since.
+      // Presence resolves an unknown PUT even if somebody has since edited its data.
       const current = await this.io.optional(url);
-      if (!current || !same(current.dataset, attempted.destination.dataset))
-        throw new ModelError(412, url, current?.etag);
-      Object.assign(copy, { original: attempted.original, destination: current });
       this.copyAttempts.delete(url);
+      if (current) {
+        Object.assign(copy, { original: attempted, destination: current });
+        return;
+      }
     }
-    if (copy.destination.etag !== undefined && copy.original.etag === latest.original.etag) return;
     await this.io.container(new URL("./", url).href);
     const current = await this.io.optional(url);
+    if (current) throw new ModelError(412, url, current.etag);
     const dataset = latest.destination.dataset;
-    if (current && same(current.dataset, dataset)) {
-      Object.assign(copy, { original: latest.original, destination: current });
-      return;
-    }
-    const etag = copy.destination.etag;
-    if (etag === undefined ? current !== undefined : current?.etag !== etag) {
-      if (etag === undefined || !current) throw new ModelError(412, url, current?.etag);
-      // A separately edited destination wins over subsequent source revisions.
-      // Keep our last written ETag so later source edits cannot claim that version.
-      copy.original = latest.original;
-      return;
-    }
-    this.copyAttempts.set(url, { original: latest.original, destination: { url, dataset } });
+    this.copyAttempts.set(url, latest.original);
     let destination: Resource;
     try {
-      destination = await this.io.write(
-        url,
-        dataset,
-        etag === undefined ? { create: true } : { etag },
-      );
+      destination = await this.io.write(url, dataset, { create: true });
     } catch (error) {
+      // A definitive rejection cannot have committed, regardless of read-back access.
+      if (
+        error instanceof ModelError &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 412
+      ) {
+        this.copyAttempts.delete(url);
+        throw error;
+      }
       const confirmed = await this.io.optional(url);
       this.copyAttempts.delete(url);
-      if (!confirmed || !same(confirmed.dataset, dataset)) throw error;
+      if (!confirmed) throw error;
       destination = confirmed;
     }
     Object.assign(copy, { original: latest.original, destination });
@@ -163,22 +159,32 @@ export class TaskMove {
         // a reply can arrive during cleanup and must still reach its copied parent.
         const latest = await this.listCopies(copies);
         if (latest.length === 0) return moved;
-        let changed = false;
+        let added = false;
         for (const copy of latest) {
           const previous = copies.find((entry) => entry.original.url === copy.original.url);
-          changed ||= !previous || previous.original.etag !== copy.original.etag;
+          added ||= !previous;
           // Reserve new URLs before writing, including when the response or read-back is lost.
           if (!previous) copies.push(copy);
           await this.reconcileCopy(previous ?? copy, copy);
         }
-        // A stable pass permits deletion. Leave room for another scan afterwards,
+        // Retain changed source revisions permanently, with their confirmed copies untouched.
+        const removable = latest.filter((copy) =>
+          copies.some(
+            (entry) =>
+              entry.original.url === copy.original.url &&
+              entry.original.etag === copy.original.etag,
+          ),
+        );
+        if (removable.length === 0) return moved;
+        // A stable mapping permits deletion. Leave room for another scan afterwards,
         // so a late reply cannot turn successful cleanup into an invisible orphan.
-        if (changed || pass === 2) continue;
-        for (const { original } of [...latest].reverse()) {
+        if (added || pass === 2) continue;
+        for (const { original } of [...removable].reverse()) {
           try {
             await this.io.remove(original.url, original.etag);
           } catch (error) {
-            if (await this.io.optional(original.url)) throw error;
+            const current = await this.io.optional(original.url);
+            if (current && current.etag === original.etag) throw error;
           }
         }
       }

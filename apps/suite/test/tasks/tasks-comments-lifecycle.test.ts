@@ -204,7 +204,7 @@ describe("comment lifecycle with projects and task moves", () => {
     for (const url of [task.url, root.url, reply.url]) expect(pod.files.has(url)).toBe(false);
   });
 
-  it("re-copies edits made after the snapshot using the same destination URLs before cleanup", async () => {
+  it("retains source revisions edited after their confirmed copies without writing destinations again", async () => {
     const { store, pod, source, target, task, comments, root, reply } = await setup();
     pod.intercept = async (request) => {
       if (request.method === "DELETE" && request.url === task.url) {
@@ -215,23 +215,21 @@ describe("comment lifecycle with projects and task moves", () => {
     const moved = await store.moveTaskToProject(task, source, target, "moved");
     const threads = await store.comments(target, moved).list();
     expect(threads).toHaveLength(1);
-    expect(threads[0]?.root.text).toBe("Latest root");
-    expect(threads[0]?.replies.map((entry) => entry.text)).toEqual(["Latest reply"]);
+    expect(threads[0]?.root.text).toBe("Root");
+    expect(threads[0]?.replies.map((entry) => entry.text)).toEqual(["Reply"]);
     for (const comment of [threads[0]?.root, threads[0]?.replies[0]]) {
       const writes = pod.mutations().filter((r) => r.method === "PUT" && r.url === comment?.url);
-      expect(writes).toHaveLength(2);
+      expect(writes).toHaveLength(1);
       expect(writes[0]?.headers.get("If-None-Match")).toBe("*");
-      expect(writes[1]?.headers.get("If-Match")).toBe('"1"');
     }
     for (const comment of [root, reply]) {
-      expect(pod.files.has(comment.url)).toBe(false);
-      expect(
-        pod
-          .mutations()
-          .find((r) => r.method === "DELETE" && r.url === comment.url)
-          ?.headers.get("If-Match"),
-      ).toBe('"2"');
+      expect(pod.files.has(comment.url)).toBe(true);
+      expect(pod.mutations().some((r) => r.method === "DELETE" && r.url === comment.url)).toBe(
+        false,
+      );
     }
+    expect((await comments.list())[0]?.root.text).toBe("Latest root");
+    expect((await comments.list())[0]?.replies[0]?.text).toBe("Latest reply");
   });
 
   it("includes new roots and replies posted after the snapshot with remapped targets", async () => {
@@ -264,7 +262,7 @@ describe("comment lifecycle with projects and task moves", () => {
     ).toEqual([]);
   });
 
-  it("retains a revision edited during conditional cleanup and reconciles it on Retry", async () => {
+  it("retains a source revision that changes during conditional deletion and finishes", async () => {
     const { store, pod, source, target, task, comments, root } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
     let edited = false;
@@ -274,15 +272,11 @@ describe("comment lifecycle with projects and task moves", () => {
         await comments.edit(root, "Edited during cleanup");
       }
     };
-    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    const moved = await move.run();
     expect(pod.files.has(root.url)).toBe(true);
     expect(pod.files.has(task.url)).toBe(false);
-    pod.intercept = undefined;
-    const moved = await move.run();
-    expect((await store.comments(target, moved).list())[0]?.root.text).toBe(
-      "Edited during cleanup",
-    );
-    expect(pod.files.has(root.url)).toBe(false);
+    expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Root");
+    expect((await comments.list())[0]?.root.text).toBe("Edited during cleanup");
   });
 
   it("finds a reply posted during root cleanup even after the source root has gone", async () => {
@@ -331,7 +325,7 @@ describe("comment lifecycle with projects and task moves", () => {
     for (const comment of [root, reply]) expect(pod.files.has(comment.url)).toBe(false);
   });
 
-  it("bounds reconciliation to three passes while comments keep changing, then resumes on Retry", async () => {
+  it("finishes while a confirmed source keeps changing, retaining its latest revision", async () => {
     const { store, pod, source, target, task, comments, root, reply } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
     let passes = 0;
@@ -348,29 +342,22 @@ describe("comment lifecycle with projects and task moves", () => {
         pod.seed(root.url, await serialize(dataset));
       }
     };
-    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
-    expect(passes).toBe(3);
-    for (const comment of [root, reply]) expect(pod.files.has(comment.url)).toBe(true);
-    pod.intercept = undefined;
     const moved = await move.run();
-    const threads = await store.comments(target, moved).list();
-    expect(threads).toHaveLength(1);
-    expect(threads[0]?.root.text).toBe("Revision 3");
-    for (const comment of [root, reply]) expect(pod.files.has(comment.url)).toBe(false);
+    expect(passes).toBe(2);
+    expect(pod.files.has(root.url)).toBe(true);
+    expect(pod.files.has(reply.url)).toBe(false);
+    pod.intercept = undefined;
+    expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Root");
+    expect((await comments.list())[0]?.root.text).toBe("Revision 2");
   });
 
-  it.each([
-    "edit",
-    "reply",
-  ])("retries a failed reconciliation copy of a late %s at its reserved destination", async (change) => {
+  it("retries a failed late reply copy at its reserved destination", async () => {
     const { store, pod, source, target, task, comments, root } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
     let failedUrl: string | undefined;
     pod.intercept = async (request) => {
-      if (request.method === "DELETE" && request.url === task.url) {
-        if (change === "edit") await comments.edit(root, "Late edit");
-        else await comments.reply(root, "Late reply");
-      }
+      if (request.method === "DELETE" && request.url === task.url)
+        await comments.reply(root, "Late reply");
       if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
         failedUrl = request.url;
         return new Response(null, { status: 503 });
@@ -383,11 +370,14 @@ describe("comment lifecycle with projects and task moves", () => {
     const moved = await move.run();
     const threads = await store.comments(target, moved).list();
     expect(threads).toHaveLength(1);
-    if (change === "edit")
-      expect(threads[0]?.root).toMatchObject({ url: failedUrl, text: "Late edit" });
-    else
-      expect(threads[0]?.replies.find((entry) => entry.text === "Late reply")?.url).toBe(failedUrl);
+    expect(threads[0]?.replies.find((entry) => entry.text === "Late reply")?.url).toBe(failedUrl);
     expect(await comments.list()).toEqual([]);
+    expect(
+      pod
+        .mutations()
+        .filter((r) => r.method === "PUT" && r.url === failedUrl)
+        .map((r) => r.headers.get("If-None-Match")),
+    ).toEqual(["*", "*"]);
   });
 
   it.each([
@@ -429,24 +419,25 @@ describe("comment lifecycle with projects and task moves", () => {
   });
 
   it.each([
-    false,
-    true,
-  ])("confirms an uncertain reconciliation PUT before copying a newer source revision (%s)", async (newerSource) => {
+    { committed: false, newerSource: false },
+    { committed: false, newerSource: true },
+    { committed: true, newerSource: false },
+    { committed: true, newerSource: true },
+  ])("resolves an uncertain late copy by presence (committed: $committed, newer source: $newerSource)", async ({
+    committed,
+    newerSource,
+  }) => {
     const { store, pod, source, target, task, comments, root } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
+    let lateReply: Awaited<ReturnType<typeof comments.reply>> | undefined;
     let attemptedUrl: string | undefined;
     pod.intercept = async (request) => {
       if (request.method === "DELETE" && request.url === task.url)
-        await comments.edit(root, "Reconciled revision");
-      if (
-        !pod.files.has(task.url) &&
-        request.method === "PUT" &&
-        request.url.startsWith(`${target.tracker.stateStore}comments/`) &&
-        request.url.endsWith(".ttl")
-      ) {
+        lateReply = await comments.reply(root, "Late reply");
+      if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
         attemptedUrl = request.url;
-        pod.seed(request.url, request.body);
-        throw new TypeError("Reconciliation response lost");
+        if (committed) pod.seed(request.url, request.body);
+        throw new TypeError("Copy response lost");
       }
       if (attemptedUrl === request.url && request.method === "GET")
         return new Response(null, { status: 503 });
@@ -456,34 +447,34 @@ describe("comment lifecycle with projects and task moves", () => {
     expect(pod.files.has(task.url)).toBe(false);
     expect(pod.files.has(root.url)).toBe(true);
     pod.intercept = undefined;
-    if (newerSource) {
-      const latest = (await comments.list())[0]?.root;
-      if (!latest) throw new Error("Missing source root");
-      await comments.edit(latest, "Newer source revision");
-    }
+    if (!lateReply) throw new Error("Missing late reply");
+    if (newerSource) await comments.edit(lateReply, "Newer source revision");
     const moved = await move.run();
-    expect((await store.comments(target, moved).list())[0]?.root).toMatchObject({
-      url: attemptedUrl,
-      text: newerSource ? "Newer source revision" : "Reconciled revision",
+    expect(
+      (await store.comments(target, moved).list())[0]?.replies.find((r) => r.url === attemptedUrl),
+    ).toMatchObject({
+      text: !committed && newerSource ? "Newer source revision" : "Late reply",
     });
     const writes = pod.mutations().filter((r) => r.method === "PUT" && r.url === attemptedUrl);
-    expect(writes.map((r) => r.headers.get("If-Match"))).toEqual(
-      newerSource ? [null, '"1"', '"2"'] : [null, '"1"'],
+    expect(writes.map((r) => r.headers.get("If-None-Match"))).toEqual(
+      committed ? ["*"] : ["*", "*"],
     );
-    expect(await comments.list()).toEqual([]);
+    expect(pod.files.has(lateReply.url)).toBe(committed && newerSource);
+    expect(pod.files.has(root.url)).toBe(false);
   });
 
-  it("reports a differing destination after an uncertain PUT without overwriting it", async () => {
+  it("adopts an independently edited destination after an uncertain PUT without writing it again", async () => {
     const { store, pod, source, target, task, comments, root } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
+    let lateRoot: Awaited<ReturnType<typeof comments.create>> | undefined;
     let attemptedUrl: string | undefined;
     pod.intercept = async (request) => {
       if (request.method === "DELETE" && request.url === task.url)
-        await comments.edit(root, "Source edit");
+        lateRoot = await comments.create("Late root");
       if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
         attemptedUrl = request.url;
         pod.seed(request.url, request.body);
-        throw new TypeError("Reconciliation response lost");
+        throw new TypeError("Copy response lost");
       }
       if (attemptedUrl === request.url && request.method === "GET")
         return new Response(null, { status: 503 });
@@ -492,18 +483,95 @@ describe("comment lifecycle with projects and task moves", () => {
     pod.intercept = undefined;
     const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
     const destination = store.comments(target, moved);
-    const copied = (await destination.list())[0]?.root;
-    if (!copied) throw new Error("Missing copied root");
+    const copied = (await destination.list()).find(
+      (thread) => thread.root.url === attemptedUrl,
+    )?.root;
+    if (!copied || !lateRoot) throw new Error("Missing late root");
     await destination.edit(copied, "Destination edit");
+    await comments.edit(lateRoot, "Source edit");
     const before = pod.mutations().length;
-    for (let attempt = 0; attempt < 2; attempt++)
-      await expect(move.run()).rejects.toMatchObject({
-        message: "Some comments are still moving. Retry",
-        cause: { status: 412, url: attemptedUrl },
-      });
-    expect(pod.mutations()).toHaveLength(before);
-    expect((await destination.list())[0]?.root.text).toBe("Destination edit");
+    await move.run();
+    expect(
+      pod
+        .mutations()
+        .slice(before)
+        .some((r) => r.method === "PUT" && r.url === attemptedUrl),
+    ).toBe(false);
+    expect(
+      (await destination.list()).find((thread) => thread.root.url === attemptedUrl)?.root.text,
+    ).toBe("Destination edit");
     expect((await comments.list())[0]?.root.text).toBe("Source edit");
+    expect(pod.files.has(root.url)).toBe(false);
+  });
+
+  it.each([
+    400, 401, 403, 404, 409, 422,
+  ])("clears a rejected cleanup copy despite unavailable read-back (%s)", async (status) => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let rejectedUrl: string | undefined;
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        await comments.reply(root, "Late reply");
+      if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
+        rejectedUrl = request.url;
+        return new Response(null, { status });
+      }
+      if (request.url === rejectedUrl && request.method === "GET")
+        throw new TypeError("Read-back unavailable");
+    };
+    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    expect(rejectedUrl).toBeDefined();
+    expect(pod.files.has(rejectedUrl as string)).toBe(false);
+    pod.intercept = undefined;
+    const moved = await move.run();
+    expect(
+      (await store.comments(target, moved).list())[0]?.replies.find((r) => r.url === rejectedUrl)
+        ?.text,
+    ).toBe("Late reply");
+    expect(
+      pod
+        .mutations()
+        .filter((r) => r.method === "PUT" && r.url === rejectedUrl)
+        .map((r) => r.headers.get("If-None-Match")),
+    ).toEqual(["*", "*"]);
+    expect(await comments.list()).toEqual([]);
+  });
+
+  it("keeps an independent destination revision even when it equals one source edit before another arrives", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let destinationUrl: string | undefined;
+    let passes = 0;
+    const modified = new Date("2026-11-11T12:00:00Z");
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url) {
+        const moved = await store.readTask(`${target.tracker.stateStore}moved.ttl`);
+        const destination = store.comments(target, moved);
+        const copied = (await destination.list())[0]?.root;
+        if (!copied) throw new Error("Missing copied root");
+        destinationUrl = copied.url;
+        await destination.edit(copied, "Same edit", modified);
+        await comments.edit(root, "Same edit", modified);
+      }
+      if (
+        !pod.files.has(task.url) &&
+        request.method === "GET" &&
+        request.url === comments.container &&
+        ++passes === 2
+      ) {
+        const latest = (await comments.list())[0]?.root;
+        if (!latest) throw new Error("Missing source root");
+        await comments.edit(latest, "Newer source edit", modified);
+      }
+    };
+    const moved = await move.run();
+    expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Same edit");
+    expect((await comments.list())[0]?.root.text).toBe("Newer source edit");
+    expect(
+      pod.mutations().filter((r) => r.method === "PUT" && r.url === destinationUrl),
+    ).toHaveLength(2);
+    expect(pod.mutations().some((r) => r.method === "DELETE" && r.url === root.url)).toBe(false);
   });
 
   it("keeps the destination version when both source and destination have later edits", async () => {
@@ -519,13 +587,13 @@ describe("comment lifecycle with projects and task moves", () => {
       }
     };
     const moved = await store.moveTaskToProject(task, source, target, "moved");
-    expect(pod.files.has(root.url)).toBe(false);
+    expect(pod.files.has(root.url)).toBe(true);
     expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Destination edit");
-    expect(await comments.list()).toEqual([]);
+    expect((await comments.list())[0]?.root.text).toBe("Source edit");
   });
 
   it("keeps a destination edit across multiple newer source revisions and cleanup retries", async () => {
-    const { store, pod, source, target, task, comments, root } = await setup();
+    const { store, pod, source, target, task, comments, root, reply } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
     pod.intercept = async (request) => {
       if (request.method === "DELETE" && request.url === task.url) {
@@ -536,7 +604,7 @@ describe("comment lifecycle with projects and task moves", () => {
         await destination.edit(copied, "Destination edit");
         await comments.edit(root, "Source edit");
       }
-      if (request.method === "DELETE" && request.url === root.url)
+      if (request.method === "DELETE" && request.url === reply.url)
         return new Response(null, { status: 503 });
     };
     await expect(move.run()).rejects.toMatchObject({ cause: { status: 503 } });
@@ -546,7 +614,7 @@ describe("comment lifecycle with projects and task moves", () => {
     await comments.edit(latest, "Newer source edit");
     const moved = await move.run();
     expect((await store.comments(target, moved).list())[0]?.root.text).toBe("Destination edit");
-    expect(await comments.list()).toEqual([]);
+    expect((await comments.list())[0]?.root.text).toBe("Newer source edit");
   });
 
   it("reconciles a lost source comment DELETE response without duplicating its destination", async () => {
