@@ -4,6 +4,7 @@
 // Host patterns ported from PM docs/typed-data-views.md §2.1 and typed-views/sources.ts.
 import {
   classifyIpLiteral,
+  DEFAULT_HOSTNAME_DENYLIST,
   isDeniedHostname,
   normalizeHostForClassification,
 } from "@jeswr/guarded-fetch";
@@ -100,8 +101,12 @@ const RESERVED_NAMES = new Set(
 /** Every graph/client name crosses this boundary; reserved labels belong to Home alone. */
 export function externalName(name: string | undefined, fallback: string): string {
   const clean = (name ?? "")
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: Strip untrusted control characters.
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "")
+    // NFKC folds compatibility forms (full-width letters) before the reserved-label check.
+    .normalize("NFKC")
+    // Strip every control (Cc) and invisible format (Cf) character: bidi controls, zero-width
+    // joiners, soft hyphens, word joiners and tag characters could otherwise disguise a
+    // reserved label such as "Spotify" or "you".
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!clean || /http/i.test(clean) || RESERVED_NAMES.has(clean.toLowerCase())) return fallback;
@@ -117,7 +122,7 @@ export function publicAgentUrl(iri: string): boolean {
   return (
     host.includes(".") &&
     classifyIpLiteral(host) === 0 &&
-    !isDeniedHostname(host, ["localhost", ".local", ".internal"])
+    !isDeniedHostname(host, [...DEFAULT_HOSTNAME_DENYLIST, "localhost", ".local", ".internal"])
   );
 }
 
@@ -174,11 +179,7 @@ export function createIdentityResolver(publicFetch: typeof fetch = globalThis.fe
     for (const { iri, associated } of agentsIn(dataset, subject)) {
       if (iri === userWebId || iri === DEMO_CONNECTOR.iri || identities.has(iri)) continue;
       if (isPerson(dataset, iri)) continue;
-      if (
-        !associated &&
-        !subjectOf(dataset, iri).types.some((type) => SOFTWARE_TYPES.includes(type))
-      )
-        continue;
+      if (!associated && !isSoftware(dataset, iri)) continue;
       if (!publicAgentUrl(iri) || !isClientIdDocument(iri)) continue;
       const url = new URL(iri);
       if (url.hash || (!admitted.has(iri) && admitted.size >= 20)) continue;
@@ -214,6 +215,22 @@ const SOFTWARE_TYPES = [
   // ActivityStreams actors that are not people (bots, AI agents).
   "https://www.w3.org/ns/activitystreams#Application",
 ];
+
+/**
+ * One software-type predicate. Labels may also treat an ActivityStreams Service as an app;
+ * client-name lookup never does, because a Service is not a Solid-OIDC client.
+ */
+function isSoftware(
+  dataset: DatasetCore,
+  iri: string,
+  { includeService = false }: { includeService?: boolean } = {},
+): boolean {
+  return subjectOf(dataset, iri).types.some(
+    (type) =>
+      SOFTWARE_TYPES.includes(type) ||
+      (includeService && type === "https://www.w3.org/ns/activitystreams#Service"),
+  );
+}
 /**
  * What the loaded graph says an attributed agent is, without fetching its profile: a person
  * only when typed as one, an app when typed as software (an AI agent included). An IRI's
@@ -221,13 +238,7 @@ const SOFTWARE_TYPES = [
  */
 function typedAgent(dataset: DatasetCore, iri: string): "person" | "app" | undefined {
   if (isPerson(dataset, iri)) return "person";
-  if (
-    subjectOf(dataset, iri).types.some(
-      (type) =>
-        SOFTWARE_TYPES.includes(type) || type === "https://www.w3.org/ns/activitystreams#Service",
-    )
-  )
-    return "app";
+  if (isSoftware(dataset, iri, { includeService: true })) return "app";
   return undefined;
 }
 
