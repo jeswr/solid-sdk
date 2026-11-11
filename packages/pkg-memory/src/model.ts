@@ -597,6 +597,7 @@ export async function parseNanopublications(
   // rejected literals. Resolve both envelope and assertion targets to kept IDs.
   const targets = new Set<string>();
   for (const { id } of skipped) {
+    const local = new Set<string>();
     const head = new RdfNode(df.namedNode(id), graph(dataset, id));
     const metadata = new Set([
       id,
@@ -613,7 +614,11 @@ export async function parseNanopublications(
             q.predicate.value === `${NS.pkg}contradicts`) &&
           q.object.termType === "NamedNode"
         )
-          targets.add(q.object.value);
+          local.add(q.object.value);
+    // Like classifyNanopublications, an envelope-scoped update affects only the
+    // envelopes it names, not other envelopes sharing the assertion.
+    const envelopeTargets = [...local].filter((target) => kept.has(target));
+    for (const target of envelopeTargets.length ? envelopeTargets : local) targets.add(target);
   }
   const retained = new Set([...kept.keys()].flatMap((id) => envelopes.get(id) as string[]));
   return {

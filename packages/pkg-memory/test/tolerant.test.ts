@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory as df, Store } from "n3";
 import { isomorphic } from "rdf-isomorphic";
@@ -464,4 +463,42 @@ it.each([
   expect((await parseNanopublications(await serializeNanopublications(result))).nanopubs).toEqual(
     result.nanopubs,
   );
+});
+
+it("lets an unreadable update only lower a current belief", async () => {
+  const value = await buildNanopublications(
+    {
+      batch_id: "belief-floor",
+      worker: { agent_id: "https://example.org/agent", agent_label: "Fictional extractor" },
+      claims: (
+        [
+          ["definite", "SelfReportedExplicit", "Current"],
+          ["uncertain", "Inferred", "Current"],
+          ["mentioned", "Mentioned", "Current"],
+          ["ended", "SelfReportedExplicit", "Superseded"],
+        ] as const
+      ).map(([id, epistemic, validity]) => ({
+        id,
+        assertion: createFactAssertion(owner, {
+          template: "condition",
+          value: { id: `https://example.org/${id}`, name: `Fictional ${id}` },
+        }),
+        epistemic,
+        validity,
+      })),
+    },
+    { owner, generatedAt: "2026-11-01T00:00:00Z" },
+  );
+  const base = classifyNanopublications(value);
+  const affected = classifyNanopublications({
+    ...value,
+    affected: value.nanopubs.map((np) => np.id),
+  });
+  expect(base.map((np) => np.belief)).toEqual(["definitely", "might", "mentioned", "past"]);
+  expect(affected.map((np) => [np.belief, np.affectedBySkipped])).toEqual([
+    ["might", true],
+    ["might", true],
+    ["mentioned", undefined],
+    ["past", undefined],
+  ]);
 });

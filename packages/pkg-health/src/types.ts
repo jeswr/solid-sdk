@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import type {
   Belief,
   EpistemicStatus,
@@ -82,7 +81,13 @@ export interface ObservationSeries {
   id: string;
   label: string;
   unit?: string;
-  points: { x: string; y: number; factId: string }[];
+  points: {
+    x: string;
+    y: number;
+    factId: string;
+    belief: Belief;
+    affectedBySkipped?: true;
+  }[];
 }
 export type TimelineKind = "condition" | "medication" | "immunization" | "encounter" | "documents";
 export interface HealthTimelineItem {
@@ -90,6 +95,8 @@ export interface HealthTimelineItem {
   start?: string;
   end?: string;
   label: string;
+  belief: Belief;
+  affectedBySkipped?: true;
   tone: "active" | "past" | "neutral";
 }
 export type HealthTimeline = Record<TimelineKind, HealthTimelineItem[]>;

@@ -63,8 +63,7 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
       np.contradicts.some((target) => !byAssertion.has(target) || liveAssertions.has(target)) ||
       contradictedByLive.has(np.assertionId);
     let belief: Belief;
-    if (affected.has(np.id)) belief = "might";
-    else if (inactive.has(np.id)) belief = "past";
+    if (inactive.has(np.id)) belief = "past";
     else if (np.epistemic === "Mentioned") belief = "mentioned";
     else if (np.validity === "Contradicted") belief = "might";
     else if (np.epistemic === "Documented") belief = "definitely";
@@ -74,10 +73,14 @@ export function classifyNanopublications(value: Nanopublications): ClassifiedNan
     )
       belief = "definitely";
     else belief = "might";
+    // A readable retraction or replacement is final, and a Mentioned claim is never
+    // raised: an unreadable later update can only lower a current belief.
+    const uncertain = affected.has(np.id) && (belief === "definitely" || belief === "might");
+    if (uncertain) belief = "might";
     return {
       ...np,
       belief,
-      ...(affected.has(np.id) ? { affectedBySkipped: true as const } : {}),
+      ...(uncertain ? { affectedBySkipped: true as const } : {}),
       corroboration: (byAssertion.get(np.assertionId) as Nanopublication[]).length,
       replacedBy: [...(replacements.get(np.id) ?? [])].sort(),
     };

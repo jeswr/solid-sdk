@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, expect, it, vi } from "vitest";
 import {
   buildNanopublications,

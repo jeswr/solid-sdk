@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { DatasetCore } from "@rdfjs/types";
 import type { Nanopublication } from "./model.js";
 import { graph, NS, RdfNode } from "./rdf.js";

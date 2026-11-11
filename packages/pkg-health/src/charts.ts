@@ -33,7 +33,13 @@ export function observationSeries(
         : fact.label.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase());
     const id = JSON.stringify([key, fact.unit ?? null]);
     const group = groups.get(id) ?? { id, label: fact.label, unit: fact.unit, points: [] };
-    group.points.push({ x: new Date(time).toISOString(), y: fact.value, factId: fact.id });
+    group.points.push({
+      x: new Date(time).toISOString(),
+      y: fact.value,
+      factId: fact.id,
+      belief: fact.belief,
+      ...(fact.affectedBySkipped ? { affectedBySkipped: true as const } : {}),
+    });
     groups.set(id, group);
   }
   const series = [...groups.values()].sort((a, b) => a.id.localeCompare(b.id));
@@ -66,10 +72,13 @@ export function healthTimeline(
           (fact.kind === "document" ? fact.dateCreated : fact.period.start) ??
           (fact.kind === "encounter" || fact.kind === "immunization" ? fact.date : undefined),
         end: fact.period.end,
+        belief: fact.belief,
+        ...(fact.affectedBySkipped ? { affectedBySkipped: true as const } : {}),
+        // An unreadable later update means the fact may have changed: never show it as active.
         tone:
           fact.period.end !== undefined || fact.belief === "past"
             ? "past"
-            : fact.validity === "Current"
+            : fact.validity === "Current" && !fact.affectedBySkipped
               ? "active"
               : "neutral",
       });

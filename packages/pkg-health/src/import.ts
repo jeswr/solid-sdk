@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { type Nanopublications, parseNanopublicationsTolerant } from "@jeswr/pkg-memory";
 import { HealthGraphError } from "./types.js";

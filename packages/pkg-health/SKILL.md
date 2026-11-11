@@ -3,7 +3,6 @@ name: pkg-health
 description: Use when reading, charting or correcting health facts in the personal knowledge graph
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
 
 Use `projectHealthFacts(parsed, { owner })` for pod or local TriG nanopublications.
 Use `importHealthExport(text, { owner })` for tolerant local exports, or parse with

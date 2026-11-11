@@ -1,12 +1,17 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { NanopubStore } from "@jeswr/pkg-memory";
 import { createMemoryPodPort } from "@jeswr/pkg-memory/testing";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, type Store, Writer } from "n3";
 import { expect, it } from "vitest";
 import { entities } from "../src/generated/model.js";
-import { healthTimeline, importHealthExport, projectHealthFacts } from "../src/index.js";
-import { batch, claim, condition, FixtureNode, owner, S, X } from "./helpers.js";
+import {
+  healthTimeline,
+  importHealthExport,
+  observationSeries,
+  projectHealthFacts,
+} from "../src/index.js";
+import { batch, claim, condition, FixtureNode, observation, owner, S, X } from "./helpers.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fictional fixture");
@@ -121,4 +126,138 @@ it.each([
   const view = projectHealthFacts(await batch([{ ...claim("document"), assertion }]), { owner });
   expect(required(view.byKind.document[0])).toMatchObject({ dateCreated: expected });
   expect(healthTimeline(view).documents).toHaveLength(expected ? 1 : 0);
+});
+
+function memoryStore() {
+  const port = createMemoryPodPort({ root: "https://example.org/pod/", webId: owner });
+  return new NanopubStore({
+    ...port,
+    async head(target: string) {
+      return { acl: `${target}.acl` };
+    },
+  });
+}
+const withdraw = { clientId: "https://example.org/client", generatedAt: "2026-11-11T12:00:00Z" };
+
+it("keeps A past when one of two retractions is skipped", async () => {
+  const store = memoryStore();
+  const original = await batch([claim("a")]);
+  const a = required(original.nanopubs[0]);
+  await store.put(original);
+  const r1 = required((await store.retract(a.id, { ...withdraw, batchId: "w1" })).nanopubs[0]);
+  const r2 = required(
+    (
+      await store.retract(a.id, {
+        ...withdraw,
+        batchId: "w2",
+        generatedAt: "2026-11-11T13:00:00Z",
+      })
+    ).nanopubs[0],
+  );
+  const value = await store.list();
+  poison(value.dataset, r2.pubinfoId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  const view = projectHealthFacts(imported.value, { owner });
+  for (const id of [a.id, r1.id]) {
+    const fact = view.facts.find((f) => f.id === id);
+    expect(fact?.belief).toBe("past");
+    expect(fact?.affectedBySkipped).toBeUndefined();
+  }
+  expect(healthTimeline(view).condition.find((item) => item.id === a.id)?.tone).toBe("past");
+});
+
+it("keeps A past when it has its own invalidation and its skipped replacement names it", async () => {
+  const value = await batch([
+    { ...claim("old", condition("Fictional old", "old")), validity: "Superseded" },
+    claim("bad", condition("Fictional bad", "bad")),
+  ]);
+  const old = required(value.nanopubs.find((np) => np.identifier.endsWith("/old")));
+  const bad = required(value.nanopubs.find((np) => np.identifier.endsWith("/bad")));
+  new FixtureNode(
+    bad.assertionId,
+    new NamedGraphDataset(df.namedNode(bad.provenanceId), value.dataset, df),
+  ).link("http://www.w3.org/ns/prov#wasRevisionOf", old.assertionId);
+  poison(value.dataset, bad.pubinfoId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  expect(imported.value.affected).toEqual([old.id]);
+  expect(projectHealthFacts(imported.value, { owner }).facts).toMatchObject([
+    { id: old.id, belief: "past", affectedBySkipped: undefined },
+  ]);
+});
+
+it("never raises a Mentioned claim named by a skipped contradiction", async () => {
+  const value = await batch([
+    { ...claim("m", condition("Fictional mentioned", "m")), epistemic: "Mentioned" },
+    claim("bad", condition("Fictional bad", "bad")),
+  ]);
+  const m = required(value.nanopubs.find((np) => np.identifier.endsWith("/m")));
+  const bad = required(value.nanopubs.find((np) => np.identifier.endsWith("/bad")));
+  new FixtureNode(
+    bad.assertionId,
+    new NamedGraphDataset(df.namedNode(bad.provenanceId), value.dataset, df),
+  ).link("https://jeswr.org/ns/pkg#contradicts", m.assertionId);
+  poison(value.dataset, bad.pubinfoId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  expect(projectHealthFacts(imported.value, { owner }).facts).toMatchObject([
+    { id: m.id, belief: "mentioned", affectedBySkipped: undefined },
+  ]);
+});
+
+it("limits a skipped envelope-scoped retraction to the envelope it names", async () => {
+  const store = memoryStore();
+  const first = await batch([claim("a")], "b1");
+  const second = await batch([claim("a")], "b2");
+  const a = required(first.nanopubs[0]);
+  const copy = required(second.nanopubs[0]);
+  expect(copy.assertionId).toBe(a.assertionId);
+  await store.put(first);
+  await store.put(second);
+  const r = required((await store.retract(a.id, { ...withdraw, batchId: "w" })).nanopubs[0]);
+  const value = await store.list();
+  poison(value.dataset, r.pubinfoId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  expect(imported.value.affected).toEqual([a.id]);
+  const view = projectHealthFacts(imported.value, { owner });
+  expect(view.facts.find((f) => f.id === a.id)).toMatchObject({
+    belief: "might",
+    affectedBySkipped: true,
+  });
+  expect(view.facts.find((f) => f.id === copy.id)).toMatchObject({
+    belief: "definitely",
+    affectedBySkipped: undefined,
+  });
+});
+
+it("marks uncertain facts on the timeline and never shows them as active", async () => {
+  const value = await batch([
+    claim("a", condition("Fictional original", "a")),
+    { ...claim("b", condition("Fictional revision", "b")), supersedes: ["a"] },
+  ]);
+  const a = required(value.nanopubs.find((np) => np.identifier.endsWith("/a")));
+  const b = required(value.nanopubs.find((np) => np.identifier.endsWith("/b")));
+  poison(value.dataset, b.provenanceId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  const item = healthTimeline(projectHealthFacts(imported.value, { owner })).condition.find(
+    (entry) => entry.id === a.id,
+  );
+  expect(item).toMatchObject({ belief: "might", affectedBySkipped: true, tone: "neutral" });
+});
+
+it("marks series points whose observation has an unreadable later update", async () => {
+  const value = await batch([
+    { ...claim("pulse"), assertion: observation({ id: "pulse", date: "2026-10-01T00:00:00Z" }) },
+    {
+      ...claim("pulse-fix"),
+      assertion: observation({ id: "fix", date: "2026-10-01T00:00:00Z" }),
+      supersedes: ["pulse"],
+    },
+  ]);
+  const pulse = required(value.nanopubs.find((np) => np.identifier.endsWith("/pulse")));
+  const fix = required(value.nanopubs.find((np) => np.identifier.endsWith("/pulse-fix")));
+  poison(value.dataset, fix.provenanceId);
+  const imported = await importHealthExport(await external(value.dataset), { owner });
+  const points = observationSeries(projectHealthFacts(imported.value, { owner })).series.flatMap(
+    (series) => series.points,
+  );
+  expect(points).toMatchObject([{ factId: pulse.id, belief: "might", affectedBySkipped: true }]);
 });
