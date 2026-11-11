@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NanopubStore } from "@jeswr/pkg-memory";
 import { PROTECTED_AGENT_CONTAINERS } from "./agent-layout.js";
-import { podScopedUrlOrUndefined } from "./auth.js";
+import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
 import type { PodPort } from "./pod-port.js";
 
 export const PERSONAL_DATA_DENIED = "Personal data requires a purpose-limited tool";
@@ -85,6 +85,68 @@ function auxiliaryGovernsPrefix(path: string, prefix: string): boolean {
   }
   const subjectPath = `/${subject.filter(Boolean).join("/")}`;
   return subjectPath === "/" || prefix === subjectPath || prefix.startsWith(`${subjectPath}/`);
+}
+
+/** Per-mutation discovery, including absent areas and shared inheritance ancestors. */
+export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<string>> {
+  try {
+    if (!pod.head) throw new Error();
+    const root = new URL(pod.root);
+    const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
+    const areas = [
+      personalDataRoot(pod),
+      ...PROTECTED_AGENT_CONTAINERS.map((path) => new URL(path, root).href),
+      ...(profile ? [profile] : []),
+    ];
+    const targets = new Set([root.href]);
+    for (const area of areas) {
+      const target = new URL(area);
+      target.hash = "";
+      targets.add(target.href);
+      for (let ancestor = new URL("./", target); ; ancestor = new URL("../", ancestor)) {
+        requirePodScopedUrl({ podRoot: root.href }, ancestor.href);
+        targets.add(ancestor.href);
+        if (ancestor.href === root.href) break;
+      }
+    }
+    const auxiliaries = new Set<string>();
+    const rootPaths = pathAliases(root);
+    for (const target of targets) {
+      const metadata = await pod.head(target);
+      // A successful HEAD alone cannot establish the governing auxiliary resources.
+      if (!metadata.acl && !metadata.describedby?.length) throw new Error();
+      for (const association of [metadata.acl, ...(metadata.describedby ?? [])]) {
+        if (association === undefined) continue;
+        const url = new URL(association); // Portable ports promise absolute metadata.
+        requirePodScopedUrl({ podRoot: root.href }, url.href);
+        for (const path of pathAliases(url)) {
+          // Every decoding stage must remain in the pod, including double-encoded traversal.
+          if (
+            !rootPaths.some(
+              (prefix) => prefix === "/" || path === prefix || path.startsWith(`${prefix}/`),
+            )
+          )
+            throw new Error();
+          auxiliaries.add(path);
+        }
+      }
+    }
+    return auxiliaries;
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
+}
+
+/** Apply the same conservative URL identities to advertised associations and final aliases. */
+export function requireAuxiliaryMutationAccess(
+  url: string,
+  auxiliaries: ReadonlySet<string>,
+): void {
+  try {
+    if (pathAliases(new URL(url)).some((path) => auxiliaries.has(path))) throw new Error();
+  } catch {
+    throw new Error(PERSONAL_DATA_DENIED);
+  }
 }
 
 /** No URL or backend-supplied value may enter this diagnostic. */

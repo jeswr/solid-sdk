@@ -203,7 +203,11 @@ the fetch capability while pod operations use the supplied port.
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
-HTTP 404 for resources not yet created. HEAD refuses redirects. Optional
+HTTP 404 for resources not yet created, and `PodHeadResult.describedby`, the absolute
+URLs from all unanchored `rel="describedby"` Links. HEAD refuses redirects and throws
+on failed responses other than 404 or malformed/ambiguous Link metadata. Valid responses
+without auxiliary Links return an empty result; memory and audit still require `acl`.
+Optional
 `PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
@@ -235,6 +239,19 @@ The agent prefixes share one layout definition with the shared-context path.
 Generic writes and deletes of an ACL, ACR or `.meta` resource that governs a protected
 area (the pod root's, an ancestor's, or the area's own, in `/.acl` and slashless `.acl`
 forms) are refused, because a protected area inherits its ancestors' access rules.
+Before each otherwise-allowed generic write/delete, the server also uses the current
+`PodPort.head` to discover `rel="acl"` and `rel="describedby"` associations for the pod
+root, every protected area (including the in-pod configured WebID profile document)
+and all their ancestor containers. Advertised auxiliary URLs are protected even at
+unconventional locations, including ACR query URLs. Shared ancestors are inspected
+once per mutation; associations are never cached across calls. Target and final URL
+aliases receive the same case, percent-decoding, path and slashless checks.
+Missing HEAD capability or auxiliary metadata, network failures, non-2xx responses other than 404,
+malformed/ambiguous Links (including multiple ACLs) and off-pod associations refuse
+the mutation with `Personal data requires a purpose-limited tool`. Associations on
+404 responses are included; missing associations fail closed even on 404.
+Custom ports enabling generic writes must supply this metadata and throw on discovery
+errors. Generic reads are unchanged and do not require HEAD.
 The personal-data area includes nanopublications, policy, locks, audit
 logs and their local ACLs. `context_read` is the only read path for the shared
 context and applies card-number redaction. The internal personal-tool and audit

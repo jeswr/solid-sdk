@@ -379,7 +379,10 @@ describe("MCP chat tools over the scoped fetch port", () => {
   });
 
   it("accepts missing Content-Type and ETag, and reports primitive transport failures", async () => {
-    const fetch: typeof globalThis.fetch = async () => new Response(null);
+    const fetch: typeof globalThis.fetch = async (target, init) =>
+      new Response(null, {
+        headers: init?.method === "HEAD" ? { link: `<${target}.acl>; rel="acl"` } : {},
+      });
     const config = { fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
     const port = createChatPodPort(config);
     const target = `${ROOT}private/chats/test.ttl`;
@@ -503,7 +506,16 @@ describe("MCP chat tools over the scoped fetch port", () => {
   ])("refuses every chat PUT redirect (%s) without a second request", async (status) => {
     for (const location of [ROOT, ROOT.slice(0, -1), `${ROOT}other`, "https://evil.example/x"]) {
       const fetch = vi.fn(async () => new Response(null, { status, headers: { location } }));
-      const port = createChatPodPort({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
+      const transport: typeof globalThis.fetch = async (input, init) =>
+        init?.method === "HEAD"
+          ? new Response(null, { headers: { link: `<${input}.acl>; rel="acl"` } })
+          : Reflect.apply(fetch, undefined, [input, init]);
+      const port = createChatPodPort({
+        fetch: transport,
+        podRoot: ROOT,
+        webId: OWNER,
+        readOnly: false,
+      });
       const target = `${ROOT}private/chats/.acl`;
       await expect(port.write(target, new Uint8Array(), "text/turtle", {})).rejects.toThrow(
         /redirect/,
@@ -531,7 +543,8 @@ describe("MCP chat tools over the scoped fetch port", () => {
         expect.objectContaining({ text: expect.stringMatching(/redirect/) }),
       ]);
       expect(pod.resources.size).toBe(0);
-      expect(pod.requests.some((r) => r.url === ROOT)).toBe(false);
+      expect(pod.requests.some((r) => r.url === ROOT && r.method !== "HEAD")).toBe(false);
+      expect(pod.requests.filter((r) => r.url === ROOT && r.method === "HEAD")).toHaveLength(1);
     } finally {
       await client.close();
     }

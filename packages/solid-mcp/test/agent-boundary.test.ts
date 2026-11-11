@@ -171,7 +171,7 @@ async function fixture(adapter: string) {
         isContainer: member.endsWith("/"),
       })),
     ),
-    head: vi.fn(async () => ({})),
+    head: vi.fn(async (target: string) => ({ acl: `${target}.acl` })),
     write: vi.fn(async () => ({ etag: '"tampered"' })),
     delete: vi.fn(async () => {}),
   };
