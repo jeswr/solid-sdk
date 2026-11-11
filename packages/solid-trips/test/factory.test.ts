@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { checkOwnerOnly } from "@jeswr/pod-access";
 import { setGrants } from "@jeswr/pod-access/roles";
 import { createTypeIndex } from "@jeswr/pod-type-index";
@@ -86,6 +87,7 @@ it.each([
   "unknown",
   "unrepresentable",
   "unsupported-model",
+  "not-storage-root",
 ] as const)("fails closed on helper refusal: %s", async (reason) => {
   const { register } = await fixture();
   vi.mocked(checkOwnerOnly).mockResolvedValue({

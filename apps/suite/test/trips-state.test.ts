@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type { Trip, TripsStore } from "@jeswr/solid-trips";
+// AUTHORED-BY Claude Opus 5.5
+import { type Trip, type TripsStore, UnconfirmedWriteError } from "@jeswr/solid-trips";
+import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { createTripsState } from "../src/apps/trips/state/trips-state";
 
@@ -259,4 +261,41 @@ it("does not create an orphan booking for a trip that has disappeared", async ()
   await tick();
   expect(store.addReservation).not.toHaveBeenCalled();
   expect(store.deleteReservation).not.toHaveBeenCalled();
+});
+
+it("compensates a new booking on a definite 412 trip refusal", async () => {
+  const refused = new StorageError("precondition-failed", {
+    status: 412,
+    method: "PUT",
+    url: a.id,
+  });
+  const { state, store, failure } = setup(
+    vi.fn(async () => {
+      throw refused;
+    }),
+  );
+  state.addBooking(a.id, { kind: "FlightReservation", title: "New booking" });
+  await tick();
+  expect(store.deleteReservation).toHaveBeenCalledOnce();
+  expect(failure).toHaveBeenCalledWith(expect.stringContaining("Couldn't save"));
+});
+it("keeps a new booking and reloads when the trip write outcome is unknown", async () => {
+  const { state, store, failure } = setup(
+    vi.fn(async () => {
+      throw new UnconfirmedWriteError(new Error("connection reset"));
+    }),
+  );
+  const linked = { ...a, reservations: [...a.reservations, "https://pod.example/new#it"] };
+  store.load = vi.fn(async () => ({
+    trips: [linked, b],
+    reservations: [{ id: "https://pod.example/new#it", kind: "FlightReservation" as const }],
+  }));
+  state.addBooking(a.id, { kind: "FlightReservation", title: "New booking" });
+  await tick();
+  await tick();
+  // The PUT may have committed: deleting the booking could leave the trip with a dangling link.
+  expect(store.deleteReservation).not.toHaveBeenCalled();
+  expect(store.load).toHaveBeenCalledOnce();
+  expect(failure).toHaveBeenCalledWith(expect.stringContaining("couldn't confirm"));
+  expect(state.getSnapshot().trips[0]?.reservations).toContain("https://pod.example/new#it");
 });

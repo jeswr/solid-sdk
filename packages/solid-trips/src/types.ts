@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 export const reservationKinds = [
   "FlightReservation",
   "TrainReservation",
@@ -48,6 +49,12 @@ export interface ReservationInput {
 export interface Reservation extends ReservationInput {
   id: string;
   etag?: string | null | undefined;
+  /**
+   * "manual" marks a record read from (or written to) the user's own owner-only
+   * manual bookings container. It is never read from RDF, so a connector document
+   * cannot claim it; such a record carries no email trust unless one was stated.
+   */
+  origin?: "manual" | undefined;
 }
 export type ExtractMarkup = (html: string) => Promise<ReservationInput[]>;
 export interface ReadNotice {

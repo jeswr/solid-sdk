@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   bookingTime,
@@ -164,7 +165,8 @@ export function BookingEditor({ trip, close }: { trip: Trip; close: () => void }
               number: value("number"),
               start,
               end,
-              trust: "verified",
+              // A manual booking makes no email-markup trust claim; the owner-only manual
+              // container is what makes it trusted (see isTrusted).
               status: "http://schema.org/ReservationConfirmed",
             });
             close();

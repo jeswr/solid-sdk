@@ -22,6 +22,10 @@ avoids schema:itinerary's Place/ItemList range. Reservation fields use reservati
 reservationStatus (string or IRI), provider (literal or Organization/name), underName → Person/name,
 reservationFor → the class-specific generated node, dateModified, prov:wasDerivedFrom,
 and https://jeswr.org/fedcon#emailMarkupTrust (only an explicit "verified" renders as verified).
+Manual bookings write no email trust. The store marks records read from its own owner-only
+trips/reservations/ container `origin: "manual"` (never read from RDF); `isTrusted(item)` is
+true for "verified", or for a manual record that claims no trust. Connector records without a
+trust flag stay "unverified".
 Providers can also be on reservationFor → airline/provider. Sender keys and opaque
 resource slugs never determine booking identity or trust. Missing dateModified stays absent.
 
@@ -34,7 +38,9 @@ and start/endTime; events have name, location → Place/name/address and startDa
 The generated READ profile accepts the connector's xsd:string times and statuses. The
 facade validates ISO calendar/clock/offset values and bridges typed xsd:dateTime values,
 IRI statuses and provider literals/nodes using typed RDF/JS accessors. Invalid times are
-omitted without dropping other booking fields. Manual writes keep xsd:dateTime and the
+omitted without dropping other booking fields. A bare calendar date (for example an Event
+startDate "2026-12-01", as xsd:string or xsd:date) is an all-day booking (`isAllDay`); it is
+kept as given, sorts first on its day and is written back as xsd:date. Manual writes keep xsd:dateTime and the
 original lexical offset (the generator's Date projection loses it). Booking names live on
 the reservation itself, including transport bookings. Supplying a fetched document URL to
 `parseReservations(dataset, url)` excludes subjects asserted about other documents. `itinerary()` orders original calendar
@@ -46,10 +52,14 @@ departure airport (or an explicit homeAirport option) determines a return-home b
 Existing membership, including duplicate confirmation keys, wins. Destination changes between
 separated stays also split clusters; transport links can bridge destinations. Undated items
 stay out of suggestions. `deduplicate` uses trimmed, case-insensitive confirmation/provider;
-latest valid dateModified wins, with stable lexical identifier ties.
+a trusted copy always beats an untrusted one (a later spoofed unverified email never replaces a
+verified or manual booking); within a trust rank the latest valid dateModified wins, with
+stable lexical identifier ties.
 
 `createTripsStore` takes storage, Type Index and an owner-only provisioning port. `openTripsStore`
-wires the suite clients, pod-access role writer and fail-closed `checkOwnerOnly` verifier. It creates trips/ with one document per
+wires the suite clients, pod-access role writer and fail-closed `checkOwnerOnly` verifier
+(`verifiedOwnerOnly(storage, owner, establish)`; `test/privacy-e2e.test.ts` runs the real
+verifier against a fake Solid server, including the not-storage-root refusal). It creates trips/ with one document per
 trip and trips/reservations/ for manual bookings. Resources are empty until privacy succeeds;
 all content writes require observed ETags. Private Trip registration uses pod-type-index.
 Trips never provisions or changes access on shared settings, preferences or Type Index
@@ -66,8 +76,12 @@ registrations point at messages/ and are never used to guess a trips/ path. It d
 by 30 seconds, 16 sources, 200 documents, eight pages per container, 1 MiB listing pages and
 512 KiB/10,000 quads per RDF document and 200 parsed reservations. Scans retain partial
 results and return `{ notice: { skipped, capped } }` when sources fail or limits are reached.
-Own Trips/manual containers page to completion without the scan's 200-document/eight-page
-caps; per-document failures are skipped and counted. Repeated cursors stop with a notice.
+Own Trips/manual containers skip the scan's 200-document/eight-page caps but have a generous
+`loadBudget` (default 100 pages per container and 60 seconds per load); exceeding it returns
+the partial result with a capped notice. Per-document failures are skipped and counted.
+Repeated cursors stop with a notice. A trip PUT that fails without a definite refusal (network,
+timeout, 408, 5xx, malformed response) throws `UnconfirmedWriteError`: callers reload rather
+than compensate, because the write may have committed.
 Failed creation steps conditionally delete the new resource best effort; booking-link
 compensation can delete only a new manual booking with its observed response validator. The connector API
 is not present in this worktree; `importEmail(html, extract)` is the injected seam. Without
@@ -94,6 +108,9 @@ Exact divergences pinned in regression tests:
 - Connector string values, booking-level airline/provider and fedcon trust now survive
   parse/group (`test/connector.test.ts`); invalid times are omitted, absent modification
   times stay absent, and booking names persist for all seven reservation classes.
+- Trust-ranked deduplication, manual bookings without email trust, all-day dates, the load
+  budget, unconfirmed trip writes and the CON-A8 writer's one-document-per-item layout
+  (`test/fixtures/writer/`) are pinned in `test/trust-time-budget.test.ts`.
 - Foreign reservation subjects are excluded on fetched-document reads; guessed mail paths
   are removed. Load/scan failures retain usable results with a notice (`test/recovery.test.ts`).
 - Only Trips resources receive access changes. Existing private indexes are verified with

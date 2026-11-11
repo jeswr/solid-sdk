@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { itinerary, type Reservation, type Trip } from "@jeswr/solid-trips";
+import { isAllDay, isTrusted, itinerary, type Reservation, type Trip } from "@jeswr/solid-trips";
 import {
   Badge,
   Button,
@@ -57,6 +58,7 @@ const icons = {
   EventReservation: Ticket,
 };
 function LocalTime({ value }: { value?: string | undefined }) {
+  if (value && isAllDay(value)) return <time dateTime={value}>All day</time>;
   return value ? (
     <time dateTime={value}>
       {value.slice(11, 16)}
@@ -81,7 +83,7 @@ function BookingCard({ item, trip }: { item: Reservation; trip: Trip }) {
       <div className="tr-booking-main">
         <div className="tr-card-top">
           <span className="tr-eyebrow">{kindLabels[item.kind]}</span>
-          {item.trust !== "verified" && <Badge variant="outline">Unverified sender</Badge>}
+          {!isTrusted(item) && <Badge variant="outline">Unverified sender</Badge>}
         </div>
         <h3>
           {item.title ??

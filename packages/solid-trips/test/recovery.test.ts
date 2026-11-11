@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
@@ -225,7 +226,11 @@ describe("conditional compensation", () => {
     storage.write = vi.fn(async () => {
       throw new Error("write failed");
     });
-    await expect(store.saveTrip({ ...saved, name: "Changed" })).rejects.toThrow("write failed");
+    // A transport-level throw leaves the PUT outcome unknown; the original failure is the cause.
+    await expect(store.saveTrip({ ...saved, name: "Changed" })).rejects.toMatchObject({
+      name: "UnconfirmedWriteError",
+      cause: expect.objectContaining({ message: "write failed" }),
+    });
     expect(await storage.head(saved.id.split("#")[0] as string)).toBeTruthy();
     const remove = vi.spyOn(storage, "delete").mockRejectedValue(new Error("cleanup failed"));
     await expect(store.addReservation(input)).rejects.toThrow("write failed");

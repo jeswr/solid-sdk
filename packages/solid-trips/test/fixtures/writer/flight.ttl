@@ -1,0 +1,24 @@
+# AUTHORED-BY Claude Opus 5.5
+# Shaped like the CON-A8 MailMarkupWriter (origin/claude/project-thread-mna5p5-markup,
+# packages/pod-connectors/src/mail/markup-writer.ts writeNode): ONE document per item at
+# <account>/trips/<sha256>.ttl, the item rooted at #it, nested nodes at #node-N numbered
+# depth-first in property order, string values as xsd:string, every node carrying
+# fedcon:emailMarkupTrust and prov:wasDerivedFrom, and the receiver dateModified as
+# xsd:dateTime on the root only. Item content is EMAIL_MARKUP_FIXTURES[2] (FlightReservation).
+@prefix s: <http://schema.org/> .
+@prefix f: <https://jeswr.org/fedcon#> .
+@prefix p: <http://www.w3.org/ns/prov#> .
+@prefix x: <http://www.w3.org/2001/XMLSchema#> .
+<#it> a s:FlightReservation ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ;
+  s:reservationNumber "TEST-FLIGHT-42" ; s:provider <#node-0> ;
+  s:reservationStatus "https://schema.org/ReservationConfirmed" ;
+  s:underName <#node-1> ; s:reservationFor <#node-2> ;
+  s:dateModified "2026-11-20T08:00:00.000Z"^^x:dateTime .
+<#node-0> a s:Organization ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ; s:name "Example Air" .
+<#node-1> a s:Person ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ; s:name "Example Traveller" .
+<#node-2> a s:Flight ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ;
+  s:flightNumber "EX42" ; s:airline <#node-3> ; s:departureAirport <#node-4> ;
+  s:arrivalAirport <#node-5> ; s:departureTime "2026-12-01T09:00:00Z" .
+<#node-3> a s:Organization ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ; s:name "Example Air" .
+<#node-4> a s:Airport ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ; s:name "Example North" ; s:iataCode "AAA" .
+<#node-5> a s:Airport ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> ; s:name "Example South" ; s:iataCode "BBB" .

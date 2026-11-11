@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { DatasetCore } from "@jeswr/fetch-rdf";
 import { LiteralAs, NamedNodeAs, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -61,13 +62,22 @@ function timePath(kind: ReservationInput["kind"], field: "start" | "end") {
     return { child: true, predicate: field === "start" ? "startDate" : "endDate" };
   return { child: true, predicate: field === "start" ? "departureTime" : "arrivalTime" };
 }
-/** ISO calendar and clock validation, without inferring a zone for local times. */
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+/** A date without a clock time is an all-day booking (for example an Event startDate). */
+export const isAllDay = (value: string | undefined): boolean =>
+  !!value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+/**
+ * ISO calendar and clock validation, without inferring a zone for local times.
+ * A bare calendar date is accepted as all-day and kept as given.
+ */
 export function parseReservationTime(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const match =
-    /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/.exec(
+      value,
+    );
   if (!match) return undefined;
-  const [, date, hours, minutes, seconds, zone] = match;
+  const [, date, hours = "00", minutes = "00", seconds, zone] = match;
   const day = new Date(`${date}T00:00:00Z`);
   if (
     !Number.isFinite(day.getTime()) ||
@@ -109,7 +119,18 @@ function providerName(subject: TermWrapper, predicate = "provider"): string | un
     return undefined;
   });
 }
-export function parseReservations(dataset: DatasetCore, documentUrl?: string): Reservation[] {
+export interface ParseReservationsOptions {
+  /**
+   * The document is in the user's own owner-only manual bookings container. Only the
+   * store sets this, from the document location, never from RDF content.
+   */
+  manual?: boolean;
+}
+export function parseReservations(
+  dataset: DatasetCore,
+  documentUrl?: string,
+  options: ParseReservationsOptions = {},
+): Reservation[] {
   const result: Reservation[] = [];
   const subjects = new Set(
     [...dataset]
@@ -158,8 +179,11 @@ export function parseReservations(dataset: DatasetCore, documentUrl?: string): R
             const valid = parseReservationTime(lexical);
             return valid ? new Date(valid).toISOString() : undefined;
           })(),
-        trust: root.trust === "verified" ? "verified" : "unverified",
+        // Connector records without a trust flag fail closed to unverified. A manual
+        // record claims no email trust unless one was stated explicitly.
+        trust: options.manual ? root.trust : root.trust === "verified" ? "verified" : "unverified",
       };
+      if (options.manual) item.origin = "manual";
       for (const field of ["title", "number", "address"] as const)
         if (booking && field in booking)
           item[field] ??= (booking as unknown as Record<string, string>)[field];
@@ -186,10 +210,7 @@ export function parseReservations(dataset: DatasetCore, documentUrl?: string): R
           item[field] = parseReservationTime(
             OptionalFrom.subjectPredicate(owner, SCHEMA + path.predicate, (term) =>
               term.termType === "Literal" &&
-              [
-                "http://www.w3.org/2001/XMLSchema#string",
-                "http://www.w3.org/2001/XMLSchema#dateTime",
-              ].includes(term.datatype.value)
+              [`${XSD}string`, `${XSD}dateTime`, `${XSD}date`].includes(term.datatype.value)
                 ? LiteralAs.string(term)
                 : undefined,
             ),
@@ -243,8 +264,10 @@ export function buildReservation(url: string, input: ReservationInput) {
   for (const field of ["start", "end"] as const) {
     const value = input[field];
     if (!value) continue;
-    // xsd:dateTime needs seconds even when a connector string used ISO minute precision.
-    if (!/T\d{2}:\d{2}:\d{2}/.test(value) || !parseReservationTime(value))
+    // xsd:dateTime needs seconds even when a connector string used ISO minute precision;
+    // an all-day date is written as xsd:date.
+    const allDay = isAllDay(value);
+    if ((!allDay && !/T\d{2}:\d{2}:\d{2}/.test(value)) || !parseReservationTime(value))
       throw new TypeError("Use a valid ISO date and time including seconds");
     const path = timePath(input.kind, field);
     OptionalAs.object(
@@ -252,7 +275,7 @@ export function buildReservation(url: string, input: ReservationInput) {
       SCHEMA + path.predicate,
       value,
       (text, factory) =>
-        factory.literal(text, factory.namedNode("http://www.w3.org/2001/XMLSchema#dateTime")),
+        factory.literal(text, factory.namedNode(`${XSD}${allDay ? "date" : "dateTime"}`)),
     );
   }
   const parsed = parseReservations(graph)[0];

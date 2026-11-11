@@ -1,9 +1,11 @@
 # AUTHORED-BY Codex (GPT-6.1 Sol)
 # Source: PR #474, origin/claude/project-thread-mna5p5-markup,
 # packages/pod-connectors/src/mail/markup-fixtures.ts EMAIL_MARKUP_FIXTURES (travel items)
-# and markup-writer.test.ts "writes every supported type". Expanded exactly as
-# markup-writer.ts writeNode/addLiteral: string values stay xsd:string, children
-# are fragment IRIs, every node carries provenance/trust. Slugs are opaque.
+# and markup-writer.test.ts "writes every supported type". Literal encoding follows
+# markup-writer.ts writeNode/addLiteral (string values stay xsd:string, every node
+# carries provenance/trust), but this is a test convenience, NOT the writer's layout:
+# all seven items share one document under readable fragment names. The writer emits
+# one document per item rooted at #it with #node-N children; see fixtures/writer/.
 @prefix s: <http://schema.org/> .
 @prefix f: <https://jeswr.org/fedcon#> .
 @prefix p: <http://www.w3.org/ns/prov#> .

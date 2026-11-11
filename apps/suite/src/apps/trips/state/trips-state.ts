@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   bookingKey,
   type ReservationInput,
   type Trip,
   type TripSnapshot,
   type TripsStore,
+  UnconfirmedWriteError,
 } from "@jeswr/solid-trips";
 
 class PartialMoveError extends Error {}
@@ -43,14 +45,16 @@ export function createTripsState(
     try {
       confirmed = await next.persist(confirmed);
     } catch (cause) {
-      if (cause instanceof PartialMoveError) {
+      if (cause instanceof PartialMoveError || cause instanceof UnconfirmedWriteError) {
         try {
           confirmed = await store.load();
         } catch {
           /* Keep the last confirmed view until a reload succeeds. */
         }
         error =
-          "Part of this move reached your pod. Reload to check both trips before trying again.";
+          cause instanceof PartialMoveError
+            ? "Part of this move reached your pod. Reload to check both trips before trying again."
+            : "We couldn't confirm this change reached your pod. Reload to check before trying again.";
       } else error = "Couldn't save this change. Your itinerary has been restored.";
       if (alive) onFailure(error);
     }
@@ -137,10 +141,14 @@ export function createTripsState(
               reservations: [...snapshot.reservations, reservation],
             };
           } catch (error) {
-            try {
-              await store.deleteReservation(reservation);
-            } catch {
-              /* Best-effort compensation. */
+            // The trip PUT may have committed (link saved): deleting the booking then
+            // would leave a dangling link. Compensate only on a definite refusal.
+            if (!(error instanceof UnconfirmedWriteError)) {
+              try {
+                await store.deleteReservation(reservation);
+              } catch {
+                /* Best-effort compensation. */
+              }
             }
             throw error;
           }

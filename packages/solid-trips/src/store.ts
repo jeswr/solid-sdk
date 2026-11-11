@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { checkOwnerOnly } from "@jeswr/pod-access";
@@ -31,10 +32,31 @@ export interface StorePorts {
   /** Establish and verify owner-only resource and descendant access. */
   protect(url: string, folder: boolean): Promise<void>;
   verifyPrivateIndex?(): Promise<void>;
+  /** Budget for reading the user's own Trips containers; exceeding it gives a partial notice. */
+  loadBudget?: { maxPages?: number; timeoutMs?: number };
+}
+/** Generous defaults: own containers are owner-written, but a server can still page forever. */
+export const DEFAULT_LOAD_BUDGET = { maxPages: 100, timeoutMs: 60_000 } as const;
+/**
+ * The trip write may or may not have committed (network loss, timeout, 5xx, a malformed
+ * success). Callers must not compensate as though it failed; reload and check instead.
+ */
+export class UnconfirmedWriteError extends Error {
+  constructor(cause: unknown) {
+    super("Could not confirm whether the change reached your pod", { cause });
+    this.name = "UnconfirmedWriteError";
+  }
+}
+/** A definite refusal: the request never ran (scope, unsupported) or a 4xx other than 408. */
+function definiteRefusal(error: unknown): boolean {
+  if (!(error instanceof StorageError)) return false;
+  if (error.code === "scope" || error.code === "unsupported") return true;
+  return error.status !== null && error.status >= 400 && error.status < 500 && error.status !== 408;
 }
 const documentOf = (id: string) => id.split("#")[0] as string;
 export function createTripsStore(ports: StorePorts) {
   const { storage, index, protect } = ports;
+  const budget = { ...DEFAULT_LOAD_BUDGET, ...ports.loadBudget };
   let base = new URL("trips/", storage.root).href;
   let manual = new URL("reservations/", base).href;
   // Conditional cleanup cannot delete another writer's intervening update.
@@ -85,12 +107,13 @@ export function createTripsStore(ports: StorePorts) {
     });
     return { dataset, etag: response.etag };
   }
-  /** Own containers page to completion; connector scans have explicit budgets. */
+  /** Own containers have a generous page budget; connector scans have tighter ones. */
   async function documents(
     container: string,
     notice: ReadNotice,
     signal?: AbortSignal,
     cap = Infinity,
+    maxPages = 8,
   ) {
     const urls = new Set<string>();
     let cursor: import("@jeswr/storage-client").PageCursor | undefined;
@@ -115,7 +138,7 @@ export function createTripsStore(ports: StorePorts) {
           }
         }
         cursor = page.next ?? undefined;
-        if (cursor && (visited.has(cursor.url) || (++pages >= 8 && cap !== Infinity))) {
+        if (cursor && (visited.has(cursor.url) || ++pages >= maxPages)) {
           notice.capped = true;
           notice.skipped++;
           break;
@@ -133,10 +156,11 @@ export function createTripsStore(ports: StorePorts) {
     const trips: Trip[] = [],
       reservations: Reservation[] = [];
     const notice: ReadNotice = { skipped: 0, capped: false };
-    const docs = new Set(await documents(manual, notice));
-    for (const url of await documents(base, notice)) {
+    const signal = AbortSignal.timeout(budget.timeoutMs);
+    const docs = new Set(await documents(manual, notice, signal, Infinity, budget.maxPages));
+    for (const url of await documents(base, notice, signal, Infinity, budget.maxPages)) {
       try {
-        const { dataset, etag } = await read(url);
+        const { dataset, etag } = await read(url, signal);
         const trip = parseTrip(`${url}#it`, dataset);
         if (trip) {
           trips.push({ ...trip, etag });
@@ -144,15 +168,23 @@ export function createTripsStore(ports: StorePorts) {
         } else notice.skipped++;
       } catch {
         notice.skipped++;
+        notice.capped ||= signal.aborted;
       }
     }
     for (const url of docs) {
       try {
-        const parsed = parseReservations((await read(url)).dataset, url);
+        // Only the owner-only manual container is user-entered; linked connector
+        // documents elsewhere keep their own email trust.
+        const scoped = assertWithinPodScope(storage.root, url);
+        const isManual = scoped.startsWith(manual) && scoped !== manual;
+        const parsed = parseReservations((await read(scoped, signal)).dataset, scoped, {
+          manual: isManual,
+        });
         reservations.push(...parsed);
         if (!parsed.length) notice.skipped++;
       } catch {
         notice.skipped++;
+        notice.capped ||= signal.aborted;
       }
     }
     return { trips, reservations, notice };
@@ -181,10 +213,13 @@ export function createTripsStore(ports: StorePorts) {
         modified: new Date().toISOString(),
         created: trip.created ?? new Date().toISOString(),
       };
-      const result = await storage.write(url, await serializeTrip(saved), {
-        contentType: "text/turtle",
-        ifMatch: etag,
-      });
+      const body = await serializeTrip(saved);
+      let result: Awaited<ReturnType<StorageClient["write"]>>;
+      try {
+        result = await storage.write(url, body, { contentType: "text/turtle", ifMatch: etag });
+      } catch (error) {
+        throw definiteRefusal(error) ? error : new UnconfirmedWriteError(error);
+      }
       return { ...saved, etag: result.etag };
     } catch (error) {
       if (creating) await cleanup(url, cleanupTag);
@@ -210,6 +245,7 @@ export function createTripsStore(ports: StorePorts) {
         ...input,
         id: `${url}#it`,
         etag: result.etagSource === "response" ? result.etag : null,
+        origin: "manual",
       };
     } catch (error) {
       await cleanup(url, cleanupTag);
@@ -301,22 +337,39 @@ export async function openTripsStore(
     ? createSolidBackend({ fetch, root })
     : (await createPodClient({ fetch, storage: root })).storage;
   const { index, verifyPrivateIndex } = tripsTypeIndex(storage, fetch, owner, demo);
+  const verified = verifiedOwnerOnly(storage, owner, async (url, folder) => {
+    const result = await setGrants(
+      [url],
+      [{ agent: { type: "webid", id: owner }, role: "manager", inherited: false, source: "" }],
+      { fetch, webId: owner, root, kind: folder ? "folder" : "resource", ownOnly: true },
+    );
+    return !result.failed.length;
+  });
   return createTripsStore({
     storage,
     index,
     verifyPrivateIndex,
     protect: async (url, folder) => {
       if (demo) return; // Explicit session fixture, never inferred from RDF.
-      const result = await setGrants(
-        [url],
-        [{ agent: { type: "webid", id: owner }, role: "manager", inherited: false, source: "" }],
-        { fetch, webId: owner, root, kind: folder ? "folder" : "resource", ownOnly: true },
-      );
-      if (result.failed.length) throw new Error("Could not establish owner-only Trips storage");
-      if (!(await checkOwnerOnly({ storage, url, ownerWebId: owner })).private)
-        throw new Error("Could not verify owner-only Trips storage");
+      await verified(url, folder);
     },
   });
+}
+/**
+ * Establish owner-only access, then verify the raw effective access independently with
+ * checkOwnerOnly; a successful role write is never treated as proof of privacy.
+ */
+export function verifiedOwnerOnly(
+  storage: StorageClient,
+  owner: string,
+  establish: (url: string, folder: boolean) => Promise<boolean>,
+): StorePorts["protect"] {
+  return async (url, folder) => {
+    if (!(await establish(url, folder)))
+      throw new Error("Could not establish owner-only Trips storage");
+    if (!(await checkOwnerOnly({ storage, url, ownerWebId: owner })).private)
+      throw new Error("Could not verify owner-only Trips storage");
+  };
 }
 export async function importEmail(
   html: string,

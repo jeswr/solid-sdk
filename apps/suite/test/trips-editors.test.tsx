@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -80,9 +81,10 @@ it("uses datetime-local controls and preserves a separately entered optional off
       title: "My onward flight",
       start: "2026-12-01T09:30:00+02:00",
       end: "2026-12-01T12:30:00+01:00",
-      trust: "verified",
     }),
   );
+  // A manual booking never claims email-markup trust.
+  expect(addBooking.mock.calls[0]?.[1]).not.toHaveProperty("trust");
   expect(close).toHaveBeenCalledOnce();
 });
 it("leaves the time zone unspecified when the confirmation has no offset", async () => {

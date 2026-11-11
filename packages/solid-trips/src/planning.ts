@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { Reservation, Trip } from "./types.js";
 
 const DAY = 86_400_000;
@@ -10,12 +11,27 @@ export function bookingKey(item: Reservation): string {
     ? JSON.stringify([key(item.reservationNumber), key(item.provider)])
     : item.id;
 }
-/** Equal timestamps use the lexical identifier to give stable results across scan order. */
+/**
+ * Trusted means a verified email markup sender, or the user's own manual record that
+ * claims no email trust. Missing trust on any other record is never trusted.
+ */
+export function isTrusted(item: Pick<Reservation, "trust" | "origin">): boolean {
+  return item.trust === "verified" || (item.origin === "manual" && item.trust !== "unverified");
+}
+/**
+ * A trusted copy always beats an untrusted one, whatever its timestamp, so a spoofed
+ * later email cannot replace a verified booking. Within a trust rank the newest
+ * `modified` wins; equal timestamps use the lexical identifier for stable results.
+ */
 export function deduplicate(reservations: readonly Reservation[]): Reservation[] {
   const byKey = new Map<string, Reservation>();
   for (const item of reservations) {
     const k = bookingKey(item);
     const old = byKey.get(k);
+    if (old && isTrusted(old) !== isTrusted(item)) {
+      if (isTrusted(item)) byKey.set(k, item);
+      continue;
+    }
     const parsedTime = Date.parse(item.modified ?? "");
     const parsedPrevious = Date.parse(old?.modified ?? "");
     const time = Number.isFinite(parsedTime) ? parsedTime : Number.NEGATIVE_INFINITY;
