@@ -24,10 +24,13 @@ export const CLIENT_TIMEOUT_MS = 5000;
 function https(value: unknown): value is string {
   const url = typeof value === "string" ? httpUrl(value) : undefined;
   if (url?.protocol !== "https:") return false;
-  const host = normalizeHostForClassification(url.hostname);
+  const host = normalizeHostForClassification(url.hostname).replace(/\.$/, "");
+  // Browsers cannot block hostnames that resolve to private addresses without DNS access.
   return (
     !isDeniedHostname(host, [...DEFAULT_HOSTNAME_DENYLIST, "localhost", "local"]) &&
-    (classifyIpLiteral(host) === 0 ? host.includes(".") : isPublicAddress(host, false))
+    (classifyIpLiteral(host) === 0
+      ? host.includes(".") && host.split(".").every(Boolean)
+      : isPublicAddress(host, false))
   );
 }
 const publicClientFetch: typeof globalThis.fetch = async (input, init) =>

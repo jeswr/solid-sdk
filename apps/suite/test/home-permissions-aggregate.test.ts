@@ -227,7 +227,8 @@ describe("Home permission holdings", () => {
         records,
       }).rows.find((row) => row.id === bob)!.lines;
       expect(lines).toHaveLength(2);
-      expect(lines.every((line) => !line.folderScope)).toBe(true);
+      expect(lines.find((line) => line.inherited)?.folderScope).toBe("members");
+      expect(lines.find((line) => !line.inherited)?.folderScope).toBeUndefined();
     }
   });
   it("does not compact a shared ACL line that includes unrelated resources or ancestors", () => {

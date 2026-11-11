@@ -37,7 +37,10 @@ it("resolves the seeded app's real client name and logo through the fixture tran
     DEMO_APP_CLIENT_ID,
     expect.objectContaining({ credentials: "omit", redirect: "error" }),
   );
-  const client = await (await pod.fetch(DEMO_APP_CLIENT_ID)).json();
+  const document = await pod.fetch(DEMO_APP_CLIENT_ID);
+  expect(document.headers.get("content-type")).toBe("application/json");
+  const client = await document.json();
+  expect(client["@context"]).toBe("https://www.w3.org/ns/solid/oidc-context.jsonld");
   expect(client.client_id).toBe(DEMO_APP_CLIENT_ID);
   expect(client.client_name).toBe(metadata.name);
   expect(client.logo_uri).toBe(metadata.logoUri);
@@ -119,6 +122,32 @@ it("does not fall back to a network logo when the fixture is absent, malformed o
   });
   expect(await clientLogoSource(DEMO_APP_LOGO)).toBeUndefined();
   vi.mocked(getDemoPod).mockRejectedValue(new Error("offline"));
+  expect(await clientLogoSource(DEMO_APP_LOGO)).toBeUndefined();
+});
+
+it.each([
+  "image/svg+xml; charset=utf-8",
+  "IMAGE/SVG+XML ; charset=UTF-8",
+])("loads a demo SVG whose content type has parameters: %s", async (contentType) => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", "1");
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(0) });
+  vi.mocked(getDemoPod).mockResolvedValue(pod);
+  const original = await pod.fetch(DEMO_APP_LOGO);
+  await pod.fetch(DEMO_APP_LOGO, {
+    method: "PUT",
+    headers: { "content-type": contentType },
+    body: await original.text(),
+  });
+  const source = await clientLogoSource(DEMO_APP_LOGO);
+  expect(source).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+  expect(decodeURIComponent(source || "")).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
+});
+
+it("refuses a demo logo response without a content type", async () => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", "1");
+  const pod = createDemoPod({ root: DEMO_ROOT });
+  vi.spyOn(pod, "fetch").mockResolvedValue(new Response(null));
+  vi.mocked(getDemoPod).mockResolvedValue(pod);
   expect(await clientLogoSource(DEMO_APP_LOGO)).toBeUndefined();
 });
 

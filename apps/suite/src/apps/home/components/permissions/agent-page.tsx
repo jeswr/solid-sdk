@@ -21,6 +21,7 @@ import {
 
 export function ClientCard({ metadata }: { metadata: ClientMetadata }) {
   const [logo, setLogo] = useState<string>();
+  const [logoError, setLogoError] = useState(false);
   return (
     <section className="hm-permission-about" aria-labelledby="client-about">
       <h2 id="client-about">What this app says about itself</h2>
@@ -56,11 +57,16 @@ export function ClientCard({ metadata }: { metadata: ClientMetadata }) {
         ) : (
           <Button
             variant="outline"
-            onClick={async () => setLogo(await clientLogoSource(metadata.logoUri as string))}
+            onClick={async () => {
+              const source = await clientLogoSource(metadata.logoUri as string);
+              setLogo(source);
+              setLogoError(!source);
+            }}
           >
             Show logo
           </Button>
         ))}
+      {logoError && <p role="status">Couldn't load the logo</p>}
       {!metadata.name &&
         !metadata.uri &&
         !metadata.policyUri &&

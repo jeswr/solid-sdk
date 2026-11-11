@@ -914,6 +914,11 @@ describe("public Client ID Document resolver", () => {
     const transport = vi.fn<typeof fetch>();
     for (const host of [
       "localhost",
+      "localhost.",
+      "intranet.",
+      "foo..bar",
+      "foo.bar..",
+      ".foo.bar",
       "sub.localhost.",
       "printer.local",
       "internal",
@@ -932,6 +937,7 @@ describe("public Client ID Document resolver", () => {
     }
     expect(transport).not.toHaveBeenCalled();
     expect(isClientIdDocument("https://8.8.8.8/client.json")).toBe(true);
+    expect(isClientIdDocument("https://app.test./client.json")).toBe(true);
   });
   it("times out a hanging document and retries failures soon instead of caching them for a day", async () => {
     vi.useFakeTimers();

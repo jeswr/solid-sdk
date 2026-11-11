@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
@@ -107,6 +108,9 @@ function GrantDetails({
           className="hm-permission-path"
           key={`${resource.url}:${resource.node}:${resource.scope}`}
         >
+          {resource.isContainer && (
+            <span>{resource.scope === "members" ? "Everything in it" : "This folder"}</span>
+          )}
           <code>{relativePath(resource.url, storage)}</code>
           {technical ? (
             <a href={resource.source} target="_blank" rel="noopener noreferrer">
@@ -282,7 +286,7 @@ export function PermissionAccessRow({
     if (checked) {
       const removed = binding.removed[line.key];
       if (removed?.token && !removed.stale) void binding.undo(removed.token);
-    } else if (line.inherited) open(line);
+    } else if (line.resources.some((r) => r.inherited || r.scope === "members")) open(line);
     else void binding.revoke(line);
   };
   const nameLink = (

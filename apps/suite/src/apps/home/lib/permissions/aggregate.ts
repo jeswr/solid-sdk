@@ -247,20 +247,20 @@ export function aggregateHoldings(
     }
   }
   for (const { row, url, resource, members } of ownScopes.values()) {
-    if (!resource || !members) continue;
     // A shared ACL may also govern other resources. Only compact this folder's
     // own two scopes, never an ancestor's defaults or an unrelated target.
     if (
-      resource.resources.some((r) => r.url !== url) ||
-      members.resources.some((r) => r.url !== url || r.inheritedFrom !== url)
+      resource?.resources.some((r) => r.url !== url) ||
+      members?.resources.some((r) => r.url !== url || r.inheritedFrom !== url)
     )
       continue;
+    if (members) members.folderScope = "members";
+    if (!resource || !members) continue;
     if (JSON.stringify(resource.modes) === JSON.stringify(members.modes)) {
       resource.resources.push(...members.resources);
       row.lines = row.lines.filter((line) => line !== members);
     } else {
       resource.folderScope = "resource";
-      members.folderScope = "members";
     }
   }
   const rank = (row: AgentRow) =>

@@ -20,7 +20,11 @@ export async function clientLogoSource(url: string): Promise<string | undefined>
   try {
     const response = await demoClientResource(url, { credentials: "omit", redirect: "error" });
     if (!response) return url;
-    if (!response.ok || response.headers.get("content-type") !== "image/svg+xml") return undefined;
+    if (
+      !response.ok ||
+      response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "image/svg+xml"
+    )
+      return undefined;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await response.text())}`;
   } catch {
     return undefined;
