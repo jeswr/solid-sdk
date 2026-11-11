@@ -15,8 +15,8 @@ declare module "pod-health/ui" {
      *  `https://carol.example/health/record.ttl`). */
     resourceUrl: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The bounded authenticated fetch for pod reads. Omit to use the
+     * unauthenticated global fetch.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the list. */

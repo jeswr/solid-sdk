@@ -10,6 +10,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as healthStore from "../../src/store.js";
 import { useHealthRecords } from "../../src/ui/useHealthRecords.js";
 
 afterEach(() => {
@@ -65,6 +66,12 @@ describe("useHealthRecords", () => {
   });
 
   it("does not let a slow superseded load overwrite a newer resource change", async () => {
+    // Model a read that cannot be aborted (for example, already queued cached work).
+    // The hook's generation fence must still discard its eventual successful result.
+    const readHealth = healthStore.readHealth;
+    vi.spyOn(healthStore, "readHealth").mockImplementation((url, options) =>
+      readHealth(url, options?.fetch ? { fetch: options.fetch } : {}),
+    );
     let releaseSlow: () => void = () => {};
     const slow = new Promise<void>((r) => {
       releaseSlow = r;
@@ -95,6 +102,7 @@ describe("useHealthRecords", () => {
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.resourceUrl).toBe("https://pod.example/health/fast.ttl");
+    expect(result.current.entries[0]?.iri).toBe("https://pod.example/health/fast.ttl#cond");
     expect(result.current.error).toBeNull();
   });
 

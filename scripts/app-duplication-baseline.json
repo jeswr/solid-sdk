@@ -1,46 +1,6 @@
 {
   "window": 120,
   "clusters": {
-    "0036e5c7e90b3ae9840066a99cb639659966921f26f387928089781242a6e0d0": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 1047,
-          "endLine": 1100,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 1046,
-          "endLine": 1092,
-          "tokens": 125
-        }
-      ]
-    },
-    "014737296a50d9e6a37070c10747b71d5c17b25fa1905ebbaae8a370b09a643d": {
-      "tokens": 127,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 447,
-          "endLine": 533,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 486,
-          "endLine": 572,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 461,
-          "endLine": 547,
-          "tokens": 127
-        }
-      ]
-    },
     "02b63c9e1ee3086f47d772cb074aab47ea84ddf32d7979cbb612ab9d4fa5143b": {
       "tokens": 127,
       "locations": [
@@ -104,29 +64,6 @@
         }
       ]
     },
-    "0339eb2e120cdece358001648ef377e6a81443bde7a5b091b5c21de08445cec7": {
-      "tokens": 120,
-      "locations": [
-        {
-          "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 123,
-          "endLine": 157,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 641,
-          "endLine": 676,
-          "tokens": 120
-        },
-        {
-          "file": "packages/solid-auth-core/src/redirect.ts",
-          "startLine": 189,
-          "endLine": 225,
-          "tokens": 120
-        }
-      ]
-    },
     "03c97b4d23313c4364cf7a11bf2474455a52d1ca81d291d36cf8a1e1330d33f8": {
       "tokens": 143,
       "locations": [
@@ -157,25 +94,19 @@
       ]
     },
     "03cfcce585a0e1c2703352c8fe236c57840c15b5859e4a6c0569b3f8eba274e0": {
-      "tokens": 229,
+      "tokens": 235,
       "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1126,
-          "endLine": 1211,
-          "tokens": 229
-        },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 1008,
-          "endLine": 1092,
-          "tokens": 229
+          "endLine": 1100,
+          "tokens": 235
         },
         {
           "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
           "startLine": 1007,
-          "endLine": 1091,
-          "tokens": 229
+          "endLine": 1092,
+          "tokens": 235
         }
       ]
     },
@@ -224,12 +155,6 @@
       "locations": [
         {
           "file": "apps/pod-chat/web/src/LoginScreen.tsx",
-          "startLine": 9,
-          "endLine": 65,
-          "tokens": 287
-        },
-        {
-          "file": "apps/pod-health/web/src/LoginScreen.tsx",
           "startLine": 9,
           "endLine": 65,
           "tokens": 287
@@ -310,12 +235,6 @@
           "tokens": 137
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 493,
-          "endLine": 577,
-          "tokens": 137
-        },
-        {
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 482,
           "endLine": 562,
@@ -345,12 +264,6 @@
           "tokens": 166
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1115,
-          "endLine": 1169,
-          "tokens": 166
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 997,
           "endLine": 1050,
@@ -377,12 +290,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1233,
           "endLine": 1291,
-          "tokens": 306
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1310,
-          "endLine": 1368,
           "tokens": 306
         },
         {
@@ -576,12 +483,6 @@
           "tokens": 185
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1499,
-          "endLine": 1556,
-          "tokens": 185
-        },
-        {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1543,
           "endLine": 1600,
@@ -733,33 +634,10 @@
           "tokens": 135
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1446,
-          "endLine": 1486,
-          "tokens": 135
-        },
-        {
           "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
           "startLine": 1212,
           "endLine": 1252,
           "tokens": 135
-        }
-      ]
-    },
-    "116e0f0d8c1a3246a70f860870c7c43a33151fd509ac9abf6e34fe8106bcf76e": {
-      "tokens": 151,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1072,
-          "endLine": 1107,
-          "tokens": 151
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1145,
-          "endLine": 1179,
-          "tokens": 151
         }
       ]
     },
@@ -918,12 +796,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 390,
-          "endLine": 426,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 354,
           "endLine": 390,
@@ -962,12 +834,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1206,
           "endLine": 1272,
-          "tokens": 143
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1386,
-          "endLine": 1452,
           "tokens": 143
         },
         {
@@ -1031,12 +897,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1064,
           "endLine": 1099,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1115,
-          "endLine": 1150,
           "tokens": 120
         },
         {
@@ -1115,12 +975,6 @@
           "tokens": 131
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1339,
-          "endLine": 1371,
-          "tokens": 131
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1507,
           "endLine": 1539,
@@ -1165,12 +1019,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 332,
           "endLine": 368,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 649,
-          "endLine": 685,
           "tokens": 127
         },
         {
@@ -1241,12 +1089,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1296,
           "endLine": 1434,
-          "tokens": 430
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1373,
-          "endLine": 1502,
           "tokens": 430
         },
         {
@@ -1463,12 +1305,6 @@
           "tokens": 134
         },
         {
-          "file": "apps/pod-health/web/src/auth/autologin-plan.ts",
-          "startLine": 108,
-          "endLine": 134,
-          "tokens": 134
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/autologin-plan.ts",
           "startLine": 108,
           "endLine": 134,
@@ -1511,23 +1347,6 @@
         }
       ]
     },
-    "24031577484473e9043f89753402852a66affd400cfa60ee1a26cc70e3c3dc49": {
-      "tokens": 161,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1039,
-          "endLine": 1118,
-          "tokens": 161
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 920,
-          "endLine": 1000,
-          "tokens": 161
-        }
-      ]
-    },
     "244e4b4fe575ce41829ad75b1eb73ed270c479957574d61e9b264d8d3f22014b": {
       "tokens": 167,
       "locations": [
@@ -1541,12 +1360,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1287,
           "endLine": 1344,
-          "tokens": 167
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1467,
-          "endLine": 1524,
           "tokens": 167
         },
         {
@@ -1732,31 +1545,25 @@
       ]
     },
     "2cece567574bf99f0aef341cfcfaf3153da9f484f6d82e265e79b85dbc2a6604": {
-      "tokens": 126,
+      "tokens": 134,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 437,
-          "endLine": 532,
-          "tokens": 126
+          "endLine": 533,
+          "tokens": 134
         },
         {
           "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
           "startLine": 451,
-          "endLine": 546,
-          "tokens": 126
+          "endLine": 547,
+          "tokens": 134
         }
       ]
     },
     "2de5108199111928116664ac4846533a0fda3d743e0a8b63045442a09067ab57": {
       "tokens": 191,
       "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 786,
-          "endLine": 860,
-          "tokens": 191
-        },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 678,
@@ -2071,12 +1878,6 @@
           "startLine": 1058,
           "endLine": 1101,
           "tokens": 226
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1131,
-          "endLine": 1173,
-          "tokens": 226
         }
       ]
     },
@@ -2155,43 +1956,37 @@
       ]
     },
     "355b607b093cc34f9cde025f4b659a7a01e11a36e42e47ac249ed10f771538a5": {
-      "tokens": 144,
+      "tokens": 145,
       "locations": [
         {
           "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
           "startLine": 762,
           "endLine": 789,
-          "tokens": 144
+          "tokens": 145
         },
         {
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 767,
           "endLine": 799,
-          "tokens": 144
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 747,
-          "endLine": 778,
-          "tokens": 144
+          "tokens": 145
         },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 638,
           "endLine": 670,
-          "tokens": 144
+          "tokens": 145
         },
         {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 815,
           "endLine": 842,
-          "tokens": 144
+          "tokens": 145
         },
         {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 742,
           "endLine": 772,
-          "tokens": 144
+          "tokens": 145
         }
       ]
     },
@@ -2294,29 +2089,6 @@
           "startLine": 251,
           "endLine": 281,
           "tokens": 184
-        }
-      ]
-    },
-    "397f84429ff50456daa7084799a87eebb5dc83926dc8669015b9520f4e8c56a4": {
-      "tokens": 153,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1459,
-          "endLine": 1517,
-          "tokens": 153
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1658,
-          "endLine": 1716,
-          "tokens": 153
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
-          "startLine": 1726,
-          "endLine": 1784,
-          "tokens": 153
         }
       ]
     },
@@ -2785,12 +2557,6 @@
       "tokens": 122,
       "locations": [
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1796,
-          "endLine": 1874,
-          "tokens": 122
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1870,
           "endLine": 1935,
@@ -2974,12 +2740,6 @@
           "tokens": 183
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1412,
-          "endLine": 1469,
-          "tokens": 183
-        },
-        {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1451,
           "endLine": 1508,
@@ -3006,12 +2766,6 @@
           "file": "apps/issues/src/lib/session-context.tsx",
           "startLine": 134,
           "endLine": 182,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 652,
-          "endLine": 703,
           "tokens": 121
         },
         {
@@ -3064,12 +2818,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1311,
           "endLine": 1354,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1491,
-          "endLine": 1543,
           "tokens": 145
         },
         {
@@ -3176,12 +2924,6 @@
           "tokens": 147
         },
         {
-          "file": "apps/pod-health/web/src/auth/session-derivation.ts",
-          "startLine": 35,
-          "endLine": 71,
-          "tokens": 147
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/session-derivation.ts",
           "startLine": 43,
           "endLine": 79,
@@ -3221,29 +2963,6 @@
           "startLine": 52,
           "endLine": 69,
           "tokens": 120
-        }
-      ]
-    },
-    "5835ff2069f7cb568818d31f1d6caca5910ac7a6d6077e96956a61ea25c6e55b": {
-      "tokens": 156,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
-          "startLine": 353,
-          "endLine": 429,
-          "tokens": 156
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
-          "startLine": 743,
-          "endLine": 816,
-          "tokens": 156
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
-          "startLine": 330,
-          "endLine": 406,
-          "tokens": 156
         }
       ]
     },
@@ -3448,12 +3167,6 @@
         },
         {
           "file": "apps/pod-chat/web/src/auth/login-result.ts",
-          "startLine": 56,
-          "endLine": 101,
-          "tokens": 128
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/login-result.ts",
           "startLine": 56,
           "endLine": 101,
           "tokens": 128
@@ -3720,12 +3433,6 @@
           "tokens": 252
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 778,
-          "endLine": 892,
-          "tokens": 252
-        },
-        {
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 739,
           "endLine": 853,
@@ -3784,12 +3491,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1123,
-          "endLine": 1142,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1282,
           "endLine": 1309,
@@ -3810,12 +3511,6 @@
           "file": "apps/issues/src/lib/session-context.tsx",
           "startLine": 124,
           "endLine": 158,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 642,
-          "endLine": 677,
           "tokens": 120
         },
         {
@@ -3845,12 +3540,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 871,
           "endLine": 938,
-          "tokens": 136
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 775,
-          "endLine": 842,
           "tokens": 136
         },
         {
@@ -4001,12 +3690,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1101,
           "endLine": 1155,
-          "tokens": 222
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1173,
-          "endLine": 1227,
           "tokens": 222
         },
         {
@@ -4282,23 +3965,6 @@
         }
       ]
     },
-    "71ff68b55c1c66c5bc719ae7f424aaf3017bc5c69430b25e9cff387dfb018fad": {
-      "tokens": 126,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1469,
-          "endLine": 1517,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
-          "startLine": 1539,
-          "endLine": 1587,
-          "tokens": 126
-        }
-      ]
-    },
     "729abdda2d96973c07894820b7dc19f7af30365689903ddfc01e354a8e3ec9e3": {
       "tokens": 167,
       "locations": [
@@ -4404,12 +4070,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1301,
           "endLine": 1346,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1481,
-          "endLine": 1526,
           "tokens": 127
         },
         {
@@ -4866,12 +4526,6 @@
           "tokens": 130
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1111,
-          "endLine": 1139,
-          "tokens": 130
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1270,
           "endLine": 1301,
@@ -4978,12 +4632,6 @@
           "tokens": 142
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1378,
-          "endLine": 1444,
-          "tokens": 142
-        },
-        {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 1227,
           "endLine": 1288,
@@ -5027,12 +4675,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1271,
           "endLine": 1327,
-          "tokens": 178
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1451,
-          "endLine": 1507,
           "tokens": 178
         },
         {
@@ -5137,12 +4779,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1084,
           "endLine": 1129,
-          "tokens": 207
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1156,
-          "endLine": 1201,
           "tokens": 207
         },
         {
@@ -5306,12 +4942,6 @@
       "tokens": 195,
       "locations": [
         {
-          "file": "apps/pod-health/web/src/App.tsx",
-          "startLine": 72,
-          "endLine": 151,
-          "tokens": 195
-        },
-        {
           "file": "apps/pod-mail/web/src/App.tsx",
           "startLine": 74,
           "endLine": 153,
@@ -5368,23 +4998,6 @@
           "startLine": 36,
           "endLine": 52,
           "tokens": 137
-        }
-      ]
-    },
-    "854ec7fb96823cf3ad231205a0b2daee1a37c188ccabafd9e3507f75b4ceedbd": {
-      "tokens": 243,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 822,
-          "endLine": 926,
-          "tokens": 243
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 629,
-          "endLine": 733,
-          "tokens": 243
         }
       ]
     },
@@ -5461,12 +5074,6 @@
           "tokens": 129
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1433,
-          "endLine": 1471,
-          "tokens": 129
-        },
-        {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1472,
           "endLine": 1510,
@@ -5510,12 +5117,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 988,
           "endLine": 1028,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 892,
-          "endLine": 932,
           "tokens": 126
         },
         {
@@ -5912,23 +5513,6 @@
         }
       ]
     },
-    "91061a87913b2d1cda9c315d3df98ac4473fcafe9d14be734c50d828f4c865d2": {
-      "tokens": 121,
-      "locations": [
-        {
-          "file": "apps/issues/src/lib/webid-token-provider.ts",
-          "startLine": 634,
-          "endLine": 664,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1199,
-          "endLine": 1229,
-          "tokens": 121
-        }
-      ]
-    },
     "915d769b4f67ea1e5308b5fd0d225294f6d71341ecf861de80654fb6182e8da4": {
       "tokens": 120,
       "locations": [
@@ -5977,12 +5561,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 869,
           "endLine": 928,
-          "tokens": 131
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 773,
-          "endLine": 832,
           "tokens": 131
         },
         {
@@ -6162,35 +5740,6 @@
         }
       ]
     },
-    "959276174d0a54916a6463dee2e2c04378132bb75d61b80f2d8935586549e839": {
-      "tokens": 121,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 563,
-          "endLine": 623,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
-          "startLine": 589,
-          "endLine": 648,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 575,
-          "endLine": 635,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
-          "startLine": 591,
-          "endLine": 651,
-          "tokens": 121
-        }
-      ]
-    },
     "95e98531c11059f577a4bb838de8dc51c3610bbe7dacae0cd756a3d53b227801": {
       "tokens": 161,
       "locations": [
@@ -6305,8 +5854,8 @@
       "locations": [
         {
           "file": "apps/pod-health/src/ui/HealthRecords.tsx",
-          "startLine": 61,
-          "endLine": 87,
+          "startLine": 60,
+          "endLine": 86,
           "tokens": 141
         },
         {
@@ -6346,23 +5895,6 @@
         }
       ]
     },
-    "9b50c2e2ec7043d407c1d008fe3d870134d482403610d1c4735b990c39cc1af3": {
-      "tokens": 165,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1050,
-          "endLine": 1073,
-          "tokens": 165
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1123,
-          "endLine": 1146,
-          "tokens": 165
-        }
-      ]
-    },
     "9bd0553142c74d9f11be006792beac41a902cac5177e7666209b2ce6f8c7a884": {
       "tokens": 120,
       "locations": [
@@ -6399,19 +5931,19 @@
       ]
     },
     "9bd5b1d00a50896b814fbdea5eb6eb164396f705a9b233cd7f93333c8c7c351d": {
-      "tokens": 127,
+      "tokens": 128,
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
           "startLine": 120,
           "endLine": 157,
-          "tokens": 127
+          "tokens": 128
         },
         {
           "file": "packages/solid-auth-core/src/redirect.ts",
           "startLine": 186,
           "endLine": 225,
-          "tokens": 127
+          "tokens": 128
         }
       ]
     },
@@ -6471,12 +6003,6 @@
           "tokens": 129
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1341,
-          "endLine": 1373,
-          "tokens": 129
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1509,
           "endLine": 1541,
@@ -6509,12 +6035,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 799,
           "endLine": 853,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 778,
-          "endLine": 832,
           "tokens": 145
         },
         {
@@ -6568,23 +6088,6 @@
           "startLine": 10,
           "endLine": 35,
           "tokens": 153
-        }
-      ]
-    },
-    "9e3a466b98451d5e25098c7fa034c509c03b5e642505792635218a8f925823d9": {
-      "tokens": 164,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 770,
-          "endLine": 826,
-          "tokens": 164
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/SessionProvider.tsx",
-          "startLine": 578,
-          "endLine": 633,
-          "tokens": 164
         }
       ]
     },
@@ -6814,41 +6317,6 @@
         }
       ]
     },
-    "a58294dc6c15cd8af5b4e5ac2968d770660b990f867adfdb4c6bd16c2c4399d6": {
-      "tokens": 120,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
-          "startLine": 768,
-          "endLine": 789,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
-          "startLine": 773,
-          "endLine": 799,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
-          "startLine": 644,
-          "endLine": 670,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
-          "startLine": 821,
-          "endLine": 842,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
-          "startLine": 748,
-          "endLine": 772,
-          "tokens": 120
-        }
-      ]
-    },
     "a706fad958e7bf2514e4aa8e6ffccab5617d45d0e368361f6608b6cd974bd3bb": {
       "tokens": 121,
       "locations": [
@@ -6920,54 +6388,48 @@
       ]
     },
     "a815df98a0fab87103968100d0a490655a2372e7c1ecb55cedbbed37a41b143c": {
-      "tokens": 163,
+      "tokens": 275,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 988,
-          "endLine": 1049,
-          "tokens": 163
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 892,
-          "endLine": 975,
-          "tokens": 163
+          "endLine": 1065,
+          "tokens": 275
         },
         {
           "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
           "startLine": 1093,
-          "endLine": 1154,
-          "tokens": 163
+          "endLine": 1170,
+          "tokens": 275
         }
       ]
     },
     "a8e3418e0033f2c32d6c9ae37d307a2395a9270f1c4756640e1599e4d30fea0a": {
-      "tokens": 145,
+      "tokens": 219,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 532,
-          "endLine": 577,
-          "tokens": 145
+          "endLine": 623,
+          "tokens": 219
         },
         {
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 560,
-          "endLine": 603,
-          "tokens": 145
+          "endLine": 648,
+          "tokens": 219
         },
         {
           "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
           "startLine": 546,
-          "endLine": 589,
-          "tokens": 145
+          "endLine": 635,
+          "tokens": 219
         },
         {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 562,
-          "endLine": 605,
-          "tokens": 145
+          "endLine": 651,
+          "tokens": 219
         }
       ]
     },
@@ -7166,12 +6628,6 @@
           "tokens": 166
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1786,
-          "endLine": 1874,
-          "tokens": 166
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1860,
           "endLine": 1935,
@@ -7213,12 +6669,6 @@
           "tokens": 333
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1680,
-          "endLine": 1770,
-          "tokens": 333
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1748,
           "endLine": 1844,
@@ -7245,31 +6695,25 @@
       ]
     },
     "b01e902597071e14bd41088631d1d8df7a3249750559f5d2595043c760089ede": {
-      "tokens": 184,
+      "tokens": 221,
       "locations": [
         {
           "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
           "startLine": 331,
-          "endLine": 416,
-          "tokens": 184
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 653,
-          "endLine": 738,
-          "tokens": 184
+          "endLine": 429,
+          "tokens": 221
         },
         {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 721,
-          "endLine": 805,
-          "tokens": 184
+          "endLine": 816,
+          "tokens": 221
         },
         {
           "file": "apps/pod-photos/web/src/auth/SessionProvider.tsx",
           "startLine": 308,
-          "endLine": 393,
-          "tokens": 184
+          "endLine": 406,
+          "tokens": 221
         }
       ]
     },
@@ -7943,23 +7387,6 @@
         }
       ]
     },
-    "c0962660dcca289c3656eac2dbf187710927b71b5878908ef9c90233666a14a0": {
-      "tokens": 154,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1168,
-          "endLine": 1240,
-          "tokens": 154
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1244,
-          "endLine": 1317,
-          "tokens": 154
-        }
-      ]
-    },
     "c0c62114f782a44d860857397c8310bf2ef1de42934077301f104cecffed5a73": {
       "tokens": 141,
       "locations": [
@@ -7989,41 +7416,6 @@
         }
       ]
     },
-    "c41bee68792337080f39cfb2566e398f039e6542b0bbed61b9f996f536ec8c6f": {
-      "tokens": 191,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 534,
-          "endLine": 613,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 591,
-          "endLine": 668,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
-          "startLine": 562,
-          "endLine": 639,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 548,
-          "endLine": 625,
-          "tokens": 191
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
-          "startLine": 564,
-          "endLine": 641,
-          "tokens": 191
-        }
-      ]
-    },
     "c47fdc45c91bdd9ada9cebbfa7c084d051a438756263daf5dd13a19235afa84e": {
       "tokens": 171,
       "locations": [
@@ -8050,23 +7442,6 @@
           "startLine": 1094,
           "endLine": 1158,
           "tokens": 171
-        }
-      ]
-    },
-    "c546c4a3c56dee36f2fa74e4b1b515d09ad048ade16c6a3c89764f3e4b93e2f0": {
-      "tokens": 153,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/App.tsx",
-          "startLine": 63,
-          "endLine": 126,
-          "tokens": 153
-        },
-        {
-          "file": "apps/pod-photos/web/src/App.tsx",
-          "startLine": 60,
-          "endLine": 121,
-          "tokens": 153
         }
       ]
     },
@@ -8219,25 +7594,25 @@
       ]
     },
     "ca4b0d8b9b529e71a990ff7261372cfcbeb0f1828c4fc66e548cb4aab0affb2f": {
-      "tokens": 143,
+      "tokens": 144,
       "locations": [
         {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1267,
           "endLine": 1300,
-          "tokens": 143
+          "tokens": 144
         },
         {
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 1145,
           "endLine": 1178,
-          "tokens": 143
+          "tokens": 144
         },
         {
           "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
           "startLine": 1078,
           "endLine": 1111,
-          "tokens": 143
+          "tokens": 144
         }
       ]
     },
@@ -8328,12 +7703,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1049,
           "endLine": 1069,
-          "tokens": 130
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1122,
-          "endLine": 1142,
           "tokens": 130
         },
         {
@@ -8525,35 +7894,6 @@
         }
       ]
     },
-    "cfcfd4aef3bd3bd43b06bef582980a650924f31ce0ef7fa9505cf2109228c31a": {
-      "tokens": 120,
-      "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1111,
-          "endLine": 1138,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
-          "startLine": 1270,
-          "endLine": 1300,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
-          "startLine": 1148,
-          "endLine": 1178,
-          "tokens": 120
-        },
-        {
-          "file": "apps/pod-photos/web/src/auth/webid-token-provider.ts",
-          "startLine": 1081,
-          "endLine": 1111,
-          "tokens": 120
-        }
-      ]
-    },
     "d05ca1a27f7bab72b95a61925c7c24a8af23ba6c29f1daae697a7081ab043f22": {
       "tokens": 194,
       "locations": [
@@ -8651,12 +7991,6 @@
           "tokens": 140
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1486,
-          "endLine": 1531,
-          "tokens": 140
-        },
-        {
           "file": "apps/pod-money/web/src/auth/SessionProvider.tsx",
           "startLine": 1530,
           "endLine": 1575,
@@ -8683,12 +8017,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1265,
           "endLine": 1342,
-          "tokens": 241
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1342,
-          "endLine": 1419,
           "tokens": 241
         },
         {
@@ -8748,23 +8076,6 @@
           "startLine": 1123,
           "endLine": 1174,
           "tokens": 122
-        }
-      ]
-    },
-    "d5aa540a5c10b3bb31e186b4d3bdaf32f38b9d80252555a8bfe0684007f891c6": {
-      "tokens": 124,
-      "locations": [
-        {
-          "file": "apps/app-store/web/src/auth/SessionProvider.tsx",
-          "startLine": 1273,
-          "endLine": 1326,
-          "tokens": 124
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1377,
-          "endLine": 1434,
-          "tokens": 124
         }
       ]
     },
@@ -8913,12 +8224,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1184,
           "endLine": 1250,
-          "tokens": 187
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1260,
-          "endLine": 1327,
           "tokens": 187
         },
         {
@@ -9150,12 +8455,6 @@
           "tokens": 145
         },
         {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 649,
-          "endLine": 690,
-          "tokens": 145
-        },
-        {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 503,
           "endLine": 544,
@@ -9195,29 +8494,6 @@
           "startLine": 84,
           "endLine": 102,
           "tokens": 124
-        }
-      ]
-    },
-    "e015e3bc17466b6eb2c06be2601cc683141319f540e19f60e1cab618fffb4c7c": {
-      "tokens": 144,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 842,
-          "endLine": 923,
-          "tokens": 144
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 746,
-          "endLine": 827,
-          "tokens": 144
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 947,
-          "endLine": 1028,
-          "tokens": 144
         }
       ]
     },
@@ -9293,12 +8569,6 @@
     "e32ac6731a4b47efa9d8a9ca8ea15bdceb66bfeef06e028db0d27bf321ca4ed2": {
       "tokens": 150,
       "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 738,
-          "endLine": 772,
-          "tokens": 150
-        },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 629,
@@ -9400,12 +8670,6 @@
           "file": "apps/pod-chat/web/src/App.tsx",
           "startLine": 88,
           "endLine": 146,
-          "tokens": 143
-        },
-        {
-          "file": "apps/pod-health/web/src/App.tsx",
-          "startLine": 99,
-          "endLine": 157,
           "tokens": 143
         },
         {
@@ -9521,19 +8785,19 @@
       ]
     },
     "e8f329217dd258b18bc2e6af265c76d5c36af40bb034de462f38cc8e25ebf4e6": {
-      "tokens": 139,
+      "tokens": 173,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1451,
-          "endLine": 1511,
-          "tokens": 139
+          "endLine": 1517,
+          "tokens": 173
         },
         {
           "file": "apps/pod-mail/web/src/auth/webid-token-provider.ts",
           "startLine": 1718,
-          "endLine": 1778,
-          "tokens": 139
+          "endLine": 1784,
+          "tokens": 173
         }
       ]
     },
@@ -9606,12 +8870,6 @@
           "tokens": 230
         },
         {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 843,
-          "endLine": 932,
-          "tokens": 230
-        },
-        {
           "file": "apps/pod-money/web/src/auth/webid-token-provider.ts",
           "startLine": 804,
           "endLine": 893,
@@ -9672,12 +8930,6 @@
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 1397,
           "endLine": 1437,
-          "tokens": 123
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1465,
-          "endLine": 1503,
           "tokens": 123
         },
         {
@@ -9943,23 +9195,6 @@
         }
       ]
     },
-    "f252c018f83c6b063581a69d02f1037ea59b62475b46acb1479ac9fe09203f8c": {
-      "tokens": 231,
-      "locations": [
-        {
-          "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
-          "startLine": 1008,
-          "endLine": 1065,
-          "tokens": 231
-        },
-        {
-          "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
-          "startLine": 1113,
-          "endLine": 1170,
-          "tokens": 231
-        }
-      ]
-    },
     "f2e89320623e2835755aedc1e6f7e12afdc0fa9c01c5165bf637b19f89c5def3": {
       "tokens": 140,
       "locations": [
@@ -10017,12 +9252,6 @@
         },
         {
           "file": "apps/pod-chat/web/src/auth/login-ux.ts",
-          "startLine": 13,
-          "endLine": 56,
-          "tokens": 179
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/login-ux.ts",
           "startLine": 13,
           "endLine": 56,
           "tokens": 179
@@ -10140,12 +9369,6 @@
           "file": "apps/app-store/web/src/auth/webid-token-provider.ts",
           "startLine": 1391,
           "endLine": 1444,
-          "tokens": 143
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/webid-token-provider.ts",
-          "startLine": 1465,
-          "endLine": 1516,
           "tokens": 143
         },
         {
@@ -10283,19 +9506,19 @@
       ]
     },
     "f8086899553ff4693a304256caec93613d6d6154a26b0ad3528e662ccd1faa52": {
-      "tokens": 185,
+      "tokens": 210,
       "locations": [
         {
           "file": "apps/pod-chat/web/src/auth/webid-token-provider.ts",
           "startLine": 813,
-          "endLine": 907,
-          "tokens": 185
+          "endLine": 923,
+          "tokens": 210
         },
         {
           "file": "apps/pod-music/web/src/auth/webid-token-provider.ts",
           "startLine": 918,
-          "endLine": 1012,
-          "tokens": 185
+          "endLine": 1028,
+          "tokens": 210
         }
       ]
     },
@@ -10348,12 +9571,6 @@
     "f9dce4542b4912496ee7fcb4f5f950ef345e7376bd08d104824df5bcea4e4c4d": {
       "tokens": 212,
       "locations": [
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1066,
-          "endLine": 1150,
-          "tokens": 212
-        },
         {
           "file": "apps/pod-mail/web/src/auth/SessionProvider.tsx",
           "startLine": 948,
@@ -10492,12 +9709,6 @@
           "file": "apps/pod-chat/web/src/auth/SessionProvider.tsx",
           "startLine": 1255,
           "endLine": 1299,
-          "tokens": 145
-        },
-        {
-          "file": "apps/pod-health/web/src/auth/SessionProvider.tsx",
-          "startLine": 1435,
-          "endLine": 1479,
           "tokens": 145
         },
         {

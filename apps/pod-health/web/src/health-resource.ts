@@ -21,7 +21,7 @@
 //      is a HINT, not a grant — the data layer still WAC-checks every GET.
 //
 // HOUSE-RULE CONTRACT: all RDF is read through @jeswr/fetch-rdf (fetch + parse)
-// and typed accessors (@solid/object for the profile pointers; pod-health's own
+// and typed accessors (@rdfjs/wrapper for the profile pointers; pod-health's own
 // TypeIndexDataset for the registry). Never parse Turtle by hand, never build
 // triples by string concatenation.
 import { fetchRdf } from "@jeswr/fetch-rdf";
@@ -79,8 +79,8 @@ function asContainer(url: string): string {
 
 /**
  * Discover the health RECORD DOCUMENT URL to show. Re-reads the WebID profile
- * (through the auth-patched global fetch, so a private-index pointer behind WAC
- * is visible), then tries Type-Index discovery against every index the profile
+ * through the supplied bounded auth.fetch, then tries Type-Index discovery against
+ * every index the profile
  * advertises, preferring a `solid:instance` (a real single record document) over
  * a `solid:instanceContainer` (a container — resolved to `${container}record.ttl`
  * since the data layer reads a document, not a container listing). Falls back to
@@ -93,7 +93,7 @@ function asContainer(url: string): string {
  *
  * @param webId     the authenticated user's WebID.
  * @param podRoot   the derived pod root (always ends in "/").
- * @param fetchImpl optional fetch (the authenticated global in a real session).
+ * @param fetchImpl optional authenticated fetch; defaults to the public global fetch.
  */
 export async function discoverHealthResource(
   webId: string,
