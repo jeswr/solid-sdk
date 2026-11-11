@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   CommandType,
   type ICellData,
@@ -8,10 +9,11 @@ import {
   type IUndoRedoService,
   type IWorkbookData,
   type IWorksheetData,
+  Tools,
 } from "@univerjs/core";
 import * as Y from "yjs";
 import type { Snapshot } from "../contract";
-import { decodeCell, encodeCell } from "./formulas";
+import { decodeCell, encodeCell, type StoredCell } from "./formulas";
 import {
   type Axes,
   axes,
@@ -30,8 +32,13 @@ import {
 const historyMutation = "sheets.mutation.collaborative-history";
 const structure =
   /^sheet\.mutation\.(insert-row|insert-col|remove-rows|remove-col|move-rows|move-columns)$/;
+// Univer 1.2 sort writes reorder-range; single/bulk replace writes set-range-values.
+// Filter range/criteria/recalculation mutations only affect snapshot metadata and
+// local visibility. Keep them out of Yjs and, especially, the stable-axis splice path.
 const collaborative = (id: string) =>
-  structure.test(id) || id === "sheet.mutation.set-range-values";
+  structure.test(id) ||
+  id === "sheet.mutation.set-range-values" ||
+  id === "sheet.mutation.reorder-range";
 type StackItem = Y.UndoManager["undoStack"][number];
 type HistoryToken = { undo: StackItem | undefined; redo: StackItem | undefined };
 
@@ -192,27 +199,52 @@ export class CollaborationBridge {
     const position = this.positions.get(params.subUnitId) as Axes;
     // Added sheets are snapshot-managed; their initial cells are seeded at commit.
     if (!state) return;
-    if (id === "sheet.mutation.set-range-values") {
+    if (id === "sheet.mutation.set-range-values" || id === "sheet.mutation.reorder-range") {
       const snapshot = this.read() as unknown as IWorkbookData;
       const sheet = snapshot.sheets[params.subUnitId];
+      const captureCell = (r: number, c: number) => {
+        const rowId = position.rowIds[r];
+        const colId = position.colIds[c];
+        if (rowId === undefined || colId === undefined) return;
+        const key = `${rowId}|${colId}`;
+        const cell = sheet?.cellData?.[r]?.[c];
+        const value = cell
+          ? encodeCell(jsonCopy(cell), params.subUnitId, snapshot, this.positions)
+          : undefined;
+        const style = typeof value?.s === "string" ? snapshot.styles[value.s] : undefined;
+        this.pending.push(() => {
+          const comparable = (stored: StoredCell | undefined) => {
+            if (!stored) return undefined;
+            const cell = decodeCell(stored, snapshot, this.positions);
+            if (cell.f) {
+              delete cell.v;
+              delete cell.t;
+              delete cell.si;
+            }
+            if (typeof cell.s === "string") cell.s = snapshot.styles[cell.s] ?? cell.s;
+            return cell;
+          };
+          // Structural formula interceptors can resend unchanged cells. Treat
+          // shifted formula text, cached results and equivalent style IDs as the
+          // same value, or a peer's insertion would overwrite the sort's undo.
+          if (Tools.diffValue(comparable(cells(state).get(key)), comparable(value))) return;
+          if (style && typeof value?.s === "string")
+            this.doc.getMap<IStyleData>("styles").set(value.s, jsonCopy(style));
+          if (value) cells(state).set(key, value);
+          else cells(state).delete(key);
+        });
+      };
+      if (id === "sheet.mutation.reorder-range") {
+        // Sorting moves content between existing row IDs, not the IDs themselves.
+        // Capture the complete rectangle after reordering, including emptied cells;
+        // commit() groups this and formula adjustments into one stable-ID undo item.
+        const { startRow, endRow, startColumn, endColumn } = params.range;
+        for (let r = startRow; r <= endRow; r++)
+          for (let c = startColumn; c <= endColumn; c++) captureCell(r, c);
+        return;
+      }
       for (const [r, row] of Object.entries(params.cellValue ?? {})) {
-        for (const c of Object.keys(row)) {
-          const rowId = position.rowIds[Number(r)];
-          const colId = position.colIds[Number(c)];
-          if (rowId === undefined || colId === undefined) continue;
-          const key = `${rowId}|${colId}`;
-          const cell = sheet?.cellData?.[Number(r)]?.[Number(c)];
-          const value = cell
-            ? encodeCell(jsonCopy(cell), params.subUnitId, snapshot, this.positions)
-            : undefined;
-          const style = typeof value?.s === "string" ? snapshot.styles[value.s] : undefined;
-          this.pending.push(() => {
-            if (style && typeof value?.s === "string")
-              this.doc.getMap<IStyleData>("styles").set(value.s, jsonCopy(style));
-            if (value) cells(state).set(key, value);
-            else cells(state).delete(key);
-          });
-        }
+        for (const c of Object.keys(row)) captureCell(Number(r), Number(c));
       }
       return;
     }
@@ -255,13 +287,18 @@ export class CollaborationBridge {
     }
     if (sheets.some((id) => !sheetStates(this.doc).has(id)))
       this.doc.transact(() => seedSheets(this.doc, snapshot), SEED_ORIGIN);
+    const previousUndo = this.undo.undoStack.at(-1);
     if (pending.length)
       this.doc.transact(() => {
         for (const operation of pending) operation();
       }, LOCAL_ORIGIN);
     if (pending.length) {
       if (item && item.unitID === snapshot.id) {
-        const token: HistoryToken = { undo: this.undo.undoStack.at(-1), redo: undefined };
+        const latestUndo = this.undo.undoStack.at(-1);
+        const token: HistoryToken = {
+          undo: latestUndo !== previousUndo ? latestUndo : undefined,
+          redo: undefined,
+        };
         for (const direction of ["undo", "redo"] as const) {
           const key = direction === "undo" ? "undoMutations" : "redoMutations";
           let replaced = false;

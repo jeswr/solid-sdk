@@ -506,6 +506,33 @@ export const mountUniver: MountEngine = async (container, options) => {
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = commentStructuralEdit(event.id, event.params);
     if (edit) {
+      // Filters stay in workbook.json, outside Yjs: collaborators choose their
+      // own hidden rows. Remote mutations bypass Univer's filter command
+      // interceptors, so clear this sheet's local filter rather than retain a
+      // stale range/criteria after row or column insertion, removal or movement.
+      if (event.options?.fromCollab && commands.hasCommand("sheet.mutation.remove-filter")) {
+        // View-only exports/unlock use the saved baseline, so invalidate its
+        // affected sheet too while preserving saved filters on other sheets.
+        if (readOnly && Array.isArray(filterBaseline))
+          filterBaseline = filterBaseline.map((resource) => {
+            if (
+              !resource ||
+              typeof resource !== "object" ||
+              Array.isArray(resource) ||
+              resource.name !== SHEET_FILTER_SNAPSHOT_ID ||
+              typeof resource.data !== "string"
+            )
+              return resource;
+            const filters = JSON.parse(resource.data) as Record<string, unknown>;
+            delete filters[edit.sheet];
+            return { ...resource, data: JSON.stringify(filters) };
+          });
+        commands.syncExecuteCommand(
+          "sheet.mutation.remove-filter",
+          { unitId: workbook.getId(), subUnitId: edit.sheet },
+          { fromCollab: true },
+        );
+      }
       if (charts !== undefined) {
         charts = withCharts(
           {},

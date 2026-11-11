@@ -200,6 +200,13 @@ Chart sources and comment anchors still follow collaborative row/column changes;
 coordinates are saved with the guarded snapshot. Presence and cursors are out of scope:
 pods provide no ephemeral channel.
 
+Sorts share the reordered cells at their existing row/column IDs in one collaborative
+undo step; undo and redo also reach other editors. Find and replace shares ordinary
+cell mutations. Filter definitions and criteria remain in `workbook.json`, outside Yjs,
+so each editor can choose hidden rows independently. A remote row/column insertion,
+removal or move clears the affected sheet's local filter to avoid stale ranges and
+criteria; editors can reapply it against the updated structure.
+
 Charts (SHT-05) are app-owned SVGs in a scrollable strip below the grid. This avoids
 coupling their position and keyboard controls to Univer's canvas coordinates or its Pro
 chart plugin. The editor and chart renderer are lazy chunks; the list page loads neither.
