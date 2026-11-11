@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { evaluate, type OdrlConstraint, type OdrlPolicy, OPERATOR_IRI } from "@jeswr/solid-odrl";
+import { SPECIAL_CATEGORIES } from "./categories.js";
 import type { Nanopublication } from "./model.js";
 import { dateTime, iri, NS } from "./rdf.js";
 
@@ -11,45 +12,7 @@ export const MEMORY_PURPOSES = {
 } as const;
 /** A supported purpose token. */
 export type MemoryPurpose = keyof typeof MEMORY_PURPOSES;
-const special = new Set([
-  `${NS.dpv}SpecialCategoryPersonalData`,
-  // DPV-PD 2.0 §4: https://w3c-cg.github.io/dpv/2.0/pd/#vocab-special
-  ...[
-    "MedicalHealth",
-    "BloodType",
-    "Disability",
-    "DNACode",
-    "DrugTestResult",
-    "Health",
-    "PhysicalHealth",
-    "HealthHistory",
-    "FamilyHealthHistory",
-    "IndividualHealthHistory",
-    "HealthRecord",
-    "Prescription",
-    "Genetic",
-    "MentalHealth",
-    "Biometric",
-    "FacialPrint",
-    "Fingerprint",
-    "Retina",
-    "EthnicOrigin",
-    "PoliticalAffiliation",
-    "Religion",
-    "Fetish",
-    "Proclivity",
-    "SexualPreference",
-    "Ethnicity",
-    "Race",
-    "PoliticalOpinion",
-    "ReligiousBelief",
-    "PhilosophicalBelief",
-    "Sexual",
-    "SexualHistory",
-    "SexualOrientation",
-    "TradeUnionMembership",
-  ].map((name) => NS.pd + name),
-]);
+const special = new Set(SPECIAL_CATEGORIES);
 function categoryIri(category: string): string {
   return iri(category.startsWith("pd:") ? NS.pd + category.slice(3) : category);
 }

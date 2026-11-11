@@ -32,8 +32,8 @@ first with canonical UTC `at` timestamps; malformed dates, ambiguous client/date
 non-HTTP(S) or credential-bearing clients are dropped.
 
 `PersonalDataRead` exposes `at`, `client`, optional `tool`, optional `purpose`, `categories`,
-optional `decision` (`permit`, `prohibited`, `refuse-all`), optional `resourceCount`, and `source`
-(`monthly` or `chain`). Monthly rows read only PROV Activity / wasAssociatedWith / startedAtTime,
+optional `decision` (`permit`, `confirm-required`, `prohibited`, `refuse-all`), optional
+`resourceCount`, and `source` (`monthly` or `chain`). Monthly rows read only PROV Activity / wasAssociatedWith / startedAtTime,
 DPV hasPurpose / hasPersonalData, optional mcp:tool / mcp:decision literals and prov:used IRIs.
 Resource URLs become a count; unknown predicates and literal personal values are never projected.
 The existing MCP writer currently emits client, date, purpose and categories only. Chain source
@@ -44,3 +44,12 @@ In single-user MCP mode there are no connection records. Revoke access by rotati
 
 Run `pnpm --filter @jeswr/mcp-connections run lint`, `build`, `typecheck`, and `test`.
 Tests enforce 100% statement, branch, function and line coverage. MIT licensed.
+
+`PERSONAL_DATA_CATEGORY_LABELS` and `personalDataCategoryLabel(iri)` provide readable labels
+for every special category from `@jeswr/pkg-memory/categories`, Financial, and common
+personal-data categories. Unknown IRIs return "Other personal data"; the special inventory
+is imported rather than duplicated. This import remains browser-safe.
+Tool metadata is projected only when it matches `^[A-Za-z0-9_.-]{1,64}$`; invalid,
+ambiguous and non-literal values are omitted. `confirm-required` is also an accepted decision.
+A parity test checks that the audit container is the `audit/` sibling of NanopubStore's
+`mcp/` container, as used by the MCP writer.

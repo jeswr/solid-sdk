@@ -3516,6 +3516,9 @@ importers:
       '@jeswr/ldp-container':
         specifier: workspace:*
         version: link:../../packages/ldp-container
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../pkg-memory
       '@rdfjs/wrapper':
         specifier: 0.34.0
         version: 0.34.0

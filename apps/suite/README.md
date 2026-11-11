@@ -17,6 +17,15 @@ S1 includes no connection records or revoke actions. For a single-user server, r
 rotating `MCP_ACCESS_TOKEN`; such servers write no connection records.
 See `src/shell/settings/assistants/SKILL.md` for maintenance and test rules.
 
+Assistant audit categories use the shared MCP labels, including all memory special categories
+and Financial. Decision tokens display as plain user text and timestamps use the viewer's
+local timezone. The registered-assistant label requires a /clients/ path on the configured
+MCP server host; other clients show their host and a path shortened to 32 characters,
+without query or fragment. Session-opening failures offer Retry, which reopens the provider.
+The audit, Contacts and agent readers share guarded-fetch's bounded strict UTF-8 reader;
+malformed UTF-8 fails closed. Their existing byte budgets and size-error messages remain.
+Assistant visual snapshots run only for 375-light and 1280-dark; axe runs in all six projects.
+
 ## Pilot feedback
 
 `/feedback` is available without signing in. It offers a guided interview and a quick note,

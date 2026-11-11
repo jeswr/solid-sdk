@@ -7,10 +7,19 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 const mocks = vi.hoisted(() => ({
   state: { status: "loading" } as Record<string, unknown>,
   url: undefined as string | undefined,
+  providerMounts: 0,
 }));
-vi.mock("../src/lib/session/pod-session", () => ({
-  PodSessionProvider: ({ children }: { children: unknown }) => children,
-}));
+vi.mock("../src/lib/session/pod-session", async () => {
+  const { useEffect } = await import("react");
+  return {
+    PodSessionProvider: ({ children }: { children: unknown }) => {
+      useEffect(() => {
+        mocks.providerMounts++;
+      }, []);
+      return children;
+    },
+  };
+});
 vi.mock("../src/lib/session/shell-pod-session", () => ({ usePodSessionState: () => mocks.state }));
 vi.mock("../src/shell/environment", () => ({
   useSuiteEnvironment: () => ({ NEXT_PUBLIC_SUITE_MCP_URL: mocks.url }),
@@ -100,7 +109,9 @@ it("renders loading, whitelisted metadata with labels and a count, empty, and er
     .mockResolvedValueOnce([]);
   const audit = source(list);
   const account = session();
-  const view = await mount(h(PersonalDataReads, { session: account, source: audit }));
+  const view = await mount(
+    h(PersonalDataReads, { session: account, source: audit, serverUrl: URL }),
+  );
   expect(view.host.textContent).toContain("Loading personal data reads");
   await act(() =>
     pending.resolve([
@@ -152,6 +163,60 @@ it("drops previous-account rows immediately and ignores late successful or faile
   await secondView.unmount();
   await act(() => late.reject(new Error("private")));
 });
+it.each([
+  [URL, "https://mcp.example/clients/opaque", "An assistant registered with mcp.example"],
+  [URL, "https://other.example/clients/opaque", "other.example/clients/opaque"],
+  [URL, "https://mcp.example:8443/clients/opaque", "mcp.example:8443/clients/opaque"],
+  [URL, "https://mcp.example/app", "mcp.example/app"],
+  [undefined, "https://mcp.example/clients/opaque", "mcp.example/clients/opaque"],
+  [
+    URL,
+    `https://other.example/${"a".repeat(60)}?secret#hidden`,
+    `other.example/${"a".repeat(30)}…`,
+  ],
+])("labels client %s / %s against the configured server", async (serverUrl, client, label) => {
+  const view = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      serverUrl,
+      source: source(vi.fn().mockResolvedValue([{ ...row, client }])),
+    }),
+  );
+  expect(view.host.querySelector("strong")?.textContent).toBe(label);
+  expect(view.host.textContent).not.toMatch(/secret|hidden/);
+});
+it("renders readable decisions and the viewer's local time", async () => {
+  const at = "2026-07-01T12:00:00.000Z";
+  const decisions = ["permit", "confirm-required", "prohibited", "refuse-all"] as const;
+  const view = await mount(
+    h(PersonalDataReads, {
+      session: session(),
+      source: source(
+        vi.fn().mockResolvedValue(decisions.map((decision) => ({ ...row, at, decision }))),
+      ),
+    }),
+  );
+  for (const label of ["Allowed", "Confirmation required", "Blocked", "All access refused"])
+    expect(view.host.textContent).toContain(`Decision: ${label}`);
+  expect(view.host.textContent).not.toMatch(/confirm-required|refuse-all|prohibited|permit/);
+  const time = view.host.querySelector("time");
+  // vitest.config.ts pins Europe/London: July is BST, one hour ahead of UTC.
+  expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe("Europe/London");
+  expect(time?.textContent).toBe(
+    new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(at)),
+  );
+  expect(time?.textContent).not.toBe(
+    new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(at)),
+  );
+  expect(time?.getAttribute("datetime")).toBe(at);
+});
 it("hides reads offline, ignores in-flight replies, and reloads on reconnection", async () => {
   const pending = deferred<PersonalDataRead[]>();
   const list = vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValueOnce([]);
@@ -192,6 +257,9 @@ it("shows session loading, signed-out and unavailable states with the configured
   mocks.state = { status: "error" };
   await view.render(h(AssistantSettings));
   expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
+  const mounts = mocks.providerMounts;
+  await click(button(view.host, "Retry"));
+  expect(mocks.providerMounts).toBe(mounts + 1);
   const ready = { ...session(), fetch: async () => new Response(null, { status: 404 }) };
   mocks.state = { status: "ready", session: ready };
   await view.render(h(AssistantSettings));

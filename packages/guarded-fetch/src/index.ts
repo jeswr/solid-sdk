@@ -56,5 +56,6 @@ export {
   podScopedUrl,
   redactUserinfo,
 } from "./podScope.js";
+export { ResponseBodyLimitError, readBoundedText } from "./read-bounded-text.js";
 export { RedirectRefusedError, refuseRedirects } from "./refuseRedirects.js";
 export { snapshotFetchInput, snapshotRequest } from "./request-snapshot.js";

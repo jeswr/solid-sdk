@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, readBoundedText } from "@jeswr/guarded-fetch";
 import type { AuditRead } from "@jeswr/mcp-connections";
 import type { PodSession } from "@/lib/session/types";
 
@@ -26,37 +26,14 @@ export function auditRead(session: PodSession, signal: AbortSignal): AuditRead {
         status: response.status,
       });
     }
-    const reader = response.body?.getReader();
-    const onAbort = () => {
-      void reader?.cancel().catch(() => {});
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    const chunks: Uint8Array[] = [];
-    let size = 0;
     try {
-      if (reader) {
-        while (true) {
-          const chunk = await reader.read();
-          signal.throwIfAborted();
-          if (chunk.done) break;
-          size += chunk.value.byteLength;
-          if (size > 256 * 1024) throw new Error("Personal data reads unavailable");
-          chunks.push(chunk.value);
-        }
-      }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.length;
-      }
       return {
-        text: new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+        text: await readBoundedText(response, 256 * 1024, signal),
         contentType: response.headers.get("content-type") ?? "text/turtle",
       };
-    } finally {
-      signal.removeEventListener("abort", onAbort);
-      void reader?.cancel().catch(() => {});
+    } catch {
+      signal.throwIfAborted();
+      throw new Error("Personal data reads unavailable");
     }
   };
 }

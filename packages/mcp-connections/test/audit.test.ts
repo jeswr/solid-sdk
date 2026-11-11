@@ -118,6 +118,39 @@ describe("monthly audit projection", () => {
     ]);
     expect(JSON.stringify(rows)).not.toMatch(/value|secret-resource|private literal/);
   });
+  it.each(["a", "A-Z_0.9", "x".repeat(64)])("projects safe tool name %s", async (tool) => {
+    const text = document((node) => {
+      activity(node).text(`${MCP}tool`, tool);
+    });
+    expect(
+      (await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100))[0]?.tool,
+    ).toBe(tool);
+  });
+  it.each([
+    "",
+    "x".repeat(65),
+    "private value",
+    "health_query\n",
+    "<script>",
+    "é",
+    "https://secret.example/",
+  ])("drops unsafe tool name %j", async (tool) => {
+    const text = document((node) => {
+      activity(node).text(`${MCP}tool`, tool);
+    });
+    const rows = await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).not.toHaveProperty("tool");
+  });
+  it("drops ambiguous and non-literal tool fields", async () => {
+    const text = document((node) => {
+      activity(node, "urn:ambiguous").text(`${MCP}tool`, "one").text(`${MCP}tool`, "two");
+      activity(node, "urn:iri").iri(`${MCP}tool`, "urn:private");
+    });
+    const rows = await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.tool === undefined)).toBe(true);
+  });
   it("reads only the newest three direct monthly names and sorts rows by timestamp before limiting", async () => {
     const files = Object.fromEntries(
       ["2026-08", "2026-09", "2026-10", "2026-11"].map((month, index) => [
@@ -163,6 +196,7 @@ describe("monthly audit projection", () => {
   });
   it.each([
     "prohibited",
+    "confirm-required",
     "refuse-all",
     "invalid",
     "",
@@ -172,7 +206,7 @@ describe("monthly audit projection", () => {
     });
     const rows = await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100);
     expect(rows[0]?.decision).toBe(
-      decision === "prohibited" || decision === "refuse-all" ? decision : undefined,
+      ["prohibited", "confirm-required", "refuse-all"].includes(decision) ? decision : undefined,
     );
     expect(rows[0]?.categories).toEqual([]);
     expect(rows[0]?.purpose).toBeUndefined();

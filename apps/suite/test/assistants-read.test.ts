@@ -148,4 +148,60 @@ describe("assistant audit transport and demo fixture", () => {
       )(auditContainer(DEMO_ROOT)),
     ).rejects.toThrow();
   });
+  it("cancels a late response after abort and a rejected null-body HTTP response", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const read = auditRead(
+      session(async () => {
+        controller.abort(new Error("cancelled"));
+        return new Response(new ReadableStream({ cancel }));
+      }),
+      controller.signal,
+    );
+    await expect(read(auditContainer(DEMO_ROOT))).rejects.toThrow("cancelled");
+    expect(cancel).toHaveBeenCalled();
+    await expect(
+      auditRead(
+        session(async () => new Response(null, { status: 403 })),
+        signal(),
+      )(auditContainer(DEMO_ROOT)),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("accepts the matching final URL and sanitizes body and cancellation errors", async () => {
+    const target = auditContainer(DEMO_ROOT);
+    const response = new Response("ok");
+    Object.defineProperty(response, "url", { value: target });
+    expect(
+      (
+        await auditRead(
+          session(async () => response),
+          signal(),
+        )(target)
+      ).text,
+    ).toBe("ok");
+    const badBody = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("secret backend"));
+      },
+    });
+    await expect(
+      auditRead(
+        session(async () => new Response(badBody)),
+        signal(),
+      )(target),
+    ).rejects.toEqual(new Error("Personal data reads unavailable"));
+    const cancel = vi.fn().mockRejectedValue(new Error("secret cancellation"));
+    await expect(
+      auditRead(
+        session(
+          async () =>
+            new Response(new ReadableStream({ cancel }), {
+              status: 403,
+            }),
+        ),
+        signal(),
+      )(target),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(cancel).toHaveBeenCalled();
+  });
 });
