@@ -109,6 +109,21 @@ it("loads the remote snapshot into a mounted engine and returns conflict focus t
   await editor.unmount();
 });
 
+it.each([
+  "https://other.example/sheets/book/",
+  "not a URL",
+])("explains the credential boundary when rejecting shared workbook link %s", async (container) => {
+  const { calls } = await setup();
+  calls.length = 0;
+  const editor = await mount(h(SheetEditor, { container }));
+  expect(editor.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "same origin as your pod",
+  );
+  expect(calls).toEqual([]);
+  expect(mocks.mount).not.toHaveBeenCalled();
+  await editor.unmount();
+});
+
 it("remounts a still-loading grid with the remote snapshot when resolving a reopened conflict", async () => {
   const { book, local, remote, entry } = await conflict();
   const waiting = deferred<SheetEngine>();

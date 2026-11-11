@@ -99,6 +99,16 @@ export class WorkbookNotFoundError extends Error {
   }
 }
 
+/** Rejected before any request carrying the session's credentials. */
+export class WorkbookLinkError extends Error {
+  constructor(
+    message = "Shared spreadsheets must use a container URL on the same origin as your pod.",
+  ) {
+    super(message);
+    this.name = "WorkbookLinkError";
+  }
+}
+
 export interface CreateWorkbookInput {
   readonly title: string;
   /** Engine snapshot; omitted means one empty sheet named "Sheet1". */
@@ -123,6 +133,8 @@ export interface WorkbookService {
   /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
   createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
+  /** Same-origin shared links only; always view-only, with no redirects or foreign writes. */
+  openShared(container: string): Promise<OpenedWorkbook>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and

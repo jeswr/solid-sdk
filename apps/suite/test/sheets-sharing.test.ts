@@ -5,11 +5,14 @@ import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { serializeTurtle } from "../src/apps/docs/lib/model/rdf-io";
 import { privateAcl } from "../src/apps/drive/lib/client/access";
+import { SheetResource } from "../src/apps/sheets/lib/model";
 import { WorkbookSharingAdapter } from "../src/apps/sheets/lib/sharing";
 import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { harness, POD, WEBID } from "./sheets-workbook-helpers";
 
-const READER = `${POD}reader#me`;
+const READER = "https://pod.example/bob/profile/card#me";
+const ACL = "http://www.w3.org/ns/auth/acl#";
+const ACP = "http://www.w3.org/ns/solid/acp#";
 const signal = () => new AbortController().signal;
 async function setup() {
   const pod = await harness();
@@ -56,8 +59,14 @@ describe("workbook container sharing", () => {
         inherited = true;
       }
     };
-    const reader = createWorkbookService({ ...options, fetch: readerFetch, webId: READER });
-    const opened = await reader.open(book.container);
+    const reader = createWorkbookService({
+      ...options,
+      podRoot: "https://pod.example/bob/",
+      fetch: readerFetch,
+      webId: READER,
+    });
+    await expect(reader.open(book.container)).rejects.toThrow();
+    const opened = await reader.openShared(book.container);
     expect(opened.readOnly).toBe(true);
     expect(opened.snapshot).toEqual(book.snapshot);
     for (const path of [
@@ -68,9 +77,7 @@ describe("workbook container sharing", () => {
       "versions/one.json",
     ])
       expect((await readerFetch(`${book.container}${path}`)).ok).toBe(true);
-    await expect(
-      reader.save(book.container, opened.snapshot, opened.version),
-    ).rejects.toMatchObject({ status: 403 });
+    await expect(reader.save(book.container, opened.snapshot, opened.version)).rejects.toThrow();
     await adapter.setPerson(book.container, READER, "editor");
     await adapter.setPerson(book.container, READER, "viewer");
     expect(
@@ -78,13 +85,24 @@ describe("workbook container sharing", () => {
     ).toBe(403);
     await adapter.setPerson(book.container, READER, null);
     expect((await readerFetch(`${book.container}workbook.json`)).status).toBe(403);
+    await adapter.setGeneral(book.container, { mode: "link", role: "viewer" });
+    expect((await adapter.load(book.container, signal())).general).toEqual({
+      mode: "link",
+      role: "viewer",
+    });
+    await adapter.setGeneral(book.container, { mode: "restricted" });
   });
 
   it("opens an existing ACL without creating one and rejects out-of-pod and non-container targets", async () => {
     const { adapter, book, pod, calls } = await setup();
+    const policy = privateAcl(book.container, WEBID);
+    new SheetResource(`${book.container}.acl#note`, policy, DataFactory).setText(
+      "http://www.w3.org/2000/01/rdf-schema#comment",
+      "Owner policy",
+    );
     await pod.fetch(`${book.container}.acl`, {
       method: "PUT",
-      body: await serializeTurtle(privateAcl(book.container, WEBID)),
+      body: await serializeTurtle(policy),
       headers: { "content-type": "text/turtle" },
     });
     calls.length = 0;
@@ -110,6 +128,88 @@ describe("workbook container sharing", () => {
   it("leaves unverified inherited access untouched", async () => {
     const { session, book, calls } = await setup();
     const adapter = new WorkbookSharingAdapter({ ...session, mode: "solid" });
+    calls.length = 0;
+    await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("does not revoke an inherited legacy grant beside an owner default", async () => {
+    const { session, book, pod, calls } = await setup();
+    const policy = privateAcl(POD, WEBID);
+    const bob = new SheetResource(`${POD}.acl#bob`, policy, DataFactory);
+    bob.types.add(`${ACL}Authorization`);
+    bob.links(`${ACL}agent`).add(READER);
+    bob.links(`${ACL}mode`).add(`${ACL}Read`);
+    bob.links(`${ACL}defaultForNew`).add(POD);
+    await pod.fetch(`${POD}.acl`, {
+      method: "PUT",
+      body: await serializeTurtle(policy),
+      headers: { "content-type": "text/turtle" },
+    });
+    calls.length = 0;
+    const adapter = new WorkbookSharingAdapter({ ...session, mode: "solid" });
+    await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+    expect(pod.has(`${book.container}.acl`)).toBe(false);
+    expect(await (await pod.fetch(`${POD}.acl`)).text()).toBe(await serializeTurtle(policy));
+  });
+
+  it.each([
+    "discovery",
+    "predicate",
+    "type",
+  ])("rejects existing mixed-policy %s and locks stale sharing state", async (kind) => {
+    const { adapter, book, pod, calls, setHook } = await setup();
+    await adapter.load(book.container, signal());
+    if (kind === "discovery") {
+      setHook((call) =>
+        call.method === "HEAD"
+          ? new Response(null, {
+              headers: {
+                link: `<${book.container}.acl>; rel="acl", <${book.container}.acr>; rel="${ACP}accessControl"`,
+              },
+            })
+          : undefined,
+      );
+    } else {
+      const policy = privateAcl(book.container, WEBID);
+      const mixed = new SheetResource(`${book.container}.acl#mixed`, policy, DataFactory);
+      if (kind === "type") mixed.types.add(`${ACP}AccessControlResource`);
+      else mixed.links(`${ACP}accessControl`).add(`${book.container}.acr#policy`);
+      await pod.fetch(`${book.container}.acl`, {
+        method: "PUT",
+        body: await serializeTurtle(policy),
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    calls.length = 0;
+    await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    await expect(adapter.setPerson(book.container, READER, "viewer")).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    await expect(adapter.setGeneral(book.container, { mode: "link" })).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(calls.some((call) => call.method === "PUT")).toBe(false);
+  });
+
+  it("rejects ACP discovery before bootstrapping a missing ACL", async () => {
+    const { adapter, book, calls, setHook } = await setup();
+    setHook((call) =>
+      call.method === "HEAD"
+        ? new Response(null, {
+            headers: {
+              link: `<${book.container}.acl>; rel="acl", <${book.container}.acr>; rel="${ACP}accessControl"`,
+            },
+          })
+        : undefined,
+    );
     calls.length = 0;
     await expect(adapter.load(book.container, signal())).rejects.toMatchObject({
       code: "unsupported",

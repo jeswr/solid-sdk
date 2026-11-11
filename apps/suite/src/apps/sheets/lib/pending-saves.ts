@@ -96,6 +96,12 @@ export function createPendingSaves() {
         };
       },
       schedule,
+      setReadOnly() {
+        opened = { ...opened, readOnly: true };
+        // Stop timers and capture the engine getter without discarding its pending edit.
+        queue.setOnline(false);
+        void queue.flush();
+      },
       rename(next: string) {
         if (opened.readOnly) return;
         title = next.trim();

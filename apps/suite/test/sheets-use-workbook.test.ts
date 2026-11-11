@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OpenedWorkbook, WorkbookService } from "../src/apps/sheets/lib/contract";
 import { WorkbookConflictError, WorkbookNotFoundError } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
+import { createWorkbookService } from "../src/apps/sheets/lib/workbook";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
 
@@ -29,6 +30,43 @@ async function setup(online = true) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("workbook editor lifecycle", () => {
+  it("opens and reloads a shared route using the recipient's distinct storage root", async () => {
+    const { book, options, service } = await setup(false);
+    const ownerEntry = pendingSaves.acquire(service, book);
+    ownerEntry.setOnline(false);
+    const ownerEdit = snapshot("Alice's pending edit");
+    ownerEntry.schedule(() => ownerEdit);
+    await ownerEntry.flush();
+    const recipient = createWorkbookService({
+      ...options,
+      podRoot: "https://pod.example/bob/",
+      webId: "https://pod.example/bob/profile/card#me",
+    });
+    context.service = recipient;
+    const own = vi.spyOn(recipient, "open");
+    const shared = vi.spyOn(recipient, "openShared");
+    const editor = await mount(h(Editor, { container: book.container }));
+    expect(state.error).toBeUndefined();
+    expect(state.readOnly).toBe(true);
+    expect(state.workbook?.snapshot).toEqual(book.snapshot);
+    await act(async () => {
+      expect(await state.reload()).toEqual(book.snapshot);
+    });
+    expect(own).not.toHaveBeenCalled();
+    expect(shared).toHaveBeenCalledTimes(2);
+    expect(ownerEntry.workbook.snapshot).toEqual(ownerEdit);
+    expect(ownerEntry.workbook.readOnly).not.toBe(true);
+    shared.mockRejectedValueOnce(new WorkbookNotFoundError(book.container));
+    await act(async () => {
+      await expect(state.reload()).rejects.toMatchObject({ reason: "missing" });
+    });
+    shared.mockRejectedValueOnce(new WorkbookNotFoundError(book.container));
+    await act(() => state.retryOpen());
+    expect(pendingSaves.get(book.container)).toBe(ownerEntry);
+    expect(ownerEntry.dirty).toBe(true);
+    await editor.unmount();
+    pendingSaves.drop(book.container);
+  });
   it("reuses offline pending edits on reopen and saves them after navigating away again", async () => {
     const { service, book } = await setup(false);
     const open = vi.spyOn(service, "open");
@@ -296,4 +334,42 @@ it("suppresses detached pending saves when re-opening reveals view-only access",
   });
   await editor.unmount();
   expect(save).not.toHaveBeenCalled();
+  expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+  pendingSaves.drop(book.container);
+});
+
+it("retains edits, title and unload protection through repeated view-only navigation after a 403", async () => {
+  const { service, book, setHook } = await setup();
+  const save = vi.spyOn(service, "save");
+  const first = await mount(h(Editor, { container: book.container }));
+  const local = snapshot("Keep this unsaved edit");
+  setHook((call) => (call.method === "PUT" ? new Response(null, { status: 403 }) : undefined));
+  await act(async () => {
+    state.scheduleSave(() => local);
+    state.rename("Unsaved title");
+    await state.flush();
+  });
+  expect(state.readOnly).toBe(true);
+  expect(state.status).toBe("error");
+  await first.unmount();
+  vi.spyOn(service, "open").mockResolvedValue({ ...book, readOnly: true });
+  for (let navigation = 0; navigation < 3; navigation++) {
+    const reopened = await mount(h(Editor, { container: book.container }));
+    expect(state.readOnly).toBe(true);
+    expect(state.workbook?.snapshot).toEqual(local);
+    expect(state.metadata?.title).toBe("Unsaved title");
+    expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+    const closing = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(closing);
+    expect(closing.defaultPrevented).toBe(true);
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      await state.retry();
+      await state.flush();
+    });
+    await reopened.unmount();
+  }
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(pendingSaves.get(book.container)?.dirty).toBe(true);
+  pendingSaves.drop(book.container);
 });

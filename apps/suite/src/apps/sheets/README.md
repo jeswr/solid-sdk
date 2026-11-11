@@ -10,12 +10,21 @@ remain authoritative. Sharing supports viewers, editors and public links; it add
 realtime collaboration. Unsupported ACL shapes and ACP fail closed. A missing own ACL
 is created conditionally only after verifying owner-only inherited access, or for the
 isolated demo pod. Inherited policies with other collaborators must be managed at their source.
+Verification includes both `acl:default` and legacy `acl:defaultForNew` grants. ACP discovery
+or mixed-policy RDF blocks sharing changes even when an own WAC-looking ACL already exists.
+
+Shared links use a separate view-only read path for another pod on the signed-in storage's
+origin, matching Docs' link origin boundary. Cross-origin links, credentials in URLs, ambiguous
+paths and redirects are refused with an explanation. Reads stay within the validated workbook;
+mutations remain restricted to the user's own Sheets container. Shared views never acquire a
+writer or consume another account's pending edits.
 
 An explicit lack of Write in either authoritative resource's `WAC-Allow` header opens
 the editor with “View only”. A save rejected with 403 switches the mounted engine to
 the same mode and stops subsequent autosaves, including reconnection and teardown saves.
 Unknown permission hints allow editing until a save supplies a definitive response.
 Existing local edits remain available to download or copy after write access is lost.
+Reopening view-only preserves their pending queue and unload warning across repeated navigation.
 
 At phone widths the compact engine hides the ribbon, leaving the File menu, a single-line
 formula bar and horizontally scrolling sheet tabs with a fixed add button. The header

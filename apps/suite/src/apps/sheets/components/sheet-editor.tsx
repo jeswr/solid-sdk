@@ -36,7 +36,12 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
-import { type SheetEngine, type Snapshot, WorkbookNotFoundError } from "../lib/contract";
+import {
+  type SheetEngine,
+  type Snapshot,
+  WorkbookLinkError,
+  WorkbookNotFoundError,
+} from "../lib/contract";
 import { loadEngine } from "../lib/engine";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
@@ -237,6 +242,7 @@ export function SheetEditor({ container }: { container: string }) {
     return (
       <div className="sht-state" role="alert">
         <h1>Couldn't open this spreadsheet</h1>
+        {state.error instanceof WorkbookLinkError && <p>{state.error.message}</p>}
         <Button onClick={state.retryOpen}>Retry</Button>
         <Link href="/sheets">Back to spreadsheets</Link>
       </div>

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
@@ -54,11 +55,17 @@ export async function verifyPrivateIndexAccess(
         }
         const modes = new Set<string>();
         for (const auth of new AclResource(dataset, DataFactory).authorizations) {
-          const targets = SetFrom.subjectPredicate(
-            auth,
-            `${ACL}${resource === indexUrl ? "accessTo" : "default"}`,
-            NamedNodeAs.string,
-            NamedNodeFrom.string,
+          const targets = new Set(
+            (resource === indexUrl ? ["accessTo"] : ["default", "defaultForNew"]).flatMap(
+              (predicate) => [
+                ...SetFrom.subjectPredicate(
+                  auth,
+                  ACL + predicate,
+                  NamedNodeAs.string,
+                  NamedNodeFrom.string,
+                ),
+              ],
+            ),
           );
           if (!targets.has(resource) || auth.mode.size === 0) continue;
           const groups = SetFrom.subjectPredicate(
