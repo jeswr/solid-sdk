@@ -107,6 +107,27 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   const second = await send(page, "Second message");
   await expect(page.getByRole("article")).toHaveCount(2);
   await first.hover();
+  await first.getByRole("button", { name: "Add reaction", exact: true }).click();
+  await page.getByRole("menuitem", { name: "React with 👍", exact: true }).click();
+  const reaction = first.getByRole("button", { name: "👍 1 reaction, including you", exact: true });
+  await expect(reaction).toHaveAttribute("aria-pressed", "true");
+  await expect(reaction).toHaveText("👍 1");
+  // A reload proves reactions come from the day resource rather than local component state.
+  await page.reload();
+  await expect(reaction).toHaveAttribute("aria-pressed", "true");
+  await reaction.click();
+  await expect(reaction).toBeHidden();
+  // The actions menu also exposes the picker to keyboard users and restores focus on Escape.
+  const actions = first.getByRole("button", { name: "Message actions", exact: true });
+  await actions.focus();
+  await actions.press("ArrowDown");
+  const addReaction = page.getByRole("menuitem", { name: "Add reaction", exact: true });
+  await addReaction.focus();
+  await addReaction.press("ArrowRight");
+  await expect(page.getByRole("menuitem", { name: "React with 👍", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(actions).toBeFocused();
+  await first.hover();
   await first.getByRole("button", { name: "Message actions" }).click();
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "Edit message", exact: true });

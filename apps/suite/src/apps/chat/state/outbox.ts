@@ -66,6 +66,7 @@ export class ChatOutbox {
       tombstone: false,
       deleted: false,
       edited: false,
+      reactions: [],
       status,
     };
   }

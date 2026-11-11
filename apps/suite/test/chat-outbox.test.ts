@@ -53,6 +53,7 @@ function sent(target: string, content: string, input?: { id?: string; at?: Date 
     tombstone: false,
     deleted: false,
     edited: false,
+    reactions: [],
   };
 }
 function setup(idb = new IDBFactory(), identity = webId) {
