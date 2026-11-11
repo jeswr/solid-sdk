@@ -1182,14 +1182,25 @@ export class TasksCache {
     else this.hiddenTasks.delete(url);
     this.emit();
   }
-  /** One conditional update: skipped occurrences never create completion history. */
-  skipTask(item: StoredTask, now = new Date()): Promise<SkipPlan | undefined> {
-    const current = Object.values(this.snapshot.tasks)
+  /** Recover committed completions first; the skip itself never creates completion history. */
+  async skipTask(item: StoredTask, now = new Date()): Promise<SkipPlan | undefined> {
+    let current = Object.values(this.snapshot.tasks)
       .flatMap((load) => load.items)
       .find((task) => task.url === item.url);
-    if (!current || this.unresolvedCompletions.has(item.url)) return Promise.resolve(undefined);
+    if (!current || this.unresolvedCompletions.has(item.url)) return undefined;
+    const recovery = this.recoverPersistedCompletion(current, now);
+    if (recovery) {
+      if (!(await recovery)) {
+        this.onNotice("Couldn't check this task's history. Try again.");
+        return undefined;
+      }
+      current = Object.values(this.snapshot.tasks)
+        .flatMap((load) => load.items)
+        .find((task) => task.url === item.url);
+      if (!current) return undefined;
+    }
     const plan = planSkip(current, this.snapshot.views, now);
-    if (!plan) return Promise.resolve(undefined);
+    if (!plan) return undefined;
     return this.updateOccurrence(current, plan.original, plan.previous).then((result) =>
       result ? plan : undefined,
     );
@@ -1244,6 +1255,19 @@ export class TasksCache {
   ): Promise<CompletionPlan | undefined> {
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
+    const recovery = this.recoverPersistedCompletion(item, now);
+    if (recovery) return recovery;
+    const plan = planComplete(item, this.snapshot.views, now, options);
+    if (plan.kind === "advance") return this.advanceTask(item, plan);
+    return this.updateTask(item, (task) => {
+      task.state = "closed";
+      task.endedAt = now;
+    }).then((task) => (task ? plan : undefined));
+  }
+  private recoverPersistedCompletion(
+    item: StoredTask,
+    now: Date,
+  ): Promise<CompletionPlan | undefined> | undefined {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -1255,12 +1279,6 @@ export class TasksCache {
         !item.task.completionOperations.has(copy.url),
     );
     if (project && orphans?.length) return this.recoverCompletion(project, item, orphans, now);
-    const plan = planComplete(item, this.snapshot.views, now, options);
-    if (plan.kind === "advance") return this.advanceTask(item, plan);
-    return this.updateTask(item, (task) => {
-      task.state = "closed";
-      task.endedAt = now;
-    }).then((task) => (task ? plan : undefined));
   }
   /** Undo retains occurrence ownership across lost responses and retries each write conditionally. */
   undoCompletion(item: StoredTask, plan: CompletionPlan): Promise<boolean | undefined> {
