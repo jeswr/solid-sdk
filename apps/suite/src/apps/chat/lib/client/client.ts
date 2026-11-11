@@ -8,6 +8,7 @@ import {
   isWithinPodScope,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
+import { Store } from "n3";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -21,14 +22,17 @@ import {
   loadMessages,
   loadRoom,
   loadRooms,
+  type MemberContainer,
   messageResource,
-  messageSubject,
   type Reaction,
   react,
+  reactionDocument,
   readMessages,
   readReactions,
-  readRoom,
+  type readRoom,
+  readRoomLayout,
   removeJoinedRoom,
+  removeMessage,
   roomContainer,
   saveJoinedRoom,
   saveMessageEdit,
@@ -56,6 +60,7 @@ export interface Room {
   members: string[];
   creator: string | undefined;
   created: string | undefined;
+  memberContainers?: MemberContainer[];
   isDirect: boolean;
   lastActivity?: Date;
 }
@@ -112,6 +117,7 @@ function roomResult(url: string, room: NonNullable<ReturnType<typeof readRoom>>)
     members: room.members,
     creator: room.creator,
     created: room.created,
+    ...(room.memberContainers !== undefined ? { memberContainers: room.memberContainers } : {}),
     isDirect: room.members.length === 2 && (room.name === "" || room.name.startsWith("dm:")),
   };
 }
@@ -229,13 +235,23 @@ export class ChatClient {
       since?: Date | undefined;
       signal?: AbortSignal | undefined;
     } = {},
-  ) {
+  ): Promise<{ messages: Message[]; next: Date | null; dropped?: number }> {
     const page = await loadMessages(abortableFetch(this.fetch, signal), url, before, since, days);
     const reactions = new Map<string, Reaction[]>();
+    const known = new Set(page.messages.map((message) => message.id));
     for (const document of page.documents)
-      for (const [message, found] of readReactions(document.dataset, document.url))
+      for (const [message, found] of readReactions(
+        document.dataset,
+        document.url,
+        known,
+        page.memberContainers,
+      ))
         reactions.set(message, [...(reactions.get(message) ?? []), ...found]);
-    return { messages: this.remember(page.messages, reactions), next: page.next };
+    return {
+      messages: this.remember(page.messages, reactions),
+      next: page.next,
+      dropped: page.dropped,
+    };
   }
   async search(
     source: string,
@@ -396,7 +412,7 @@ export class ChatClient {
       readMessages(document.dataset),
       readReactions(document.dataset, document.url),
     );
-    return messages.find((message) => message.id === messageSubject(room, at, id)) as Message;
+    return messages.find((message) => message.id === `${document.url}#${id}`) as Message;
   }
   async react(room: string, subject: string, emoji: string): Promise<void> {
     assertWithinPodScope(this.storageUrl, roomContainer(room));
@@ -412,9 +428,25 @@ export class ChatClient {
     const message = readMessages(document.dataset).find((message) => message.id === subject);
     if (!message || message.tombstone || message.deletedAt !== undefined)
       throw new ChatClientError("missing-message");
-    const mine = (readReactions(document.dataset, url).get(subject) ?? []).filter(
-      (reaction) => reaction.actorId === this.webId && reaction.emoji === emoji,
-    );
+    const context = await reactionDocument(this.fetch, room, subject, this.webId);
+    if (context) {
+      if (!context.messages.some((message) => message.id === subject))
+        throw new ChatClientError("missing-message");
+      try {
+        document = await loadChat(this.fetch, room, context.document);
+      } catch (error) {
+        if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+        document = { url: context.document, dataset: new Store(), etag: null };
+      }
+    }
+    const mine = (
+      readReactions(
+        document.dataset,
+        context?.document ?? url,
+        new Set([subject]),
+        context?.containers,
+      ).get(subject) ?? []
+    ).filter((reaction) => reaction.actorId === this.webId && reaction.emoji === emoji);
     const input = { message: subject, actor: this.webId, at: new Date() };
     if (mine.length) {
       for (const reaction of mine) {
@@ -446,6 +478,14 @@ export class ChatClient {
     this.remember(
       readMessages(
         (await deleteOwnMessage(this.fetch, room, subject, this.webId, new Date())).dataset,
+      ),
+    );
+  }
+  async moderate(room: string, subject: string): Promise<void> {
+    if (!this.known.has(subject)) throw new ChatClientError("missing-message");
+    this.remember(
+      readMessages(
+        (await removeMessage(this.fetch, room, subject, this.webId, new Date())).dataset,
       ),
     );
   }
@@ -498,7 +538,7 @@ export class ChatClient {
       await this.join(url);
       return roomResult(
         url,
-        readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
+        (await readRoomLayout(url, document.dataset)) as NonNullable<ReturnType<typeof readRoom>>,
       );
     }
   }
@@ -533,7 +573,7 @@ export class ChatClient {
       });
       room = roomResult(
         url,
-        readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
+        (await readRoomLayout(url, document.dataset)) as NonNullable<ReturnType<typeof readRoom>>,
       );
     } catch (error) {
       if (!(error instanceof ChatIoError && error.status === 412)) throw error;
@@ -548,7 +588,7 @@ export class ChatClient {
           { name: "", members: people, creator: this.webId, created: new Date() },
           { resume: true },
         );
-        const resumed = readRoom(url, document.dataset);
+        const resumed = await readRoomLayout(url, document.dataset);
         if (!resumed) throw failure;
         return roomResult(url, resumed);
       });

@@ -242,7 +242,10 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       </div>
     );
   const data = room.data;
-  const canRewrite = data.creator === session.webId;
+  const canModerate = data.memberContainers !== undefined && data.creator === session.webId;
+  const canRewrite =
+    data.creator === session.webId ||
+    !!data.memberContainers?.some((member) => member.owner === session.webId);
   const list = messages.data?.messages ?? [];
   const lastOwn = [...list]
     .reverse()
@@ -294,6 +297,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
           canRewrite={canRewrite}
+          canModerate={canModerate}
           onRendered={setRenderedAt}
           loadOlder={messages.loadOlder}
           onEdit={setEditing}
@@ -353,7 +357,9 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       >
         <AlertDialogContent className="chat-dialog">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete message?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {deleting?.author !== session.webId ? "Remove message?" : "Delete message?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               The message text will be replaced with “Message deleted”. Replies keep their place.
             </AlertDialogDescription>
@@ -367,8 +373,11 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
                 event.preventDefault();
                 if (!deleting) return;
                 setBusy(true);
-                void actions
-                  .remove(url, deleting.id)
+                void (
+                  deleting.author === session.webId
+                    ? actions.remove(url, deleting.id)
+                    : actions.moderate(url, deleting.id)
+                )
                   .then(
                     () => setDeleting(undefined),
                     () => setDeleteError("Couldn't delete the message. Try again."),
@@ -376,7 +385,11 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
                   .finally(() => setBusy(false));
               }}
             >
-              {busy ? "Deleting…" : "Delete message"}
+              {busy
+                ? "Deleting…"
+                : deleting?.author !== session.webId
+                  ? "Remove message"
+                  : "Delete message"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

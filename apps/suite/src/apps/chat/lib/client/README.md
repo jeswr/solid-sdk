@@ -31,7 +31,9 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
 - Own messages become tasks using the existing same-subject overlay and `wf:dateDue`.
   Somebody else's message becomes a linked personal task under `tasks/`, since room members
   with Read/Append cannot rewrite the original day. Edit/Delete and the composer edit shortcut
-  are available only to the room creator for this cut. Joining records a room locally and
+  are available for own messages to members with a validated v2 container, and only
+  to the room creator in v1. V2 owners have an explicit “Remove message” action
+  (`moderate`) for other members’ messages. Joining records a room locally and
   never grants remote posting rights.
 - Profiles are parsed by the model and cached per client. Profiles outside the storage path
   use the separately injected public transport with credentials omitted and redirects refused.

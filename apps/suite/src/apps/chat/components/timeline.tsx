@@ -62,6 +62,7 @@ function MessageArticle({
   retry,
   discard,
   canRewrite,
+  canModerate = false,
   highlighted,
 }: {
   url: string;
@@ -75,6 +76,7 @@ function MessageArticle({
   retry: (id: string) => void;
   discard: (id: string) => void;
   canRewrite: boolean;
+  canModerate?: boolean;
   highlighted: boolean;
 }) {
   const { session } = useChat();
@@ -231,6 +233,11 @@ function MessageArticle({
                   <DropdownMenuItem onSelect={() => onDelete(message)}>Delete</DropdownMenuItem>
                 </>
               )}
+              {message.author !== session.webId && canModerate && (
+                <DropdownMenuItem onSelect={() => onDelete(message)}>
+                  Remove message
+                </DropdownMenuItem>
+              )}
               {!canRewrite && (
                 <DropdownMenuLabel className="chat-hint">
                   Editing needs write access to this room
@@ -271,6 +278,7 @@ export function Timeline({
   retry,
   discard,
   canRewrite,
+  canModerate = false,
   onRendered,
 }: {
   url: string;
@@ -287,6 +295,7 @@ export function Timeline({
   retry: (id: string) => void;
   discard: (id: string) => void;
   canRewrite: boolean;
+  canModerate?: boolean;
   onRendered?: (at: number) => void;
 }) {
   const { session } = useChat();
@@ -583,6 +592,7 @@ export function Timeline({
               retry={retry}
               discard={discard}
               canRewrite={canRewrite}
+              canModerate={canModerate}
             />
           </div>
         ))}

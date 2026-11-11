@@ -140,7 +140,7 @@ it("rehydrates and flushes pending sends when Chat remounts already online", asy
   online.mockReturnValue(true);
   await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
   expect((await client.messages(room.url)).messages[0]).toMatchObject({
-    id: pending?.id,
+    id: expect.stringMatching(new RegExp(`#${pending?.localId}$`)),
     published: pending?.published,
     content: "Survives Drive",
   });

@@ -14,7 +14,13 @@ export interface RoomInput {
   created: Date;
   members: readonly string[];
 }
+export interface MemberContainer {
+  url: string;
+  owner: string;
+}
 export interface ChatRoom {
+  /** Undefined is v1; even an empty validated list denotes v2 (fail closed). */
+  memberContainers?: MemberContainer[];
   id: string;
   name: string;
   creator: string | undefined;
@@ -85,6 +91,8 @@ export function buildRoomAcl(
   aclUrl: string,
   owner: string,
   members: readonly string[],
+  layout: "v1" | "v2" = "v1",
+  writer?: string,
 ): Store {
   const container = roomContainer(room);
   httpIri(aclUrl);
@@ -107,7 +115,17 @@ export function buildRoomAcl(
     memberRule.accessTo = container;
     memberRule.default = container;
     memberRule.canRead = true;
-    memberRule.canAppend = true;
+    memberRule.canAppend = layout === "v1";
+  }
+  if (writer !== undefined) {
+    httpIri(writer);
+    const writeRule = new Authorization(`${aclUrl}#writer`, dataset, DataFactory);
+    writeRule.type.add(`${NS.ACL}Authorization`);
+    writeRule.agent.add(writer);
+    writeRule.accessTo = container;
+    writeRule.default = container;
+    writeRule.canRead = true;
+    writeRule.canWrite = true;
   }
   return dataset;
 }

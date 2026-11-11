@@ -31,7 +31,9 @@ export function messageResource(room: string, subject: string): string {
   if (
     target.search ||
     !/^#[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(target.hash) ||
-    !/^\d{4}\/\d{2}\/\d{2}\.ttl$/.test(url.slice(base.length, url.indexOf("#")))
+    !/^(?:members\/[a-f0-9]{32}\/)?\d{4}\/\d{2}\/\d{2}\.ttl$/.test(
+      url.slice(base.length, url.indexOf("#")),
+    )
   )
     throw new ChatModelError("invalid-input");
   target.hash = "";

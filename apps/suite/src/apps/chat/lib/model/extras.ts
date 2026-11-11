@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
 import { buildTask } from "@jeswr/solid-task-model/task";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { ensureContainer, loadChat, saveChat } from "./io";
+import { readRoomLayout } from "./layout";
 import type { ChatMessage } from "./messages";
-import { roomContainer } from "./paths";
+import { roomContainer, roomIndex } from "./paths";
 import { ChatNode, NS, readText } from "./rdf";
 import { httpIri, isoDate, text } from "./validation";
 
@@ -41,21 +43,46 @@ export async function loadRoomFiles(
   room: string,
 ): Promise<string[]> {
   const base = roomContainer(room);
-  const document = await loadChat(fetch, base, base);
-  return [...new Container(base, document.dataset, DataFactory).contains]
-    .map((resource) => resource.id)
-    .filter((url) => {
-      try {
-        assertWithinPodScope(base, url);
-      } catch {
-        return false;
+  let layout: Awaited<ReturnType<typeof readRoomLayout>>;
+  try {
+    layout = await readRoomLayout(room, (await loadChat(fetch, base, roomIndex(room))).dataset);
+  } catch (error) {
+    if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+  }
+  const roots = layout?.memberContainers?.map((member) => member.url) ?? [base];
+  const files: string[] = [];
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(6, roots.length) }, async () => {
+      while (cursor < roots.length) {
+        const root = roots[cursor++] as string;
+        const pending = [root];
+        for (const url of pending) {
+          const document = await loadChat(fetch, base, url);
+          for (const resource of new Container(url, document.dataset, DataFactory).contains) {
+            try {
+              assertWithinPodScope(root, resource.id);
+            } catch {
+              continue;
+            }
+            const path = resource.id.slice(root.length);
+            if (
+              layout?.memberContainers !== undefined &&
+              /^(?:\d{4}\/|\d{4}\/\d{2}\/)$/.test(path) &&
+              !pending.includes(resource.id)
+            )
+              pending.push(resource.id);
+            else if (
+              !new URL(resource.id).pathname.endsWith("/") &&
+              !/\.(ttl|acl)$/.test(new URL(resource.id).pathname)
+            )
+              files.push(resource.id);
+          }
+        }
       }
-      return (
-        !new URL(url).pathname.endsWith("/") &&
-        !new URL(url).pathname.endsWith(".ttl") &&
-        !new URL(url).pathname.endsWith(".acl")
-      );
-    });
+    }),
+  );
+  return files.sort();
 }
 /** A participant can turn somebody else's message into a personal task without rewriting their day. */
 export async function copyMessageTask(

@@ -307,7 +307,7 @@ it("re-reads and retries a real stale ETag once, retaining concurrent messages a
   await expect(react(noEtag, room, { ...input, id: "no-etag" })).rejects.toMatchObject({
     code: "missing-etag",
   });
-  expect(noEtag).toHaveBeenCalledTimes(1);
+  expect(noEtag).toHaveBeenCalledTimes(2);
   const noResponseEtag: typeof globalThis.fetch = async (url, init) =>
     init?.method === "PATCH" ? new Response(null, { status: 204 }) : pod.fetch(url, init);
   expect((await react(noResponseEtag, room, { ...input, id: "no-response-etag" })).etag).toBeNull();

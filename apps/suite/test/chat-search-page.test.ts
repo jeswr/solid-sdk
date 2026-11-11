@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -282,5 +283,5 @@ it("keeps server pages independent of search params for native static export", a
   expect(search).toContain("<Suspense>");
   expect(search).toContain("<ChatSearchRoute />");
   expect(room).not.toContain("searchParams");
-  expect(room).toContain("<RoomRoute reference={ref} />");
+  expect(room).toContain("<RoomPageRoute />");
 });

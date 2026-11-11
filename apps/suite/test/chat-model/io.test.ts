@@ -14,6 +14,7 @@ import {
   loadMessages,
   loadRoom,
   loadRooms,
+  memberContainer,
   messageSubject,
   NS,
   parseChat,
@@ -54,6 +55,10 @@ function pod() {
     if (overridden) return overridden;
     const headers = new Headers(init.headers);
     const existing = files.get(url);
+    if (method === "HEAD")
+      return files.has(url)
+        ? new Response(null, { headers: { link: '<.acl>; rel="acl"' } })
+        : new Response(null, { status: 404 });
     if (method === "GET")
       return existing
         ? new Response(existing.body, {
@@ -119,9 +124,15 @@ it("creates a room's container, advertised ACL, and descriptor without public or
     `${storage}chat/rooms/`,
     room,
     `${room}.acl`,
+    `${room}members/`,
+    `${room}members/`,
+    ...[await memberContainer(room, alice), await memberContainer(room, bob)].flatMap((url) => [
+      url,
+      `${url}.acl`,
+    ]),
     roomIndex(room),
   ]);
-  expect(p.files.get(`${room}.acl`)?.body).toContain(`${NS.ACL}Append`);
+  expect(p.files.get(`${room}.acl`)?.body).not.toContain(`${NS.ACL}Append`);
   expect(p.files.get(`${room}.acl`)?.body).not.toContain(`${NS.FOAF}Agent`);
   expect(new Headers(p.calls.at(-1)?.init.headers).get("if-none-match")).toBe("*");
   const loaded = await loadRoom(p.fetch, room);
@@ -431,6 +442,7 @@ it("validates existing dated parents and never overwrites conflicting creations 
   );
   await sendMessage(p.fetch, room, input);
   expect(p.calls.map(({ method, url }) => [method, url])).toEqual([
+    ["GET", roomIndex(room)],
     ["GET", dayUrl(room, at)],
     ["GET", `${room}2026/`],
     ["GET", `${room}2026/10/`],
@@ -459,7 +471,7 @@ it("validates existing dated parents and never overwrites conflicting creations 
   await expect(sendMessage(noTag.fetch, room, { ...input, id: "m2" })).rejects.toThrow(
     "missing-etag",
   );
-  expect(noTag.calls).toHaveLength(1);
+  expect(noTag.calls).toHaveLength(2);
 });
 
 it("revalidates a parent created concurrently after a 404 and preserves it on 412", async () => {
@@ -531,7 +543,7 @@ it("enforces author, validator and scope checks before any mutation write", asyn
   await expect(saveMessageEdit(p.fetch, room, subject, bob, "forged", at)).rejects.toThrow(
     "not-author",
   );
-  expect(p.calls).toHaveLength(1);
+  expect(p.calls).toHaveLength(2);
   const entry = p.files.get(dayUrl(room, at)) as { body: string; etag: string | null };
   entry.etag = null;
   await expect(deleteOwnMessage(p.fetch, room, subject, alice, at)).rejects.toThrow("missing-etag");
