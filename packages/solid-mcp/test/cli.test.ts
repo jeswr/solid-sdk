@@ -249,10 +249,10 @@ describe("stdio executable", () => {
           ],
         },
       });
-      // chat-acl.ts refuses with "Chat protection unavailable"; podOutputError keeps
-      // that internal diagnostic generic at the MCP boundary.
+      // chat-acl.ts refuses with the fixed "Chat protection unavailable" diagnostic,
+      // which podOutputError passes through like the audit and memory refusals.
       expect(saved.isError).toBe(true);
-      expect(text(saved)).toBe("Pod operation failed");
+      expect(text(saved)).toBe("Chat protection unavailable");
       const chats = await client.callTool({ name: "chat_list", arguments: {} });
       expect(chats.isError, text(chats)).toBeFalsy();
       expect(JSON.parse(text(chats))).toEqual({ conversations: [] });

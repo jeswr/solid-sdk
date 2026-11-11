@@ -376,6 +376,7 @@ export function podOutputError(error: unknown): Error {
   if (message === PERSONAL_DATA_DENIED) return new Error(message);
   if (message === "Audit protection unavailable") return new Error(message);
   if (message === "Memory protection unavailable") return new Error(message);
+  if (message === "Chat protection unavailable") return new Error(message);
   if (
     [
       AUXILIARY_MUTATION_DENIED,
