@@ -1,0 +1,51 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/suite-i18n",
+  "version": "0.1.0",
+  "description": "Typed message catalogs, ICU subset formatting and locale negotiation for Solid Suite",
+  "type": "module",
+  "license": "MIT",
+  "securityCritical": false,
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "default": "./dist/react.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "@testing-library/react": "16.3.2",
+    "jsdom": "29.1.1",
+    "@biomejs/biome": "^2.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@types/node": "^25.9.2",
+    "@vitest/coverage-v8": "4.1.10"
+  }
+}

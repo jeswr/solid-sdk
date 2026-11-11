@@ -1,14 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { useState } from "react";
 import styles from "@/shell/notifications/notifications.module.css";
 import { NotificationsTray } from "@/shell/notifications/notifications-tray";
 import { SuiteShell } from "@/shell/suite-shell";
 import { ShellSyncSheet } from "@/shell/sync/shell-sync-sheet";
 export default function Page() {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
-    <SuiteShell app="home" pageTitle="Notifications">
+    <SuiteShell app="home" pageTitle={t("notifications.title")}>
       <div className={styles.page}>
         <NotificationsTray page onOpenSync={() => setOpen(true)} />
         <ShellSyncSheet open={open} onOpenChange={setOpen} />

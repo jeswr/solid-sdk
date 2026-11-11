@@ -410,3 +410,8 @@ wraps such controls: transparent while online; offline it disables them and expl
 keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
 connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Navigation's built-in app names and `SignInCard` controls use the shared
+`I18nProvider` from `@jeswr/suite-i18n/react`. Standalone use defaults to English;
+explicit host app names and sign-in titles remain authoritative.

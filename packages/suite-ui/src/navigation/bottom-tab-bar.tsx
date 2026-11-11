@@ -3,9 +3,13 @@
 "use client";
 
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, mobileApps, suiteApps } from "./apps.js";
+import { AppGlyph, mobileApps, suiteApps, useNavigationApps } from "./apps.js";
 
-export function BottomTabBar({ currentApp, apps = suiteApps }: Omit<AppLauncherProps, "trigger">) {
+export function BottomTabBar({
+  currentApp,
+  apps: suppliedApps = suiteApps,
+}: Omit<AppLauncherProps, "trigger">) {
+  const apps = useNavigationApps(suppliedApps);
   return (
     <nav className="suite-bottom-tabs" aria-label="Apps">
       {mobileApps.map((slug) => {

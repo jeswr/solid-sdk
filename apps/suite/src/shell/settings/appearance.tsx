@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { localeNames, locales } from "@jeswr/suite-i18n";
+import { useT } from "@jeswr/suite-i18n/react";
 import { appRegistry } from "../registry";
 import { usePreferences } from "./preferences";
 
 export function AppearanceSettings() {
+  const t = useT();
+  const language = usePreferences("locale");
   const theme = usePreferences("theme");
   const density = usePreferences("density");
   const font = usePreferences("fontScale");
@@ -13,7 +17,26 @@ export function AppearanceSettings() {
   return (
     <>
       <fieldset>
-        <legend>Theme</legend>
+        <legend>{t("settings.language")}</legend>
+        <label>
+          {t("settings.languageLabel")}
+          <select
+            value={language.value}
+            onChange={(event) => language.update(event.target.value as typeof language.value)}
+            aria-describedby="language-help"
+          >
+            <option value="">{t("settings.automatic")}</option>
+            {locales.map((locale) => (
+              <option key={locale} value={locale} lang={locale}>
+                {localeNames[locale]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p id="language-help">{t("settings.languageHelp")}</p>
+      </fieldset>
+      <fieldset>
+        <legend>{t("appearance.theme")}</legend>
         <div className="settings-choice-row">
           {(["system", "light", "dark"] as const).map((value) => (
             <label className="settings-theme" key={value}>
@@ -26,24 +49,24 @@ export function AppearanceSettings() {
                   checked={theme.value === value}
                   onChange={() => theme.update(value)}
                 />
-                {value === "system" ? "System" : value === "light" ? "Light" : "Dark"}
+                {t(`appearance.${value}`)}
               </span>
             </label>
           ))}
         </div>
       </fieldset>
       <label>
-        Density
+        {t("appearance.density")}
         <select
           value={density.value}
           onChange={(event) => density.update(event.target.value as typeof density.value)}
         >
-          <option value="comfortable">Comfortable</option>
-          <option value="compact">Compact</option>
+          <option value="comfortable">{t("appearance.comfortable")}</option>
+          <option value="compact">{t("appearance.compact")}</option>
         </select>
       </label>
       <label>
-        UI font size
+        {t("appearance.fontSize")}
         <select
           value={font.value}
           onChange={(event) => font.update(event.target.value as typeof font.value)}
@@ -56,13 +79,13 @@ export function AppearanceSettings() {
         </select>
       </label>
       <label>
-        Reduce motion
+        {t("appearance.motion")}
         <select
           value={motion.value}
           onChange={(event) => motion.update(event.target.value as typeof motion.value)}
         >
-          <option value="system">Follow system</option>
-          <option value="reduce">Reduce</option>
+          <option value="system">{t("appearance.followSystem")}</option>
+          <option value="reduce">{t("appearance.reduce")}</option>
         </select>
       </label>
       <label className="settings-toggle">
@@ -71,10 +94,10 @@ export function AppearanceSettings() {
           checked={colours.value}
           onChange={(event) => colours.update(event.target.checked)}
         />
-        Show app colours on rail
+        {t("appearance.colours")}
       </label>
       <label>
-        Start page
+        {t("appearance.startPage")}
         <select
           value={start.value}
           onChange={(event) => start.update(event.target.value as typeof start.value)}
@@ -83,7 +106,7 @@ export function AppearanceSettings() {
             .filter((app) => app.status === "first-cut")
             .map((app) => (
               <option key={app.slug} value={app.basePath}>
-                {app.name}
+                {t(`apps.${app.slug}`)}
               </option>
             ))}
         </select>

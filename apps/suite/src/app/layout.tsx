@@ -3,6 +3,7 @@
 import { onest, sourceCode, sourceSerif } from "@jeswr/suite-ui/fonts";
 import type { Metadata, Viewport } from "next";
 import { NativeStartupGate } from "@/components/native-startup-gate";
+import { SkipLink } from "@/shell/i18n";
 import { suiteEnv } from "@/shell/lib/env";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -11,15 +12,14 @@ export const metadata: Metadata = { title: "Solid Suite", icons: { icon: "/icon.
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const app = (
     <Providers environment={suiteEnv()}>
-      <a className="skip-link" href="#main-content">
-        Skip to main content
-      </a>
+      <SkipLink />
       {children}
     </Providers>
   );
   return (
     <html
       lang="en"
+      dir="ltr"
       className={`${onest.variable} ${sourceSerif.variable} ${sourceCode.variable}`}
       suppressHydrationWarning
       data-density="comfortable"

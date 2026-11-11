@@ -1,6 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { en } from "@jeswr/suite-i18n";
+import { useT } from "@jeswr/suite-i18n/react";
 /**
  * Sidebar shared by /home, /permissions and /connect (03-home-permissions §2.1):
  * the nine domains, then shortcuts to Connect services and Permissions. The
@@ -26,6 +28,7 @@ export function domainFromPath(pathname: string): string | undefined {
 }
 
 export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }) {
+  const t = useT();
   const pathname = usePathname();
   const active = domainFromPath(pathname);
   return (
@@ -41,7 +44,11 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
                   aria-current={active === domain.id ? "page" : undefined}
                 >
                   <DomainIcon name={domain.icon} />
-                  <span className="hm-nav-label">{domain.label}</span>
+                  <span className="hm-nav-label">
+                    {Object.hasOwn(en.home.domains, domain.id)
+                      ? t(`home.domains.${domain.id as keyof typeof en.home.domains}`)
+                      : domain.label}
+                  </span>
                   {(counts?.get(domain.id) ?? 0) > 0 ? (
                     <span className="hm-nav-count">
                       <span className="hm-sr-only">, </span>

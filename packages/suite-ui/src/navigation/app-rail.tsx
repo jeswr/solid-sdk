@@ -9,7 +9,7 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip.js";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, suiteApps } from "./apps.js";
+import { AppGlyph, suiteApps, useNavigationApps } from "./apps.js";
 import { usePreferences } from "./preferences.js";
 
 export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
@@ -19,11 +19,12 @@ export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
 }
 export function AppRail({
   currentApp,
-  apps = suiteApps,
+  apps: suppliedApps = suiteApps,
   notifications,
   offline,
   account,
 }: AppRailProps) {
+  const apps = useNavigationApps(suppliedApps);
   const preferences = usePreferences("rail");
   const visible = apps.filter(
     (app) => app.status !== "backlog" || process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",

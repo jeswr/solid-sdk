@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { en } from "@jeswr/suite-i18n";
+import { useT } from "@jeswr/suite-i18n/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -18,6 +20,7 @@ export function DomainNavigation({
   active: string;
   counts: ReadonlyMap<string, number>;
 }) {
+  const t = useT();
   const row = useRef<HTMLFieldSetElement>(null);
   const router = useRouter();
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on route changes and when counts first appear
@@ -63,7 +66,11 @@ export function DomainNavigation({
             aria-current={domain.id === active ? "page" : undefined}
           >
             <DomainIcon name={domain.icon} />
-            <span>{domain.label}</span>
+            <span>
+              {Object.hasOwn(en.home.domains, domain.id)
+                ? t(`home.domains.${domain.id as keyof typeof en.home.domains}`)
+                : domain.label}
+            </span>
             {(counts.get(domain.id) ?? 0) > 0 ? (
               <span className="hm-nav-count">
                 <span className="hm-sr-only">, </span>

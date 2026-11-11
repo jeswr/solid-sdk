@@ -7,7 +7,7 @@ import { Popover } from "radix-ui";
 import { useId, useRef, useState } from "react";
 import { IconButton } from "../components/ui/icon-button.js";
 import { AppGrid } from "./app-grid.js";
-import { type AppSlug, type NavigationApp, suiteApps } from "./apps.js";
+import { type AppSlug, type NavigationApp, suiteApps, useNavigationApps } from "./apps.js";
 import { CustomiseRail } from "./customise-rail.js";
 import { usePreferences } from "./preferences.js";
 import { LauncherSkeleton, NavigationErrorState } from "./states.js";
@@ -19,9 +19,10 @@ export interface AppLauncherProps {
 }
 export function AppLauncher({
   currentApp,
-  apps = suiteApps,
+  apps: suppliedApps = suiteApps,
   trigger = "button",
 }: AppLauncherProps) {
+  const apps = useNavigationApps(suppliedApps);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [customise, setCustomise] = useState(false);
