@@ -71,7 +71,6 @@ export function createUndoStack({
   };
   /** History recorded after an entry that can no longer be redone is not replayable. */
   const retireRedo = (scope: string) => {
-    branches.set(scope, (branches.get(scope) ?? 0) + 1);
     records = records.filter((record) => record.entry.scope !== scope || record.phase !== "redo");
   };
   const prune = () => {
