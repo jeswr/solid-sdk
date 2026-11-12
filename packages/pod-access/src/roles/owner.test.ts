@@ -169,6 +169,7 @@ describe("makeOwnerOnly", () => {
     "https://pod.example/outside/?ext=acr",
     "https://u:p@pod.example/private/?ext=acr",
     "?ext=acr#fragment",
+    "https://pod.example/private/other?ext=acr",
   ])("refuses unsafe ESS query endpoint %s before reading it", async (target) => {
     const p = pod({ model: "acp", link: `<${target}>; rel="${ACP}accessControl"` });
     await expect(p.run({ implementation: "ess", root: resource })).rejects.toMatchObject({
@@ -257,6 +258,21 @@ describe("makeOwnerOnly", () => {
     expect(await objects(p.puts()[0]?.[1]?.body, `${model === "wac" ? ACL : ACP}agent`)).toEqual([
       owner,
     ]);
+  });
+  it.each([
+    `acl:agentClass <http://xmlns.com/foaf/0.1/Agent>; acl:mode acl:Read`,
+    `acl:agent <${other}>; acl:mode acl:Control`,
+  ])("rewrites an owner-only ACL that also holds an untyped foreign node (%s)", async (grant) => {
+    // Servers may honour an authorization without an rdf:type; the no-op shortcut must not keep it.
+    const own = `${await privateDocument("wac")}\n${prefixes} <#x> acl:accessTo <${resource}>; ${grant}.`;
+    const p = pod({ own });
+    await expect(p.run()).rejects.toMatchObject({ code: "unsupported" });
+    expect(p.puts()).toEqual([]);
+    await p.run({ replace: true });
+    expect(p.puts()).toHaveLength(1);
+    const body = p.puts()[0]?.[1]?.body;
+    expect(await objects(body, `${ACL}agent`)).toEqual([owner]);
+    expect(await objects(body, `${ACL}agentClass`)).toEqual([]);
   });
   it.each([
     "acl:agentClass <http://xmlns.com/foaf/0.1/Agent>",
@@ -445,7 +461,7 @@ describe("makeOwnerOnly", () => {
     const p = pod({
       model: "acp",
       own: 404,
-      link: `<policy>; ReL=ACL; title=first; title=second; flag; flag=one; title*=UTF-8'en'Policy, <${ACP}AccessControlResource>; rel=type`,
+      link: `<policy>; ReL=acl; title=first; title=second; flag; flag=one; title*=UTF-8'en'Policy, <${ACP}AccessControlResource>; rel=type`,
     });
     await p.run();
     expect(p.puts()).toHaveLength(1);

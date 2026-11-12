@@ -63,6 +63,10 @@ export async function makeOwnerOnly(
   const endpoint = endpoints[0] as string;
   const accessQuery = implementation === "ess" ? "?ext=acr" : false;
   scoped(endpoint, io.root, accessQuery);
+  // ESS addresses a resource's ACR as the resource itself plus `?ext=acr`; any other
+  // query-addressed endpoint could point at a different resource's document.
+  if (accessQuery && endpoint.includes("?") && endpoint !== `${resource}${accessQuery}`)
+    throw roleError("scope", endpoint, "An ESS access document must belong to the resource");
   if (endpoint === resource)
     throw roleError("scope", endpoint, "An access document cannot replace the protected resource");
   // An ACP relation/type is explicit evidence even on create. An acl relation alone
@@ -90,6 +94,9 @@ export async function makeOwnerOnly(
           )
             throw roleError("inherited-grant", resource, "Ancestor access is not owner-only");
   const existing = snapshot.own;
+  // Any subject naming a non-owner agent, class, group or client, typed as an
+  // authorization or not. The no-op shortcut below must never keep such a node.
+  let sawForeign = false;
   if (existing) {
     // Inspect every placement, including foreign targets and detached selectors;
     // projections for just the selected resource must never hide foreign grants.
@@ -106,6 +113,7 @@ export async function makeOwnerOnly(
         ["agentClass", "agentGroup", "client"].some(
           (name) => node.terms(namespace + name).size > 0,
         );
+      sawForeign ||= foreign;
       if (foreign && replace !== true)
         throw roleError("unsupported", resource, "Existing foreign grants require replace: true");
       for (const name of model === "wac" ? ["accessTo", "default", "defaultForNew"] : ["resource"])
@@ -132,6 +140,7 @@ export async function makeOwnerOnly(
   // including Append. A verified no-op needs neither a validator nor a PUT.
   if (
     existing &&
+    !sawForeign &&
     (["resource", "members"] as const).every((scope) =>
       policiesEqual(scopePolicy(existing.policy, scope), scopePolicy(policy, scope)),
     )

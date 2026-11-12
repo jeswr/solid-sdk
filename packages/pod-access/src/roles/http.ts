@@ -77,10 +77,11 @@ export function links(headers: Headers, base: string, rel: string): string[] {
       !parameters.some(
         (param) =>
           (param[1] as string).toLowerCase() === "rel" &&
+          // Relation values stay case-sensitive, matching the requests-solid parser:
+          // if the two layers could disagree on an endpoint, discovery must fail closed.
           value(param[2] ?? "")
-            .toLowerCase()
             .split(/\s+/)
-            .includes(rel.toLowerCase()),
+            .includes(rel),
       )
     )
       continue;
