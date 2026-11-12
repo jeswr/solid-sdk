@@ -78,3 +78,13 @@ health:SleepObservation a owl:Class ;
   rdfs:subClassOf health:Observation ;
   rdfs:label "Sleep Observation"@en ;
   skos:definition "A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'."@en .
+
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Local assistant-import composition facets; these are not clinical sector classes.
+@prefix import: <https://jeswr.org/ns/pkg-health/import#> .
+import:AssistantTextValue a owl:Class .
+import:AssistantTextFields a owl:Class .
+import:AssistantSourceMetadata a owl:Class .
+import:AssistantOwner a owl:Class .
+import:AssistantDateFields a owl:Class .
+import:AssistantDateTimeFields a owl:Class .

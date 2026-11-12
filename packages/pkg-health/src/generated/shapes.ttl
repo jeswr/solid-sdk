@@ -3,6 +3,18 @@
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix shapes: <https://jeswr.org/ns/pkg-health/shapes#>.
 
+shapes:0572e9a0d3cfac7b70d5a948f66488a877507a796070ed9487c23eb4d17937f4-SpecificResource-hasSelector sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/oa#hasSelector>;
+    sh:severity sh:Info.
+shapes:0af03c5a204a47d04e4f56a27aaac1ecd022ddf927a1660023ed5905409a1abc-AssistantDateTimeFields-validThrough sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/validThrough>;
+    sh:severity sh:Info.
+shapes:0c094c988f897b03c56be6a8ba7f9a0b5b4ae4bb4d23c129469fde237b973e62-AssistantTextFields-doseSchedule sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/doseSchedule>;
+    sh:severity sh:Info.
 shapes:15fb6ad35d4af642364f584edd2024acaea3a57678f2d806650adf1d2d028471-Immunization-hasCode sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasCode;
@@ -63,9 +75,17 @@ shapes:403010d5f3eaad5787122a05acfb1954a2a98ccb6040fe00c3ffc1e6537d043f-DigitalD
     sh:maxCount 1;
     sh:path <https://schema.org/name>;
     sh:severity sh:Info.
+shapes:446c2d08b530153357b8417a5b06b15c1903baba85142beec2f69b400c560408-Annotation-hasTarget sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/oa#hasTarget>;
+    sh:severity sh:Info.
 shapes:454147c1c1edf1e001bb058451a7785f0f591812d0141b7e4efbd104836b9b4f-Observation-hasCode sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:458c367e199404b3d0f0b1f2de8eed67ecbaafa7268e761c11cd2d90132aea33-AssistantSourceMetadata-instrument sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/instrument>;
     sh:severity sh:Info.
 shapes:4f7cb7f19c23dcabcedf056e3c9da78d141be30d02d6e933ec4c11043a6eef44-Observation-hasUnit sh:maxCount 1;
     sh:nodeKind sh:IRI;
@@ -92,6 +112,10 @@ shapes:61cce756d902dd1d09117b8623ea019e9fcc3c26eed72fff4754aa01c0793a2e-VitalSig
     sh:nodeKind sh:IRI;
     sh:path health:hasUnit;
     sh:severity sh:Info.
+shapes:6211c285c260c7d9d7c9825f607ebbcd25de58bb59f16430b3e1c364c0cd4c74-AssistantTextFields-description sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/description>;
+    sh:severity sh:Info.
 shapes:62d292b5dd8d7ea814c339645ce1fa5276349484c60a5cd99f9e7db64ad15525-AllergyIntolerance-hasCode sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasCode;
@@ -104,6 +128,10 @@ shapes:670156866a4923796a991fffb0507ee0c199b1b42fa8556170d81ccad0857021-StepCoun
     sh:maxCount 1;
     sh:path <https://schema.org/name>;
     sh:severity sh:Info.
+shapes:690ed0651aca919def8bc69391fd78c1310370389b456ed8d84e288457bba8f3-TextQuoteSelector-exact sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <http://www.w3.org/ns/oa#exact>;
+    sh:severity sh:Info.
 shapes:6f6a6cf8f44300d7f0959a593c21d13e9649a569f4aaa37e09f46cb8be26e2b5-Observation-unitCode sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
     sh:path health:unitCode;
@@ -111,6 +139,11 @@ shapes:6f6a6cf8f44300d7f0959a593c21d13e9649a569f4aaa37e09f46cb8be26e2b5-Observat
 shapes:717d18eb611ad3b3383ede927839be4d2f105998b7e2771cfc5d885b989a1b07-StepCountObservation-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:patient;
+    sh:severity sh:Info.
+shapes:73c643ab676ec0af6a7de367da23659f5d158dfe8b2a4fafa8abc0f945b0288e-AssistantTextValue-value sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:name "textValue";
+    sh:path health:value;
     sh:severity sh:Info.
 shapes:74f0325e599b0483a4330cb8df406b05c0f21b3d5f7981aefff16a961f0f0d74-StepCountObservation-effectiveTime sh:maxCount 1;
     sh:nodeKind sh:IRI;
@@ -124,6 +157,10 @@ shapes:7fba1ce4c00741b7adcb717cc9c4e6898ed8804ae397fc783639e2f4401b0b26-HeartRat
     sh:nodeKind sh:IRI;
     sh:path health:effectiveTime;
     sh:severity sh:Info.
+shapes:8028edb9bee874a58fe7b5952229c5534a506ca7a053d6b3793a23c7b0376c98-AssistantDateTimeFields-validFrom sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/validFrom>;
+    sh:severity sh:Info.
 shapes:872566d8c4c912934c34ab92ec2424f48331ea38e6f1d5023b7fd774fe4fd4d3-HeartRateObservation-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:patient;
@@ -132,11 +169,19 @@ shapes:889c34e83938946c8c3ffbeda857ebd0e998dffe15872fc8ffb07f343960d166-Observat
     sh:nodeKind sh:IRI;
     sh:path health:patient;
     sh:severity sh:Info.
+shapes:8c9f07fe02d05bb5c99efd6812febef773fedb4ee21da19d690bd2fc1012cde4-AssistantOwner-additionalProperty sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path <https://schema.org/additionalProperty>;
+    sh:severity sh:Info.
 shapes:90f9f449f3004b4568ac3185bd0b02e8e479bb264e874d0283696f9bcec5c507-n5 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> <https://w3id.org/jeswr/sectors/health#recordedBy>;
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
 shapes:934e7271bbf1ba27d098477b4521a5725c835653e07e54a2383b4c086dbf73a8-Condition-hasCode sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:96986d2f2b9c248d8e00f1387890832d5d07d7756bf5d4027c836f1331dcdcaa-AssistantSourceMetadata-dateCreated sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/dateCreated>;
     sh:severity sh:Info.
 shapes:995fb108b596ad7b0bd3aab8984c5a55bcddcda88184127a75381de17c609e23-Instant-inXSDDateTime sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
     sh:maxCount 1;
@@ -157,6 +202,33 @@ shapes:9b7257cb637175e2734ce79b6505be0fa23de62b747083b0d25e383cc09ba2fb-Medicati
 shapes:AllergyIntolerance a sh:NodeShape;
     sh:property shapes:286218b71d5242f956952655e2b8e13a546e0bfd19b625bcbf0bcb0af507e806-AllergyIntolerance-name, shapes:62d292b5dd8d7ea814c339645ce1fa5276349484c60a5cd99f9e7db64ad15525-AllergyIntolerance-hasCode, shapes:bffda30c0b2b74bd9b59cbb87c2b48e3d74dbe5b5680a5363d83133b82879bd9-AllergyIntolerance-patient;
     sh:targetClass <http://hl7.org/fhir/AllergyIntolerance>.
+shapes:AssistantAnnotation a sh:NodeShape;
+    sh:property shapes:446c2d08b530153357b8417a5b06b15c1903baba85142beec2f69b400c560408-Annotation-hasTarget;
+    sh:targetClass <http://www.w3.org/ns/oa#Annotation>.
+shapes:AssistantDateFields a sh:NodeShape;
+    sh:property shapes:d66457a7df26cadae45bb9126c587083c743dc22f424c9016833e1e3a8276fc5-AssistantDateFields-validFrom, shapes:de12eb7e050741a8c7a929813ffea59e191bef1f484dec18b1235220d13fa9f6-AssistantDateFields-validThrough, shapes:e32901296e713cec0d2016733e9a608ec8b712b5155f85560918b93bdcd2f549-AssistantDateFields-effectiveTime;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantDateFields>.
+shapes:AssistantDateTimeFields a sh:NodeShape;
+    sh:property shapes:0af03c5a204a47d04e4f56a27aaac1ecd022ddf927a1660023ed5905409a1abc-AssistantDateTimeFields-validThrough, shapes:8028edb9bee874a58fe7b5952229c5534a506ca7a053d6b3793a23c7b0376c98-AssistantDateTimeFields-validFrom, shapes:f57cc6018c39e78a1ee110e6a3f26a394974e4eeb9bc22f53d32cf36be35b857-AssistantDateTimeFields-effectiveTime;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantDateTimeFields>.
+shapes:AssistantEvidenceTarget a sh:NodeShape;
+    sh:property shapes:0572e9a0d3cfac7b70d5a948f66488a877507a796070ed9487c23eb4d17937f4-SpecificResource-hasSelector, shapes:c57023408832f7002752903c0e344f45d90ba7f6b4ac1adfc9454836f131c739-SpecificResource-hasSource;
+    sh:targetClass <http://www.w3.org/ns/oa#SpecificResource>.
+shapes:AssistantOwner a sh:NodeShape;
+    sh:property shapes:8c9f07fe02d05bb5c99efd6812febef773fedb4ee21da19d690bd2fc1012cde4-AssistantOwner-additionalProperty;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantOwner>.
+shapes:AssistantQuoteSelector a sh:NodeShape;
+    sh:property shapes:690ed0651aca919def8bc69391fd78c1310370389b456ed8d84e288457bba8f3-TextQuoteSelector-exact;
+    sh:targetClass <http://www.w3.org/ns/oa#TextQuoteSelector>.
+shapes:AssistantSourceMetadata a sh:NodeShape;
+    sh:property shapes:458c367e199404b3d0f0b1f2de8eed67ecbaafa7268e761c11cd2d90132aea33-AssistantSourceMetadata-instrument, shapes:96986d2f2b9c248d8e00f1387890832d5d07d7756bf5d4027c836f1331dcdcaa-AssistantSourceMetadata-dateCreated;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantSourceMetadata>.
+shapes:AssistantTextFields a sh:NodeShape;
+    sh:property shapes:0c094c988f897b03c56be6a8ba7f9a0b5b4ae4bb4d23c129469fde237b973e62-AssistantTextFields-doseSchedule, shapes:6211c285c260c7d9d7c9825f607ebbcd25de58bb59f16430b3e1c364c0cd4c74-AssistantTextFields-description, shapes:c045b6429912afbd9a938956c81c72c02e7024feb54226a0a078b26029a08620-AssistantTextFields-name;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantTextFields>.
+shapes:AssistantTextValue a sh:NodeShape;
+    sh:property shapes:73c643ab676ec0af6a7de367da23659f5d158dfe8b2a4fafa8abc0f945b0288e-AssistantTextValue-value;
+    sh:targetClass <https://jeswr.org/ns/pkg-health/import#AssistantTextValue>.
 shapes:CodeableConcept a sh:NodeShape;
     sh:property shapes:530693a1b038c1ce0d08cdb93589c8639baed4858121e14e885fb5385902e27a-CodeableConcept-value, shapes:9b57394c92e85bd623827cd775f428800f4a0746fbc79fdc5c6ec1bc90017826-CodeableConcept-name, shapes:ab3b9489ce64902cf8d5c329dd91f71bdd24ee02f5c1969ea28509dc760679ff-CodeableConcept-exactMatch;
     sh:targetClass health:CodeableConcept, <https://w3id.org/jeswr/sectors/health#CodeableConcept>.
@@ -188,7 +260,7 @@ shapes:Observation a sh:NodeShape;
     sh:property shapes:454147c1c1edf1e001bb058451a7785f0f591812d0141b7e4efbd104836b9b4f-Observation-hasCode, shapes:4f7cb7f19c23dcabcedf056e3c9da78d141be30d02d6e933ec4c11043a6eef44-Observation-hasUnit, shapes:6f6a6cf8f44300d7f0959a593c21d13e9649a569f4aaa37e09f46cb8be26e2b5-Observation-unitCode, shapes:889c34e83938946c8c3ffbeda857ebd0e998dffe15872fc8ffb07f343960d166-Observation-patient, shapes:d06b519addcafa00ee6b537a6b1172079fe8664aea0e8d39e199905512c3982b-Observation-name, shapes:ec8346b9eda812807cd42d148e0a678cab4131ce62eba845ae33c010a1996bc5-Observation-effectiveTime, shapes:ed588e0eaad172fc25daf35259e91044c164c555290ca0ba5bf84d27297b187b-Observation-value;
     sh:targetClass <http://hl7.org/fhir/Observation>, health:Observation, <https://schema.org/Observation>, <https://w3id.org/jeswr/sectors/health#Observation>.
 shapes:PropertyValue a sh:NodeShape;
-    sh:property shapes:d0c79a9534ac9c018a25444eb62492ba47282908680ed3acca1fa301b20cda1b-PropertyValue-propertyID, shapes:f1b491aaf11dc401a6ec6b07cba853bacd32307ed8cdde8b3efc1f710be2d2aa-PropertyValue-value;
+    sh:property shapes:b64a75ddf0a3822649616b30f1627945e5a464009c999649c780595bfa1871a3-PropertyValue-name, shapes:d0c79a9534ac9c018a25444eb62492ba47282908680ed3acca1fa301b20cda1b-PropertyValue-propertyID, shapes:f1b491aaf11dc401a6ec6b07cba853bacd32307ed8cdde8b3efc1f710be2d2aa-PropertyValue-value;
     sh:targetClass <https://schema.org/PropertyValue>.
 shapes:SleepObservation a sh:NodeShape;
     sh:property shapes:2f1916e681a948f7af3fe138580fa5ba521d050b27bd32b5ad4fd54b5fd85be5-SleepObservation-effectiveTime, shapes:50f25bba434a6b0d25ce1fa3f58678ea2cf152d0bba86c48ee458ea3f0014283-SleepObservation-name, shapes:54aaeda89eec75be1bd1d2cab30ae57c94629447a03571674f3b4009b8bdb818-SleepObservation-unitCode, shapes:7b7e255009dbcf9415314d97cacd37e8e0aaa9776e1dfc0a20c03120a42ceff2-SleepObservation-hasCode, shapes:b11b53c6d66637f67e4f0f9c189617a076ca5619caf651416adb29cc9f1f5802-SleepObservation-hasUnit, shapes:c778e14f0c9c30b5c3fc5c3251a7bfaf4a165f45f2835f0e1bb0a9932add5c26-SleepObservation-patient, shapes:ce2e69bda0a41174078c9f31e90bb8a8fd2be460a9e945a5938905f2c479c284-SleepObservation-value;
@@ -226,6 +298,10 @@ shapes:b53d34464c9a67bfa843b3e0f938e0f81b2536e436c2671ed3220bd6d514911c-Medicati
     sh:nodeKind sh:IRI;
     sh:path health:medication;
     sh:severity sh:Info.
+shapes:b64a75ddf0a3822649616b30f1627945e5a464009c999649c780595bfa1871a3-PropertyValue-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
+    sh:severity sh:Info.
 shapes:be42c6161ae943c4f6aba8cc7b405fe71032441a797fc2e5b38d793c68edd897-Condition-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
     sh:path <https://schema.org/name>;
@@ -233,6 +309,10 @@ shapes:be42c6161ae943c4f6aba8cc7b405fe71032441a797fc2e5b38d793c68edd897-Conditio
 shapes:bffda30c0b2b74bd9b59cbb87c2b48e3d74dbe5b5680a5363d83133b82879bd9-AllergyIntolerance-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:patient;
+    sh:severity sh:Info.
+shapes:c045b6429912afbd9a938956c81c72c02e7024feb54226a0a078b26029a08620-AssistantTextFields-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/name>;
     sh:severity sh:Info.
 shapes:c13d9fec2e0a812531c070023da29466e8805cad898d7650fccc5d53285a893c-Encounter-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
@@ -245,6 +325,10 @@ shapes:c2bff167216210160f8a18eb8b058a994b987070d0bc9c4c5a25411587504bdb-HeartRat
 shapes:c3f5cf557ac65e4e17ea481f68b3d5cb125f821ae6d341273624cd290960fe20-DigitalDocument-dateCreated sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
     sh:maxCount 1;
     sh:path <https://schema.org/dateCreated>;
+    sh:severity sh:Info.
+shapes:c57023408832f7002752903c0e344f45d90ba7f6b4ac1adfc9454836f131c739-SpecificResource-hasSource sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path <http://www.w3.org/ns/oa#hasSource>;
     sh:severity sh:Info.
 shapes:c778e14f0c9c30b5c3fc5c3251a7bfaf4a165f45f2835f0e1bb0a9932add5c26-SleepObservation-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
@@ -267,6 +351,10 @@ shapes:d0c79a9534ac9c018a25444eb62492ba47282908680ed3acca1fa301b20cda1b-Property
     sh:maxCount 1;
     sh:path <https://schema.org/propertyID>;
     sh:severity sh:Info.
+shapes:d66457a7df26cadae45bb9126c587083c743dc22f424c9016833e1e3a8276fc5-AssistantDateFields-validFrom sh:datatype <http://www.w3.org/2001/XMLSchema#date>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/validFrom>;
+    sh:severity sh:Info.
 shapes:d684a300d4dae7a010344f34c76ff76b57a8c426cd528ea0898b21c6c90f9591-Immunization-effectiveTime sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:effectiveTime;
@@ -274,6 +362,10 @@ shapes:d684a300d4dae7a010344f34c76ff76b57a8c426cd528ea0898b21c6c90f9591-Immuniza
 shapes:d7f57a9a8184c3b98ff765f9922656c37545cae1191932ca29826ea876fdbbd0-Condition-patient sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:patient;
+    sh:severity sh:Info.
+shapes:de12eb7e050741a8c7a929813ffea59e191bef1f484dec18b1235220d13fa9f6-AssistantDateFields-validThrough sh:datatype <http://www.w3.org/2001/XMLSchema#date>;
+    sh:maxCount 1;
+    sh:path <https://schema.org/validThrough>;
     sh:severity sh:Info.
 shapes:e09780d00d0551dc3ea969f88b7c98d58b20f47674ff7c49f47c39bd55a9dcc0-HeartRateObservation-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
@@ -286,6 +378,10 @@ shapes:e14907b8aa9c5c1e85b4a6460f72fa12ce83e3e081f34dfc8c3a89be9e1e7b0e-Encounte
 shapes:e301d2e68ef64d54cc40476435af5c084fa8e2a257f0fec9d0b399d687a252a8-StepCountObservation-hasUnit sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasUnit;
+    sh:severity sh:Info.
+shapes:e32901296e713cec0d2016733e9a608ec8b712b5155f85560918b93bdcd2f549-AssistantDateFields-effectiveTime sh:datatype <http://www.w3.org/2001/XMLSchema#date>;
+    sh:maxCount 1;
+    sh:path health:effectiveTime;
     sh:severity sh:Info.
 shapes:e7031c0813f4223851dce9c28a5b9d39f573b14dfb9262442f8e8f22129954af-MedicationStatement-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
@@ -316,6 +412,10 @@ shapes:f1b491aaf11dc401a6ec6b07cba853bacd32307ed8cdde8b3efc1f710be2d2aa-Property
 shapes:f31a21307cad2cfd6c9145d7e62121e0a19235a268330bf7d7a93555bf29c308-Encounter-hasCode sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path health:hasCode;
+    sh:severity sh:Info.
+shapes:f57cc6018c39e78a1ee110e6a3f26a394974e4eeb9bc22f53d32cf36be35b857-AssistantDateTimeFields-effectiveTime sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:path health:effectiveTime;
     sh:severity sh:Info.
 shapes:f6005082c624124f0ff3d66433b9a46c5222bf827ca60b4015a095631ac3cf5e-VitalSign-unitCode sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;

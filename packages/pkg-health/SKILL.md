@@ -2,6 +2,7 @@
 name: pkg-health
 description: Use when reading, charting or correcting health facts in the personal knowledge graph
 ---
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 Use `projectHealthFacts(parsed, { owner })` for pod or local TriG nanopublications.
@@ -59,3 +60,34 @@ with batch/fact/generated builders. Do not add hand-written quads or Turtle to i
 Its qualitative observation builds are omitted for the documented generator union
 gap. Preserve per-projection assertion and provenance graph caches; do not introduce
 per-fact full-dataset scans or global caches.
+
+Use `importAssistantTurtle(text, { owner, assistant: { iri, label }, batchId, generatedAt })`
+for non-nanopub assistant exports. It accepts both schema.org schemes and pkg namespaces,
+validates each fact/source/product before building, and skips invalid facts with fixed
+aggregate reasons. Scalar aliases must agree, except NFC-normalized case-only name
+variants; keep the original literal of the first variant in Unicode code-point order.
+Repeated source titles keep the first non-empty title in code-point order (or an explicit
+empty title when all are empty). Source dates compare by calendar day, dropping date
+zones without changing the day; a dateTime wins over a date on the same UTC day, and
+dateTimes then compare by instant. Source dates stay dates; sub-millisecond source times
+truncate. Refuse zone-less dateTimes and UTC years outside 0001–9999 on facts and sources.
+Over-long quotes are dropped, never cut; a fact needs one usable quote. Every subject
+alias must name the owner: canonical/legacy health patient, FHIR subject and both schema.org
+schemes' subject/patient (`SUBJECT_LINK_PREDICATES`, shared with the projector), plus
+schema:about on facts only; `about` on sources and in the projector names a topic. Products
+naming another person refuse their statement. Fact candidates have a recognised fact type or
+a patient/subject link. Foreign/mixed-subject CreativeWorks are invalid sources (referencing
+facts skip InvalidSource); the assistant-export IRI is reserved; year 0000 dates are refused.
+Emit only sources referenced by accepted claims; unreferenced sources and sources used only
+by skipped facts must not reach the RDF. With one derived source, pair each usable quote
+with it. With multiple sources, emit quote-free evidence for each, and attach quotes only
+to a stable assistant-export batch document (`pkgId("assistant-export", batchId)`, id/url;
+title `${assistant.label} export`, created `generatedAt`, model assistant label). Emit that
+export source only if an accepted claim uses it; preserve quotes in projected provenance.
+The assistant is the worker and attributed agent.
+Generated local import facets preserve qualitative observations, date/dateTime precision,
+statement schedules, source creation/model metadata and note labels. See the README's
+import gaps before extending admission. Keep independent exports in separate batches with
+the same owner; merge their TriG using the nanopub parser and preserve `affected` context.
+The local CLI prints counts only; `--generated-at` fixes the clock. Never put real health
+exports in fixtures or logs.

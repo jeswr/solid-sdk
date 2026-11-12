@@ -5,6 +5,7 @@ import {
   parseNanopublications,
   serializeNanopublications,
 } from "@jeswr/pkg-memory";
+import type { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { entities } from "../src/generated/model.js";
 import { HEALTH_CATEGORIES, HealthGraphError, projectHealthFacts } from "../src/index.js";
@@ -283,4 +284,21 @@ describe("projection and ownership", () => {
     expect(log).not.toHaveBeenCalled();
     log.mockRestore();
   });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps an owned fact whose schema:about names a topic, and refuses a foreign schema:patient", async () => {
+  const topical = claim("topical", condition("Fictional topical condition", "topical"));
+  new FixtureNode("https://example.org/entities/topical", topical.assertion as Store).link(
+    "https://schema.org/about",
+    "https://example.org/topics/iron",
+  );
+  const foreign = claim("foreign", condition("Fictional foreign condition", "foreign"));
+  new FixtureNode("https://example.org/entities/foreign", foreign.assertion as Store).link(
+    "http://schema.org/patient",
+    other,
+  );
+  const view = projectHealthFacts(await batch([topical, foreign]), { owner });
+  expect(view.facts.map((f) => f.label)).toEqual(["Fictional topical condition"]);
+  expect(view.excludedOtherSubjects).toBe(1);
 });

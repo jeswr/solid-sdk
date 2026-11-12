@@ -67,6 +67,237 @@ const manifest = {
       ]
     },
     {
+      "name": "AssistantAnnotation",
+      "typeIris": [
+        "http://www.w3.org/ns/oa#Annotation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasTarget",
+          "predicate": "http://www.w3.org/ns/oa#hasTarget",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantEvidenceTarget",
+      "typeIris": [
+        "http://www.w3.org/ns/oa#SpecificResource"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "hasSelector",
+          "predicate": "http://www.w3.org/ns/oa#hasSelector",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "hasSource",
+          "predicate": "http://www.w3.org/ns/oa#hasSource",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantQuoteSelector",
+      "typeIris": [
+        "http://www.w3.org/ns/oa#TextQuoteSelector"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "exact",
+          "predicate": "http://www.w3.org/ns/oa#exact",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantDateFields",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantDateFields"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "validFrom",
+          "predicate": "https://schema.org/validFrom",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "validThrough",
+          "predicate": "https://schema.org/validThrough",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantDateTimeFields",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantDateTimeFields"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "effectiveTime",
+          "predicate": "https://jeswr.org/ns/sectors/health#effectiveTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "validFrom",
+          "predicate": "https://schema.org/validFrom",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "validThrough",
+          "predicate": "https://schema.org/validThrough",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantOwner",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantOwner"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "additionalProperty",
+          "predicate": "https://schema.org/additionalProperty",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantSourceMetadata",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantSourceMetadata"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "dateCreated",
+          "predicate": "https://schema.org/dateCreated",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "instrument",
+          "predicate": "https://schema.org/instrument",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantTextFields",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantTextFields"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "doseSchedule",
+          "predicate": "https://schema.org/doseSchedule",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "AssistantTextValue",
+      "typeIris": [
+        "https://jeswr.org/ns/pkg-health/import#AssistantTextValue"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "textValue",
+          "predicate": "https://jeswr.org/ns/sectors/health#value",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
       "name": "CodeableConcept",
       "typeIris": [
         "https://jeswr.org/ns/sectors/health#CodeableConcept"
@@ -687,6 +918,14 @@ const manifest = {
         "convention": "self"
       },
       "fields": [
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
         {
           "name": "propertyID",
           "predicate": "https://schema.org/propertyID",

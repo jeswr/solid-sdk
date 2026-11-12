@@ -17,13 +17,17 @@
 #   admission forbids their aliases across owners. The facade's typed read view provides
 #   canonical-first legacy reads plus FHIR/schema subject links and rdfs:label fallback.
 # - Mixed XSD temporal bounds (date/dateTime/gYearMonth/gYear), observation numeric/string
-#   values and effectiveTime (literal or OWL-Time resource) cannot be represented by this
-#   closed profile. Numeric builds narrow value to decimal; effectiveTime builds use
+#   values and effectiveTime (literal or OWL-Time resource) cannot share one admitted
+#   field. Clinical builds narrow value to decimal; their effectiveTime builds use
 #   named Instant links, with dateTime instants. Document builds narrow creation to
 #   dateTime; the reader preserves other literal date precisions. Typed read views
 #   preserve mixed imported values and handle blank PropertyValue/document subjects.
-# - schema:doseSchedule and schema:code are omitted: BlankNodeOrIRI records are not
-#   admitted. The typed view reads their typed fields, including skolemized records.
+# - Resource schema:doseSchedule and schema:code are omitted: BlankNodeOrIRI records
+#   are not admitted. The typed view reads their fields, including skolemized records.
+# - Assistant-import facets compose separate string/date/dateTime fields with the
+#   clinical builders. They add string schedules, source metadata and owner note links.
+#   OA shapes admit stable named evidence targets/selectors. These local additions
+#   do not widen the clinical sector or introduce a heterogeneous runtime field.
 # - CodeableConcept core:value is narrowed to string (as written by PKG templates);
 #   core:inScheme is omitted in favour of the PKG skos:exactMatch code IRI.
 # See README Generator gaps for the complete compatibility contract.
@@ -106,6 +110,7 @@ shape:DigitalDocument a sh:NodeShape ;
 
 shape:PropertyValue a sh:NodeShape ;
   sh:targetClass schema:PropertyValue ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path schema:propertyID ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path schema:value ; sh:name "textValue" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
 
@@ -148,3 +153,51 @@ shape:SleepObservation a sh:NodeShape ;
   sh:property [ sh:path health:unitCode ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:effectiveTime ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
   sh:property [ sh:path health:value ; sh:name "numericValue" ; sh:datatype xsd:decimal ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+# Assistant-import facets compose with the clinical builders. Separate target classes
+# admit each literal datatype without widening the sector profile or runtime.
+@prefix import: <https://jeswr.org/ns/pkg-health/import#> .
+
+shape:AssistantTextValue a sh:NodeShape ;
+  sh:targetClass import:AssistantTextValue ;
+  sh:property [ sh:path health:value ; sh:name "textValue" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:AssistantTextFields a sh:NodeShape ;
+  sh:targetClass import:AssistantTextFields ;
+  sh:property [ sh:path schema:description ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:name ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:doseSchedule ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:AssistantSourceMetadata a sh:NodeShape ;
+  sh:targetClass import:AssistantSourceMetadata ;
+  sh:property [ sh:path schema:instrument ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:dateCreated ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:AssistantOwner a sh:NodeShape ;
+  sh:targetClass import:AssistantOwner ;
+  sh:property [ sh:path schema:additionalProperty ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:AssistantDateFields a sh:NodeShape ;
+  sh:targetClass import:AssistantDateFields ;
+  sh:property [ sh:path schema:validFrom ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:validThrough ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:datatype xsd:date ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+shape:AssistantDateTimeFields a sh:NodeShape ;
+  sh:targetClass import:AssistantDateTimeFields ;
+  sh:property [ sh:path schema:validFrom ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path schema:validThrough ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path health:effectiveTime ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:severity sh:Info ] .
+
+# Stable named OA evidence nodes replace only builder-generated provenance blanks.
+@prefix oa: <http://www.w3.org/ns/oa#> .
+shape:AssistantAnnotation a sh:NodeShape ;
+  sh:targetClass oa:Annotation ;
+  sh:property [ sh:path oa:hasTarget ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+shape:AssistantEvidenceTarget a sh:NodeShape ;
+  sh:targetClass oa:SpecificResource ;
+  sh:property [ sh:path oa:hasSource ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] ;
+  sh:property [ sh:path oa:hasSelector ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; sh:severity sh:Info ] .
+shape:AssistantQuoteSelector a sh:NodeShape ;
+  sh:targetClass oa:TextQuoteSelector ;
+  sh:property [ sh:path oa:exact ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:severity sh:Info ] .
