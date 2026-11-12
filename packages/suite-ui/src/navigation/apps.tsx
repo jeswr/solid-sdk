@@ -26,17 +26,7 @@ export const suiteApps: readonly NavigationApp[] = [
   { slug: "permissions", name: "Permissions", basePath: "/permissions", status: "first-cut" },
   { slug: "sheets", name: "Sheets", basePath: "/sheets", status: "first-cut" },
   ...(
-    [
-      "calendar",
-      "contacts",
-      "notes",
-      "photos",
-      "chat",
-      "mail",
-      "music",
-      "money",
-      "health",
-    ] as const
+    ["calendar", "contacts", "notes", "photos", "chat", "mail", "music", "money", "health"] as const
   ).map((slug) => ({
     slug,
     name: slug.charAt(0).toUpperCase() + slug.slice(1),
