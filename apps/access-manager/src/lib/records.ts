@@ -50,22 +50,13 @@ export class GrantHistory extends TermWrapper {
   get grantRef(): string | undefined {
     return OptionalFrom.subjectPredicate(this, ACCM.grantRef, NamedNodeAs.string);
   }
-  set grantRef(value: string | undefined) {
-    OptionalAs.object(this, ACCM.grantRef, value, NamedNodeFrom.string);
-  }
 
   get requestRef(): string | undefined {
     return OptionalFrom.subjectPredicate(this, ACCM.requestRef, NamedNodeAs.string);
   }
-  set requestRef(value: string | undefined) {
-    OptionalAs.object(this, ACCM.requestRef, value, NamedNodeFrom.string);
-  }
 
   get created(): Date | undefined {
     return OptionalFrom.subjectPredicate(this, DCT.created, LiteralAs.date);
-  }
-  set created(value: Date | undefined) {
-    OptionalAs.object(this, DCT.created, value, LiteralFrom.dateTime);
   }
 
   get revokedAt(): Date | undefined {

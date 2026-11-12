@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Legacy history remains readable; request lifecycle parsing belongs to the SDK.
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { ODRL } from "@jeswr/pod-access/requests-solid";
+import { ACCM, ODRL } from "@jeswr/pod-access/requests-solid";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
@@ -13,13 +13,13 @@ import { GrantHistory } from "../../src/lib/records.js";
 import { createPodStub } from "../pod-stub.js";
 
 const LEGACY = "https://w3id.org/jeswr/accm#";
+const iris = (node: TermWrapper, predicate: string) =>
+  SetFrom.subjectPredicate(node, predicate, NamedNodeAs.string, NamedNodeFrom.string);
 const URL = "https://pod.example/grant.ttl";
 async function legacyRecord() {
   const dataset = new Store();
   const record = new GrantHistory(URL, dataset, DataFactory);
   record.grantId = "digest";
-  record.grantRef = "https://pod.example/grant.ttl";
-  record.requestRef = "https://pod.example/inbox/request.ttl";
   record.agent = "https://app.example/#agent";
   record.modes.add(`${NS.ACL}Read`);
   record.modes.add(`${NS.ACL}Append`);
@@ -29,6 +29,8 @@ async function legacyRecord() {
   SetFrom.subjectPredicate(typed, `${NS.RDF}type`, NamedNodeAs.string, NamedNodeFrom.string).add(
     ODRL.Agreement,
   );
+  iris(typed, ACCM.grantRef).add("https://pod.example/grant.ttl");
+  iris(typed, ACCM.requestRef).add("https://pod.example/inbox/request.ttl");
   const canonical = await toTurtle(dataset);
   expect(canonical).not.toContain("w3id.org/jeswr");
   return canonical.replaceAll(NS.ACCESS_MANAGER, LEGACY);
@@ -85,7 +87,9 @@ describe("legacy history reads and canonical writes", () => {
     const dataset = new Store();
     const record = new GrantHistory(`${LEGACY}resource`, dataset, DataFactory);
     record.grantId = `${LEGACY}literal`;
-    record.grantRef = `${LEGACY}resource`;
+    iris(new TermWrapper(`${LEGACY}resource`, dataset, DataFactory), ACCM.grantRef).add(
+      `${LEGACY}resource`,
+    );
     const read = new GrantHistory(
       `${LEGACY}resource`,
       await parseRdf(await toTurtle(dataset), "text/turtle"),

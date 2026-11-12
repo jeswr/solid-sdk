@@ -17,7 +17,7 @@
 // This module performs NO real fetch, imports NO auth code, and is only ever
 // loaded behind the ?demo gate in main.tsx.
 
-import { DataFactory, Writer } from "n3";
+import { demoTurtle } from "./rdf.js";
 
 /** Thrown for any non-read request in demo mode (surfaces in the saving UI). */
 export class DemoReadOnlyError extends Error {
@@ -50,26 +50,14 @@ function containerListing(url: string, resources: ReadonlyMap<string, string>): 
       children.add(url + rest.slice(0, slash + 1));
     }
   }
-  const { namedNode, quad } = DataFactory;
-  const writer = new Writer();
-  for (const child of children)
-    writer.addQuad(
-      quad(namedNode(url), namedNode("http://www.w3.org/ns/ldp#contains"), namedNode(child)),
-    );
-  for (const type of ["BasicContainer", "Container"])
-    writer.addQuad(
-      quad(
-        namedNode(url),
-        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
-        namedNode(`http://www.w3.org/ns/ldp#${type}`),
-      ),
-    );
-  let body = "";
-  writer.end((error, result) => {
-    if (error) throw error;
-    body = result;
+  return demoTurtle((node) => {
+    const container = node(url);
+    for (const child of children) container.iris("http://www.w3.org/ns/ldp#contains").add(child);
+    for (const type of ["BasicContainer", "Container"])
+      container
+        .iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+        .add(`http://www.w3.org/ns/ldp#${type}`);
   });
-  return body;
 }
 
 /**

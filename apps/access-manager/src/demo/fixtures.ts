@@ -29,9 +29,9 @@
 // the typed accessors in src/lib.
 
 import { ACCM, ACL, FOAF, RDF } from "@jeswr/pod-access/requests-solid";
-import { DataFactory, Writer } from "n3";
 import type { Session } from "../auth/SessionContext.js";
 import { createDemoPod, type DemoPod } from "./pod.js";
+import { demoTurtle } from "./rdf.js";
 
 /** Ada — the demo pod owner. */
 export const DEMO_POD = "https://ada.example/";
@@ -101,13 +101,7 @@ function clinicProfile(): string {
 }
 
 function clinicName(): string {
-  return new Writer().quadsToString([
-    DataFactory.quad(
-      DataFactory.namedNode(CLINIC),
-      DataFactory.namedNode(FOAF.name),
-      DataFactory.literal("Clinic App"),
-    ),
-  ]);
+  return demoTurtle((node) => node(CLINIC).texts(FOAF.name).add("Clinic App"));
 }
 
 /** Root ACL: Ada alone controls the pod; everything inherits from here. */
@@ -147,19 +141,16 @@ function healthAcl(): string {
 
 /** A sealed owner-only sample history folder, matching requests-solid's storage layout. */
 function recordsAcl(): string {
-  const { namedNode, literal, quad } = DataFactory;
   const url = `${DEMO_GRANTS}.acl`;
-  const owner = namedNode(`${url}#owner`);
-  return new Writer().quadsToString([
-    quad(owner, namedNode(RDF.type), namedNode(ACL.Authorization)),
-    quad(owner, namedNode(ACL.agent), namedNode(ADA)),
-    quad(owner, namedNode(ACL.accessTo), namedNode(DEMO_GRANTS)),
-    quad(owner, namedNode(ACL.default), namedNode(DEMO_GRANTS)),
-    ...[ACL.Read, ACL.Write, ACL.Control].map((mode) =>
-      quad(owner, namedNode(ACL.mode), namedNode(mode)),
-    ),
-    quad(namedNode(url), namedNode(`${ACCM.ns}recordsKey`), literal("demo-records-key")),
-  ]);
+  return demoTurtle((node) => {
+    const owner = node(`${url}#owner`);
+    owner.iris(RDF.type).add(ACL.Authorization);
+    owner.iris(ACL.agent).add(ADA);
+    owner.iris(ACL.accessTo).add(DEMO_GRANTS);
+    owner.iris(ACL.default).add(DEMO_GRANTS);
+    for (const mode of [ACL.Read, ACL.Write, ACL.Control]) owner.iris(ACL.mode).add(mode);
+    node(url).texts(`${ACCM.ns}recordsKey`).add("demo-records-key");
+  });
 }
 
 /** /profile/card ACL: Ada controls it; ANYONE on the web can read it. */
