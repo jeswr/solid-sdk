@@ -15,6 +15,11 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   The React outbox serializes sends per room and retains failed drafts for Retry/Discard.
   Pending sends and composer drafts persist in guarded localStorage envelopes keyed by WebID and
   room. Remounting restores their stable IDs and timestamps; sends flush on mount and `online`.
+- Messages expose `reactions` aggregated by distinct actor and emoji, with `reactedByMe`
+  for the current WebID. `react(room, messageId, emoji)` reads the current day and toggles
+  one Like on, or appends Undos for all matching active Likes by that WebID. Other
+  participants' Likes remain intact; deleted messages are refused. Timeline chips and
+  the keyboard-accessible eight-emoji picker invalidate messages after successful writes.
 - DMs have an empty name, exactly two members and a deterministic SHA-256 slug. Existing
   joined DMs reopen. Colliding DM creators load and verify the winner's exact membership,
   with bounded retries while its index is being written; they never suffix a DM.

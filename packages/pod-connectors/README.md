@@ -228,6 +228,195 @@ keep working. An unsupported-only archive returns its report even when it writes
 Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
 they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
 
+## Bank statements
+
+`./adapters/bank-statements` exports `bankStatementsFileAdapter` and
+`createBankStatementsFileAdapter(options)`. CSV detection uses normalized headers,
+never the filename: Revolut account statements, Monzo transaction exports and
+Starling GBP statements. Revolut and Starling headers must match exactly after
+normalization. Monzo exports differ by app version, so Monzo is detected by column
+name in any order: Transaction ID, Date, Time, Type, Name, Amount and Currency are
+required; Emoji, Category, Local amount + Local currency, Notes and #tags, Address,
+Receipt, Description, Category split and Money Out + Money In are optional (each `+`
+pair must appear together). This admits the short 11-column layout and the full
+18-column layout (`…,Notes and #tags,Address,Receipt,Description,Category split,Money Out,Money In`).
+Unknown or duplicate columns are not Monzo. A header containing two or more
+distinctive columns of one bank is rejected with "looks like <bank> but the columns
+differ" if it does not match: Revolut's Product, State, Started Date and Completed
+Date; Monzo's Transaction ID, Emoji, Local amount, Notes and #tags and Category
+split; Starling's Counter Party, Amount (GBP) and Spending Category. Known banks
+take precedence over the original generic CSV importer. Other headers retain
+that importer's date/description/amount aliases, separate debit/credit support,
+lenient value/date parsing, row-index-derived IDs and snapshot replacement behavior.
+Generic imports do not infer currency or create account links. An explicit
+`csvFormat` disables this fallback; mismatches return a bounded `unsupported` report.
+The export-screen directions in `fileHint` are guidance; no provider was contacted
+to verify current menus. All tests use synthetic files.
+
+HSBC UK's three-column **headerless** CSV is ambiguous. Hosts must explicitly
+select it and supply a stable account label; the default picker adapter refuses it:
+
+```ts
+import { createBankStatementsFileAdapter } from '@jeswr/pod-connectors/adapters/bank-statements';
+
+const adapter = createBankStatementsFileAdapter({
+  csvFormat: 'hsbc-uk',
+  accountLabel: 'HSBC everyday', // use a different label for a credit card
+  currency: 'GBP', // HSBC UK default; validated against the runtime's ISO 4217 codes
+});
+// Pass adapter, file and the host's PodWriter to runFileImport as usual.
+```
+
+`csvFormat` can also constrain detection to `revolut`, `monzo` or `starling`.
+`accountLabel` distinguishes accounts absent from an export; keep it stable across
+overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
+and Starling default to one account per bank/currency; provide labels when importing
+multiple accounts.
+Changing or adding an `accountLabel` later creates a new per-account document;
+keep labels stable to avoid duplicate transactions across documents.
+
+Generic CSV and OFX/QFX retain `finance/bank-transactions.ttl` under the connector
+container, with their original `schema:Invoice`/`fin:TransactionRecord` mapping, IDs,
+datatypes, Invoice Type Index registration and replacement snapshots. Revolut, HSBC UK,
+Monzo and Starling instead write Suite Money's generated wire format through
+`@jeswr/solid-money` (`MoneyDocument`, `putAccount`, `putTransaction`; read back with
+`parseMoney`), sharded per account and month inside the connector container:
+
+```text
+finance/bank/<bank>-<account-slug>/account.ttl             #it        fin:FinancialAccount (skos:prefLabel)
+finance/bank/<bank>-<account-slug>/<YYYY-MM>.ttl           #txn-<id>  fin:Transaction
+finance/bank/<bank>-<account-slug>/<YYYY-MM>-part-<n>.ttl  overflow parts, n = 2, 3, …
+```
+
+The account slug is the SHA-256 hash of the account key, never a raw account number,
+and `<id>` is the SHA-256 transaction identity below. Months come from solid-money's
+`monthKey` (the UTC month of `postingTime`, as in Suite Money). Each transaction carries
+`pm:account` to the account, `schema:description`, `fin:postingTime` and a
+`fin:hasMonetaryAmount` node with the signed exact decimal `schema:value` and uppercase
+`schema:currency`; amounts never pass through JS numbers. Every touched document is read
+first, edited with `putAccount`/`putTransaction` (which upsert by subject and reuse the
+stored amount node) and replaced under the read's ETag precondition, so re-importing
+overlapping statements merges by transaction ID and never duplicates. Stored blank-node
+labels are compacted on read so repeated imports do not grow the documents. Transactions
+absent from a later export are kept. Both registrations (`fin:FinancialAccount`,
+`fin:Transaction`) point at the `finance/bank/` container. **Provenance:** each transaction's
+(and each document's) `prov:wasDerivedFrom` names the account document, not the imported
+file. The import session would otherwise record the run's `urn:solid:connector:…:export`
+source, and Suite Money's validator rejects any non-http(s) `prov:wasDerivedFrom`, so its
+reader would refuse every imported transaction. `prov:wasGeneratedBy` still names the import
+run in `_provenance.ttl`. Imports in either layout leave the other
+layout untouched. Revolut's imported amount is `Amount - Fee` using exact decimal
+arithmetic, including negative fees (fee refunds). Only COMPLETED Revolut rows import;
+other states count in `report.skipped`.
+
+**Per-document budget** (`BANK_DOCUMENT_BUDGET`): at most 2,000 transactions and 4 MiB per
+month document, measured before writing as N-Triples bytes (an upper bound on the Turtle
+the writer PUTs) plus an allowance for the provenance the import session adds. Readers
+parse through `@jeswr/fetch-rdf`, whose defaults are 16 MiB and 1,000,000 quads; a full
+document uses at most a quarter of the byte limit and fewer than 30,000 quads. A month that would
+exceed the budget continues in the next `-part-<n>` document (new transactions go to the
+last part; existing ones are updated where they are stored). Re-imports read the first
+month document and each following part until one is absent. More than 1,000 parts for one
+account-month, a single transaction above the byte budget, or an update that would push a
+stored document over budget fails the import with `BankDocumentBudgetError`; nothing is
+truncated.
+
+**Per-import budget**: at most 50 accounts and 600 documents per import. A statement export
+covers one account; Revolut splits it into one account per Product and currency pocket, and
+50 covers every pocket an export can hold. 600 documents is 50 years of monthly documents for
+one account, or 12 accounts over 4 years, while bounding Pod reads and the documents held in
+memory (each at most 4 MiB). The parser fails as soon as a 51st account, or the 601st account
+plus account-month document, appears, before any Pod read. Planning then counts every
+document it reads (account documents, stored month documents and parts, and the one absent
+part probed after the last stored part, which is reused if the month needs a new part) and
+fails before the 601st read; a re-import over stored months costs about two reads per month.
+
+**Failure and retries.** Every budget error is raised while parsing or planning, so nothing
+is written. Writes then happen one document at a time (account document first, then months
+in order). A failed write, such as a 412 from a concurrent change or a network error, stops
+the import with the earlier documents already written; re-running the same import converges,
+because every write re-reads the document and upserts by transaction ID.
+
+**Posting-date window.** Known-bank rows must post between 1970-01-01 and one year after
+the import (date-only values at UTC midnight). Rows outside the window are skipped and
+counted in `report.skipped`, so a corrupt export cannot spread rows across thousands of
+months (dates may otherwise use any year 0001-9999). Generic CSV and OFX keep their original
+date handling.
+
+**Omitted bank fields.** solid-money's model has no fields for these, so they are not
+written (no hand-written accessors are added): Monzo Transaction ID (it still keys the
+hashed transaction subject), Revolut/Starling running balance (identity only), Revolut
+Type, Product, State and Started Date (Product still separates accounts), Monzo Time,
+Type, Emoji, Category, Local amount/currency, Notes and #tags, Address, Receipt,
+Category split and Money Out/In (Description only serves as a fallback, below), and Starling Type, Spending Category and
+Notes. Folded into `schema:description` instead: Starling's Reference (`<Counter Party> —
+<Reference>`) and a nonzero Revolut fee, appended as ` (fee <fee> <currency>)`; zero fees
+are omitted. Monzo and HSBC day-only dates stay `xsd:date`.
+
+**Descriptions.** solid-money rejects a description that is empty once control characters
+are stripped. When the primary description has no visible text the row falls back to the
+bank's own columns (Monzo: Name, then Description, then Type; Revolut: Description, then
+Type; Starling: the visible parts of Counter Party and Reference, joined with ` — `, then
+Type). A row with no visible text in any of
+them is skipped and counted in `report.skipped`, as are HSBC rows with an empty description.
+An `accountLabel` must likewise contain visible text.
+
+When upgrading from the generic-only importer, recognised-bank imports read the
+older shared document through the existing reader port and compare Invoice
+descriptions, amounts and dates, including the old generic representation of
+Monzo/Revolut rows. Matching transactions produce this run-report warning in
+`unsupported`: "N transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts."
+Nothing is deleted automatically. The comparison is bounded to 100,000 Invoices,
+1,600,000 quads and 64 MiB of term characters; exceeding a bound reports that the
+older shared document needs a manual duplicate check.
+
+No exchange rate is inferred:
+Monzo local amounts/currencies do not replace the account amount/currency.
+
+Bank-specific dates use strict calendar validation and typed `xsd:date`/`xsd:dateTime` values.
+Revolut uses Completed Date. Its optional `timeZone` is validated as an IANA name
+and defaults to **Europe/London**, independent of the host's zone. Repeated wall
+times select the earlier instant; gaps advance by the transition's duration,
+following [Temporal's compatible rule](https://tc39.es/proposal-temporal/docs/zoneddatetime.html#static-methods).
+Explicit timestamp offsets take precedence. Bank-specific day-only UK dates stay
+day-only; OFX retains its previous `xsd:dateTime` at UTC midnight. Generic CSV
+keeps its original date parsing and `xsd:dateTime` values. Bank-specific currency
+codes must be uppercase ISO 4217 codes supported by the runtime's ICU data
+(`Intl.supportedValuesOf('currency')`). Invalid bank-specific amounts,
+currencies, dates and rows count as skips.
+
+Bank-specific CSV SHA-256 identifiers use account identity plus Monzo Transaction ID
+when available. Otherwise they hash posting date, description, canonical amount,
+currency and balance (when present). HSBC additionally includes a per-file
+occurrence index for identical (date, description, amount) rows, so repeated
+purchases remain distinct and re-importing the same file stays idempotent.
+Overlapping exports of a day with identical HSBC rows rely on row order and
+consistent inclusion of those occurrences; partial overlaps cannot establish which
+identical purchase is which. Filenames never enter bank-specific keys.
+Generic CSV and OFX/QFX keep their original IDs and snapshot behavior.
+
+Bounds: 64 MiB declared/actual file bytes, 100,000 CSV source rows including skipped and malformed
+rows, 1,024 CSV columns, 64 KiB header characters, 4 MiB logical CSV records,
+16 KiB characters per bank-specific CSV field and 64 digits per bank-specific amount.
+OFX/QFX retain the original imported-row limit and the shared scanner caps transactions at 64 KiB bytes. Exceeding the bank-specific row/file cap fails before saving
+transaction data; oversized/malformed records are skipped at safe boundaries.
+Generic CSV imports truncate to the first 100,000 source rows and return a warning
+in `report.unsupported`; skipped and malformed rows consume that allowance too.
+Unterminated quoted CSV fails. Formula prefixes remain inert literal data.
+Parsing and validation finish before the first data write, and cancellation closes
+the input reader and prevents subsequent Pod operations through the shared runner.
+
+**Suite Money integration gap in this checkout:** known-bank imports now use Suite Money's
+wire format, but they stay inside `integrations/bank-statements/finance/bank/`, while Money
+reads only `<storage>/money/accounts/` and `money/transactions/` and does not discover this
+connector's Type Index entries. Generic CSV and OFX keep the Invoice model. This adapter
+preserves the writer's confinement; imports do **not** automatically appear in Money. A host
+integration/migration is required to bridge the destinations. No Suite app files are changed.
+The bridge must also handle re-imports: `putTransaction` rewrites every Transaction field it
+owns (account, description, category, payee, derivedFrom, debit/credit account, posting
+time and amount), so once Money writes categories or payees into these documents, a
+re-import of the same transaction would erase them.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
@@ -437,8 +626,8 @@ records are discarded through the next safe boundary and counted in
 `report.skipped` and `report.state.counts.skipped`. Unterminated XML markup or
 quoted CSV records fail with an explicit error. A skipped WhatsApp line also
 discards the pending message and continuations until the next timestamp.
-CSV headers are parsed and normalised once per file, including bank column
-aliases, and are limited to 1,024 columns and 65,536 characters.
+CSV headers are parsed and normalised once per file, including known bank header
+signatures, and are limited to 1,024 columns and 65,536 characters.
 CSV data tokenization retains only as many cells as the header contains. Extra
 fields are scanned without retaining their text, and the entire row is skipped
 and counted. WhatsApp constructs each message directly from coalesced slices,
