@@ -2,13 +2,11 @@
 
 /**
  * Live-update hook — subscribes to Solid notifications for a topic resource and
- * calls `onChange` when the pod data changes, so a view can re-`reload()` itself
- * without polling (PM finding #3).
+ * calls `onChange` when the pod data changes, so a view can re-`reload()` itself.
  *
  * **Progressive enhancement, never a dependency** (AGENTS.md / solid-notifications
- * skill): if the server doesn't support notifications, or discovery / subscription
- * / the socket fails, this hook quietly does nothing — the view keeps its existing
- * fetch-on-mount + manual-reload behaviour. {@link subscribeToResource} already
+ * skill): the SDK selects push or polling and reconciles after interruptions.
+ * Discovery failures preserve fetch-on-mount + manual-reload behaviour. {@link subscribeToResource} already
  * swallows every error and returns a no-op unsubscribe, so this hook never throws.
  *
  * Lifecycle: subscribes only while `status === "logged-in"` and `topicUrl` is set;
@@ -44,6 +42,7 @@ export function useResourceNotifications(
     if (status !== "logged-in" || !topicUrl) return;
 
     let cancelled = false;
+    const abort = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let unsubscribe: (() => void) | undefined;
 
@@ -57,7 +56,7 @@ export function useResourceNotifications(
 
     // subscribeToResource never rejects (it degrades to a no-op unsubscribe), but
     // guard with .catch anyway so a future change can't break the view.
-    subscribeToResource(topicUrl, fire, { fetchImpl: podFetch })
+    subscribeToResource(topicUrl, fire, { fetchImpl: podFetch, signal: abort.signal })
       .then((unsub) => {
         if (cancelled) {
           unsub(); // unmounted before the subscription settled — tear it down now
@@ -71,6 +70,7 @@ export function useResourceNotifications(
 
     return () => {
       cancelled = true;
+      abort.abort();
       if (timer) clearTimeout(timer);
       unsubscribe?.();
     };

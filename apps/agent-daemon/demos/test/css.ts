@@ -1,6 +1,7 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
+import { createPodClient } from "@jeswr/storage-client";
 import { type ChildProcess, fork } from "child_process";
 import { once } from "events";
 import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
@@ -77,7 +78,9 @@ export async function startD2Css() {
       headers.set("authorization", `WebID ${owner}`);
       return anonymous(input, { ...init, headers });
     };
+    const { storage } = await createPodClient({ fetch: io, storage: root });
     const workspace = new PodWorkspace({
+      storage,
       root,
       ownerWebId: owner,
       io,
