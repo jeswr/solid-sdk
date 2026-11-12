@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { assignRole, listRoleAssignments, revokeAccess, type RoleAssignment } from "@/lib/sharing";
+import {
+  assignRole,
+  listRoleAssignments,
+  revokeAccess,
+  revokeCopiedAccess,
+  type RoleAssignment,
+} from "@/lib/sharing";
 import { ROLES, ROLE_PRESETS, type Role } from "@/lib/roles";
 import {
   Dialog,
@@ -42,6 +48,7 @@ export function ShareDialog({
   onOpenChange,
   resourceUrl,
   extraResourceUrls = [],
+  memberUrls = [],
   ownerWebId,
   title = "Share access",
   description = "Grant another person access by their WebID.",
@@ -52,6 +59,8 @@ export function ShareDialog({
   resourceUrl: string;
   /** Additional resources that must carry the same grants (e.g. the tracker config). */
   extraResourceUrls?: string[];
+  /** Resources inside `resourceUrl` whose own ACLs may hold a copy of a revoked grant. */
+  memberUrls?: readonly string[];
   ownerWebId: string;
   title?: string;
   description?: string;
@@ -113,6 +122,7 @@ export function ShareDialog({
     try {
       await revokeAccess(resourceUrl, ownerWebId, webId);
       for (const extra of extraResourceUrls) await revokeAccess(extra, ownerWebId, webId);
+      await revokeCopiedAccess(memberUrls, ownerWebId, webId);
       toast.success("Access removed");
       await refresh();
       onChanged?.();

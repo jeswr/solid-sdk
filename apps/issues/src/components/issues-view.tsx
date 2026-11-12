@@ -1638,6 +1638,9 @@ export function IssuesView() {
           onOpenChange={(o) => !o && setShareResource(undefined)}
           resourceUrl={shareResource.url}
           extraResourceUrls={shareResource.extraUrls}
+          memberUrls={
+            shareResource.url === repo.containerUrl ? issues.issues.map((i) => i.url) : []
+          }
           ownerWebId={profile.webId}
           title={`Share ${shareResource.label}`}
           description="Grant another person access by their WebID. They can open it from their own app."

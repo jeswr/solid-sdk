@@ -8,6 +8,7 @@ import {
   grantPublicRead,
   listRoleAssignments,
   revokeAccess,
+  revokeCopiedAccess,
   SharingError,
 } from "./sharing";
 
@@ -126,6 +127,11 @@ function modesOf(
   return [...modes].sort();
 }
 
+const trackerAcl = (editor: string) => `@prefix acl: <${ACL}>.
+<${TRACKER}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${TRACKER}>;
+  acl:default <${TRACKER}>; acl:mode acl:Read, acl:Write, acl:Control.
+<${TRACKER}.acl#editor> a acl:Authorization; acl:agent <${editor}>; acl:accessTo <${TRACKER}>;
+  acl:default <${TRACKER}>; acl:mode acl:Read, acl:Write, acl:Append.`;
 const aclWith = (extra: string) => `@prefix acl: <${ACL}>.
 <${ACL_URL}#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${RES}>;
   acl:mode acl:Read, acl:Write, acl:Control.
@@ -150,8 +156,28 @@ describe("sharing via @jeswr/pod-access/roles (WAC)", () => {
   });
 
   it("does not list access inherited from a parent folder", async () => {
-    const pod = aclPod();
+    const pod = aclPod({ [`${TRACKER}.acl`]: trackerAcl(BOB) });
+    // Bob inherits editor from the tracker, so the tracker lists him and the issue does not.
+    expect(await listRoleAssignments(TRACKER, OWNER, pod.impl)).toContainEqual({
+      subject: BOB,
+      kind: "agent",
+      role: "editor",
+    });
     expect(await listRoleAssignments(RES, OWNER, pod.impl)).toEqual([]);
+  });
+
+  it("removes the copies a single-issue share made when someone leaves the tracker", async () => {
+    const pod = aclPod({ [`${TRACKER}.acl`]: trackerAcl(BOB) });
+    // Sharing one issue with Carol gives it its own ACL, copying Bob's inherited editor role.
+    await assignRole(RES, OWNER, CAROL, "viewer", pod.impl);
+    expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toContain("Write");
+    const other = `${TRACKER}other.ttl`;
+    await revokeAccess(TRACKER, OWNER, BOB, pod.impl);
+    await revokeCopiedAccess([RES, other], OWNER, BOB, pod.impl);
+    expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toEqual([]);
+    expect(modesOf(pod.acl(ACL_URL), ACL_URL, CAROL, RES)).toEqual(["Read"]);
+    // A member without its own ACL is never written.
+    expect(pod.puts().some((put) => put.url === `${other}.acl`)).toBe(false);
   });
 
   it("creates an own ACL (If-None-Match: *) granting a viewer Read only; the owner keeps Control", async () => {

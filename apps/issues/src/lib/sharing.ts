@@ -189,6 +189,32 @@ export function revokeAccess(
   });
 }
 
+/**
+ * Revoke a person's direct access on each member that holds one. Sharing a single issue gives
+ * it its own ACL that copies the tracker's inheritable grants, so removing someone from the
+ * tracker must also remove those copies, or they keep access to the issues shared one by one.
+ * Members where the person has no direct role are left untouched.
+ */
+export async function revokeCopiedAccess(
+  memberUrls: readonly string[],
+  ownerWebId: string,
+  webId: string,
+  fetchImpl?: typeof fetch,
+): Promise<void> {
+  for (const url of memberUrls) {
+    await guard(url, async () => {
+      const options = roleOptions(url, ownerWebId, fetchImpl);
+      const { grants } = await readGrants(url, options);
+      if (
+        grants.some(
+          (grant) => !grant.inherited && grant.agent.type === "webid" && grant.agent.id === webId,
+        )
+      )
+        throwIfFailed(await removeGrant([url], { type: "webid", id: webId }, options));
+    });
+  }
+}
+
 /** Make a resource publicly readable, keeping the owner's control and all other grants. */
 export function grantPublicRead(
   resourceUrl: string,
