@@ -1,15 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Claude Opus 5.5
 import { serialize } from "@jeswr/rdf-serialize";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
+import { docContainerUrls } from "../src/apps/docs/lib/model/layout";
 import {
   applyDocumentSharing,
   DOCUMENT_PARTS_DIFFER,
   loadDocumentSharing,
+  MAX_DOCUMENT_PARTS,
+  TOO_MANY_PARTS,
 } from "../src/apps/docs/lib/sharing/document-sharing";
-import { docContainerUrls } from "../src/apps/docs/lib/model/layout";
 import {
   loadSharing,
   SharingRefreshError,
@@ -461,4 +464,134 @@ it("materialises a companion policy that previously inherited from outside the t
   const snapshot = await env.load();
   const fresh = await applyDocumentSharing(env.session, snapshot, select(snapshot.state));
   expect(fresh.needsSave).toBeUndefined();
+});
+
+it.each([
+  ["no ETag", null],
+  ["a weak ETag", 'W/"weak"'],
+] as const)("completes a save when the server answers PUT with %s (CSS)", async (_name, etag) => {
+  const env = await setup();
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    if (init?.method !== "PUT") return response;
+    const headers = new Headers(response.headers);
+    if (etag) headers.set("etag", etag);
+    else headers.delete("etag");
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const session = { ...env.session, fetch };
+  let snapshot = await loadDocumentSharing(session, DOC);
+  snapshot = await applyDocumentSharing(session, snapshot, select(snapshot.state));
+  expect(snapshot.notice).toBeUndefined();
+  for (const url of [DOC, ...parts])
+    expect(await env.roles(url)).toEqual([
+      [
+        [ALICE, "owner"],
+        [BOB, "viewer"],
+      ],
+      "none",
+    ]);
+  // A second save, and a revocation, still pin each reload.
+  snapshot = await applyDocumentSharing(session, snapshot, {
+    ...snapshot.state,
+    people: snapshot.state.people.filter((p) => p.webId !== BOB),
+  });
+  for (const url of [DOC, ...parts])
+    expect(await env.roles(url)).toEqual([[[ALICE, "owner"]], "none"]);
+});
+
+it("still refuses a concurrent change after an ETag-less PUT once the reload is pinned", async () => {
+  const env = await setup();
+  const acl = `${layout.container}.acl`;
+  let written = false;
+  let edited = false;
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    const response = await env.session.fetch(url, init);
+    const method = init?.method ?? "GET";
+    if (String(url) === acl && method === "GET" && written && !edited) {
+      // Someone else edits the companion policy right after our reload pinned it.
+      edited = true;
+      await env.access(layout.container, [[CAROL, ["Read"]]]);
+    }
+    if (method !== "PUT") return response;
+    if (String(url) === acl) written = true;
+    const headers = new Headers(response.headers);
+    headers.delete("etag");
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const session = { ...env.session, fetch };
+  const snapshot = await loadDocumentSharing(session, DOC);
+  await expect(applyDocumentSharing(session, snapshot, select(snapshot.state))).rejects.toThrow(
+    "Document sharing is incomplete",
+  );
+  expect(edited).toBe(true);
+});
+
+it("treats a member with its own policy as a document part", async () => {
+  const env = await setup();
+  const image = `${layout.assets}image.png`;
+  await env.pod.fetch(image, {
+    method: "PUT",
+    body: "png",
+    headers: { "content-type": "image/png" },
+  });
+  await env.access(image, [[BOB, ["Read", "Write"]]]);
+  // A member that only inherits is not a separate part.
+  await env.pod.fetch(`${layout.comments}inherits.ttl`, { method: "PUT", body: "" });
+  const snapshot = await env.load();
+  expect(snapshot).toMatchObject({ notice: DOCUMENT_PARTS_DIFFER, needsSave: true });
+  expect(snapshot.companions.map((part) => part.resource)).toEqual([...parts, image]);
+  const result = await applyDocumentSharing(env.session, snapshot, snapshot.state);
+  expect(result.notice).toBeUndefined();
+  expect(await env.roles(image)).toEqual([[[ALICE, "owner"]], "none"]);
+});
+
+it("fails closed when a listed member cannot be checked", async () => {
+  const env = await setup();
+  const image = `${layout.assets}image.png`;
+  await env.pod.fetch(image, {
+    method: "PUT",
+    body: "png",
+    headers: { "content-type": "image/png" },
+  });
+  const failing = (match: (url: string, init?: RequestInit) => Response | undefined) =>
+    loadDocumentSharing(
+      {
+        ...env.session,
+        fetch: async (url, init) => match(String(url), init) ?? env.session.fetch(url, init),
+      },
+      DOC,
+    );
+  const message = `Couldn't check document part ${image}`;
+  const head = (url: string, init?: RequestInit) => url === image && init?.method === "HEAD";
+  await expect(
+    failing((url, init) => (head(url, init) ? new Response(null, { status: 500 }) : undefined)),
+  ).rejects.toThrow(message);
+  await expect(
+    failing((url, init) => (head(url, init) ? new Response(null) : undefined)),
+  ).rejects.toThrow(message);
+  await expect(
+    failing((url, init) =>
+      url === `${image}.acl` && init?.method === "HEAD"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    ),
+  ).rejects.toThrow(message);
+  const foreign = `${ROOT}docs/other.ttl`;
+  await expect(
+    failing((url, init) =>
+      url === layout.assets && (init?.method ?? "GET") === "GET"
+        ? new Response(`<> <http://www.w3.org/ns/ldp#contains> <${foreign}>.`, {
+            headers: { "content-type": "text/turtle" },
+          })
+        : undefined,
+    ),
+  ).rejects.toThrow(`Couldn't check document part ${foreign}`);
+});
+
+it("refuses to check a companion tree with too many members", async () => {
+  const env = await setup();
+  for (let index = 0; index <= MAX_DOCUMENT_PARTS; index++)
+    await env.pod.fetch(`${layout.updateLog}${index}.bin`, { method: "PUT", body: "" });
+  await expect(env.load()).rejects.toThrow(TOO_MANY_PARTS);
 });

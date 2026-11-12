@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
+import { Container } from "@solid/object";
+import { DataFactory } from "n3";
+import { accessControl } from "../../../drive/lib/client/access";
 import {
   applySharing,
   loadSharing,
@@ -10,7 +15,12 @@ import {
 } from "../../../drive/lib/sharing/adapter";
 import { SharingError } from "../../../drive/lib/sharing/rdf";
 import type { SharingRole, SharingSelection } from "../../../drive/lib/sharing/types";
-import { CHANGED_WHILE_SAVING, pinFetch, recordAccess } from "../../../drive/lib/sharing/verify";
+import {
+  CHANGED_WHILE_SAVING,
+  pinFetch,
+  recordAccess,
+  validator,
+} from "../../../drive/lib/sharing/verify";
 import { docContainerUrls } from "../model/layout";
 
 export const DOCUMENT_PARTS_DIFFER =
@@ -33,10 +43,69 @@ function signature(selection: SharingSelection): string {
   ]);
 }
 
+/** More members than this and the document's parts are not checked one by one. */
+export const MAX_DOCUMENT_PARTS = 2000;
+export const TOO_MANY_PARTS =
+  "This document has too many parts to check its sharing. Share it from Drive instead.";
+
+/**
+ * Every member of the companion tree whose access is set on that member itself, in
+ * breadth-first order so a parent always precedes its children. Members that only
+ * inherit follow their governing container and need no separate write.
+ */
+async function ownPolicyParts(
+  session: SharingSession,
+  root: string,
+  standard: ReadonlySet<string>,
+): Promise<string[]> {
+  const http = refuseRedirects(session.fetch);
+  const access = accessControl(http, session.storageUrl);
+  const found: string[] = [];
+  const queue = [root];
+  let seen = 0;
+  while (queue.length) {
+    const container = queue.shift() as string;
+    const { dataset } = await fetchRdf(container, { fetch: http });
+    const members = [...new Container(container, dataset, DataFactory).contains].map(
+      (member) => member.id,
+    );
+    seen += members.length;
+    if (seen > MAX_DOCUMENT_PARTS) throw new SharingError(TOO_MANY_PARTS);
+    for (const member of members) {
+      assertWithinPodScope(session.storageUrl, member);
+      if (!member.startsWith(container) || member === container)
+        throw new SharingError(`Couldn't check document part ${member}. Try again.`);
+      // Policy documents themselves (a listing may show them) are not parts.
+      if (/\.(acl|acr)$/.test(new URL(member).pathname)) continue;
+      if (member.endsWith("/")) queue.push(member);
+      const head = await http(member, { method: "HEAD" });
+      if (!head.ok) throw new SharingError(`Couldn't check document part ${member}. Try again.`);
+      // The standard containers are always parts, as before; any other member is one
+      // only when it carries its own policy.
+      if (standard.has(member)) {
+        found.push(member);
+        continue;
+      }
+      // Sharing reads the demo pod's policies too, so ignore Drive's demo opt-out here.
+      const headers = new Headers(head.headers);
+      headers.delete("x-solid-demo-access-control");
+      const endpoint = access.discover(member, headers, true);
+      if (!endpoint) throw new SharingError(`Couldn't check document part ${member}. Try again.`);
+      const policy = await http(endpoint, { method: "HEAD" });
+      if (policy.status === 404) continue;
+      if (!policy.ok) throw new SharingError(`Couldn't check document part ${member}. Try again.`);
+      found.push(member);
+    }
+  }
+  return found;
+}
+
 /** The main resource drives the controls; every existing part is independently verified. */
 export async function loadDocumentSharing(
   session: SharingSession,
   resource: string,
+  /** Unpinned transport for listings, which are not access documents. */
+  listing: SharingSession = session,
 ): Promise<DocumentSharingSnapshot> {
   const layout = docContainerUrls(resource);
   const pins = new Map<string, string>();
@@ -52,16 +121,13 @@ export async function loadDocumentSharing(
   };
   const main = await load(resource);
   const companions = [await load(layout.container)];
-  const http = refuseRedirects(session.fetch);
-  for (const url of [layout.updateLog, layout.assets, layout.comments, layout.versions]) {
-    assertWithinPodScope(session.storageUrl, url);
-    const response = await http(url, { method: "HEAD" });
-    // Versions are created lazily; older documents may lack other containers too.
-    // Only 404 proves absence. Future Docs-created containers inherit the root policy.
-    if (response.status === 404) continue;
-    if (!response.ok) throw new SharingError(`Couldn't check document part ${url}. Try again.`);
-    companions.push(await load(url));
-  }
+  // Docs creates the companion containers lazily, and a member shared from Drive keeps
+  // its own policy. Every part with its own policy is a part of this document's sharing.
+  const standard = new Set([layout.updateLog, layout.assets, layout.comments, layout.versions]);
+  const found = await ownPolicyParts(listing, layout.container, standard);
+  // The standard containers first, in a fixed order; deeper parts after their parents.
+  for (const url of [...[...standard].filter((url) => found.includes(url)), ...found])
+    if (!companions.some((part) => part.resource === url)) companions.push(await load(url));
   const differs = companions.some((part) => signature(part.state) !== signature(main.state));
   const unmanaged = companions.find((part) => !part.canManage);
   return {
@@ -151,10 +217,28 @@ export async function applyDocumentSharing(
   // edits. Pin every access-document GET; only our accepted conditional PUTs advance pins.
   const pins = new Map(document.pins);
   const pinned = pinFetch(session.fetch, pins);
+  // A server may accept a PUT without an ETag (CSS does). The next read of that document
+  // is then the adapter's own verified reload, which must match the selection; it sets
+  // the pin, and every later read must match it.
+  const unconfirmed = new Set<string>();
   const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    if (method === "GET" && unconfirmed.has(url)) {
+      const response = await session.fetch(input, init);
+      unconfirmed.delete(url);
+      pins.set(url, validator(response));
+      return response;
+    }
     const response = await pinned(input, init);
-    if (init?.method === "PUT" && response.ok)
-      pins.set(String(input), `200 ${response.headers.get("etag")}`);
+    if (method !== "GET" && method !== "HEAD" && response.ok) {
+      const etag = response.headers.get("etag");
+      if (method === "PUT" && etag && !etag.startsWith("W/")) pins.set(url, `200 ${etag}`);
+      else {
+        pins.delete(url);
+        unconfirmed.add(url);
+      }
+    }
     return response;
   };
   const applying = { ...session, fetch };
@@ -180,7 +264,7 @@ export async function applyDocumentSharing(
     await applySharing(applying, main, selection);
     confirmed.push(`document access matches the selection (${main.resource})`);
     active = "final verification of all document parts";
-    const fresh = await loadDocumentSharing(applying, main.resource);
+    const fresh = await loadDocumentSharing(applying, main.resource, session);
     if (signature(fresh.state) !== signature(selection) || fresh.needsSave)
       throw new SharingError("Current document parts do not all match the selected access.");
     return fresh;
