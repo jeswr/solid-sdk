@@ -1,4 +1,5 @@
 # AUTHORED-BY Claude Opus 4.8
+# AUTHORED-BY Claude Opus 5.5 (Suite Music library profile)
 #
 # Generation INPUT (ontology, L0) for @jeswr/solid-listening's generated model.
 #
@@ -9,8 +10,18 @@
 # is the source of truth for their full gUFO axiomatisation — this input carries
 # just the label + definition admission requires. time:Instant is a NON-sector
 # class (gated via its shape only, not admission), so it is not declared here.
+#
+# Suite Music library (AUTHORED-BY Claude Opus 5.5): the same five sector classes
+# (Track / Artist / Album / Playlist / PlaybackEvent), labels + definitions VERBATIM,
+# under the jeswr.org re-mint of the sector namespace
+# (https://jeswr.org/ns/sectors/media#, @jeswr/suite-vocab NS.MEDIA). That is the
+# namespace the Suite Music app has always written to pods, so its on-pod IRIs are kept
+# exactly; the scrobble composite above keeps the w3id.org identifiers. See the header
+# of media.shapes.ttl for the library profile.
 @prefix media: <https://w3id.org/jeswr/sectors/media#> .
 @prefix core:  <https://w3id.org/jeswr/core#> .
+@prefix jmedia: <https://jeswr.org/ns/sectors/media#> .
+@prefix jcore: <https://jeswr.org/ns/core#> .
 @prefix owl:   <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix skos:  <http://www.w3.org/2004/02/skos/core#> .
@@ -39,3 +50,28 @@ media:Album a owl:Class ;
     rdfs:subClassOf core:InformationResource ;
     rdfs:label "Album"@en ;
     skos:definition "A released collection of recordings; its tracks are core:hasPart of it. A curated collection whole. Aligns to schema:MusicAlbum."@en .
+
+jmedia:PlaybackEvent a owl:Class ;
+    rdfs:subClassOf jcore:Event ;
+    rdfs:label "Playback Event"@en ;
+    skos:definition "A single datable play occurrence — WHAT was played (media:playedWork), WHEN (core:atTime), and on which Account (media:onAccount). core:hadParticipant the listener. The atomic row of a streaming history."@en .
+
+jmedia:Track a owl:Class ;
+    rdfs:subClassOf jmedia:MusicRecording ;
+    rdfs:label "Track"@en ;
+    skos:definition "A music recording as it appears as a playable track on a service (the Spotify-style 'track'), carrying service-level identifiers."@en .
+
+jmedia:Artist a owl:Class ;
+    rdfs:subClassOf jcore:Agent ;
+    rdfs:label "Artist"@en ;
+    skos:definition "The role of an agent (a core:Person or a core:Organization) credited as the creator/performer of a creative work. Rooted in core:Agent so both solo artists and bands qualify without collapsing those Core classes."@en .
+
+jmedia:Album a owl:Class ;
+    rdfs:subClassOf jcore:InformationResource ;
+    rdfs:label "Album"@en ;
+    skos:definition "A released collection of recordings; its tracks are core:hasPart of it. A curated collection whole. Aligns to schema:MusicAlbum."@en .
+
+jmedia:Playlist a owl:Class ;
+    rdfs:subClassOf jcore:InformationResource ;
+    rdfs:label "Playlist"@en ;
+    skos:definition "A curated, ordered collection of recordings assembled by a Person or service; its entries are core:hasPart of it. A SubKind over a collection. Aligns to schema:MusicPlaylist."@en .

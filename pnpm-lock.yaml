@@ -2445,6 +2445,9 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-listening':
+        specifier: workspace:*
+        version: link:../../packages/solid-listening
       '@jeswr/solid-sheets':
         specifier: workspace:*
         version: link:../../packages/solid-sheets

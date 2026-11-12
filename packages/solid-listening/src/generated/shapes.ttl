@@ -1,13 +1,41 @@
 @prefix core: <https://w3id.org/jeswr/core#>.
 @prefix dcterms: <http://purl.org/dc/terms/>.
 @prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix jcore: <https://jeswr.org/ns/core#>.
+@prefix jmedia: <https://jeswr.org/ns/sectors/media#>.
 @prefix media: <https://w3id.org/jeswr/sectors/media#>.
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix schema: <https://schema.org/>.
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix shapes: <https://w3id.org/jeswr/sectors/media/shapes#>.
 @prefix time: <http://www.w3.org/2006/time#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
+<https://jeswr.org/ns/sectors/media/shapes#LibraryAlbumShape> a sh:NodeShape;
+    sh:property shapes:0935f39b1fe3ba341f0c511081817e859628e046f7b9b5bf35c4b87b8bc52115-Album-image, shapes:3519f42fe51b6a09ea7b5f04fa53d038dc40d8a1f303a7f348cc6de05dc3b228-Album-track, shapes:393d69d187b09990b9c00b7a87353ce6e200bf15e50c82da93e22eb20c958a5f-Album-url, shapes:5b63e1cfa30207a2f6f8d481118b94063b6a353477db6a7b7fea1df03cb30cf6-Album-performedByArtist, shapes:9e81f8dd23df1a806b36ef4a1babe437ebc564a8ff9359fe2fee5986cf272cf5-Album-title, shapes:bbc6cae053eec67f62979f3d891db76e006d4a35ec84d8885b1c1319267cd002-Album-name, shapes:cc110d6980bec57c85f9afb849db40a1a705c74b7561a3ae2c0b25b7898d65a7-Album-byArtist;
+    sh:targetClass jmedia:Album.
+<https://jeswr.org/ns/sectors/media/shapes#LibraryArtistShape> a sh:NodeShape;
+    sh:property shapes:18c5ffca8f710b1e4772dc19bf3973c910c582dee09a9ba0f3ef45142f4298c4-Artist-url, shapes:434286a7d965cdfaa5ee7dee82810209e23736033f6ffc264e10a77b46ca699e-Artist-byArtist, shapes:5d07b6b6d44edf114eb399598abc4ed0799d02a59ee34135f3acc32860c5ea5e-Artist-name, shapes:80cc5ff143a7f2e48992c3bd70bce6c5d05b7f078a6b3f599cc5d6ff85542e9b-Artist-performedByArtist, shapes:960647fbcc6f17795e591197877dc364886e29c7c74a1c3006ea712279b1c0a9-Artist-image, shapes:bdc300ee997703ef6afa4dfd128f0121ba7370504fdca40e2722921c6641f8b1-Artist-name;
+    sh:targetClass jmedia:Artist.
+<https://jeswr.org/ns/sectors/media/shapes#LibraryPlaylistShape> a sh:NodeShape;
+    sh:property shapes:198d62ca6cf67f664eda23a48fbd2463070cc0c26ed0854258c0352a9f5f3c2e-Playlist-title, shapes:6aa4089274f63d7a46bfef6cd847aaaec2748f9b0f84141b768974862a529998-Playlist-byArtist, shapes:8ec900ad15e60630294cf1df7d948020e490f539048bb38f6035d60bea2b6d92-Playlist-performedByArtist, shapes:911c63084d8be693e4b8a57a8d13d5ea7885757bbd3c34d6bdb8348539fc6df4-Playlist-url, shapes:b1460b4e069add19c9e772628985b99f628f06d87a3066d244f8b65005ffd9ff-Playlist-name, shapes:e8928edc73d64e4075167de7923074bc657288bac081448b451a38cb34f24c2b-Playlist-image;
+    sh:targetClass jmedia:Playlist.
+<https://jeswr.org/ns/sectors/media/shapes#LibraryTrackShape> a sh:NodeShape;
+    sh:property shapes:05421c71ba7f0f3daaabfce0eefd8862f7840479cdea9cf74a133927152ebe12-Track-loved, shapes:1beecb00b4dddc6a369be56a4692c63984136096407267c78f8fbd6273d88b99-Track-contentUrl, shapes:2571e4727b331ee9a2cd32329f387760118521a49451463750192d6ddab55e03-Track-byArtist, shapes:3c8f3fd022b3f1f538e69038bc7699f3dbea0d079419374be8046fc3938186ac-Track-image, shapes:54bc6b85998a5bd1d8ab512b529e206029589ccbb3756fa9b1a3b5edfc9e9009-Track-title, shapes:81460ce6c94c8a231c8d79cb36ad9bf183bd2a92bfce37f0fa45beda2424626c-Track-isrc, shapes:8251791f2bb860b58e68010a6eea29597f80ac2854b67fed23375fe02dcddd21-Track-durationSeconds, shapes:8b23341778a3ca531c13b39efa40f26ec9d955db373aae94991151562772e847-Track-inAlbum, shapes:92177f6e5b1b70789947b5d60f3703729d0ee0777ea9beb0b69e8b1f3ddc0fee-Track-duration, shapes:9dbed4ab049578fe68c972f678756cda7e588f28a6edddbceaca28fe2a9000c2-Track-name, shapes:b6a0104b2c386133402afdae0208350c5c4c278ae4d1ef1e0b1c23344107f822-Track-lyrics, shapes:d04f0ad3b6278cb30b958382259a561ac75355545121224517ac98c2db6c15b5-Track-performedByArtist, shapes:d15db360abebb8fa2d92ab589c63baabebd5acb84ad5991a6f4b0818dbcc80fe-Track-inAlbum, shapes:e0c8784651c559fec29807bc0315c75d491d49d585d55d401aa7d34878a4158c-Track-url;
+    sh:targetClass jmedia:Track.
+<https://jeswr.org/ns/sectors/media/shapes#ListenShape> a sh:NodeShape;
+    sh:property shapes:427e72f2e1bceddcd642226942cee71e5e587818459f425a48f9ede5b9995b47-PlaybackEvent-playedWork, shapes:43075e791ef67c647d148b1833a50575faaf519274455ff35cefbd0fcd00cfb4-PlaybackEvent-hadParticipant, shapes:5677760c9f778c73bac74e62fec0ad2cf2efcc8c394d014f61a0d4a907967ab5-PlaybackEvent-startTime, shapes:76f0f360a334f913c0b5bf7fde66eff89bb16fcc84ac44de4fb0e25861b30488-PlaybackEvent-msPlayed, shapes:ae5cd0d979a8d53e16520128b765907f736486deb67a5ce7b9af0e9d39bbf3e5-PlaybackEvent-agent, shapes:b0d88962e620eff82f700b0db261556d268e136f34ba3bb34534f85c6de85777-PlaybackEvent-atTime, shapes:b6781e0cd4e11ff97f45e2ddf207a86acdc673dc6798f05ac59f2a573f7498c9-PlaybackEvent-object, shapes:d5336c6e9b5e94a192cc4c8c091914837c3edcf8cc66ec2ad49dd64b9d438595-PlaybackEvent-endTime;
+    sh:targetClass jmedia:PlaybackEvent.
+shapes:05421c71ba7f0f3daaabfce0eefd8862f7840479cdea9cf74a133927152ebe12-Track-loved sh:datatype xsd:boolean;
+    sh:maxCount 1;
+    sh:name "loved";
+    sh:path jmedia:loved;
+    sh:severity sh:Info.
+shapes:0935f39b1fe3ba341f0c511081817e859628e046f7b9b5bf35c4b87b8bc52115-Album-image sh:maxCount 1;
+    sh:name "image";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
+    sh:severity sh:Info.
 shapes:121d50a42d696be6c49d1cdde3a9dddc9213fe3935126e47bbe2b0e9aef26e3a-PlaybackEvent-msPlayed sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minInclusive 0;
@@ -17,10 +45,31 @@ shapes:17288e98eb707c05d2eee968ddf3c641e64baca74a1e8a746ad498665a12e0eb-Playback
     sh:maxCount 1;
     sh:path media:onAccount;
     sh:severity sh:Warning.
+shapes:18c5ffca8f710b1e4772dc19bf3973c910c582dee09a9ba0f3ef45142f4298c4-Artist-url sh:maxCount 1;
+    sh:name "url";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:severity sh:Info.
+shapes:198d62ca6cf67f664eda23a48fbd2463070cc0c26ed0854258c0352a9f5f3c2e-Playlist-title sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "title";
+    sh:path dcterms:title;
+    sh:severity sh:Warning.
 shapes:1b67191edf9b077b5524355718a191c8cd5e2b29e6cfc426594a62446ec603cc-Track-inAlbum sh:class media:Album;
     sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path media:inAlbum;
+    sh:severity sh:Info.
+shapes:1beecb00b4dddc6a369be56a4692c63984136096407267c78f8fbd6273d88b99-Track-contentUrl sh:maxCount 1;
+    sh:name "contentUrl";
+    sh:nodeKind sh:IRI;
+    sh:path schema:contentUrl;
+    sh:severity sh:Info.
+shapes:2571e4727b331ee9a2cd32329f387760118521a49451463750192d6ddab55e03-Track-byArtist sh:maxCount 1;
+    sh:name "byArtist";
+    sh:nodeKind sh:IRI;
+    sh:path schema:byArtist;
     sh:severity sh:Info.
 shapes:34b2a30bdf469f1b8dc5554ae33c9b10e958fa48749ce5bc7e948a2b594f19cd-Track-title sh:datatype xsd:string;
     sh:maxCount 1;
@@ -29,10 +78,75 @@ shapes:34b2a30bdf469f1b8dc5554ae33c9b10e958fa48749ce5bc7e948a2b594f19cd-Track-ti
     sh:path dcterms:title;
     sh:pattern "\\S";
     sh:severity sh:Violation.
+shapes:3519f42fe51b6a09ea7b5f04fa53d038dc40d8a1f303a7f348cc6de05dc3b228-Album-track sh:name "track";
+    sh:nodeKind sh:IRI;
+    sh:path schema:track;
+    sh:severity sh:Info.
+shapes:393d69d187b09990b9c00b7a87353ce6e200bf15e50c82da93e22eb20c958a5f-Album-url sh:maxCount 1;
+    sh:name "url";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:severity sh:Info.
+shapes:3c8f3fd022b3f1f538e69038bc7699f3dbea0d079419374be8046fc3938186ac-Track-image sh:maxCount 1;
+    sh:name "image";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
+    sh:severity sh:Info.
+shapes:427e72f2e1bceddcd642226942cee71e5e587818459f425a48f9ede5b9995b47-PlaybackEvent-playedWork sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "playedWork";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:playedWork;
+    sh:severity sh:Violation.
+shapes:43075e791ef67c647d148b1833a50575faaf519274455ff35cefbd0fcd00cfb4-PlaybackEvent-hadParticipant sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "hadParticipant";
+    sh:nodeKind sh:IRI;
+    sh:path jcore:hadParticipant;
+    sh:severity sh:Warning.
+shapes:434286a7d965cdfaa5ee7dee82810209e23736033f6ffc264e10a77b46ca699e-Artist-byArtist sh:maxCount 1;
+    sh:name "byArtist";
+    sh:nodeKind sh:IRI;
+    sh:path schema:byArtist;
+    sh:severity sh:Info.
+shapes:54bc6b85998a5bd1d8ab512b529e206029589ccbb3756fa9b1a3b5edfc9e9009-Track-title sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:minLength 1;
+    sh:name "title";
+    sh:path dcterms:title;
+    sh:pattern "\\S";
+    sh:severity sh:Violation.
+shapes:5677760c9f778c73bac74e62fec0ad2cf2efcc8c394d014f61a0d4a907967ab5-PlaybackEvent-startTime sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:name "startTime";
+    sh:path schema:startTime;
+    sh:severity sh:Info.
+shapes:5b63e1cfa30207a2f6f8d481118b94063b6a353477db6a7b7fea1df03cb30cf6-Album-performedByArtist sh:maxCount 1;
+    sh:name "performedByArtist";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:performedByArtist;
+    sh:severity sh:Info.
+shapes:5d07b6b6d44edf114eb399598abc4ed0799d02a59ee34135f3acc32860c5ea5e-Artist-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:severity sh:Info.
+shapes:6aa4089274f63d7a46bfef6cd847aaaec2748f9b0f84141b768974862a529998-Playlist-byArtist sh:maxCount 1;
+    sh:name "byArtist";
+    sh:nodeKind sh:IRI;
+    sh:path schema:byArtist;
+    sh:severity sh:Info.
 shapes:6c1948d6948697b236ba1b4150704437557fdf1bf5dccd2df5aa0ecfffd9f690-Track-performedByArtist sh:class media:Artist;
     sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path media:performedByArtist;
+    sh:severity sh:Info.
+shapes:76f0f360a334f913c0b5bf7fde66eff89bb16fcc84ac44de4fb0e25861b30488-PlaybackEvent-msPlayed sh:datatype xsd:integer;
+    sh:maxCount 1;
+    sh:minInclusive 0;
+    sh:name "msPlayed";
+    sh:path jmedia:msPlayed;
     sh:severity sh:Info.
 shapes:7a890da0e64cec2e34f22342bfd1af08431754ba614108b899baba7c9d5fc5d1-Track-isrc sh:datatype xsd:string;
     sh:maxCount 1;
@@ -41,6 +155,47 @@ shapes:7a890da0e64cec2e34f22342bfd1af08431754ba614108b899baba7c9d5fc5d1-Track-is
 shapes:7d7253774d3022814f9263f86af5f7b6c7a0b676b7917dee809bfe0fdb44e699-Artist-name sh:datatype xsd:string;
     sh:maxCount 1;
     sh:path foaf:name;
+    sh:severity sh:Info.
+shapes:80cc5ff143a7f2e48992c3bd70bce6c5d05b7f078a6b3f599cc5d6ff85542e9b-Artist-performedByArtist sh:maxCount 1;
+    sh:name "performedByArtist";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:performedByArtist;
+    sh:severity sh:Info.
+shapes:81460ce6c94c8a231c8d79cb36ad9bf183bd2a92bfce37f0fa45beda2424626c-Track-isrc sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "isrc";
+    sh:path jmedia:isrc;
+    sh:severity sh:Info.
+shapes:8251791f2bb860b58e68010a6eea29597f80ac2854b67fed23375fe02dcddd21-Track-durationSeconds sh:datatype xsd:decimal;
+    sh:maxCount 1;
+    sh:minInclusive 0;
+    sh:name "durationSeconds";
+    sh:path jmedia:durationSeconds;
+    sh:severity sh:Info.
+shapes:8b23341778a3ca531c13b39efa40f26ec9d955db373aae94991151562772e847-Track-inAlbum sh:maxCount 1;
+    sh:name "inAlbum";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:inAlbum;
+    sh:severity sh:Info.
+shapes:8ec900ad15e60630294cf1df7d948020e490f539048bb38f6035d60bea2b6d92-Playlist-performedByArtist sh:maxCount 1;
+    sh:name "performedByArtist";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:performedByArtist;
+    sh:severity sh:Info.
+shapes:911c63084d8be693e4b8a57a8d13d5ea7885757bbd3c34d6bdb8348539fc6df4-Playlist-url sh:maxCount 1;
+    sh:name "url";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:severity sh:Info.
+shapes:92177f6e5b1b70789947b5d60f3703729d0ee0777ea9beb0b69e8b1f3ddc0fee-Track-duration sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "duration";
+    sh:path schema:duration;
+    sh:severity sh:Info.
+shapes:960647fbcc6f17795e591197877dc364886e29c7c74a1c3006ea712279b1c0a9-Artist-image sh:maxCount 1;
+    sh:name "image";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
     sh:severity sh:Info.
 shapes:9675150e7cbf2984b3896e7bfae54a8d9212953ad45d05faeb2d43e9034b1a10-Album-title sh:datatype xsd:string;
     sh:maxCount 1;
@@ -51,6 +206,17 @@ shapes:9b2a3925abfe6a4193f4591d7310f0daa8520fd9b0f256d1545d2132a5cfc60e-Playback
     sh:minCount 1;
     sh:nodeKind sh:IRI;
     sh:path core:hadParticipant;
+    sh:severity sh:Warning.
+shapes:9dbed4ab049578fe68c972f678756cda7e588f28a6edddbceaca28fe2a9000c2-Track-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:severity sh:Info.
+shapes:9e81f8dd23df1a806b36ef4a1babe437ebc564a8ff9359fe2fee5986cf272cf5-Album-title sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "title";
+    sh:path dcterms:title;
     sh:severity sh:Warning.
 shapes:AlbumShape a sh:NodeShape;
     sh:property shapes:9675150e7cbf2984b3896e7bfae54a8d9212953ad45d05faeb2d43e9034b1a10-Album-title;
@@ -71,17 +237,73 @@ shapes:a338dc98ce7e5c5bbdf1176a202462432e624826adb59b550bc24efeb60484cc-Playback
     sh:maxCount 1;
     sh:path media:loved;
     sh:severity sh:Info.
+shapes:ae5cd0d979a8d53e16520128b765907f736486deb67a5ce7b9af0e9d39bbf3e5-PlaybackEvent-agent sh:maxCount 1;
+    sh:name "agent";
+    sh:nodeKind sh:IRI;
+    sh:path schema:agent;
+    sh:severity sh:Info.
+shapes:b0d88962e620eff82f700b0db261556d268e136f34ba3bb34534f85c6de85777-PlaybackEvent-atTime sh:maxCount 1;
+    sh:minCount 1;
+    sh:name "atTime";
+    sh:nodeKind sh:IRI;
+    sh:path jcore:atTime;
+    sh:severity sh:Violation.
+shapes:b1460b4e069add19c9e772628985b99f628f06d87a3066d244f8b65005ffd9ff-Playlist-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:severity sh:Info.
 shapes:b66010bf36645b478c5572e4c0a2bc37d22a5af0bd1f9c09245a387767ea4593-PlaybackEvent-playedWork sh:class media:Track;
     sh:maxCount 1;
     sh:minCount 1;
     sh:nodeKind sh:IRI;
     sh:path media:playedWork;
     sh:severity sh:Violation.
+shapes:b6781e0cd4e11ff97f45e2ddf207a86acdc673dc6798f05ac59f2a573f7498c9-PlaybackEvent-object sh:maxCount 1;
+    sh:name "listenedTo";
+    sh:nodeKind sh:IRI;
+    sh:path schema:object;
+    sh:severity sh:Info.
+shapes:b6a0104b2c386133402afdae0208350c5c4c278ae4d1ef1e0b1c23344107f822-Track-lyrics sh:maxCount 1;
+    sh:name "lyrics";
+    sh:nodeKind sh:IRI;
+    sh:path schema:lyrics;
+    sh:severity sh:Info.
+shapes:bbc6cae053eec67f62979f3d891db76e006d4a35ec84d8885b1c1319267cd002-Album-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "name";
+    sh:path schema:name;
+    sh:severity sh:Info.
+shapes:bdc300ee997703ef6afa4dfd128f0121ba7370504fdca40e2722921c6641f8b1-Artist-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:name "foafName";
+    sh:path foaf:name;
+    sh:severity sh:Info.
 shapes:c70f47436eec8d27cfacdd7e71c35acb9ad96ec548ce48c52f1208643288378c-PlaybackEvent-completionFraction sh:datatype xsd:decimal;
     sh:maxCount 1;
     sh:maxInclusive 1;
     sh:minInclusive 0;
     sh:path media:completionFraction;
+    sh:severity sh:Info.
+shapes:cc110d6980bec57c85f9afb849db40a1a705c74b7561a3ae2c0b25b7898d65a7-Album-byArtist sh:maxCount 1;
+    sh:name "byArtist";
+    sh:nodeKind sh:IRI;
+    sh:path schema:byArtist;
+    sh:severity sh:Info.
+shapes:d04f0ad3b6278cb30b958382259a561ac75355545121224517ac98c2db6c15b5-Track-performedByArtist sh:maxCount 1;
+    sh:name "performedByArtist";
+    sh:nodeKind sh:IRI;
+    sh:path jmedia:performedByArtist;
+    sh:severity sh:Info.
+shapes:d15db360abebb8fa2d92ab589c63baabebd5acb84ad5991a6f4b0818dbcc80fe-Track-inAlbum sh:maxCount 1;
+    sh:name "schemaInAlbum";
+    sh:nodeKind sh:IRI;
+    sh:path schema:inAlbum;
+    sh:severity sh:Info.
+shapes:d5336c6e9b5e94a192cc4c8c091914837c3edcf8cc66ec2ad49dd64b9d438595-PlaybackEvent-endTime sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:name "endTime";
+    sh:path schema:endTime;
     sh:severity sh:Info.
 shapes:dd2d89b3f8380ffe5c3c5be165407712a5df5abd752cca94f7506fe925feeca6-PlaybackEvent-atTime sh:class time:Instant;
     sh:maxCount 1;
@@ -89,10 +311,20 @@ shapes:dd2d89b3f8380ffe5c3c5be165407712a5df5abd752cca94f7506fe925feeca6-Playback
     sh:nodeKind sh:IRI;
     sh:path core:atTime;
     sh:severity sh:Violation.
+shapes:e0c8784651c559fec29807bc0315c75d491d49d585d55d401aa7d34878a4158c-Track-url sh:maxCount 1;
+    sh:name "url";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:severity sh:Info.
 shapes:e70e13ad16e2b4664908ee0e3cb13b2fcfcc4c02854ed1bfd92a6ce11e6d649e-Track-durationSeconds sh:datatype xsd:decimal;
     sh:maxCount 1;
     sh:minInclusive 0;
     sh:path media:durationSeconds;
+    sh:severity sh:Info.
+shapes:e8928edc73d64e4075167de7923074bc657288bac081448b451a38cb34f24c2b-Playlist-image sh:maxCount 1;
+    sh:name "image";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
     sh:severity sh:Info.
 shapes:eabcc1dc5fb19a166aa5b58df083eabf4a5d2bfd602aeec96fe0dcf21a32fc98-Instant-inXSDDateTime sh:datatype xsd:dateTime;
     sh:maxCount 1;

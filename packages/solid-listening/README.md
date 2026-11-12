@@ -129,7 +129,9 @@ never edited here.
 
 ## Public API
 
-`./` (main — **browser-safe, no `node:*`**): `Scrobble`, `Track`, `Artist`,
+`./` (main — **browser-safe, no `node:*`**): the Suite Music library facade
+`libraryTypeQuads`, `libraryFieldQuads`, `LIBRARY_CO_TYPES`, `LIBRARY_MEDIA` (and its
+`LibraryView` / `LibraryField` / `LibraryValue` types); `Scrobble`, `Track`, `Artist`,
 `Album`, `PlayedAtInstant`, `ScrobbleData`, `scrobbleSubject`,
 `scrobbleNodeIris`, `buildScrobble`, `serializeScrobble`, `storeToTurtle`,
 `parseScrobble`, `parseScrobbleTtl`, `isHttpIri`; the owner-only ACL helpers
@@ -186,6 +188,61 @@ git-pinned runtime `8c7f78e`), `parseScrobble` differs as follows, pinned in
 - A track typed with a class that the same document declares `rdfs:subClassOf
   media:Track` is accepted (SHACL `sh:class` semantics). Field values are still read only
   from the scrobble's own `#track` node.
+
+## Suite Music library
+
+The Suite Music app (`apps/suite`, `src/apps/music/lib/model`) writes its library and
+listening history through this package's generated **flat** entities `LibraryTrack`,
+`LibraryArtist`, `LibraryAlbum`, `LibraryPlaylist` and `Listen` (one subject per
+track/artist/album/playlist/play, many per document), plus the scrobble composite's
+`playedAt` node for play instants. The profile is the "Suite Music library profile"
+section of `codegen/media.shapes.ttl`; its header lists every mapping and narrowing.
+
+- **IRIs.** The app's on-pod IRIs are kept exactly: the jeswr.org sector namespace
+  (`https://jeswr.org/ns/sectors/media#`, `https://jeswr.org/ns/core#`) it has always
+  written, plus schema.org (`https://schema.org/`). The scrobble composite keeps the
+  w3id.org identifiers described above.
+- **Dual writes.** The app writes each sector term together with a schema.org mirror
+  (`dct:title` + `schema:name`, `media:performedByArtist` + `schema:byArtist`,
+  `media:playedWork` + `schema:object`, `core:atTime` + `schema:startTime`, …). Each is
+  its own canonical field; read aliases would be migrated away on write.
+- **Facade** (`src/library.ts`): `libraryTypeQuads(view, subject)` stamps the sector
+  class and its schema.org co-type (`LIBRARY_CO_TYPES`); `libraryFieldQuads(view,
+  subject, field, value)` returns the quads one generated field writes, throwing
+  `RangeError` when the model rejects a defined value. Writes run on a scratch store:
+  a wrapper on the live dataset re-checks alias migration over every typed subject under
+  a 10,000-read budget, which a whole library or a month of history exceeds.
+
+What stays in the app, because the generator cannot express it:
+
+- **Tolerant reads** of foreign and legacy data: Music Ontology (`mo:`), Pod Music's
+  `http://schema.org/` connector data, w3id.org media terms, untyped or language-tagged
+  literals, literal or blank-node artist/album references, ISO `schema:duration`,
+  `"1"` as a loved flag, and first-valid-value-wins over repeated values. The runtime
+  reads one exact datatype per field and drops ambiguous values; aliases are capped at
+  four and are migrated away on write.
+- **Playlist entries**: blank `schema:ListItem` nodes with `schema:position` and
+  `schema:item`. Generated wrappers address named subjects only, and composite links hold
+  one child, not an ordered collection.
+- **Instant allocation**: reusing a play's private instant and detaching shared ones.
+- **`media:msPlayed` writes**: the generated `xsd:integer` writer drops integers above
+  `Number.MAX_SAFE_INTEGER`, which the app has always written exactly.
+- **Alias clearing**: before a write the app clears the edited field's legacy predicates.
+
+### Exact divergences in the app's writes
+
+Pinned in `apps/suite/test/music/compatibility.test.ts`:
+
+- `media:durationSeconds` uses the shortest round-trip decimal spelling (`0.1`), not 21
+  significant digits (`0.100000000000000005551`). The value read back is unchanged.
+- A date after year 9999 (or before year 0) is written as a valid `xsd:dateTime`
+  (`20000-01-01T00:00:00.000Z`) instead of JavaScript's expanded-year form
+  (`+020000-…`). The app's reader parses dates with `Date`, so it skips such a play.
+- Negative zero durations are written as `"0"` (previously `"-0"`); the value read back
+  is the same.
+- An IRI containing U+0085 (NEXT LINE), as a value or a subject, is rejected where the
+  old writer accepted it, and a blank-node subject is rejected by the generated wrapper.
+  No app path produces either.
 
 ## License
 
