@@ -20,11 +20,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GROUP_UNSAFE,
   GROUP_UNSUPPORTED,
+  GROUPS_UNVERIFIED,
   GroupDirectory,
   memberWebId,
   SECURING_BLOCKED,
   SECURING_RACE,
   SETTINGS_UNSAFE,
+  SETTINGS_UNVERIFIED,
 } from "../src/index.js";
 
 vi.mock("@jeswr/pod-access", () => ({ readWac: vi.fn() }));
@@ -1070,12 +1072,17 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     // The folder is owner-only now, but unsealed: the surviving settings are never trusted.
     expect(roles.get(folder)).toEqual([ownerManager]);
     expect(sealed.has(folder)).toBe(false);
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
-    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SECURING_RACE);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
+    // A retry neither trusts nor silently deletes them: the owner decides.
+    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SETTINGS_UNVERIFIED);
     expect(privateGrants()).toEqual([]);
     expect(photos.create).not.toHaveBeenCalled();
-    // That retry cleaned up and sealed the folder; the next starts from empty settings.
+    expect(await directory.unverified()).toEqual([
+      { folder: "settings", documents: [`${folder}state.json`] },
+    ]);
+    await directory.verifyFolder("settings", "discard");
     await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
+    expect(sealed.has(folder)).toBe(true);
     photos.create.mockResolvedValue([`${root}photos/family/`]);
     await directory.setupFamily(group.id, [photos]);
     expect(privateGrants()).toEqual([]);
@@ -1092,7 +1099,7 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     await expect(directory.setFamily(group.id)).rejects.toThrow(SECURING_BLOCKED);
     expect(sealed.has(folder)).toBe(false);
     await expect(storage.read(`${folder}0.txt`)).rejects.toMatchObject({ code: "not-found" });
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
   });
   it("leaves the folder untrusted when the cleanup never runs", async () => {
     const { directory, storage } = make();
@@ -1110,9 +1117,10 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     });
     await expect(directory.setFamily(group.id)).rejects.toThrow("Tab closed");
     expect(sealed.has(folder)).toBe(false);
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
-    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SECURING_RACE);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
+    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SETTINGS_UNVERIFIED);
     expect(privateGrants()).toEqual([]);
+    expect(photos.create).not.toHaveBeenCalled();
   });
   it("unseals a sealed folder whose access widened, and refuses it while it holds anything", async () => {
     const { directory, storage } = make();
@@ -1127,11 +1135,14 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
     await expect(directory.setFamily(group.id)).rejects.toThrow(SETTINGS_UNSAFE);
     expect(sealed.has(folder)).toBe(false);
-    // Narrowing it again doesn't restore trust: what it holds was written while others could.
+    // Narrowing it again doesn't restore trust (what it holds was written while others could),
+    // and nothing is deleted: the owner keeps or removes it.
     roles.set(folder, [ownerManager]);
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
-    await expect(directory.setFamily(group.id)).rejects.toThrow(SECURING_RACE);
-    await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
+    await expect(directory.setFamily(group.id)).rejects.toThrow(SETTINGS_UNVERIFIED);
+    expect((await storage.read(`${folder}state.json`)).contentType).toBe("application/json");
+    await directory.verifyFolder("settings", "keep");
+    expect((await directory.list())[0]?.family).toBe(true);
   });
   it("refuses settings with their own access document, which a planter could have sealed", async () => {
     const { directory } = make();
@@ -1146,8 +1157,8 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     const group = await directory.create("Family", [bob]);
     const groups = `${root}groups/`;
     sealed.delete(groups);
-    await expect(directory.list()).rejects.toThrow(GROUP_UNSAFE);
-    await expect(directory.rename(group.id, "Kin")).rejects.toThrow(GROUP_UNSAFE);
+    await expect(directory.list()).rejects.toThrow(GROUPS_UNVERIFIED);
+    await expect(directory.rename(group.id, "Kin")).rejects.toThrow(GROUPS_UNVERIFIED);
     sealed.add(groups);
     const document = group.id.replace("#this", "");
     roles.set(document, roles.get(groups) ?? []);
@@ -1175,8 +1186,122 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     });
     await expect(directory.create("Family", [bob])).rejects.toThrow(SECURING_BLOCKED);
     expect(sealed.has(groups)).toBe(false);
-    await expect(directory.list()).rejects.toThrow(GROUP_UNSAFE);
-    await expect(directory.create("Family", [bob])).rejects.toThrow(SECURING_BLOCKED);
+    await expect(directory.list()).rejects.toThrow(GROUPS_UNVERIFIED);
+    await expect(directory.create("Family", [bob])).rejects.toThrow(GROUPS_UNVERIFIED);
+    // Removing it fails the same way, so the folder stays unsealed.
+    await expect(directory.verifyFolder("groups", "discard")).rejects.toThrow(SECURING_BLOCKED);
+    expect(sealed.has(groups)).toBe(false);
+  });
+});
+
+describe("folders changed outside the suite are kept or removed by the owner (review round 5)", () => {
+  const groups = `${root}groups/`;
+  const folder = `${root}settings/group-sharing/`;
+  async function twoGroups() {
+    const fixture = make();
+    const family = await fixture.directory.create("Family", [bob]);
+    const team = await fixture.directory.create("Team", [carol]);
+    await fixture.directory.setFamily(family.id);
+    return { ...fixture, family, team };
+  }
+  it("deletes nothing when a safe groups folder lost its seal (PoC V5), and refuses", async () => {
+    const { directory, storage, family, team } = await twoGroups();
+    // An external ACL editor rewrote groups/.acl without the seal; the policy is unchanged.
+    sealed.delete(groups);
+    const remove = vi.spyOn(storage, "delete");
+    const grants = vi.mocked(setGrants).mock.calls.length;
+    await expect(directory.create("Garden", [bob])).rejects.toThrow(GROUPS_UNVERIFIED);
+    await expect(directory.list()).rejects.toThrow(GROUPS_UNVERIFIED);
+    await expect(directory.share(family.id, `${root}x`, "viewer")).rejects.toThrow(
+      GROUPS_UNVERIFIED,
+    );
+    expect(remove).not.toHaveBeenCalled();
+    expect(vi.mocked(setGrants).mock.calls.length).toBe(grants);
+    for (const { id } of [family, team])
+      expect(await storage.read(id.replace("#this", ""))).toBeDefined();
+    expect(await directory.unverified()).toEqual([
+      {
+        folder: "groups",
+        documents: [family.id, team.id].map((id) => id.replace("#this", "")).sort(),
+      },
+    ]);
+  });
+  it("keeps the documents as they are when the owner says so", async () => {
+    const { directory, family, team } = await twoGroups();
+    sealed.delete(groups);
+    await directory.verifyFolder("groups", "keep");
+    expect(sealed.has(groups)).toBe(true);
+    expect((await directory.list()).map((group) => group.id).sort()).toEqual(
+      [family.id, team.id].sort(),
+    );
+    expect(await directory.unverified()).toEqual([]);
+    expect((await directory.create("Garden", [bob])).name).toBe("Garden");
+  });
+  it("removes the documents when the owner says so", async () => {
+    const { directory, storage, family } = await twoGroups();
+    sealed.delete(groups);
+    await directory.verifyFolder("groups", "discard");
+    expect(sealed.has(groups)).toBe(true);
+    await expect(storage.read(family.id.replace("#this", ""))).rejects.toMatchObject({
+      code: "not-found",
+    });
+    expect(await directory.list()).toEqual([]);
+  });
+  it("never keeps a document with its own access document", async () => {
+    const { directory, family } = await twoGroups();
+    sealed.delete(groups);
+    roles.set(family.id.replace("#this", ""), roles.get(groups) ?? []);
+    await expect(directory.verifyFolder("groups", "keep")).rejects.toThrow(GROUP_UNSAFE);
+    expect(sealed.has(groups)).toBe(false);
+  });
+  it("refuses to verify a folder others can change, and leaves verified or missing ones alone", async () => {
+    const { directory } = make();
+    await directory.verifyFolder("groups", "keep");
+    await directory.verifyFolder("settings", "discard");
+    expect(setGrants).not.toHaveBeenCalled();
+    expect(await directory.unverified()).toEqual([]);
+    const group = await directory.create("Family", [bob]);
+    await directory.setFamily(group.id);
+    const calls = vi.mocked(setGrants).mock.calls.length;
+    await directory.verifyFolder("groups", "keep");
+    expect(vi.mocked(setGrants).mock.calls.length).toBe(calls);
+    expect(await directory.unverified()).toEqual([]);
+    roles.set(folder, []);
+    sealed.delete(folder);
+    await expect(directory.verifyFolder("settings", "keep")).rejects.toThrow(SETTINGS_UNSAFE);
+    // An unsafe folder is reported as unsafe by the readers, not as unverified.
+    expect(await directory.unverified()).toEqual([]);
+    await expect(directory.verifyFolder("settings", "maybe" as unknown as "keep")).rejects.toThrow(
+      "keep or discard",
+    );
+  });
+  it("lists only safe, unsealed folders holding documents a reader would read", async () => {
+    const { directory, storage } = make();
+    const group = await directory.create("Family", [bob]);
+    await directory.setFamily(group.id);
+    sealed.delete(groups);
+    await storage.create(groups, "x", { name: "notes.txt", contentType: "text/plain" });
+    await storage.delete(group.id.replace("#this", ""), {
+      ifMatch: (await storage.head(group.id.replace("#this", ""))).etag as string,
+    });
+    // Only a never-read leftover: nothing to decide, and securing leaves it in place.
+    expect(await directory.unverified()).toEqual([]);
+    await directory.create("Team", [bob]);
+    expect(await storage.read(`${groups}notes.txt`)).toBeDefined();
+    expect(sealed.has(groups)).toBe(true);
+  });
+  it("still discards what is planted while an unsealed folder is secured, and lists settings", async () => {
+    const { directory, storage } = make();
+    const group = await directory.create("Family", [bob]);
+    plantDuringProvisioning(storage, folder);
+    await expect(directory.setFamily(group.id)).rejects.toThrow(SECURING_RACE);
+    await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
+    await directory.setFamily(group.id);
+    sealed.delete(folder);
+    expect(await directory.unverified()).toEqual([
+      { folder: "settings", documents: [`${folder}state.json`] },
+    ]);
+    await expect(directory.setFamily(group.id)).rejects.toThrow(SETTINGS_UNVERIFIED);
   });
 });
 

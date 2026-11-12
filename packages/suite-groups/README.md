@@ -71,28 +71,47 @@ private or writable group membership fails closed before grants are issued.
 Trust in a dedicated folder (`groups/`, `settings/group-sharing/`) rests on a seal, not on its
 current access alone (pod-access `sealAccess`, in the folder's own ACL, so only Control can write
 it). Securing a folder rewrites its ACL to owner management (plus public Read for `groups/`),
-deletes whatever it then holds, and seals it LAST. Readers (`list`, settings, membership edits,
-Family marking, sharing) trust a folder only while it is sealed and still safe on raw modes, and
-a document in it only while it inherits that folder's ACL (`governedBy`): an own document ACL
-could have been planted, and sealed, by whoever wrote it before the folder was secured. So a
-cleanup that fails part-way, a crash or a closed tab leaves the folder unsealed and refused
-(`SETTINGS_UNSAFE`, `GROUP_UNSAFE`), and the next change that secures it cleans up again.
+deletes only what appeared during that rewrite, and seals it LAST. Readers (`list`, settings,
+membership edits, Family marking, sharing) trust a folder only while it is sealed and still safe
+on raw modes, and a document in it only while it inherits that folder's ACL (`governedBy`): an own
+document ACL could have been planted, and sealed, by whoever wrote it before the folder was
+secured. So a cleanup that fails part-way, a crash or a closed tab leaves the folder unsealed and
+refused, and nothing it holds is trusted until the owner decides.
 
 - A sealed, safe folder is left as it is. A sealed folder whose access widened is unsealed
   first, and then treated like any unsafe folder.
 - An unsafe folder must be empty to be secured (`SETTINGS_UNSAFE`/`GROUP_UNSAFE` otherwise): its
   content could be someone else's, and is never taken over.
-- An unsealed folder's content was not verified, even if it is owner-only now. After the rewrite
-  it is deleted, the documents readers read first (`state.json`; group `.ttl` documents), each
-  delete conditional on the entry's current ETag. A failure never stops the rest, and the call
-  fails with `SECURING_RACE` (reload and retry) once the folder is sealed.
+- A safe but unsealed folder that already holds documents a reader would read (`state.json`;
+  group `.ttl` documents) is refused with `SETTINGS_UNVERIFIED`/`GROUPS_UNVERIFIED`, and nothing is
+  deleted. It got that way through an earlier build, an ACL editor that dropped the seal, a
+  cleanup that never finished, or a widen-then-narrow (the recovery `GROUP_UNSAFE` asks for).
+  Deleting automatically would silently drop every group, and with it every `acl:agentGroup`
+  grant, or re-send invitations. `unverified()` lists such folders and their documents;
+  `verifyFolder(folder, "keep")` re-checks that the folder is safe and that every document
+  inherits its ACL (one with its own ACL is refused, never kept), then seals without deleting;
+  `verifyFolder(folder, "discard")` deletes what the folder holds, then seals. Settings → Groups &
+  family offers these as Keep and Remove, Remove after a confirmation.
+- Only documents that appear between the emptiness check and the permission rewrite (this pass's
+  race window) are deleted automatically: the documents readers read first, each delete
+  conditional on the entry's current ETag. A failure never stops the rest, and the call fails
+  with `SECURING_RACE` (reload and retry) once the folder is sealed. Older never-read leftovers
+  are left in place.
 - The seal is withheld (`SECURING_BLOCKED`) while a readable document survives, e.g. one whose own
   ACL shuts the owner out; remove it to continue. Other leftovers (such an undeletable `0.txt`, a
   planted sub-folder) are never read, so they do not block the seal.
-- Settings written before the seal existed, or a demo pod seeded without it, count as unverified:
-  the next change discards them.
-- Known limit, as for the requests-solid records folder: if the owner widens a sealed folder's
-  ACL with another tool and narrows it again before this library sees it, the seal survives.
+
+Threat model limits of the seal:
+
+- Anyone who held Control on the folder itself before it was secured could write the owner's
+  seal into the folder ACL and then drop their own access: the result is indistinguishable from
+  a folder the owner verified. Seals cannot prevent this; only grant Control on these folders to
+  agents you trust.
+- A planted document with its own ACL that lets the owner read it but not write or delete it
+  blocks sealing permanently (`SECURING_BLOCKED`, and `verifyFolder` fails the same way). This
+  fails safe, but recovering needs the server's administrator.
+- If the owner widens a sealed folder's ACL with another tool and narrows it again before this
+  library sees it, the seal survives (as for the requests-solid records folder).
 
 A folder whose policy pod-access cannot represent as roles (e.g. Append-only grants) is refused
 rather than rewritten.

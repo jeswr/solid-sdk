@@ -239,7 +239,11 @@ and other grant callers (root, `settings/`, reserved folders, access documents, 
 encodings); requests-solid approval uses it. `sealAccess`/`isSealed`/`unsealAccess` keep an
 owner's seal in a resource's own access document (only Control can write it): seal last, after
 verifying what it governs, and trust contents only while sealed; `sealDataset` seals an offline
-document. Keep all of these documented in README.
+document. Limits: anyone who held Control on the resource before it was secured can forge the
+owner's seal and then drop their own access (inherent to seals), and the owner widening then
+narrowing a sealed resource elsewhere keeps the seal. A seal can be dropped by any editor that
+rewrites the document without unknown statements, so treat "unsealed" as "ask the owner", never
+as "delete". Keep all of these documented in README.
 
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token

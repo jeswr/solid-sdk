@@ -12,11 +12,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GROUP_TARGET,
   GROUP_UNSAFE,
+  GROUPS_UNVERIFIED,
   GroupDirectory,
   ownerOnlyAccess,
   SECURING_BLOCKED,
   SECURING_RACE,
   SETTINGS_UNSAFE,
+  SETTINGS_UNVERIFIED,
 } from "../src/index.js";
 
 const root = "https://pod.example/owner/";
@@ -330,25 +332,72 @@ describe("settings written under an earlier untrusted policy (review round 2)", 
     await expect(directory.setFamily(group.id)).rejects.toThrow("settings must be owner-only");
     expect(puts.slice(start)).toEqual([]);
   });
-  it("never trusts settings in an owner-only folder that was never sealed; the next change discards them", async () => {
-    // Owner-only now cannot show who wrote them: a cleanup that failed after the permission
-    // rewrite leaves exactly this state (review round 4).
-    const { directory, group, fetch, acls, storage } = await preexisting(policy(ownerRule()));
+  it("refuses legacy settings in an owner-only folder that was never sealed, deleting nothing, until the owner keeps them", async () => {
+    // An earlier build wrote them into an owner-only folder without a seal (review round 5).
+    const { directory, group, fetch, acls, storage, puts } = await preexisting(policy(ownerRule()));
     await storage.create(root, null, { name: "private", kind: "container" });
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
     const create = vi.fn();
+    const start = puts.length;
     await expect(
       directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]),
-    ).rejects.toThrow(SECURING_RACE);
+    ).rejects.toThrow(SETTINGS_UNVERIFIED);
     expect(create).not.toHaveBeenCalled();
+    expect(puts.slice(start)).toEqual([]);
+    expect(await storage.read(settings)).toBeDefined();
+    expect(await directory.unverified()).toEqual([{ folder: "settings", documents: [settings] }]);
+    await directory.verifyFolder("settings", "keep");
     expect(acls.get(`${folder}.acl`)?.body).toContain("sealedBy");
-    expect(await directory.list()).toEqual([{ ...group, family: false }]);
-    await directory.setFamily(group.id);
     expect((await directory.list())[0]).toMatchObject({ id: group.id, family: true });
     const grants = (
       await readGrants(`${root}private/`, { fetch, root, model: "wac", kind: "folder" })
     ).grants;
     expect(grants.some((grant) => grant.agent.type === "group")).toBe(false);
+  });
+});
+
+describe("a groups folder whose seal an external editor dropped (review round 5, PoC V5)", () => {
+  const groups = `${root}groups/`;
+  async function stripped() {
+    const fixture = await pod();
+    const family = await fixture.directory.create("Family", [bob]);
+    const team = await fixture.directory.create("Team", [mallory]);
+    const file = await fixture.storage.create(root, "x", {
+      name: "file.txt",
+      contentType: "text/plain",
+    });
+    await fixture.directory.share(family.id, file.url, "viewer");
+    expect(fixture.acls.get(`${groups}.acl`)?.body).toContain("sealedBy");
+    // The same policy, rewritten without statements the editor doesn't know.
+    await fixture.putAcl(groups, policy(ownerRule(), rule({ kind: "public" }, ["read"])));
+    expect(fixture.acls.get(`${groups}.acl`)?.body).not.toContain("sealedBy");
+    return { ...fixture, family, team, file };
+  }
+  it("refuses, deletes nothing, and keeps every group on the owner's word", async () => {
+    const { directory, storage, family, team, file, fetch } = await stripped();
+    const before = [family, team].map((group) => doc(group.id));
+    await expect(directory.create("Garden", [bob])).rejects.toThrow(GROUPS_UNVERIFIED);
+    await expect(directory.list()).rejects.toThrow(GROUPS_UNVERIFIED);
+    for (const url of before) expect(await storage.read(url)).toBeDefined();
+    expect(await directory.unverified()).toEqual([{ folder: "groups", documents: before.sort() }]);
+    await directory.verifyFolder("groups", "keep");
+    expect((await directory.list()).map((group) => group.id).sort()).toEqual(
+      [family.id, team.id].sort(),
+    );
+    // The group grant made before still names a group that exists.
+    expect(
+      (await readGrants(file.url, { fetch, root, model: "wac" })).grants.some(
+        (grant) => grant.agent.type === "group" && grant.agent.id === family.id,
+      ),
+    ).toBe(true);
+    expect((await directory.create("Garden", [bob])).name).toBe("Garden");
+  });
+  it("removes every group on the owner's word", async () => {
+    const { directory, storage, family, team } = await stripped();
+    await directory.verifyFolder("groups", "discard");
+    for (const group of [family, team])
+      await expect(storage.read(doc(group.id))).rejects.toMatchObject({ code: "not-found" });
+    expect(await directory.list()).toEqual([]);
   });
 });
 
@@ -571,16 +620,19 @@ describe("fail-safe cleanup with real ACLs (review round 4)", () => {
     // Owner-only now, but unsealed: the surviving planted settings are refused everywhere.
     expect(acls.get(`${folder}.acl`)?.body).not.toContain("sealedBy");
     expect(await ownerOnlyAccess({ storage, fetch, webId: owner }, settings)).toBe(true);
-    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
     await expect(directory.notifyOnce(group.id, group.id, "Invite")).rejects.toThrow(
-      SETTINGS_UNSAFE,
+      SETTINGS_UNVERIFIED,
     );
     const create = vi.fn(async () => [`${root}new/`]);
     await expect(
       directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]),
-    ).rejects.toThrow(SECURING_RACE);
+    ).rejects.toThrow(SETTINGS_UNVERIFIED);
     expect(create).not.toHaveBeenCalled();
     expect(puts).not.toContain(`${root}private/.acl`);
+    // The owner removes what the failed cleanup left; the blocker stays, never read.
+    await directory.verifyFolder("settings", "discard");
+    await expect(storage.read(settings)).rejects.toMatchObject({ code: "not-found" });
     await directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]);
     expect(create).toHaveBeenCalledTimes(1);
     expect(await groupOnPrivate(fetch)).toBe(false);
@@ -598,6 +650,10 @@ describe("fail-safe cleanup with real ACLs (review round 4)", () => {
     expect(acls.get(own)?.body).toContain("sealedBy");
     expect(await storage.read(settings)).toBeDefined();
     await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    // Nor can the owner keep it once the folder needs verifying: a kept document must inherit.
+    await putAcl(folder, policy(ownerRule()));
+    await expect(directory.verifyFolder("settings", "keep")).rejects.toThrow(SETTINGS_UNSAFE);
+    expect(acls.get(`${folder}.acl`)?.body).not.toContain("sealedBy");
   });
 });
 

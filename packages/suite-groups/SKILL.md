@@ -16,8 +16,10 @@ Group grants are Viewer/Editor only; never target the root, settings/, groups/ (
 Trust a dedicated folder (groups/, settings) only while it is sealed (pod-access sealAccess) and
 safe, and its documents only while they inherit its ACL (governedBy). Seal LAST, after the rewrite
 and cleanup, so any failure leaves it unsealed and refused; never trust "owner-only now" alone.
-Secure only empty unsafe folders; cleanup deletes readable documents first and keeps going past
-failures (SECURING_RACE); a surviving readable document withholds the seal (SECURING_BLOCKED).
+Secure only empty unsafe folders; auto-delete only what appears during this pass's rewrite,
+readable documents first, past failures (SECURING_RACE); a survivor withholds the seal
+(SECURING_BLOCKED). Never delete documents a safe unsealed folder already holds: refuse with
+*_UNVERIFIED and let the owner choose verifyFolder(folder, "keep" | "discard") (unverified()).
 Collections share references only; use extend(source, resources, { within }) for contents the
 owner adds later, passing only that action's own additions, never members others could write.
 Share multi-resource items in one call so each member receives at most one notification attempt.

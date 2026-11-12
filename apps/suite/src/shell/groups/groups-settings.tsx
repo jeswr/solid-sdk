@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   type DeletionReview,
   GROUP_PRIVACY,
   type GroupDirectory,
+  type GroupFolder,
   type SharedGroup,
+  type UnverifiedFolder,
 } from "@jeswr/suite-groups";
 import { Button, Input, Label, PeoplePicker, type SharingPerson } from "@jeswr/suite-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,7 +44,9 @@ function GroupsPanel({
 }) {
   const connection = useNeedsConnection();
   const [directory, setDirectory] = useState<GroupDirectory>();
+  const [ready, setReady] = useState(false);
   const [groups, setGroups] = useState<SharedGroup[]>([]);
+  const [unverified, setUnverified] = useState<UnverifiedFolder[]>([]);
   const [name, setName] = useState("");
   const [members, setMembers] = useState<SharingPerson[]>([]);
   const [contacts, setContacts] = useState<SharingPerson[]>([]);
@@ -58,10 +63,15 @@ function GroupsPanel({
     let live = true;
     void groupDirectory(session)
       .then(async (directory) => {
+        // The directory is kept even when listing is refused, so the owner can resolve a
+        // folder changed outside the suite.
+        if (live) setDirectory(directory);
+        const pending = await directory.unverified();
+        if (live) setUnverified(pending);
         const groups = await directory.list();
         if (live) {
-          setDirectory(directory);
           setGroups(groups);
+          setReady(true);
         }
       })
       .catch((error) => {
@@ -99,13 +109,18 @@ function GroupsPanel({
     writing.current = true;
     setBusy(true);
     setMessage("");
+    const refresh = async () => {
+      setUnverified(await directory.unverified());
+      setGroups(await directory.list());
+      setReady(true);
+    };
     try {
       await action(directory);
-      setGroups(await directory.list());
+      await refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The group change could not be saved");
       try {
-        setGroups(await directory.list());
+        await refresh();
       } catch {
         /* Keep the last confirmed list while storage is unavailable. */
       }
@@ -128,9 +143,19 @@ function GroupsPanel({
       {message && <p role="alert">{message}</p>}
       {busy && <p role="status">Saving groups…</p>}
       {connection.disabled && <p role="status">{connection.reason}</p>}
+      {unverified.map((folder) => (
+        <UnverifiedNotice
+          key={folder.folder}
+          folder={folder}
+          busy={busy || connection.disabled}
+          resolve={(decision) =>
+            void act((directory) => directory.verifyFolder(folder.folder, decision))
+          }
+        />
+      ))}
       <section aria-label="Create group">
         <h2>{family ? "Set up Family" : "Create a group"}</h2>
-        <fieldset disabled={!directory || busy || connection.disabled}>
+        <fieldset disabled={!ready || busy || connection.disabled}>
           <Label htmlFor="group-name">Group name</Label>
           <Input id="group-name" value={name} onChange={(event) => setName(event.target.value)} />
           <PeoplePicker
@@ -286,6 +311,58 @@ function GroupsPanel({
         </section>
       )}
     </>
+  );
+}
+const NOTICE: Record<GroupFolder, (count: number) => [string, string]> = {
+  groups: (count) => [
+    "Group files changed",
+    `${count} group ${count === 1 ? "file was" : "files were"} changed outside the suite. Keep them or remove them?`,
+  ],
+  settings: () => [
+    "Group settings changed",
+    "Your group sharing settings were changed outside the suite. Keep them or remove them?",
+  ],
+};
+/** The owner's decision on a folder whose files were written while it was unverified. */
+function UnverifiedNotice({
+  folder,
+  busy,
+  resolve,
+}: {
+  folder: UnverifiedFolder;
+  busy: boolean;
+  resolve(decision: "keep" | "discard"): void;
+}) {
+  const [confirm, setConfirm] = useState(false);
+  const [title, text] = NOTICE[folder.folder](folder.documents.length);
+  const heading = `unverified-${folder.folder}`;
+  return (
+    <section aria-labelledby={heading}>
+      <h2 id={heading}>{title}</h2>
+      <p>{text}</p>
+      {confirm ? (
+        <fieldset disabled={busy}>
+          <legend>Remove them from your pod? This can't be undone.</legend>
+          <div className="settings-choice-row">
+            <Button variant="destructive" onClick={() => resolve("discard")}>
+              Remove files
+            </Button>
+            <Button variant="outline" onClick={() => setConfirm(false)}>
+              Cancel
+            </Button>
+          </div>
+        </fieldset>
+      ) : (
+        <div className="settings-choice-row">
+          <Button disabled={busy} onClick={() => resolve("keep")}>
+            Keep
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}>
+            Remove
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
 function GroupCard({

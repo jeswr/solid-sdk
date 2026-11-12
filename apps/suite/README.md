@@ -130,8 +130,11 @@ Progress/notification receipts are kept privately in `settings/group-sharing/`. 
 before delivery to prevent duplicate notifications. Multi-resource setup/deletion is not
 atomic: partial failures are shown for review and explicit recovery.
 
-The demo seeds a fictional Family and Garden team, with the `groups/` and
-`settings/group-sharing/` ACLs sealed as group sharing leaves a folder it verified (see
-suite-groups: content in an unsealed folder is never trusted). Library behavior and its limitations are
+If the groups or settings folder holds files written while it was unverified (an earlier build,
+or an ACL editor that dropped the seal), Settings → Groups & family says "N group files were
+changed outside the suite" and offers Keep or Remove (Remove asks for confirmation); nothing is
+deleted until the owner chooses. The demo seeds a fictional Family and Garden team, with the
+`groups/` and `settings/group-sharing/` ACLs sealed as group sharing leaves a folder it verified
+(see suite-groups: content in an unsealed folder is never trusted). Library behavior and its limitations are
 in [suite-groups](../../packages/suite-groups/README.md); `e2e/groups.spec.ts` covers creation,
 Drive sharing and Permissions in all configured widths and themes.

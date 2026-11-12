@@ -2,7 +2,7 @@
 // @vitest-environment jsdom
 
 import { readGrants, removeGrant } from "@jeswr/pod-access/roles";
-import type { GroupDirectory } from "@jeswr/suite-groups";
+import { GROUPS_UNVERIFIED, type GroupDirectory, type UnverifiedFolder } from "@jeswr/suite-groups";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   cleanup,
@@ -61,6 +61,8 @@ function setup() {
     addMember: vi.fn(),
     removeMember: vi.fn(),
     rename: vi.fn(),
+    unverified: vi.fn(async (): Promise<UnverifiedFolder[]> => []),
+    verifyFolder: vi.fn(async () => {}),
   };
   vi.mocked(groupDirectory).mockResolvedValue(directory as unknown as GroupDirectory);
   vi.mocked(readGrants).mockResolvedValue({
@@ -94,6 +96,81 @@ it("creates a group and shows a grants warning before deletion", async () => {
   expect(directory.delete).not.toHaveBeenCalled();
   fireEvent.click(within(review).getByRole("button", { name: "Remove grants and delete group" }));
   await waitFor(() => expect(directory.delete).toHaveBeenCalledTimes(1));
+});
+it("asks the owner to keep or remove group files changed outside the suite", async () => {
+  const directory = setup();
+  const documents = [`${root}groups/a.ttl`, `${root}groups/b.ttl`];
+  directory.unverified.mockResolvedValueOnce([{ folder: "groups", documents }]);
+  directory.list.mockRejectedValueOnce(new Error(GROUPS_UNVERIFIED));
+  render(
+    <AccountsContext.Provider value={context}>
+      <GroupsSettings />
+    </AccountsContext.Provider>,
+  );
+  const notice = await screen.findByRole("region", { name: "Group files changed" });
+  expect(
+    within(notice).getByText(
+      "2 group files were changed outside the suite. Keep them or remove them?",
+    ),
+  ).toBeTruthy();
+  expect(await screen.findByRole("alert")).toHaveProperty("textContent", GROUPS_UNVERIFIED);
+  // Nothing else can be changed until the owner decides.
+  const create = screen.getByRole("region", { name: "Create group" });
+  expect((create.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+  fireEvent.click(within(notice).getByRole("button", { name: "Keep" }));
+  await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("groups", "keep"));
+  await waitFor(() =>
+    expect(screen.queryByRole("region", { name: "Group files changed" })).toBeNull(),
+  );
+  expect(await screen.findByRole("region", { name: "Family" })).toBeTruthy();
+  expect((create.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(false);
+});
+it("confirms before removing changed files, and words a single file or settings", async () => {
+  const directory = setup();
+  directory.unverified.mockResolvedValueOnce([
+    { folder: "groups", documents: [`${root}groups/a.ttl`] },
+    { folder: "settings", documents: [`${root}settings/group-sharing/state.json`] },
+  ]);
+  render(
+    <AccountsContext.Provider value={context}>
+      <GroupsSettings />
+    </AccountsContext.Provider>,
+  );
+  const notice = await screen.findByRole("region", { name: "Group files changed" });
+  expect(
+    within(notice).getByText(
+      "1 group file was changed outside the suite. Keep them or remove them?",
+    ),
+  ).toBeTruthy();
+  const settings = screen.getByRole("region", { name: "Group settings changed" });
+  expect(
+    within(settings).getByText(
+      "Your group sharing settings were changed outside the suite. Keep them or remove them?",
+    ),
+  ).toBeTruthy();
+  fireEvent.click(within(notice).getByRole("button", { name: "Remove" }));
+  const confirm = within(notice).getByRole("group", {
+    name: "Remove them from your pod? This can't be undone.",
+  });
+  expect(directory.verifyFolder).not.toHaveBeenCalled();
+  fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+  expect(
+    within(notice).queryByRole("group", {
+      name: "Remove them from your pod? This can't be undone.",
+    }),
+  ).toBeNull();
+  fireEvent.click(within(notice).getByRole("button", { name: "Remove" }));
+  fireEvent.click(
+    within(
+      within(notice).getByRole("group", {
+        name: "Remove them from your pod? This can't be undone.",
+      }),
+    ).getByRole("button", {
+      name: "Remove files",
+    }),
+  );
+  await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("groups", "discard"));
+  expect(directory.verifyFolder).toHaveBeenCalledTimes(1);
 });
 it("shows why ACP group sharing is unavailable", async () => {
   setup();
