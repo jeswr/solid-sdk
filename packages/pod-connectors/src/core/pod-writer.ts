@@ -2,12 +2,13 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
+import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { freshRdf } from "../pod/rdf-read.js";
 import { ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortableFetch } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
+import { adapterContainer, containerResolver, validateBinaryType } from "./pod-writer-policy.js";
 import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
 
@@ -35,20 +36,10 @@ export interface FetchPodWriterOptions {
  */
 export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter {
   const { adapterId, webId, podRoot } = options;
-  if (!/^[a-z0-9-]+$/.test(adapterId))
-    throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
-  const root = assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
+  const root = adapterContainer(adapterId, podRoot);
   const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
   const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
-  const resolve = (slug: string): string => {
-    try {
-      return assertWithinPodScope(root, new URL(slug, root).href, { allowRoot: false });
-    } catch (cause) {
-      throw new IntegrationSyncError(adapterId, `Slug escapes the adapter container: ${slug}`, {
-        cause,
-      });
-    }
-  };
+  const resolve = containerResolver(root, adapterId);
   return {
     webId,
     resolve,
@@ -97,28 +88,13 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
   };
 }
 
-/** RDF goes through `write` so it is serialised by N3 and carries provenance. */
-const RDF_MEDIA_TYPES = new Set([
-  "text/turtle",
-  "text/n3",
-  "application/ld+json",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig",
-  "application/rdf+xml",
-]);
-const MEDIA_TYPE =
-  /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*(\s*;\s*[a-z0-9-]+=[a-z0-9-]+)*$/i;
-
 async function writeBinaryResource(
   adapterId: string,
   url: string,
   doc: BinaryDoc,
   podFetch: typeof fetch,
 ): Promise<WrittenBinary> {
-  const mediaType = String(doc.contentType.split(";", 1)[0]).trim().toLowerCase();
-  if (!MEDIA_TYPE.test(doc.contentType) || RDF_MEDIA_TYPES.has(mediaType))
-    throw new IntegrationSyncError(adapterId, `Unsupported binary content type: ${mediaType}`);
+  validateBinaryType(doc.contentType, adapterId);
   const headers = new Headers({ "content-type": doc.contentType });
   if ((doc.mode ?? "create") === "create") headers.set("if-none-match", "*");
   else {

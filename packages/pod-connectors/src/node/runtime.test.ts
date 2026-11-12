@@ -7,7 +7,7 @@ import { get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
-import * as dpop from "@jeswr/solid-dpop";
+import * as podAuth from "@jeswr/pod-auth/node";
 import { HEALTH } from "@jeswr/solid-health";
 import { AclResource, Agent } from "@solid/object";
 import { strToU8, zipSync } from "fflate";
@@ -95,9 +95,14 @@ function fixturePod() {
       return Response.json({ issuer: config.oidcIssuer, token_endpoint: tokenUrl });
     if (url === tokenUrl) {
       const headers = new Headers(init?.headers);
-      expect(headers.get("authorization")).toBe(
-        `Basic ${Buffer.from("synthetic-client:synthetic-secret").toString("base64")}`,
-      );
+      const basic = Buffer.from(
+        (headers.get("authorization") as string).slice(6),
+        "base64",
+      ).toString();
+      expect(basic.split(":").map(decodeURIComponent)).toEqual([
+        "synthetic-client",
+        "synthetic-secret",
+      ]);
       expect(new URLSearchParams(String(init?.body)).get("grant_type")).toBe("client_credentials");
       expect(
         JSON.parse(
@@ -355,6 +360,31 @@ describe("Pod client credentials", () => {
     expect(cancel).toHaveBeenCalledOnce();
     expect(pulls).toBeLessThan(33);
   });
+  it("replays immutable binary bodies above the ordinary 16 MiB replay cap", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const body = new Blob([new Uint8Array(16 * 1024 * 1024 + 1)]);
+    await expect(
+      authenticated(`${TEST_POD_ROOT}integrations/spotify/large.bin`, {
+        method: "PUT",
+        body,
+        headers: { "content-type": "application/octet-stream", "if-none-match": "*" },
+      }),
+    ).resolves.toMatchObject({ status: 201 });
+    const stored = requests.at(-1)?.body as Uint8Array;
+    expect(stored.byteLength).toBe(body.size);
+  });
+
+  it("replaces caller-supplied credential headers with the configured Pod identity", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    await authenticated(`${TEST_POD_ROOT}missing`, {
+      headers: { authorization: "Bearer source-secret", dpop: "caller-proof" },
+    });
+    expect(requests.at(-1)?.headers.get("authorization")).toBe("DPoP synthetic-pod-token");
+    expect(requests.at(-1)?.headers.get("dpop")).not.toBe("caller-proof");
+  });
+
   it("refuses the real target of a shadowed Request before Pod I/O", async () => {
     const { transport, requests } = fixturePod();
     const authenticated = await createClientCredentialsFetch(config, transport);
@@ -796,13 +826,18 @@ describe("Pod client credentials", () => {
     const started = new Promise<void>((resolve) => {
       ready = resolve;
     });
-    vi.spyOn(dpop, "rdfFetchFor").mockImplementation(
-      (_session, _credentials, fetchImpl) => async (input) => {
-        if (!fetchImpl) throw new Error("Missing fixture transport");
-        const init = { method: "GET", signal: internal.signal };
-        return fetchImpl(String(input), init);
-      },
-    );
+    const original = podAuth.forClientCredentials;
+    vi.spyOn(podAuth, "forClientCredentials").mockImplementation(async (options) => {
+      const auth = await original(options);
+      return {
+        ...auth,
+        fetch: (input, init) =>
+          auth.fetch(input, {
+            ...init,
+            signal: AbortSignal.any([new Request(input, init).signal, internal.signal]),
+          }),
+      };
+    });
     let configured = false;
     const authenticated = await createClientCredentialsFetch(config, async (input, init) => {
       if (!configured) return transport(input, init);
@@ -831,8 +866,8 @@ describe("Pod client credentials", () => {
     await expect(
       createClientCredentialsFetch({ ...config, tokenUrl: "http://issuer.test/token" }, fetch),
     ).rejects.toMatchObject({ kind: "auth" });
-    vi.spyOn(dpop, "createSession").mockImplementation(async (_credentials, transport) => {
-      await transport!("https://unexpected.test/token");
+    vi.spyOn(podAuth, "forClientCredentials").mockImplementation(async (options) => {
+      await options.fetch?.("https://unexpected.test/token");
       throw new Error("unreachable");
     });
     await expect(createClientCredentialsFetch(config, fetch)).rejects.toMatchObject({
