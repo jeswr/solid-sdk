@@ -3,6 +3,7 @@
 
 import * as entry0 from "@jeswr/agent-audit";
 import * as entry1 from "@jeswr/agent-audit/testing";
+import * as entry2 from "@jeswr/agent-audit/verify";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { execFile } from "child_process";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -16,6 +17,7 @@ import { expect, it } from "vitest";
 const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const modules: Record<string, object> = {
   ".": entry0,
+  "./verify": entry2,
   "./testing": entry1,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
@@ -34,7 +36,11 @@ it.each(entries)("resolves %s", (subpath, target) => {
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
   expect(Object.keys(modules[subpath] as object)).toContain(
-    subpath === "." ? "AuditWriter" : "createMemoryAuditPod",
+    subpath === "."
+      ? "AuditWriter"
+      : subpath === "./verify"
+        ? "verifyRange"
+        : "createMemoryAuditPod",
   );
 });
 

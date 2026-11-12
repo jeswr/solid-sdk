@@ -44,6 +44,8 @@ export interface MessageView {
   originalUrl?: string;
   read: boolean;
   starred: boolean;
+  /** Filed under Drafts: editable and discardable, never sent from here. */
+  draft: boolean;
   labels: string[];
   attachments: AttachmentView[];
 }
