@@ -26,6 +26,7 @@ import {
 } from "@/components/use-permissions";
 import {
   describeModes,
+  roleForModes,
   type CategoryAccess,
 } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
@@ -70,11 +71,14 @@ function ConnectedAppDetail() {
       const fresh = await getFreshModel();
       const grants = freshGrantsForCategory(fresh, app.agentId, categoryId);
       await permissionsBackend.revokeGrants(app.agentId, grants);
+      // Undo re-grants the same access, which is only possible when the
+      // revoked modes were exactly a role (never widened to the nearest one).
+      const canRestore = roleForModes(access.modes) !== undefined;
       toast.success(
         `${app.name} can no longer ${describeModes(access.modes)} your ${label}.`,
         {
           description: "You can grant access again anytime.",
-          action: {
+          action: canRestore ? {
             label: "Undo",
             onClick: () => {
               // Re-grant against a FRESH context too (the owner WebID / pod
@@ -97,7 +101,7 @@ function ConnectedAppDetail() {
                   toast.error(`Couldn't restore access to your ${label}.`);
                 });
             },
-          },
+          } : undefined,
         },
       );
       reload();
