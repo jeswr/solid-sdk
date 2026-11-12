@@ -1,0 +1,65 @@
+{
+  "name": "@jeswr/solid-environment",
+  "version": "0.1.0",
+  "private": false,
+  "securityCritical": false,
+  "description": "Generated SOSA/QUDT model for indoor air observations and numeric purifier state.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "x-authored-by": "AUTHORED-BY Codex GPT-6.1-Sol; AUTHORED-BY Codex GPT-6",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-environment"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology ../solid-federation-vocab/sectors/environment/environment.ttl --shapes codegen/environment.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "lint": "biome check src scripts test codegen/codegen.config.json package.json tsconfig*.json vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@jeswr/solid-federation-vocab": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "@zazuko/env-node": "^3.1.0",
+    "rdf-validate-shacl": "^0.6.5",
+    "@biomejs/biome": "^2.0.0",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  }
+}

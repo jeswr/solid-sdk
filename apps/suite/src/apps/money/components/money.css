@@ -1000,3 +1000,128 @@
 .mon-rules-error {
   color: var(--destructive);
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.mon-budget-month,
+.mon-budget-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.mon-budget-month p {
+  min-width: 9rem;
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+}
+.mon-budget-tools .mon-hint {
+  flex: 1;
+  min-width: 12rem;
+  margin: 0;
+}
+.mon-budget-summary,
+.mon-budget-empty,
+.mon-budget-ready,
+.mon-budget-group {
+  margin-bottom: var(--space-4);
+}
+.mon-budget-summary ul {
+  display: grid;
+  gap: var(--space-3);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.mon-budget-summary li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+}
+.mon-budget-summary li > span:last-child {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.mon-budget-ready p:last-child,
+.mon-budget-flag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.mon-budget-warning {
+  border: 1px solid var(--destructive);
+}
+.mon-budget-overspent,
+.mon-budget-warning p:last-child {
+  color: var(--destructive);
+}
+.mon-budget-group h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-base);
+}
+.mon-budget-table {
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+.mon-budget-table tbody th {
+  background: transparent;
+  color: var(--foreground);
+}
+.mon-budget-input input {
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.mon-budget-input span,
+.mon-budget-flag {
+  font-size: var(--text-xs);
+}
+.mon-budget-flag {
+  justify-content: flex-end;
+}
+@media (max-width: 599px) {
+  .mon-budget-table,
+  .mon-budget-table tbody,
+  .mon-budget-table tr,
+  .mon-budget-table td,
+  .mon-budget-table tbody th {
+    display: block;
+    width: 100%;
+  }
+  .mon-budget-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .mon-budget-table tr {
+    margin-bottom: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+  }
+  .mon-budget-table td,
+  .mon-budget-table tbody th {
+    border: 0;
+    padding: var(--space-2) 0;
+  }
+  .mon-budget-table td {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    text-align: right;
+    gap: var(--space-1) var(--space-3);
+  }
+  .mon-budget-table td::before {
+    content: attr(data-label);
+    text-align: left;
+    color: var(--foreground-muted);
+  }
+  .mon-budget-flag {
+    grid-column: 2;
+  }
+}

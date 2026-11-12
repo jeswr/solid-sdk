@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * MetadataStore over fake-indexeddb: CRUD, byUrl index, touch, per-identity
  * DB naming (§7 cache scoping).
  */
 import { afterEach, describe, expect, it } from 'vitest';
+import { keyRequest } from '../src/cache-policy.js';
 import { DEFAULT_DB_NAME, dbNameForWebId, MetadataStore } from '../src/metadata-store.js';
 import { DB_PREFIX } from '../src/scope.js';
 import type { CacheMetadata } from '../src/types.js';
@@ -51,6 +53,19 @@ describe('dbNameForWebId — §7 per-identity scoping', () => {
 });
 
 describe('MetadataStore CRUD', () => {
+  it('rolls back both halves of a replacement when metadata cannot be stored', async () => {
+    const s = await freshStore();
+    const previous = record();
+    const key = keyRequest(previous.url, previous.varyKey);
+    await s.replace(key, new Response('old bytes'), previous);
+    const invalid = { ...previous, etag: 'new', uncloneable: () => {} };
+    await expect(s.replace(key, new Response('new bytes'), invalid)).rejects.toMatchObject({
+      name: 'DataCloneError',
+    });
+    expect(await s.get(previous.key)).toEqual(previous);
+    expect(await (await s.bytes.match(key))?.text()).toBe('old bytes');
+  });
+
   it('puts and gets a record', async () => {
     const s = await freshStore();
     await s.put(record());
