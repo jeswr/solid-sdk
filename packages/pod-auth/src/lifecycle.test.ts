@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import type { RefreshSessionRecord } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
@@ -987,25 +988,16 @@ test.each([
   expect(f.record()).toBeUndefined();
 });
 
-test.each([
-  false,
-  true,
-])("rejecting a selected identity clears the owner and catalog alongside credentials; forgetFails=%s", async (forgetFails) => {
+test("rejecting a selected identity discards its grant, owner and catalog entry without a full forget", async () => {
   const f = fixture();
   f.options.ui.getWebId = async () => "https://id.example/bob";
-  if (forgetFails) {
-    const { DPoPTokenProvider } = await import("@jeswr/reactive-authentication");
-    const forget = DPoPTokenProvider.prototype.forget;
-    vi.spyOn(DPoPTokenProvider.prototype, "forget").mockImplementation(async function (
-      this: DPoPTokenProvider,
-    ) {
-      await forget.call(this);
-      throw new Error("forget failed");
-    });
-  }
+  // Only the rejected attempt's own grant is discarded; nothing is revoked or superseded.
+  const { DPoPTokenProvider } = await import("@jeswr/reactive-authentication");
+  const forget = vi.spyOn(DPoPTokenProvider.prototype, "forget");
   await f.sessions.setItem("unrelated", { keep: true });
   const auth = f.load();
-  await expect(auth.login()).rejects.toThrow(forgetFails ? "forget failed" : "selected account");
+  await expect(auth.login()).rejects.toThrow("selected account");
+  expect(forget).not.toHaveBeenCalled();
   expect(await auth.identity()).toBeNull();
   expect(f.record()).toBeUndefined();
   for (const name of ["owner", "accounts", "active"])

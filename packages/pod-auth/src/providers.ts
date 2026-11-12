@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
@@ -33,7 +34,12 @@ import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { namespaceFence } from "./namespace.js";
 import { secureUrl } from "./options.js";
-import { memoryStore, sessionStorage } from "./sessions.js";
+import {
+  type LoginOwnership,
+  memoryStore,
+  OwnershipChangedError,
+  sessionStorage,
+} from "./sessions.js";
 import type {
   CidSubject,
   GrantOwner,
@@ -662,7 +668,6 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
-    forget: async () => await persistence.exclusive(forget),
     retireIfOwnedBy: async (expected: GrantOwner, retiring: () => void) =>
       await persistence.exclusive(async () => {
         const result = await persistence.retirement(expected);
@@ -693,10 +698,25 @@ export function createProviders(
     },
     logout: async () => await persistence.exclusive(logout),
     /**
-     * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
-     * upgrade completed), so an abandoned login knows it must discard one.
+     * Rejects an authenticated identity. During a login attempt only that attempt's new grants are
+     * removed, restoring what they displaced; other contexts' grants, the owner and the pointer stay.
      */
-    login: async (value: LoginHint, signal: AbortSignal, granted: () => void = () => {}) => {
+    reject: async () => {
+      if (!persistence.attempting()) return await persistence.exclusive(forget);
+      boundary.clear();
+      await persistence.discard();
+    },
+    /**
+     * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
+     * upgrade completed), so an abandoned login knows it must discard one. `ownership` is checked under
+     * the namespace mutation lock before authorization and again before each publication.
+     */
+    login: async (
+      value: LoginHint,
+      signal: AbortSignal,
+      granted: () => void = () => {},
+      ownership: LoginOwnership = {},
+    ) => {
       let obtained = false;
       const grant = () => {
         obtained = true;
@@ -705,16 +725,19 @@ export function createProviders(
       codeRedeemed = grant;
       loginSignal = signal;
       try {
+        await persistence.exclusive(async () => await persistence.begin(ownership));
         await loginAttempt(value, signal, grant);
       } catch (error) {
-        // Nothing was granted: forget the abandoned attempt's account choice (memory only).
-        if (signal.aborted && !obtained) {
+        // Nothing was granted, or the rejected grant was discarded: forget the attempt's account choice.
+        if ((signal.aborted && !obtained) || error instanceof OwnershipChangedError) {
           hint = {};
           selections.clear();
+          boundary.clear();
         }
         throw error;
       } finally {
         // Logins are serialized by the caller, so this attempt owns both hooks until it ends.
+        persistence.end();
         codeRedeemed = undefined;
         loginSignal = undefined;
       }

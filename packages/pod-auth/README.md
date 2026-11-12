@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pod-auth
 
@@ -36,9 +37,27 @@ abort, and the call rejects once the attempt has wound down, with stored session
 grant had already arrived when the abort was seen, pod-auth discards it with a full `logout()` first. Protocol validation, PKCE,
 DPoP proofs, refresh machinery and discovery stay in the protocol engine. A missing issuer chooser
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
-Explicit WebID and issuer hints must agree with the profile and the authenticated identity.
+Explicit WebID and issuer hints must agree with the profile and the authenticated identity. An
+authenticated identity that disagrees is rejected, and only that attempt's new grant is discarded,
+restoring any grant it displaced for the same context; other contexts' grants, the owner record and
+the pointer stay as they were, and nothing is revoked or superseded.
 Concurrent logins with the same hint share one promise; different hints reject while login is pending.
 Call `logout()` before switching accounts on the same instance.
+
+Pass `expectRemembered` with the `remembered()` result a decision to sign in was based on. Login then
+rejects with `OwnershipChangedError` before authorization if the pointer differs. Under the namespace
+mutation lock, immediately before the attempt publishes a new grant owner and again before it writes
+the pointer, pod-auth checks that the pointer and the stored grant owner are unchanged since the
+attempt began. If another tab signed in meanwhile, the attempt discards only its own new grant and
+rejects with `OwnershipChangedError`. A pointer another tab already wrote for this attempt's own
+renewed grant (same WebID, issuer and context) is not a conflict. `reauthorize: true` (WebID hints
+only) authorizes interactively without redeeming any stored refresh credential: use it when a grant
+persistently fails refresh with an error other than `invalid_grant`, such as `invalid_client`, which
+restore and a plain login retry without reaching authorization. It rejects with
+`OwnershipChangedError` if the pointer or stored owner names another account. The new grant replaces
+the old one for that context; the old one stays catalogued so logout revokes it. A discarded grant is
+removed locally but not revoked, because per-grant revocation would supersede the shared fence.
+Ownership-guarded attempts are never shared with concurrent logins.
 
 For an issuer-only Solid login, the returned WebID must list that issuer as `solid:oidcIssuer`.
 The protocol engine enforces this binding with `verifyWebId: true` before storing a session or reporting

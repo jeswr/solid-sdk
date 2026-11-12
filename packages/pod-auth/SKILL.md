@@ -4,6 +4,7 @@ description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, res
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Work with `@jeswr/pod-auth`
 
@@ -64,7 +65,13 @@ Construct one core per application session. `ui.getCode` must return the complet
 including `state`, `code` and `iss`, honor cancellation and own popup/redirect cleanup. Choose among
 advertised issuers explicitly; omitting the chooser for multiple issuers throws `AmbiguousIssuerError`.
 Same-hint concurrent login is single-flight; different hints reject while login is pending. Log out
-before switching accounts. `identity()` reads claims only; it never refreshes, contacts an issuer or
+before switching accounts. Pass `login(hint, { expectRemembered })` with the `remembered()` result the
+sign-in decision used: pod-auth refuses before authorization if the pointer differs and compares the
+pointer and stored grant owner again under the namespace mutation lock before publishing the grant
+owner and the pointer, rejecting with `OwnershipChangedError` after discarding only that attempt's new
+grant. Use `reauthorize: true` (WebID hints only, same account only) to replace a grant whose refresh
+persistently fails with something other than `invalid_grant`. A rejected identity also discards only
+the attempt's own new grant, never other contexts' grants, the owner or the pointer. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 
 Use the pure `./directory` entry point for shared sign-in address handling. `KNOWN_PROVIDERS` is deeply
