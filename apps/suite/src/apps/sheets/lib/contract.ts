@@ -21,10 +21,10 @@
  * Both are interfaces so the UI can be exercised against fakes in unit tests.
  */
 
+import type { WorkbookMetadata } from "@jeswr/solid-sheets";
 import type { WorkbookCollaboration } from "./collaboration/persistence";
 import type { DraftAnchor } from "./comments/anchors";
 import type { CellAnchor } from "./comments/selector";
-import type { WorkbookMetadata } from "./model/rdf";
 import type { Snapshot } from "./model/snapshot";
 import type { StructuralEdit } from "./refs/model";
 
