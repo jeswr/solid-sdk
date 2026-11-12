@@ -245,11 +245,11 @@ class HealthInput {
     const identifier = safeHttpIri(value);
     if (identifier === undefined || identifier !== value) return this.invalid();
     if (clinicalCode && snomedIri(identifier)) return this.distinct(identifier);
-    let text = identifier;
+    let text = identifier.normalize("NFKC");
     for (let round = 0; round < 4; round += 1) {
       let decoded: string;
       try {
-        decoded = decodeURIComponent(text);
+        decoded = decodeURIComponent(text).normalize("NFKC");
       } catch {
         return this.invalid();
       }
@@ -257,7 +257,7 @@ class HealthInput {
       text = decoded;
     }
     // Residual escapes can hide another decoding layer; refuse instead of storing it.
-    if (text.includes("%") || containsCardNumber(text.normalize("NFKC"))) return this.invalid();
+    if (text.includes("%") || containsCardNumber(text)) return this.invalid();
     return this.distinct(identifier);
   }
 

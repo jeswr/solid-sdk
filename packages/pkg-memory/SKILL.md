@@ -54,8 +54,11 @@ also accept `{ decimal: "1.10" }` to preserve validated decimal scale. Read only
 own properties and validate snapshots before writing RDF; programming errors must
 surface. Inherited template headers are refused; throwing dispatch getters or proxies
 produce a fixed `Invalid fact template` error. Entity IRIs must be unchanged HTTP(S),
-distinct from each other and the owner. Scan the owner and every supplied IRI after
-repeated percent-decoding and NFKC folding. Exempt only Verhoeff-valid SNOMED CT
+distinct from each other and the owner. NFKC-normalize the owner and every supplied
+IRI before percent-decoding and after each of at most four decoding rounds, then
+refuse residual percent signs and scan for card numbers. This includes escapes
+introduced by Unicode percent signs or hex characters. Preserve the original IRI
+in RDF. Exempt only Verhoeff-valid SNOMED CT
 concept codes (6–18 ASCII digits, no leading zero, partition `00` or `10`) and
 exact `http://snomed.info/id/<id>` code or concept/product IRIs under an
 `http://snomed.info/` system. Partition `10` requires at least 11 digits, including

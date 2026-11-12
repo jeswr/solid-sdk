@@ -221,6 +221,30 @@ describe("health fact graphs", () => {
     ).toBeGreaterThan(0);
   });
 
+  it.each(templates)("%s: preserves benign NFKC-stable IRIs", (template) => {
+    const id = "https://example.org/clinical/café%2Dvisit";
+    const store = assertion(template, { ...examples[template], id });
+    expect(new RdfNode(id, store).oneIri(`${NS.health}patient`)).toBe(owner);
+  });
+
+  it("normalizes each decoding round while retaining the four-round bound", () => {
+    let suffix = "％４１";
+    for (let round = 0; round < 4; round += 1) {
+      const serviceProvider = `https://example.org/providers/${suffix}`;
+      const store = assertion("encounter", { ...encounter, serviceProvider });
+      expect(new RdfNode(encounter.id, store).oneIri(`${NS.health}careProvider`)).toBe(
+        serviceProvider,
+      );
+      suffix = encodeURIComponent(suffix);
+    }
+    expect(() =>
+      assertion("encounter", {
+        ...encounter,
+        serviceProvider: `https://example.org/providers/${suffix}`,
+      }),
+    ).toThrow(new Error("Invalid encounter"));
+  });
+
   it("emits a vaccine product with a nested code and occurrence", async () => {
     await matches(
       assertion("immunization"),
@@ -342,6 +366,38 @@ describe("health template refusal boundaries", () => {
       new Error(`Invalid ${template}`),
     );
   }
+
+  // Encoded separators keep the undecoded hex digits from accidentally matching the detector.
+  const encodedPan = Array.from(
+    pan.replaceAll(" ", "/"),
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  ).join("");
+  const fullwidth = (text: string) =>
+    text.replace(/[0-9A-F]/g, (character) => String.fromCharCode(character.charCodeAt(0) + 0xfee0));
+
+  it.each([
+    ["fullwidth percent", encodedPan.replaceAll("%", "％")],
+    ["small percent", encodedPan.replaceAll("%", "﹪")],
+    ["fullwidth hex digits", fullwidth(encodedPan)],
+    ["fullwidth percent and hex digits", fullwidth(encodedPan).replaceAll("%", "％")],
+    ["fullwidth hex letters", fullwidth(encodeURIComponent("４１１１１１１１１１１１１１１１"))],
+    ["malformed", "﹪ＦＦ"],
+  ])("refuses %s escapes in every clinical IRI role without disclosing values", (_label, payload) => {
+    for (const suffix of [payload, encodeURIComponent(payload)]) {
+      const id = `https://example.org/${suffix}`;
+      for (const template of templates) {
+        refuses(template, { ...examples[template], id });
+        expect(() => createFactAssertion(id, fact(template, examples[template]))).toThrow(
+          new Error(`Invalid ${template}`),
+        );
+      }
+      refuses("observation", { ...observation, code: { ...code, id } });
+      refuses("observation", { ...observation, code: { ...code, system: id } });
+      refuses("immunization", { ...immunization, vaccine: { id } });
+      refuses("immunization", { ...immunization, vaccine: { ...code, system: id } });
+      refuses("encounter", { ...encounter, serviceProvider: id });
+    }
+  });
 
   it("refuses card numbers in numeric and lexical decimals without echoing their digits", () => {
     for (const value of [

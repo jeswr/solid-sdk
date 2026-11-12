@@ -116,9 +116,11 @@ the decimal point or other separators, so some large clinical values are refused
 The `kind` and temporal datatype fields use closed enums. Entity IRIs must be unchanged
 HTTP(S) IRIs accepted by `safeHttpIri`; all entity, concept, vaccine, coding-system
 and provider identifiers must differ from each other and from the owner. The owner
-and all supplied IRIs are percent-decoded up to four rounds and NFKC-normalized
-before card-number scanning;
-malformed or residual percent escapes are refused. The sole exemption is clinical
+and all supplied IRIs are NFKC-normalized before percent-decoding and after each
+of at most four decoding rounds, then scanned for card numbers. Malformed or
+residual percent escapes in the normalized text are refused, including escapes
+introduced by fullwidth or small percent signs and fullwidth hex characters.
+The original IRI is retained in the RDF. The sole exemption is clinical
 coding under an `http://snomed.info/` system: a Verhoeff-valid SNOMED CT concept
 identifier (6–18 ASCII digits, no leading zero, partition `00` or `10`), either
 as digits or an exact `http://snomed.info/id/<id>` code or concept/product IRI.
