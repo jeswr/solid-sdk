@@ -117,8 +117,10 @@ export function groupNetflixEntries(entries: readonly ConnectorEntry[]): Connect
       result.push(entry);
       continue;
     }
+    // Season/Series markers always mean TV; Part/Volume/Book/Chapter only when an episode
+    // segment follows, because films use them too ("John Wick: Chapter 2").
     const episodic =
-      /^(.+?):\s*((?:(?:season|series|part|volume|book|chapter)\s+\d+|limited series)\b.*)$/i.exec(
+      /^(.+?):\s*((?:(?:season|series)\s+\d+|limited series)\b.*|(?:part|volume|book|chapter)\s+\d+\s*:.*)$/i.exec(
         entry.data.title,
       );
     if (!episodic) {

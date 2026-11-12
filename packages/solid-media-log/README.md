@@ -69,8 +69,9 @@ capability discovery; do not infer this option from arbitrary pod data.
 `connectorEntries` reads **the existing typed pod-connectors wrappers**, without mutating imports:
 
 - Netflix `schema:WatchAction`: title and `startTime`; `groupNetflixEntries` groups episode titles
-  with explicit `Season N`, `Series N`, `Limited Series`, `Part N`, `Volume N`, `Book N` or
-  `Chapter N` markers after a show name into one in-progress series across documents. Progress counts distinct episode titles, so
+  with explicit `Season N`, `Series N` or `Limited Series` markers after a show name, or `Part N`,
+  `Volume N`, `Book N` or `Chapter N` followed by an episode segment (`Show: Volume 1: Episode`),
+  into one in-progress series across documents. Films such as `John Wick: Chapter 2` stay films. Progress counts distinct episode titles, so
   rewatches do not inflate it. Film subtitles and `Episode IV` alone do not imply TV. Standalone titles
   are films by default and can be corrected by the user. No episode count implies series completion.
 - Goodreads `schema:Book`: title, author, personal rating and reading shelf. The existing

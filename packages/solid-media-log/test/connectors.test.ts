@@ -168,6 +168,10 @@ it.each([
   "Mission: Impossible: Fallout",
   "A Film: Parting Ways",
   "A Film: Season of Rain",
+  "John Wick: Chapter 2",
+  "John Wick: Chapter 3 – Parabellum",
+  "Kill Bill: Volume 1",
+  "Harry Potter and the Deathly Hallows: Part 2",
 ])("does not turn the film subtitle %s into a series", (title) => {
   const item = {
     id: "https://pod.example/netflix#film",
