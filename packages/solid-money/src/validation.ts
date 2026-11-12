@@ -1,7 +1,17 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
+import { sanitizeText } from "@jeswr/model-runtime";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
-import { parseDate } from "../import/values";
-import type { Money, Range, Transaction } from "./types";
+import type { Money, Range, Transaction } from "./types.js";
+import { parseDate } from "./values.js";
+
+/**
+ * True when `value` still has visible text after the generated writers strip
+ * control characters, so validation agrees with what is actually stored.
+ */
+export function hasText(value: string): boolean {
+  return sanitizeText(value).trim() !== "";
+}
 
 export function iri(value: string): string {
   if (safeHttpIri(value) !== value) throw new TypeError("Invalid money resource IRI");

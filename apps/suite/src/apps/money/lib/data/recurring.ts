@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import type { Transaction } from "@jeswr/solid-money";
 import type { Recurrence } from "../forecast";
-import type { Transaction } from "../model";
 import { formatMoney, minorUnits, parseMoney } from "../reports";
 
 export interface RecurringPayment {

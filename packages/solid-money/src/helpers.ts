@@ -1,7 +1,8 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-import { parseAmount } from "../import/values";
-import type { Balance, Category, Money, Range, Transaction } from "./types";
-import { instant, iri, validateMoney, validateRange, validateTransaction } from "./validation";
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+
+import type { Balance, Category, Money, Range, Transaction } from "./types.js";
+import { instant, iri, validateMoney, validateRange, validateTransaction } from "./validation.js";
+import { parseAmount } from "./values.js";
 
 export function monthKey(at: string): string {
   return new Date(instant(at)).toISOString().slice(0, 7);

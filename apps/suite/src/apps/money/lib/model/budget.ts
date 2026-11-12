@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { iri } from "@jeswr/solid-money";
 import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralAs,
@@ -13,7 +15,6 @@ import {
 import { DataFactory } from "n3";
 import { type Allocation, calculateBudget, formatMoney, parseMoney } from "../budget";
 import { type MoneyDocument, MoneyNode, putMoney } from "./rdf";
-import { iri } from "./validation";
 
 export const BUDGET = {
   type: `${NS.FINANCE}Budget`,

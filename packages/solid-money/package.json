@@ -1,0 +1,55 @@
+{
+  "name": "@jeswr/solid-money",
+  "version": "0.1.0",
+  "description": "Generated finance RDF model with exact decimal amounts for Solid money applications",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-money"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/solid-money/tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/money.ontology.ttl --shapes codegen/money.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "lint": "pnpm -w exec biome check packages/solid-money",
+    "typecheck": "pnpm -w exec tsc -p packages/solid-money/tsconfig.json --noEmit",
+    "test": "pnpm -w exec vitest run --root packages/solid-money"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
+    "@rdfjs/wrapper": "0.34.0",
+    "n3": "2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "^25.9.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

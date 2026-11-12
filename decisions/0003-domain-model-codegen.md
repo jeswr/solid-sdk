@@ -62,6 +62,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | implemented: generated Task + RecurrenceRule composite and Calendar behind facades; sector ratchet still open (normative) | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
+| W2 Suite Money extraction | implemented: generated finance field core plus exact-decimal/blank-node/date compatibility views; Suite consumes the shared package | `packages/solid-money`, `apps/suite` | sst-ild.7 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
