@@ -322,6 +322,7 @@ it("words the toast from the recorded choices when another tab approved first", 
     expiryEnforced: false,
     recorded: {
       dataTypes: [ACTIVITY_CLASS],
+      grantedTypes: [ACTIVITY_CLASS],
       role: "editor",
       expiresAt: new Date("2027-01-01T00:00:00Z"),
     },
@@ -498,7 +499,7 @@ it("names what a finished approval recorded when the SDK reports it", async () =
     receiptUrl: `${ROOT}r`,
     notified: true,
     expiryEnforced: false,
-    recorded: { dataTypes: [SLEEP], role: "viewer" },
+    recorded: { dataTypes: [SLEEP], grantedTypes: [SLEEP], role: "viewer" },
   });
   await review();
   await click(button(dialog(), "Share"));

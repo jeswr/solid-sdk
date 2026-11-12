@@ -254,8 +254,8 @@ export function finishedMessage(name: string, notified: boolean): string {
 
 /**
  * What an approval actually applied, from the choices the SDK recorded. They can differ from what
- * this sheet sent: another tab may have approved first. Only data types a role granted are named,
- * and a Viewer approval can only see.
+ * this sheet sent: another tab may have approved first. Only data types that were granted a mode
+ * are named (a change-only type under a Viewer approval was not), and a Viewer approval can only see.
  */
 export function recordedMessage(
   name: string,
@@ -264,7 +264,7 @@ export function recordedMessage(
   notified: boolean,
 ): string {
   const chosen = cards.filter((card) =>
-    card.shareableTypes.some((type) => recorded.dataTypes.includes(type)),
+    card.shareableTypes.some((type) => recorded.grantedTypes.includes(type)),
   );
   if (chosen.length === 0) return finishedMessage(name, notified);
   const change = recorded.role !== "viewer" && chosen.some((card) => card.modes.includes("write"));

@@ -68,12 +68,18 @@ export interface DecideOptions {
 }
 
 /**
- * The owner's choices an approval recorded when it was pinned, in the shape of a
- * {@link RequestDecision}: passing them back resumes that approval.
+ * The owner's choices an approval recorded when it was pinned. `dataTypes`, `role` and `expiresAt`
+ * are a {@link RequestDecision}'s: passing them back resumes that approval.
  */
 export interface RecordedChoices {
   /** The approved data types, sorted and deduplicated (the request's own when none were chosen). */
   dataTypes: string[];
+  /**
+   * The approved data types that were actually granted a mode, sorted: a type with no mode of its
+   * own, or one that asked only to change data under a Viewer approval, is left out. Name these
+   * when saying what was shared.
+   */
+  grantedTypes: string[];
   /**
    * "viewer" when the approval narrowed to requested Read; otherwise "editor", meaning each target
    * got the role its requested modes map to, as `RequestDecision.role` means.
@@ -370,6 +376,17 @@ function withinRequest(snapshot: Snapshot, entry: RequestEntry): boolean {
   );
 }
 
+/** Sorted, unique strings: the only form decide() records a list of data types in. */
+function isSortedSet(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item, index) =>
+        typeof item === "string" && (index === 0 || (value[index - 1] as string) < item),
+    )
+  );
+}
+
 /** A recorded timestamp exactly as `Date.prototype.toISOString` writes it. */
 function isIsoInstant(value: unknown): boolean {
   if (typeof value !== "string") return false;
@@ -381,6 +398,7 @@ function isIsoInstant(value: unknown): boolean {
 function recordedChoices(snapshot: Snapshot): RecordedChoices {
   return {
     dataTypes: [...snapshot.chosen.dataTypes],
+    grantedTypes: [...snapshot.dataTypes],
     role: snapshot.chosen.viewer ? "viewer" : "editor",
     ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
   };
@@ -396,7 +414,11 @@ async function validateSnapshot(
     !withinRequest(snapshot, entry) ||
     snapshot.schemaVersion !== "1" ||
     (snapshot.expiresAt !== undefined && !isIsoInstant(snapshot.expiresAt)) ||
-    !Array.isArray(snapshot.chosen?.dataTypes) ||
+    // The owner's choices are a sorted set of requested types, holding every granted type.
+    !isSortedSet(snapshot.chosen?.dataTypes) ||
+    !snapshot.chosen.dataTypes.every((type) => entry.dataTypes.includes(type)) ||
+    !isSortedSet(snapshot.dataTypes) ||
+    !snapshot.dataTypes.every((type) => snapshot.chosen.dataTypes.includes(type)) ||
     typeof snapshot.chosen.viewer !== "boolean" ||
     snapshot.targets.length === 0 ||
     snapshot.targets.length > MAX_MEMBERS ||
@@ -768,6 +790,9 @@ export async function decide(
   };
 }
 
+/** How many decision-record lookups a listing runs at once. */
+const RECORD_LOOKUPS = 4;
+
 /**
  * Attach to each pending or Approving request the choices of the approval the owner's records
  * hold for it, if any. Read-only: a records folder that is not sealed yet holds no trusted record,
@@ -795,23 +820,32 @@ export async function withRecordedChoices(
     return entries;
   }
   if (key === undefined) return entries;
-  const out: AccessRequestEntry[] = [];
-  for (const entry of entries) {
-    if (open(entry)) {
-      try {
-        // An open request matches only an approval still in progress, never a finished record.
-        const slot = (await findSlot(storage, key, entry, owner, fetchFn)) as Slot;
-        const snapshot = slot.record?.snapshot;
-        if (snapshot !== undefined) {
-          await validateSnapshot(snapshot, entry, slot.url, { webId: owner, storage });
-          out.push({ ...entry, recorded: recordedChoices(snapshot) });
-          continue;
-        }
-      } catch {
-        options.signal?.throwIfAborted();
-      }
+  const records = key;
+  const lookup = async (entry: RequestEntry): Promise<RecordedChoices | undefined> => {
+    try {
+      // An open request matches only an approval still in progress, never a finished record.
+      const slot = (await findSlot(storage, records, entry, owner, fetchFn)) as Slot;
+      const snapshot = slot.record?.snapshot;
+      if (snapshot === undefined) return undefined;
+      await validateSnapshot(snapshot, entry, slot.url, { webId: owner, storage });
+      return recordedChoices(snapshot);
+    } catch {
+      options.signal?.throwIfAborted();
+      return undefined;
     }
-    out.push(entry);
-  }
+  };
+  // A few lookups at a time, each entry keeping its place.
+  const out = [...entries];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < entries.length) {
+      const index = next++;
+      const entry = entries[index] as AccessRequestEntry;
+      if (!open(entry)) continue;
+      const recorded = await lookup(entry);
+      if (recorded !== undefined) out[index] = { ...entry, recorded };
+    }
+  };
+  await Promise.all(Array.from({ length: RECORD_LOOKUPS }, worker));
   return out;
 }

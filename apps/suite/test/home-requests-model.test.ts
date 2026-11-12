@@ -344,39 +344,52 @@ describe("data type cards", () => {
     expect(deniedMessage("Bob", true)).toBe("You denied Bob's request.");
     expect(deniedMessage("Bob", false)).toContain("We couldn't tell Bob;");
     expect(finishedMessage("Bob", true)).toBe("You finished approving Bob's request.");
+    expect(finishedMessage("Bob", false)).toContain("We couldn't tell Bob;");
+    expect(EXPIRY_NOT_ENFORCED).toBe(
+      "Access won't end automatically on this storage; remove it from Permissions when you're done.",
+    );
   });
 
   it("words an approval from the choices the SDK recorded, not the ones sent", () => {
     const Doc = "https://vocab.example/Doc";
+    const Other = "https://vocab.example/Other";
     const cards = requestCards({
       dataTypes: [STEPS, Doc],
       modesByType: { [STEPS]: ["read"], [Doc]: ["read", "write"] },
     });
-    expect(recordedMessage("MaraCoach", cards, { dataTypes: [STEPS], role: "editor" }, true)).toBe(
-      "MaraCoach can now see your Activity.",
-    );
+    const both = { dataTypes: [STEPS, Doc], grantedTypes: [STEPS, Doc] };
     expect(
-      recordedMessage("MaraCoach", cards, { dataTypes: [STEPS, Doc], role: "editor" }, false),
-    ).toBe(
+      recordedMessage("MaraCoach", cards, { ...both, grantedTypes: [STEPS], role: "editor" }, true),
+    ).toBe("MaraCoach can now see your Activity.");
+    expect(recordedMessage("MaraCoach", cards, { ...both, role: "editor" }, false)).toBe(
       "MaraCoach can now see and change your Activity and Doc. We couldn't tell MaraCoach; they'll see it next time they check.",
     );
     // A Viewer approval can only see, whatever was asked for.
-    expect(recordedMessage("MaraCoach", cards, { dataTypes: [Doc], role: "viewer" }, true)).toBe(
-      "MaraCoach can now see your Doc.",
-    );
+    expect(
+      recordedMessage("MaraCoach", cards, { ...both, grantedTypes: [Doc], role: "viewer" }, true),
+    ).toBe("MaraCoach can now see your Doc.");
+    // Chosen but not granted (it asked only to change, under a Viewer approval): not named.
+    const changeOnly = requestCards({
+      dataTypes: [STEPS, Doc],
+      modesByType: { [STEPS]: ["read"], [Doc]: ["write"] },
+    });
+    expect(
+      recordedMessage(
+        "MaraCoach",
+        changeOnly,
+        { ...both, grantedTypes: [STEPS], role: "viewer" },
+        true,
+      ),
+    ).toBe("MaraCoach can now see your Activity.");
     // Recorded types this sheet has no card for: name none.
     expect(
       recordedMessage(
         "Bob",
         cards,
-        { dataTypes: ["https://vocab.example/Other"], role: "editor" },
+        { dataTypes: [Other], grantedTypes: [Other], role: "editor" },
         true,
       ),
     ).toBe("You finished approving Bob's request.");
-    expect(finishedMessage("Bob", false)).toContain("We couldn't tell Bob;");
-    expect(EXPIRY_NOT_ENFORCED).toBe(
-      "Access won't end automatically on this storage; remove it from Permissions when you're done.",
-    );
   });
 });
 

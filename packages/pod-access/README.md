@@ -680,12 +680,14 @@ notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `mo
 (`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
 only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, `decidedAt?`,
 and `recorded?`. Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
-A pending or Approving entry carries `recorded` (the same `{ dataTypes, role, expiresAt? }` shape
-`decide` returns, below) when the owner's own records already pin an approval of it, for example one
-another tab started and did not finish. That lookup reads only: it writes nothing (not even sealing
-the records folder), attaches nothing while the records folder is missing, unsealed or shared, and
-leaves out a record that can't be read or doesn't validate. Passing the recorded choices back to
-`decide` finishes that approval.
+A pending or Approving entry carries `recorded` (the same `{ dataTypes, grantedTypes, role,
+expiresAt? }` shape `decide` returns, below) when the owner's own records already pin an approval of
+it, for example one another tab started and did not finish. That lookup reads only: it writes
+nothing (not even sealing the records folder), runs at most four record lookups at once, attaches
+nothing while the records folder is missing, unsealed, shared, lacking the owner's full control, or
+advertised as not WAC by its own Link header (then nothing further is probed), and leaves out a
+record that can't be read, names another request or doesn't validate. Cancellation propagates.
+Passing the recorded `dataTypes`, `role` and `expiresAt` back to `decide` finishes that approval.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
@@ -732,14 +734,17 @@ payload is refused against a pin with an end date or a Viewer role. Completed de
 idempotent and grant nothing new, whatever choices the call passes; reversing approval/denial is
 rejected.
 
-An approval's result carries `recorded: { dataTypes, role, expiresAt? }`: the choices its pinned
-decision recorded, which is what was applied. They can differ from the call's own choices when
-another call (another tab) pinned or finished the approval first, so word confirmations from
+An approval's result carries `recorded: { dataTypes, grantedTypes, role, expiresAt? }`: the choices
+its pinned decision recorded, which is what was applied. They can differ from the call's own choices
+when another call (another tab) pinned or finished the approval first, so word confirmations from
 `recorded`, not from what was sent. `dataTypes` are the approved types, sorted (the request's own
-when none were chosen); `role` is `viewer` when the approval narrowed to Read, otherwise `editor`
+when none were chosen). `grantedTypes` are those of them that were granted a mode, sorted: a type
+with no permission of its own, or one that asked only to change data under `role: "viewer"`, is
+left out, so name `grantedTypes` when saying what was shared. `role` is `viewer` when the approval narrowed to Read, otherwise `editor`
 (each target got the role its requested modes map to, as `RequestDecision.role` means); `expiresAt`
-is absent for access until revoked. A denial has no `recorded`. A pinned end date that is not
-exactly the instant `decide` wrote is refused as an invalid snapshot. Denial receipt writes can also be retried. Requester-supplied grant/receipt
+is absent for access until revoked. A denial has no `recorded`. A pinned snapshot is refused as
+invalid unless its chosen and granted data types are sorted, unique strings, the chosen ones are all
+requested, every granted one was chosen, and its end date is exactly the instant `decide` wrote. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
 **WAC does not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in

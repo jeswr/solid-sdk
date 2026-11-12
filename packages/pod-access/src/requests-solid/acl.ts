@@ -299,7 +299,9 @@ export async function ensureOwnerOnlyContainer(
  * The records key of an already private records folder, sealing it first if needed; undefined
  * while the folder or its ACL does not exist yet (so no decision record can exist either). Writes
  * nothing to a pod without a records folder ACL. With `seal` false it writes nothing at all: a
- * folder not sealed yet has no key (and so no trusted record) and gives undefined.
+ * folder not sealed yet has no key (and so no trusted record) and gives undefined, and so does a
+ * folder whose own Link header already shows it is not WAC (an ACP `accessControl` link, or no
+ * `acl` link), without probing further.
  */
 export async function recordsKey(
   container: string,
@@ -312,6 +314,11 @@ export async function recordsKey(
   const head = await fetchFn(container, { method: "HEAD" });
   if (head.status === 404) return undefined;
   if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
+  if (!seal) {
+    const links = head.headers.get("link") ?? "";
+    if (link(links, ACP_ACCESS_CONTROL, container) || !link(links, "acl", container))
+      return undefined;
+  }
   const url = await aclUrl(container, storage, fetchFn);
   const existing = await read(url, fetchFn);
   if (!existing) return undefined;

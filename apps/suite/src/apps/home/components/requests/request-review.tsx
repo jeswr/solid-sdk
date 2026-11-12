@@ -70,7 +70,8 @@ const RECORDED =
   "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here";
 /**
  * An approval is pinned that this sheet didn't send (or can't show): finishing applies the choices
- * recorded when it started, which the SDK doesn't expose, so no cards are shown for it.
+ * recorded when it started. This sheet doesn't show them as cards (listed entries carry them as
+ * `recorded`, and the finished approval's result reports them for the toast).
  */
 export const RECORDED_TEXT = `${RECORDED}, or deny it.`;
 /** RECORDED_TEXT once denying was refused for good. */
