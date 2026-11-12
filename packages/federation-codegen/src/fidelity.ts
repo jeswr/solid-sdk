@@ -37,6 +37,7 @@ import {
   isHttpPattern,
   linkTargetConforms,
 } from "./compile.js";
+import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { compareStrings } from "./rdf.js";
 import {
@@ -514,7 +515,8 @@ function assertCompositeFidelity(
       if (
         node.name !== composite.root &&
         constraint.hasClass !== undefined &&
-        constraint.conceptIris === undefined
+        constraint.conceptIris === undefined &&
+        field.hasClass === undefined
       ) {
         throw new FidelityError(
           `child shape sh:class constraint ${field.predicate} requires a projected composite link`,
@@ -593,6 +595,31 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   const owners = compiled.manifest.entities.flatMap<ManifestEntity | ManifestNode>((e) =>
     isCompositeEntity(e) ? e.nodes : [e],
   );
+  const invariants = shapeInvariants(shapes);
+  for (const owner of owners) {
+    const shape = shapes.nodeShapes.find((s) => owner.typeIris.includes(s.targetClass));
+    if (
+      JSON.stringify(owner.invariants ?? []) !==
+      JSON.stringify(shape ? (invariants.byClass.get(shape.targetClass) ?? []) : [])
+    )
+      throw new FidelityError(`invariant mismatch for ${owner.name}`);
+    for (const field of owner.fields) {
+      const c = shape?.properties.find((p) => p.pathIri === field.predicate);
+      if (JSON.stringify(field.hasValue) !== JSON.stringify(c ? propertyHasValue(c) : undefined))
+        throw new FidelityError(`hasValue mismatch for ${owner.name}.${field.name}`);
+      if (
+        field.kind !== "nested" &&
+        field.hasClass !==
+          (c && propertySources(c).some((s) => invariants.collectionLinks.has(s.shapeIri))
+            ? c.hasClass
+            : undefined)
+      )
+        throw new FidelityError(`collection class mismatch for ${owner.name}.${field.name}`);
+    }
+    for (const c of shape?.properties ?? [])
+      if (propertyHasValue(c) && !owner.fields.some((f) => f.predicate === c.pathIri))
+        throw new FidelityError(`omitted hasValue field ${c.pathIri}`);
+  }
   for (const owner of owners)
     for (const field of owner.fields) {
       const c = shapes.nodeShapes

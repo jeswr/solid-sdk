@@ -16,6 +16,12 @@
 
 import { literalMapper } from "./datatypes.js";
 import { isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import {
+  type EntityInvariant,
+  type HasValueConstraint,
+  validateEntityInvariants,
+  validateHasValue,
+} from "./invariants.js";
 
 /** The manifest schema version this runtime interprets. */
 export const MANIFEST_VERSION = 1 as const;
@@ -32,10 +38,9 @@ const CAP = {
   prefixes: 256,
   string_len: 4096,
   in_values: 1024,
-  // A composite manifest nests two levels deeper than a flat one
-  // (entities → nodes → fields → guards → value), so this bounds that shape with
-  // headroom while staying a small recursion-bomb guard.
-  default_object_depth: 10,
+  // Allow the independently checked 16-atom / four-logical-level invariant grammar
+  // inside a composite node. Unknown nested payloads still fail the closed key checks.
+  default_object_depth: 32,
   /** Nodes per composite entity (root + sub-nodes). */
   nodes_per_composite: 64,
 } as const;
@@ -86,6 +91,7 @@ export interface ManifestOrdered {
 export const MAX_ORDERED_ITEMS = 256;
 
 export interface ManifestField {
+  hasValue?: HasValueConstraint;
   /** The JS/TS accessor name (allowlisted charset, reserved-name-checked). */
   name: string;
   /** The full predicate IRI. */
@@ -104,7 +110,7 @@ export interface ManifestField {
   kind: "iri" | "literal" | "nested";
   /** For a `nested` field: the name of the target sub-node within the composite. */
   node?: string;
-  /** Nested link's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
+  /** Link/IRI collection's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
   hasClass?: string;
   /** True when the source link has sh:class but no sh:node; its target must match exactly. */
   classOnly?: true;
@@ -127,6 +133,7 @@ export interface ManifestField {
 }
 
 export interface ManifestEntity {
+  invariants?: EntityInvariant[];
   /** The entity name (also the generated Wrapper / TS type base name). */
   name: string;
   /** Discriminator — a FLAT (single-node) entity. Absent is treated as `"flat"`. */
@@ -148,6 +155,7 @@ export interface ManifestEntity {
  * one incoming link; the graph is acyclic and spans every node).
  */
 export interface ManifestNode {
+  invariants?: EntityInvariant[];
   /** The node name — unique within the composite; referenced by `nested` fields. */
   name: string;
   /** The `rdf:type` IRI(s) this node is stamped with / recognised by. */
@@ -292,6 +300,7 @@ const GUARD_KEYS = new Set<string>([
   "nonBlank",
 ]);
 const FIELD_KEYS = new Set<string>([
+  "hasValue",
   "name",
   "predicate",
   "aliasPredicates",
@@ -311,6 +320,7 @@ const FIELD_KEYS = new Set<string>([
   "guards",
 ]);
 const ENTITY_KEYS = new Set<string>([
+  "invariants",
   "name",
   "kind",
   "typeIris",
@@ -319,7 +329,14 @@ const ENTITY_KEYS = new Set<string>([
   "fields",
 ]);
 const COMPOSITE_ENTITY_KEYS = new Set<string>(["name", "kind", "root", "nodes"]);
-const NODE_KEYS = new Set<string>(["name", "typeIris", "aliasTypeIris", "fragment", "fields"]);
+const NODE_KEYS = new Set<string>([
+  "invariants",
+  "name",
+  "typeIris",
+  "aliasTypeIris",
+  "fragment",
+  "fields",
+]);
 const ROOT_KEYS = new Set<string>(["manifestVersion", "runtime", "prefixes", "entities"]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -410,6 +427,7 @@ function validateNestedField(
   const node = checkString(raw.node, "field.node (required for a nested field)");
   if (!NAME_RE.test(node)) fail(`field.node "${node}" is not a valid node name`);
   for (const forbidden of [
+    "hasValue",
     "aliasPredicates",
     "datatype",
     "collection",
@@ -467,7 +485,6 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     return validateNestedField(raw, name, predicate);
   }
   if (raw.node !== undefined) fail("field.node is only allowed on a nested field");
-  if (raw.hasClass !== undefined) fail("field.hasClass is only allowed on a nested field");
   if (raw.classOnly !== undefined) fail("field.classOnly is only allowed on a nested field");
   if (raw.kind !== "iri" && raw.kind !== "literal") {
     fail('field.kind must be "iri", "literal", or "nested"');
@@ -491,6 +508,11 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
 
   const field: ManifestField = { name, predicate, kind };
+  if (raw.hasClass !== undefined) {
+    if (kind !== "iri" || collection !== "set")
+      fail("field.hasClass requires a nested link or IRI collection");
+    field.hasClass = checkIri(raw.hasClass, "field.hasClass");
+  }
   if (raw.aliasPredicates !== undefined) {
     field.aliasPredicates = validateAliases(
       raw.aliasPredicates,
@@ -608,6 +630,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     });
     if (field.default !== undefined) checkIri(field.default, "field.default");
   }
+  if (raw.hasValue !== undefined) field.hasValue = validateHasValue(raw.hasValue, field);
   return field;
 }
 
@@ -736,6 +759,7 @@ function validateEntity(raw: Record<string, unknown>): ManifestEntity {
     ...(raw.aliasTypeIris !== undefined
       ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "entity.aliasTypeIris") }
       : {}),
+    ...(raw.invariants !== undefined ? { invariants: raw.invariants as EntityInvariant[] } : {}),
     subject: { convention },
     fields,
   };
@@ -772,6 +796,7 @@ function validateNode(raw: unknown, seenFieldNames: Set<string>): ManifestNode {
       ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "node.aliasTypeIris") }
       : {}),
     fragment,
+    ...(raw.invariants !== undefined ? { invariants: raw.invariants as EntityInvariant[] } : {}),
     fields,
   };
 }
@@ -921,6 +946,7 @@ export function validateManifest(input: unknown): ModelManifest {
 
   validatePredicateAliases(entities);
   validateTypeAliases(entities);
+  validateEntityInvariants(entities);
 
   return {
     manifestVersion: MANIFEST_VERSION,

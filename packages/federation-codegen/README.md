@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
@@ -47,7 +48,7 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
   silently-incomplete model (missing labels, un-domained/ranged properties, a literal without a
   datatype, a class without a NodeShape). SHACL components are allowlisted: direct property paths,
   datatype/IRI term kinds, cardinality, enums, numeric bounds, string minimum length, and composite
-  `sh:class`/`sh:node` links. Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
+  `sh:class`/`sh:node` links, scalar `sh:hasValue`, and bounded node invariants (below). Only `^https?://`, `^https://` (emits `iriScheme: "https"`), and
   the nonblank string pattern `\S` have reviewed closed guards; other patterns and components
   are admission errors, including on node shapes. Reject implicit class targets: a shape
   that is a SHACL instance of `rdfs:Class` or `owl:Class` in the shapes graph (directly or via
@@ -363,3 +364,55 @@ the package command.
 ## Licence
 
 MIT © Jesse Wright
+
+
+## Fixed values and bounded logical invariants
+
+Property-level `sh:hasValue` accepts exactly one IRI or admitted typed literal on a
+scalar/enum field (`sh:maxCount 1`). It must satisfy the conjoined datatype, concept
+class/`sh:in`, bounds and lexical guards. Literals must match the runtime writer's
+canonical lexical form. Conflicting merged fixed values, collections, ordered fields,
+composite links and fixed-value defaults fail closed. The manifest retains the exact
+term and strongest contributing severity. Generated TypeScript retains the base
+scalar/enum type; it does not narrow a fixed value to e.g. `true`.
+
+Node-level `sh:not`, `sh:and` and `sh:or` accept only this grammar:
+
+```text
+Expr = [ sh:path P; sh:hasValue V ]
+     | [ sh:path P; sh:qualifiedMinCount N; sh:qualifiedValueShape Expr ]
+     | [ sh:not Expr ] | [ sh:and (Expr ...) ] | [ sh:or (Expr ...) ]
+```
+
+Every path is a single predicate IRI identifying a projected field on the current
+entity. Qualified paths must be composite links or IRI collections with a projected
+`sh:class` target; the inner expression uses that target's fields. Collection links
+retain `hasClass` for data-graph membership checks. Lists must be nonempty and well
+formed; expression/list nodes cannot be shared or cyclic. Logical depth is at most
+four (a qualified context change adds no level), total atoms at most sixteen per
+source NodeShape, and N is a positive `xsd:integer` at most sixteen. Each qualified
+atom and its inner atoms count towards that total. The parser checks these limits
+before general blank-node identity refinement.
+
+Expression nodes accept only their operator's predicates. At a logical NodeShape,
+ordinary shape structure plus `sh:message`, `sh:severity`, `rdfs:label` and
+`rdfs:comment` are allowed. Nested annotations, `sh:node` operands, `sh:xone`,
+qualified maxima/disjointness, complex/alternative expression paths and unknown
+predicates remain rejected. Every merged source shape contributes its own invariant,
+source IRI, severity (default Violation) and message, in deterministic shape order.
+Fidelity independently re-reads the graph and checks those trees, fixed values and
+collection classes exactly. The diet fixture pins model JSON bytes and compares its
+safety cases with emitted SHACL validation.
+
+Runtime parses reject false Violation invariants; Warning/Info use the existing
+advisory disposition. Qualified atoms count distinct linked nodes only after their
+own entity reader succeeds. Builds and setters validate staged state before live
+mutation; linked readers share bounded reads, and exhaustion fails closed even in
+negated expressions. See model-runtime's fixed-value/invariant contract.
+
+The full health-diary CLI probe now admits its consent and genetic safety constructs.
+With a temporary flat entity config it still fails on the Violation-grade
+`Meal.hasItem` class collection and eight vocabulary properties missing domain/range
+or explicit waivers: `additive`, `declaredAllergen`, `derivedFrom`, `note`,
+`offCategory`, `offRef`, `severity`, and `traceAllergen`. This lane does not migrate
+health-diary or relax those independent admission rules.

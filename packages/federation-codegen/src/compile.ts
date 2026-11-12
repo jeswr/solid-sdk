@@ -33,6 +33,7 @@ import {
   type FieldConfig,
   isCompositeConfig,
 } from "./config.js";
+import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { SH } from "./rdf.js";
 import {
@@ -283,6 +284,8 @@ function compileField(
   }
 
   if (Object.keys(guards).length > 0) field.guards = guards;
+  const hasValue = propertyHasValue(constraint);
+  if (hasValue) field.hasValue = hasValue;
   return field;
 }
 
@@ -496,7 +499,10 @@ function compileCompositeEntity(
         nodeName !== compConfig.root &&
         constraint.hasClass !== undefined &&
         !constraint.ordered &&
-        constraint.conceptIris === undefined
+        constraint.conceptIris === undefined &&
+        !propertySources(constraint).some((s) =>
+          shapeInvariants(shapes).collectionLinks.has(s.shapeIri),
+        )
       )
         throw new Error(
           `child shape sh:class constraint ${constraint.pathIri} requires a projected composite link`,
@@ -529,6 +535,7 @@ function compileCompositeEntity(
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
   assertClassOwnership(config);
+  const invariants = shapeInvariants(shapes);
   const orderedTargets = orderedItemTargets(shapes, config);
   if (implicitClassTargets(shapes.quads).length)
     throw new TypeError("implicit class targets are not modeled by the runtime");
@@ -588,6 +595,24 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
   const compositeEntities: AnyManifestEntity[] = config.entities
     .filter(isCompositeConfig)
     .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, typeAliases, provenance));
+
+  for (const entity of [...flatEntities, ...compositeEntities]) {
+    const owners = "nodes" in entity ? entity.nodes : [entity];
+    for (const owner of owners) {
+      const constraints = invariants.byClass.get(owner.typeIris[0] as string);
+      if (constraints) owner.invariants = structuredClone(constraints);
+      const shape = shapeByTarget.get(owner.typeIris[0] as string);
+      for (const field of owner.fields) {
+        const c = shape?.properties.find((p) => p.pathIri === field.predicate);
+        if (
+          c &&
+          field.collection === "set" &&
+          propertySources(c).some((s) => invariants.collectionLinks.has(s.shapeIri))
+        )
+          field.hasClass = c.hasClass;
+      }
+    }
+  }
 
   const manifest: ModelManifest = validateManifest({
     manifestVersion: 1,

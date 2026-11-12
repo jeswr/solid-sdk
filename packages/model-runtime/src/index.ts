@@ -43,7 +43,15 @@ export {
   subjectIri,
   tryRead,
 } from "./guards.js";
-
+export {
+  type ConstraintSeverity,
+  type ConstraintTerm,
+  constraintTerm,
+  type EntityInvariant,
+  type HasValueConstraint,
+  type InvariantExpression,
+  validateConstraintTerm,
+} from "./invariants.js";
 export {
   type AnyManifestEntity,
   type CompositeManifestEntity,
@@ -61,7 +69,6 @@ export {
   RUNTIME_MAJOR,
   validateManifest,
 } from "./manifest.js";
-
 export {
   type DefineModelOptions,
   defineModel,
@@ -72,5 +79,4 @@ export {
   type Model,
   type ModelEntity,
 } from "./model.js";
-
 export { assertSerializedQuads, assertWritableQuads } from "./rdf.js";

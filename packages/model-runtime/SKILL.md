@@ -6,6 +6,8 @@ description: Use when loading a generated domain model (model.js from @jeswr/fed
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+
 # Generated-model runtime
 
 `@jeswr/model-runtime` lives in `packages/model-runtime` and is security-critical. It is the
@@ -217,3 +219,46 @@ manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `saniti
 `tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter
 behaviour stays byte-identical.
+
+
+## Fixed values and entity invariants
+
+A scalar field may carry `hasValue: { term, severity }`, where `term` is
+`{ kind: "iri", value }` or `{ kind: "literal", value, datatype }`. Literals retain
+canonical lexical spelling and their exact datatype. Reads compare the selected,
+guarded RDF term, so `"1"^^xsd:boolean` does not satisfy a `true` constant. Missing,
+ambiguous or different values reject at Violation grade; Warning/Info omit the field,
+following the existing advisory policy. Defaults cannot supply a fixed value.
+Builds and setters require the exact term at every severity and throw `TypeError`
+before changing a live dataset.
+
+An entity or composite node may carry `invariants`, each with its source `shape` IRI,
+`severity`, optional `message`, and a data-only `expression`. Operators are `hasValue`
+(`path`, `term`), `not` (`expression`), `and`/`or` (`expressions`), and `qualified`
+(`path`, `targetClass`, `minCount`, `expression`). Paths identify fields on the current
+entity; a qualified expression changes context to its linked entity. Qualified links
+are composite edges or class-linked IRI sets (`hasClass`). They follow exact safe
+http(s) subjects in the supplied dataset, without fetching. Each distinct linked subject
+counts only after its own reader succeeds, including its own invariants. Failed child
+parses count as false. Class-only links require data-graph class membership; `sh:node`
+links keep their existing strict child-conformance policy.
+
+Evaluation uses two-valued logic over guarded values and exact retained RDF terms;
+missing or dropped fields do not satisfy atoms, and read defaults do not invent RDF
+presence. A false Violation invariant rejects a parse. Warning/Info retain the entity,
+like existing advisory constraints; source messages remain in the manifest and SHACL
+(the runtime has no separate diagnostic callback). Every build validates its completed
+state. Setters, field/type live-set add/delete/clear, and `mark()` stage migration and the explicit
+write in a copy, check recognized constrained focuses (including parents of changed
+children and reached untyped `sh:node` children), then apply the delta. Failure leaves the original dataset unchanged. Chained
+set mutations and `forEach` callbacks retain the same checks. Generated node lenses use
+the full owning model for these checks.
+
+Closed validation caps logical depth at four, atoms at sixteen per source shape, and
+qualified minima at positive integers up to sixteen. Qualified context changes do not
+add a logical nesting level; their inner logical operators do. Reads share a 10,000
+raw-read/visit budget across linked readers and class walks, with cycle detection and
+a 64-active-reader cap. Exhaustion rejects the whole read, including under negation;
+writes throw before mutation. Ordinary models without these constraints retain their
+existing build contract. Generated TypeScript keeps the base scalar/enum type rather
+than narrowing a fixed value; runtime checks remain authoritative.

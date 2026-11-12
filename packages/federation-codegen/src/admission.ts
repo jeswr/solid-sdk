@@ -21,6 +21,7 @@ import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { shapeInvariants } from "./invariants.js";
 import { orderedItemTargets } from "./ordered.js";
 import { Graph, RDF, SH } from "./rdf.js";
 import {
@@ -76,10 +77,12 @@ export function admit(
   config?: CodegenConfig,
 ): AdmissionReport {
   const violations: AdmissionViolation[] = [];
+  let invariants: ReturnType<typeof shapeInvariants>;
   const add = (code: string, severity: AdmissionSeverity, subject: string, message: string) =>
     violations.push({ code, severity, subject, message });
   try {
     orderedItemTargets(shapes, config);
+    invariants = shapeInvariants(shapes);
   } catch (error) {
     if (!(error instanceof AdmissionError)) throw error;
     violations.push(...error.violations);
@@ -207,8 +210,9 @@ export function admit(
     "pattern",
     "class",
     "node",
+    "hasValue",
   ]);
-  const nodeComponents = new Set(["targetClass", "property"]);
+  const nodeComponents = new Set(["targetClass", "property", "not", "and", "or"]);
   const aliasPathComponents = new Set(["alternativePath"]);
   const subjects = new Map(
     shapes.quads
@@ -221,6 +225,7 @@ export function admit(
       .map((q) => [q.subject.value, q.subject]),
   );
   for (const subject of subjects.values()) {
+    if (invariants.consumed.has(subject.value)) continue;
     const isProperty =
       graph.objects(subject, `${SH}path`).length > 0 ||
       graph.has(subject, `${RDF}type`, `${SH}PropertyShape`);
@@ -241,6 +246,9 @@ export function admit(
         unsupported("no runtime projection");
         continue;
       }
+      if (["not", "and", "or"].includes(component) && !shapeByIri.has(subject.value))
+        unsupported("logical constraints require a projected NodeShape");
+      if (component === "hasValue" && !c) unsupported("hasValue requires a projected property");
       const isAliasedTarget =
         component === "targetClass" &&
         (shapeByIri.get(subject.value)?.aliasTypeIris?.length ?? 0) > 0;
@@ -285,7 +293,9 @@ export function admit(
         unsupported("numeric bounds require a numeric projection");
       if (
         isNested &&
-        ["pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(component)
+        ["hasValue", "pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(
+          component,
+        )
       )
         unsupported("nested links cannot carry scalar guards");
       if (component === "node") {
@@ -303,6 +313,7 @@ export function admit(
         component === "class" &&
         !isNested &&
         !orderedShapeIris.has(subject.value) &&
+        !invariants.collectionLinks.has(subject.value) &&
         c?.conceptIris === undefined &&
         config !== undefined
       ) {

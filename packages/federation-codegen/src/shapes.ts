@@ -22,6 +22,7 @@ import { DataFactory } from "n3";
 import { type NormalizedOntology, owlRdfsAdapter } from "./adapter.js";
 import { AdmissionError } from "./admission.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { shapeInvariants, shapeTerm } from "./invariants.js";
 import { mergeNodeShapes } from "./merge.js";
 import { compareStrings, Graph, parseTurtle, RDF, RDFS, SH, XSD } from "./rdf.js";
 
@@ -32,6 +33,9 @@ export type ShapeScalar = string | number | boolean;
 export type ShapeKind = "iri" | "literal";
 
 export interface ShapeConstraint {
+  /** Config-projected structural edge, including class-only nested links. */
+  compositeLink?: true;
+  hasValue?: import("@jeswr/model-runtime").ConstraintTerm;
   /** Config-selected ordered encoding; validated against the complete item shape. */
   ordered?: { position: string; value: string };
   /** `sh:path` — the predicate IRI. */
@@ -567,6 +571,8 @@ export function parseShapes(
       if (pattern !== undefined) constraint.pattern = pattern;
       const severity = graph.value(propObj, `${SH}severity`);
       if (severity !== undefined) constraint.severity = severity;
+      const hasValue = graph.object(propObj, `${SH}hasValue`);
+      if (hasValue !== undefined) constraint.hasValue = shapeTerm(hasValue);
       // sh:in — a closed value set (RDF list). An unparseable/nil list yields [] so
       // admission can flag it (present-but-empty ⇒ malformed enum).
       const inHead = graph.object(propObj, `${SH}in`);
@@ -613,6 +619,7 @@ export function parseShapes(
         sources.some((source) => nodeConstrainedProperties.has(source.shapeIri))
       )
         for (const source of sources) linkProperties.add(source.shapeIri);
+      if (configuredLink) c.compositeLink = true;
     }
   }
   // Resolve concept-vs-link semantics only AFTER conjunction: another source
@@ -660,6 +667,20 @@ export function parseShapes(
       aliases.add(alias);
     }
   }
+
+  // Reject hostile logical graphs before the general blank-node identity refinement.
+  // Anchored shapes/properties are already named; expression/list nodes stay blank here.
+  shapeInvariants({
+    nodeShapes,
+    quads: quads.map((q) =>
+      DataFactory.quad(
+        rewriteTerm(q.subject, skolem, pathRoots) as Quad_Subject,
+        q.predicate,
+        rewriteTerm(q.object, skolem, pathRoots) as Quad_Object,
+        q.graph,
+      ),
+    ),
+  });
 
   // Any remaining blank nodes (e.g. nested lists) get a deterministic skolem by a
   // canonical key over the triples they participate in.
