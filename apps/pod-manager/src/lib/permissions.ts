@@ -426,7 +426,13 @@ export class WacPermissionsBackend implements PermissionsBackend {
           const named = [...irisOf(auth, `${ACL}accessTo`), ...irisOf(auth, `${ACL}default`)];
           if (!named.some((target) => targets.has(target))) continue;
           if (auth.agent.delete(agentId)) changed = true;
-          if (auth.origin.delete(agentId)) changed = true;
+          if (auth.origin.delete(agentId)) {
+            changed = true;
+            // `acl:origin` narrows a rule to those origins: removing the last
+            // one would leave its agents unrestricted (wider access). Delete
+            // the whole rule instead — revoke may over-remove, never widen.
+            if (auth.origin.size === 0) deleteAuthorization(auth);
+          }
           pruneEmptyAuthorization(auth);
         }
         return changed;
@@ -579,6 +585,11 @@ function pruneEmptyAuthorization(auth: Authorization): void {
   ) {
     return;
   }
+  deleteAuthorization(auth);
+}
+
+/** Delete every triple of an authorization (its own term as subject). */
+function deleteAuthorization(auth: Authorization): void {
   for (const quad of [...auth.dataset.match(termOf(auth))]) {
     auth.dataset.delete(quad);
   }

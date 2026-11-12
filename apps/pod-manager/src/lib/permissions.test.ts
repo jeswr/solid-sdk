@@ -270,6 +270,53 @@ describe("WacPermissionsBackend.revokeGrants", () => {
   });
 });
 
+describe("WacPermissionsBackend.revokeGrants — origins", () => {
+  const ORIGIN = "https://app.example";
+  const OTHER_ORIGIN = "https://other.example";
+  const HEALTH = `${POD}health/`;
+  const originAcl = (origins: string) => `${HEALTH_ACL}
+<#via-origin> a acl:Authorization ;
+  acl:agent <${APP_HEALTH}> ; acl:origin ${origins} ;
+  acl:accessTo <./> ; acl:default <./> ;
+  acl:mode acl:Read, acl:Write .`;
+
+  async function revokeOrigin(origins: string) {
+    const pod = aclPod([POD, HEALTH], {
+      [`${POD}.acl`]: ROOT_ACL,
+      [`${HEALTH}.acl`]: originAcl(origins),
+    });
+    const backend = new WacPermissionsBackend(pod.fetch);
+    const app = (await backend.listApps(ctx())).find((a) => a.agentId === ORIGIN);
+    if (!app) throw new Error("origin missing from read model");
+    expect(app.kind).toBe("origin");
+    await backend.revokeGrants(ORIGIN, allGrants(app));
+    const doc = pod.docs.get(`${HEALTH}.acl`);
+    if (!doc) throw new Error("health ACL missing");
+    return new AclResource(
+      await parseRdf(doc.body, "text/turtle", { baseIRI: `${HEALTH}.acl` }),
+      DataFactory,
+    );
+  }
+
+  it("deletes a rule whose last origin is revoked instead of un-restricting its agents", async () => {
+    const acl = await revokeOrigin(`<${ORIGIN}>`);
+    const rules = [...acl.authorizations];
+    // The origin-restricted Read+Write rule is gone, not widened to every origin.
+    expect(rules.some((a) => a.origin.size > 0)).toBe(false);
+    // The app's separate, unrestricted Read+Write rule (#tracker) is untouched.
+    expect(rules.filter((a) => a.agent.has(APP_HEALTH))).toHaveLength(1);
+    expect(rules.some((a) => a.agent.has(OWNER) && a.canReadWriteAcl)).toBe(true);
+  });
+
+  it("keeps the rule restricted to its remaining origins", async () => {
+    const acl = await revokeOrigin(`<${ORIGIN}>, <${OTHER_ORIGIN}>`);
+    const restricted = [...acl.authorizations].filter((a) => a.origin.size > 0);
+    expect(restricted).toHaveLength(1);
+    expect([...restricted[0].origin]).toEqual([OTHER_ORIGIN]);
+    expect(restricted[0].agent.has(APP_HEALTH)).toBe(true);
+  });
+});
+
 describe("WacPermissionsBackend.grant (via @jeswr/pod-access/roles addGrant)", () => {
   const NEW_APP = "https://new-app.example/id#this";
   const HEALTH = `${POD}health/`;
