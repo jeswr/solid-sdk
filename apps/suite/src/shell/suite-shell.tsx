@@ -127,11 +127,18 @@ function Frame({
           <AppRail
             currentApp={slug}
             apps={apps}
+            showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS}
             account={account}
             notifications={<NotificationsBell onOpenSync={() => setSyncOpen(true)} />}
           />
         }
-        tabBar={<BottomTabBar currentApp={slug} apps={apps} />}
+        tabBar={
+          <BottomTabBar
+            currentApp={slug}
+            apps={apps}
+            showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS}
+          />
+        }
         sidebar={
           sidebar ?? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
         }
