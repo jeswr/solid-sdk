@@ -5,6 +5,7 @@ import { addIriTriple, addLiteralTriple } from "@jeswr/rdf-serialize/wrapper";
 import type { DatasetCore } from "@rdfjs/types";
 import { Authorization, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
+import { DocumentCommentStore } from "../../src/apps/docs/lib/model/comments";
 import { WacSharingAdapter } from "../../src/shell/share/wac-adapter";
 import { accountAuth, cssAccount, expect, signedOutTest as test } from "./fixtures";
 
@@ -139,20 +140,28 @@ for (const legacy of [false, true]) {
       const ownerRead = await alice.fetch(ownerComment);
       expect(ownerRead.status).toBe(200);
       const original = await ownerRead.text();
-      const posted = await bob.fetch(comments, {
-        method: "POST",
-        headers: { "content-type": "text/turtle", slug: "bob.ttl" },
-        body: await turtle(
-          comment(new URL("bob.ttl", comments).href, cssAccount("bob").webId, "New comment"),
-        ),
+      // Publish through the Docs client: a commenter has Append on the container only, so a
+      // PUT-create of a member is refused and comments must be created with POST.
+      if (!legacy) {
+        const put = await bob.fetch(new URL(`${randomUUID()}.ttl`, comments).href, {
+          method: "PUT",
+          headers: { "content-type": "text/turtle", "if-none-match": "*" },
+          body: await turtle(comment(comments, cssAccount("bob").webId, "Must be refused")),
+        });
+        expect(put.status).toBe(403);
+        await put.body?.cancel();
+      }
+      const store = new DocumentCommentStore(comments, file, bob.fetch);
+      const published = await store.create("New comment", cssAccount("bob").webId, {
+        exact: "word",
+        prefix: "",
+        suffix: "",
+        start: "AA==",
+        end: "AQ==",
       });
-      expect(posted.status).toBe(201);
-      const location = posted.headers.get("location");
-      expect(location).toBeTruthy();
-      const postedUrl = new URL(location as string, comments).href;
+      const postedUrl = published.url;
       expect(postedUrl.startsWith(comments)).toBe(true);
       created.push(postedUrl);
-      await posted.body?.cancel();
       const postedRead = await alice.fetch(postedUrl);
       expect(postedRead.status).toBe(200);
       expect(await postedRead.text()).toContain("New comment");

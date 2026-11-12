@@ -63,6 +63,9 @@ export class WacSharingAdapter implements SharingAdapter {
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private options: { fetch?: typeof fetch; webId: string; commentsUrl?: string }) {
     this.fetch = refuseRedirects(options.fetch ?? globalThis.fetch);
+    // Commenter Append is safe only on a container whose members inherit Read alone.
+    if (options.commentsUrl !== undefined && !isContainerUrl(this.url(options.commentsUrl)))
+      throw new ShareError("unsupported");
     this.supportsCommenter = !!options.commentsUrl;
   }
   private url(value: string) {
@@ -133,6 +136,8 @@ export class WacSharingAdapter implements SharingAdapter {
     this.url(url);
     if (this.options.commentsUrl) {
       if (this.boundUrl !== undefined && this.boundUrl !== url) throw new ShareError("unsupported");
+      // The comments container lives in the document's storage, never on another origin.
+      assertWithinPodScope(new URL("/", url).href, this.options.commentsUrl);
       this.boundUrl = url;
     }
     try {
@@ -189,28 +194,49 @@ export class WacSharingAdapter implements SharingAdapter {
         dataset: new Store([...doc.dataset]),
       }));
       const dirty = new Set<string>();
-      const comments = next[1];
-      // Narrow every legacy rule, including comments-only principals. Retain all
-      // other modes and scopes exactly; migration never grants Read. The migration
-      // needs its own conditional write, so it never blocks a plan that does not
-      // touch the comments ACL when that ACL has no strong validator.
-      if (comments && strongEtag(comments.etag) && this.narrowLegacyAppend(comments))
-        dirty.add(comments.source);
       for (const change of changes) {
         const doc = next.find((entry) => entry.source === change.source);
         if (!doc) throw new ShareError("unsupported");
         this.apply(doc.dataset, change.resource, change.principal, change.add, change.remove);
         dirty.add(doc.source);
       }
+      // Never write a state the sharing dialog cannot read back.
+      const readable = (documents: LoadedDocument[]) => {
+        try {
+          return readSharing(this.input(documents));
+        } catch {
+          return undefined;
+        }
+      };
+      const planned = readable(next);
+      if (!planned) throw new ShareError("unsupported");
+      const comments = next[1];
+      // Best-effort narrowing of the comments ACL, which only ever removes access:
+      // legacy member Append, and Read/Append left behind for people who no longer
+      // have the document (say, after a revocation's second write failed). It rides
+      // this plan's conditional write and is dropped when the result would not read
+      // back, so it never blocks an unrelated change.
+      if (comments && strongEtag(comments.etag)) {
+        const trial = { ...comments, dataset: new Store([...comments.dataset]) };
+        const people = new Set(planned.people.map((person) => person.webId));
+        const narrowed = this.narrowLegacyAppend(trial);
+        if (
+          (this.dropOrphanComments(trial, people) || narrowed) &&
+          readable([next[0] as LoadedDocument, trial])
+        ) {
+          next[1] = trial;
+          dirty.add(trial.source);
+        }
+      }
       if (!dirty.size) return;
       for (const doc of next)
         if (dirty.has(doc.source) && !strongEtag(doc.etag)) throw new ShareError("unsupported");
-      // Never write a state the sharing dialog cannot read back.
-      try {
-        readSharing(this.input(next));
-      } catch {
-        throw new ShareError("unsupported");
-      }
+      // A partial failure must never leave hidden access. Remove comment access before the
+      // document grant it belongs to, and grant the document before its comment access.
+      const grantsComments = changes.some(
+        (change) => change.source === comments?.source && change.add.length > 0,
+      );
+      if (comments && !grantsComments) next.reverse();
       // Prepare every body before the first write. Never leave half a plan due to local validation.
       const writes = await Promise.all(
         next
@@ -392,6 +418,38 @@ export class WacSharingAdapter implements SharingAdapter {
       scoped.mode.delete(`${ACL}Append`);
       if (!scoped.mode.size) this.dropAuthorization(scoped);
       changed = true;
+    }
+    return changed;
+  }
+  /** Remove Read/Append comment rules for agents with no access to the document. Rules
+   * carrying Write or Control are not the dialog's commenter shape; leave them unchanged. */
+  private dropOrphanComments(doc: LoadedDocument, people: Set<string>): boolean {
+    let changed = false;
+    const targets = ["accessTo", "default", "defaultForNew"].map((p) => ACL + p);
+    for (const auth of [...new AclResource(doc.dataset, DataFactory).authorizations]) {
+      const scoped = new ScopedAuthorization(auth as Term, doc.dataset, DataFactory);
+      if (
+        [...auth.mode].some((mode) => mode !== `${ACL}Read` && mode !== `${ACL}Append`) ||
+        !targets.some((target) => scoped.values(target).has(doc.resource))
+      )
+        continue;
+      for (const agent of [...scoped.values(`${ACL}agent`)]) {
+        if (people.has(agent)) continue;
+        // Keep any unrelated scopes on a private copy; drop only this container's targets.
+        const rest = this.copyAuthorization(auth);
+        for (const p of ["agent", "agentClass", "agentGroup"]) rest.values(ACL + p).clear();
+        rest.values(`${ACL}agent`).add(agent);
+        for (const target of targets) rest.values(target).delete(doc.resource);
+        if (!targets.some((target) => rest.values(target).size)) this.dropAuthorization(rest);
+        scoped.values(`${ACL}agent`).delete(agent);
+        changed = true;
+      }
+      if (
+        !scoped.values(`${ACL}agent`).size &&
+        !scoped.values(`${ACL}agentClass`).size &&
+        !scoped.values(`${ACL}agentGroup`).size
+      )
+        this.dropAuthorization(scoped);
     }
     return changed;
   }

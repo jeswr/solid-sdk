@@ -386,9 +386,17 @@ describe("WAC sharing adapter", () => {
             .has(COMMENTS),
       ),
     ).toBe(false);
-    expect(commentsGrants(comments, CAROL).some((row) => row.canRead)).toBe(true);
+    // Carol has no document grant, so her comment access was hidden from the dialog:
+    // it is removed, while her unrelated scope survives on a private copy.
+    expect(commentsGrants(comments, CAROL)).toEqual([]);
     expect(
-      commentsGrants(comments, CAROL).some((row) => row.canAppend && row.accessTo === COMMENTS),
+      rows.some(
+        (row) =>
+          row.agent.has(CAROL) &&
+          !row.agent.has(BOB) &&
+          row.canAppend &&
+          properties(row).values(`${ACL}accessTo`).has(`${FILE}-unrelated`),
+      ),
     ).toBe(true);
     expect(
       rows.some(
@@ -441,7 +449,7 @@ describe("WAC sharing adapter", () => {
       ),
     ).toBe(true);
   });
-  it("narrows comments-only principals when saving unrelated general access", async () => {
+  it("removes comment access for people without the document when saving unrelated general access", async () => {
     const { fetch, documents } = await server();
     const comments = document("wac", false, COMMENTS);
     authorization(comments, ALICE, ["Read", "Write", "Control"]).default = COMMENTS;
@@ -456,11 +464,8 @@ describe("WAC sharing adapter", () => {
         (row) => row.agent.has(BOB) && row.canAppend && row.default === COMMENTS,
       ),
     ).toBe(false);
-    const bob = commentsGrants(comments, BOB);
-    expect(bob).toHaveLength(1);
-    expect(new Set(bob[0]?.mode)).toEqual(new Set([`${ACL}Append`]));
-    expect(bob[0]?.accessTo).toBe(COMMENTS);
-    expect(bob[0]?.default).toBeUndefined();
+    expect(commentsGrants(comments, BOB)).toEqual([]);
+    expect(commentsGrants(comments, ALICE)).toHaveLength(1);
   });
   it("narrows defaults-only legacy rules without adding a container target", async () => {
     const { fetch, documents, doc } = await server();
@@ -801,5 +806,113 @@ describe("comments migration safety", () => {
       (auth) => auth.agent.has(CAROL),
     );
     expect(carol).toHaveLength(1);
+  });
+  describe("partial failures and best-effort narrowing", () => {
+    async function commenterServer() {
+      const harness = await server();
+      const comments = document("wac", false, COMMENTS);
+      authorization(comments, ALICE, ["Read", "Write", "Control"]).default = COMMENTS;
+      harness.documents.set(comments.source, comments);
+      const adapter = new WacSharingAdapter({
+        fetch: harness.fetch,
+        webId: ALICE,
+        commentsUrl: COMMENTS,
+      });
+      await adapter.load(FILE, signal());
+      return { ...harness, comments, adapter };
+    }
+    const putTargets = (fetch: ReturnType<typeof vi.fn>) =>
+      fetch.mock.calls
+        .filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT")
+        .map(([url]) => String(url));
+    /** Fail the nth PUT from now with the given status; other requests pass through. */
+    function failNthPut(fetch: ReturnType<typeof vi.fn<typeof globalThis.fetch>>, n: number) {
+      const original = fetch.getMockImplementation() as typeof globalThis.fetch;
+      let seen = 0;
+      fetch.mockImplementation(async (input, init) => {
+        if (init?.method === "PUT" && ++seen === n) return new Response(null, { status: 500 });
+        return original(input, init);
+      });
+    }
+
+    it("grants the document before comment access, and revokes comment access first", async () => {
+      const { adapter, fetch, comments, doc } = await commenterServer();
+      await adapter.setPerson(FILE, BOB, "commenter");
+      expect(putTargets(fetch)).toEqual([doc.source, comments.source]);
+      fetch.mockClear();
+      await adapter.setPerson(FILE, BOB, null);
+      expect(putTargets(fetch)).toEqual([comments.source, doc.source]);
+      expect(commentsGrants(comments, BOB)).toEqual([]);
+    });
+
+    it("a revocation whose document write fails leaves Bob visible without comment access", async () => {
+      const { adapter, fetch, comments } = await commenterServer();
+      await adapter.setPerson(FILE, BOB, "commenter");
+      failNthPut(fetch, 2);
+      await expect(adapter.setPerson(FILE, BOB, null)).rejects.toMatchObject({ code: "network" });
+      expect(commentsGrants(comments, BOB)).toEqual([]);
+      const state = await adapter.load(FILE, signal());
+      expect(state.people).toContainEqual({ webId: BOB, role: "viewer" });
+      await adapter.setPerson(FILE, BOB, null);
+      expect((await adapter.load(FILE, signal())).people.map((p) => p.webId)).not.toContain(BOB);
+    });
+
+    it("removes comment access left behind for someone without the document on the next change", async () => {
+      const { adapter, fetch, comments } = await commenterServer();
+      // The state an interrupted revocation left before writes were ordered.
+      authorization(comments, BOB, ["Read", "Append"]);
+      authorization(comments, BOB, ["Read"]).default = COMMENTS;
+      await adapter.load(FILE, signal());
+      expect((await adapter.load(FILE, signal())).people.map((p) => p.webId)).not.toContain(BOB);
+      fetch.mockClear();
+      await adapter.setPerson(FILE, BOB, null, { narrowOnly: true });
+      expect(putTargets(fetch)).toEqual([comments.source]);
+      expect(commentsGrants(comments, BOB)).toEqual([]);
+      expect(commentsGrants(comments, ALICE)).toHaveLength(1);
+    });
+
+    it("keeps Write and Control comment rules of people without the document", async () => {
+      const { adapter, fetch, comments } = await commenterServer();
+      authorization(comments, CAROL, ["Read", "Write", "Control"]).default = COMMENTS;
+      await adapter.load(FILE, signal());
+      fetch.mockClear();
+      await adapter.setGeneral(FILE, { mode: "restricted" });
+      expect(putTargets(fetch)).toEqual([]);
+      expect(commentsGrants(comments, CAROL)).toHaveLength(1);
+    });
+
+    it("drops a legacy narrowing that would not read back instead of refusing a revocation", async () => {
+      const { adapter, fetch, comments, doc } = await commenterServer();
+      authorization(doc, PUBLIC, ["Read"]);
+      authorization(doc, CAROL, ["Read"]);
+      // Carol's comment modes are split across rules: narrowing member Append would
+      // leave Control on members without Append on the container's Read/Control split.
+      authorization(comments, CAROL, ["Read", "Control"]).default = COMMENTS;
+      authorization(comments, CAROL, ["Append"]).default = COMMENTS;
+      const before = await turtle(comments);
+      expect((await adapter.load(FILE, signal())).general).toEqual({
+        mode: "link",
+        role: "viewer",
+      });
+      fetch.mockClear();
+      await adapter.setGeneral(FILE, { mode: "restricted" }, { narrowOnly: true });
+      expect(putTargets(fetch)).toEqual([doc.source]);
+      expect(await turtle(comments)).toBe(before);
+      expect((await adapter.load(FILE, signal())).general).toEqual({ mode: "restricted" });
+    });
+
+    it("requires a comments container in the document's storage", async () => {
+      expect(
+        () => new WacSharingAdapter({ webId: ALICE, commentsUrl: `${FILE}-comments.ttl` }),
+      ).toThrow(expect.objectContaining({ code: "unsupported" }));
+      const { fetch } = await server();
+      const foreign = new WacSharingAdapter({
+        fetch,
+        webId: ALICE,
+        commentsUrl: "https://other.example/comments/",
+      });
+      await expect(foreign.load(FILE, signal())).rejects.toThrow();
+      expect(fetch).not.toHaveBeenCalled();
+    });
   });
 });

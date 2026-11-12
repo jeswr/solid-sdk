@@ -303,3 +303,43 @@ it("bounds untrusted quote selectors and rejects oversized anchors", async () =>
     await pod.fetch(entry.url, { method: "DELETE" });
   }
 });
+it("publishes with POST and a Slug so commenters need only Append on the container", async () => {
+  const { store, http } = setup();
+  const root = await store.create("First", actor, anchor);
+  const writes = http.mock.calls.filter(([, init]) => init?.method && init.method !== "GET");
+  // The first comment creates the missing container (an owner's Write), then POSTs.
+  expect(writes.map(([url, init]) => [String(url), init?.method])).toEqual([
+    [container, "POST"],
+    [container, "PUT"],
+    [container, "POST"],
+  ]);
+  expect(new Headers(writes[2]?.[1]?.headers).get("slug")).toBe(root.url.slice(container.length));
+  http.mockClear();
+  const reply = await store.reply(root, "Second", other);
+  expect(
+    http.mock.calls
+      .filter(([, init]) => init?.method && !["GET", "HEAD"].includes(init.method))
+      .map(([url, init]) => [String(url), init?.method]),
+  ).toEqual([[container, "POST"]]);
+  expect((await store.list())[0]?.replies.map((entry) => entry.url)).toEqual([reply.url]);
+});
+it("refuses a POST the server stored under another name, and surfaces other failures", async () => {
+  const { store, http } = setup();
+  await store.create("Seed the container", actor, anchor);
+  http.mockImplementationOnce(
+    async () =>
+      new Response(null, { status: 201, headers: { location: `${container}renamed.ttl` } }),
+  );
+  await expect(store.create("Renamed", actor, anchor)).rejects.toMatchObject({ status: 502 });
+  http.mockImplementationOnce(async () => new Response(null, { status: 201 }));
+  await expect(store.create("No location", actor, anchor)).rejects.toMatchObject({ status: 502 });
+  http.mockImplementationOnce(async () => new Response(null, { status: 403 }));
+  await expect(store.create("Denied", actor, anchor)).rejects.toMatchObject({ status: 403 });
+  // A container another client created between the 404 and our PUT is fine.
+  http.mockImplementationOnce(async () => new Response(null, { status: 404 }));
+  http.mockImplementationOnce(async () => new Response(null, { status: 412 }));
+  await expect(store.create("Raced", actor, anchor)).resolves.toMatchObject({ text: "Raced" });
+  http.mockImplementationOnce(async () => new Response(null, { status: 404 }));
+  http.mockImplementationOnce(async () => new Response(null, { status: 403 }));
+  await expect(store.create("No write", actor, anchor)).rejects.toMatchObject({ status: 403 });
+});
