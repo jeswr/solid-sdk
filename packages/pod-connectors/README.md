@@ -840,10 +840,16 @@ the same origin, can use that key and decrypt the refresh tokens; non-extractabl
 raw key bytes being exported. With `getOrCreateKey({ passphrase })` the database holds only the
 key wrapped by AES-256-GCM under a PBKDF2-SHA-256 key (600,000 iterations, random 16-byte salt
 stored beside it), so a copied profile is unusable without the passphrase. Same-origin script
-running while the vault is unlocked can still use the returned key. Passphrases are 8 to 1,024
-UTF-16 code units; strength is the host's responsibility. A wrong passphrase, a tampered wrapped
+running while the vault is unlocked can still use the returned key, and script that persists on
+the origin (an injected or compromised dependency) can capture the passphrase at the next unlock.
+Passphrases are 8 to 1,024 UTF-16 code units; strength is the host's responsibility. A copied
+profile allows offline guessing at 600,000 PBKDF2 iterations per guess, so an 8-character minimum
+is a floor, not a recommendation: prefer a long passphrase. A wrong passphrase, a tampered wrapped
 key, or mixing passphrase and unprotected modes in one database raises the generic
-`ConnectorVaultError`. A forgotten passphrase requires reauthorisation.
+`ConnectorVaultError`. A forgotten passphrase requires reauthorisation. To switch an existing
+unprotected database to passphrase mode, delete the old database (its unprotected key and
+ciphertexts stay usable otherwise) and reauthorise. Do not record the chosen mode or the
+passphrase in localStorage, IndexedDB or any other browser storage.
 
 `ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
 `delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only). The
@@ -927,6 +933,11 @@ When the OAuth config has a `revocationEndpoint` (RFC 7009), disconnect first PO
 and session refresh tokens there (`token_type_hint=refresh_token`, same client authentication
 and private-controller timeout rule, not sent once cancelled), ignoring every failure, then
 deletes locally. The Google configurations declare `https://oauth2.googleapis.com/revoke`.
+Revoking at Google removes the whole grant for that OAuth client, so disconnecting one Google
+connector also signs out every other Google connector that shares the client ID; those need
+reauthorising. A disconnect cancelled part-way can revoke one of the two tokens and not the other,
+and still deletes the local record; remove any remaining access in the provider's account
+settings (for Google, the account's third-party access page).
 Other providers have no RFC 7009 endpoint configured: revoke the app's access in the provider's
 account settings.
 The built-in stores provide account locks for the shared engine, including CLI cron runs

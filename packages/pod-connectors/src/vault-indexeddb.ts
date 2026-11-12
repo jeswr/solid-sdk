@@ -21,8 +21,10 @@ const WRAP_AAD = new TextEncoder().encode("pod-connectors-vault-key:1");
 export interface VaultKeyOptions {
   /**
    * Store the vault key wrapped by a key derived from this user secret (8 to 1024 UTF-16
-   * code units), so a copied profile or same-origin script cannot use it without the secret.
-   * A database uses one mode for its lifetime; the host must not persist the passphrase.
+   * code units), so a copied profile cannot use it without the secret. It does not stop
+   * same-origin script that persists until the next unlock: such script can capture the
+   * passphrase or use the unwrapped key. A database uses one mode for its lifetime; the host
+   * must not persist the passphrase or the mode choice in browser storage.
    */
   readonly passphrase?: string;
 }
