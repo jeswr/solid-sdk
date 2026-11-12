@@ -191,6 +191,9 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
     let discovering = true;
     const client = await createNodeOidcClient({
       issuer,
+      // The broker verifies the profile binding once through guarded fetch-rdf, with content
+      // negotiation and storage discovery. Avoid the engine's separate Turtle-only profile read.
+      verifyWebId: false,
       clientId: options.clientId,
       redirectUri: options.redirectUri,
       // Only a session's client answers LWS challenges, under that session's exchange rule.

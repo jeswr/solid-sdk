@@ -98,14 +98,48 @@ to MCP, and the MCP bearer is never forwarded. Supply secrets through the enviro
 neither the server nor the tests print them.
 
 Validation: `pnpm --filter @jeswr/app-mcp-server test` runs unit and local CSS integration
-tests. The integration suite requires `openssl` and free ports 3390 (CSS) and 3391 (MCP).
-It boots pinned CSS 8.0.0-alpha.3 once, generates a temporary TLS certificate, trusts it
-only in the test worker and CSS child, and seeds unique accounts/profiles/private data.
-The MCP TS SDK drives discovery, DCR, PKCE and token exchange; scripted native forms and
-CSS account controls complete consent. Every exposed tool and alias is called, with
-health policy denial expected. A separate owner-isolation/revocation scenario runs on the
-same CSS. Setup/login failures fail the suite, and servers/certificates are removed at exit.
-No external service or real account is used. `pnpm run gate` runs the affected workspace
-gate. No publish or deploy is needed.
+tests. The integration suites require `openssl` and free loopback ports 3390 (CSS), 3391
+(MCP), and 3392 (the connector client metadata HTTPS document). Files run sequentially
+because they share those ports. Each suite boots pinned CSS 8.0.0-alpha.3 once on a private
+Unix socket behind a loopback TCP listener, generates a temporary TLS certificate, trusts it
+only in the test worker and CSS child, and seeds unique accounts/private data. Profile storage
+and issuer seeding uses the existing typed Agent accessors and the N3 Writer; CSS's other
+profile fields are retained. Setup/login failures fail the suite, and servers/certificates
+are removed at exit. No external service or real account is used.
 
-Run only the local CSS scenario with `pnpm --filter @jeswr/app-mcp-server test:e2e`.
+`test/css.e2e.test.ts` uses the MCP TS SDK for discovery, DCR, PKCE and token exchange;
+scripted native forms and CSS account controls complete consent. Every exposed tool and
+alias is called, with health policy denial expected. Separate owner-isolation/revocation
+and single-user scenarios run on the same CSS.
+
+`test/connectors.e2e.test.ts` exercises remote connector protocol profiles, using the
+SDK's Streamable HTTP client for initialization, tool listing and calls:
+
+- Claude custom connectors (claude.ai / Claude Desktop): discovery follows the 401
+  resource-metadata challenge and its AS identifier, then separate Client ID Metadata
+  Document and RFC 7591 DCR runs use the exact
+  `https://claude.ai/api/mcp/auth_callback` redirect. Both registration modes are currently
+  advertised and required to pass. The metadata document is served over local TLS.
+- ChatGPT developer-mode connectors/apps: DCR uses
+  `https://chatgpt.com/connector_platform_oauth_redirect`. Tests parse and check the exact
+  search/fetch envelopes, fetch every returned ID, find a saved chat title and a generic
+  Markdown memory note, and check every tool's read-only annotation. Protected PKG memory
+  remains excluded from generic search; personal reads use purpose-limited tools.
+- Both use PKCE S256 and the MCP resource on authorization and token exchange, and
+  intercept the external callback without fetching it. Negative cases cover PKCE plain,
+  exact redirect/resource binding, a second resource sharing the issuer/key/grant store,
+  upstream pod-token passthrough, foreign Origin, and refresh rotation/reuse revocation.
+  ChatGPT registration additionally refuses non-loopback HTTP redirects and unsupported
+  confidential-client authentication. The Claude session covers shared-context absence,
+  card redaction, two-message chat save/list/get/export, preference/address memory, policy
+  denial of health reads, current generic listing boundaries, and write refusal in default
+  read-only mode.
+
+The connector harness refuses non-local fetches. Generic tools currently expose `agent/`
+and its context document; the explicitly named `it.todo` tracks the agent/context wall in
+sst-5ax.38. These are deterministic local protocol simulations, not runs of vendor UIs.
+The existing `agent-daemon-container` CSS CI workflow also runs both MCP e2e files.
+
+Run both suites with `pnpm --filter @jeswr/app-mcp-server test:e2e`, or only connector
+acceptance with `pnpm --filter @jeswr/app-mcp-server test:e2e:connectors`.
+`pnpm run gate` runs the affected workspace gate. No publish or deploy is needed.
