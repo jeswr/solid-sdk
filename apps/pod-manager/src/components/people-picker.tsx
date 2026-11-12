@@ -133,7 +133,7 @@ export function PeoplePicker({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-5 rounded-full"
+                  className="size-5! min-h-5! rounded-full!"
                   onClick={() => unpick(webId)}
                   aria-label={`Remove ${labelFor(webId)}`}
                 >

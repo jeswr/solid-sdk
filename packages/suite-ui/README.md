@@ -30,8 +30,13 @@ Import `tokens.css`, `theme.css`, `density.css` and `components.css` first, then
 the app palette after them, then map the suite-only tokens onto it under `:root, .dark`:
 `--surface` (card), `--surface-2` (muted), `--surface-3` (secondary), `--foreground-muted`
 (muted foreground), `--primary-soft` / `--primary-soft-foreground` (accent) and
-`--font-ui` (the app font). The type, radius, spacing, density and motion scales stay
-the suite's. Issues and Pod Manager use this seam; see their `globals.css`.
+`--font-ui` (the app font). The type, spacing, density and motion scales and the
+component radii stay the suite's; an app's own `@theme` radius overrides apply only to
+its utility classes. `components.css` is unlayered, so it beats Tailwind utilities: a
+call site that needs a narrower input or a borderless trigger marks the class
+important (`w-16!`, `border-transparent!`). Issues and Pod Manager use this seam; see
+their `globals.css`. The app's own `--input` colour sets control borders, so keep it at
+3:1 against the background to meet the boundary contrast the components assume.
 
 ## DS-08 date and time inputs
 

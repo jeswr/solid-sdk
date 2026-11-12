@@ -551,7 +551,7 @@ export function FieldsDialog({
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className="h-8 w-16"
+                      className="h-8 w-16!"
                       defaultValue={limit.min ?? ""}
                       disabled={busy}
                       aria-label={`Minimum WIP for ${s.label}`}
@@ -565,7 +565,7 @@ export function FieldsDialog({
                       type="number"
                       min={0}
                       inputMode="numeric"
-                      className="h-8 w-16"
+                      className="h-8 w-16!"
                       defaultValue={limit.max ?? ""}
                       disabled={busy}
                       aria-label={`Maximum WIP for ${s.label}`}

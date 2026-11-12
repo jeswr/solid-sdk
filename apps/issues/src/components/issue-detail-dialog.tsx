@@ -646,7 +646,7 @@ export function IssueDetailDialog({
               <Input
                 aria-label="Time spent"
                 placeholder="1h 30m"
-                className="h-8 sm:w-28"
+                className="h-8 sm:w-28! sm:flex-none"
                 value={logDuration}
                 onChange={(e) => setLogDuration(e.target.value)}
               />

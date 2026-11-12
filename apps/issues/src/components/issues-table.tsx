@@ -56,7 +56,7 @@ function SelectCell({
       value={value ?? NONE}
       onValueChange={(v) => onCommit(v === NONE ? undefined : v)}
     >
-      <SelectTrigger className="h-7 w-full border-transparent text-sm hover:border-input data-[state=open]:border-input" aria-label={ariaLabel}>
+      <SelectTrigger className="h-7! min-h-7! w-full border-transparent! text-sm hover:border-input! data-[state=open]:border-input!" aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

@@ -66,7 +66,7 @@ export function WorkloadView({ issues, groupIri }: { issues: IssueRecord[]; grou
             min={1}
             value={capacity}
             onChange={(e) => onCapacity(e.target.value)}
-            className="h-8 w-20"
+            className="h-8 w-20!"
           />
         </span>
       </CardHeader>
