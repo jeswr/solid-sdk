@@ -4,7 +4,12 @@ import { z } from "zod";
 import type { NotesStore, StoredNote } from "../lib/model/store";
 import { createPendingDrafts, type PendingDraft } from "./pending-drafts";
 
-const draft = z.object({ title: z.string(), body: z.string(), labels: z.array(z.string()) });
+const draft = z.object({
+  title: z.string(),
+  body: z.string(),
+  labels: z.array(z.string()),
+  preserveCurrent: z.boolean().optional(),
+});
 const optionalText = z.string().optional();
 const stored = draft.extend({
   url: z.url(),
@@ -22,6 +27,7 @@ const stored = draft.extend({
   revisions: z.array(
     z.object({
       id: z.string(),
+      title: optionalText,
       body: z.string(),
       format: z.string(),
       generatedAt: z.string(),

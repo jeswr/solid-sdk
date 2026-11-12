@@ -173,3 +173,24 @@ it("stops draining when Write is revoked during a save and retains the newer loc
   expect(pending.get(note.url)).toMatchObject({ draft: latest, status: "read-only" });
   expect(await pending.retry()).toEqual([]);
 });
+
+it("keeps a restore's preserve flag for one save only, even when edits arrive meanwhile", async () => {
+  const { pending } = fixture();
+  const first = deferred<StoredNote>();
+  const inputs: unknown[] = [];
+  const save = vi.fn(async (baseline: StoredNote, input: unknown) => {
+    inputs.push(input);
+    return inputs.length === 1 ? first.promise : { ...baseline, etag: '"v3"' };
+  });
+  pending.change(note, { ...draft, preserveCurrent: true }, save);
+  const flushing = pending.flush(note, save);
+  await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+  pending.change(note, { ...draft, body: "Typed after", preserveCurrent: true }, save);
+  first.resolve({ ...note, etag: '"v2"' });
+  await flushing;
+  expect(inputs).toEqual([
+    { ...draft, preserveCurrent: true },
+    { ...draft, body: "Typed after", labels: ["A"] },
+  ]);
+  expect(pending.get(note.url)).toBeUndefined();
+});
