@@ -26,8 +26,20 @@ export const MARKUP_PREDICATES = Object.fromEntries(
   MARKUP_PROPERTIES.map((prop) => [prop, `${SCHEMA}${prop}`]),
 ) as Record<MarkupProperty, string>;
 export const MARKUP_TRUST = `${NS.FEDCON}emailMarkupTrust`;
+export const MARKUP_SENDER_KEY = `${NS.FEDCON}emailMarkupSenderKey`;
+export const MARKUP_SLUG = `${NS.FEDCON}emailMarkupSlug`;
 /** Closed vocabulary bridge for inert extracted markup; all RDF goes through typed accessors. */
 export class MailMarkupResource extends TermWrapper {
+  get senderKey(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, MARKUP_SENDER_KEY, LiteralAs.string);
+  }
+  set senderKey(value: string | undefined) {
+    OptionalAs.object(this, MARKUP_SENDER_KEY, value, LiteralFrom.string);
+  }
+  /** Bounded cleanup inventory on the source EmailMessage, written before item PUTs. */
+  get markupSlugs(): Set<string> {
+    return SetFrom.subjectPredicate(this, MARKUP_SLUG, LiteralAs.string, LiteralFrom.string);
+  }
   get types(): Set<string> {
     return SetFrom.subjectPredicate(this, `${RDF}type`, NamedNodeAs.string, NamedNodeFrom.string);
   }

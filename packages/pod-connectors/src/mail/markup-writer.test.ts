@@ -2,12 +2,12 @@
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { EMAIL_MARKUP_FIXTURES, jsonLdFixture } from "../../test-support/markup-fixtures.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { Provenance } from "../core/provenance.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { ImportContext } from "../core/types.js";
-import { EMAIL_MARKUP_FIXTURES, jsonLdFixture } from "./markup-fixtures.js";
 import { MARKUP_CLASSES, MARKUP_PREDICATES, MailMarkupResource } from "./markup-vocab.js";
 import {
   createMailMarkupWriter,
@@ -21,7 +21,7 @@ import { MAIL_CLASSES, MailMessage } from "./vocab.js";
 const account = "example@example.test";
 const ROOT = `${TEST_POD_ROOT}integrations/markup/`;
 const message = (id: string) => `${ROOT}${messageSlug(account, id)}#it`;
-const date = new Date("2026-12-01T09:00:00Z");
+const date = new Date("2026-01-01T09:00:00Z");
 function setup() {
   const pod = createMemoryPod();
   const podWriter = createFetchPodWriter({
@@ -62,6 +62,7 @@ function source(index = 2, extra: Partial<MailMarkupSource> = {}): MailMarkupSou
     messageIri: message("one"),
     html: jsonLdFixture(EMAIL_MARKUP_FIXTURES[index]),
     dateModified: date,
+    sender: "receipts@example.test",
     ...extra,
   };
 }
@@ -104,7 +105,7 @@ describe("MailMarkupWriter persistence", () => {
       const [again] = await createMailMarkupWriter(ctx, account).add(source());
       expect(again?.iri).toBe(first.iri);
     });
-    const newer = new Date("2026-12-02T09:00:00Z");
+    const newer = new Date("2026-01-02T09:00:00Z");
     await run(async (ctx) => {
       const [changed] = await createMailMarkupWriter(ctx, account).add(
         source(2, {
@@ -172,13 +173,12 @@ describe("MailMarkupWriter persistence", () => {
       const [verified] = await writer.add(source(2, { authentication: { dmarc: "pass" } }));
       expect(resource(pod, verified as StoredEmailMarkup).trust).toBe("verified");
       const [unverified] = await writer.add(
-        source(2, { messageIri: message("spoof"), dateModified: new Date("2026-12-03T00:00:00Z") }),
+        source(2, { messageIri: message("spoof"), dateModified: new Date("2026-01-03T00:00:00Z") }),
       );
-      expect(unverified?.iri).not.toBe(verified?.iri);
+      expect(unverified).toBeUndefined();
       expect(resource(pod, verified as StoredEmailMarkup).trust).toBe("verified");
-      expect(resource(pod, unverified as StoredEmailMarkup).trust).toBe("unverified");
       const [repeat] = await writer.add(source(2, { messageIri: message("spoof") }));
-      expect(repeat?.iri).toBe(unverified?.iri);
+      expect(repeat).toBeUndefined();
     });
   });
   it("stores strings as literals and finite numeric/boolean values through typed accessors", async () => {
@@ -213,24 +213,22 @@ describe("MailMarkupWriter persistence", () => {
       ).toBe("Literal");
     });
   });
-  it("falls back to epoch for missing/invalid dates and accepts a valid markup modification time", async () => {
+  it("leaves missing receiver dates unknown and ignores sender markup modification times", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
       const writer = createMailMarkupWriter(ctx, account);
       const [a] = await writer.add(source(0, { dateModified: new Date(NaN) }));
-      expect(resource(pod, a as StoredEmailMarkup).dateModified).toEqual(new Date(0));
+      expect(resource(pod, a as StoredEmailMarkup).dateModified).toBeUndefined();
       const [b] = await writer.add(
         source(0, {
           dateModified: undefined,
           html: jsonLdFixture({
             ...EMAIL_MARKUP_FIXTURES[0],
-            dateModified: "2026-12-01T10:00:00Z",
+            dateModified: "2026-01-01T10:00:00Z",
           }),
         }),
       );
-      expect(resource(pod, b as StoredEmailMarkup).dateModified?.toISOString()).toBe(
-        "2026-12-01T10:00:00.000Z",
-      );
+      expect(resource(pod, b as StoredEmailMarkup).dateModified).toBeUndefined();
     });
   });
   it("rejects sources outside this account before any Pod I/O", async () => {
@@ -259,27 +257,27 @@ describe("MailMarkupWriter persistence", () => {
   });
   it("preserves conditional-write conflicts", async () => {
     const { pod, podWriter, run } = setup();
-    await expect(
-      run(async (ctx) => {
-        const ports = {
-          ...ctx,
-          async read(slug: string) {
-            const old = await ctx.read(slug);
-            await podWriter.write(
-              {
-                slug,
-                category: "mail",
-                forClass: MARKUP_CLASSES.FlightReservation,
-                dataset: new Store(),
-              },
-              { ifNoneMatch: "*" },
-            );
-            return old;
-          },
-        };
-        await createMailMarkupWriter(ports, account).add(source());
-      }),
-    ).rejects.toThrow();
+    await run(async (ctx) => {
+      const ports = {
+        ...ctx,
+        async read(slug: string) {
+          const old = await ctx.read(slug);
+          await podWriter.write(
+            {
+              slug,
+              category: "mail",
+              forClass: MARKUP_CLASSES.FlightReservation,
+              dataset: new Store(),
+            },
+            { ifNoneMatch: "*" },
+          );
+          return old;
+        },
+      };
+      const writer = createMailMarkupWriter(ports, account);
+      expect(await writer.add(source())).toEqual([]);
+      expect(writer.errors).toContain("markup-write-failed");
+    });
     expect(markupUrls(pod)).toHaveLength(1);
   });
 });
@@ -294,6 +292,8 @@ describe("stored mail re-scan", () => {
       mail.types.add(MAIL_CLASSES.EmailMessage);
       mail.bodyHtml = source().html;
       mail.dateReceived = date;
+      mail.sender = "mailto:receipts%40example.test";
+      new MailMarkupResource(message(id), dataset, DataFactory).dateModified = date;
       await ctx.write({ slug, category: "mail", forClass: MAIL_CLASSES.EmailMessage, dataset });
     };
     await run(async (ctx) => {
@@ -339,7 +339,7 @@ describe("markup update and re-scan boundaries", () => {
       const [changed] = await writer.add(
         source(0, {
           messageIri: message("order-change"),
-          dateModified: new Date("2026-12-03T00:00:00Z"),
+          dateModified: new Date("2026-01-03T00:00:00Z"),
           html: jsonLdFixture({
             "@type": "Order",
             orderNumber: "TEST-ORDER-42",
@@ -493,7 +493,7 @@ it("releases source reads and skipped markup reads without dropping write precon
     const ports = { ...ctx, releaseRead };
     const writer = createMailMarkupWriter(ports, account);
     const [first] = await writer.add(source(2, { authentication: { dmarc: "pass" } }));
-    expect(releaseRead).not.toHaveBeenCalled();
+    expect(releaseRead).not.toHaveBeenCalledWith(first?.slug);
     await writer.add(
       source(2, {
         messageIri: message("old"),
@@ -546,4 +546,302 @@ it("bounds root items across the entire re-scan, including within its final mess
       items: 0,
     });
   });
+});
+
+it.each([
+  ["unverified", "unverified", true],
+  ["unverified", "verified", true],
+  ["verified", "verified", true],
+  ["verified", "unverified", false],
+] as const)("enforces the update matrix %s -> %s", async (before, after, allowed) => {
+  const { pod, run } = setup();
+  await run(async (ctx) => {
+    const writer = createMailMarkupWriter(ctx, account);
+    const [first] = await writer.add(
+      source(2, {
+        authentication:
+          before === "verified" ? { dmarc: "pass", alignedDomain: "example.test" } : undefined,
+      }),
+    );
+    const next = await writer.add(
+      source(2, {
+        messageIri: message("next"),
+        dateModified: new Date("2026-02-01"),
+        authentication:
+          after === "verified" ? { dmarc: "pass", alignedDomain: "example.test" } : undefined,
+      }),
+    );
+    expect(next.length).toBe(allowed ? 1 : 0);
+    if (allowed) expect(next[0]?.iri).toBe(first?.iri);
+    expect(resource(pod, first as StoredEmailMarkup).trust).toBe(allowed ? after : before);
+    expect([...resource(pod, first as StoredEmailMarkup).derivedFrom]).toEqual([
+      message(allowed ? "next" : "one"),
+    ]);
+  });
+});
+
+it("isolates two senders reusing provider and booking number", async () => {
+  const { pod, run } = setup();
+  await run(async (ctx) => {
+    const writer = createMailMarkupWriter(ctx, account);
+    const [one] = await writer.add(source());
+    const [two] = await writer.add(
+      source(2, { sender: "attacker@EVIL.test", messageIri: message("attacker") }),
+    );
+    expect(two?.iri).not.toBe(one?.iri);
+    expect(resource(pod, one as StoredEmailMarkup).senderKey).toBe("example.test");
+    expect(resource(pod, two as StoredEmailMarkup).senderKey).toBe("evil.test");
+  });
+  expect(markupUrls(pod)).toHaveLength(2);
+});
+
+it("shares item and write budgets across messages and counts failed attempts", async () => {
+  const { run } = setup();
+  await run(async (ctx) => {
+    const writer = createMailMarkupWriter(ctx, account, { maxTotalItems: 2 });
+    expect(await writer.add(source())).toHaveLength(1);
+    expect(await writer.add(source(2, { messageIri: message("two") }))).toHaveLength(1);
+    expect(await writer.add(source(2, { messageIri: message("three") }))).toEqual([]);
+    expect(writer.errors).toContain("markup-item-budget-exceeded");
+    let attempts = 0;
+    const failing = createMailMarkupWriter(
+      {
+        ...ctx,
+        write: async () => {
+          attempts++;
+          throw new Error("private detail");
+        },
+      },
+      account,
+      { maxTotalWrites: 1 },
+    );
+    expect(await failing.add(source())).toEqual([]);
+    expect(await failing.add(source())).toEqual([]);
+    expect(attempts).toBe(1);
+    expect(failing.errors).toEqual(["markup-write-failed", "markup-write-budget-exceeded"]);
+    const broken = createMailMarkupWriter(ctx, account, { maxBytes: -1 });
+    expect(await broken.add(source())).toEqual([]);
+    expect(broken.errors).toEqual(["markup-extraction-failed"]);
+  });
+});
+
+it("skips oversized serialized items and keeps later small items", async () => {
+  const { pod, run } = setup();
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  await run(async (ctx) => {
+    const writer = createMailMarkupWriter(ctx, account);
+    const items = await writer.add(
+      source(0, {
+        html: jsonLdFixture([
+          {
+            "@type": "Order",
+            description: Array.from({ length: 24 }, (_, i) => `${i}${"x".repeat(8190)}`),
+          },
+          { "@type": "Order", name: "Small" },
+        ]),
+      }),
+    );
+    expect(items).toHaveLength(1);
+    expect(writer.errors).toContain("markup-item-too-large");
+  });
+  expect(markupUrls(pod)).toHaveLength(1);
+  for (const url of markupUrls(pod))
+    expect(
+      new TextEncoder().encode(await serialize([...pod.dataset(url)])).length,
+    ).toBeLessThanOrEqual(64 * 1024);
+});
+
+it("indexes markup before writes and removes only the current source's resources", async () => {
+  const { pod, run } = setup();
+  const { createMailWriter } = await import("./writer.js");
+  const raw = new TextEncoder().encode(
+    ["From: receipts@example.test", "Content-Type: text/html", "", source().html].join("\r\n"),
+  );
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account);
+    await writer.add({ raw, folders: [], read: false, fallbackId: "one", receivedAt: date });
+    await writer.add({
+      raw,
+      folders: [],
+      read: false,
+      fallbackId: "two",
+      receivedAt: new Date("2026-02-01"),
+    });
+    await writer.flush();
+  });
+  const url = markupUrls(pod)[0] as string;
+  for (const id of ["one", "two"])
+    expect(
+      new MailMarkupResource(
+        message(id),
+        pod.dataset(`${ROOT}${messageSlug(account, id)}`),
+        DataFactory,
+      ).markupSlugs.size,
+    ).toBe(1);
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account, { extractMarkup: false });
+    await writer.removeMessage(messageSlug(account, "one"));
+    await writer.flush();
+  });
+  expect(markupUrls(pod)).toEqual([url]);
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account, { extractMarkup: false });
+    await writer.removeMessage(messageSlug(account, "two"));
+    await writer.flush();
+  });
+  expect(markupUrls(pod)).toEqual([]);
+});
+
+it("prunes orphan assertions while retaining assertions with an existing source", async () => {
+  const { pod, run } = setup();
+  await run(async (ctx) => {
+    const writer = createMailMarkupWriter(ctx, account);
+    await writer.add(source(0));
+    await writer.add(source(2, { messageIri: message("missing") }));
+    const dataset = new Store();
+    const mail = new MailMessage(message("one"), dataset, DataFactory);
+    mail.types.add(MAIL_CLASSES.EmailMessage);
+    await ctx.write({
+      slug: messageSlug(account, "one"),
+      category: "mail",
+      forClass: MAIL_CLASSES.EmailMessage,
+      dataset,
+    });
+  });
+  expect(markupUrls(pod)).toHaveLength(2);
+  await run(async (ctx) => {
+    expect(await rescanMailMarkup(ctx, account, { prune: true })).toEqual({
+      messages: 1,
+      items: 0,
+      pruned: 1,
+    });
+  });
+  expect(markupUrls(pod)).toHaveLength(1);
+});
+
+it("never uses stored dateSent or legacy dateReceived when re-scanning without trusted time", async () => {
+  const { pod, run } = setup();
+  await run(async (ctx) => {
+    const dataset = new Store();
+    const mail = new MailMessage(message("one"), dataset, DataFactory);
+    mail.types.add(MAIL_CLASSES.EmailMessage);
+    mail.bodyHtml = source().html;
+    mail.sender = "mailto:receipts%40example.test";
+    mail.dateSent = new Date("2099-01-01");
+    mail.dateReceived = new Date("2099-01-01");
+    await ctx.write({
+      slug: messageSlug(account, "one"),
+      category: "mail",
+      forClass: MAIL_CLASSES.EmailMessage,
+      dataset,
+    });
+    await rescanMailMarkup(ctx, account);
+    const url = markupUrls(pod)[0] as string;
+    expect(
+      new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).dateModified,
+    ).toBeUndefined();
+    const [next] = await createMailMarkupWriter(ctx, account).add(
+      source(2, { messageIri: message("next"), dateModified: date }),
+    );
+    expect(next?.updated).toBe(true);
+    expect(markupUrls(pod)).toHaveLength(1);
+  });
+});
+
+it("retains the cleanup inventory on deletion failure and safely retries", async () => {
+  const { pod, run } = setup();
+  const { createMailWriter } = await import("./writer.js");
+  const raw = new TextEncoder().encode(
+    ["From: receipts@example.test", "Content-Type: text/html", "", source().html].join("\r\n"),
+  );
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account);
+    await writer.add({ raw, folders: [], read: false, fallbackId: "one" });
+    await writer.flush();
+  });
+  await expect(
+    run(async (ctx) => {
+      const writer = createMailWriter(
+        {
+          ...ctx,
+          remove: async (slug) => {
+            if (slug.includes("/trips/")) throw new Error("synthetic deletion failure");
+            await ctx.remove(slug);
+          },
+        },
+        account,
+      );
+      await writer.removeMessage(messageSlug(account, "one"));
+      await writer.flush();
+    }),
+  ).rejects.toThrow("synthetic deletion failure");
+  expect(
+    new MailMarkupResource(
+      message("one"),
+      pod.dataset(`${ROOT}${messageSlug(account, "one")}`),
+      DataFactory,
+    ).markupSlugs.size,
+  ).toBe(1);
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account);
+    await writer.removeMessage(messageSlug(account, "one"));
+    await writer.flush();
+  });
+  expect(markupUrls(pod)).toHaveLength(0);
+  expect(pod.urls()).not.toContain(`${ROOT}${messageSlug(account, "one")}`);
+});
+
+it("does not recreate markup for messages kept in Trash during a re-scan", async () => {
+  const { pod, run } = setup();
+  const { createMailWriter } = await import("./writer.js");
+  const raw = new TextEncoder().encode(
+    ["From: receipts@example.test", "Content-Type: text/html", "", source().html].join("\r\n"),
+  );
+  await run(async (ctx) => {
+    const writer = createMailWriter(ctx, account);
+    await writer.add({
+      raw,
+      folders: [{ key: "Trash", title: "Trash" }],
+      trashed: true,
+      read: false,
+      fallbackId: "one",
+    });
+    await writer.flush();
+    expect(await rescanMailMarkup(ctx, account)).toEqual({ messages: 1, items: 0 });
+  });
+  expect(markupUrls(pod)).toHaveLength(0);
+});
+
+it("bounds repeated provenance before allocating RDF for an oversized source IRI", async () => {
+  const ctx = { resolve: (s: string) => `${ROOT}${s}`, read: vi.fn(), write: vi.fn() };
+  const writer = createMailMarkupWriter(ctx, account);
+  expect(await writer.add(source(0, { messageIri: message("x".repeat(8192)) }))).toEqual([]);
+  expect(writer.errors).toEqual(["markup-extraction-failed"]);
+  expect(ctx.read).not.toHaveBeenCalled();
+  expect(ctx.write).not.toHaveBeenCalled();
+});
+
+it("preserves imported email counts when only the markup cleanup inventory is rewritten", async () => {
+  const { run } = setup();
+  const { createMailWriter } = await import("./writer.js");
+  const raw = new TextEncoder().encode(
+    [
+      "From: receipts@example.test",
+      "Content-Type: text/html",
+      "",
+      jsonLdFixture({ "@type": "Order", name: "Counted order" }),
+    ].join("\r\n"),
+  );
+  const report = await run(async (ctx) => {
+    // Only the inventory PUT fits; the source message must still count as imported.
+    const writer = createMailWriter(ctx, account, { markup: { maxTotalWrites: 1 } });
+    await writer.add({ raw, folders: [], read: false, fallbackId: "one" });
+    expect(writer.errors).toContain("markup-write-budget-exceeded");
+  });
+  expect(report.state?.counts.items).toBe(1);
+  const rescan = await run(async (ctx) => {
+    await rescanMailMarkup(ctx, account, { maxTotalWrites: 1 });
+  });
+  // Re-scanning an existing source counts only the newly written assertion and its nodes.
+  expect(rescan.state?.counts.items).toBe(1);
 });

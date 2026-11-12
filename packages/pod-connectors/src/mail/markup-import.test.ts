@@ -2,6 +2,11 @@
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
+import {
+  EMAIL_MARKUP_FIXTURES,
+  jsonLdFixture,
+  microdataFixture,
+} from "../../test-support/markup-fixtures.js";
 import { runFileImport } from "../core/file-import.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
@@ -15,7 +20,6 @@ import {
 import { createGmailAdapter } from "../gmail/adapter.js";
 import { GMAIL_API, GMAIL_FIXTURES, rawMessage } from "../gmail/fixtures.js";
 import { createGoogleTakeoutFileAdapter } from "../google-takeout/file-adapter.js";
-import { EMAIL_MARKUP_FIXTURES, jsonLdFixture, microdataFixture } from "./markup-fixtures.js";
 import { MailMarkupResource } from "./markup-vocab.js";
 
 const lines = (html: string) => [
@@ -48,7 +52,7 @@ describe("transactional markup import hooks", () => {
   it.each([
     true,
     false,
-  ])("Gmail extraction enabled=%s, raw authentication headers never verify trust", async (enabled) => {
+  ])("Gmail extraction enabled=%s, another authserv-id cannot verify trust", async (enabled) => {
     const { pod, podWriter } = setup("gmail");
     const adapter = createGmailAdapter({ extractMarkup: enabled });
     const routes = [
@@ -92,7 +96,7 @@ describe("transactional markup import hooks", () => {
     const { pod, podWriter } = setup("google-takeout");
     const bytes = zipSync({
       "Takeout/Mail/All.mbox": strToU8(
-        `From sender Tue Dec 1 09:00:00 2026\n${lines(microdataFixture(EMAIL_MARKUP_FIXTURES[5])).join("\n")}\n`,
+        `From sender Thu Jan 1 09:00:00 2026\n${lines(microdataFixture(EMAIL_MARKUP_FIXTURES[5])).join("\n")}\n`,
       ),
     });
     const blob = new Blob([new Uint8Array(bytes)]);
@@ -114,7 +118,311 @@ describe("transactional markup import hooks", () => {
       const resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
       expect(resource.trust).toBe("unverified");
       expect([...resource.derivedFrom][0]).toContain("/messages/");
-      expect(resource.dateModified?.toISOString()).toBe("2026-12-01T09:00:00.000Z");
+      expect(resource.dateModified?.toISOString()).toBe("2026-01-01T09:00:00.000Z");
     }
   });
+});
+
+const gmailRoutes = (
+  messages: {
+    id: string;
+    html?: string;
+    headers?: string[];
+    labels?: string[];
+    internalDate?: string;
+    status?: number;
+  }[],
+) => [
+  ...GMAIL_FIXTURES.filter((r) => !r.url.includes("/messages")),
+  { url: `${GMAIL_API}/messages`, json: { messages: messages.map((m) => ({ id: m.id })) } },
+  ...messages.map((m) => ({
+    url: `${GMAIL_API}/messages/${m.id}`,
+    status: m.status,
+    json: {
+      id: m.id,
+      threadId: "thread",
+      labelIds: m.labels ?? ["INBOX"],
+      internalDate: m.internalDate ?? "1767258000000",
+      raw: rawMessage([
+        ...(m.headers ?? []),
+        ...lines(m.html ?? jsonLdFixture(EMAIL_MARKUP_FIXTURES[2])).filter(
+          (line) => !line.startsWith("Message-ID:"),
+        ),
+        "",
+      ]),
+    },
+  })),
+];
+const takeoutFile = (messages: string[]) => {
+  const bytes = zipSync({ "Takeout/Mail/All.mbox": strToU8(messages.join("\n")) });
+  const blob = new Blob([new Uint8Array(bytes)]);
+  return {
+    name: "takeout.zip",
+    type: "application/zip",
+    size: bytes.length,
+    text: () => blob.text(),
+    stream: () => blob.stream(),
+    slice: (a: number, b: number) => blob.slice(a, b),
+  };
+};
+
+it.each([
+  "gmail",
+  "google-takeout",
+])("%s keeps importing messages after markup PUT failures", async (id) => {
+  const { pod, podWriter } = setup(id);
+  let failures = 0;
+  const failingWriter = {
+    ...podWriter,
+    write: async (...args: Parameters<typeof podWriter.write>) => {
+      if (/\/(trips|purchases)\//.test(args[0].slug)) {
+        failures++;
+        throw new Error("private provider detail");
+      }
+      return podWriter.write(...args);
+    },
+  };
+  const report =
+    id === "gmail"
+      ? await runImport({
+          adapter: createGmailAdapter(),
+          podWriter: failingWriter,
+          mode: "live",
+          sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "one" }, { id: "two" }])) },
+        })
+      : await runFileImport({
+          adapter: createGoogleTakeoutFileAdapter(),
+          podWriter: failingWriter,
+          file: takeoutFile(
+            ["one", "two"].map(
+              (id) =>
+                `From sender Thu Jan 1 09:00:00 2026\n${lines(
+                  jsonLdFixture(EMAIL_MARKUP_FIXTURES[2]),
+                )
+                  .map((line) =>
+                    line.startsWith("Message-ID:") ? `Message-ID: <${id}@example.test>` : line,
+                  )
+                  .join("\n")}\n`,
+            ),
+          ),
+        });
+  expect(failures).toBe(2);
+  expect(report.errors).toEqual(["markup-write-failed"]);
+  expect(report.state?.lastOutcome).toBe("success");
+  expect(pod.urls().filter((url) => /\/messages\/.+\.ttl$/.test(url))).toHaveLength(2);
+  expect(pod.urls().filter((url) => /\/messages\/.+\.eml$/.test(url))).toHaveLength(2);
+  expect(pod.urls().some((url) => url.includes("/threads/"))).toBe(true);
+  expect(urls(pod)).toHaveLength(0);
+});
+
+it.each([
+  "gmail",
+  "google-takeout",
+])("%s reports extraction failures and still stores the mailbox", async (id) => {
+  const { pod, podWriter } = setup(id);
+  const options = { markup: { maxBytes: -1 } };
+  const report =
+    id === "gmail"
+      ? await runImport({
+          adapter: createGmailAdapter(options),
+          podWriter,
+          mode: "live",
+          sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "one" }, { id: "two" }])) },
+        })
+      : await runFileImport({
+          adapter: createGoogleTakeoutFileAdapter(options),
+          podWriter,
+          file: takeoutFile(
+            ["one", "two"].map(
+              (id) =>
+                `From sender Thu Jan 1 09:00:00 2026\n${[
+                  `Message-ID: <${id}@example.test>`,
+                  ...lines(jsonLdFixture(EMAIL_MARKUP_FIXTURES[2])).filter(
+                    (line) => !line.startsWith("Message-ID:"),
+                  ),
+                ].join("\n")}\n`,
+            ),
+          ),
+        });
+  expect(report.errors).toEqual(["markup-extraction-failed"]);
+  expect(report.state?.lastOutcome).toBe("success");
+  expect(pod.urls().filter((url) => /\/messages\/.+\.ttl$/.test(url))).toHaveLength(2);
+  expect(pod.urls().filter((url) => /\/messages\/.+\.eml$/.test(url))).toHaveLength(2);
+  expect(urls(pod)).toHaveLength(0);
+});
+
+it.each([
+  "gmail",
+  "google-takeout",
+])("%s refuses a forged lower Google header during an actual import", async (id) => {
+  const { pod, podWriter } = setup(id);
+  const headers = [
+    "Authentication-Results: mx.google.com; dmarc=fail header.from=example.test",
+    "Authentication-Results: mx.google.com; dmarc=pass header.from=example.test",
+  ];
+  if (id === "gmail")
+    await runImport({
+      adapter: createGmailAdapter(),
+      podWriter,
+      mode: "live",
+      sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "forged", headers }])) },
+    });
+  else
+    await runFileImport({
+      adapter: createGoogleTakeoutFileAdapter(),
+      podWriter,
+      file: takeoutFile([
+        `From sender Thu Jan 1 09:00:00 2026\n${[
+          ...headers,
+          ...lines(jsonLdFixture(EMAIL_MARKUP_FIXTURES[2])),
+        ].join("\n")}\n`,
+      ]),
+    });
+  const url = urls(pod)[0] as string;
+  expect(new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).trust).toBe(
+    "unverified",
+  );
+});
+
+it.each([
+  "gmail",
+  "google-takeout",
+])("%s stores Google authentication and reuses it on re-scan", async (id) => {
+  const { pod, podWriter } = setup(id);
+  const header = "Authentication-Results: mx.google.com; dmarc=pass header.from=example.test";
+  if (id === "gmail")
+    await runImport({
+      adapter: createGmailAdapter(),
+      podWriter,
+      mode: "live",
+      sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "verified", headers: [header] }])) },
+    });
+  else
+    await runFileImport({
+      adapter: createGoogleTakeoutFileAdapter(),
+      podWriter,
+      file: takeoutFile([
+        `From sender Thu Jan 1 09:00:00 2026\n${[header, "Received: from sender by mx.google.com; Thu, 01 Jan 2026 08:00:00 +0000", ...lines(jsonLdFixture(EMAIL_MARKUP_FIXTURES[2]))].join("\n")}\n`,
+      ]),
+    });
+  const url = urls(pod)[0] as string;
+  let resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
+  expect(resource.trust).toBe("verified");
+  expect(resource.senderKey).toBe("example.test");
+  expect(resource.dateModified).toEqual(
+    new Date(id === "gmail" ? "2026-01-01T09:00:00Z" : "2026-01-01T08:00:00Z"),
+  );
+  const { createImportSession } = await import("../core/import-session.js");
+  const { rescanMailMarkup } = await import("./markup-writer.js");
+  const session = createImportSession(podWriter, id, `urn:test:${id}`, {});
+  await rescanMailMarkup({ ...session, resolve: podWriter.resolve }, "alex@example.test");
+  resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
+  expect(resource.trust).toBe("verified");
+  expect(urls(pod)).toHaveLength(1);
+  await session.finish();
+});
+
+it("a future sender Date and markup dateModified cannot pin a Gmail booking", async () => {
+  const { pod, podWriter } = setup("gmail");
+  const adapter = createGmailAdapter();
+  const run = (id: string, internalDate: string, status: string) =>
+    runImport({
+      adapter,
+      podWriter,
+      mode: "live",
+      sourceAuth: {
+        fetch: fixtureFetch(
+          "gmail",
+          gmailRoutes([
+            {
+              id,
+              internalDate,
+              headers: ["Date: Fri, 01 Jan 2099 00:00:00 +0000"],
+              html: jsonLdFixture({
+                ...EMAIL_MARKUP_FIXTURES[2],
+                name: status,
+                dateModified: "2099-01-01T00:00:00Z",
+              }),
+            },
+          ]),
+        ),
+      },
+    });
+  await run("first", "1767258000000", "Booked");
+  await run("changed", "1767344400000", "Cancelled");
+  expect(urls(pod)).toHaveLength(1);
+  const url = urls(pod)[0] as string;
+  const resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
+  expect(resource.dateModified).toEqual(new Date("2026-01-02T09:00:00Z"));
+  expect([...resource.strings("name")]).toEqual(["Cancelled"]);
+});
+
+it.each(["404", "SPAM", "TRASH", "sweep"])("Gmail %s removes derived markup", async (mode) => {
+  const { pod, podWriter } = setup("gmail");
+  const run = (routes: ReturnType<typeof gmailRoutes>) =>
+    runImport({
+      adapter: createGmailAdapter(),
+      podWriter,
+      mode: "live",
+      sourceAuth: { fetch: fixtureFetch("gmail", routes) },
+    });
+  await run(gmailRoutes([{ id: "one" }]));
+  expect(urls(pod)).toHaveLength(1);
+  await run(
+    gmailRoutes(
+      mode === "sweep"
+        ? []
+        : [
+            {
+              id: "one",
+              status: mode === "404" ? 404 : undefined,
+              labels: mode === "SPAM" || mode === "TRASH" ? [mode] : undefined,
+            },
+          ],
+    ),
+  );
+  expect(urls(pod)).toHaveLength(0);
+  if (mode === "TRASH")
+    expect(pod.urls().some((url) => /messages\/gmail-one.ttl$/.test(url))).toBe(true);
+});
+
+it("carries the markup budgets through the Gmail factory without skipping mail", async () => {
+  const { pod, podWriter } = setup("gmail");
+  const report = await runImport({
+    adapter: createGmailAdapter({ markup: { maxTotalItems: 1, maxTotalWrites: 2 } }),
+    podWriter,
+    mode: "live",
+    sourceAuth: { fetch: fixtureFetch("gmail", gmailRoutes([{ id: "one" }, { id: "two" }])) },
+  });
+  expect(urls(pod)).toHaveLength(1);
+  expect(pod.urls().filter((url) => /\/messages\/.+\.ttl$/.test(url))).toHaveLength(2);
+  expect(report.errors).toContain("markup-item-budget-exceeded");
+});
+
+it("leaves Gmail modification time unknown when internalDate is absent", async () => {
+  const { pod, podWriter } = setup("gmail");
+  await runImport({
+    adapter: createGmailAdapter(),
+    podWriter,
+    mode: "live",
+    sourceAuth: {
+      fetch: fixtureFetch(
+        "gmail",
+        gmailRoutes([
+          {
+            id: "unknown",
+            internalDate: "",
+            headers: [
+              "Received: from sender by mx.google.com; Thu, 01 Jan 2026 09:00:00 +0000",
+              "Date: Fri, 01 Jan 2099 00:00:00 +0000",
+            ],
+          },
+        ]),
+      ),
+    },
+  });
+  const url = urls(pod)[0] as string;
+  expect(
+    new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).dateModified,
+  ).toBeUndefined();
 });

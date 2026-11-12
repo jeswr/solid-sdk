@@ -61,6 +61,8 @@ export interface RunImportOptions extends ConnectorStateOptions {
 }
 
 export interface ImportReport {
+  /** Stable, non-personal codes for recoverable failures. */
+  errors?: readonly string[];
   adapterId: string;
   /** Updated host-owned checkpoint; persist only in the host. */
   state?: ConnectorState;
@@ -140,6 +142,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       categories: [...new Set(session.written.map((w) => w.category))],
       cursor: state.cursor,
       skipped: outcome.skipped,
+      errors: outcome.errors,
       indexUrl,
       state,
     };

@@ -118,7 +118,7 @@ export interface FileImportAdapter {
   importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome>;
 }
 
-export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
+export interface FileImportOutcome extends Pick<ImportOutcome, "skipped" | "errors"> {
   readonly unsupported?: readonly string[];
 }
 
@@ -220,6 +220,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       skipped: skipped || undefined,
       state,
       unsupported: outcome?.unsupported,
+      errors: outcome?.errors,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the

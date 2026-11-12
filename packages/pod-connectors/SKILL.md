@@ -261,19 +261,38 @@ quoted attribute handling and raw/comment skipping. Never resolve JSON-LD contex
 foreign/redefining contexts must not reinterpret compact terms as schema.org. Keep parsing
 and typed RDF vocabulary modules free of runtime `core/` and Node imports.
 
-Gmail and Takeout use `createMailWriter` with extraction on by default; their factory
-functions accept `MailWriterOptions` for opt-out and lower parser limits. Store message RDF
-and bytes before markup. Keep markup writes in the same session, so failures retain the
-cursor, and enforce cancellation after each awaited read and before writes. Purchases and
-trips are account-local subcontainers. Deterministic hashes use provider + reservation/order
-number + type, otherwise message/index; deliveries may use tracking number. Reject older
-updates and preserve ETags. Every nested resource carries source-message derivation and trust.
-The current mail model has no trusted receiver authentication: automatic imports must remain
-unverified regardless of MIME Authentication-Results. Only host-supplied, already stored
-receiver evidence may verify trust. Unverified mail must never replace a verified booking.
-Cover every root type and nested order structures in both encodings, hostile/foreign contexts,
-parser bounds, replays/updates, import opt-out, stored-HTML re-scan and cancellation with
-synthetic fixtures and memory Pods. See README's CON-A8 section for the public contract.
+Gmail and Takeout use `createMailWriter` with extraction on by default; factory options
+can opt out or lower limits. Store source RDF and bytes first. Hash booking identities as
+[type, senderKey, provider, number], otherwise message/index. Sender keys use the verified
+aligned domain or unverified From domain; malformed/missing From remains message-local.
+Only the top-most Authentication-Results with exact authserv-id mx.google.com may provide
+Google evidence: require a single DMARC pass and matching header.from, ignoring later
+headers and other authserv-ids. Unsupported syntax in the first Google header fails closed;
+never fall through to a lower duplicate. Preserve trusted host evidence. Persist sender key/trust and
+receiver modification time on message RDF for re-scan. Unverified assertions never overwrite
+verified assertions; verified assertions can promote unverified assertions. Preserve ETags.
+
+Clock comparisons use Gmail internalDate or Takeout's top Received timestamp only when its receiver is recognizably Google,
+falling back to the bounded mbox separator date (UTC when zone-less), clamped at import time.
+Missing time is unknown/epoch for comparison. Never use MIME Date or markup timestamps for
+update ordering, including on re-scan; only new dedicated stored receiver metadata is trusted.
+
+Cap extracted scalars at 256 Ki characters per email and independently cap intermediate
+microdata values before normalization; retain what fits and flag truncation. Skip items over
+64 KiB UTF-8 Turtle, enforcing the cap after session provenance too. Bound source IRIs to
+8,192 characters before repeating them across nested provenance. Share item and PUT-attempt
+budgets (default 2,000 each) across all messages in createMailWriter/re-scan, counting failures
+and source inventory PUTs. Catch extraction/markup write failures per message and report stable
+codes through writer.errors and ImportReport.errors; keep importing emails and advancing the
+cursor. Cancellation still propagates. Depth overflow must keep scanning later JSON scripts.
+
+Persist a bounded fedcon:emailMarkupSlug inventory once per message before item PUTs, preserve
+it on replay without resetting this run's source-message counts, and delete only assertions currently derived from that message before deleting
+its RDF. Cleanup runs even with extraction off; Trash retires markup while retaining mail.
+Re-scan prune mode visits bounded purchases/trips listings and removes assertions with missing
+source messages. Keep fixture helpers outside src so ./mail/* cannot expose them.
+Cover all roots/encodings, adversarial auth/clock/parser cases, count-based amplification,
+trust-update matrix, failure continuation, budgets, removal, prune and re-scan with fixtures.
 
 `ctx.releaseRead(slug)` releases a read-only session dataset and its ETag, with no Pod I/O;
 the next write to that slug must read again. Keep it optional for custom non-retaining ports.

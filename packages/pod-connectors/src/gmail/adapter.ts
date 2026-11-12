@@ -59,7 +59,7 @@ export function createGmailAdapter(options: MailWriterOptions = {}): Integration
       scopes: GOOGLE_SCOPES.gmail,
       categories: ["mail"],
       whatYouGet:
-        "Your email, labels and original messages saved into Mail, plus sender-asserted purchases and reservations from email markup.",
+        "Your email, labels and original messages saved into Mail, plus sender-asserted purchases and reservations from email markup with sender authentication labels.",
       requirements: [
         "Google OAuth verification: gmail.readonly is a restricted scope, so only test users can connect until Google verifies the app (including its security assessment).",
         "Browser hosts inject a Web OAuth client id and token proxy URL (TOKEN_PROXY); register their OAuth callback URI.",
@@ -99,7 +99,11 @@ export function createGmailAdapter(options: MailWriterOptions = {}): Integration
       for (const folder of labels.values()) known.set(folder.key, folder);
       await mail.flush([...known.values()]);
       ctx.progress({ label: "Done", done: sync.done, total: sync.done });
-      return { cursor, skipped: sync.skipped || undefined };
+      return {
+        cursor,
+        skipped: sync.skipped || undefined,
+        errors: mail.errors.length ? mail.errors : undefined,
+      };
     },
   };
 }
@@ -259,6 +263,8 @@ class Sync {
     try {
       await this.mail.add({
         raw,
+        googleReceiver: true,
+        trashed: labelIds.includes("TRASH"),
         folders,
         read: !labelIds.includes("UNREAD"),
         threadKey: `gmail-${message.threadId}`,

@@ -196,6 +196,8 @@ export interface EmailMarkupOptions {
 }
 /** Trusted host evidence from stored receiver authentication, never raw sender-supplied MIME headers. */
 export interface MailMarkupAuthentication {
+  /** Aligned DMARC header.from domain, supplied by the receiver or trusted host. */
+  readonly alignedDomain?: string;
   readonly dmarc?: "pass" | "fail";
   readonly spf?: "pass" | "fail";
   readonly dkim?: "pass" | "fail";

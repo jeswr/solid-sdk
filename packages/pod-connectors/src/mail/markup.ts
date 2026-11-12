@@ -17,6 +17,7 @@ export const MAX_MARKUP_BYTES = 8 * 1024 * 1024;
 export const MAX_MARKUP_ITEMS = 1000;
 export const MAX_MARKUP_SCRIPTS = 32;
 export const MAX_MARKUP_STRING = 8192;
+export const MAX_MARKUP_SCALAR_CHARS = 256 * 1024;
 const MAX_NODES = 4096;
 const MAX_VALUES = 16_384;
 const nodeTypes: ReadonlySet<string> = new Set(MARKUP_NODE_TYPES);
@@ -109,16 +110,42 @@ function guardedJson(text: string): unknown {
   }
 }
 /** Pure inert extraction; capped input, scripts, strings, nodes, depth, elements and root items. */
+export interface EmailMarkupResult {
+  readonly items: EmailMarkupItem[];
+  readonly truncated: boolean;
+  readonly scalarCharacters: number;
+}
 export function extractEmailMarkup(
   html: string,
   options: EmailMarkupOptions = {},
 ): EmailMarkupItem[] {
+  return extractEmailMarkupResult(html, options).items;
+}
+export function extractEmailMarkupResult(
+  html: string,
+  options: EmailMarkupOptions = {},
+): EmailMarkupResult {
   const maxBytes = markupLimit(options.maxBytes, DEFAULT_MARKUP_MAX_BYTES, MAX_MARKUP_BYTES);
   const maxItems = markupLimit(options.maxItems, 100, MAX_MARKUP_ITEMS);
-  if (!maxItems || !fitsUtf8(html, maxBytes)) return [];
+  if (!maxItems || !fitsUtf8(html, maxBytes))
+    return { items: [], truncated: !!html, scalarCharacters: 0 };
   const out: EmailMarkupItem[] = [];
   let nodes = 0;
   let valueCount = 0;
+  let characters = 0;
+  let microCharacters = 0;
+  let truncated = false;
+  let exhausted = false;
+  let microExhausted = false;
+  function charge(value: string | number | boolean): boolean {
+    const length = String(value).length;
+    if (length > MAX_MARKUP_SCALAR_CHARS - characters) {
+      truncated = exhausted = true;
+      return false;
+    }
+    characters += length;
+    return true;
+  }
   function normalize(raw: Record<string, unknown>, depth = 0): MarkupNode | undefined {
     if (depth >= MARKUP_MAX_DEPTH || ++nodes > MAX_NODES || !schemaContext(raw["@context"]))
       return undefined;
@@ -127,23 +154,28 @@ export function extractEmailMarkup(
     if (raw["@type"] !== undefined && !type) return undefined;
     const props: MarkupProperties = {};
     // Keep @id inert, but allow it to identify nested providers without dereferencing it.
-    if (typeof raw["@id"] === "string" && raw["@id"].length <= MAX_MARKUP_STRING)
+    if (
+      typeof raw["@id"] === "string" &&
+      raw["@id"].length <= MAX_MARKUP_STRING &&
+      charge(raw["@id"])
+    )
       props.identifier = [raw["@id"]];
     for (const [key, source] of Object.entries(raw)) {
-      if (valueCount >= MAX_VALUES) break;
+      if (valueCount >= MAX_VALUES || exhausted) break;
       const name = schemaTerm(key);
       if (!name || !properties.has(name)) continue;
       const values: MarkupValue[] = [];
       for (const value of Array.isArray(source) ? source : [source]) {
-        if (values.length >= 64 || valueCount >= MAX_VALUES) break;
+        if (values.length >= 64 || valueCount >= MAX_VALUES || exhausted) break;
         valueCount++;
-        if (typeof value === "string" && value.length <= MAX_MARKUP_STRING) values.push(value);
-        else if (
+        if (typeof value === "string" && value.length <= MAX_MARKUP_STRING) {
+          if (charge(value)) values.push(value);
+        } else if (
           typeof value === "boolean" ||
           (typeof value === "number" && Number.isFinite(value))
-        )
-          values.push(value);
-        else if (record(value)) {
+        ) {
+          if (charge(value)) values.push(value);
+        } else if (record(value)) {
           const child = normalize(value, depth + 1);
           if (child) values.push(child);
         }
@@ -154,6 +186,7 @@ export function extractEmailMarkup(
   }
   function visit(value: unknown, depth = 0): void {
     if (
+      exhausted ||
       out.length >= maxItems ||
       depth >= MARKUP_MAX_DEPTH ||
       nodes >= MAX_NODES ||
@@ -184,6 +217,7 @@ export function extractEmailMarkup(
   const stack: Frame[] = [];
   let scopes = 0;
   let scripts = 0;
+  let overflowDepth = 0;
   function scope(): Record<string, unknown> | undefined {
     for (let i = stack.length - 1; i >= 0; i--) if (stack[i]?.scope) return stack[i]?.scope;
     return undefined;
@@ -195,7 +229,17 @@ export function extractEmailMarkup(
     if (frame.owner && frame.props.length) {
       for (const prop of frame.props) {
         const previous = frame.owner[prop];
-        if (Array.isArray(previous) && previous.length < 64) previous.push(value);
+        if (Array.isArray(previous) && previous.length >= 64) continue;
+        // Bound the intermediate microdata tree before normalization, including aliases.
+        if (typeof value === "string") {
+          if (value.length > MAX_MARKUP_STRING) continue;
+          if (value.length > MAX_MARKUP_SCALAR_CHARS - microCharacters) {
+            truncated = microExhausted = true;
+            break;
+          }
+          microCharacters += value.length;
+        }
+        if (Array.isArray(previous)) previous.push(value);
         else if (!previous) frame.owner[prop] = [value];
       }
     } else if (frame.scope) visit(frame.scope);
@@ -203,13 +247,22 @@ export function extractEmailMarkup(
   function appendText(text: string): void {
     const owner = scope();
     for (const frame of stack)
-      if (frame.props.length && !frame.scope && frame.owner === owner) {
+      if (
+        !frame.overflow &&
+        frame.props.length &&
+        !frame.scope &&
+        frame.value === undefined &&
+        frame.owner === owner
+      ) {
         if (text.length > MAX_MARKUP_STRING - frame.text.length) frame.overflow = true;
         else frame.text += text;
       }
   }
   for (const token of markupHtmlTokens(html)) {
-    if (out.length >= maxItems) break;
+    if (out.length >= maxItems || exhausted || microExhausted) {
+      truncated = true;
+      break;
+    }
     if (token.kind === "raw") {
       if (
         token.tag === "script" &&
@@ -218,14 +271,20 @@ export function extractEmailMarkup(
         asciiLower(token.attrs.get("type")?.trim() ?? "") === "application/ld+json"
       )
         visit(guardedJson(token.value));
-      else if (token.tag === "textarea" || token.tag === "title") appendText(token.value);
+      else if (!overflowDepth && (token.tag === "textarea" || token.tag === "title"))
+        appendText(token.value);
       continue;
     }
+    if (overflowDepth && token.kind === "text") continue;
     if (token.kind === "text") {
       appendText(token.value);
       continue;
     }
     if (token.kind === "end") {
+      if (overflowDepth) {
+        overflowDepth--;
+        continue;
+      }
       // A bounded stack search; mismatched tags never pop unrelated scope boundaries.
       let index = stack.length - 1;
       while (index >= 0 && stack[index]?.tag !== token.tag) index--;
@@ -233,7 +292,11 @@ export function extractEmailMarkup(
       while (stack.length > index) finish(stack.pop() as Frame);
       continue;
     }
-    if (stack.length >= MARKUP_MAX_DEPTH) break;
+    if (overflowDepth || stack.length >= MARKUP_MAX_DEPTH) {
+      if (!token.void) overflowDepth++;
+      truncated = true;
+      continue;
+    }
     const props = (token.attrs.get("itemprop") ?? "")
       .split(/\s+/)
       .slice(0, 16)
@@ -265,6 +328,12 @@ export function extractEmailMarkup(
     if (token.void) finish(frame);
     else stack.push(frame);
   }
-  // Unclosed scopes/properties are intentionally not published.
-  return out;
+  // A scalar budget stop publishes only the values already finished. Ordinary unclosed
+  // scopes remain unpublished. Normalization independently caps repeated nested aliases.
+  if (microExhausted)
+    while (stack.length) {
+      const frame = stack.pop() as Frame;
+      if (frame.scope) finish(frame);
+    }
+  return { items: out, truncated, scalarCharacters: characters };
 }

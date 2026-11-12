@@ -29,12 +29,16 @@ describe("email markup", () => {
 
 import { vi } from "vitest";
 import {
+  EMAIL_MARKUP_FIXTURES,
+  jsonLdFixture,
+  microdataFixture,
+} from "../../test-support/markup-fixtures.js";
+import {
   DEFAULT_MARKUP_MAX_BYTES,
   MAX_MARKUP_BYTES,
   MAX_MARKUP_SCRIPTS,
   MAX_MARKUP_STRING,
 } from "./markup.js";
-import { EMAIL_MARKUP_FIXTURES, jsonLdFixture, microdataFixture } from "./markup-fixtures.js";
 
 describe("transactional fixtures", () => {
   it.each(
@@ -196,7 +200,7 @@ describe("hostile and ambiguous markup", () => {
       ),
     ).toEqual([]);
     expect(extractEmailMarkup("<div ".repeat(10000) + ld(order))).toEqual([]);
-    expect(extractEmailMarkup("<div>".repeat(40) + ld(order))).toEqual([]);
+    expect(extractEmailMarkup("<div>".repeat(40) + ld(order))).toHaveLength(1);
     expect(extractEmailMarkup("<br>".repeat(50001) + ld(order))).toEqual([]);
     expect(extractEmailMarkup('<script type="application/ld+json">{"@type":"Order"}')).toEqual([]);
   });
@@ -291,4 +295,49 @@ describe("work and allocation budgets", () => {
       extractEmailMarkup(html, { maxBytes: new TextEncoder().encode(html).length - 1 }),
     ).toEqual([]);
   });
+});
+
+it("bounds nested microdata amplification and JSON scalar totals by character count", async () => {
+  const { extractEmailMarkupResult, MAX_MARKUP_SCALAR_CHARS } = await import("./markup.js");
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const { DataFactory, Store } = await import("n3");
+  const { MailMarkupResource } = await import("./markup-vocab.js");
+  const props = MARKUP_PROPERTIES.slice(0, 16).join(" ");
+  const block = `<div itemscope itemtype="https://schema.org/Order">${`<span itemprop="${props}">`.repeat(25)}${"x".repeat(8192)}${"</span>".repeat(25)}</div>`;
+  for (const html of [
+    block.repeat(4),
+    ld(Array.from({ length: 40 }, () => ({ "@type": "Order", name: "x".repeat(8192) }))),
+  ]) {
+    const result = extractEmailMarkupResult(html);
+    expect(result.truncated).toBe(true);
+    const count = (value: unknown): number => {
+      if (typeof value !== "object" || value === null) return String(value).length;
+      if (Array.isArray(value)) return value.reduce((n, child) => n + count(child), 0);
+      return Object.values(
+        (value as { properties: Record<string, unknown> }).properties,
+      ).reduce<number>((n, child) => n + count(child), 0);
+    };
+    expect(result.items.reduce((n, item) => n + count(item), 0)).toBeLessThanOrEqual(
+      MAX_MARKUP_SCALAR_CHARS,
+    );
+    expect(result.scalarCharacters).toBeLessThanOrEqual(MAX_MARKUP_SCALAR_CHARS);
+    expect(result.items.length).toBeGreaterThan(0);
+    const dataset = new Store();
+    const resource = new MailMarkupResource("https://example.test/item", dataset, DataFactory);
+    for (const item of result.items)
+      for (const [prop, values] of Object.entries(item.properties))
+        for (const value of values ?? [])
+          if (typeof value !== "object")
+            resource.addLiteral(prop as (typeof MARKUP_PROPERTIES)[number], value);
+    // RDF escaping/metadata has a separate writer cap; this also detects extraction expansion.
+    expect(new TextEncoder().encode(await serialize([...dataset])).length).toBeLessThan(
+      2 * MAX_MARKUP_SCALAR_CHARS,
+    );
+  }
+});
+
+it("finds a later JSON-LD script after forty unclosed elements", () => {
+  expect(
+    extractEmailMarkup("<p>".repeat(40) + ld({ "@type": "Order", orderNumber: "late" })),
+  ).toEqual([{ type: "Order", properties: { orderNumber: ["late"] } }]);
 });
