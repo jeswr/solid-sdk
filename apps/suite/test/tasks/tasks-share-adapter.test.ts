@@ -146,6 +146,37 @@ describe("Tasks named sharing", () => {
     expect((await f.grants(f.project.url)).some((grant) => grant.agents.includes(bob))).toBe(false);
   });
 
+  it("settles a retry against a delayed original grant that commits before its base is checked", async () => {
+    const f = await fixture();
+    await f.load();
+    const aclUrl = `${f.project.url}.acl`;
+    let delayed: (() => Promise<Response>) | undefined;
+    f.intercept((url, init) => {
+      if (url === aclUrl && init.method === "PUT") {
+        delayed = () => f.pod.fetch(url, init);
+        throw new Error("Lost response while the write remains in flight");
+      }
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    expect((await f.load()).pendingAccess).toBe(true);
+    let trackerPuts = 0;
+    let committed = false;
+    f.intercept(async (url, init) => {
+      if (init.method !== "PUT") return;
+      if (url === aclUrl) trackerPuts++;
+      // The original grant lands after the retry has read its snapshot, while it narrows.
+      if (url === `${f.folder}.acl` && !committed) {
+        committed = true;
+        expect((await delayed?.())?.ok).toBe(true);
+      }
+    });
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    expect(committed).toBe(true);
+    expect(trackerPuts).toBe(0);
+    expect((await f.load()).pendingAccess).toBe(false);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(true);
+  });
+
   it.each([
     "editor",
     null,

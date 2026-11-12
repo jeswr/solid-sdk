@@ -585,7 +585,7 @@ describe("fallback fired store", () => {
     expect(await another.claim("during-outage")).toBe(false);
   });
 
-  it("reports an outage once, prunes only the fallback, and retries keys when both stores fail", async () => {
+  it("reports an outage once, prunes the fallback, and retries keys when both stores fail", async () => {
     const failure = new Error("Storage unavailable");
     const primary = {
       claim: vi.fn().mockRejectedValue(failure),
@@ -601,7 +601,7 @@ describe("fallback fired store", () => {
     expect(await store.claim("retry")).toBe(true);
     await store.prune?.();
     expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
-    expect(primary.prune).not.toHaveBeenCalled();
+    expect(primary.prune).toHaveBeenCalledOnce();
     expect(fallback.prune).toHaveBeenCalledOnce();
   });
   it("remembers claims across an IndexedDB outage and recovery", async () => {

@@ -227,9 +227,13 @@ export function fallbackFiredStore(
       }
       return [...new Set([...known, ...primaryKeys, ...((await fallback.keys?.()) ?? [])])];
     },
-    // Prune only the fallback. Pruning the IndexedDB primary from inside a tick stalls the
-    // Tasks UI under the test IndexedDB, and the primary loads legacy claims lazily on claim.
+    // Retention applies to every durable layer. A failing primary must not stop the fallback.
     async prune() {
+      try {
+        await primary.prune?.();
+      } catch (error) {
+        report(error);
+      }
       await fallback.prune?.();
     },
   };

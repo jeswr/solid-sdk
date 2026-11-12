@@ -605,6 +605,15 @@ describe("IndexedDB fired store", () => {
     const store = createIndexedDbFiredStore(fake.factory);
     expect(await store.claim("previous")).toBe(false);
   });
+  it("closes every connection after its claim or prune, holding none between ticks", async () => {
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    await store.claim("key");
+    await store.prune?.();
+    await store.claim("next");
+    expect(fake.factory.open).toHaveBeenCalledTimes(3);
+    for (const db of fake.databases) expect(db.close).toHaveBeenCalledOnce();
+  });
   it("closes on version changes and reopens lazily", async () => {
     const fake = fakeIndexedDB();
     const store = createIndexedDbFiredStore(fake.factory);

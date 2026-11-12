@@ -96,7 +96,6 @@ export function createLocalStorageFiredStore(storage: Storage): FiredReminderSto
 
 /** Lazy atomic claims across tabs/connections, with a tab-local cache of known fired keys. */
 export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderStore {
-  let database: Promise<IDBDatabase> | undefined;
   const known = new Map<string, number>();
   let legacyClaims: Map<string, number> | undefined;
   function open(version?: number): Promise<IDBDatabase> {
@@ -122,87 +121,92 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
           db.close();
           resolve(open(db.version + 1));
         } else {
-          db.onversionchange = () => {
-            db.close();
-            database = undefined;
-          };
+          db.onversionchange = () => db.close();
           resolve(db);
         }
       };
     });
   }
-  async function db(): Promise<IDBDatabase> {
-    database ??= open().catch((error: unknown) => {
-      database = undefined;
-      throw error;
-    });
-    return database;
+  // Each claim or prune uses its own short-lived connection. A tab never holds the shared
+  // "tasks" database open between ticks, so other tabs' upgrades and test harnesses that wait
+  // for connections to close are not blocked. Closing waits for the transaction to finish.
+  async function withDb<T>(work: (database: IDBDatabase) => Promise<T>): Promise<T> {
+    const database = await open();
+    try {
+      return await work(database);
+    } finally {
+      database.close();
+    }
   }
   async function claim(key: string, legacy?: LegacyReminderClaim): Promise<boolean> {
     if (known.has(key)) return false;
-    const database = await db();
-    return new Promise((resolve, reject) => {
-      const tx = database.transaction(STORE, "readwrite");
-      const store = tx.objectStore(STORE);
-      const now = new Date();
-      let claimed = false;
-      let previous = legacyClaims;
-      tx.oncomplete = () => {
-        legacyClaims = previous;
-        known.set(key, now.getTime());
-        resolve(claimed);
-      };
-      tx.onerror = tx.onabort = () => reject(tx.error);
-      const request = store.get(key);
-      request.onsuccess = () => {
-        if (request.result !== undefined) return;
-        const accept = () => {
-          if (!legacyClaimed(previous ?? new Map(), legacy)) {
-            store.put(now.toISOString(), key);
-            claimed = true;
-          }
-        };
-        // Scheduler pruning normally loads these once per tick. Direct claims also
-        // consult persisted legacy records before accepting their first new key.
-        if (legacy && !previous) {
-          previous = new Map();
-          const scan = store.openCursor();
-          scan.onsuccess = () => {
-            const cursor = scan.result;
-            if (cursor) {
-              if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
-                previous?.set(cursor.key, Date.parse(cursor.value));
-              cursor.continue();
+    return withDb(
+      (database) =>
+        new Promise((resolve, reject) => {
+          const tx = database.transaction(STORE, "readwrite");
+          const store = tx.objectStore(STORE);
+          const now = new Date();
+          let claimed = false;
+          let previous = legacyClaims;
+          tx.oncomplete = () => {
+            legacyClaims = previous;
+            known.set(key, now.getTime());
+            resolve(claimed);
+          };
+          tx.onerror = tx.onabort = () => reject(tx.error);
+          const request = store.get(key);
+          request.onsuccess = () => {
+            if (request.result !== undefined) return;
+            const accept = () => {
+              if (!legacyClaimed(previous ?? new Map(), legacy)) {
+                store.put(now.toISOString(), key);
+                claimed = true;
+              }
+            };
+            // Scheduler pruning normally loads these once per tick. Direct claims also
+            // consult persisted legacy records before accepting their first new key.
+            if (legacy && !previous) {
+              previous = new Map();
+              const scan = store.openCursor();
+              scan.onsuccess = () => {
+                const cursor = scan.result;
+                if (cursor) {
+                  if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
+                    previous?.set(cursor.key, Date.parse(cursor.value));
+                  cursor.continue();
+                } else accept();
+              };
             } else accept();
           };
-        } else accept();
-      };
-    });
+        }),
+    );
   }
   async function prune(): Promise<void> {
     const cutoff = new Date(Date.now() - RETENTION);
     for (const [key, at] of known) if (at < cutoff.getTime()) known.delete(key);
-    const database = await db();
-    return new Promise((resolve, reject) => {
-      const tx = database.transaction(STORE, "readwrite");
-      const store = tx.objectStore(STORE);
-      const previous = new Map<string, number>();
-      tx.oncomplete = () => {
-        legacyClaims = previous;
-        resolve();
-      };
-      tx.onerror = tx.onabort = () => reject(tx.error);
-      const scan = store.openCursor();
-      scan.onsuccess = () => {
-        const cursor = scan.result;
-        if (cursor) {
-          if (cursor.value < cutoff.toISOString()) cursor.delete();
-          else if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
-            previous.set(cursor.key, Date.parse(cursor.value));
-          cursor.continue();
-        }
-      };
-    });
+    return withDb(
+      (database) =>
+        new Promise((resolve, reject) => {
+          const tx = database.transaction(STORE, "readwrite");
+          const store = tx.objectStore(STORE);
+          const previous = new Map<string, number>();
+          tx.oncomplete = () => {
+            legacyClaims = previous;
+            resolve();
+          };
+          tx.onerror = tx.onabort = () => reject(tx.error);
+          const scan = store.openCursor();
+          scan.onsuccess = () => {
+            const cursor = scan.result;
+            if (cursor) {
+              if (cursor.value < cutoff.toISOString()) cursor.delete();
+              else if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
+                previous.set(cursor.key, Date.parse(cursor.value));
+              cursor.continue();
+            }
+          };
+        }),
+    );
   }
   return { claim, prune };
 }

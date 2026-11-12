@@ -360,9 +360,23 @@ export class TasksSharingAdapter implements SharingAdapter {
         );
         const trackerAcl = await this.acl(url, signal);
         if (!trackerAcl) throw new ShareError("conflict");
-        this.pendingEtag = requireEtag(trackerAcl.etag);
-        this.pendingPeople = next;
-        this.unconfirmedChange = true;
+        const etag = requireEtag(trackerAcl.etag);
+        if (retrying) {
+          // Keep the original base revision, so a later read still recognises the original
+          // PUT if it commits after this point. If it has already committed, settle against
+          // it rather than retrying over it.
+          if (etag !== this.pendingEtag) {
+            await this.readState(url, signal, "settle");
+            if (this.unconfirmedChange) throw new ShareError("network");
+            const settled = await this.readState(url, signal, "all", true);
+            if (!settled.canManage || settled.readOnly) throw new ShareError("forbidden");
+            return;
+          }
+        } else {
+          this.pendingEtag = etag;
+          this.pendingPeople = next;
+          this.unconfirmedChange = true;
+        }
         try {
           await this.tracker.setPerson(url, webId, role, opts);
         } catch (error) {
