@@ -54,6 +54,7 @@ export type HealthFact =
       kind: "medication";
       product: { name: string; atcCode?: string };
       dose?: { value: string; unit: string; frequency?: string };
+      doseSchedule?: string;
     })
   | (HealthFactBase & {
       kind: "observation";

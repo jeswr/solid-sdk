@@ -124,6 +124,78 @@
         "convention": "self"
       },
       "fields": {}
+    },
+    {
+      "name": "AssistantTextValue",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantTextValue",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantDateFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantDateFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantDateTimeFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantDateTimeFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantTextFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantTextFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantSourceMetadata",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantSourceMetadata",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantOwner",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantOwner",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantAnnotation",
+      "targetClass": "http://www.w3.org/ns/oa#Annotation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantEvidenceTarget",
+      "targetClass": "http://www.w3.org/ns/oa#SpecificResource",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantQuoteSelector",
+      "targetClass": "http://www.w3.org/ns/oa#TextQuoteSelector",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
     }
   ]
 }

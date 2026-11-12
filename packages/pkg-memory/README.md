@@ -338,3 +338,11 @@ matches share its quads; `add` and `delete` throw. Take a fresh snapshot after e
 The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
 this changes index allocation only, and retains the N3 Store API and reference
 language deduplication. No RDF terms, canonicalization or hash inputs change.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`parseReferenceRdf(body, "text/turtle" | "application/trig", baseIRI?)` exposes the existing
+suite parser without requiring nanopub envelopes or applying literal/term validation.
+It preserves the parser's reference language-tag spelling. Structured importers can
+validate separate records with `canonicalizeAssertion` before passing generated assertions
+to `buildNanopublications`; unvalidated parser output must never be stored or displayed.
+This export adds no parsing, normalization, canonicalization or hashing behavior.

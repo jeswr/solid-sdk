@@ -169,6 +169,95 @@ projection before display. pkg-memory's existing RDFlib parity policy still excl
 `xsd:double` and `xsd:dateTimeStamp`: tolerant import counts/skips these as unsupported
 datatypes, while the projector can read them in an existing `Nanopublications` value.
 
+Assistant Turtle import
+
+```ts
+import { importAssistantTurtle, importHealthExport, projectHealthFacts } from "@jeswr/pkg-health";
+import { serializeNanopublications, parseNanopublications } from "@jeswr/pkg-memory";
+
+const assistant = await importAssistantTurtle(turtle, {
+  owner: ownerWebId,
+  assistant: { iri: "https://example.org/agents/assistant", label: "Fictional assistant" },
+  batchId: "assistant-health-2026-11-01",
+  generatedAt: "2026-11-01T12:00:00Z",
+});
+const view = projectHealthFacts(assistant.value, { owner: ownerWebId });
+
+// Import the existing PKG independently. The caller merges the two separate batches.
+const existing = await importHealthExport(otherTrig, { owner: ownerWebId });
+const merged = await parseNanopublications(
+  (await serializeNanopublications(existing.value)) +
+  (await serializeNanopublications(assistant.value)),
+);
+// Preserve tolerant-import context when present; it is not serialized RDF.
+merged.affected = existing.value.affected;
+const combined = projectHealthFacts(merged, { owner: ownerWebId });
+```
+
+Use distinct batch IDs for independent exports and the same explicit owner. Stable claim
+IDs derive from the fact IRIs; fixed input/options yield the same nanopub metadata,
+assertion IDs and byte-identical serialized TriG. Generated OA builders give evidence
+targets/selectors stable named IRIs, replacing only new envelope provenance blanks.
+Do not flatten assertion/provenance graphs or rewrite existing hashes. For empty
+batches, combine only nonempty nanopub exports: the nanopub parser requires a head.
+If both imports were tolerant nanopub imports, union their `affected` lists.
+
+The local importer uses pkg-memory's existing `parseReferenceRdf` suite-parser boundary.
+It accepts both schema.org schemes and both `https://w3id.org/jeswr/pkg#` and
+`https://jeswr.org/ns/pkg#` status predicates. Scalar aliases are combined; conflicting
+values refuse the fact. It requires one recognised fact type and exclusively owner
+`health:patient`/`schema:about` links. Missing or mixed owner links refuse the fact.
+Conditions and medicines use memory templates; observations, encounters, immunizations
+and owner-linked PropertyValue notes use generated builders. Observation string units
+become `health:unitCode`. Statement labels and string `doseSchedule` are preserved;
+the latter projects as `doseSchedule`, alongside the existing structured `dose` view.
+Note names are retained as labels and property IDs. Optional descriptions remain in RDF.
+
+SelfReportedExplicit stays explicit, Inferred stays inferred, Uncertain becomes
+SelfReportedHedged; Current stays Current and Past becomes Historical. Every claim
+carries MedicalHealth and explicit attribution to the assistant, which is also the
+batch worker. Every valid CreativeWork becomes a document batch source, including
+unreferenced sources. Generated source metadata retains its title, creation time and
+the assistant label as model. Assistant exports may repeat a source's name or creation
+date: the first non-empty name in code-point order and the earliest date are kept. A
+source `xsd:date` stays a date with no invented time of day; sub-millisecond digits of a
+source `xsd:dateTime` are truncated, because source times are provenance metadata, not
+facts. Fact and medicine names that differ only in letter case are one name (the first in
+code-point order); genuinely different names refuse the fact. Each exact quote is paired with every derived-from source;
+quotes remain attached to their own claim. Unreferenced sources are absent from the
+projected provenance view, as usual.
+
+`skipped` counts fact nodes once, with fixed aggregate reasons: OtherSubject,
+UnsupportedType, UnknownEpistemicStatus, UnknownValidityStatus, InvalidEvidence,
+InvalidSource, UnsupportedValue, UnsupportedDatePrecision or InvalidFact. Raw outgoing
+terms on facts, products and sources pass memory's unchanged literal-parity and term
+safety checks before assertions are built. No values or parser diagnostics enter errors
+or reports. Invalid syntax throws a fixed HealthGraphError; invalid options fail before
+parsing. Invalid sources cause their referencing facts to be skipped.
+
+Import gaps: named fact/product/source IRIs are required; language-tagged scalar text,
+non-string PropertyValue values, non-string units/schedules, resource effective-time
+links, non-date/dateTime bounds, unsupported memory datatypes and numbers the runtime
+cannot represent faithfully are skipped. Text that the generated runtime would sanitize
+is refused. Quotes must be nonempty and at most 300 Unicode code points, as required by
+the memory builder; quotes are never truncated. An over-long quote is dropped, and the
+fact is kept when another usable quote remains (otherwise InvalidEvidence). Generated date facets retain date vs
+dateTime precision, normalize dateTime offsets to UTC, and drop date timezone suffixes
+without changing the calendar day. Nonzero sub-millisecond dateTime precision on a fact is
+skipped rather than rounded. These are local import limits, not changes to the clinical sector
+or pkg-memory's hash/normalization policy.
+
+```sh
+node packages/pkg-health/scripts/import-assistant-turtle.mjs in.ttl out.trig \
+  --owner https://example.org/people/avery#me \
+  --assistant-iri https://example.org/agents/assistant \
+  --assistant-label "Fictional assistant" --batch assistant-health-2026-11-01
+```
+
+Build first. The CLI writes TriG through pkg-memory and prints only imported/skipped
+counts. `--generated-at <xsd:dateTime>` fixes the clock for repeatable runs; otherwise
+it uses the current time. Failures print one fixed message with no paths or diagnostics.
+
 Fictional demo
 
 ```ts
@@ -257,8 +346,12 @@ kidney/urinary, reproductive/sexual. This prioritization only stabilizes display
 
 Generator gaps
 
-The generated core has fifteen assertion/supporting-record shapes, including all four
+The generated core has twenty-four assertion/supporting-record shapes, including all four
 sector observation subtypes, OWL-Time Instant, PropertyValue and DigitalDocument.
+Six local assistant-import facet classes compose text values, literal date/dateTime
+bounds/effective times, statement text, source metadata and owner-property links with
+the clinical builders. Three OA evidence shapes supply deterministic named provenance
+nodes. PropertyValue adds a name field for imported note labels.
 Canonical and legacy aliases, schema:MedicalCondition/Drug and FHIR/schema Observation
 remain supported. `codegen/pkg-health.shapes.ttl` documents the read/build narrowings:
 numeric builds use xsd:decimal; Instant and document creation builds use xsd:dateTime;
@@ -284,13 +377,15 @@ normative clinical validator.
    string value is rejected (multiple NodeShapes per canonical targetClass); the
    generator admits no heterogeneous numeric/string field union. The demo therefore
    omits qualitative results. Imported qualitative observations remain supported and
-   exhaustively tested. No new generator/runtime behaviour is introduced.
+   exhaustively tested. Assistant imports compose the generated AssistantTextValue facet
+   with Observation, using a distinct local target class. No new generator/runtime
+   behaviour is introduced.
 6. Blank subjects: generated entity wrappers require NamedNodes. Imported blank
    PropertyValue and DigitalDocument records use bounded read-only typed views;
    demo notes use the existing preference template, which skolemizes the blank node.
 
 The original gaps remain documented for maintainer follow-up (HKG-A1/A2); the
-qualitative demo limitation is the same mixed-value union gap, not a new model workaround. The
+qualitative demo limitation is the same mixed-value union gap. The
 codegen/runtime packages and generated files are never hand-edited. Regenerate with
 `pnpm --filter @jeswr/pkg-health codegen`; the drift test compares every artifact byte
 for byte. Build copies generated JS/declarations into dist. Biome excludes generated

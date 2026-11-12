@@ -2,6 +2,7 @@
 name: pkg-health
 description: Use when reading, charting or correcting health facts in the personal knowledge graph
 ---
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 Use `projectHealthFacts(parsed, { owner })` for pod or local TriG nanopublications.
@@ -59,3 +60,18 @@ with batch/fact/generated builders. Do not add hand-written quads or Turtle to i
 Its qualitative observation builds are omitted for the documented generator union
 gap. Preserve per-projection assertion and provenance graph caches; do not introduce
 per-fact full-dataset scans or global caches.
+
+Use `importAssistantTurtle(text, { owner, assistant: { iri, label }, batchId, generatedAt })`
+for non-nanopub assistant exports. It accepts both schema.org schemes and pkg namespaces,
+validates each fact/source/product before building, and skips invalid facts with fixed
+aggregate reasons. Scalar aliases must agree, except names that differ only in case;
+repeated source names/dates keep the first name and earliest date (source dates stay
+dates; sub-millisecond source times truncate). Over-long quotes are dropped, never cut;
+a fact needs one usable quote. All patient/about links must name the owner.
+Each source/quote pair becomes evidence, with the assistant as worker and attributed agent.
+Generated local import facets preserve qualitative observations, date/dateTime precision,
+statement schedules, source creation/model metadata and note labels. See the README's
+import gaps before extending admission. Keep independent exports in separate batches with
+the same owner; merge their TriG using the nanopub parser and preserve `affected` context.
+The local CLI prints counts only; `--generated-at` fixes the clock. Never put real health
+exports in fixtures or logs.

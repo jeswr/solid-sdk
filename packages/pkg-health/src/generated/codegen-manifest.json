@@ -9,14 +9,14 @@
     "major": 0
   },
   "inputs": {
-    "ontology.ttl": "5a2e60d8c6b6acc4c8bfaf5b3f70912cbe958f9acbc987a91a4104b950329362",
-    "shapes.shacl.ttl": "0cd449e95fe03583cc2c69648a71da9e64c356022a075d6bd51a534d8848e447",
-    "codegen.config.json": "5f2e1ccd53e027ed40b651bbe5eb60cc96889e9b7ece52c72c12f14940bbe555"
+    "ontology.ttl": "ab6cbb1eb8b76eb022e501b551c4a277e6f6eeaef3b88ea31f21801820ce1d07",
+    "shapes.shacl.ttl": "bb11ae745f1d3a6ae907e85027aa05718c7aba6d51c9304484b4ac51781b05c3",
+    "codegen.config.json": "8facbfeab1a5d0aaedcc7d792053ead89e66deda295de0845ed9b12507afd3b0"
   },
   "outputs": {
-    "model.d.ts": "45306bb97c8769742649ea2220bd003e5ee89e22793d5418c92a5984173367c1",
-    "model.js": "cca23032671fd6a46136d48e5d4e062c0445b9a03d6791a98892ad9d9b57ac6d",
-    "model.json": "e8dee1c821333359e1b9d225789e76bd982cc4bc0e47e40ac3d297a11a75f1a6",
-    "shapes.ttl": "4931d4ce3a6baf4f7162986897be9fcd7bbdaf4e18dcec01b78cb48099160d8e"
+    "model.d.ts": "1c782d3353bdef1cbb0a648603f32bb559ecd70c8bdd6957a41e60af05aa51ea",
+    "model.js": "49cb4b7550fc687da4a25e40f4de0a7a8d4243b185289fdd6b20d603be96c8a5",
+    "model.json": "489c2f38e92e7317994f6329634fba1aeb59a47cf9d59f94890df9948912a4ae",
+    "shapes.ttl": "d61f9470af899cd2c969d632828fc14d75bc2ef8e4caa0aac0c4f8f9f49d0bf2"
   }
 }

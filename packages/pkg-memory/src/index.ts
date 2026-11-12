@@ -46,6 +46,8 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+/** Suite RDF parser without nanopub-envelope or literal validation; validate before building. */
+export { parseReferenceRdf } from "./rdf.js";
 export { readNamedGraph } from "./read-graph.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
