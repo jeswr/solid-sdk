@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
 
 const sample = fileURLToPath(new URL("../../public/samples/sample-mailbox.mbox", import.meta.url));
 test.use({ locale: "en" });
@@ -27,6 +28,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__mail-test-reset");
+  await seedDemoSession(page);
 });
 async function capture(page: Page, info: TestInfo, view: string) {
   await page.evaluate(() => document.fonts.ready);
@@ -235,4 +237,52 @@ test("composes, saves, edits and discards a draft in the pod", async ({ page }, 
   await expect(page.getByRole("link", { name: /Allotment rota/ })).toHaveCount(0);
   await page.goto("/mail/compose?draft=not-a-ref");
   await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();
+});
+test("demo Send files a composed message in Sent with a not-delivered note and removes it from Drafts", async ({
+  page,
+}, info) => {
+  await page.goto("/mail/compose");
+  await expect(page.getByRole("heading", { name: "New message", level: 1 })).toBeVisible();
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(send).toBeDisabled();
+  await expect(
+    page.getByText("Demo pod: Send files the message in Sent. Nothing leaves your browser.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByLabel("To", { exact: true }).fill("Bob Example <bob@example.org>");
+  await expect(send).toBeEnabled();
+  await page.getByLabel("Subject", { exact: true }).fill("Demo garden invitation");
+  await page.getByLabel("Message", { exact: true }).fill("Meet by the greenhouse on Saturday.");
+  await accessible(page);
+  await send.click();
+  await expect(page).toHaveURL(/\/mail\/sent$/);
+  await expect(page.getByRole("heading", { name: "Sent", exact: true, level: 1 })).toBeVisible();
+  await expect(
+    page.getByText("Saved in Sent (demo, not delivered)", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("tr[data-thread]")).toHaveCount(1);
+  await expect(page.locator("tr[data-thread]")).toContainText("Demo garden invitation");
+  await page.getByRole("link", { name: "View", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Demo garden invitation", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Sent from the demo pod. Not delivered.", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Meet by the greenhouse on Saturday.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("Draft, not sent.", { exact: true })).toHaveCount(0);
+  await accessible(page);
+  await capture(page, info, "demo-sent");
+  await page.reload();
+  await expect(
+    page.getByText("Sent from the demo pod. Not delivered.", { exact: true }),
+  ).toBeVisible();
+  await nav(page, "Drafts");
+  await expect(page.getByRole("link", { name: /Demo garden invitation/ })).toHaveCount(0);
+  await expect(page.locator("tr[data-thread]")).toHaveCount(0);
+  await nav(page, "Sent");
+  await expect(page.locator("tr[data-thread]")).toContainText("Demo garden invitation");
 });
