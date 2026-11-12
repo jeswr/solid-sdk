@@ -1663,7 +1663,14 @@ class InvariantBudgetExceeded extends Error {}
 
 function termKey(term: Term): string {
   return term.termType === "Literal"
-    ? JSON.stringify([term.termType, term.value, term.datatype.value, term.language])
+    ? JSON.stringify([
+        term.termType,
+        term.value,
+        term.datatype.value,
+        term.language,
+        // RDF 1.2 base direction: "x"@en--ltr and "x"@en--rtl are distinct value nodes.
+        (term as { direction?: string }).direction ?? "",
+      ])
     : JSON.stringify([term.termType, term.value]);
 }
 

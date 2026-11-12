@@ -275,8 +275,11 @@ qualified minima at positive integers up to sixteen. Qualified context changes d
 add a logical nesting level; their inner logical operators do. Evaluation reads each
 (node, predicate) once and evaluates each (node, sub-expression) once, so work is linear in
 the linked nodes reached. One parse (or one write's validation) may read 10,000 raw quads
-for invariants and take 100,000 expression steps; only entities with Violation invariants
-consume this budget. Exhaustion rejects the read, including under negation; writes throw
+for invariants and take 100,000 expression steps. On reads, only entities with Violation
+invariants consume this budget; on writes in a model with invariants, finding the affected
+nodes (the written node, nested nodes and reverse-linked owners) also draws on it, so a write
+to a node with many incoming links can throw the budget error even when that node has no
+invariants of its own. Exhaustion rejects the read, including under negation; writes throw
 before mutation. Alias-migration audits compare field projections only and keep their own
 budget. Ordinary models without these constraints retain their existing build contract.
 Generated TypeScript keeps the base scalar/enum type rather

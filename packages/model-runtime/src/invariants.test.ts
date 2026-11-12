@@ -224,7 +224,7 @@ describe("entity invariant evaluation and atomic writes", () => {
     expect(e.parse(URL, store)).toEqual({ flag: false });
     (new e.Wrapper(URL, store, F) as unknown as { flag: boolean }).flag = false;
   });
-  it("uses validated field projections (not raw values or read defaults)", () => {
+  it("evaluates the raw graph, never read defaults", () => {
     const e = entity(manifest([invariant(not(atom()))]));
     expect(e.parse(URL, dataset('ex:flag "true"'))).toEqual({});
     expect(e.parse(URL, dataset())).toEqual({});
@@ -935,5 +935,46 @@ describe("write validation is scoped to the focuses a write can affect", () => {
       expect(() => child.sub.delete(`${URL}#leaf`)).toThrow(/violates invariant/);
       expect(snapshot(store)).toEqual(before);
     }
+  });
+});
+
+describe("qualified value nodes keep RDF 1.2 base direction distinct", () => {
+  const directed = (): ModelManifest => ({
+    manifestVersion: 1,
+    runtime: { name: "@jeswr/model-runtime", major: 0 },
+    prefixes: {},
+    entities: [
+      {
+        name: "Record",
+        typeIris: [`${EX}Record`],
+        subject: { convention: "self" },
+        fields: [{ name: "links", predicate: `${EX}links`, kind: "iri", collection: "set" }],
+        invariants: [
+          invariant(
+            not({
+              op: "qualified",
+              path: `${EX}links`,
+              targetClass: `${EX}Child`,
+              minCount: 2,
+              expression: not(atom()),
+            }),
+          ),
+        ],
+      },
+      {
+        name: "Child",
+        typeIris: [`${EX}Child`],
+        subject: { convention: "self" },
+        fields: [field("flag")],
+      },
+    ],
+  });
+  const store = (objects: string) =>
+    new Store(new Parser().parse(`<${URL}> a <${EX}Record>; <${EX}links> ${objects}.`));
+
+  it("counts ltr and rtl literals with the same text as two value nodes", () => {
+    const record = entity(directed());
+    expect(record.parse(URL, store(`"x", "y"`))).toBeUndefined();
+    expect(record.parse(URL, store(`"x"@en--ltr, "x"@en--rtl`))).toBeUndefined();
   });
 });
