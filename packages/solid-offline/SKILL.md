@@ -212,7 +212,8 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   it. Hydration (and every send) fails an item whose required field (`id`, `op`, `url`,
   `status`, finite non-negative `size`/`createdAt`) is invalid, with `invalid stored item`; an
   unknown status becomes `failed` and stays listed, and any other such item is withheld from
-  `pending()`. A conflict with any invalid field is withheld from `conflicts()`.
+  `pending()`. `resolve(id, 'mine' | 'both')` refuses such an item (`'theirs'` discards it). A
+  conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient

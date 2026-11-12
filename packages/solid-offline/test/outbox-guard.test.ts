@@ -1268,6 +1268,57 @@ describe('guarded conflicts', () => {
     expect(outbox.pending()).toMatchObject([{ status: 'conflict' }]);
   });
 
+  async function invalidItemConflict() {
+    const original = box();
+    const { conflictId } = await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record.item, { size: -1 });
+    });
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    const client = storage();
+    client.head.mockResolvedValue({ etag: '"latest"' } as Awaited<
+      ReturnType<StorageClient['head']>
+    >);
+    // Binds the client; replay skips the conflicted item.
+    await outbox.replay(client.client);
+    return { outbox, delegate, client, conflictId };
+  }
+
+  it.each([
+    'mine',
+    'both',
+  ] as const)('never resolves %s for a conflict whose stored item is invalid', async (strategy) => {
+    const { outbox, delegate, client, conflictId } = await invalidItemConflict();
+    expect(outbox.pending()).toEqual([]);
+    expect(outbox.conflicts()).toEqual([]);
+    await expect(outbox.resolve(conflictId, strategy)).rejects.toThrow('invalid stored item');
+    let item: TestStoredItem['item'] | undefined;
+    await stored((record) => {
+      item = structuredClone(record.item);
+    });
+    expect(item).toMatchObject({ status: 'failed', error: '[solid-offline] invalid stored item' });
+    await outbox.retry();
+    expect(delegate).not.toHaveBeenCalled();
+    expect(client.head).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('discards a conflict whose stored item is invalid with theirs, delivering nothing', async () => {
+    const { outbox, delegate, client, conflictId } = await invalidItemConflict();
+    await outbox.resolve(conflictId, 'theirs');
+    const reopened = box();
+    await reopened.ready;
+    expect(reopened.pending()).toEqual([]);
+    expect(reopened.conflicts()).toEqual([]);
+    expect(await reopened.localBody(conflictId)).toBeNull();
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
   it('withholds a stored conflict that is not an object', async () => {
     const original = box();
     await guardedConflict(original);

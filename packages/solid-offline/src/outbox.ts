@@ -1018,8 +1018,10 @@ export function createOutbox(options: {
       }),
     conflicts: () =>
       records.flatMap((r) => {
-        // A conflict missing any field is withheld rather than shown partially.
-        const conflict = r.conflict && pickFields(r.conflict, conflictFields);
+        // A conflict missing any field, or whose item is invalid (and so withheld from
+        // pending()), is withheld rather than shown partially.
+        const conflict =
+          r.conflict && pickFields(r.item, itemFields) && pickFields(r.conflict, conflictFields);
         return conflict ? [conflict] : [];
       }),
     async enqueue(operation) {
@@ -1132,6 +1134,9 @@ export function createOutbox(options: {
           await drop(record);
           return;
         }
+        // Deliver nothing for an item whose public fields are invalid; the refresh that
+        // exclusive() ran has already marked it failed.
+        assertStoredItem(record);
         const storage = client();
         const request = storedRequest(record, storage);
         const guard = storedGuard(record);

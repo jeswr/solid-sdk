@@ -252,9 +252,10 @@ neither enumerated nor exposed. An optional field whose stored value has an unex
 (such as an object `label`) is omitted rather than returned by reference. Required fields
 (`id`, `op`, `url`, `status`, and `size`/`createdAt` as finite non-negative numbers) are never
 omitted: hydration marks an item with an invalid required field failed (`invalid stored item`),
-so replay and retry never send it. An unknown `status` becomes `failed` and the item stays
+so replay, retry and `resolve(id, 'mine' | 'both')` never send it (`'theirs'` still discards
+it). An unknown `status` becomes `failed` and the item stays
 listed; an item with any other invalid required field is withheld from `pending()`. A stored
-conflict with any invalid field is withheld from `conflicts()`; its item stays `conflict`.
+conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,
