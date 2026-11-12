@@ -6,7 +6,7 @@ import { defineModel } from "@jeswr/model-runtime";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
 import { DataFactory, Parser, Store } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
-import { AdmissionError, generateModel } from "../../src/index.js";
+import { AdmissionError, type CodegenConfig, generateModel } from "../../src/index.js";
 import {
   baseShapes,
   config,
@@ -279,5 +279,87 @@ describe("closed admission of logical operands (review probe p4)", () => {
     expect(summaryEntity && "invariants" in summaryEntity && summaryEntity.invariants).toHaveLength(
       1,
     );
+  });
+});
+
+describe("an optional composite link cannot hide a child that SHACL rejects (review finding 1)", () => {
+  const D = "https://pod.test/doc";
+  /** Root --hlaMarker (optional)--> Marker child, linked by sh:node or class-only sh:class. */
+  const tree = (classOnly: boolean, child: "invariant" | "fixed") => {
+    const presence =
+      child === "fixed"
+        ? "sh:property [sh:path diet:markerPresence; sh:datatype xsd:boolean; sh:maxCount 1; sh:hasValue true]"
+        : "sh:property [sh:path diet:markerPresence; sh:datatype xsd:boolean; sh:maxCount 1]; sh:not [sh:path diet:markerPresence; sh:hasValue true]";
+    const shapes = `${H}diet:Root a sh:NodeShape; sh:targetClass diet:GeneticSummary;
+      sh:property [sh:path diet:hlaMarker; ${classOnly ? "sh:class diet:HlaMarker" : "sh:node diet:Marker"}; sh:maxCount 1].
+      diet:Marker a sh:NodeShape; sh:targetClass diet:HlaMarker; ${presence}.`;
+    const cfg: CodegenConfig = {
+      ...config,
+      entities: [
+        {
+          name: "Tree",
+          kind: "composite",
+          root: "root",
+          nodes: {
+            root: {
+              targetClass: `${EX}GeneticSummary`,
+              fragment: "it",
+              links: { hlaMarker: "child" },
+            },
+            child: {
+              targetClass: `${EX}HlaMarker`,
+              fragment: "marker",
+              fields: { markerPresence: {} },
+            },
+          },
+        },
+      ],
+    };
+    const vocab = `${H}diet:GeneticSummary a owl:Class; rdfs:label "s"; rdfs:comment "s". diet:HlaMarker a owl:Class; rdfs:label "m"; rdfs:comment "m".`;
+    return generateModel({
+      ontologyTtl: vocab,
+      shapesTtl: shapes,
+      config: cfg,
+      admissionNamespace: EX,
+    });
+  };
+  const root = `<${D}#it> a diet:GeneticSummary`;
+  const typed = (node: string, presence: boolean) =>
+    `${node} a diet:HlaMarker; diet:markerPresence ${presence}.`;
+  it.each([
+    [false, "invariant"],
+    [true, "invariant"],
+    [false, "fixed"],
+    [true, "fixed"],
+  ] as const)("runtime parse agrees with SHACL (class-only=%s, %s)", async (classOnly, child) => {
+    const result = tree(classOnly, child);
+    const Tree = must(defineModel(result.manifest).entities.Tree);
+    // The invariant forbids presence=true; the fixed value requires it.
+    const bad = child === "invariant";
+    const m = `<${D}#marker>`;
+    for (const [label, ttl, valid] of [
+      ["violating child", `${root}; diet:hlaMarker ${m}. ${typed(m, bad)}`, false],
+      ["conforming child", `${root}; diet:hlaMarker ${m}. ${typed(m, !bad)}`, true],
+      ["no link", `${root}. ${typed(m, !bad)}`, true],
+      [
+        "violating second value node",
+        `${root}; diet:hlaMarker ${m}, <${D}#m2>. ${typed(m, !bad)} ${typed(`<${D}#m2>`, bad)}`,
+        false,
+      ],
+    ] as const) {
+      const store = doc(ttl);
+      const parsed = Tree.parse(D, store);
+      expect(parsed !== undefined, label).toBe(valid);
+      if (valid) expect(parsed?.markerPresence, label).toBe(label === "no link" ? undefined : !bad);
+      const report = await engine.validate(store, must(result.artifacts["shapes.ttl"]));
+      expect(report.conforms, label).toBe(valid);
+    }
+  });
+  it("review probe: R -> C with C not(hasValue(flag, true)) and flag true does not parse", () => {
+    for (const classOnly of [false, true]) {
+      const Tree = must(defineModel(tree(classOnly, "invariant").manifest).entities.Tree);
+      const store = doc(`${root}; diet:hlaMarker <${D}#marker>. ${typed(`<${D}#marker>`, true)}`);
+      expect(Tree.parse(D, store), `class-only=${classOnly}`).toBeUndefined();
+    }
   });
 });

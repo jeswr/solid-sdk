@@ -9,6 +9,7 @@ import {
   type ManifestEntity,
   ManifestError,
   type ManifestField,
+  type ManifestNode,
   type ModelManifest,
   validateManifest,
 } from "./index.js";
@@ -62,6 +63,10 @@ const dataset = (properties = "") =>
     new Parser().parse(`${header}<${URL}> a ex:Record ${properties ? `; ${properties}` : ""}.`),
   );
 const snapshot = (s: Store) => [...s].map((q) => JSON.stringify(q)).sort();
+/** Pin WHICH rule rejected a write: the owner and source shape, not just any TypeError. */
+const violates = (owner = "Record") =>
+  new RegExp(`^entity ${owner} violates invariant https://example\\.org/invariants#Safety$`);
+const fixedValue = /^field flag requires sh:hasValue$/;
 
 function linked(
   expression: InvariantExpression,
@@ -132,15 +137,15 @@ describe("property hasValue", () => {
     ])
       expect(e.parse(URL, dataset(value))).toEqual(severity === "Violation" ? undefined : {});
     expect(e.parse(URL, dataset("ex:flag true"))).toEqual({ flag: true });
-    expect(() => e.build(URL, {})).toThrow(TypeError);
-    expect(() => e.build(URL, { flag: false })).toThrow(TypeError);
+    expect(() => e.build(URL, {})).toThrow(fixedValue);
+    expect(() => e.build(URL, { flag: false })).toThrow(fixedValue);
     const store = e.build(URL, { flag: true });
     const w = new e.Wrapper(URL, store, F) as unknown as { flag?: boolean };
     const before = snapshot(store);
     for (const invalid of [false, undefined]) {
       expect(() => {
         w.flag = invalid;
-      }).toThrow(TypeError);
+      }).toThrow(fixedValue);
       expect(snapshot(store)).toEqual(before);
     }
     w.flag = true;
@@ -204,7 +209,7 @@ describe("entity invariant evaluation and atomic writes", () => {
     const bad = { flag: invalid, other: invalid };
     expect(e.parse(URL, dataset(`ex:flag ${valid}; ex:other ${valid}`))).toEqual(good);
     expect(e.parse(URL, dataset(`ex:flag ${invalid}; ex:other ${invalid}`))).toBeUndefined();
-    expect(() => e.build(URL, bad)).toThrow(TypeError);
+    expect(() => e.build(URL, bad)).toThrow(violates());
     const store = e.build(URL, good);
     const w = new e.Wrapper(URL, store, F) as unknown as { flag: boolean; other: boolean };
     // For OR, the other true branch permits a first write; the second write must fail.
@@ -212,7 +217,7 @@ describe("entity invariant evaluation and atomic writes", () => {
     const before = snapshot(store);
     expect(() => {
       w.flag = invalid;
-    }).toThrow(TypeError);
+    }).toThrow(violates());
     expect(snapshot(store)).toEqual(before);
   });
   it.each([
@@ -274,7 +279,7 @@ describe("entity invariant evaluation and atomic writes", () => {
         }),
     ]) {
       const before = snapshot(store);
-      expect(mutate).toThrow(TypeError);
+      expect(mutate).toThrow(violates());
       expect(snapshot(store)).toEqual(before);
     }
     expect(set.delete("extra")).toBe(true);
@@ -284,7 +289,7 @@ describe("entity invariant evaluation and atomic writes", () => {
     const e = entity(manifest([invariant(atom())]));
     const store = new Store();
     const w = new e.Wrapper(URL, store, F);
-    expect(() => w.mark()).toThrow(TypeError);
+    expect(() => w.mark()).toThrow(violates());
     expect(store.size).toBe(0);
   });
 });
@@ -362,7 +367,7 @@ describe("qualified linked entity readers", () => {
     const before = snapshot(store);
     expect(() => {
       child.flag = false;
-    }).toThrow(TypeError);
+    }).toThrow(violates());
     expect(snapshot(store)).toEqual(before);
   });
   it("evaluates linearly: 1,000 linked nodes fit the budget", () => {
@@ -496,7 +501,7 @@ describe("invariant adversarial bounds and migration", () => {
       (
         new (must(model.entities.Record).Wrapper)(URL, store, F) as unknown as { flag: boolean }
       ).flag = true;
-    }).toThrow(TypeError);
+    }).toThrow(/invariant write validation exceeds its read budget/);
     expect(snapshot(store)).toEqual(before);
   });
   it("admits the complete 16-atom qualified grammar within four logical levels", () => {
@@ -542,7 +547,7 @@ describe("invariant adversarial bounds and migration", () => {
     const w = new e.Wrapper(URL, store, F) as unknown as { flag: boolean; other: boolean };
     expect(() => {
       w.other = true;
-    }).toThrow(TypeError);
+    }).toThrow(violates());
     expect(snapshot(store)).toEqual(before);
     w.flag = true;
     w.other = true;
@@ -792,7 +797,7 @@ describe("writes through structural node lenses", () => {
     const before = snapshot(store);
     expect(() => {
       w.child = `${URL}#bad`;
-    }).toThrow(TypeError);
+    }).toThrow(violates("child"));
     expect(snapshot(store)).toEqual(before);
     w.child = `${URL}#good`;
   });
@@ -814,7 +819,7 @@ describe("type-set invariant writes", () => {
     const store = new Store(new Parser().parse(`${header}<${URL}#c0> ex:flag true.`));
     const child = new (must(model.entities.Child).Wrapper)(`${URL}#c0`, store, F);
     const before = snapshot(store);
-    expect(() => child.types.add(`${EX}Record`)).toThrow(TypeError);
+    expect(() => child.types.add(`${EX}Record`)).toThrow(violates());
     expect(() => child.types.add(`${EX}Child`)).not.toThrow(); // Child has no invariant
     expect(snapshot(store)).not.toEqual(before);
     expect(store.countQuads(`${URL}#c0`, null, `${EX}Record`, null)).toBe(0);
@@ -922,7 +927,7 @@ describe("write validation is scoped to the focuses a write can affect", () => {
     };
     expect(() => {
       leaf.flag = false;
-    }).toThrow(/violates invariant/);
+    }).toThrow(violates());
     expect(snapshot(store)).toEqual(before);
     if (mid.startsWith("<")) {
       const child = new (must(model.entities.Child).Wrapper)(
@@ -932,7 +937,7 @@ describe("write validation is scoped to the focuses a write can affect", () => {
       ) as unknown as {
         sub: Set<string>;
       };
-      expect(() => child.sub.delete(`${URL}#leaf`)).toThrow(/violates invariant/);
+      expect(() => child.sub.delete(`${URL}#leaf`)).toThrow(violates());
       expect(snapshot(store)).toEqual(before);
     }
   });
@@ -976,5 +981,245 @@ describe("qualified value nodes keep RDF 1.2 base direction distinct", () => {
     const record = entity(directed());
     expect(record.parse(URL, store(`"x", "y"`))).toBeUndefined();
     expect(record.parse(URL, store(`"x"@en--ltr, "x"@en--rtl`))).toBeUndefined();
+  });
+});
+
+describe("optional composite links cannot hide a child that violates a Violation constraint", () => {
+  /** Root R --ex:links (optional)--> child C; `classOnly` selects an sh:class-only link. */
+  const tree = (
+    classOnly: boolean,
+    child: Partial<ManifestNode> = { invariants: [invariant(not(atom()))] },
+  ): ModelManifest => ({
+    ...manifest(),
+    entities: [
+      {
+        name: "Tree",
+        kind: "composite",
+        root: "root",
+        nodes: [
+          {
+            name: "root",
+            fragment: "it",
+            typeIris: [`${EX}Record`],
+            fields: [
+              field("other"),
+              {
+                name: "child",
+                predicate: `${EX}links`,
+                kind: "nested",
+                node: "child",
+                ...(classOnly ? { hasClass: `${EX}Child`, classOnly: true as const } : {}),
+              },
+            ],
+          },
+          {
+            name: "child",
+            fragment: "child",
+            typeIris: [`${EX}Child`],
+            fields: [field("flag"), field("note", { datatype: `${XSD}string` })],
+            ...child,
+          },
+        ],
+      },
+    ],
+  });
+  const tree$ = (body: string) =>
+    new Store(new Parser().parse(`${header}<${URL}#it> a ex:Record; ex:other false ${body}.`));
+  const parse = (m: ModelManifest, body: string) =>
+    must(defineModel(m).entities.Tree).parse(URL, tree$(body));
+
+  it.each([
+    false,
+    true,
+  ])("review probe: a violating child rejects the root (class-only=%s)", (classOnly) => {
+    const m = tree(classOnly);
+    // R -> C, C has not(hasValue(flag, true)), the data says flag true: must NOT parse.
+    expect(parse(m, `; ex:links <${URL}#child>. <${URL}#child> a ex:Child; ex:flag true`)).toBe(
+      undefined,
+    );
+    expect(parse(m, `; ex:links <${URL}#child>. <${URL}#child> a ex:Child; ex:flag false`)).toEqual(
+      { other: false, flag: false },
+    );
+    // No link at all: the optional child is simply absent.
+    expect(parse(m, `. <${URL}#child> a ex:Child; ex:flag true`)).toEqual({ other: false });
+  });
+  it.each([
+    false,
+    true,
+  ])("checks every raw value node, not only the resolvable target (class-only=%s)", (classOnly) => {
+    const m = tree(classOnly);
+    const violating = (node: string) => `${node} a ex:Child; ex:flag true`;
+    for (const body of [
+      // Ambiguity drops the optional link, but each value node is still validated.
+      `; ex:links <${URL}#child>, <${URL}#c2>. <${URL}#child> a ex:Child; ex:flag false. ${violating(`<${URL}#c2>`)}`,
+      `; ex:links _:b. ${violating("_:b")}`,
+      `; ex:links <urn:x:c>. ${violating("<urn:x:c>")}`,
+    ])
+      expect(parse(m, body), body).toBeUndefined();
+  });
+  it("a class-only link reaches only class-targeted value nodes; sh:node reaches every one", () => {
+    const body = `; ex:links <${URL}#child>. <${URL}#child> ex:flag true`;
+    expect(parse(tree(true), body)).toEqual({ other: false });
+    expect(parse(tree(false), body)).toBeUndefined();
+  });
+  it.each([
+    false,
+    true,
+  ])("a missing Violation fixed value rejects the root (class-only=%s)", (classOnly) => {
+    const fixed = (severity: "Violation" | "Warning") =>
+      tree(classOnly, {
+        fields: [
+          field("flag", {
+            hasValue: {
+              term: { kind: "literal", value: "true", datatype: `${XSD}boolean` },
+              severity,
+            },
+          }),
+        ],
+      });
+    const child = (flag: string) =>
+      `; ex:links <${URL}#child>. <${URL}#child> a ex:Child ${flag ? `; ex:flag ${flag}` : ""}`;
+    for (const flag of ["false", "", '"true"'])
+      expect(parse(fixed("Violation"), child(flag)), flag).toBeUndefined();
+    expect(parse(fixed("Violation"), child("true"))).toEqual({ other: false, flag: true });
+    // Advisory fixed values keep the ordinary policy.
+    expect(parse(fixed("Warning"), child("false"))).toEqual({ other: false });
+  });
+  it("keeps ordinary degradation for advisory invariants and other child failures", () => {
+    const warning = tree(false, { invariants: [invariant(not(atom()), "Warning")] });
+    expect(parse(warning, `; ex:links <${URL}#child>. <${URL}#child> ex:flag true`)).toEqual({
+      other: false,
+      flag: true,
+    });
+    // A malformed optional value fails the strict sh:node child, which an optional link
+    // still drops: no Violation invariant or fixed value is involved.
+    expect(
+      parse(tree(false), `; ex:links <${URL}#child>. <${URL}#child> ex:flag false; ex:note 1`),
+    ).toEqual({ other: false });
+  });
+  it("propagates through nested descendants and fails closed on budget exhaustion", () => {
+    const m = tree(false, {
+      fields: [
+        field("flag"),
+        { name: "leaf", predicate: `${EX}sub`, kind: "nested", node: "leaf" },
+      ],
+    });
+    const nodes = (m.entities[0] as { nodes: ManifestNode[] }).nodes;
+    nodes.push({
+      name: "leaf",
+      fragment: "leaf",
+      typeIris: [`${EX}Leaf`],
+      fields: [field("deep")],
+      invariants: [invariant(not(atom("deep")))],
+    });
+    const body = (value: string) =>
+      `; ex:links <${URL}#child>. <${URL}#child> ex:sub <${URL}#leaf>. <${URL}#leaf> ex:deep ${value}`;
+    expect(parse(m, body("false"))).toEqual({ other: false, deep: false });
+    expect(parse(m, body("true"))).toBeUndefined();
+    const many = Array.from({ length: 11_000 }, (_, i) => `<${URL}#c${i}>`).join(", ");
+    expect(parse(tree(false), `; ex:links ${many}`)).toBeUndefined();
+  });
+});
+
+describe("ordered setters in models with write constraints", () => {
+  /** Record.steps is ordered; its item class is also the type of a constrained Step entity. */
+  const steps = (): ModelManifest => {
+    const m = manifest(undefined, [
+      field("steps", {
+        datatype: `${XSD}string`,
+        maxCount: undefined,
+        collection: "ordered",
+        ordered: {
+          itemClass: `${EX}Step`,
+          position: `${EX}position`,
+          value: `${EX}text`,
+          minPosition: 1,
+          severity: "Violation",
+        },
+      }),
+    ]);
+    m.entities.push({
+      name: "Step",
+      typeIris: [`${EX}Step`],
+      subject: { convention: "self" },
+      fields: [field("text", { datatype: `${XSD}string` })],
+      invariants: [invariant(not(atom("text", "forbidden", `${XSD}string`)))],
+    });
+    return m;
+  };
+  it("stages the write and validates the co-typed item nodes it rewrites", () => {
+    const e = entity(steps());
+    const store = e.build(URL, { steps: ["one"] });
+    const w = new e.Wrapper(URL, store, F) as unknown as { steps: string[] };
+    const before = snapshot(store);
+    expect(() => {
+      w.steps = ["one", "forbidden"];
+    }).toThrow(violates("Step"));
+    expect(snapshot(store)).toEqual(before);
+    w.steps = ["two", "three"];
+    expect(e.parse(URL, store)).toEqual({ steps: ["two", "three"] });
+  });
+});
+
+describe("advisory-only invariants keep the ordinary write path", () => {
+  const tree = (severity: EntityInvariant["severity"]): ModelManifest => ({
+    ...manifest(),
+    entities: [
+      {
+        name: "Tree",
+        kind: "composite",
+        root: "root",
+        nodes: [
+          {
+            name: "root",
+            fragment: "it",
+            typeIris: [`${EX}Root`],
+            fields: [{ name: "child", predicate: `${EX}links`, kind: "nested", node: "child" }],
+          },
+          {
+            name: "child",
+            fragment: "child",
+            typeIris: [`${EX}Child`],
+            fields: [field("flag")],
+            invariants: [invariant(not(atom()), severity)],
+          },
+        ],
+      },
+    ],
+  });
+  it.each([
+    ["Warning", false],
+    ["Info", false],
+    ["Violation", true],
+  ] as const)("%s: only Violation invariants stage and budget writes", (severity, staged) => {
+    // 11,000 untyped nodes link to the written node: finding the focuses it is a composite
+    // child of exhausts the write budget, but only a model that validates writes looks.
+    const many = Array.from({ length: 11_000 }, (_, i) => `<${URL}#p${i}> ex:links <${URL}#c>.`);
+    const store = new Store(new Parser().parse(`${header}${many.join("\n")}`));
+    const view = must(
+      defineModel(manifest(), { migrationManifest: tree(severity) }).entities.Record,
+    );
+    const w = new view.Wrapper(`${URL}#c`, store, F) as unknown as { flag: boolean };
+    const write = () => {
+      w.flag = true;
+    };
+    if (staged) expect(write).toThrow(/^invariant write validation exceeds its read budget$/);
+    else expect(write).not.toThrow();
+    expect(store.countQuads(`${URL}#c`, `${EX}flag`, null, null)).toBe(staged ? 0 : 1);
+  });
+});
+
+describe("set conformance keeps RDF 1.2 base direction distinct", () => {
+  it("counts ltr and rtl literals with the same text as two values against sh:maxCount", () => {
+    const e = entity(
+      manifest(undefined, [
+        field("tags", { collection: "set", maxCount: 2, datatype: `${XSD}string` }),
+      ]),
+    );
+    const store = (objects: string) =>
+      new Store(new Parser().parse(`<${URL}> a <${EX}Record>; <${EX}tags> ${objects}.`));
+    expect(e.parse(URL, store(`"a", "x"@en--ltr`))).toEqual({ tags: ["a"] });
+    // Three distinct value nodes exceed maxCount 2, so the optional set is not projected.
+    expect(e.parse(URL, store(`"a", "x"@en--ltr, "x"@en--rtl`))).toEqual({});
   });
 });

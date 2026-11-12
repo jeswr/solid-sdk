@@ -415,9 +415,15 @@ values): `hasValue` checks the raw objects of the path, and qualified atoms coun
 linked object (any IRI scheme, blank nodes) on whose own raw data the inner expression
 holds. Negated safety rules therefore fail closed exactly like an external validator of
 the emitted shapes.ttl; the diet regression tests compare both on adversarial data. Parses
-reject false Violation invariants; Warning/Info are advisory. Builds and setters validate
-the staged state of the affected focuses before live mutation, within a bounded budget.
-See model-runtime's fixed-value/invariant contract.
+reject false Violation invariants; Warning/Info are advisory. A composite child's Violation
+invariant or Violation fixed value rejects the containing parse whenever the link has a raw
+object, even behind an optional `sh:node` or class-only link; other failures of an optional
+child still drop only the child. Invariants see only the parsed dataset: when a qualified
+rule spans resources (e.g. a `self`-subject target stored in its own document), merge the
+linked documents before parsing, or the atom is false and a negated rule passes vacuously.
+Builds and setters (ordered setters included) validate the staged state of the affected
+focuses before live mutation, within a bounded budget. See model-runtime's
+fixed-value/invariant contract for the precise rules.
 
 The full health-diary CLI probe now admits its consent and genetic safety constructs.
 With a temporary flat entity config it still fails on the Violation-grade

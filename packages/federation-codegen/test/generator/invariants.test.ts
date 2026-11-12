@@ -84,7 +84,9 @@ describe("closed property hasValue admission", () => {
     "sh:hasValue true; sh:maxCount 2",
     "sh:hasValue true; sh:node diet:MarkerShape",
   ])("rejects incompatible or multiple values: %s", (constraint) => {
-    expect(() => generate(baseShapes.replace("sh:hasValue true", constraint))).toThrow();
+    expect(() => generate(baseShapes.replace("sh:hasValue true", constraint))).toThrow(
+      AdmissionError,
+    );
   });
   it("rejects collection-valued property hasValue", () => {
     expect(() =>
@@ -292,14 +294,14 @@ describe("diet semantics through generated runtime and SHACL", () => {
     expect(e.parse("https://pod.test/doc", store)).toEqual(data);
     expect(() =>
       e.build("https://pod.test/doc", { ...data, coeliacGeneticRisk: `${EX}riskHaplotypeAbsent` }),
-    ).toThrow(TypeError);
+    ).toThrow(/^entity Summary violates invariant https:\/\/example\.org\/diet#CoverageSafety$/);
     const before = [...store];
     const w = new e.Wrapper("https://pod.test/doc", store, DataFactory) as unknown as {
       coeliacGeneticRisk: string;
     };
     expect(() => {
       w.coeliacGeneticRisk = `${EX}riskHaplotypeAbsent`;
-    }).toThrow(TypeError);
+    }).toThrow(/^entity Summary violates invariant https:\/\/example\.org\/diet#CoverageSafety$/);
     expect([...store]).toEqual(before);
   });
   it.each([
@@ -354,7 +356,7 @@ describe("diet semantics through generated runtime and SHACL", () => {
     const before = [...store];
     expect(() => {
       w.present = false;
-    }).toThrow(TypeError);
+    }).toThrow(/^field present requires sh:hasValue$/);
     expect([...store]).toEqual(before);
     const rootLens = must(
       defineModel(views.manifest, { migrationManifest: result.manifest }).entities.TreeRootNode,
@@ -364,7 +366,7 @@ describe("diet semantics through generated runtime and SHACL", () => {
     };
     expect(() => {
       root.hlaMarker = undefined;
-    }).toThrow(TypeError);
+    }).toThrow(/^entity root violates invariant https:\/\/example\.org\/diet#Root$/);
     expect([...store]).toEqual(before);
     for (const quad of store.getQuads(
       "https://pod.test/doc#marker",

@@ -332,20 +332,44 @@ validator of the emitted shapes.ttl and fail closed. Read defaults never invent 
 
 A false Violation invariant rejects a parse. Warning/Info invariants are advisory: the
 runtime has no diagnostic callback, so it does not evaluate them (they can neither reject
-an entity nor exhaust a budget); their messages remain in the manifest and SHACL.
+an entity nor exhaust a budget, on reads or writes); their messages remain in the manifest
+and SHACL.
 
-Every build validates its completed state. Setters, field/type live-set add/delete/clear,
-and `mark()` stage the write in a copy (with the same alias migration a write runs without
-invariants; type-set writes migrate nothing, as before), validate it, then apply the delta;
-failure leaves the dataset unchanged. Validation covers only focuses the write can affect,
-so an invalid unrelated sibling never blocks a write: the written node under the writing
-shape and under every shape it is a focus of (typed, or reached from a typed composite
-root); the `sh:node` descendants of those focuses; and owners whose qualified invariants
-reach the written node, found by a bounded reverse lookup along each qualified path chain.
+In a composite, a child's Violation constraints bind its parent however the link is graded.
+Whenever the link has a raw object, the containing parse rejects if any value node of the
+link fails a Violation invariant of the child node, or lacks the exact term of a
+Violation-graded fixed value among the raw objects of that field's predicate (or a read alias).
+This applies recursively through nested descendants. An `sh:node` link checks every value
+node: any IRI scheme, blank nodes, literals, and values an ambiguous link would drop. A
+class-only (`sh:class`) link checks only the value nodes that are instances of the link
+class or the child's type IRIs, since only those are SHACL focuses of the child. Behind an
+optional link, every other child failure still drops the child, as before. This covers
+malformed or ambiguous values, a missing required field, advisory constraints, and a
+present fixed value made ambiguous by a second value. A required link still rejects on any
+child failure. Why: an optional link must not hide a child that an external SHACL validator
+of the emitted shapes.ttl rejects; the probe is a child carrying
+`not(hasValue(flag, true))` whose data says `flag true`.
+
+Invariants see only the parsed dataset. A qualified atom whose linked node lives in another
+document (for example a `self`-subject entity stored in its own resource) sees no triples for
+it, so the atom is false and a negated rule passes vacuously, exactly as SHACL over that
+single graph would. When a rule spans resources, merge the linked documents into the dataset
+before parsing.
+
+Writes are validated in a model whose manifest (or a `checkAlso` manifest) has a Violation
+invariant or a fixed value at any severity; advisory invariants alone keep the ordinary
+write path. Every build validates its completed state. Setters (including ordered-field
+setters), field/type live-set add/delete/clear, and `mark()` stage the write in a copy
+(with the same alias migration a write runs without invariants; type-set writes migrate
+nothing, as before), validate it, then apply the delta; failure leaves the dataset
+unchanged. Validation covers only focuses the write can affect, so an invalid unrelated
+sibling never blocks a write: the written node under the writing shape, and every named
+node the write changes (including the item nodes an ordered write rewrites) under every
+shape it is a focus of (typed, or reached from a typed composite root); the `sh:node`
+descendants of those focuses; and owners whose qualified invariants reach a written node,
+found by a bounded reverse lookup along each qualified path chain.
 Each must keep its fixed values and Violation invariants. Chained set mutations and
 `forEach` callbacks retain the checks; generated node lenses use the full owning model.
-Ordered-field setters keep their existing path, since ordered fields cannot be invariant or
-fixed-value paths.
 
 Closed validation caps logical depth at four, atoms at sixteen per source shape, and
 qualified minima at positive integers up to sixteen. Qualified context changes do not
@@ -353,8 +377,9 @@ add a logical nesting level; their inner logical operators do. Evaluation reads 
 (node, predicate) once and evaluates each (node, sub-expression) once, so work is linear in
 the linked nodes reached. One parse (or one write's validation) may read 10,000 raw quads
 for invariants and take 100,000 expression steps. On reads, only entities with Violation
-invariants consume this budget; on writes in a model with invariants, finding the affected
-nodes (the written node, nested nodes and reverse-linked owners) also draws on it, so a write
+invariants, and composite nodes whose nested children carry Violation invariants or fixed
+values, consume this budget. On writes in a validated model, finding the affected nodes
+(the written nodes, nested nodes and reverse-linked owners) also draws on it, so a write
 to a node with many incoming links can throw the budget error even when that node has no
 invariants of its own. Exhaustion rejects the read, including under negation; writes throw
 before mutation. Alias-migration audits compare field projections only and keep their own

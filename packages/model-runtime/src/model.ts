@@ -893,7 +893,15 @@ function makeWrapperClass(
           return readOrdered(this, plan);
         },
         set(this: TermWrapper, value: unknown) {
-          writeOrdered(this, plan, value, () => beforeWrite(this, field));
+          // An ordered write rewrites item nodes (types, positions, values) that a co-typed
+          // shape or a checkAlso owner may constrain, so it is staged and validated too.
+          if (hasWriteConstraints(context)) {
+            stagedWrite(this, context, { owner, iri: this.value, field }, (staged) =>
+              writeOrdered(staged, plan, value),
+            );
+          } else {
+            writeOrdered(this, plan, value, () => beforeWrite(this, field));
+          }
         },
         enumerable: false,
         configurable: true,
@@ -984,10 +992,8 @@ function setTermsConform(doc: TermWrapper, plan: FieldPlan): boolean {
       doc as unknown as Term,
       doc.factory.namedNode(predicate),
     )) {
-      const key =
-        term.termType === "Literal"
-          ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
-          : JSON.stringify([term.termType, term.value]);
+      // RDF term identity, including RDF 1.2 literal base direction.
+      const key = termKey(term);
       if (seen.has(key)) continue;
       seen.add(key);
       if (field.maxCount !== undefined && seen.size > field.maxCount) return false;
@@ -1015,10 +1021,8 @@ function flatTermsConform(doc: TermWrapper, plan: FieldPlan): boolean {
       doc as unknown as Term,
       doc.factory.namedNode(predicate),
     )) {
-      const key =
-        term.termType === "Literal"
-          ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
-          : JSON.stringify([term.termType, term.value]);
+      // RDF term identity, including RDF 1.2 literal base direction.
+      const key = termKey(term);
       if (seen.has(key)) continue;
       seen.add(key);
       if (field.maxCount !== undefined && seen.size > field.maxCount) return false;
@@ -1551,11 +1555,14 @@ const MAX_CLASS_READS = 10000;
 /** SHACL class membership is rdf:type followed by rdfs:subClassOf* in the data. */
 function hasDatasetClass(
   doc: TermWrapper,
-  subject: string,
+  subject: string | Term,
   required: readonly string[],
   budget?: MigrationBudget,
   consume?: () => boolean,
 ): boolean {
+  const focus = typeof subject === "string" ? doc.factory.namedNode(subject) : subject;
+  // A literal has no outgoing triples, so it is never an instance of a class.
+  if (focus.termType !== "NamedNode" && focus.termType !== "BlankNode") return false;
   const accepted = new Set(required);
   const pending: Term[] = [];
   const seen = new Set<string>();
@@ -1570,11 +1577,7 @@ function hasDatasetClass(
     }
     return false;
   };
-  for (const type of matchObjects(
-    doc.dataset,
-    doc.factory.namedNode(subject),
-    doc.factory.namedNode(RDF_TYPE),
-  )) {
+  for (const type of matchObjects(doc.dataset, focus, doc.factory.namedNode(RDF_TYPE))) {
     if (budget) migrationRead(budget);
     if (consume && !consume()) return false;
     if (++reads > MAX_CLASS_READS) return false;
@@ -1802,9 +1805,9 @@ function hasWriteConstraints(context: MigrationContext): boolean {
   return [context.manifest, ...context.checkAlso].some((manifest) => {
     let found = writeConstraintCache.get(manifest);
     if (found === undefined) {
-      found = invariantOwners(manifest.entities).some(
-        (owner) => owner.invariants?.length || owner.fields.some((field) => field.hasValue),
-      );
+      // Advisory (Warning/Info) invariants are never evaluated, so alone they leave a
+      // model on the ordinary, unstaged write path.
+      found = invariantOwners(manifest.entities).some(hasOwnConstraints);
       writeConstraintCache.set(manifest, found);
     }
     return found;
@@ -1833,8 +1836,9 @@ function qualifiedChains(
 /**
  * Validate a write's STAGED state before it is committed. Only focuses the write can affect
  * are checked, so an unrelated invalid sibling from the pod never blocks a write:
- *  - the written node under the writing wrapper's shape (`seeds`), and under every other shape
- *    it is a focus of (typed, or reached from a typed composite root via nested links);
+ *  - the written node under the writing wrapper's shape (`seeds`), and every node the write
+ *    changes (`written`: the node itself, plus e.g. an ordered write's item nodes) under every
+ *    shape it is a focus of (typed, or reached from a typed composite root via nested links);
  *  - the nested descendants of those focuses, since a link write can change which node is
  *    the child (sh:node applies the child's constraints to it, typed or not);
  *  - owners whose qualified invariants reach the written node: found by a bounded reverse
@@ -1846,7 +1850,7 @@ function assertWriteConstraints(
   context: MigrationContext,
   factory: DataFactory,
   seeds: readonly { owner: ShapeOwner; iri: string }[],
-  written?: string,
+  written: readonly string[] = [],
 ): void {
   if (!hasWriteConstraints(context)) return;
   const manifests = [context.manifest, ...context.checkAlso];
@@ -1915,14 +1919,14 @@ function assertWriteConstraints(
       }
     };
     for (const seed of seeds) descend(seed.owner, seed.iri);
-    if (written !== undefined) {
-      for (const owner of owners) if (isFocus(owner, written)) descend(owner, written);
+    for (const node of written) {
+      for (const owner of owners) if (isFocus(owner, node)) descend(owner, node);
       // Reverse lookup: owners whose qualified chains end at, or pass through, the written node.
       for (const owner of owners)
         for (const invariant of owner.invariants ?? []) {
           if (invariant.severity !== "Violation") continue;
           for (const chain of qualifiedChains(invariant.expression)) {
-            let level: Term[] = [factory.namedNode(written)];
+            let level: Term[] = [factory.namedNode(node)];
             for (let i = chain.length - 1; i >= 0 && level.length; i--) {
               const next = new Map<string, Term>();
               for (const object of level)
@@ -2028,16 +2032,94 @@ function stagedWrite(
     ? canonicalizeAliases(doc.dataset, context, doc.factory, request)
     : new Store([...doc.dataset.match()]);
   change(new TermWrapper(doc as unknown as Term, output, doc.factory));
+  const removed = [...doc.dataset.match()].filter((q) => !output.has(q));
+  const added = [...output].filter((q) => !doc.dataset.has(q));
+  // Every named subject the write changes is a written node: besides the wrapper's own node,
+  // an ordered write rewrites its item nodes, which another shape may also constrain.
+  const written = new Set([request.iri]);
+  for (const q of [...removed, ...added])
+    if (q.subject.termType === "NamedNode") written.add(q.subject.value);
   assertWriteConstraints(
     output,
     context,
     doc.factory,
     [{ owner: request.owner, iri: request.iri }],
-    request.iri,
+    [...written],
   );
-  const before = [...doc.dataset.match()];
-  for (const q of before) if (!output.has(q)) doc.dataset.delete(q);
-  for (const q of [...output]) if (!doc.dataset.has(q)) doc.dataset.add(q);
+  for (const q of removed) doc.dataset.delete(q);
+  for (const q of added) doc.dataset.add(q);
+}
+
+/** Whether a composite node or one of its nested descendants carries a SHACL Violation. */
+function carriesViolations(
+  node: ManifestNode,
+  byName: ReadonlyMap<string, ManifestNode>,
+  seen = new Set<ManifestNode>(),
+): boolean {
+  if (seen.has(node)) return false;
+  seen.add(node);
+  if (node.invariants?.some((invariant) => invariant.severity === "Violation")) return true;
+  return node.fields.some((field) => {
+    if (field.kind !== "nested") return field.hasValue?.severity === "Violation";
+    const child = byName.get(field.node as string);
+    return child !== undefined && carriesViolations(child, byName, seen);
+  });
+}
+
+/**
+ * Whether SHACL would report a Violation-graded `sh:hasValue` or node invariant of `child`
+ * (or of its nested descendants) at a value node of `field` on `focus`. Evaluated over the
+ * RAW graph, exactly as an external validator of the emitted shapes.ttl sees it: every raw
+ * object of the link (any term kind; ambiguity, non-http IRIs and blank nodes included) is a
+ * value node. An `sh:node` link applies the child shape to every value node; a class-only
+ * (`sh:class`) link reaches only the value nodes that are themselves class-targeted focuses
+ * (instances of the link class or the child's target classes). A fixed value fails iff its
+ * exact term is not among the raw objects of its predicate or a read alias (`sh:hasValue`).
+ * Budget exhaustion throws
+ * {@link InvariantBudgetExceeded}, which the caller treats as a violation (fail closed).
+ */
+function linkViolates(
+  focus: Term,
+  field: ManifestField,
+  child: ManifestNode,
+  byName: ReadonlyMap<string, ManifestNode>,
+  evaluator: InvariantEvaluator,
+  depth = 0,
+): boolean {
+  if (depth > 64) throw new InvariantBudgetExceeded();
+  const doc = new TermWrapper(focus, evaluator.dataset, evaluator.factory);
+  const classes = [...(field.hasClass ? [field.hasClass] : []), ...child.typeIris];
+  const consume = (): true => {
+    evaluator.consume();
+    return true;
+  };
+  for (const object of evaluator.objects(focus, field.predicate)) {
+    if (field.classOnly && !hasDatasetClass(doc, object, classes, undefined, consume)) continue;
+    evaluator.consume();
+    for (const own of child.fields) {
+      if (own.kind === "nested") {
+        const grandchild = byName.get(own.node as string);
+        if (
+          grandchild &&
+          carriesViolations(grandchild, byName) &&
+          linkViolates(object, own, grandchild, byName, evaluator, depth + 1)
+        )
+          return true;
+      } else if (own.hasValue?.severity === "Violation") {
+        // Read aliases count as the canonical predicate, as the reader migrates them.
+        const expected = constraintTerm(own.hasValue.term, evaluator.factory);
+        const predicates = [own.predicate, ...(own.aliasPredicates ?? [])];
+        if (
+          !predicates.some((predicate) =>
+            evaluator.objects(object, predicate).some((term) => term.equals(expected)),
+          )
+        )
+          return true;
+      }
+    }
+    if (evaluator.violated(child, object) !== undefined) return true;
+  }
+  return false;
 }
 
 /** Parse at an ACTUAL focus IRI; only nested focus nodes use strict conformance. */
@@ -2061,6 +2143,19 @@ function parseShapeAt(
     }
     const child = byName.get(field.node as string);
     if (!child) return undefined;
+    // A Violation invariant or fixed value of a PRESENT child rejects this node however the
+    // link is graded: an optional link must not hide a child that external SHACL rejects.
+    // (Migration audits compare field projections only, like the invariant check below.)
+    if (!budget.migration && carriesViolations(child, byName)) {
+      budget.invariants ??= new InvariantEvaluator(dataset, factory);
+      try {
+        if (linkViolates(doc as unknown as Term, field, child, byName, budget.invariants))
+          return undefined;
+      } catch (error) {
+        if (error instanceof InvariantBudgetExceeded) return undefined;
+        throw error;
+      }
+    }
     const required = field.guards?.requiredFailClosed === true;
     const link = resolveNestedTarget(doc, field.predicate);
     if (link.reject) {
