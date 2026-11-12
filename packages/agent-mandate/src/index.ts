@@ -12,6 +12,7 @@ export {
   type ControlStatementResult,
   issueControlStatement,
   readControlClaims,
+  readControlVerificationMethod,
   verifyControlStatement,
 } from "./control.js";
 export { mandateToTurtle, parseMandateCredential } from "./document.js";

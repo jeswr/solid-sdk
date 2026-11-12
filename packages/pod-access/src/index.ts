@@ -3,6 +3,12 @@
 /** Solid/LWS sharing, WAC/ACP translation and bounded access proofs. */
 export { createAccessClient } from "./access.js";
 export {
+  checkOwnerOnly,
+  type OwnerOnlyOptions,
+  type OwnerOnlyReason,
+  type OwnerOnlyResult,
+} from "./owner-only.js";
+export {
   assertNotWider,
   effectiveMembers,
   effectivePolicy,

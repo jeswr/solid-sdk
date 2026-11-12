@@ -51,6 +51,8 @@ export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidat
 export { handleNotification, resyncSweep } from './invalidation.js';
 export type { CacheStorageLike, PurgeDeps, PurgeResult } from './logout.js';
 export { purgeForWebId } from './logout.js';
+export type { PageCache, PageCacheOptions } from './page-cache.js';
+export { createPageCache } from './page-cache.js';
 // P5 — WebID cache scoping (§7), logout-purge, and the status surface.
 export {
   ANONYMOUS_SCOPE,
