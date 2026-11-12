@@ -662,7 +662,9 @@ minutes. Episodes use their title and show name in that history representation.
 
 SHA-256 ids derive from the UTC timestamp and valid track URI, falling back to artist/title
 names; rows sharing an id within one import are one play (the last row wins). Basic
-`endTime` is interpreted as UTC at its exported minute precision. Duration is not
+`endTime` is interpreted as UTC at its exported minute precision, so repeats of one
+recording ending in the same minute are numbered in file order and the number joins the id
+from the second repeat on: re-importing the same file, or an overlapping one, adds nothing. Duration is not
 subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
 matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
 and does not filter by duration. Spotify file import deduplicates exact natural keys only.
@@ -677,11 +679,14 @@ shared artist within 90 seconds, from different sources or with Basic's minute p
 Only timestamp, title, artist/show, album and milliseconds are kept; a validated track URI
 only feeds the id.
 `ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
+Rows with `incognito_mode: true` (Spotify Private Session plays, which Spotify keeps out of
+the user's history) are skipped and counted as skips; there is no opt-in yet.
 Raw files and filenames are never written to the pod. Malformed rows count as skips.
-All selected input is verified before history writes; invalid JSON, CRC/size/DEFLATE
-errors and exceeded limits fail before history changes. Months are then saved one after
-another, so a later failure (a Pod error, or a month over the document limit) may leave
-earlier months saved; re-import finishes without duplicating them.
+All selected input is verified, and every month's existing parts are read and its new
+documents planned, before history writes: invalid JSON, CRC/size/DEFLATE errors, exceeded
+limits and a month over the document limit fail before history changes. Months are then
+saved one after another, so a Pod error may leave earlier months saved; re-import finishes
+without duplicating them.
 
 The shared streaming JSON scanner caps tokens at 1 MiB, records at 4 MiB, nesting at 64,
 and each JSON file at 64 MiB. Per run: 100,000 rows including invalid/duplicate/oversized

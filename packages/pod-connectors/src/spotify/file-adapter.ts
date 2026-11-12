@@ -48,6 +48,8 @@ interface Play {
   album?: string;
   uri?: string;
   ms: number;
+  /** Basic rows only: earlier rows in the same file with this minute and recording. */
+  occurrence?: number;
 }
 const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() && value.length <= 4096 ? value.trim() : undefined;
@@ -55,6 +57,8 @@ const text = (value: unknown): string | undefined =>
 function play(value: unknown): Play | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const row = value as Record<string, unknown>;
+  // Private Session plays stay private: Spotify keeps them out of history and taste.
+  if (row.incognito_mode === true) return;
   const basic = row.ts === undefined;
   const raw = basic ? row.endTime : row.ts;
   if (typeof raw !== "string") return;
@@ -87,7 +91,18 @@ function play(value: unknown): Play | undefined {
       text(basic ? row.artistName : row.master_metadata_album_artist_name) ??
       (!basic ? text(row.episode_show_name) : undefined),
     album: !basic ? text(row.master_metadata_album_album_name) : undefined,
+    ...(basic ? { occurrence: 0 } : {}),
   };
+}
+
+/** A play's recording identity: the track URI, else its names. */
+const identity = (item: Play) => item.uri ?? JSON.stringify([item.artist ?? "", item.title]);
+
+/** The play id: SHA-256 of its instant and recording, plus a Basic repeat's occurrence. */
+function playId(item: Play): Promise<string> {
+  const key: unknown[] = [item.when, identity(item)];
+  if (item.occurrence) key.push(item.occurrence);
+  return sha256(JSON.stringify(key));
 }
 
 /**
@@ -151,7 +166,7 @@ export const spotifyFileAdapter: FileImportAdapter = {
   accept: ".zip,application/zip,.json,application/json",
   streaming: true,
   fileHint:
-    'Spotify → Account → Privacy settings → Download your data. Request "Extended streaming history" (or "Account data"). Select the downloaded ZIP, or a Streaming_History_Audio_*.json, Streaming_History_Video_*.json or StreamingHistory_music_*.json file (older exports: endsong_*.json or StreamingHistory*.json). IP address, country and device are discarded. Short plays are kept.',
+    'Spotify → Account → Privacy settings → Download your data. Request "Extended streaming history" (or "Account data"). Select the downloaded ZIP, or a Streaming_History_Audio_*.json, Streaming_History_Video_*.json or StreamingHistory_music_*.json file (older exports: endsong_*.json or StreamingHistory*.json). IP address, country and device are discarded, and Private Session (incognito) plays are skipped. Short plays are kept.',
   exportUrl: "https://www.spotify.com/account/privacy/",
   async importFile(file, ctx) {
     ctx.signal?.throwIfAborted();
@@ -176,6 +191,10 @@ export const spotifyFileAdapter: FileImportAdapter = {
       ctx.signal?.throwIfAborted();
       if (!raw.trimStart().startsWith("["))
         throw new Error("Spotify history must be a JSON array.");
+      // Basic rows carry minute precision: repeats of one recording in the same minute are
+      // numbered in file order, so re-importing the same file yields the same ids, and
+      // overlapping files (each numbering from zero) still name each repeat once.
+      const repeats = new Map<string, number>();
       for await (const entry of jsonEntries({ ...input, text: async () => raw }, [""], [], () => {
         count();
         skipped++;
@@ -185,6 +204,11 @@ export const spotifyFileAdapter: FileImportAdapter = {
         if (!item) {
           skipped++;
           continue;
+        }
+        if (item.occurrence !== undefined) {
+          const key = JSON.stringify([item.when, identity(item)]);
+          item.occurrence = repeats.get(key) ?? 0;
+          repeats.set(key, item.occurrence + 1);
         }
         retained += new TextEncoder().encode(JSON.stringify(item)).length;
         if (retained > SPOTIFY_FILE_LIMITS.textBytes)
@@ -237,15 +261,19 @@ export const spotifyFileAdapter: FileImportAdapter = {
         text: async () => input.text,
       });
     }
-    // Stage the bounded, allowlisted records first: damaged archives never partially import.
+    // Stage the bounded, allowlisted records and plan every month's documents before the
+    // first write: damaged archives and months over a document limit never partially import.
+    ctx.progress({ label: "Checking your Spotify history in your pod…", done: 0 });
+    const plans: Part[][] = [];
+    for (const [month, items] of months) plans.push(await planMonth(month, items, ctx));
     let done = 0;
-    for (const [month, items] of months) {
+    for (const parts of plans) {
       ctx.progress({
         label: "Saving Spotify history to your pod…",
         done: done++,
-        total: months.size,
+        total: plans.length,
       });
-      await writeMonth(month, items, ctx);
+      await writeParts(parts, ctx);
     }
     return { skipped };
   },
@@ -302,17 +330,21 @@ function storedPart(slug: string, url: string, dataset: DatasetCore): Part {
 }
 
 /**
- * Merge one month's plays into its contiguous history parts. A play already stored stays
- * in its part, so re-imports never move or duplicate it; new plays fill parts in order
- * under the play and size budgets, then open the next part.
+ * Plan one month's plays into its contiguous history parts, reading the stored parts but
+ * writing nothing. A play already stored stays in its part, so re-imports never move or
+ * duplicate it; new plays fill parts in order under the play and size budgets, then open
+ * the next part. Throws when the month would need more parts than allowed.
  */
-async function writeMonth(month: string, items: readonly Play[], ctx: FileImportContext) {
+async function planMonth(
+  month: string,
+  items: readonly Play[],
+  ctx: FileImportContext,
+): Promise<Part[]> {
   // Rows that share an id are one play; the last one read wins, as on re-import.
   const unique = new Map<string, Play>();
   for (const item of items) {
     ctx.signal?.throwIfAborted();
-    const identity = item.uri ?? JSON.stringify([item.artist ?? "", item.title]);
-    unique.set(await sha256(JSON.stringify([item.when, identity])), item);
+    unique.set(await playId(item), item);
   }
   const parts: Part[] = [];
   for (let part = 1; ; part++) {
@@ -363,7 +395,11 @@ async function writeMonth(month: string, items: readonly Play[], ctx: FileImport
       index++;
     }
   }
-  // Ascending writes keep parts contiguous if a later write fails.
+  return parts;
+}
+
+/** Write one month's planned parts, in ascending order so they stay contiguous on failure. */
+async function writeParts(parts: readonly Part[], ctx: FileImportContext) {
   for (const part of parts) {
     if (part.assigned.length === 0) continue;
     const scrobbles = new Store();

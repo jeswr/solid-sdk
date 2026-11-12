@@ -11,7 +11,10 @@ Spotify file import shares the `spotify` catalog id with its live adapter. Route
 `fileAdapterById('spotify')`; see README's Spotify section and `src/spotify/file-adapter.ts`.
 Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
 CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
-Never persist IP, country, device, raw export or filename. Keep merged month documents
+Never persist IP, country, device, raw export or filename, and skip
+`incognito_mode: true` (Private Session) rows as skips. Basic repeats in one minute get a
+per-file occurrence in their id. Plan every month (reads, part assignment, limits) before
+the first write. Keep merged month documents
 inside the connector container (`spotifyHistorySlug`: `YYYY-MM.ttl`, then contiguous
 `-part-N` under the `SPOTIFY_FILE_LIMITS` play/byte/part budgets), with SHA-256
 timestamp/track-or-name ids. Read a month's parts before writing: stored plays never move.

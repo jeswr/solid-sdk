@@ -18,6 +18,8 @@ import { SPOTIFY_FILE_LIMITS, spotifyFileAdapter, spotifyHistorySlug } from "./f
 import { BASIC_HISTORY, EXTENDED_HISTORY } from "./file-fixtures.js";
 import { CORE, MEDIA, TIME } from "./vocab.js";
 
+const PROV = "http://www.w3.org/ns/prov#";
+
 const ROOT = `${TEST_POD_ROOT}integrations/spotify/`;
 const DOC = `${ROOT}music/history/2026-10.ttl`;
 const json = (rows: unknown) => memoryFile("StreamingHistory_music_0.json", JSON.stringify(rows));
@@ -160,13 +162,34 @@ describe("Spotify history export", () => {
     expect(report.skipped).toBeUndefined();
   });
 
-  it("drops hostile URI values rather than storing or following them", async () => {
-    const { pod } = await fileImport(
-      spotifyFileAdapter,
-      json([{ ...EXTENDED_HISTORY[0], spotify_track_uri: "https://private.example/DO-NOT-STORE" }]),
-    );
-    expect(plays(pod)).toHaveLength(1);
-    expect(pod.get(DOC)).not.toContain("private.example");
+  it("drops hostile URI values: the stored graph is exactly that of a row without a URI", async () => {
+    const { spotify_track_uri: _uri, ...noUri } = EXTENDED_HISTORY[0] as Record<string, unknown>;
+    // The play graph (event, instant, recording), without the run's provenance.
+    const graph = async (row: unknown) => {
+      const { pod } = await fileImport(spotifyFileAdapter, json([row]));
+      return {
+        text: pod.get(DOC) ?? "",
+        quads: [...pod.dataset(DOC)]
+          .filter((q) => q.subject.value.includes("#") && !q.predicate.value.startsWith(PROV))
+          .map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`)
+          .sort(),
+      };
+    };
+    const hostile = await graph({
+      ...noUri,
+      spotify_track_uri: "https://private.example/DO-NOT-STORE",
+    });
+    const without = await graph(noUri);
+    const valid = await graph(EXTENDED_HISTORY[0]);
+    expect(hostile.text).not.toContain("private.example");
+    expect(hostile.quads.length).toBeGreaterThan(0);
+    expect(hostile.quads).toEqual(without.quads);
+    // A valid URI changes only the play id, and is never stored itself.
+    expect(valid.quads).not.toEqual(without.quads);
+    expect(valid.text).not.toContain("0123456789ABCDEFGHIJKL");
+    const ids = (quads: string[]) =>
+      quads.map((q) => q.replace(/#scrobble-[0-9a-f]{64}/g, "#scrobble"));
+    expect(ids(valid.quads)).toEqual(ids(without.quads));
   });
   it.each([
     0, 6,
@@ -216,16 +239,33 @@ describe("Spotify history export", () => {
         .getObjects(null, DataFactory.namedNode(`${MEDIA}msPlayed`), null)
         .map((n) => n.value),
     ).toEqual(["42"]);
-    const { pod: names } = await fileImport(
-      spotifyFileAdapter,
-      json([...BASIC_HISTORY, ...BASIC_HISTORY]),
-    );
-    expect(plays(names)).toHaveLength(1);
+    // Basic repeats are numbered per file, so the same file twice adds nothing.
+    const basic = json([...BASIC_HISTORY, ...BASIC_HISTORY]);
+    const { pod: names } = await fileImport(spotifyFileAdapter, basic);
+    expect(plays(names)).toHaveLength(2);
+    await fileImport(spotifyFileAdapter, basic, { pod: names });
+    expect(plays(names)).toHaveLength(2);
   });
-  it("writes one play for rows sharing an id within an import, keeping the last row", async () => {
+  it("keeps repeats of one recording in the same Basic minute, idempotently across files", async () => {
+    const repeat = [BASIC_HISTORY[0], { ...BASIC_HISTORY[0], msPlayed: 9 }];
+    const { pod } = await fileImport(spotifyFileAdapter, json(repeat));
+    expect(plays(pod)).toHaveLength(2);
+    // An overlapping file numbers its own repeats from zero: one copy adds nothing.
+    await fileImport(spotifyFileAdapter, json([BASIC_HISTORY[0]]), { pod });
+    await fileImport(spotifyFileAdapter, json(repeat), { pod });
+    expect(plays(pod)).toHaveLength(2);
+    expect(
+      pod
+        .dataset(DOC)
+        .getObjects(null, DataFactory.namedNode(`${MEDIA}msPlayed`), null)
+        .map((n) => n.value)
+        .sort(),
+    ).toEqual(["500", "9"]);
+  });
+  it("writes one play for Extended rows sharing an id within an import, keeping the last row", async () => {
     const { pod } = await fileImport(
       spotifyFileAdapter,
-      json([BASIC_HISTORY[0], { ...BASIC_HISTORY[0], msPlayed: 7 }]),
+      json([EXTENDED_HISTORY[0], { ...EXTENDED_HISTORY[0], ms_played: 7 }]),
     );
     expect(plays(pod)).toHaveLength(1);
     expect(
@@ -465,5 +505,63 @@ describe("Spotify history export", () => {
     await expect(
       fileImport(spotifyFileAdapter, archive({ "MyData/Userdata.json": "{}" })),
     ).rejects.toThrow("No Spotify streaming history found in this archive.");
+  });
+
+  it("skips Private Session (incognito) plays and counts them", async () => {
+    const { pod, report } = await fileImport(
+      spotifyFileAdapter,
+      json([
+        { ...EXTENDED_HISTORY[0], incognito_mode: true, master_metadata_track_name: "Secret Song" },
+        { ...EXTENDED_HISTORY[0], incognito_mode: false },
+      ]),
+    );
+    expect(report.skipped).toBe(1);
+    expect(plays(pod)).toHaveLength(1);
+    for (const url of pod.urls()) expect(pod.get(url)).not.toContain("Secret Song");
+    await expect(
+      fileImport(spotifyFileAdapter, json([{ ...EXTENDED_HISTORY[0], incognito_mode: true }])),
+    ).resolves.toMatchObject({ report: { skipped: 1, written: [] } });
+  });
+
+  it("plans every month before writing: a later month over the part limit writes nothing", async () => {
+    await withLimits({ documentPlays: 1, monthParts: 2 }, async () => {
+      const pod = createMemoryPod();
+      const september = { ...EXTENDED_HISTORY[0], ts: "2026-09-01T12:00:00Z" };
+      await expect(
+        fileImport(spotifyFileAdapter, json([september, ...extendedRows(3)]), { pod }),
+      ).rejects.toThrow("document limit");
+      expect(pod.urls().filter((url) => url.includes("/history/"))).toEqual([]);
+    });
+  });
+
+  it("stops a highly compressed entry at the shared inflation budget before any write", async () => {
+    const bomb = `[${" ".repeat(4 * 1024 * 1024)}${JSON.stringify(EXTENDED_HISTORY[0])}]`;
+    const file = archive({ "Streaming_History_Audio_2026.json": bomb });
+    expect(file.size).toBeLessThan(64 * 1024);
+    await withLimits({ inflatedBytes: 1024 * 1024 }, async () => {
+      const pod = createMemoryPod();
+      await expect(fileImport(spotifyFileAdapter, file, { pod })).rejects.toThrow(
+        "total-inflated-cap",
+      );
+      expect(pod.urls().filter((url) => url.includes("/history/"))).toEqual([]);
+    });
+  });
+
+  it("refuses an export over the real 16 MiB metadata cap before any write", {
+    timeout: 60_000,
+  }, async () => {
+    const long = (c: string) => c.repeat(4096);
+    const rows = Array.from({ length: 1_400 }, (_, i) => ({
+      ts: new Date(Date.UTC(2026, 9, 1) + i * 1000).toISOString().replace(".000Z", "Z"),
+      ms_played: 1,
+      master_metadata_track_name: long("t"),
+      master_metadata_album_artist_name: long("a"),
+      master_metadata_album_album_name: long("b"),
+    }));
+    const pod = createMemoryPod();
+    await expect(fileImport(spotifyFileAdapter, json(rows), { pod })).rejects.toThrow(
+      "metadata limit",
+    );
+    expect(pod.get(DOC)).toBeUndefined();
   });
 });
