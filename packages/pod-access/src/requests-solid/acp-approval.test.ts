@@ -27,6 +27,7 @@ import {
 import { acpRecords } from "./acp-records.js";
 import { decide, previewDecision } from "./approval.js";
 import { UnsupportedAccessModelError } from "./errors.js";
+import { agentUrl } from "./http.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL, LDP, SOLID } from "./vocab.js";
 
@@ -573,6 +574,32 @@ describe("ACP approval and sealed owner records", () => {
         ).toBe("approved");
       }
     }
+  });
+
+  it.each([
+    `${ACP}PublicAgent`,
+    `${ACP}AuthenticatedAgent`,
+    `${ACL.ns}AuthenticatedAgent`,
+    "http://xmlns.com/foaf/0.1/Agent",
+  ])("refuses agent class %s as the requester before any write", async (agentClass) => {
+    for (const relation of ["acl", `${ACP}accessControl`]) {
+      const pod = await acpPod(relation);
+      await seedRecords(pod);
+      pod.seed(REQUEST, accessRequestTurtle(REQUEST).replaceAll(REQUESTER, agentClass));
+      await expect(
+        previewDecision({ id: REQUEST }, { approve: true }, options(pod)),
+      ).rejects.toThrow("Unreadable access request");
+      await expect(decide({ id: REQUEST }, { approve: true }, options(pod))).rejects.toThrow(
+        "Unreadable access request",
+      );
+      expect(writes(pod)).toEqual([]);
+    }
+  });
+
+  it("names agent classes as unusable requesters", () => {
+    expect(() => agentUrl(`${ACP}PublicAgent`)).toThrow("agent class");
+    expect(() => agentUrl("http://xmlns.com/foaf/0.1/Agent")).toThrow("agent class");
+    expect(agentUrl(REQUESTER)).toBe(REQUESTER);
   });
 
   it("refuses unsupported ACP Control modes on ancestor resource and ACR-self policies", async () => {

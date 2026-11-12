@@ -21,6 +21,7 @@ import {
 } from "./acl.js";
 import { DecisionPreviewConflictError } from "./errors.js";
 import {
+  agentUrl,
   httpUrl,
   MAX_MEMBERS,
   publicHttpsUrl,
@@ -433,7 +434,7 @@ async function validateSnapshot(
   ) {
     throw new Error("Invalid persisted approval snapshot");
   }
-  httpUrl(snapshot.agent);
+  agentUrl(snapshot.agent);
   for (const target of snapshot.targets) assertGrantable(target, options.storage);
 }
 
@@ -489,6 +490,8 @@ async function preflight(
   fetchFn: typeof fetch,
   model: "wac" | "acp",
 ): Promise<void> {
+  // Never grant an agent class, whichever path built the snapshot.
+  agentUrl(snapshot.agent);
   // Revalidate every target before records or access writes, including on recovery.
   for (const target of snapshot.targets) {
     const actual = await accessModel({ fetch: fetchFn, storage: options.storage, target });
