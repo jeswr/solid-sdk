@@ -92,6 +92,24 @@ it("saves through real pod-backed SDK preferences, restores after remount and sh
   await vi.waitFor(() => expect(restored).toHaveBeenLastCalledWith(CLIENT));
   expect(second.host.querySelector<HTMLInputElement>("input")?.value).toBe(CLIENT);
 });
+it("saves an upper-case Client ID in Spotify's lower-case spelling", async () => {
+  const { storage, make } = await preferences();
+  const onClientId = vi.fn();
+  const { host } = await mount(h(SpotifyClientForm, { usePreferences: make(), onClientId }));
+  await vi.waitFor(() =>
+    expect(host.querySelector<HTMLButtonElement>("button")?.disabled).toBe(false),
+  );
+  await fill(host, CLIENT.toUpperCase());
+  await submit(host);
+  await vi.waitFor(() => expect(onClientId).toHaveBeenLastCalledWith(CLIENT));
+  const file = await storage.read(`${storage.root}settings/suite/connect.spotify-client-id.json`);
+  expect(JSON.parse(await file.text())).toBe(CLIENT);
+  expect(host.textContent).toContain("Client ID saved in your pod.");
+  expect(spotifyClientSchema.parse(CLIENT.toUpperCase())).toBe(CLIENT);
+  const base = registry.adapterById("spotify");
+  if (!base?.oauth?.clientId)
+    expect(spotifyAdapterFor(CLIENT.toUpperCase())?.oauth?.clientId).toBe(CLIENT);
+});
 it("shows validation errors without persisting invalid input or activating a client", async () => {
   const { make, storage } = await preferences();
   const write = vi.spyOn(storage, "write");

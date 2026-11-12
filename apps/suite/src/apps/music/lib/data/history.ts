@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5 (best-effort, de-duplicated Spotify imports)
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import {
@@ -14,6 +15,7 @@ import {
   recentlyPlayed,
 } from "../model";
 import { type Library, musicRoot } from "./library";
+import { dedupeImportedPlays, loadSpotifyHistory } from "./spotify-history";
 
 export { computeTopArtists, recentlyPlayed };
 export async function loadHistory(
@@ -27,23 +29,22 @@ export async function loadHistory(
     { length: months },
     (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index - offset, 1)),
   );
-  const [history, importedSpotify] = await Promise.all([
+  // Imported file history is best effort: it never rejects the user's own history.
+  const [history, imported] = await Promise.all([
     readMonths(fetch, musicRoot(storage), dates),
-    readMonths(fetch, new URL("integrations/spotify/music/", storage).href, dates),
+    loadSpotifyHistory(fetch, storage, dates),
   ]);
-  history.push(...importedSpotify);
   const selected = new Set(dates.map(monthKey));
+  const liveHistory = new URL("integrations/spotify/music/recently-played.ttl", storage).href;
   try {
-    const doc = await loadMusic(
-      createPodScopedFetch(storage, { fetch }),
-      new URL("integrations/spotify/music/recently-played.ttl", storage).href,
-    );
-    history.push(
+    const doc = await loadMusic(createPodScopedFetch(storage, { fetch }), liveHistory);
+    imported.push(
       ...readHistory(doc.dataset).filter((play) => selected.has(monthKey(play.startTime))),
     );
   } catch (error) {
     if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
   }
+  history.push(...dedupeImportedPlays(imported, liveHistory));
   return history.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
 }
 export async function recordPlay(

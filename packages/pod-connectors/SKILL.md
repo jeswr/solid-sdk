@@ -11,12 +11,16 @@ Spotify file import shares the `spotify` catalog id with its live adapter. Route
 `fileAdapterById('spotify')`; see README's Spotify section and `src/spotify/file-adapter.ts`.
 Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
 CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
-Never persist IP, country, device, raw export or filename. Keep one merged
-`music/history/YYYY-MM.ttl` per month inside the connector container, with SHA-256
-timestamp/track-or-name ids. Write each play through `@jeswr/solid-listening`'s `addScrobble`
-(the generated model) at `#scrobble-<id>` plus `-track/-artist/-album/-instant`; never add
-hand-written media accessors to `spotify/vocab.ts`. Canonicalize the built store with
-`canonicalizeJeswrDataset` before `ctx.write` (the model emits legacy w3id media/core terms).
+Never persist IP, country, device, raw export or filename. Keep merged month documents
+inside the connector container (`spotifyHistorySlug`: `YYYY-MM.ttl`, then contiguous
+`-part-N` under the `SPOTIFY_FILE_LIMITS` play/byte/part budgets), with SHA-256
+timestamp/track-or-name ids. Read a month's parts before writing: stored plays never move.
+Write each play through `@jeswr/solid-listening`'s `addScrobble` (the generated model) at
+`#scrobble-<id>`/`-instant`, sharing per-document track/artist/album nodes whose hash keys
+cover every value they describe; never add hand-written media accessors to
+`spotify/vocab.ts`. Canonicalize the built store with `canonicalizeJeswrDataset` before
+`ctx.write` (the model emits legacy w3id media/core terms). Suite Music's
+`data/spotify-history.ts` mirrors the slug and part limit and folds imported duplicates.
 Keep short plays: the existing scrobble importer has no duration cutoff. All archive entries
 share row, retained-text and month budgets. Count invalid, oversized and duplicate rows.
 Suite Connect reads these shards in Music and saves personal public Spotify client IDs

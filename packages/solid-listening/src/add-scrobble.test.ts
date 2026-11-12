@@ -90,6 +90,50 @@ describe("addScrobble", () => {
     expect(Date.parse(value?.value ?? "")).toBeGreaterThanOrEqual(before - 1000);
   });
 
+  it("shares a track, artist and album node described identically by several scrobbles", () => {
+    const store = new Store();
+    const shared = (base: string) => ({
+      ...at(base),
+      track: `${RES}#track-1`,
+      artist: `${RES}#artist-1`,
+      album: `${RES}#album-1`,
+    });
+    const song = { trackTitle: "One", artistName: "A", albumTitle: "R" };
+    addScrobble(store, shared(`${RES}#p1`), { ...song, playedAt: WHEN });
+    const size = store.size;
+    addScrobble(store, shared(`${RES}#p2`), { ...song, playedAt: new Date(WHEN.getTime() + 1) });
+    expect(store.getObjects(`${RES}#p2`, MEDIA_PLAYED_WORK, null)[0]?.value).toBe(`${RES}#track-1`);
+    // Only the second event and its instant are new.
+    const perPlay = new Store();
+    addScrobble(perPlay, at(`${RES}#p`), { trackTitle: "One", playedAt: WHEN });
+    expect(store.size - size).toBe(perPlay.size - 2);
+    // Re-adding an identical scrobble is a no-op.
+    addScrobble(store, shared(`${RES}#p2`), { ...song, playedAt: new Date(WHEN.getTime() + 1) });
+    expect(store.size - size).toBe(perPlay.size - 2);
+    const before = store.size;
+    expect(() =>
+      addScrobble(store, shared(`${RES}#p3`), { ...song, albumTitle: "Other", playedAt: WHEN }),
+    ).toThrow("already described differently");
+    expect(store.size).toBe(before);
+  });
+
+  // Regression: building in the target store re-scanned it on every generated write,
+  // hitting the runtime's 10,000-read migration budget after ~40 scrobbles.
+  it("keeps a constant cost per scrobble in a large dataset", { timeout: 60_000 }, () => {
+    const store = new Store();
+    const started = performance.now();
+    for (let i = 0; i < 1_000; i++)
+      addScrobble(store, at(`${RES}#n${i}`), {
+        trackTitle: `Song ${i}`,
+        artistName: "Artist",
+        albumTitle: "Album",
+        playedAt: new Date(WHEN.getTime() + i * 1000),
+        msPlayed: i,
+      });
+    expect(store.getSubjects(RDF_TYPE, PLAYBACK_EVENT_CLASS, null)).toHaveLength(1_000);
+    expect(performance.now() - started).toBeLessThan(30_000);
+  });
+
   it("refuses duplicate, unsafe or already-described subjects before writing", () => {
     const store = new Store();
     expect(() =>

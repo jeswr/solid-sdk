@@ -42,5 +42,5 @@ export function spotifyAdapterFor(personalClientId: string) {
   const adapter = registry.adapterById("spotify");
   if (!adapter?.oauth || adapter.oauth.clientId || !/^[a-fA-F0-9]{32}$/.test(personalClientId))
     return adapter;
-  return { ...adapter, oauth: { ...adapter.oauth, clientId: personalClientId } };
+  return { ...adapter, oauth: { ...adapter.oauth, clientId: personalClientId.toLowerCase() } };
 }

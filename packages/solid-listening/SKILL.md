@@ -18,10 +18,13 @@ out the ISRC pattern and `media:playedVia`, and narrows `playedWork` to `media:T
 the reasons are in its header. `listening.shacl.ttl` is the published, complete profile
 validated in `src/shape.test.ts`.
 
-`addScrobble` writes one scrobble at caller-chosen subjects (many per document) through
-the generated per-node views (`nodes.Scrobble`). It must add exactly the quads of the
-generated composite build for the conventional subjects; `src/add-scrobble.test.ts` pins that
-equality, so keep its node materialisation in step with the composite.
+`addScrobble` writes one scrobble at caller-chosen subjects (many per document): it runs
+the generated composite build in a scratch store and moves the quads onto the caller's
+subjects with `@rdfjs/wrapper`. Never write generated views directly into a large target:
+every generated write rescans its whole dataset against the runtime's 10,000-read
+migration budget. A written subject may pre-exist only with an identical description
+(shared recording nodes). `src/add-scrobble.test.ts` pins equality with the composite
+build, sharing, and 1,000 calls into one store.
 
 Parse behaviour: required links (`playedWork`, `atTime`) and the track title fail
 closed on any non-conforming value (a language-tagged title rejects the scrobble; README

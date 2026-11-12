@@ -20,9 +20,11 @@
  *     dropped — composed here via the typed `Scrobble` view.
  */
 
+import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import type { DatasetCore } from "@rdfjs/types";
-import { DataFactory, type Store } from "n3";
-import { entities, type ScrobbleData as GeneratedScrobbleData, nodes } from "./generated/model.js";
+import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
+import { entities, type ScrobbleData as GeneratedScrobbleData } from "./generated/model.js";
 import { httpIriOrUndefined } from "./iri.js";
 import { Scrobble } from "./nodes.js";
 
@@ -136,15 +138,28 @@ export function buildScrobble(resourceUrl: string, data: ScrobbleData): Store {
 }
 
 /**
+ * The resource the generated composite builds a scrobble at before {@link addScrobble}
+ * moves it. A `urn:` never collides with a written link: every other IRI the model writes
+ * is either one of its own node subjects or an http(s) listener WebID.
+ */
+const SCRATCH_RESOURCE = "urn:jeswr:solid-listening:scratch";
+
+/**
  * Describe one scrobble at caller-chosen node subjects inside an existing dataset, for
  * documents that hold many scrobbles (such as a monthly history shard), where the
  * one-per-resource fragments of {@link buildScrobble} would collide.
  *
- * Every write goes through the GENERATED per-node views (`nodes.Scrobble`), with the
- * same adaptations and node materialisation as the generated composite build:
- * `addScrobble(store, scrobbleNodeIris(url), data)` adds exactly the quads of
- * `buildScrobble(url, data)`. The five subjects must be distinct safe absolute IRIs that
- * do not yet appear as subjects in `dataset`; otherwise it throws before writing.
+ * The scrobble is built by the GENERATED composite ({@link buildScrobble}, with its
+ * adaptations) in a scratch store and moved onto `iris` term-for-term through
+ * `@rdfjs/wrapper`, so `addScrobble(store, scrobbleNodeIris(url), data)` adds exactly
+ * the quads of `buildScrobble(url, data)`, and one call costs the same however large
+ * `dataset` is.
+ *
+ * The five subjects must be distinct safe absolute IRIs. A subject this scrobble writes
+ * may already be described in `dataset` only exactly as this scrobble describes it, so
+ * several scrobbles can share one track, artist or album node; any other existing
+ * description throws before anything is copied. Unused subjects (no artist or album
+ * named) are never written.
  */
 export function addScrobble(
   dataset: DatasetCore,
@@ -154,50 +169,37 @@ export function addScrobble(
   const subjects = [iris.event, iris.track, iris.artist, iris.album, iris.instant];
   if (new Set(subjects).size !== subjects.length)
     throw new TypeError("scrobble node subjects must be distinct");
-  const view = nodes.Scrobble;
-  // Constructing each view validates its subject IRI before anything is written.
-  const event = new view.event.Wrapper(iris.event, dataset, DataFactory);
-  const track = new view.track.Wrapper(iris.track, dataset, DataFactory);
-  const artist = new view.artist.Wrapper(iris.artist, dataset, DataFactory);
-  const album = new view.album.Wrapper(iris.album, dataset, DataFactory);
-  const instant = new view.playedAt.Wrapper(iris.instant, dataset, DataFactory);
   for (const subject of subjects)
-    if (dataset.match(DataFactory.namedNode(subject), null, null, null).size > 0)
-      throw new TypeError("scrobble node subjects must not already be described");
-
-  const adapted = adapt(data);
-  const hasArtist = adapted.artistName !== undefined;
-  const hasAlbum = adapted.albumTitle !== undefined;
-  const hasTrack =
-    adapted.trackTitle !== undefined ||
-    adapted.durationSeconds !== undefined ||
-    adapted.isrc !== undefined ||
-    hasArtist ||
-    hasAlbum;
-
-  event.mark();
-  event.msPlayed = adapted.msPlayed;
-  instant.mark();
-  instant.playedAt = adapted.playedAt;
-  event.atTime = instant.id;
-  if (hasTrack) {
-    track.mark();
-    track.trackTitle = adapted.trackTitle;
-    track.durationSeconds = adapted.durationSeconds;
-    track.isrc = adapted.isrc;
-    if (hasArtist) {
-      artist.mark();
-      artist.artistName = adapted.artistName;
-      track.performedByArtist = artist.id;
-    }
-    if (hasAlbum) {
-      album.mark();
-      album.albumTitle = adapted.albumTitle;
-      track.inAlbum = album.id;
-    }
-    event.playedWork = track.id;
+    if (!isSafeAbsoluteIri(subject))
+      throw new TypeError("scrobble node subjects must be safe absolute IRIs");
+  const from = scrobbleNodeIris(SCRATCH_RESOURCE);
+  const rename = new Map<string, string>([
+    [from.event, iris.event],
+    [from.track, iris.track],
+    [from.artist, iris.artist],
+    [from.album, iris.album],
+    [from.instant, iris.instant],
+  ]);
+  const moved = new Store();
+  for (const quad of buildScrobble(SCRATCH_RESOURCE, data)) {
+    const subject = rename.get(quad.subject.value);
+    if (subject === undefined || quad.graph.termType !== "DefaultGraph")
+      throw new TypeError("unexpected generated scrobble quad");
+    const target = quad.object.termType === "NamedNode" ? rename.get(quad.object.value) : undefined;
+    const anchor = new TermWrapper(DataFactory.namedNode(subject), moved, DataFactory);
+    SetFrom.subjectPredicate(anchor, quad.predicate.value, TermAs.term, TermFrom.itself).add(
+      target === undefined ? quad.object : DataFactory.namedNode(target),
+    );
   }
-  writeListener(iris.event, dataset, data.listener);
+  for (const subject of subjects) {
+    const term = DataFactory.namedNode(subject);
+    const built = moved.match(term, null, null, null);
+    const existing = dataset.match(term, null, null, null);
+    if (built.size === 0 || existing.size === 0) continue;
+    if (existing.size !== built.size || [...existing].some((quad) => !built.has(quad)))
+      throw new TypeError("scrobble node subject is already described differently");
+  }
+  for (const quad of moved) dataset.add(quad);
 }
 
 /** Serialise a `Store` to Turtle with the model's prefixes. */

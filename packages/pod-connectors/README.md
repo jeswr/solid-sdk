@@ -633,34 +633,54 @@ The `spotify` catalog id also supports `fileAdapterById('spotify')` (direct modu
 `./spotify/file-adapter`). Request Extended streaming history or Account data through
 Spotify Account → Privacy settings → Download your data. Select the ZIP or a single
 `Streaming_History_Audio_*.json`, `Streaming_History_Video_*.json` or
-`StreamingHistory_music_*.json`. No Web API application is needed for file import.
+`StreamingHistory_music_*.json`. Older exports' `MyData/endsong_N.json` (extended) and
+`StreamingHistoryN.json` (account data) are accepted too; each row's fields decide how it
+is read. A ZIP with none of these names fails with "No Spotify streaming history found in
+this archive." No Web API application is needed for file import.
 
 File history merges into `integrations/spotify/music/history/YYYY-MM.ttl`, registered as
-`media:PlaybackEvent`, inside the connector container. Each play is written by
-`@jeswr/solid-listening`'s generated scrobble model (`addScrobble`): a `media:PlaybackEvent`
-with `media:msPlayed`, `media:playedWork` → a titled `media:Track`, `media:performedByArtist`
-→ a `foaf:name`d `media:Artist`, `media:inAlbum` → a titled `media:Album`, and
-`core:atTime` → `time:Instant`. Plays share the month document, so the five nodes sit at
-`#scrobble-<id>`, `-track`, `-artist`, `-album` and `-instant`. The model still emits the
-legacy `w3id.org/jeswr` media/core namespaces; the adapter stores them under the canonical
-`@jeswr/suite-vocab` namespaces with `canonicalizeJeswrDataset`. The adapter writes no
-hand-built accessors, `schema:` types, `media:playedVia` or Spotify track link (the generated
-profile leaves out `playedVia`). Episodes use their title and show name in that history
-representation. Music reads these monthly documents alongside its scrobble imports and live
-Spotify history. SHA-256 ids derive from the UTC timestamp and valid track URI, falling back
-to artist/title names; rows sharing an id within one import are one play (the last row wins).
-Basic `endTime` is interpreted as UTC at its exported minute precision. Duration is not
+`media:PlaybackEvent`, inside the connector container. A month splits into contiguous
+`YYYY-MM-part-N.ttl` documents (`spotifyHistorySlug`) when a document would exceed 2,000
+plays or about 4 MiB of estimated Turtle (well under readers' 16 MiB cap), up to 64
+documents a month. The adapter reads a month's existing parts first: a stored play stays in
+its part, so re-imports never move or duplicate it, and new plays fill parts in order.
+
+Each play is written by `@jeswr/solid-listening`'s generated scrobble model (`addScrobble`):
+a `media:PlaybackEvent` with `media:msPlayed`, `media:playedWork` → a titled `media:Track`,
+`media:performedByArtist` → a `foaf:name`d `media:Artist`, `media:inAlbum` → a titled
+`media:Album`, and `core:atTime` → `time:Instant`. The event is `#scrobble-<id>` and its
+instant `#scrobble-<id>-instant`. Plays of one recording in a document share its
+`#track-<key>`, `#artist-<key>` and `#album-<key>` nodes, keyed by a hash of every value the
+node describes, so Music counts them as one track. Recordings are not shared across
+documents. The model still emits the legacy `w3id.org/jeswr` media/core namespaces; the
+adapter stores them under the canonical `@jeswr/suite-vocab` namespaces with
+`canonicalizeJeswrDataset`. The adapter writes no hand-built accessors, `schema:` types,
+`media:playedVia` or Spotify track link (the generated profile leaves out `playedVia`).
+The generated runtime costs a few milliseconds a play, so the 100,000-row maximum takes
+minutes. Episodes use their title and show name in that history representation.
+
+SHA-256 ids derive from the UTC timestamp and valid track URI, falling back to artist/title
+names; rows sharing an id within one import are one play (the last row wins). Basic
+`endTime` is interpreted as UTC at its exported minute precision. Duration is not
 subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
 matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
 and does not filter by duration. Spotify file import deduplicates exact natural keys only.
+
+The same listen can therefore be stored twice: a Basic and an Extended export of the same
+plays hash differently, and the live adapter's `music/recently-played.ttl#play-…` overlaps
+file history for recent periods. Music reads every part alongside its own history and live
+Spotify history, and folds imported duplicates on read: the same normalised title and a
+shared artist within 90 seconds, from different sources or with Basic's minute precision
+(the precise play wins). A failure reading imported file history never hides Music's own.
 
 Only timestamp, title, artist/show, album and milliseconds are kept; a validated track URI
 only feeds the id.
 `ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
 Raw files and filenames are never written to the pod. Malformed rows count as skips.
 All selected input is verified before history writes; invalid JSON, CRC/size/DEFLATE
-errors and exceeded limits fail before history changes. Pod failures may leave earlier
-months saved; re-import finishes without duplicating them.
+errors and exceeded limits fail before history changes. Months are then saved one after
+another, so a later failure (a Pod error, or a month over the document limit) may leave
+earlier months saved; re-import finishes without duplicating them.
 
 The shared streaming JSON scanner caps tokens at 1 MiB, records at 4 MiB, nesting at 64,
 and each JSON file at 64 MiB. Per run: 100,000 rows including invalid/duplicate/oversized

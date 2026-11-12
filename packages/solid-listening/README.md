@@ -102,11 +102,13 @@ await writeOwnerOnlyAcl(
 
 A document that holds many scrobbles (a monthly history shard, say) cannot use the
 one-per-resource `#it`/`#track`/… fragments. `addScrobble(dataset, iris, data)` describes
-one scrobble at caller-chosen node subjects in an existing dataset, writing through the
-generated per-node views with the same adaptations. `addScrobble(store,
-scrobbleNodeIris(url), data)` adds exactly the quads of `buildScrobble(url, data)`. The
-five subjects must be distinct safe absolute IRIs not yet described in the dataset, or it
-throws before writing:
+one scrobble at caller-chosen node subjects in an existing dataset: the generated composite
+builds it in a scratch store and it is moved onto `iris` term for term, so
+`addScrobble(store, scrobbleNodeIris(url), data)` adds exactly the quads of
+`buildScrobble(url, data)` and each call costs the same however large the dataset is. The
+five subjects must be distinct safe absolute IRIs. A track, artist or album subject (or
+any other) may already be in the dataset only with exactly the description this scrobble
+gives it, so plays can share recording nodes; anything else throws before writing:
 
 ```ts
 import { addScrobble } from "@jeswr/solid-listening";

@@ -12,7 +12,8 @@ export const spotifyClientSchema = {
   parse(value: unknown): string {
     if (typeof value !== "string" || (value !== "" && !/^[a-fA-F0-9]{32}$/.test(value)))
       throw new Error("Enter the 32 hexadecimal characters of your Spotify Client ID.");
-    return value;
+    // Spotify issues lower-case Client IDs; store and use that canonical spelling.
+    return value.toLowerCase();
   },
 };
 
@@ -75,7 +76,8 @@ export function SpotifyClientForm({
   const [draft, setDraft] = useState<string>();
   const [invalid, setInvalid] = useState(false);
   const value = draft ?? preference.value;
-  const valid = /^[a-fA-F0-9]{32}$/.test(value.trim());
+  const normalized = value.trim().toLowerCase();
+  const valid = /^[a-f0-9]{32}$/.test(normalized);
   const [redirect, setRedirect] = useState("");
   useEffect(() => {
     setRedirect(new URL(OAUTH_CALLBACK_PATH, window.location.href).href);
@@ -85,12 +87,12 @@ export function SpotifyClientForm({
       !preference.loading &&
         !preference.pending &&
         !preference.error &&
-        value.trim() === preference.value
+        normalized === preference.value
         ? preference.value
         : "",
     );
   }, [
-    value,
+    normalized,
     preference.value,
     preference.loading,
     preference.pending,
@@ -136,7 +138,7 @@ export function SpotifyClientForm({
             return;
           }
           setInvalid(false);
-          void preference.set(value.trim()).catch(() => setInvalid(true));
+          void preference.set(normalized).catch(() => setInvalid(true));
         }}
       >
         <label htmlFor="spotify-client-id">Spotify Client ID</label>
@@ -170,7 +172,7 @@ export function SpotifyClientForm({
             : "Couldn't read pod preferences. Save a Client ID to retry."
           : preference.pending
             ? "Saving Client ID…"
-            : value.trim() !== preference.value
+            : normalized !== preference.value
               ? "Save this Client ID before continuing."
               : preference.value
                 ? "Client ID saved in your pod."

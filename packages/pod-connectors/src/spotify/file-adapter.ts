@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5 (scrobble writes through @jeswr/solid-listening)
 import { addScrobble } from "@jeswr/solid-listening";
-import { Store } from "n3";
+import type { DatasetCore } from "@rdfjs/types";
+import { DataFactory, Store } from "n3";
 import { canonicalizeJeswrDataset } from "../core/canonical-vocab.js";
-import type { FileImportAdapter, ImportFile } from "../core/file-import.js";
+import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { MAX_FILE_BYTES } from "../core/file-import.js";
 import { jsonEntries } from "../core/file-json.js";
 import { sniffInput } from "../google-takeout/dispatch.js";
@@ -24,7 +25,21 @@ export const SPOTIFY_FILE_LIMITS = {
   entries: 1_000,
   textBytes: 16 * 1024 * 1024,
   months: 600,
+  /** Plays in one history document; a month splits into `-part-N` documents beyond it. */
+  documentPlays: 2_000,
+  /** Estimated Turtle bytes of one history document, well below readers' 16 MiB cap. */
+  documentBytes: 4 * 1024 * 1024,
+  /** History documents for one month (`YYYY-MM.ttl`, then `YYYY-MM-part-2.ttl`, …). */
+  monthParts: 64,
 } as const;
+
+/**
+ * The connector-relative slug of part `part` (from 1) of a month's history. Parts are
+ * contiguous: part N exists only after part N - 1, so readers stop at the first missing one.
+ */
+export function spotifyHistorySlug(month: string, part: number): string {
+  return part === 1 ? `music/history/${month}.ttl` : `music/history/${month}-part-${part}.ttl`;
+}
 
 interface Play {
   when: string;
@@ -75,12 +90,19 @@ function play(value: unknown): Play | undefined {
   };
 }
 
-/** Accept only the documented filenames, at root or in Spotify's export directory. */
+/**
+ * Accept only documented filenames, at root or in Spotify's export directory: current
+ * extended (`Streaming_History_*`) and account (`StreamingHistory_music_N`) exports, and
+ * the older extended `MyData/endsong_N.json` and account `StreamingHistoryN.json` names.
+ * Each row's own fields decide whether it is an extended or a basic record.
+ */
 function historyEntry(name: string): boolean {
   return (
     /^(?:Spotify Extended Streaming History\/)?Streaming_History_(?:Audio|Video)_[A-Za-z0-9_-]+\.json$/.test(
       name,
-    ) || /^(?:Spotify Account Data\/)?StreamingHistory_music_\d+\.json$/.test(name)
+    ) ||
+    /^(?:MyData\/)?endsong_\d+\.json$/.test(name) ||
+    /^(?:Spotify Account Data\/|MyData\/)?StreamingHistory(?:_music_)?\d+\.json$/.test(name)
   );
 }
 
@@ -129,7 +151,7 @@ export const spotifyFileAdapter: FileImportAdapter = {
   accept: ".zip,application/zip,.json,application/json",
   streaming: true,
   fileHint:
-    'Spotify → Account → Privacy settings → Download your data. Request "Extended streaming history" (or "Account data"). Select the downloaded ZIP, or a Streaming_History_Audio_*.json, Streaming_History_Video_*.json or StreamingHistory_music_*.json file. IP address, country and device are discarded. Short plays are kept.',
+    'Spotify → Account → Privacy settings → Download your data. Request "Extended streaming history" (or "Account data"). Select the downloaded ZIP, or a Streaming_History_Audio_*.json, Streaming_History_Video_*.json or StreamingHistory_music_*.json file (older exports: endsong_*.json or StreamingHistory*.json). IP address, country and device are discarded. Short plays are kept.',
   exportUrl: "https://www.spotify.com/account/privacy/",
   async importFile(file, ctx) {
     ctx.signal?.throwIfAborted();
@@ -183,9 +205,11 @@ export const spotifyFileAdapter: FileImportAdapter = {
     if (input.zip) {
       const entries = await zipDirectory(file, SPOTIFY_FILE_LIMITS.entries);
       const inflationBudget = new InflationBudget(SPOTIFY_FILE_LIMITS.inflatedBytes);
-      for (const entry of entries) {
+      const selected = entries.filter((entry) => historyEntry(entry.name));
+      if (selected.length === 0)
+        throw new Error("No Spotify streaming history found in this archive.");
+      for (const entry of selected) {
         ctx.signal?.throwIfAborted();
-        if (!historyEntry(entry.name)) continue;
         if (entry.invalid || entry.size > MAX_FILE_BYTES)
           throw new Error("Invalid or oversized Spotify history ZIP entry.");
         // Parsing happens only after the shared reader verifies CRC, size and DEFLATE framing.
@@ -216,52 +240,176 @@ export const spotifyFileAdapter: FileImportAdapter = {
     // Stage the bounded, allowlisted records first: damaged archives never partially import.
     let done = 0;
     for (const [month, items] of months) {
-      const slug = `music/history/${month}.ttl`;
-      const doc = ctx.resolve(slug);
-      // Rows that share an id are one play; the last one read wins, as on re-import.
-      const unique = new Map<string, Play>();
-      for (const item of items) {
-        ctx.signal?.throwIfAborted();
-        const identity = item.uri ?? JSON.stringify([item.artist ?? "", item.title]);
-        unique.set(`${doc}#scrobble-${await sha256(JSON.stringify([item.when, identity]))}`, item);
-      }
-      const scrobbles = new Store();
-      for (const [root, item] of unique) {
-        // The generated listening model writes every node; ids keep re-imports idempotent.
-        addScrobble(
-          scrobbles,
-          {
-            event: root,
-            track: `${root}-track`,
-            artist: `${root}-artist`,
-            album: `${root}-album`,
-            instant: `${root}-instant`,
-          },
-          {
-            trackTitle: item.title,
-            artistName: item.artist,
-            albumTitle: item.album,
-            playedAt: new Date(item.when),
-            msPlayed: item.ms,
-          },
-        );
-      }
-      // solid-listening still emits the legacy w3id media/core namespaces; connector
-      // documents store the canonical suite terms (CON-13), as Music reads both.
-      const dataset = canonicalizeJeswrDataset(scrobbles);
       ctx.progress({
         label: "Saving Spotify history to your pod…",
         done: done++,
         total: months.size,
       });
-      await ctx.write({
-        slug,
-        category: "media",
-        forClass: `${MEDIA}PlaybackEvent`,
-        dataset,
-        writeMode: "merge",
-      });
+      await writeMonth(month, items, ctx);
     }
     return { skipped };
   },
 };
+
+const RDF_TYPE = DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+const PLAYBACK_EVENT = DataFactory.namedNode(`${MEDIA}PlaybackEvent`);
+const utf8 = (value: string | undefined) =>
+  value === undefined ? 0 : new TextEncoder().encode(value).length;
+
+/**
+ * Per-play Turtle bytes besides its text, with provenance: about a dozen IRIs in the
+ * document's namespace plus fixed terms. Measured at ~2.2 KB a play with unshared
+ * recordings and a 68-character document URL; this overestimates that by a third.
+ */
+const playOverhead = (doc: string) => 1_500 + 20 * doc.length;
+
+/** Conservative Turtle size of one play beside its document's other plays. */
+function playBytes(doc: string, item: Play): number {
+  // Literal text counts twice, covering Turtle escapes.
+  return playOverhead(doc) + 2 * (utf8(item.title) + utf8(item.artist) + utf8(item.album));
+}
+
+interface Part {
+  slug: string;
+  url: string;
+  /** Plays already stored in the part (deduplicated ids). */
+  stored: Set<string>;
+  plays: number;
+  bytes: number;
+  assigned: [id: string, item: Play][];
+}
+
+/** The stored play ids of one part, and its estimated size, from the session's read. */
+function storedPart(slug: string, url: string, dataset: DatasetCore): Part {
+  const stored = new Set<string>();
+  const prefix = `${url}#scrobble-`;
+  for (const quad of dataset.match(null, RDF_TYPE, PLAYBACK_EVENT, null)) {
+    const id = quad.subject.value.startsWith(prefix) ? quad.subject.value.slice(prefix.length) : "";
+    if (/^[0-9a-f]{64}$/.test(id)) stored.add(id);
+  }
+  let literals = 0;
+  for (const quad of dataset)
+    if (quad.object.termType === "Literal") literals += utf8(quad.object.value);
+  const plays = dataset.match(null, RDF_TYPE, PLAYBACK_EVENT, null).size;
+  return {
+    slug,
+    url,
+    stored,
+    plays,
+    bytes: plays * playOverhead(url) + 2 * literals,
+    assigned: [],
+  };
+}
+
+/**
+ * Merge one month's plays into its contiguous history parts. A play already stored stays
+ * in its part, so re-imports never move or duplicate it; new plays fill parts in order
+ * under the play and size budgets, then open the next part.
+ */
+async function writeMonth(month: string, items: readonly Play[], ctx: FileImportContext) {
+  // Rows that share an id are one play; the last one read wins, as on re-import.
+  const unique = new Map<string, Play>();
+  for (const item of items) {
+    ctx.signal?.throwIfAborted();
+    const identity = item.uri ?? JSON.stringify([item.artist ?? "", item.title]);
+    unique.set(await sha256(JSON.stringify([item.when, identity])), item);
+  }
+  const parts: Part[] = [];
+  for (let part = 1; ; part++) {
+    const slug = spotifyHistorySlug(month, part);
+    const dataset = await ctx.read(slug);
+    if (!dataset) break;
+    if (part > SPOTIFY_FILE_LIMITS.monthParts)
+      throw new Error(`Spotify history for ${month} has too many documents.`);
+    parts.push(storedPart(slug, ctx.resolve(slug), dataset));
+  }
+  const fresh: [string, Play][] = [];
+  for (const [id, item] of unique) {
+    const part = parts.find((candidate) => candidate.stored.has(id));
+    if (part) part.assigned.push([id, item]);
+    else fresh.push([id, item]);
+  }
+  fresh.sort(([a, x], [b, y]) => x.when.localeCompare(y.when) || a.localeCompare(b));
+  let index = 0;
+  for (const entry of fresh) {
+    for (;;) {
+      let part = parts[index];
+      if (!part) {
+        if (parts.length >= SPOTIFY_FILE_LIMITS.monthParts)
+          throw new Error(`Spotify history for ${month} exceeds the document limit.`);
+        const slug = spotifyHistorySlug(month, parts.length + 1);
+        part = {
+          slug,
+          url: ctx.resolve(slug),
+          stored: new Set(),
+          plays: 0,
+          bytes: 0,
+          assigned: [],
+        };
+        parts.push(part);
+      }
+      const bytes = playBytes(part.url, entry[1]);
+      // An empty part always takes one play, so every play has a home.
+      if (
+        part.plays === 0 ||
+        (part.plays < SPOTIFY_FILE_LIMITS.documentPlays &&
+          part.bytes + bytes <= SPOTIFY_FILE_LIMITS.documentBytes)
+      ) {
+        part.assigned.push(entry);
+        part.plays++;
+        part.bytes += bytes;
+        break;
+      }
+      index++;
+    }
+  }
+  // Ascending writes keep parts contiguous if a later write fails.
+  for (const part of parts) {
+    if (part.assigned.length === 0) continue;
+    const scrobbles = new Store();
+    const keys = new Map<string, string>();
+    const key = async (value: unknown) => {
+      const text = JSON.stringify(value);
+      let hash = keys.get(text);
+      if (!hash) {
+        hash = (await sha256(text)).slice(0, 32);
+        keys.set(text, hash);
+      }
+      return hash;
+    };
+    for (const [id, item] of part.assigned) {
+      ctx.signal?.throwIfAborted();
+      const root = `${part.url}#scrobble-${id}`;
+      const artist = item.artist ?? null;
+      const album = item.album ?? null;
+      // Plays of one recording in a document share its track, artist and album nodes. Each
+      // node id covers every value its description holds, so shared nodes always agree.
+      addScrobble(
+        scrobbles,
+        {
+          event: root,
+          instant: `${root}-instant`,
+          track: `${part.url}#track-${await key([item.title, artist, album])}`,
+          artist: `${part.url}#artist-${await key([artist])}`,
+          album: `${part.url}#album-${await key([artist, album])}`,
+        },
+        {
+          trackTitle: item.title,
+          artistName: item.artist,
+          albumTitle: item.album,
+          playedAt: new Date(item.when),
+          msPlayed: item.ms,
+        },
+      );
+    }
+    // solid-listening still emits the legacy w3id media/core namespaces; connector
+    // documents store the canonical suite terms (CON-13), as Music reads both.
+    await ctx.write({
+      slug: part.slug,
+      category: "media",
+      forClass: `${MEDIA}PlaybackEvent`,
+      dataset: canonicalizeJeswrDataset(scrobbles),
+      writeMode: "merge",
+    });
+  }
+}
