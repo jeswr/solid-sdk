@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord, type ActivityRecord } from "@/lib/use-issues";
 import { Repository } from "@/lib/repository";
-import { setGroupAccess } from "@/lib/sharing";
+import { assignGroupRole } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
@@ -685,7 +685,7 @@ export function IssuesView() {
     onShare: () => setShareResource({ url: issue.url, label: "this issue" }),
     onShareTeam: () =>
       run(
-        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+        () => assignGroupRole(issue.url, profile!.webId, group.iri!, "editor"),
         "Shared with the team",
       ),
     onToggle: () => {

@@ -5,8 +5,8 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { removeAccess } from "@/lib/sharing";
-import { assignRole, listRoleAssignments, ROLES, ROLE_PRESETS, type Role, type RoleAssignment } from "@/lib/roles";
+import { assignRole, listRoleAssignments, revokeAccess, type RoleAssignment } from "@/lib/sharing";
+import { ROLES, ROLE_PRESETS, type Role } from "@/lib/roles";
 import {
   Dialog,
   DialogContent,
@@ -111,8 +111,8 @@ export function ShareDialog({
   const revoke = async (webId: string) => {
     setBusyId(webId);
     try {
-      await removeAccess(resourceUrl, ownerWebId, webId);
-      for (const extra of extraResourceUrls) await removeAccess(extra, ownerWebId, webId);
+      await revokeAccess(resourceUrl, ownerWebId, webId);
+      for (const extra of extraResourceUrls) await revokeAccess(extra, ownerWebId, webId);
       toast.success("Access removed");
       await refresh();
       onChanged?.();
