@@ -1,0 +1,20 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Local generation input, reusing schema.org classes and properties. No publishing
+# federation sector exists. Only theme and slug need suite-specific predicates.
+@prefix pub: <https://jeswr.org/ns/publish#> .
+@prefix schema: <https://schema.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/publish> a owl:Ontology ;
+  rdfs:label "Publish model"@en ;
+  rdfs:comment "A local projection of websites and Markdown pages for static pod publishing."@en ;
+  vann:preferredNamespacePrefix "pub" ; vann:preferredNamespaceUri "https://jeswr.org/ns/publish#" .
+schema:WebSite a owl:Class ; rdfs:label "Website"@en ; rdfs:comment "A named website with author and presentation settings."@en .
+schema:WebPage a owl:Class ; rdfs:label "Page"@en ; rdfs:comment "An editable page or dated blog post."@en .
+pub:theme a owl:DatatypeProperty ; rdfs:label "theme"@en ;
+  rdfs:comment "The identifier of a shipped static stylesheet."@en ; rdfs:domain schema:WebSite ; rdfs:range xsd:string .
+pub:slug a owl:DatatypeProperty ; rdfs:label "slug"@en ;
+  rdfs:comment "A lowercase, hyphenated URL path segment, validated by the facade."@en ; rdfs:domain schema:WebPage ; rdfs:range xsd:string .

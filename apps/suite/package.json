@@ -99,7 +99,8 @@
     "saxes": "6.0.0",
     "y-indexeddb": "9.0.12",
     "yjs": "13.6.27",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "@jeswr/solid-publish": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",

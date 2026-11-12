@@ -1,0 +1,33 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# No federation publishing sector exists. This profile narrows schema:author to
+# a display-name string, schema:creativeWorkStatus to draft|published and
+# schema:genre to page|post. Dates are xsd:dateTime only; image is an HTTP(S) IRI.
+# Slug grammar and uniqueness are facade policy: admission supports only \S.
+@prefix pub: <https://jeswr.org/ns/publish#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ; sh:targetClass schema:WebSite ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:author ; sh:name "author" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pub:theme ; sh:name "theme" ; sh:datatype xsd:string ; sh:in ( "paper" "journal" "garden" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:inLanguage ; sh:name "inLanguage" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:url ; sh:name "publicUrl" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ; sh:targetClass schema:WebPage ;
+  sh:property [ sh:path schema:headline ; sh:name "title" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pub:slug ; sh:name "slug" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:text ; sh:name "body" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:abstract ; sh:name "summary" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:genre ; sh:name "kind" ; sh:datatype xsd:string ; sh:in ( "page" "post" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:creativeWorkStatus ; sh:name "status" ; sh:datatype xsd:string ; sh:in ( "draft" "published" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:datePublished ; sh:name "published" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:dateModified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:image ; sh:name "image" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:keywords ; sh:name "keywords" ; sh:datatype xsd:string ] .

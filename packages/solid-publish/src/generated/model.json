@@ -1,0 +1,261 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "pub": "https://jeswr.org/ns/publish#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Page",
+      "typeIris": [
+        "https://schema.org/WebPage"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "slug",
+          "predicate": "https://jeswr.org/ns/publish#slug",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "summary",
+          "predicate": "https://schema.org/abstract",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "status",
+          "predicate": "https://schema.org/creativeWorkStatus",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "draft",
+            "published"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "https://schema.org/dateModified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "published",
+          "predicate": "https://schema.org/datePublished",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "kind",
+          "predicate": "https://schema.org/genre",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "page",
+            "post"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "title",
+          "predicate": "https://schema.org/headline",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "keywords",
+          "predicate": "https://schema.org/keywords",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {
+            "trim": true,
+            "dropBlank": true,
+            "sortOnRead": true
+          }
+        },
+        {
+          "name": "position",
+          "predicate": "https://schema.org/position",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "body",
+          "predicate": "https://schema.org/text",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Site",
+      "typeIris": [
+        "https://schema.org/WebSite"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "theme",
+          "predicate": "https://jeswr.org/ns/publish#theme",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "paper",
+            "journal",
+            "garden"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "author",
+          "predicate": "https://schema.org/author",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "inLanguage",
+          "predicate": "https://schema.org/inLanguage",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "publicUrl",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        }
+      ]
+    }
+  ]
+}
