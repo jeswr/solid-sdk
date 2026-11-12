@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it } from "vitest";
 import { isDirectChild, resolveSuiteResource, sharedApps } from "./resource.js";
@@ -11,6 +12,10 @@ const resolve = (
   options: Partial<Parameters<typeof resolveSuiteResource>[1]> = {},
 ) => resolveSuiteResource({ url, ...fields }, { encodeRef, ...options });
 const preview = (value = url) => `/drive/p/${encodeRef(value.split("#")[0] as string)}`;
+const folder = (value: string) => `/drive/f/${encodeRef(value)}`;
+/** Drive's fallback: containers navigate as folders, everything else previews. */
+const fallback = (value: string) =>
+  new URL(value).pathname.endsWith("/") ? folder(value.split("#")[0] as string) : preview(value);
 
 describe("canonical suite resource resolver", () => {
   it.each([
@@ -133,14 +138,14 @@ describe("canonical suite resource resolver", () => {
       ["pod-docs/a.ttl", "docs/d"],
       ["sheets/a/", "sheets/s"],
       ["pod-sheets/a/", "sheets/s"],
-      ["tasks/a.ttl", "tasks/p"],
+      ["tasks/projects/a.ttl", "tasks/p"],
     ]) {
       const target = `${base}${path}#it`;
       expect(resolve({ url: target }, options).href).toBe(
         `/${route}/${encodeRef(target.split("#")[0] as string)}`,
       );
       expect(resolve({ url: target }, { ...options, previewOnly: true }).href).toBe(
-        preview(target),
+        fallback(target),
       );
     }
     expect(
@@ -157,14 +162,14 @@ describe("canonical suite resource resolver", () => {
       { url: `${base}other/a.ttl`, contentType: "text/plain" },
       { url: `${base}sheets/a.csv` },
       { url: `${base}other/a/`, contentType: "text/csv" },
-      { url: `${base}tasks/a.ttl?bad=1` },
+      { url: `${base}tasks/projects/a.ttl?bad=1` },
     ])
-      expect(resolve(fields, options).href).toBe(preview(fields.url));
+      expect(resolve(fields, options).href).toBe(fallback(fields.url));
     for (const path of ["docs/a.ttl", "sheets/a/"]) {
       const fields = { url: `${base}${path}` };
-      expect(resolve(fields, { shared: true }).href).toBe(preview(fields.url));
+      expect(resolve(fields, { shared: true }).href).toBe(fallback(fields.url));
       expect(resolve(fields, { shared: true, storageUrl: "https://other.example/" }).href).toBe(
-        preview(fields.url),
+        fallback(fields.url),
       );
     }
     expect(sharedApps).toEqual([
@@ -238,17 +243,20 @@ it("previews native-looking URLs that their routers reject or whose MIME contrad
     "sheets/a%2fb/",
   ])
     expect(resolveSuiteResource({ url: `${base}${path}` }, options).href).toBe(
-      preview(`${base}${path}`),
+      fallback(`${base}${path}`),
     );
-  expect(resolveSuiteResource({ url: "http://pod.example/tasks/a.ttl" }, options).href).toBe(
-    preview("http://pod.example/tasks/a.ttl"),
-  );
-  for (const path of ["docs/a.ttl", "tasks/a.ttl"])
+  expect(
+    resolveSuiteResource({ url: "http://pod.example/tasks/projects/a.ttl" }, options).href,
+  ).toBe(preview("http://pod.example/tasks/projects/a.ttl"));
+  for (const path of ["docs/a.ttl", "tasks/projects/a.ttl"])
     expect(
       resolveSuiteResource({ url: `${base}${path}`, contentType: "text/plain" }, options).href,
     ).toBe(preview(`${base}${path}`));
   expect(
-    resolveSuiteResource({ url: `${base}tasks/a.ttl`, contentType: "text/turtle" }, options).href,
+    resolveSuiteResource(
+      { url: `${base}tasks/projects/a.ttl`, contentType: "text/turtle" },
+      options,
+    ).href,
   ).toContain("/tasks/p/");
 });
 
@@ -295,4 +303,127 @@ it("applies native-format checks to search routes as well as shared routes", () 
         .href,
     ).toBe(preview(`${base}${path}`));
   }
+});
+
+describe("search mode without hints", () => {
+  const search = { hints: false } as const;
+  it.each([
+    ["Pictures/x.jpg", "image/jpeg"],
+    ["report.md", "text/markdown"],
+    ["budget.csv", "text/csv"],
+    ["docs/old.pdf", "application/pdf"],
+    ["photos/a.png", undefined],
+    ["music/a.mp3", "audio/mpeg"],
+    ["calendar/a.ics", "text/calendar"],
+    ["tasks/a.todo", undefined],
+    ["notes/a.note", undefined],
+  ])("keeps the untyped file %s in Drive", (path, contentType) => {
+    const target = `${base}${path}`;
+    for (const rdfTypes of [
+      undefined,
+      [`${NS.LDP}Resource`],
+      [`${NS.LDP}NonRDFSource`],
+      [`http://www.w3.org/ns/iana/media-types/${contentType ?? "image/png"}#Resource`],
+    ])
+      expect(
+        resolve(
+          {
+            url: target,
+            ...(rdfTypes ? { rdfTypes } : {}),
+            ...(contentType ? { contentType } : {}),
+          },
+          search,
+        ),
+      ).toEqual({ app: "drive", kind: "file", group: "file", href: preview(target) });
+  });
+  it("still lets RDF types choose the app", () => {
+    expect(
+      resolve({ url: `${base}photos/a.ttl`, rdfTypes: [`${NS.SCHEMA}ImageObject`] }, search),
+    ).toMatchObject({ app: "photos", kind: "photo" });
+    expect(
+      resolve({ url: `${base}docs/a.ttl`, rdfTypes: [`${NS.POD_DOCS}Document`] }, search).href,
+    ).toBe(`/docs/d/${encodeRef(`${base}docs/a.ttl`)}`);
+  });
+  it.each([
+    "photos/",
+    "photos/2026/",
+    "music/",
+    "docs/drafts/",
+    "sheets/a/",
+    "tasks/",
+  ])("keeps the untyped container %s a Drive folder", (path) => {
+    const target = `${base}${path}`;
+    expect(resolve({ url: target, contentType: "text/turtle" }, search)).toEqual({
+      app: "drive",
+      kind: "folder",
+      group: "file",
+      href: folder(target),
+    });
+  });
+});
+
+describe("hints never turn containers into files", () => {
+  it.each([
+    ["photos/2026/", undefined],
+    ["music/albums/", undefined],
+    ["docs/drafts/", undefined],
+    ["calendar/", "text/calendar"],
+    ["other/a/", "text/csv"],
+    ["x.jpg/", "image/jpeg"],
+    ["sheets/a/b/", undefined],
+  ])("resolves %s as a folder", (path, contentType) => {
+    const target = `${base}${path}`;
+    for (const shared of [false, true])
+      expect(resolve({ url: target, ...(contentType ? { contentType } : {}) }, { shared })).toEqual(
+        { app: "drive", kind: "folder", group: "file", href: folder(target) },
+      );
+  });
+  it("routes only Sheets' native workbook container through a hint", () => {
+    expect(resolve({ url: `${base}sheets/a/` })).toMatchObject({
+      app: "sheets",
+      kind: "spreadsheet",
+      href: `/sheets/s/${encodeRef(`${base}sheets/a/`)}`,
+    });
+    expect(resolve({ url: `${base}sheets/a/` }, { shared: true }).href).toBe(
+      folder(`${base}sheets/a/`),
+    );
+  });
+});
+
+describe("pod boundary on path-based multi-pod hosts", () => {
+  const storageUrl = "https://pod.example/alice/";
+  const options = { shared: true, storageUrl };
+  it("opens native shared documents only inside the user's own storage", () => {
+    expect(resolve({ url: `${storageUrl}docs/a.ttl` }, options).href).toBe(
+      `/docs/d/${encodeRef(`${storageUrl}docs/a.ttl`)}`,
+    );
+    expect(resolve({ url: `${storageUrl}sheets/a/` }, options).href).toBe(
+      `/sheets/s/${encodeRef(`${storageUrl}sheets/a/`)}`,
+    );
+    for (const target of [
+      "https://pod.example/eve/docs/a.ttl",
+      "https://pod.example/alicex/docs/a.ttl",
+      "https://pod.example/docs/a.ttl",
+    ])
+      expect(resolve({ url: target }, options).href).toBe(preview(target));
+    expect(resolve({ url: "https://pod.example/eve/sheets/a/" }, options).href).toBe(
+      folder("https://pod.example/eve/sheets/a/"),
+    );
+  });
+});
+
+describe("Tasks tracker layout", () => {
+  it("requires projects/ for untyped trackers and accepts typed trackers anywhere", () => {
+    for (const shared of [false, true]) {
+      for (const path of ["tasks/a.ttl", "pod-tasks/a.ttl", "tasks/projects/p/a.ttl"])
+        expect(resolve({ url: `${base}${path}` }, { shared }).href).toBe(preview(`${base}${path}`));
+      for (const path of ["tasks/projects/a.ttl", "pod-tasks/projects/a.ttl"])
+        expect(resolve({ url: `${base}${path}` }, { shared }).href).toBe(
+          `/tasks/p/${encodeRef(`${base}${path}`)}`,
+        );
+      expect(
+        resolve({ url: `${base}tasks/a.ttl`, rdfTypes: [`${NS.WF}Tracker`] }, { shared }).href,
+      ).toBe(`/tasks/p/${encodeRef(`${base}tasks/a.ttl`)}`);
+    }
+  });
 });

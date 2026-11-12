@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { SearchResult } from "@jeswr/suite-sdk/search";
 import { describe, expect, it } from "vitest";
 import { encodeRef } from "../src/lib/refs";
@@ -127,5 +128,52 @@ describe("pod search result routes", () => {
       serverSearch: false,
       results: [],
     });
+  });
+
+  it.each([
+    ["Pictures/x.jpg", "image/jpeg", undefined],
+    ["report.md", "text/markdown", "http://www.w3.org/ns/ldp#NonRDFSource"],
+    ["budget.csv", "text/csv", "http://www.w3.org/ns/iana/media-types/text/csv#Resource"],
+    ["docs/old.pdf", "application/pdf", "http://www.w3.org/ns/ldp#Resource"],
+    ["photos/a.png", undefined, undefined],
+    ["music/a.mp3", "audio/mpeg", undefined],
+    ["calendar/a.ics", "text/calendar", undefined],
+    ["notes/a.note", undefined, undefined],
+  ])("keeps the generic file %s in Drive, including Drive-scoped search", (path, contentType, type) => {
+    const url = `https://pod.example/alice/${path}`;
+    const result: SearchResult = {
+      ...row,
+      url,
+      ...(contentType ? { contentType } : {}),
+      ...(type ? { type } : {}),
+    };
+    expect(podSearchResult(result)).toMatchObject({
+      app: "drive",
+      type: "file",
+      href: `/drive/p/${encodeRef(url)}`,
+    });
+    const page = { source: "local" as const, results: [result] };
+    expect(podSearchResponse(page, "drive").results).toHaveLength(1);
+    for (const scope of ["photos", "docs", "sheets", "music", "calendar", "notes"] as const)
+      expect(podSearchResponse(page, scope).results).toEqual([]);
+  });
+
+  it.each([
+    "photos/",
+    "photos/2026/",
+    "music/albums/",
+    "docs/drafts/",
+    "sheets/budget/",
+  ])("opens the untyped container %s as a Drive folder", (path) => {
+    const url = `https://pod.example/alice/${path}`;
+    const result = podSearchResult({ ...row, url, contentType: "text/turtle" });
+    expect(result).toMatchObject({
+      app: "drive",
+      type: "file",
+      href: `/drive/f/${encodeRef(url)}`,
+    });
+    expect(
+      podSearchResponse({ source: "local", results: [{ ...row, url }] }, "drive").results,
+    ).toHaveLength(1);
   });
 });

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { InboxNotification } from "@jeswr/pod-access/notify";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -11,8 +12,12 @@ vi.mock("@jeswr/pod-access/notify", async (original) => ({
 }));
 
 import { sharedAccountKey } from "@jeswr/suite-sdk/shared";
-import { setPreferencesIdentity, useTasksPreferences } from "../src/apps/tasks/state/preferences";
-import { hideSharedForAccount } from "../src/lib/shared/hidden";
+import {
+  setPreferencesIdentity,
+  subscribeSharedProjectRemoval,
+  useTasksPreferences,
+} from "../src/apps/tasks/state/preferences";
+import { clearHiddenSharedForAccount, hideSharedForAccount } from "../src/lib/shared/hidden";
 import { useSharedItems } from "../src/lib/shared/use-shared-items";
 
 const note: InboxNotification = {
@@ -160,4 +165,92 @@ it("rejects a removal retained across session changes and a later reshare return
   await act(async () => result.refresh());
   expect(result.items).toHaveLength(1);
   await view.unmount();
+});
+
+it("never lists announcements for the user's own storage", async () => {
+  reader.list.mockResolvedValue([
+    { ...note, object: "https://alice.example/tasks/projects/home.ttl", content: "Own" },
+    note,
+  ]);
+  const view = await mount(h(Probe));
+  expect(result.items.map((item) => item.name)).toEqual(["Plan"]);
+  await view.unmount();
+});
+
+it("routes removal by Tasks list membership, never by the merged app label", async () => {
+  const tracker = "https://bob.example/tasks/projects/team.ttl";
+  const project = { url: "https://bob.example/lists/plain.ttl", title: "Listed" };
+  reader.list.mockResolvedValue([{ ...note, object: tracker, content: "Announced tracker" }]);
+  localStorage.setItem(
+    `suite.tasks.shared:${encodeURIComponent(session.webId)}`,
+    JSON.stringify([project]),
+  );
+  const removed = vi.fn();
+  const unsubscribe = subscribeSharedProjectRemoval(removed);
+  const view = await mount(h(Probe));
+  expect(result.items.find((item) => item.url === tracker)?.app).toBe("tasks");
+  await act(async () => result.remove(tracker));
+  expect(removed).not.toHaveBeenCalled();
+  expect(
+    JSON.parse(
+      localStorage.getItem(`suite.tasks.shared:${encodeURIComponent(session.webId)}`) ?? "[]",
+    ),
+  ).toEqual([project]);
+  expect(result.items.map((item) => item.url)).toEqual([project.url]);
+  await act(async () => result.remove(project.url));
+  expect(removed).toHaveBeenCalledWith(session.webId, project.url);
+  expect(result.items).toEqual([]);
+  unsubscribe();
+  await view.unmount();
+});
+
+it("hides future-dated announcements and never pins them above dated shares", async () => {
+  const dated = { ...note, object: "https://bob.example/docs/dated.ttl", content: "Dated" };
+  const future = { ...note, published: "2999-01-01T00:00:00Z", content: "Future" };
+  reader.list.mockResolvedValue([future, { ...dated, published: "2026-11-01T00:00:00Z" }]);
+  const view = await mount(h(Probe));
+  expect(result.items.map((item) => item.name)).toEqual(["Dated", "Future"]);
+  await act(async () => result.remove(note.object as string));
+  await act(async () => result.refresh());
+  expect(result.items.map((item) => item.name)).toEqual(["Dated"]);
+  // A tolerated skew still cannot outrank the hide recorded for that record.
+  const skewed = new Date(Date.now() + 120_000).toISOString();
+  reader.list.mockResolvedValue([{ ...dated, published: skewed }]);
+  await act(async () => result.refresh());
+  expect(result.items.map((item) => item.name)).toEqual(["Dated"]);
+  await act(async () => result.remove(dated.object));
+  await act(async () => result.refresh());
+  expect(result.items).toEqual([]);
+  await view.unmount();
+});
+
+it("writes and notifies the hidden list only when clearing a hidden URL", async () => {
+  const key = sharedAccountKey(session.webId);
+  const setItem = vi.spyOn(Object.getPrototypeOf(localStorage), "setItem");
+  const view = await mount(h(Probe));
+  const before = result.items;
+  clearHiddenSharedForAccount(session.webId, note.object as string);
+  expect(setItem.mock.calls.filter(([name]) => name === key)).toEqual([]);
+  expect(result.items).toBe(before);
+  setPreferencesIdentity(session.webId);
+  let preferences!: ReturnType<typeof useTasksPreferences>;
+  function TasksProbe() {
+    preferences = useTasksPreferences();
+    return null;
+  }
+  const tasks = await mount(h(TasksProbe));
+  const project = { url: "https://bob.example/tasks/projects/team.ttl", title: "Team" };
+  await act(async () => preferences.dispatch({ type: "sharedProject", ...project }));
+  await act(async () => preferences.dispatch({ type: "sharedProject", ...project }));
+  expect(setItem.mock.calls.filter(([name]) => name === key)).toEqual([]);
+  await act(async () => hideSharedForAccount(session.webId, project.url));
+  await act(async () => preferences.dispatch({ type: "sharedProject", ...project }));
+  expect(setItem.mock.calls.filter(([name]) => name === key).map(([, value]) => value)).toEqual([
+    expect.stringContaining(project.url),
+    "[]",
+  ]);
+  setItem.mockRestore();
+  await tasks.unmount();
+  await view.unmount();
+  setPreferencesIdentity(undefined);
 });

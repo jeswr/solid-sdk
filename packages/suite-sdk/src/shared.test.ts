@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import {
   classifySharedItem,
@@ -11,8 +12,10 @@ import {
   mergeSharedItems,
   parseSharedEntries,
   removeSharedItem,
+  SHARED_CLOCK_SKEW_MS,
   type SharedItem,
   sharedAccountKey,
+  sharedHiddenAt,
   sharedItemName,
   sharedItemsForAccount,
   sharedItemsFromInbox,
@@ -286,4 +289,123 @@ it("keeps insertion order for missing Drive dates and tolerates invalid Dates in
   expect(visibleSharedItems([{ url, openedAt: new Date("bad") }], hideSharedItem([], url))).toEqual(
     [],
   );
+});
+
+describe("inbox trust boundaries", () => {
+  const announce = (object: string, fields: Record<string, string> = {}) => ({
+    url: "https://alice.example/inbox/1",
+    type: "Announce",
+    summary: "Shared with you as Viewer",
+    object,
+    ...fields,
+  });
+  it("drops sender dates beyond the clock skew so they neither pin nor outrank a hide", () => {
+    const now = Date.parse("2026-11-11T12:00:00Z");
+    const [future, recent] = sharedItemsFromInbox(
+      [
+        announce("https://bob.example/future.ttl", { published: "2999-01-01T00:00:00Z" }),
+        announce("https://bob.example/recent.ttl", { published: "2026-11-10T00:00:00Z" }),
+      ],
+      { now },
+    ).sort((a, b) => a.url.localeCompare(b.url));
+    expect(future).not.toHaveProperty("sharedAt");
+    expect(recent?.sharedAt).toBe("2026-11-10T00:00:00Z");
+    // Undated sorts after dated, and a hide suppresses it until a genuine later reshare.
+    expect(
+      sharedItemsFromInbox(
+        [
+          announce("https://bob.example/future.ttl", { published: "2999-01-01T00:00:00Z" }),
+          announce("https://bob.example/recent.ttl", { published: "2026-11-10T00:00:00Z" }),
+        ],
+        { now },
+      ).map((entry) => entry.url),
+    ).toEqual(["https://bob.example/recent.ttl", "https://bob.example/future.ttl"]);
+    const hidden = hideSharedItem(
+      [],
+      "https://bob.example/future.ttl",
+      new Date(now).toISOString(),
+    );
+    expect(visibleSharedItems([future as SharedItem], hidden)).toEqual([]);
+    const skewed = new Date(now + SHARED_CLOCK_SKEW_MS).toISOString();
+    expect(sharedItemsFromInbox([announce(url, { published: skewed })], { now })[0]?.sharedAt).toBe(
+      skewed,
+    );
+    expect(
+      sharedItemsFromInbox(
+        [announce(url, { published: new Date(now + SHARED_CLOCK_SKEW_MS + 1).toISOString() })],
+        { now },
+      )[0],
+    ).not.toHaveProperty("sharedAt");
+    expect(
+      sharedItemsFromInbox([announce(url, { published: "2999-01-01T00:00:00Z" })])[0],
+    ).not.toHaveProperty("sharedAt");
+  });
+  it("hides at or after a record's own dates", () => {
+    const now = Date.parse("2026-11-11T12:00:00Z");
+    expect(sharedHiddenAt(undefined, now)).toBe("2026-11-11T12:00:00.000Z");
+    expect(sharedHiddenAt({ sharedAt: "2026-11-11T12:03:00Z" }, now)).toBe(
+      "2026-11-11T12:03:00.000Z",
+    );
+    expect(sharedHiddenAt({ openedAt: new Date("2026-11-11T12:04:00Z") }, now)).toBe(
+      "2026-11-11T12:04:00.000Z",
+    );
+    expect(sharedHiddenAt({ sharedAt: "bad", openedAt: "2026-01-01" }, now)).toBe(
+      "2026-11-11T12:00:00.000Z",
+    );
+    expect(Date.parse(sharedHiddenAt({}))).toBeLessThanOrEqual(Date.now());
+    const skewed = item({ sharedAt: "2026-11-11T12:03:00Z" });
+    expect(
+      visibleSharedItems([skewed], hideSharedItem([], url, sharedHiddenAt(skewed, now))),
+    ).toEqual([]);
+  });
+  it("never lists the user's own storage as shared with me", () => {
+    const storageUrl = "https://pod.example/alice/";
+    expect(
+      sharedItemsFromInbox(
+        [
+          announce(`${storageUrl}tasks/projects/home.ttl`),
+          announce("https://pod.example/alice"),
+          announce("https://pod.example/bob/docs/a.ttl"),
+          announce("https://pod.example/alicex/a.ttl"),
+        ],
+        { storageUrl },
+      ).map((entry) => entry.url),
+    ).toEqual(["https://pod.example/alicex/a.ttl", "https://pod.example/bob/docs/a.ttl"]);
+    expect(sharedItemsFromInbox([announce(`${storageUrl}a.ttl`)])).toHaveLength(1);
+  });
+  it("uses pod roots, not origins, on the user's own path-based host", () => {
+    const storageUrl = "https://pod.example/alice/";
+    const from = (actor: string, object: string, storage: string | undefined = storageUrl) =>
+      sharedItemsFromInbox([announce(object, { actor })], storage ? { storageUrl: storage } : {})[0]
+        ?.fromAnotherPod;
+    expect(from("https://pod.example/bob/profile/card#me", "https://pod.example/bob/a.ttl")).toBe(
+      false,
+    );
+    expect(from("https://pod.example/eve/profile/card#me", "https://pod.example/bob/a.ttl")).toBe(
+      true,
+    );
+    expect(from("https://pod.example/card#me", "https://pod.example/bob/a.ttl")).toBe(true);
+    expect(from("https://pod.example/eve/profile/card#me", "https://pod.example/eve%2fa")).toBe(
+      true,
+    );
+    // Subdomain hosts and other hosts keep the origin boundary.
+    expect(
+      from(
+        "https://bob.example/profile/card#me",
+        "https://bob.example/a.ttl",
+        "https://alice.example/",
+      ),
+    ).toBe(false);
+    expect(
+      from(
+        "https://eve.host/profile/card#me",
+        "https://eve.host/a.ttl",
+        "https://pod.example/alice/",
+      ),
+    ).toBe(false);
+    expect(from("https://pod.example/eve/card#me", "https://pod.example/bob/a.ttl", "bad")).toBe(
+      false,
+    );
+    expect(from("not a url", "https://pod.example/bob/a.ttl")).toBe(true);
+  });
 });

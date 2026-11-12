@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import {
   classifySharedItem,
   resolveSuiteResource,
@@ -37,11 +39,10 @@ export function sharedItemHref(item: SharedItem, storageUrl?: string): string {
       encodeRef,
       shared: true,
       ...(storageUrl ? { storageUrl } : {}),
+      // The pod boundary, not the origin: one host may serve many path-based pods.
       previewOnly:
         item.source === "inbox" &&
-        (item.fromAnotherPod === true ||
-          !storageUrl ||
-          new URL(item.url).origin !== new URL(storageUrl).origin),
+        (item.fromAnotherPod === true || !storageUrl || !isWithinPodScope(storageUrl, item.url)),
     },
   ).href;
 }

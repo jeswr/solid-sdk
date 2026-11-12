@@ -300,7 +300,11 @@ export function TasksSidebar() {
     (project) => project.url !== tasks.inboxUrl && !isShared(project.url),
   );
   // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
-  const favourites = visibleSharedItems(tasks.projects, hidden).filter((project) => {
+  // A Shared hide applies to shared projects only, never to the user's own projects.
+  const favourites = visibleSharedItems(
+    tasks.projects,
+    hidden.filter((item) => !tasks.cache.isOwnProject(item.url)),
+  ).filter((project) => {
     const error = tasks.tasks[project.url]?.error;
     return (
       preferences.favourites.includes(project.url) &&

@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { createInboxReader } from "@jeswr/pod-access/notify";
 import {
   mergeSharedItems,
   type SharedItem,
+  sharedHiddenAt,
   sharedItemsFromInbox,
   visibleSharedItems,
 } from "@jeswr/suite-sdk/shared";
@@ -67,7 +69,9 @@ export function useSharedItems(session: PodSession) {
       try {
         const inbox = await reader.inbox(session.webId);
         const items = inbox
-          ? sharedItemsFromInbox(await reader.list(inbox, { signal: controller.signal }))
+          ? sharedItemsFromInbox(await reader.list(inbox, { signal: controller.signal }), {
+              storageUrl: session.storageUrl,
+            })
           : [];
         if (!controller.signal.aborted && current === generation)
           setSnapshot({ session, items, projects, error: false });
@@ -110,10 +114,11 @@ export function useSharedItems(session: PodSession) {
     storageUrl: session.storageUrl,
     remove: (url: string) => {
       if (active.current !== session) return;
-      // Tasks owns the forget + preference removal flow, even from the cross-app page.
-      if (merged.some((item) => item.url === url && item.app === "tasks"))
+      // Tasks owns the forget + preference removal flow for its own Shared with me list only;
+      // every other record, whatever its app label, is a local hide.
+      if (current?.projects.some((project) => project.url === url))
         removeSharedProjectForAccount(session.webId, url);
-      else remove(url);
+      else remove(url, sharedHiddenAt(merged.find((item) => item.url === url)));
     },
     refresh: () => setVersion((value) => value + 1),
   };

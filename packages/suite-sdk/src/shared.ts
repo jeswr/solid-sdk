@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { type InboxNotification, notificationKind } from "@jeswr/pod-access/notify";
 
 import { isDirectChild, resolveSuiteResource, type SharedApp } from "./resource.js";
@@ -16,7 +18,7 @@ export interface SharedItem {
   source: "inbox" | "opened" | "app";
   contentType?: string;
   rdfTypes?: readonly string[];
-  /** An unverified announcement actor claims a resource on a different origin. */
+  /** An unverified announcement actor claims a resource outside the actor's apparent pod. */
   fromAnotherPod?: boolean;
 }
 export interface SharedItemHints {
@@ -58,17 +60,54 @@ export function isSuiteDocsDocument(url: string, storageUrl: string): boolean {
   return ["docs/", "pod-docs/"].some((slug) => isDirectChild(url, new URL(slug, storageUrl).href));
 }
 
-/** Only the suite share Announce shape; assignments, mentions and invitations stay separate. */
-export function sharedItemsFromInbox(notifications: readonly InboxNotification[]): SharedItem[] {
+/** Tolerated sender clock skew; a later `published` claim is not a date at all. */
+export const SHARED_CLOCK_SKEW_MS = 5 * 60_000;
+
+/**
+ * Whether the actor and the resource can be placed in one pod. Different origins never can.
+ * On the signed-in user's own host the user's storage depth gives the pod layout, so a
+ * path-based multi-pod host compares pod roots, not origins. Elsewhere the layout is unknown
+ * and the origin is the only boundary available without I/O.
+ */
+function sameApparentPod(actor: string, object: string, storageUrl?: string): boolean {
+  if (!isSharedItemUrl(actor)) return false;
+  const agent = new URL(actor);
+  if (agent.origin !== new URL(object).origin) return false;
+  if (!storageUrl || !isSharedItemUrl(storageUrl) || new URL(storageUrl).origin !== agent.origin)
+    return true;
+  const depth = new URL(storageUrl).pathname.split("/").filter(Boolean).length;
+  const segments = agent.pathname.split("/");
+  // The WebID document must sit inside a container at the storage depth.
+  if (segments.length <= depth + 1) return false;
+  return isWithinPodScope(
+    new URL(`${segments.slice(0, depth + 1).join("/")}/`, agent).href,
+    object,
+  );
+}
+
+/**
+ * Only the suite share Announce shape; assignments, mentions and invitations stay separate.
+ * Resources inside `storageUrl` (the user's own pod) are never "shared with me". A `published`
+ * claim later than `now` plus {@link SHARED_CLOCK_SKEW_MS} is dropped, so it can neither pin an
+ * item to the top nor outrank a local hide.
+ */
+export function sharedItemsFromInbox(
+  notifications: readonly InboxNotification[],
+  options: { storageUrl?: string; now?: number } = {},
+): SharedItem[] {
+  const latest = (options.now ?? Date.now()) + SHARED_CLOCK_SKEW_MS;
   return mergeSharedItems(
     notifications.flatMap((notification): SharedItem[] => {
       if (
         notificationKind(notification) !== "share" ||
         !notification.object ||
-        !isSharedItemUrl(notification.object)
+        !isSharedItemUrl(notification.object) ||
+        (options.storageUrl !== undefined &&
+          isWithinPodScope(options.storageUrl, notification.object))
       )
         return [];
       const role = notification.summary?.slice("Shared with you as ".length).trim();
+      const published = Date.parse(notification.published ?? "");
       return [
         {
           url: notification.object,
@@ -77,12 +116,14 @@ export function sharedItemsFromInbox(notifications: readonly InboxNotification[]
           ...(notification.actor
             ? {
                 sharedBy: notification.actor,
-                fromAnotherPod:
-                  !isSharedItemUrl(notification.actor) ||
-                  new URL(notification.actor).origin !== new URL(notification.object).origin,
+                fromAnotherPod: !sameApparentPod(
+                  notification.actor,
+                  notification.object,
+                  options.storageUrl,
+                ),
               }
             : {}),
-          ...(Number.isFinite(Date.parse(notification.published ?? ""))
+          ...(Number.isFinite(published) && published <= latest
             ? { sharedAt: notification.published }
             : {}),
           ...(role ? { role } : {}),
@@ -190,6 +231,15 @@ export function hideSharedItem(
   hiddenAt = new Date().toISOString(),
 ): HiddenSharedItem[] {
   return isSharedItemUrl(url) ? [...removeSharedItem(hidden, url), { url, hiddenAt }] : [...hidden];
+}
+/** A hide outranks the record's own dates, including a `sharedAt` within the clock skew. */
+export function sharedHiddenAt(
+  item: { sharedAt?: string; openedAt?: string | Date } | undefined,
+  now = Date.now(),
+): string {
+  return new Date(
+    Math.max(now, timestamp(item?.sharedAt), timestamp(item?.openedAt)),
+  ).toISOString();
 }
 export function visibleSharedItems<
   T extends { url: string; sharedAt?: string; openedAt?: string | Date },

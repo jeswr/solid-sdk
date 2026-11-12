@@ -15,7 +15,8 @@ export function podSearchResult(result: SdkResult): SearchResult {
       ...(result.type ? { rdfTypes: [result.type] } : {}),
       ...(result.contentType ? { contentType: result.contentType } : {}),
     },
-    { encodeRef, encodeContactRef },
+    // Only RDF types choose the app: untyped files keep Drive scope and containers stay folders.
+    { encodeRef, encodeContactRef, hints: false },
   );
   return {
     id: result.url,

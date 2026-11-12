@@ -540,3 +540,28 @@ it("never turns a hidden shared project or favourite into an own project and reo
   await view.unmount();
   await probe.unmount();
 });
+
+it("keeps an own favourite when a Shared hide names its URL", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const own = await cache.createProject("Home");
+  if (!own) throw new Error("Missing project");
+  expect(cache.isOwnProject(own.url)).toBe(true);
+  let prefs!: ReturnType<typeof useTasksPreferences>;
+  function Preferences() {
+    prefs = useTasksPreferences();
+    return null;
+  }
+  const probe = await mount(h(Preferences));
+  const view = await mount(h(TasksApp, null, "Inbox"));
+  await act(async () => prefs.dispatch({ type: "favouriteProject", url: own.url, value: true }));
+  const favourites = () =>
+    [...view.host.querySelectorAll('section[aria-label="Favourites"] a')].map((link) =>
+      link.getAttribute("href"),
+    );
+  expect(favourites()).toEqual([`/tasks/p/${encodeRef(own.url)}`]);
+  await act(async () => hideSharedForAccount(webId, own.url));
+  expect(favourites()).toEqual([`/tasks/p/${encodeRef(own.url)}`]);
+  await view.unmount();
+  await probe.unmount();
+});

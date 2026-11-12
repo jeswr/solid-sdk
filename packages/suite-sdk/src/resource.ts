@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 
 export const sharedApps = [
@@ -110,6 +112,8 @@ const hints: readonly [SharedApp, string, RegExp, RegExp, RegExp][] = [
   ],
 ];
 
+const sheetsWorkbook = /\/(?:sheets|pod-sheets)\/[^/]+\/$/;
+
 /** One resource-to-app mapping. Shared links require a native format and a capable router. */
 export function resolveSuiteResource(
   resource: ResourceHints,
@@ -119,6 +123,8 @@ export function resolveSuiteResource(
     shared?: boolean;
     storageUrl?: string;
     previewOnly?: boolean;
+    /** False keeps search's rule: only RDF types choose an app; untyped rows stay in Drive. */
+    hints?: boolean;
   },
 ): ResourceResolution {
   const document = new URL(resource.url);
@@ -126,7 +132,9 @@ export function resolveSuiteResource(
     throw new TypeError("Expected an HTTP resource without credentials");
   document.hash = "";
   const ref = options.encodeRef(document.href);
-  const preview = `/drive/p/${ref}`;
+  const container = document.pathname.endsWith("/");
+  // Drive's own convention: folders navigate, files preview.
+  const preview = container ? `/drive/f/${ref}` : `/drive/p/${ref}`;
   const rdfTypes = resource.rdfTypes?.map(canonicalize) ?? [];
   const typed = types.find(([type]) => rdfTypes.includes(type));
   const mime = resource.contentType?.split(";")[0]?.trim().toLowerCase() ?? "";
@@ -137,12 +145,18 @@ export function resolveSuiteResource(
     /* Keep malformed encodings opaque. */
   }
   const name = (resource.name ?? path).toLowerCase();
+  // A hint never turns a container into a file; Sheets' native workbook container is the
+  // only container layout a hint may route.
   const hinted =
-    hints.find(([, , mimeRule]) => mimeRule.test(mime)) ??
-    hints.find(([, , , extension]) => extension.test(name) || extension.test(path)) ??
-    hints.find(([, , , , pathRule]) => pathRule.test(path));
+    options.hints === false
+      ? undefined
+      : container
+        ? hints.find(([app]) => app === "sheets" && sheetsWorkbook.test(path))
+        : (hints.find(([, , mimeRule]) => mimeRule.test(mime)) ??
+          hints.find(([, , , extension]) => extension.test(name) || extension.test(path)) ??
+          hints.find(([, , , , pathRule]) => pathRule.test(path)));
   let app: ResourceResolution["app"] = typed?.[1] ?? hinted?.[0] ?? "drive";
-  let kind = typed?.[2] ?? hinted?.[1] ?? (path.endsWith("/") ? "folder" : "file");
+  let kind = typed?.[2] ?? hinted?.[1] ?? (container ? "folder" : "file");
   if (rdfTypes.includes(`${NS.POD_DOCS}Document`) && /\/(?:notes|pod-notes)\//.test(path)) {
     app = "notes";
     kind = "note";
@@ -163,12 +177,14 @@ export function resolveSuiteResource(
         ? "file"
         : "data");
   let href = preview;
-  const sameOrigin =
-    options.storageUrl !== undefined && document.origin === new URL(options.storageUrl).origin;
+  // The pod boundary, not the origin: path-based hosts serve many pods on one origin.
+  const ownStorage =
+    options.storageUrl !== undefined && isWithinPodScope(options.storageUrl, document.href);
   const nativeLocation = !document.search && !/%2f|%5c/i.test(document.pathname);
   const nativeRdf =
     !mime || /^(?:text\/turtle|application\/(?:ld\+json|n-triples|rdf\+xml))$/.test(mime);
-  const nativeTrackerPath = /^(?:projects\/)?[^/]+\.ttl$/.test(
+  // Untyped trackers must sit in Tasks' projects/ container; other tasks/ files are previews.
+  const nativeTrackerPath = /^projects\/[^/]+\.ttl$/.test(
     path.split(/\/(?:tasks|pod-tasks)\//)[1] ?? "",
   );
   switch (app) {
@@ -186,7 +202,7 @@ export function resolveSuiteResource(
       break;
     case "docs":
       if (
-        (!options.shared || sameOrigin) &&
+        (!options.shared || ownStorage) &&
         nativeLocation &&
         nativeRdf &&
         /\.ttl$/.test(path) &&
@@ -198,11 +214,10 @@ export function resolveSuiteResource(
       break;
     case "sheets":
       if (
-        (!options.shared || sameOrigin) &&
+        (!options.shared || ownStorage) &&
         nativeLocation &&
-        path.endsWith("/") &&
-        (rdfTypes.includes(`${NS.SCHEMA}SpreadsheetDigitalDocument`) ||
-          /\/(?:sheets|pod-sheets)\/[^/]+\/$/.test(path))
+        container &&
+        (rdfTypes.includes(`${NS.SCHEMA}SpreadsheetDigitalDocument`) || sheetsWorkbook.test(path))
       )
         href = `/sheets/s/${ref}`;
       break;

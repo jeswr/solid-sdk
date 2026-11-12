@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   type HiddenSharedItem,
@@ -42,11 +43,13 @@ function subscribe(listener: () => void) {
   };
 }
 /** Local removal only: no resource deletion, revocation or inbox mutation. */
-export function hideSharedForAccount(owner: string, url: string) {
-  write(owner, hideSharedItem(read(owner), url));
+export function hideSharedForAccount(owner: string, url: string, hiddenAt?: string) {
+  write(owner, hideSharedItem(read(owner), url, hiddenAt));
 }
+/** Writes and notifies only when the URL is actually hidden. */
 export function clearHiddenSharedForAccount(owner: string, url: string) {
-  write(owner, removeSharedItem(read(owner), url));
+  const hidden = read(owner);
+  if (hidden.some((item) => item.url === url)) write(owner, removeSharedItem(hidden, url));
 }
 function write(owner: string, items: readonly HiddenSharedItem[]) {
   const raw = JSON.stringify(items);
@@ -73,8 +76,8 @@ export function useHiddenSharedItems(owner: string) {
     () => empty,
   );
   const remove = useCallback(
-    (url: string) => {
-      if (active.current === owner) hideSharedForAccount(owner, url);
+    (url: string, hiddenAt?: string) => {
+      if (active.current === owner) hideSharedForAccount(owner, url, hiddenAt);
     },
     [owner],
   );

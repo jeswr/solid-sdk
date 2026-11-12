@@ -170,19 +170,28 @@ Public API changes must update this skill and README together.
 
 ## Shared items (`./shared`, sst-iool)
 
-`sharedItemsFromInbox` projects only share Announce notifications into `SharedItem` records.
-Sender, title and role are unverified assertions. `fromAnotherPod` flags an actor origin that
-is different from the resource origin; callers display the resource origin first and label
-announcement senders and roles as unverified. No grants or resource reads occur here.
+`sharedItemsFromInbox(notifications, { storageUrl?, now? })` projects only share Announce
+notifications into `SharedItem` records. Pass the user's `storageUrl`: resources inside it
+(pod-scope containment, not origin) are never "shared with me". A `published` claim later than
+`now + SHARED_CLOCK_SKEW_MS` (5 minutes) is dropped, so a future date can neither pin an item to
+the top nor outrank a hide. Sender, title and role are unverified assertions. `fromAnotherPod`
+flags an actor that cannot be placed in the resource's pod: different origins always, and on
+the user's own host pod roots at the user's storage depth (path-based multi-pod hosts). Callers
+display the resource origin first and label announcement senders and roles as unverified. No
+grants or resource reads occur here.
 
-`resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly? })`
+`resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly?, hints? })`
 is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
 `@jeswr/suite-vocab` IRIs (including known legacy aliases), never arbitrary local names.
-MIME, filename and path hints supply display classifications. Shared routes require native
-formats and routers that can open shared resources: native Tasks tracker documents, and native
-Docs documents / Sheets containers on the current storage origin. Other shared resources use
-Drive preview. Callers set `previewOnly` for unverified inbox resources on another origin or
-with mismatched actor/resource origins. Document references omit fragments; Tasks search keeps
+MIME, filename and path hints supply display classifications; search passes `hints: false` so
+only RDF types choose an app and generic rows stay in Drive (and in Drive-scoped search). A hint
+never turns a container into a file: untyped containers are Drive folders, except Sheets'
+native `sheets/<name>/` workbook layout. Shared routes require native formats and routers that
+can open shared resources: Tasks trackers (`wf:Tracker`, or untyped `.ttl` directly in
+`tasks/projects/`), and native Docs documents / Sheets containers inside the user's storage
+(pod-scope containment, never origin). Other resources fall back to Drive: containers open the
+folder view, files the preview. Callers set `previewOnly` for unverified inbox resources outside
+the user's storage or with an actor from another pod. Document references omit fragments; Tasks search keeps
 the task subject. `classifySharedItem` delegates to this resolver. `sharedApps` exports the
 runtime list underlying `SharedApp`.
 
@@ -195,7 +204,9 @@ Drive's stable insertion order for equal dates and its existing NaN comparison b
 Storage belongs to callers: `sharedAccountKey` keeps Tasks' encoded WebID key convention,
 `parseSharedEntries` validates stored lists, and `sharedItemsForAccount` prevents fallback
 memory from crossing accounts. `hideSharedItem` stores `{ url, hiddenAt }`; `visibleSharedItems`
-suppresses only records with no `sharedAt`/`openedAt` later than `hiddenAt`. Persist hidden
+suppresses only records with no `sharedAt`/`openedAt` later than `hiddenAt`. Hide with
+`sharedHiddenAt(record)` (the later of now and the record's own dates) so a skewed sender date
+cannot outrank the hide. Persist hidden
 entries per WebID, validate with `isHiddenSharedItem`, and clear them when the user reopens a
 resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
 stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { SharedItem } from "@jeswr/suite-sdk/shared";
 import { describe, expect, it } from "vitest";
 import { encodeRef } from "../src/lib/refs";
@@ -12,7 +13,8 @@ describe("shared item presentation", () => {
   it.each([
     ["docs/plan.ttl", "docs/d"],
     ["sheets/budget/", "sheets/s"],
-    ["tasks/team.ttl", "tasks/p"],
+    ["tasks/projects/team.ttl", "tasks/p"],
+    ["tasks/team.ttl", "drive/p"],
     ["docs/file.md", "drive/p"],
     ["docs/file.docx", "drive/p"],
     ["docs/file.txt", "drive/p"],
@@ -62,6 +64,27 @@ describe("shared item presentation", () => {
     expect(
       sharedItemHref({ ...item, url: `${storage}file.bin`, name: "docs/secret.ttl" }, storage),
     ).toBe(`/drive/p/${encodeRef(`${storage}file.bin`)}`);
+  });
+  it("uses the pod boundary, not the origin, on path-based multi-pod hosts", () => {
+    const alice = "https://pod.example/alice/";
+    const eve = "https://pod.example/eve/";
+    for (const path of ["tasks/projects/x.ttl", "docs/x.ttl", "sheets/x/"]) {
+      // Eve's same-origin announcement claims her own pod: it still only previews.
+      const announced = { ...item, url: `${eve}${path}`, source: "inbox" as const };
+      expect(sharedItemHref({ ...announced, fromAnotherPod: false }, alice)).toMatch(
+        /^\/drive\/[pf]\//,
+      );
+      expect(sharedItemHref({ ...announced, url: `${alice}${path}` }, alice)).not.toMatch(
+        /^\/drive\//,
+      );
+    }
+    // Opened resources in another pod on the same origin never open in Docs or Sheets.
+    expect(sharedItemHref({ ...item, url: `${eve}docs/x.ttl` }, alice)).toBe(
+      `/drive/p/${encodeRef(`${eve}docs/x.ttl`)}`,
+    );
+    expect(sharedItemHref({ ...item, url: `${eve}sheets/x/` }, alice)).toBe(
+      `/drive/f/${encodeRef(`${eve}sheets/x/`)}`,
+    );
   });
   it("projects Drive's legacy entries and explicit metadata", () => {
     expect(openedSharedItems([{ url, openedAt: "2026-01-01" }])[0]).toMatchObject({
