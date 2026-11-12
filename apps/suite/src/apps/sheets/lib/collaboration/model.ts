@@ -27,6 +27,10 @@ export function cells(state: SheetState) {
 export function jsonCopy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
+/** A cell's style by value, so equivalent styles under different IDs compare equal. */
+export function styleValue<T>(styles: IWorkbookData["styles"], style: string | T) {
+  return typeof style === "string" ? (styles[style] ?? style) : style;
+}
 
 /** A sheet's identity is external to the CRDT in slice 1. Never store names/order here. */
 export function seedSheets(doc: Y.Doc, snapshot: Snapshot) {

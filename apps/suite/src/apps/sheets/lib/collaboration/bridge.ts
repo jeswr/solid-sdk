@@ -27,6 +27,7 @@ import {
   sheetStates,
   snapshotAxes,
   spliceAxis,
+  styleValue,
 } from "./model";
 
 const historyMutation = "sheets.mutation.collaborative-history";
@@ -221,7 +222,7 @@ export class CollaborationBridge {
               delete cell.t;
               delete cell.si;
             }
-            if (typeof cell.s === "string") cell.s = snapshot.styles[cell.s] ?? cell.s;
+            cell.s = styleValue(snapshot.styles, cell.s);
             return cell;
           };
           // Structural formula interceptors can resend unchanged cells. Treat

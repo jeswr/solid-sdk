@@ -38,6 +38,12 @@ import { shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import { CollaborationBridge } from "../collaboration/bridge";
 import { type Axes, axes, checkpoint, sheetStates } from "../collaboration/model";
+import {
+  captureAnchorIdentities,
+  identityRange,
+  rangeIdentity,
+  restoreAnchorIdentities,
+} from "../collaboration/ranges";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
@@ -311,62 +317,24 @@ export const mountUniver: MountEngine = async (container, options) => {
     });
   };
   const commands = injector.get(ICommandService);
-  const stableRange = (sheetId: string, range: string | null): Axes | undefined => {
+  const positionOf = (sheetId: string): Axes | undefined => {
     const state = options.collaboration && sheetStates(options.collaboration.doc).get(sheetId);
-    if (!state || range === null) return undefined;
-    const position = axes(state);
-    const ref = parseA1(range);
-    return {
-      rowIds: position.rowIds.slice(
-        (ref.rows as AxisRange).start.index - 1,
-        (ref.rows as AxisRange).end.index,
-      ),
-      colIds: position.colIds.slice(
-        (ref.columns as AxisRange).start.index - 1,
-        (ref.columns as AxisRange).end.index,
-      ),
-    };
+    return state ? axes(state) : undefined;
   };
-  const resolveRange = (sheetId: string, identity: Axes): string | null => {
-    const state = options.collaboration && sheetStates(options.collaboration.doc).get(sheetId);
-    if (!state) return null;
-    const position = axes(state);
-    const rows = identity.rowIds
-      .map((id) => position.rowIds.indexOf(id))
-      .filter((index) => index >= 0);
-    const cols = identity.colIds
-      .map((id) => position.colIds.indexOf(id))
-      .filter((index) => index >= 0);
-    if (!rows.length || !cols.length) return null;
-    return `${indexToColumn(Math.min(...cols) + 1)}${Math.min(...rows) + 1}:${indexToColumn(Math.max(...cols) + 1)}${Math.max(...rows) + 1}`;
-  };
+  const stableRange = (sheetId: string, range: string | null) =>
+    rangeIdentity(positionOf(sheetId), range);
+  const resolveRange = (sheetId: string, identity: Axes) =>
+    identityRange(positionOf(sheetId), identity);
   const anchorCheckpoints = new WeakMap<AnchorDeletions, Map<string, Axes>>();
   const captureAnchors = (deleted: AnchorDeletions, fromCollab = false) => {
     if (!options.collaboration) return;
-    const stable = new Map<string, Axes>();
-    for (const kind of ["anchors", "drafts"] as const) {
-      for (const [id, anchor] of Object.entries(deleted[kind])) {
-        const known = fromCollab && identities[kind].get(id);
-        const identity = known
-          ? { rowIds: [known.rowId, known.rowId], colIds: [known.colId, known.colId] }
-          : stableRange(anchor.sheetId, anchor.cell);
-        if (identity) stable.set(`${kind}:${id}`, identity);
-      }
-    }
-    anchorCheckpoints.set(deleted, stable);
+    const known = (kind: "anchors" | "drafts", id: string) =>
+      fromCollab ? identities[kind].get(id) : undefined;
+    anchorCheckpoints.set(deleted, captureAnchorIdentities(deleted, known, positionOf));
   };
   const restoreAnchors = (deleted: AnchorDeletions) => {
     const stable = anchorCheckpoints.get(deleted);
-    if (!stable) return deleted;
-    const restored: AnchorDeletions = { revision: deleted.revision, anchors: {}, drafts: {} };
-    for (const kind of ["anchors", "drafts"] as const) {
-      for (const [id, anchor] of Object.entries(deleted[kind])) {
-        const identity = stable.get(`${kind}:${id}`);
-        const range = identity && resolveRange(anchor.sheetId, identity);
-        if (range) restored[kind][id] = { ...anchor, cell: range.split(":")[0] as string };
-      }
-    }
-    return restored;
+    return stable ? restoreAnchorIdentities(deleted, stable, positionOf) : deleted;
   };
   let collaboration: CollaborationBridge | undefined;
   // setEditable does not guard native history replay. Cancel user commands before

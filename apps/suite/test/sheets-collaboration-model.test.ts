@@ -10,6 +10,7 @@ import {
   sheetStates,
   snapshotAxes,
   spliceAxis,
+  styleValue,
 } from "../src/apps/sheets/lib/collaboration/model";
 import type { Snapshot } from "../src/apps/sheets/lib/contract";
 
@@ -73,4 +74,12 @@ it("normalizes concurrent moves without duplicating identities and removes every
   ]);
   a.destroy();
   b.destroy();
+});
+
+it("styles compare by value, keeping unknown IDs and inline styles as they are", () => {
+  const styles = { bold: { bl: 1 as const } };
+  expect(styleValue(styles, "bold")).toEqual({ bl: 1 });
+  expect(styleValue(styles, "missing")).toBe("missing");
+  expect(styleValue(styles, { it: 1 })).toEqual({ it: 1 });
+  expect(styleValue(styles, undefined)).toBeUndefined();
 });
