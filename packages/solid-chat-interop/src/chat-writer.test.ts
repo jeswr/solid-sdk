@@ -13,8 +13,8 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { chatConversationId, normalizeChatAccount, redactChatAccount } from "./chat-account.js";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
-import { ownerOnlyChatAcl } from "./index.js";
 import { ConversationProvenanceDoc } from "./conversation-provenance.js";
+import { ownerOnlyChatAcl } from "./index.js";
 import { parseAs2, storeToTurtle } from "./reconcile.js";
 import { redactSecrets } from "./redact.js";
 import {
