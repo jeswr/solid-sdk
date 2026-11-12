@@ -78,15 +78,25 @@ export function ConnectAssistant({ url }: { url: string | undefined }) {
           <p>Other MCP apps: use this address with OAuth.</p>
         </>
       ) : (
-        <p>
-          This suite has no assistant server set up. Ask whoever runs your suite for its MCP
-          address.
-        </p>
+        <>
+          <p>
+            This suite has no assistant server set up. Ask whoever runs your suite for its MCP
+            address.
+          </p>
+          <a
+            href="https://github.com/jeswr/solid-sdk/tree/main/apps/mcp-server#readme"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            How to run an assistant server
+          </a>
+        </>
       )}
       <p className="assistant-note">
-        To disconnect an assistant, remove it in that assistant's connector settings. That stops it
-        using your pod. To also cut off its access on the server, ask whoever runs your assistant
-        server to revoke it.
+        To disconnect an assistant, choose Disconnect under Connected assistants; its access ends on
+        its next request. Assistants connected before connection records existed, or through a
+        single-user server, aren't listed there: ask whoever runs your assistant server to revoke
+        them.
       </p>
     </section>
   );
@@ -169,7 +179,9 @@ export function PersonalDataReads({
                   timeStyle: "short",
                 }).format(new Date(row.at))}
               </time>
-              <strong>{names[row.client] ?? clientLabel(row.client, serverUrl)}</strong>
+              <strong>
+                {(row.client && names[row.client]) || clientLabel(row.client, serverUrl)}
+              </strong>
               {row.tool && <span>Tool: {row.tool}</span>}
               {row.purpose && (
                 <span>Purpose: {dpvPurposeLabel(row.purpose) ?? "Other purpose"}</span>

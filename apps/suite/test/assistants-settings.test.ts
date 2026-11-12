@@ -43,9 +43,10 @@ function session(id = "alice"): PodSession {
     subscribe: () => () => {},
   };
 }
+const CLIENT = "https://mcp.example/clients/opaque-secret";
 const row: PersonalDataRead = {
   at: "2026-11-01T12:00:00.000Z",
-  client: "https://mcp.example/clients/opaque-secret",
+  client: CLIENT,
   tool: "health_query",
   purpose: "https://w3id.org/dpv#ServiceProvision",
   categories: ["https://w3id.org/dpv/pd#Health"],
@@ -65,15 +66,21 @@ beforeEach(() => {
   mocks.state = { status: "loading" };
   mocks.url = undefined;
 });
-it("shows unset setup text and the single-user token rotation footnote", async () => {
+it("shows unset setup text, a server how-to link and the disconnect footnote", async () => {
   const { host } = await mount(h(ConnectAssistant, { url: undefined }));
   expect(host.textContent).toContain(
     "This suite has no assistant server set up. Ask whoever runs your suite for its MCP address.",
   );
-  expect(host.textContent).toContain("remove it in that assistant's connector settings");
+  expect(host.textContent).toContain("choose Disconnect under Connected assistants");
   expect(host.textContent).not.toContain("MCP_ACCESS_TOKEN");
   expect(host.querySelector("input")).toBeNull();
   expect(host.querySelector('[role="tablist"]')).toBeNull();
+  const link = host.querySelector("a");
+  expect(link?.textContent).toBe("How to run an assistant server");
+  expect(link?.getAttribute("href")).toBe(
+    "https://github.com/jeswr/solid-sdk/tree/main/apps/mcp-server#readme",
+  );
+  expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
 });
 it("copies only the configured read-only URL, handles failure, and switches verbatim setup tabs", async () => {
   const writeText = vi.fn().mockResolvedValue(undefined);
@@ -222,7 +229,7 @@ it("keeps connection names alongside shared category labels and the configured-h
     h(PersonalDataReads, {
       session: session(),
       serverUrl: URL,
-      names: { [row.client]: "My connected assistant" },
+      names: { [CLIENT]: "My connected assistant" },
       source: source(
         vi.fn().mockResolvedValue([
           {

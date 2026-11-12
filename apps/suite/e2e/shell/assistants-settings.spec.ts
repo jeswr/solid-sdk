@@ -33,7 +33,7 @@ test("sets up Claude and ChatGPT and reads only audit metadata from the demo pod
   await expect(reads).toContainText("Provide the service");
   await expect(reads).toContainText("Health");
   await expect(reads).not.toContainText("https://");
-  await expect(page.getByText(/remove it in that assistant's connector settings/)).toBeVisible();
+  await expect(page.getByText(/choose Disconnect under Connected assistants/)).toBeVisible();
   await expect(page.getByText(/MCP_ACCESS_TOKEN/)).toHaveCount(0);
   await accessible(page);
   await page.getByRole("tab", { name: "ChatGPT", exact: true }).click();
