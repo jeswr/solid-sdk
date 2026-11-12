@@ -181,3 +181,30 @@ it("suppresses subscription refresh during saves, reports a failed write, and ch
     expect(view.host.textContent).toBe("Ready");
   });
 });
+
+it("reports unreadable invitations while still showing the readable ones", async () => {
+  vi.mocked(ensureEventsSample).mockResolvedValue(undefined);
+  const session = fixture();
+  const view = await mount(h(EventsProvider, { session, children: h(Probe) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(view.host.textContent).toBe("Ready");
+  });
+  const failure = vi.spyOn((await import("@jeswr/suite-ui")).toast, "error");
+  const broken = new URL("broken/index.ttl", value.controller.repository.base).href;
+  const put = await session.fetch(broken, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: "this is not turtle <",
+  });
+  expect(put.ok).toBe(true);
+  await act(async () => {
+    await value.controller.refresh();
+  });
+  expect(failure).toHaveBeenCalledWith(
+    "Some invitations could not be loaded. The available invitations are shown.",
+  );
+  expect(value.events).toEqual([]);
+  failure.mockRestore();
+  await view.unmount();
+});
