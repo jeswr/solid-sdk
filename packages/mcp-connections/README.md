@@ -28,10 +28,11 @@ matching `^\d{4}-\d{2}\.ttl$` without query/fragment, and reads the newest three
 uses fetch-rdf with 256 KiB and 10,000-quad caps per document (including the listing); remote
 JSON-LD contexts are refused. Conservatively, at most 500 activities **across all selected files**
 are accepted, including invalid activities. `limit` is an integer from 0 to 500. Results are newest
-first with canonical UTC `at` timestamps; malformed dates, ambiguous client/date fields, and
-non-HTTP(S) or credential-bearing clients are dropped.
+first with canonical UTC `at` timestamps. Rows with a malformed or ambiguous date are dropped.
+A row whose client is missing, ambiguous, non-HTTP(S) (for example a URN) or credential-bearing is
+kept without `client`, so the audit view never under-reports; show it as an unrecognised assistant.
 
-`PersonalDataRead` exposes `at`, `client`, optional `tool`, optional `purpose`, `categories`,
+`PersonalDataRead` exposes `at`, optional `client`, optional `tool`, optional `purpose`, `categories`,
 optional `decision` (`permit`, `confirm-required`, `prohibited`, `refuse-all`), optional
 `resourceCount`, and `source` (`monthly` or `chain`). Monthly rows read only PROV Activity / wasAssociatedWith / startedAtTime,
 DPV hasPurpose / hasPersonalData, optional mcp:tool / mcp:decision literals and prov:used IRIs.
@@ -39,8 +40,10 @@ Resource URLs become a count; unknown predicates and literal personal values are
 The existing MCP writer currently emits client, date, purpose and categories only. Chain source
 implementation is deferred to MCP-A1c.
 
-In single-user MCP mode there are no connection records. Revoke access by rotating
-`MCP_ACCESS_TOKEN` on the server.
+The MCP writer records only special-category and Financial reads, so this is a view of sensitive
+reads, not of every personal read. Until S2's connection records and revoke land, an owner
+disconnects an assistant in the assistant's own connector settings, and the server operator revokes
+its grant. In single-user MCP mode the operator revokes access by rotating `MCP_ACCESS_TOKEN`.
 
 Run `pnpm --filter @jeswr/mcp-connections run lint`, `build`, `typecheck`, and `test`.
 Tests enforce 100% statement, branch, function and line coverage. MIT licensed.

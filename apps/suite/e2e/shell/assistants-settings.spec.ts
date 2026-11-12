@@ -27,7 +27,7 @@ test("sets up Claude and ChatGPT and reads only audit metadata from the demo pod
   await expect(page.getByRole("status").filter({ hasText: "Copied" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("https://mcp.example/mcp");
   await expect(page.getByText("Turn it on from the tools menu in a chat.")).toBeVisible();
-  const reads = page.getByRole("list", { name: "Personal data reads, newest first" });
+  const reads = page.getByRole("list", { name: "Sensitive data reads, newest first" });
   await expect(reads.getByRole("listitem")).toHaveCount(2);
   await expect(reads.getByRole("listitem").first()).toContainText(
     "An assistant registered with mcp.example",
@@ -35,7 +35,8 @@ test("sets up Claude and ChatGPT and reads only audit metadata from the demo pod
   await expect(reads).toContainText("Provide the service");
   await expect(reads).toContainText("Health");
   await expect(reads).not.toContainText("https://");
-  await expect(page.getByText(/rotating MCP_ACCESS_TOKEN/)).toBeVisible();
+  await expect(page.getByText(/remove it in that assistant's connector settings/)).toBeVisible();
+  await expect(page.getByText(/MCP_ACCESS_TOKEN/)).toHaveCount(0);
   await accessible(page);
   await page.getByRole("tab", { name: "ChatGPT", exact: true }).click();
   await expect(page.getByRole("tabpanel")).toContainText("choose OAuth for authentication");
@@ -43,7 +44,7 @@ test("sets up Claude and ChatGPT and reads only audit metadata from the demo pod
   await accessible(page);
   await context.setOffline(true);
   await expect(
-    page.getByText("Reconnect to load personal data reads.", { exact: true }),
+    page.getByText("Reconnect to load sensitive data reads.", { exact: true }),
   ).toBeVisible();
   await expect(reads).toHaveCount(0);
   await accessible(page);

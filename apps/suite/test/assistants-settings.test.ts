@@ -70,8 +70,8 @@ it("shows unset setup text and the single-user token rotation footnote", async (
   expect(host.textContent).toContain(
     "This suite has no assistant server set up. Ask whoever runs your suite for its MCP address.",
   );
-  expect(host.textContent).toContain("rotating MCP_ACCESS_TOKEN");
-  expect(host.textContent).toContain("no connection records are written");
+  expect(host.textContent).toContain("remove it in that assistant's connector settings");
+  expect(host.textContent).not.toContain("MCP_ACCESS_TOKEN");
   expect(host.querySelector("input")).toBeNull();
   expect(host.querySelector('[role="tablist"]')).toBeNull();
 });
@@ -112,7 +112,7 @@ it("renders loading, whitelisted metadata with labels and a count, empty, and er
   const view = await mount(
     h(PersonalDataReads, { session: account, source: audit, serverUrl: URL }),
   );
-  expect(view.host.textContent).toContain("Loading personal data reads");
+  expect(view.host.textContent).toContain("Loading sensitive data reads");
   await act(() =>
     pending.resolve([
       row,
@@ -139,7 +139,7 @@ it("renders loading, whitelisted metadata with labels and a count, empty, and er
   expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
   expect(view.host.textContent).not.toContain("secret backend value");
   await click(button(view.host, "Retry"));
-  expect(view.host.textContent).toContain("No personal data reads yet");
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
 });
 it("drops previous-account rows immediately and ignores late successful or failed completions", async () => {
   const first = deferred<PersonalDataRead[]>();
@@ -152,7 +152,7 @@ it("drops previous-account rows immediately and ignores late successful or faile
   await act(() => first.resolve([row]));
   expect(view.host.textContent).not.toContain("mcp.example");
   await act(() => second.resolve([]));
-  expect(view.host.textContent).toContain("No personal data reads yet");
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
   const late = deferred<PersonalDataRead[]>();
   const secondView = await mount(
     h(PersonalDataReads, {
@@ -223,13 +223,13 @@ it("hides reads offline, ignores in-flight replies, and reloads on reconnection"
   const view = await mount(h(PersonalDataReads, { session: session(), source: source(list) }));
   Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
   await act(() => window.dispatchEvent(new Event("offline")));
-  expect(view.host.textContent).toContain("Reconnect to load personal data reads.");
+  expect(view.host.textContent).toContain("Reconnect to load sensitive data reads.");
   await act(() => pending.resolve([row]));
   expect(view.host.textContent).not.toContain("mcp.example");
   Object.defineProperty(navigator, "onLine", { configurable: true, value: true });
   await act(() => window.dispatchEvent(new Event("online")));
   expect(list).toHaveBeenCalledTimes(2);
-  expect(view.host.textContent).toContain("No personal data reads yet");
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
 });
 it("bounds a stalled source even when it ignores its abort signal", async () => {
   vi.useFakeTimers();
@@ -253,7 +253,7 @@ it("shows session loading, signed-out and unavailable states with the configured
   expect(view.host.textContent).toContain("Opening your pod");
   mocks.state = { status: "signed-out" };
   await view.render(h(AssistantSettings));
-  expect(view.host.textContent).toContain("Sign in to see personal data reads.");
+  expect(view.host.textContent).toContain("Sign in to see sensitive data reads.");
   mocks.state = { status: "error" };
   await view.render(h(AssistantSettings));
   expect(view.host.querySelector('[role="alert"]')).not.toBeNull();
@@ -263,5 +263,5 @@ it("shows session loading, signed-out and unavailable states with the configured
   const ready = { ...session(), fetch: async () => new Response(null, { status: 404 }) };
   mocks.state = { status: "ready", session: ready };
   await view.render(h(AssistantSettings));
-  expect(view.host.textContent).toContain("No personal data reads yet");
+  expect(view.host.textContent).toContain("No sensitive data reads yet");
 });
