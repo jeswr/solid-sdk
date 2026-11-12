@@ -31,8 +31,16 @@ tab's stored owner. Login proceeds when `remembered()` is empty. A remembered se
 restored and returned without login only when a WebID hint names its WebID exactly. If that
 session cannot be restored (pod-auth keeps the pointer after refresh failures other than
 `invalid_grant`, such as `invalid_client`), login proceeds only while the pointer is gone or
-still names that WebID, so the same account replaces its own unusable grant. An expiry
-emitted during that restore does not cancel the sign-in.
+still names that WebID. The same account then signs in with pod-auth's `reauthorize`, which
+authorizes instead of retrying the unusable refresh credential and replaces that grant. An
+expiry emitted during that restore does not cancel the sign-in.
+
+Every login carries the `remembered()` result its decision used as `expectRemembered`, including
+reauthentication of an expired account (read after its retirement attempt). Pod-auth compares
+that pointer and the stored grant owner under its namespace mutation lock immediately before
+publishing the new grant and the pointer. If another tab signed in while this tab's popup was
+open, pod-auth discards only this attempt's grant and rejects with `OwnershipChangedError`,
+which the backend maps to `session-elsewhere`; the other tab's session is untouched.
 
 A provider hint cannot identify the account, so it is refused whenever a session is
 remembered, even on a shared issuer: an explicit sign-in never lands in a different account.

@@ -9,6 +9,7 @@ import {
   type GrantRetirementResult,
   type Identity,
   IssuerNotAuthorizedError,
+  OwnershipChangedError,
   type PodAuth,
   type PodAuthOptions,
 } from "@jeswr/pod-auth";
@@ -53,6 +54,12 @@ function isLoopback(hostname: string): boolean {
     hostname === "localhost" || hostname === "[::1]" || /^127(?:\.\d{1,3}){3}$/u.test(hostname)
   );
 }
+/** What a login may commit over: the observed pointer, and whether it replaces that grant. */
+interface LoginPlan {
+  expectRemembered: Awaited<ReturnType<PodAuth["remembered"]>>;
+  reauthorize: boolean;
+}
+
 function accountId(webId: string): string {
   return `solid:${webId}`;
 }
@@ -60,6 +67,8 @@ function signInFailure(error: unknown): SignInError {
   if (error instanceof SignInError) return error;
   if (error instanceof IssuerNotAuthorizedError) return new SignInError("issuer-not-authorized");
   if (error instanceof AmbiguousIssuerError) return new SignInError("ambiguous-issuer");
+  // pod-auth refused to publish over a sign-in another tab committed after this one was decided.
+  if (error instanceof OwnershipChangedError) return new SignInError("session-elsewhere");
   if (
     error instanceof Error &&
     ["AbortError", "CodeRequestCancelledError", "UserCancelledError"].includes(error.name)
@@ -276,19 +285,21 @@ export class SolidBackend implements SessionBackend {
   }
 
   /**
-   * Returns null when login cannot overwrite another owner: nothing is remembered, or a WebID
-   * hint names every remembered session and it cannot be restored, so the same account replaces
-   * its own unusable grant. A remembered session is restored and returned without login only
-   * when a WebID hint names it exactly. A provider hint cannot identify the account, so it never
-   * lands in another account's session, even on a shared issuer; it and any other mismatch are
-   * refused with `session-elsewhere`, because this tab shows no account to sign out.
+   * Returns a login plan when login cannot overwrite another owner: nothing is remembered, or a
+   * WebID hint names every remembered session and it cannot be restored, so the same account
+   * reauthorizes to replace its own unusable grant. The plan carries the observed pointer, which
+   * pod-auth compares again under its mutation lock before publishing. A remembered session is
+   * restored and returned without login only when a WebID hint names it exactly. A provider hint
+   * cannot identify the account, so it never lands in another account's session, even on a
+   * shared issuer; it and any other mismatch are refused with `session-elsewhere`, because this
+   * tab shows no account to sign out.
    */
   async #adoptLiveSession(
     core: PodAuth,
     target: Awaited<ReturnType<typeof resolveLoginTarget>>,
     signal: AbortSignal,
     started: number,
-  ): Promise<SuiteAccount | null> {
+  ): Promise<SuiteAccount | LoginPlan> {
     const current = (session?: number) => {
       signal.throwIfAborted();
       if (started !== this.#version || (session !== undefined && session !== this.#sessionVersion))
@@ -298,7 +309,7 @@ export class SolidBackend implements SessionBackend {
       target.kind === "webid" && owner.webId === target.webId;
     const remembered = await core.remembered();
     current();
-    if (remembered.length === 0) return null;
+    if (remembered.length === 0) return { expectRemembered: remembered, reauthorize: false };
     if (!remembered.every(matches)) throw new SignInError("session-elsewhere");
     const session = this.#sessionVersion;
     const identity = await core.restore();
@@ -307,11 +318,12 @@ export class SolidBackend implements SessionBackend {
       // pod-auth keeps the pointer after refresh failures other than invalid_grant, and an
       // expiry emitted during restore advances the session counter, so no session fence
       // applies here. Login may proceed once the pointer is gone or still names only this
-      // WebID; a pointer that changed to another account still refuses.
+      // WebID; a pointer that changed to another account still refuses. A surviving pointer's
+      // grant cannot renew (login would retry the same refresh), so the account reauthorizes.
       const remaining = await core.remembered();
       current();
-      if (remaining.every(matches)) return null;
-      throw new SignInError("session-elsewhere");
+      if (!remaining.every(matches)) throw new SignInError("session-elsewhere");
+      return { expectRemembered: remaining, reauthorize: remaining.length > 0 };
     }
     current(session);
     if (!matches(identity)) throw new SignInError("session-elsewhere");
@@ -380,6 +392,7 @@ export class SolidBackend implements SessionBackend {
       if ("issuer" in hint ? target.kind !== "issuer" : target.kind !== "webid")
         throw new SignInError("invalid-url");
       attempt.signal.throwIfAborted();
+      let plan: LoginPlan;
       if (this.#expired && this.#identity) {
         // Retain the accepted grant snapshot even after expiry. Reading current account metadata
         // cannot distinguish a fresh authorization for that same account in another tab.
@@ -387,21 +400,24 @@ export class SolidBackend implements SessionBackend {
         const result = await this.#retire(identity, "reauthenticate");
         attempt.signal.throwIfAborted();
         if (started !== this.#version) throw new SignInError("cancelled");
-        if (!result.retired) {
-          if (result.reason === "owner-changed" || result.reason === "grant-changed")
-            throw new SignInError("account-active");
-          // No owned grant can be retired. A legacy pointer for another account still blocks
-          // switching, but an empty pointer or the expired account itself permits login.
-          const remembered = await core.remembered();
-          attempt.signal.throwIfAborted();
-          if (started !== this.#version) throw new SignInError("cancelled");
-          if (
-            remembered.some(
-              (account) => account.webId !== identity.webId || account.issuer !== identity.issuer,
-            )
+        if (
+          !result.retired &&
+          (result.reason === "owner-changed" || result.reason === "grant-changed")
+        )
+          throw new SignInError("account-active");
+        // A pointer for another account, whether a legacy one or a sign-in after this
+        // retirement, still blocks switching; an empty pointer or the expired account itself
+        // permits login. pod-auth compares this observation again before publishing.
+        const remembered = await core.remembered();
+        attempt.signal.throwIfAborted();
+        if (started !== this.#version) throw new SignInError("cancelled");
+        if (
+          remembered.some(
+            (account) => account.webId !== identity.webId || account.issuer !== identity.issuer,
           )
-            throw new SignInError("account-active");
-        }
+        )
+          throw new SignInError("account-active");
+        plan = { expectRemembered: remembered, reauthorize: false };
         this.#account = null;
         this.#identity = null;
         this.#expired = false;
@@ -411,13 +427,18 @@ export class SolidBackend implements SessionBackend {
         // an accepted snapshot to retire. A login would install a new namespace owner and
         // supersede another tab's live session, so adopt or refuse it first.
         const adopted = await this.#adoptLiveSession(core, target, attempt.signal, started);
-        if (adopted) return adopted;
+        if ("id" in adopted) return adopted;
+        plan = adopted;
       }
       attempt.signal.throwIfAborted();
       this.#authorizing = true;
       const identity = await core.login(
         target.kind === "webid" ? { webId: target.webId } : { issuer: target.issuer },
-        { signal: attempt.signal },
+        {
+          signal: attempt.signal,
+          expectRemembered: plan.expectRemembered,
+          ...(plan.reauthorize ? { reauthorize: true } : {}),
+        },
       );
       // Once pod-auth has committed the grant, cancellation belongs to the completed attempt.
       // Display metadata is best effort and cannot abandon an already committed session.

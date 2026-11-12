@@ -7,6 +7,7 @@ import {
   type AuthEventType,
   type Identity,
   IssuerNotAuthorizedError,
+  OwnershipChangedError,
   type PodAuth,
   type PodAuthOptions,
 } from "@jeswr/pod-auth";
@@ -422,7 +423,11 @@ describe("Solid shell over pod-auth", () => {
     const localStorage = { setItem: vi.fn() };
     vi.stubGlobal("localStorage", localStorage);
     const account = await h.backend.signIn(hint);
-    expect(h.auth.login).toHaveBeenCalledWith(hint, { signal: expect.any(AbortSignal) });
+    // The login carries the empty pointer it was decided on; pod-auth compares it at commit.
+    expect(h.auth.login).toHaveBeenCalledWith(hint, {
+      signal: expect.any(AbortSignal),
+      expectRemembered: [],
+    });
     expect(account).toEqual({
       id: `solid:${alice.webId}`,
       kind: "solid",
@@ -542,7 +547,15 @@ describe("Solid shell over pod-auth", () => {
     expect(h.auth.login).not.toHaveBeenCalled();
     const account = await h.backend.signIn({ webId: alice.webId });
     expect(account.webId).toBe(alice.webId);
-    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: alice.webId }, expect.anything());
+    // The pointer's grant cannot renew, so the named account reauthorizes over that observation.
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith(
+      { webId: alice.webId },
+      {
+        signal: expect.any(AbortSignal),
+        expectRemembered: [{ webId: alice.webId, issuer: alice.issuer }],
+        reauthorize: true,
+      },
+    );
     expect(h.auth.retireIfOwnedBy).not.toHaveBeenCalled();
     expect(h.auth.logout).not.toHaveBeenCalled();
     expect((await h.backend.fetchFor(account)(account.storageUrl)).ok).toBe(true);
@@ -850,7 +863,14 @@ describe("Solid shell over pod-auth", () => {
       );
       expect(h.auth.restore).not.toHaveBeenCalled();
       await h.backend.signIn({ webId: bob.webId });
-      expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: bob.webId }, expect.anything());
+      expect(h.auth.login).toHaveBeenCalledExactlyOnceWith(
+        { webId: bob.webId },
+        {
+          signal: expect.any(AbortSignal),
+          expectRemembered: [{ webId: bob.webId, issuer: bob.issuer }],
+          reauthorize: true,
+        },
+      );
     });
 
     it("refuses when an unrestorable pointer changes to another account", async () => {
@@ -926,9 +946,44 @@ describe("Solid shell over pod-auth", () => {
     expect(h.auth.login).not.toHaveBeenCalled();
     const account = await h.backend.signIn({ webId: alice.webId });
     expect(account.webId).toBe(alice.webId);
-    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: alice.webId }, expect.anything());
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith(
+      { webId: alice.webId },
+      {
+        signal: expect.any(AbortSignal),
+        expectRemembered: [{ webId: alice.webId, issuer: alice.issuer }],
+        reauthorize: true,
+      },
+    );
     expect(h.auth.logout).not.toHaveBeenCalled();
     expect((await h.backend.fetchFor(account)(account.storageUrl)).ok).toBe(true);
+  });
+
+  it("maps pod-auth's commit-time ownership refusal to session-elsewhere and holds no account", async () => {
+    const h = harness();
+    // Another tab signed in while this tab's popup was open; pod-auth discarded this attempt's grant.
+    h.auth.login.mockRejectedValueOnce(new OwnershipChangedError());
+    await expect(h.backend.signIn({ webId: alice.webId })).rejects.toEqual(
+      new SignInError("session-elsewhere"),
+    );
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith(
+      { webId: alice.webId },
+      { signal: expect.any(AbortSignal), expectRemembered: [] },
+    );
+    expect(await h.backend.restore()).toBeNull();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+    expect((await h.backend.signIn({ webId: alice.webId })).webId).toBe(alice.webId);
+  });
+
+  it("carries the pointer observed after an expired account's retirement into login", async () => {
+    const h = harness();
+    await h.backend.signIn({ issuer: alice.issuer });
+    h.emit("expired");
+    h.auth.login.mockClear();
+    await h.backend.signIn({ issuer: alice.issuer });
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith(
+      { issuer: alice.issuer },
+      { signal: expect.any(AbortSignal), expectRemembered: [] },
+    );
   });
 
   it("continues to login when the adopted session expires during restore", async () => {
