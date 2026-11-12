@@ -71,16 +71,7 @@ async function remove(auth: Awaited<ReturnType<typeof accountAuth>>, url: string
   await removed.body?.cancel();
 }
 
-// FIXME app bug (Drive guard policies overlap): driveGuardPolicy in
-// apps/suite/src/apps/drive/lib/offline/guards.ts matches every `create` inside storage for
-// BOTH drive.folder and drive.text, and the SDK requires each matching policy's own tag
-// (packages/solid-offline/SKILL.md: "Matching policies require their own guard tag").
-// Fails at: New folder -> Create while offline. withOutbox.create throws
-// "[solid-offline] guard required by registered policy" (the drive.text policy rejects the
-// drive.folder-guarded create) and Drive toasts "Couldn't create the folder"; nothing is
-// queued. A local, unshipped guard change (drive.folder creates need url.endsWith("/"),
-// drive.text creates need !url.endsWith("/")) made this test pass 18/18 across the matrix.
-test.fixme("9A: a folder created offline waits on this device, then syncs to the pod", async ({
+test("9A: a folder created offline waits on this device, then syncs to the pod", async ({
   page,
   context,
 }) => {
@@ -132,15 +123,7 @@ test.fixme("9A: a folder created offline waits on this device, then syncs to the
   }
 });
 
-// FIXME app bug (Drive guard policies overlap, as for 9A): the queued save, the replay's
-// 412 and the conflict entry all work. Fails at: Resolve -> Keep both. The keep-both copy
-// is a drive.text-guarded create that the drive.folder policy also matches, so
-// outbox.resolve rejects with "[solid-offline] guard required by registered policy" before
-// any request, the sheet toasts "Couldn't sync this change. It is still saved on this
-// device." and the conflict stays. With the same local guard change this test passed
-// 29/30 runs; the one miss stayed unresolved for 15s and was not reproduced in 12 reruns
-// (the failure check below now reports a rejected resolve instead of a timeout).
-test.fixme("9B: a text save queued offline meets a pod change, and Keep both keeps both versions", async ({
+test("9B: a text save queued offline meets a pod change, and Keep both keeps both versions", async ({
   page,
   context,
 }) => {
