@@ -95,7 +95,7 @@ export function createBoundary(
   // Resources on other storages the user chose to open with this account (grantResource). They
   // receive credentials like a storage, but are never roots: no AS trust, storages() or login context.
   let consented = new CredentialBoundary([], { allowInsecureHttp: insecure });
-  let grants: readonly ResourceGrant[] = [];
+  let grants: readonly ResourceGrant[] = Object.freeze([]);
   const grantListeners = new Set<() => void>();
   const setGrants = (next: readonly ResourceGrant[]) => {
     consented = new CredentialBoundary(
@@ -339,8 +339,9 @@ export function createBoundary(
     /**
      * Adds a consented grant after {@link grantRoot}'s checks pass again, unless the boundary was
      * cleared since `started` or the session generation's `lifetime` ended (which later ends
-     * every grant). `protocol` names the issuer and its endpoints: a grant may not contain them,
-     * nor a dot-prefixed path (CSS's `.oidc`, `.account`, `.well-known`) on the issuer's origin.
+     * every grant). `protocol` names the issuer, its discovery documents and endpoints: a grant
+     * may not contain them, nor any dot-prefixed path segment (CSS's `.oidc`, `.account`,
+     * `.well-known`, at any depth) on the issuer's origin.
      * A grant already covered by an existing one returns that grant unchanged.
      */
     consent: (
@@ -355,7 +356,7 @@ export function createBoundary(
       const url = new URL(root);
       if (
         [protocol.issuer, ...protocol.endpoints].some((endpoint) => contains(root, endpoint)) ||
-        (url.origin === new URL(protocol.issuer).origin && url.pathname.startsWith("/."))
+        (url.origin === new URL(protocol.issuer).origin && url.pathname.includes("/."))
       )
         throw new ResourceGrantError("protocol-endpoint");
       const existing = grants.find(

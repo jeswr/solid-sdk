@@ -5,6 +5,7 @@ import {
   type AuthEvent,
   createPodAuth,
   type PodAuthOptions,
+  type ResourceGrant,
   ResourceGrantError,
   withinResourceGrants,
 } from "./index.js";
@@ -197,6 +198,43 @@ test("grants belong to one account's core", async () => {
   expect(f.auth.grants!().map((g) => g.root)).toEqual([shared]);
 });
 
+test("a grant reuses a session first established reactively through a non-first root", async () => {
+  const f = fixture(
+    { storages: [] },
+    { boundary: { roots: ["https://first.example/", "https://pod.example/alice/"] } },
+  );
+  // No explicit login: the second configured root's 401 signs the user in.
+  expect((await f.auth.fetch("https://pod.example/alice/private")).status).toBe(200);
+  expect(f.ui.getCode).toHaveBeenCalledTimes(1);
+  await f.auth.grantResource!(shared);
+  expect((await f.auth.fetch(`${shared}a`)).status).toBe(200);
+  // A granted upgrade never replaces the established session, so the next grant reuses it too.
+  await f.auth.grantResource!("https://alice.example/note");
+  expect((await f.auth.fetch("https://alice.example/note")).status).toBe(200);
+  expect((await f.auth.fetch("https://pod.example/alice/other")).status).toBe(200);
+  expect(f.ui.getCode).toHaveBeenCalledTimes(1);
+  expect(f.op.stats.authorizations).toBe(1);
+});
+
+test("grants() snapshots are frozen and cannot alter policy", async () => {
+  const f = fixture();
+  await f.auth.login();
+  const fake = { root: "https://evil.example/x/", origin: "https://evil.example", created: 0 };
+  const initial = f.auth.grants!() as ResourceGrant[];
+  expect(() => initial.push(fake)).toThrow(TypeError);
+  await f.auth.grantResource!(shared);
+  const later = f.auth.grants!() as ResourceGrant[];
+  expect(() => later.push(fake)).toThrow(TypeError);
+  expect(() => {
+    (later[0] as { root: string }).root = "https://evil.example/";
+  }).toThrow(TypeError);
+  await f.auth.grantResource!("https://alice.example/note");
+  expect(f.auth.grants!().map((g) => g.root)).toEqual([shared, "https://alice.example/note"]);
+  expect(f.auth.isWithinGrantedScope!("https://evil.example/x/y")).toBe(false);
+  expect((await f.auth.fetch("https://evil.example/x/y")).status).toBe(401);
+  expect(f.credentialed("https://evil.example/")).toHaveLength(0);
+});
+
 test("a grant needs a signed-in account", async () => {
   const f = fixture();
   expect(await refusal(f.auth.grantResource!(shared))).toBe("signed-out");
@@ -292,6 +330,16 @@ test("an issuer with a path refuses any grant containing it or its endpoints", a
   expect(await refusal(f.auth.grantResource!("https://idp.example/realms/x/"))).toBe(
     "protocol-endpoint",
   );
+  // Discovery documents in every well-known form, and dot segments at any depth.
+  for (const url of [
+    "https://idp.example/realms/x/.well-known/",
+    "https://idp.example/realms/x/.well-known/openid-configuration",
+    "https://idp.example/.well-known/openid-configuration/realms/x",
+    "https://idp.example/.well-known/oauth-authorization-server/realms/x",
+    "https://idp.example/.well-known/",
+    "https://idp.example/pods/.hidden/",
+  ])
+    expect(await refusal(f.auth.grantResource!(url))).toBe("protocol-endpoint");
   // A container beside the issuer path on the same server is allowed.
   const grant = await f.auth.grantResource!("https://idp.example/pods/bob/");
   expect(grant.origin).toBe("https://idp.example");
