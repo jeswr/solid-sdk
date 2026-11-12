@@ -1,10 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { DataFactory, Writer } from "n3";
-import { test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { SimpleDataset } from "../src/SimpleDataset.js";
 import { WebIdIssuerProvider } from "../src/WebIdIssuerProvider.js";
-import { fetchTurtle, issuersFromWebId, WebIdAgent, webIdTrustsIssuer } from "../src/webId.js";
+import {
+  fetchTurtle,
+  issuersFromWebId,
+  parseWebId,
+  WebIdAgent,
+  webIdTrustsIssuer,
+} from "../src/webId.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 const webId = new URL("https://id.example/alice#me");
 const documentUrl = "https://profiles.example/alice/card?view=1";
@@ -51,7 +59,7 @@ for (const status of [301, 302, 303, 307, 308]) {
       assert.equal(init.method, "GET");
       assert.equal(init.redirect, "manual");
       assert.equal(init.credentials, "omit");
-      assert.equal(init.signal, controller.signal);
+      assert.ok(init.signal instanceof AbortSignal);
       assert.deepEqual([...new Headers(init.headers)], [["accept", "text/turtle"]]);
       assert.equal(init.body, undefined);
     }
@@ -289,7 +297,7 @@ test("aborting during a redirected fetch rejects with the caller's reason", asyn
       if (calls === 1)
         return new Response(null, { status: 307, headers: { location: documentUrl } });
       assert.equal(url.href, documentUrl);
-      assert.equal(init.signal, controller.signal);
+      assert.ok(init.signal instanceof AbortSignal);
       return new Promise((_, reject) => {
         init.signal.addEventListener("abort", () => reject(init.signal.reason), { once: true });
         started.resolve();
@@ -405,4 +413,131 @@ test("aborting while the platform follows an opaque redirect rejects", async () 
     }),
     { name: "AbortError" },
   );
+});
+
+test.each([
+  "declared",
+  "streamed",
+  "underreported",
+])("caps %s profile bytes and cancels the source", async (kind) => {
+  const cancel = vi.fn();
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(128 * 1024 + 1));
+      controller.enqueue(new Uint8Array(128 * 1024));
+      controller.enqueue(new Uint8Array([1]));
+      controller.close();
+    },
+    cancel,
+  });
+  // Leave a queued chunk so overflow must cancel instead of draining the source.
+  const response = new Response(body, {
+    headers:
+      kind === "declared"
+        ? { "content-length": String(256 * 1024 + 1) }
+        : kind === "underreported"
+          ? { "content-length": "1" }
+          : {},
+  });
+  await expect(fetchTurtle(webId, undefined, { fetch: async () => response })).rejects.toThrow(
+    new Error("WebID profile exceeds 262144 byte limit"),
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+test.each(["fetch", "redirect", "body"])("times out during profile %s", async (phase) => {
+  const timeout = new AbortController();
+  const reason = new DOMException("Profile deadline", "TimeoutError");
+  const deadline = vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+  const started = Promise.withResolvers();
+  const cancel = vi.fn();
+  const signals = [];
+  const pending = fetchTurtle(webId, undefined, {
+    fetch: async (_, init) => {
+      signals.push(init.signal);
+      if (phase === "redirect" && signals.length === 1)
+        return new Response(null, { status: 302, headers: { location: documentUrl } });
+      if (phase === "body") {
+        return new Response(
+          new ReadableStream({ pull: () => started.resolve(), cancel }, { highWaterMark: 0 }),
+        );
+      }
+      started.resolve();
+      return new Promise((_, reject) => {
+        init.signal?.addEventListener("abort", () => reject(init.signal.reason), { once: true });
+      });
+    },
+  });
+  await started.promise;
+  const rejection = expect(pending).rejects.toBe(reason);
+  timeout.abort(reason);
+  await rejection;
+  expect(deadline).toHaveBeenCalledExactlyOnceWith(8_000);
+  expect(signals.every((signal) => signal === timeout.signal)).toBe(true);
+  if (phase === "body") expect(cancel).toHaveBeenCalledWith(reason);
+  deadline.mockRestore();
+}, 1_000);
+
+test("accepts an empty profile body and profiles exactly at the byte cap", async () => {
+  const empty = await fetchTurtle(webId, undefined, { fetch: async () => new Response(null) });
+  expect(empty.quads).toEqual([]);
+  const bytes = new TextEncoder().encode(profile.padEnd(256 * 1024, " "));
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        for (const chunk of [bytes.slice(0, 10), bytes.slice(10, 100), bytes.slice(100)])
+          controller.enqueue(chunk);
+        controller.close();
+      },
+    }),
+    { headers: { "content-length": String(bytes.byteLength) } },
+  );
+  expect(await webIdTrustsIssuer(webId, issuer, undefined, { fetch: async () => response })).toBe(
+    true,
+  );
+});
+
+test.each([
+  "status",
+  "overflow",
+  "timeout",
+])("preserves %s errors if source cancellation rejects", async (kind) => {
+  const timeout = new AbortController();
+  vi.spyOn(AbortSignal, "timeout").mockReturnValue(timeout.signal);
+  const started = Promise.withResolvers();
+  const cancel = vi.fn(() => {
+    throw new Error("source cancellation failure");
+  });
+  const body = new ReadableStream(
+    {
+      pull(controller) {
+        if (kind === "overflow") controller.enqueue(new Uint8Array(256 * 1024 + 1));
+        started.resolve();
+      },
+      cancel,
+    },
+    { highWaterMark: 0 },
+  );
+  const pending = fetchTurtle(webId, undefined, {
+    fetch: async () => new Response(body, { status: kind === "status" ? 503 : 200 }),
+  });
+  if (kind === "timeout") {
+    await started.promise;
+    const reason = new DOMException("Profile deadline", "TimeoutError");
+    const rejection = expect(pending).rejects.toBe(reason);
+    timeout.abort(reason);
+    await rejection;
+  } else {
+    await expect(pending).rejects.toMatchObject({
+      message:
+        kind === "status"
+          ? `${webId.href} could not be retrieved (503)`
+          : "WebID profile exceeds 262144 byte limit",
+    });
+  }
+  expect(cancel).toHaveBeenCalledOnce();
+});
+
+test("rejects a non-string WebID value", () => {
+  expect(parseWebId(42)).toBeUndefined();
 });
