@@ -316,7 +316,8 @@ function errorMessage(error: unknown): string {
 }
 
 function validTag(tag: unknown): tag is string {
-  // Length first, so a corrupted stored tag is rejected before the pattern sees it.
+  // Defence in depth: the anchored pattern already stops by character 65, but a length
+  // check rejects a corrupted stored tag without running the pattern at all.
   return typeof tag === 'string' && tag.length <= 64 && /^[a-z][a-z0-9.-]{0,63}$/.test(tag);
 }
 
@@ -324,29 +325,55 @@ function validateTag(tag: unknown): asserts tag is string {
   if (!validTag(tag)) throw new TypeError('[solid-offline] invalid guard tag');
 }
 
+type FieldCheck = (value: unknown) => boolean;
+const string: FieldCheck = (value) => typeof value === 'string';
+const optionalString: FieldCheck = (value) => value === undefined || typeof value === 'string';
+const nullableString: FieldCheck = (value) => value === null || typeof value === 'string';
+const number: FieldCheck = (value) => typeof value === 'number';
+const oneOf =
+  (...values: unknown[]): FieldCheck =>
+  (value) =>
+    values.includes(value);
+
 /** Public item fields in creation order; `guard` and `blocked` are derived separately. */
-const itemFields = [
-  'id',
-  'op',
-  'url',
-  'container',
-  'name',
-  'contentType',
-  'label',
-  'size',
-  'createdAt',
-  'status',
-  'error',
-] as const;
+const itemFields: [keyof OutboxItem, FieldCheck][] = [
+  ['id', string],
+  ['op', oneOf('write', 'create', 'delete')],
+  ['url', string],
+  ['container', optionalString],
+  ['name', optionalString],
+  ['contentType', optionalString],
+  ['label', optionalString],
+  ['size', number],
+  ['createdAt', number],
+  ['status', oneOf('waiting', 'replaying', 'failed', 'conflict')],
+  ['error', optionalString],
+];
+
+/** Conflict fields in creation order. */
+const conflictFields: [keyof ConflictRecord, FieldCheck][] = [
+  ['id', string],
+  ['itemId', string],
+  ['url', string],
+  ['kind', oneOf('rdf', 'binary')],
+  ['localEtag', nullableString],
+  ['remoteEtag', nullableString],
+  ['contentType', string],
+];
 
 /**
- * Copy a stored item's public fields by name. A corrupted record's other keys are
- * never enumerated or exposed.
+ * Copy a stored record's public fields by name, keeping only values of the expected
+ * type. A corrupted record's other keys are never enumerated or exposed, and an
+ * unexpected value (such as an object) is omitted rather than returned by reference.
  */
-function publicItem(item: OutboxItem): Omit<OutboxItem, 'guard' | 'blocked'> {
-  const copy: Record<string, unknown> = {};
-  for (const key of itemFields) if (Object.hasOwn(item, key)) copy[key] = item[key];
-  return copy as Omit<OutboxItem, 'guard' | 'blocked'>;
+function pickFields<T>(source: object, fields: [keyof T, FieldCheck][]): Partial<T> {
+  const copy: Partial<T> = {};
+  for (const [key, valid] of fields) {
+    if (!Object.hasOwn(source, key)) continue;
+    const value = (source as T)[key];
+    if (valid(value)) copy[key] = value;
+  }
+  return copy;
 }
 
 /**
@@ -959,7 +986,7 @@ export function createOutbox(options: {
         // An invalid stored tag is omitted; hydration already failed that record.
         const tag = r.guard?.tag;
         return {
-          ...publicItem(r.item),
+          ...(pickFields<OutboxItem>(r.item, itemFields) as Omit<OutboxItem, 'guard' | 'blocked'>),
           ...(validTag(tag) ? { guard: { tag } } : {}),
           ...(r.item.status === 'waiting'
             ? guardRequired(policies, storedRequest(r), r.guard)
@@ -970,7 +997,12 @@ export function createOutbox(options: {
             : {}),
         };
       }),
-    conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
+    conflicts: () =>
+      records.flatMap((r) =>
+        r.conflict
+          ? [pickFields<ConflictRecord>(r.conflict, conflictFields) as ConflictRecord]
+          : [],
+      ),
     async enqueue(operation) {
       const guard = snapshotGuard(operation.guard);
       const persistedGuard = guard && {

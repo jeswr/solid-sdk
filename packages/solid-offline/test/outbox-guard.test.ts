@@ -45,6 +45,53 @@ function enqueue(outbox: Outbox, operation: Partial<OutboxOperation> = {}) {
 interface TestStoredItem {
   guard: { tag: string; assertions?: unknown };
   item: { guard: { tag: string; assertions?: unknown }; status: string };
+  conflict?: Record<string, unknown>;
+}
+/**
+ * Hydrate a new outbox while IndexedDB returns records rebuilt by `wrap`, whose
+ * `watch` Proxies record every ownKeys (enumeration) call. Proxies cannot be
+ * structured-cloned, so use this only where hydration persists nothing.
+ */
+async function hydrateWatched(
+  wrap: (record: TestStoredItem, watch: <T extends object>(target: T, name: string) => T) => object,
+) {
+  const enumerated: string[] = [];
+  let wrapped = 0;
+  const watch = <T extends object>(target: T, name: string): T =>
+    new Proxy(target, {
+      ownKeys(inner) {
+        enumerated.push(name);
+        return Reflect.ownKeys(inner);
+      },
+    });
+  const getAll = IDBObjectStore.prototype.getAll;
+  const spy = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: Parameters<IDBObjectStore['getAll']>
+  ) {
+    const request = getAll.apply(this, args);
+    const result = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'result');
+    Object.defineProperty(request, 'result', {
+      get() {
+        const records = result?.get?.call(request) as TestStoredItem[];
+        return records.map((record) => {
+          wrapped++;
+          return wrap(record, watch);
+        });
+      },
+      set(value: unknown) {
+        result?.set?.call(request, value);
+      },
+    });
+    return request;
+  });
+  try {
+    const outbox = box();
+    await outbox.ready;
+    return { outbox, enumerated, wrapped };
+  } finally {
+    spy.mockRestore();
+  }
 }
 async function stored(change: (record: TestStoredItem) => void) {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -847,46 +894,13 @@ describe('guard validation', () => {
     const original = box();
     await enqueue(original);
     original.close();
-    const enumerated: string[] = [];
-    const watch = (target: object, name: string) =>
-      new Proxy(target, {
-        ownKeys(inner) {
-          enumerated.push(name);
-          return Reflect.ownKeys(inner);
-        },
-      });
-    // Proxies cannot be structured-cloned, so only hydration (which persists nothing
-    // for bound records) sees them; delivery is covered by the extra-keys test below.
-    const getAll = IDBObjectStore.prototype.getAll;
-    const spy = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['getAll']>
-    ) {
-      const request = getAll.apply(this, args);
-      const result = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'result');
-      Object.defineProperty(request, 'result', {
-        get() {
-          const records = result?.get?.call(request) as TestStoredItem[];
-          return records.map((record) => ({
-            ...record,
-            guard: watch(record.guard, 'guard'),
-            item: watch({ ...record.item, guard: watch(record.item.guard, 'item.guard') }, 'item'),
-          }));
-        },
-        set(value: unknown) {
-          result?.set?.call(request, value);
-        },
-      });
-      return request;
-    });
-    try {
-      const outbox = box();
-      await outbox.ready;
-      expect(spy).toHaveBeenCalled();
-      expect(outbox.pending()).toMatchObject([{ guard: { tag }, blocked: 'no-delegate' }]);
-    } finally {
-      spy.mockRestore();
-    }
+    const { outbox, enumerated, wrapped } = await hydrateWatched((record, watch) => ({
+      ...record,
+      guard: watch(record.guard, 'guard'),
+      item: watch({ ...record.item, guard: watch(record.item.guard, 'item.guard') }, 'item'),
+    }));
+    expect(wrapped).toBeGreaterThan(0);
+    expect(outbox.pending()).toMatchObject([{ guard: { tag }, blocked: 'no-delegate' }]);
     expect(enumerated).toEqual([]);
   });
 
@@ -967,7 +981,27 @@ describe('guard validation', () => {
       { status: 'failed', error: expect.stringContaining('invalid stored guard') },
     ]);
     expect(outbox.pending()[0]).not.toHaveProperty('guard');
-    expect(JSON.stringify(outbox.pending())).not.toContain(String(invalid));
+    // A number could occur in the random id or timestamp; strings here cannot.
+    if (typeof invalid === 'string')
+      expect(JSON.stringify(outbox.pending())).not.toContain(invalid);
+  });
+
+  it('omits stored item values of an unexpected type instead of returning them', async () => {
+    const original = box();
+    await enqueue(original, { label: 'Upload' });
+    const secret = { private: 'private-object' };
+    await stored((record) => {
+      Object.assign(record.item, { label: secret, contentType: 42, error: ['private-array'] });
+    });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
+    const [item] = outbox.pending();
+    expect(item).not.toHaveProperty('label');
+    expect(item).not.toHaveProperty('contentType');
+    expect(item).not.toHaveProperty('error');
+    expect(item).toMatchObject({ op: 'write', url, status: 'waiting', guard: { tag } });
+    expect(JSON.stringify(outbox.pending())).not.toContain('private-');
   });
 
   it('accepts 64-character tags and rejects longer ones', async () => {
@@ -1123,6 +1157,47 @@ async function guardedConflict(outbox: Outbox, op: OutboxOperation['op'] = 'writ
   return { delegate, unregister, client, conflictId };
 }
 describe('guarded conflicts', () => {
+  const conflictFields = ['id', 'itemId', 'url', 'kind', 'localEtag', 'remoteEtag', 'contentType'];
+
+  it('never enumerates stored conflicts and keeps their public fields and order', async () => {
+    const original = box();
+    await guardedConflict(original);
+    const expected = original.conflicts();
+    expect(Object.keys(expected[0] as object)).toEqual(conflictFields);
+    original.close();
+    const { outbox, enumerated, wrapped } = await hydrateWatched((record, watch) => ({
+      ...record,
+      conflict: watch(record.conflict as object, 'conflict'),
+    }));
+    expect(wrapped).toBeGreaterThan(0);
+    expect(outbox.conflicts()).toEqual(expected);
+    expect(Object.keys(outbox.conflicts()[0] as object)).toEqual(conflictFields);
+    expect(outbox.pending()[0]?.status).toBe('conflict');
+    expect(enumerated).toEqual([]);
+  });
+
+  it('copies stored conflicts by field and type, without extra keys or references', async () => {
+    const original = box();
+    await guardedConflict(original);
+    original.close();
+    const extras = Object.fromEntries(
+      Array.from({ length: 20_000 }, (_, i) => [`extra${i}`, 'private-extra']),
+    );
+    await stored((record) => {
+      Object.assign(record.conflict as object, extras, {
+        kind: 'other',
+        remoteEtag: { private: 'private-object' },
+      });
+    });
+    const outbox = box();
+    await outbox.ready;
+    const [conflict] = outbox.conflicts();
+    expect(Object.keys(conflict as object)).toEqual(
+      conflictFields.filter((key) => key !== 'kind' && key !== 'remoteEtag'),
+    );
+    expect(JSON.stringify(outbox.conflicts())).not.toContain('private-');
+  });
+
   it.each([
     'write',
     'create',

@@ -158,7 +158,8 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   delivery. Snapshot assertions before asynchronous work and serialize the validated copy once
   at enqueue into a canonical JSON string for IndexedDB. On every hydration, read only the stored
   envelope's `tag` and `assertions` by name (never enumerate its keys), reject a tag longer than
-  64 characters before matching its pattern, and check the stored assertion string's UTF-8 byte
+  64 characters before the pattern runs (defence in depth; the anchored pattern already stops by
+  the 65th character), and check the stored assertion string's UTF-8 byte
   length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
   with the same depth, value-count and byte budgets. Fail closed on legacy object-valued
   assertions, since no guarded records have shipped. Invalid records become failed and cannot
@@ -205,8 +206,9 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   underlying client and a signal cancelled on close. Use that raw client to avoid recursive
   delivery. Delegate replay failures follow storage classification; failed resolution retains
   its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions,
-  and omits an invalid stored tag. It copies the documented `OutboxItem` fields by name, never
-  enumerating (or exposing other keys of) a stored item.
+  and omits an invalid stored tag. `pending()` and `conflicts()` copy the documented
+  `OutboxItem` and `ConflictRecord` fields by name and type, never enumerating (or exposing other
+  keys of) a stored record, and omit a value of an unexpected type rather than return it.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient

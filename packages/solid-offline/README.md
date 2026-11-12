@@ -240,14 +240,16 @@ non-finite numbers, sparse arrays, accessors, class instances and cycles are rej
 Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
 JSON string for IndexedDB. Hydration reads only the stored envelope's `tag` and
 `assertions` fields, without enumerating its keys, and ignores any other stored key.
-It rejects a stored tag longer than 64 characters before matching the tag pattern, and checks
+As defence in depth it rejects a stored tag longer than 64 characters before the tag pattern
+runs (the anchored pattern would already stop by the 65th character), and checks
 the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
 then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
 Invalid stored guards become failed items and cannot be sent, including through retry.
 `pending()` exposes only the read-only `guard.tag`, never assertions, and omits a stored tag
-that fails tag validation (that record is already failed). It copies only the documented
-`OutboxItem` fields from each stored item, by name, so other stored keys are neither
-enumerated nor exposed.
+that fails tag validation (that record is already failed). `pending()` and `conflicts()` copy
+only the documented `OutboxItem` and `ConflictRecord` fields, by name, so other stored keys are
+neither enumerated nor exposed. A stored field whose value has an unexpected type (an object
+`label`, an unknown `status`) is omitted rather than returned by reference.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,
