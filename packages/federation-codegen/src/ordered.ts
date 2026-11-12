@@ -1,5 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { isSafeAbsoluteIri, type ManifestOrdered, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
+// AUTHORED-BY Claude Opus 5.5
+import {
+  isSafeAbsoluteIri,
+  MAX_ORDERED_ITEMS,
+  type ManifestOrdered,
+  VALIDATED_DATATYPES,
+} from "@jeswr/model-runtime";
 import { AdmissionError } from "./admission.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
 import { RDF, SH, XSD } from "./rdf.js";
@@ -73,6 +79,14 @@ export function resolveOrdered(shapes: NormalizedShapes, outer: ShapeConstraint)
     )
       return fail(`unsupported item-shape constraint ${q.predicate.value}`);
   }
+  // Every read fails closed and every write throws above the runtime item cap, so an
+  // unsatisfiable or unreachable outer cardinality is a generation-time error.
+  if (
+    [outer, ...propertySources(outer)].some(
+      (c) => (c.minCount ?? 0) > MAX_ORDERED_ITEMS || (c.maxCount ?? 0) > MAX_ORDERED_ITEMS,
+    )
+  )
+    return fail(`outer sh:minCount / sh:maxCount must not exceed ${MAX_ORDERED_ITEMS} items`);
   if (outer.hasClass !== undefined && outer.hasClass !== item.targetClass)
     return fail("outer sh:class must equal the item targetClass");
   const position = item.properties.find((c) => c.pathIri === cfg.position);
@@ -125,6 +139,14 @@ export function resolveOrdered(shapes: NormalizedShapes, outer: ShapeConstraint)
       c.hasClass !== undefined
     )
       return fail(`item property ${c.pathIri} requires minCount 1 / maxCount 1 and a scalar value`);
+    // The runtime enforces item properties at the OUTER severity; an advisory item
+    // severity would make the emitted SHACL laxer than the runtime, so reject it.
+    if (
+      propertySources(c).some(
+        (source) => source.severity !== undefined && source.severity !== `${SH}Violation`,
+      )
+    )
+      return fail(`item property ${c.pathIri} must not carry a non-Violation sh:severity`);
   }
   if (
     position.kind !== "literal" ||
