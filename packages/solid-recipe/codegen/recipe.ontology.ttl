@@ -1,0 +1,47 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <http://schema.org/> .
+@prefix recipe: <https://jeswr.org/ns/recipe#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+schema:Recipe a owl:Class ; rdfs:label "Recipe"@en ; rdfs:comment "Recipe in a personal recipe box."@en .
+schema:NutritionInformation a owl:Class ; rdfs:label "Nutrition information"@en ; rdfs:comment "Nutrition information in a personal recipe box."@en .
+recipe:MealPlan a owl:Class ; rdfs:subClassOf schema:CreativeWork ; rdfs:label "Weekly meal plan"@en ; rdfs:comment "Weekly meal plan in a personal recipe box."@en .
+schema:name rdfs:label "name"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:description rdfs:label "description"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:image rdfs:label "image"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:url rdfs:label "url"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:author rdfs:label "author"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:recipeYield rdfs:label "recipeYield"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:prepTime rdfs:label "prepTime"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:cookTime rdfs:label "cookTime"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:totalTime rdfs:label "totalTime"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:recipeCategory rdfs:label "category"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:recipeCuisine rdfs:label "cuisine"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:keywords rdfs:label "keywords"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:recipeIngredient rdfs:label "ingredients"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:recipeInstructions rdfs:label "instructions"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+recipe:favourite a owl:DatatypeProperty ; rdfs:label "favourite"@en ; rdfs:comment "favourite value in the recipe profile."@en ; rdfs:domain schema:Recipe ; rdfs:range xsd:boolean .
+dct:created rdfs:label "created"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+dct:modified rdfs:label "modified"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:nutrition rdfs:label "nutrition"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+schema:calories rdfs:label "calories"@en ; rdfs:comment "Reused external property; its constraints are narrowed only by the local SHACL profile."@en .
+recipe:monday a owl:ObjectProperty ; rdfs:label "monday"@en ; rdfs:comment "monday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:tuesday a owl:ObjectProperty ; rdfs:label "tuesday"@en ; rdfs:comment "tuesday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:wednesday a owl:ObjectProperty ; rdfs:label "wednesday"@en ; rdfs:comment "wednesday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:thursday a owl:ObjectProperty ; rdfs:label "thursday"@en ; rdfs:comment "thursday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:friday a owl:ObjectProperty ; rdfs:label "friday"@en ; rdfs:comment "friday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:saturday a owl:ObjectProperty ; rdfs:label "saturday"@en ; rdfs:comment "saturday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+recipe:sunday a owl:ObjectProperty ; rdfs:label "sunday"@en ; rdfs:comment "sunday value in the recipe profile."@en ; rdfs:domain recipe:MealPlan ; rdfs:range rdfs:Resource .
+schema:Review a owl:Class ; rdfs:label "Personal review"@en ; rdfs:comment "The recipe box owner's personal review of a recipe."@en .
+schema:Rating a owl:Class ; rdfs:label "Personal rating"@en ; rdfs:comment "The numeric score in the recipe owner's review."@en .
+schema:review rdfs:label "Review"@en ; rdfs:comment "Reused schema.org review link, narrowed to one personal review."@en .
+schema:reviewRating rdfs:label "Review rating"@en ; rdfs:comment "Reused schema.org rating link."@en .
+schema:ratingValue rdfs:label "Rating value"@en ; rdfs:comment "Reused schema.org numeric rating value."@en .
+
+recipe:orderedIngredient a owl:DatatypeProperty ; rdfs:label "Ordered ingredient"@en ; rdfs:comment "Private position-prefixed copy preserving ingredient order and duplicate text."@en ; rdfs:domain schema:Recipe ; rdfs:range xsd:string .
+recipe:orderedInstruction a owl:DatatypeProperty ; rdfs:label "Ordered instruction"@en ; rdfs:comment "Private position-prefixed copy preserving instruction order and duplicate text."@en ; rdfs:domain schema:Recipe ; rdfs:range xsd:string .
+
+schema:startDate rdfs:label "Start date"@en ; rdfs:comment "Monday of the ISO week identified by a weekly meal plan."@en .

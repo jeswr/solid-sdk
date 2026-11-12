@@ -1,0 +1,83 @@
+{
+  "shapesBase": "https://jeswr.org/ns/recipe/shapes#",
+  "prefixes": {
+    "schema": "http://schema.org/",
+    "recipe": "https://jeswr.org/ns/recipe#",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Recipe",
+      "kind": "composite",
+      "root": "recipe",
+      "nodes": {
+        "recipe": {
+          "targetClass": "http://schema.org/Recipe",
+          "fragment": "it",
+          "fields": {
+            "name": {},
+            "description": {},
+            "image": {},
+            "url": {},
+            "author": {},
+            "recipeYield": {},
+            "prepTime": {},
+            "cookTime": {},
+            "totalTime": {},
+            "category": {},
+            "cuisine": {},
+            "keywords": {
+              "trim": true,
+              "dropBlank": true,
+              "sortOnRead": true
+            },
+            "ingredients": {},
+            "instructions": {},
+            "favourite": {
+              "default": false,
+              "materializeDefault": true
+            },
+            "created": {},
+            "modified": {},
+            "orderedIngredients": {},
+            "orderedInstructions": {}
+          },
+          "links": {
+            "nutrition": "nutrition",
+            "personalReview": "review"
+          }
+        },
+        "nutrition": {
+          "targetClass": "http://schema.org/NutritionInformation",
+          "fragment": "nutrition",
+          "fields": {
+            "calories": {}
+          }
+        },
+        "review": {
+          "targetClass": "http://schema.org/Review",
+          "fragment": "review",
+          "fields": {},
+          "links": {
+            "personalRating": "rating"
+          }
+        },
+        "rating": {
+          "targetClass": "http://schema.org/Rating",
+          "fragment": "rating",
+          "fields": {
+            "rating": {}
+          }
+        }
+      }
+    },
+    {
+      "name": "MealPlan",
+      "targetClass": "https://jeswr.org/ns/recipe#MealPlan",
+      "subject": {
+        "convention": "hash-it"
+      }
+    }
+  ]
+}
