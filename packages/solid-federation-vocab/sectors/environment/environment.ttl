@@ -1,0 +1,80 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+# Indoor environment sector. envr: terms are PROVISIONAL pending maintainer review.
+# Only the closed observable-property inventory is minted; all instance structure
+# reuses SOSA and QUDT. No equivalence or close-match assertions are made.
+# CO2 uses the authorized DimensionlessRatio fallback: the offline workspace does
+# not pin the QUDT gas-concentration quantity-kind inventory.
+@prefix envr: <https://jeswr.org/ns/sectors/environment#> .
+@prefix envsh: <https://jeswr.org/ns/sectors/environment/shapes#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix unit: <http://qudt.org/vocab/unit/> .
+@prefix quantitykind: <http://qudt.org/vocab/quantitykind/> .
+@prefix schema: <https://schema.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+<https://jeswr.org/ns/sectors/environment> a owl:Ontology ;
+    rdfs:label "Indoor environment sector"@en ;
+    rdfs:comment "Provisional observable properties for indoor air monitors and purifier telemetry, pending maintainer review."@en ;
+    vann:preferredNamespacePrefix "envr" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/environment#" ;
+    owl:imports <https://jeswr.org/ns/core> ;
+    owl:versionInfo "0.1.0" ;
+    owl:versionIRI <https://jeswr.org/ns/sectors/environment/0.1.0> .
+
+envr:sector a skos:Concept ;
+    rdfs:label "Environment sector"@en ;
+    rdfs:comment "Indoor environment monitoring and numeric purifier state."@en ;
+    rdfs:isDefinedBy <https://jeswr.org/ns/sectors/environment> ;
+    skos:prefLabel "Environment"@en .
+
+envr:CO2Concentration a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Carbon dioxide concentration"@en ;
+    rdfs:comment "Molar fraction of carbon dioxide in room air, reported in parts per million."@en ;
+    qudt:hasQuantityKind quantitykind:DimensionlessRatio .
+
+envr:PM2_5MassConcentration a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "PM2.5 mass concentration"@en ;
+    rdfs:comment "Mass concentration of airborne particles with aerodynamic diameter at most 2.5 micrometres."@en ;
+    qudt:hasQuantityKind quantitykind:MassConcentration .
+
+envr:PM10MassConcentration a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "PM10 mass concentration"@en ;
+    rdfs:comment "Mass concentration of airborne particles with aerodynamic diameter at most 10 micrometres."@en ;
+    qudt:hasQuantityKind quantitykind:MassConcentration .
+
+envr:VOCIndex a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "VOC index"@en ;
+    rdfs:comment "Device-reported volatile organic compound index; the device algorithm determines its scale."@en ;
+    qudt:hasQuantityKind quantitykind:Dimensionless .
+
+envr:AirQualityIndex a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Air quality index"@en ;
+    rdfs:comment "Device-reported air quality index; values from different device algorithms are not necessarily comparable."@en ;
+    qudt:hasQuantityKind quantitykind:Dimensionless .
+
+envr:AirTemperature a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Air temperature"@en ;
+    rdfs:comment "Temperature of the air in the feature of interest."@en ;
+    qudt:hasQuantityKind quantitykind:Temperature .
+
+envr:RelativeHumidity a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Relative humidity"@en ;
+    rdfs:comment "Relative humidity of the air in the feature of interest, expressed as a percentage."@en ;
+    qudt:hasQuantityKind quantitykind:RelativeHumidity .
+
+envr:FanSpeedLevel a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Fan speed level"@en ;
+    rdfs:comment "Device-reported numeric fan speed setting, not a rotational velocity. The feature of interest is the purifier."@en ;
+    qudt:hasQuantityKind quantitykind:Dimensionless .
+
+envr:FilterLifeRemaining a owl:NamedIndividual, sosa:ObservableProperty ;
+    rdfs:label "Filter life remaining"@en ;
+    rdfs:comment "Device-estimated remaining filter life as a percentage. The feature of interest is the purifier."@en ;
+    qudt:hasQuantityKind quantitykind:DimensionlessRatio .
