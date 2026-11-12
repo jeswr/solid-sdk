@@ -28,6 +28,7 @@ function fake() {
     purge: vi.fn(),
     close: vi.fn(),
     retry: vi.fn().mockResolvedValue(undefined),
+    discard: vi.fn().mockResolvedValue(undefined),
     resolve: vi.fn().mockResolvedValue(undefined),
     replay: vi.fn().mockResolvedValue(undefined),
     on(event, listener) {

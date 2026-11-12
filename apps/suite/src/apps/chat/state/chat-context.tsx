@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { createPodClient } from "@jeswr/storage-client";
+import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createOutbox } from "@jeswr/suite-sdk/offline";
 import {
   createContext,
   type ReactNode,
@@ -16,7 +19,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
 import { ChatLocalState } from "./local-state";
-import { ChatOutbox, type Outgoing } from "./outbox";
+import { CHAT_OUTBOX_NAMESPACE, ChatOutbox, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
 
@@ -63,8 +66,21 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   const [revision, setRevision] = useState(0);
   const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);
   const queue = useMemo(
-    () => new ChatOutbox(client, () => navigator.onLine !== false, local),
-    [client, local],
+    () =>
+      new ChatOutbox(
+        client,
+        () => navigator.onLine !== false,
+        () => ({
+          // Chat's own queue: the shell's replay and sync sheet never handle chat intents.
+          outbox: createOutbox({ webId: client.webId, namespace: CHAT_OUTBOX_NAMESPACE }),
+          storage: async () =>
+            session.mode === "demo"
+              ? createMemoryStorage({ root: client.storageUrl, protocol: "solid" })
+              : (await createPodClient({ fetch: client.fetch, storage: client.storageUrl }))
+                  .storage,
+        }),
+      ),
+    [client, session.mode],
   );
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
   const rooms = useRef<string[]>([]);
@@ -96,13 +112,17 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
     };
   }, [session, invalidate]);
   useEffect(() => {
+    const disconnect = queue.connect();
     const online = () => {
       queue.flush();
       invalidate();
     };
     addEventListener("online", online);
     queue.flush();
-    return () => removeEventListener("online", online);
+    return () => {
+      disconnect();
+      removeEventListener("online", online);
+    };
   }, [queue, invalidate]);
   const send = queue.send;
   const retrySend = queue.retry;
