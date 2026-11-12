@@ -28,6 +28,7 @@ const HSBC =
   '01/07/2026,"Synthetic shop, main branch","-1,234.56"\r\n02/07/2026,Synthetic credit,2500.00\r\n';
 const MONZO =
   "Transaction ID,Date,Time,Type,Name,Emoji,Category,Amount,Currency,Local amount,Local currency\nsynthetic-1,01/07/2026,12:00:00,Card payment,Synthetic shop,,Shopping,-5.25,GBP,-6.00,EUR";
+const GENERIC = "Date,Description,Amount,Currency\n01/07/2026,Synthetic shop,-5.25,GBP\n";
 const BANK = `${DEMO_ROOT}integrations/bank-statements/finance/bank/`;
 
 beforeEach(async () => {
@@ -78,6 +79,18 @@ describe("bank statement choices", () => {
       /at most 256 characters/,
     );
     expect(bankChoiceProblem({ format: "auto", accountLabel: "x".repeat(256) })).toBeUndefined();
+    // The adapter normalises first: invisible-only labels fail, and the limit counts code points.
+    for (const accountLabel of ["\u200B", "\u202E\u200D", "\uFEFF\u00AD"])
+      expect(bankChoiceProblem({ format: "auto", accountLabel })).toMatch(/visible text/);
+    expect(bankChoiceProblem({ format: "hsbc-uk", accountLabel: "\u200B" })).toMatch(
+      /visible text/,
+    );
+    expect(
+      bankChoiceProblem({ format: "auto", accountLabel: "\u{1F600}".repeat(256) }),
+    ).toBeUndefined();
+    expect(bankChoiceProblem({ format: "auto", accountLabel: "\u{1F600}".repeat(257) })).toMatch(
+      /at most 256 characters/,
+    );
     expect(bankStatementsAdapter({ format: "hsbc-uk", accountLabel: "Everyday" }).metadata.id).toBe(
       "bank-statements",
     );
@@ -165,9 +178,11 @@ describe("bank statements connect flow", () => {
       "Account label (optional)",
     );
     expect(label.required).toBe(false);
-    expect(label.maxLength).toBe(256);
+    // No maxLength: it counts UTF-16 code units, the adapter's limit counts code points.
+    expect(label.hasAttribute("maxlength")).toBe(false);
     expect(host.querySelector("fieldset legend")?.textContent).toBe("Statement details");
     expect(chooseFile(host).disabled).toBe(false);
+    expect(host.querySelector(".hm-connect-drop")?.hasAttribute("aria-disabled")).toBe(false);
   });
 
   it("requires a label for HSBC UK, explains why and blocks the file picker until given", async () => {
@@ -193,6 +208,7 @@ describe("bank statements connect flow", () => {
     expect(chooseFile(host).getAttribute("aria-describedby")).toBe("bank-options-problem");
     // A dropped file is ignored while the choice is incomplete: nothing is written.
     const drop = host.querySelector(".hm-connect-drop");
+    expect(drop?.getAttribute("aria-disabled")).toBe("true");
     await act(() => {
       const event = new Event("drop", { bubbles: true, cancelable: true });
       Object.defineProperty(event, "dataTransfer", {
@@ -208,6 +224,7 @@ describe("bank statements connect flow", () => {
     expect(fileInput?.disabled).toBe(false);
     expect(chooseFile(host).disabled).toBe(false);
     expect(chooseFile(host).getAttribute("aria-describedby")).toBeNull();
+    expect(drop?.hasAttribute("aria-disabled")).toBe(false);
   });
 
   it("imports an HSBC UK statement with the chosen format and label", async () => {
@@ -234,6 +251,34 @@ describe("bank statements connect flow", () => {
     expect(host.textContent).toContain(
       "If this is an HSBC UK statement, choose HSBC UK as the bank format",
     );
+  });
+
+  it("does not suggest HSBC UK when an explicit format wrote nothing", async () => {
+    const { host } = await openImport();
+    await selectFormat(byLabel<HTMLSelectElement>(host, "Bank format"), "starling");
+    await upload(host, "monzo.csv", MONZO);
+    expect(accountFolders()).toEqual([]);
+    expect(host.textContent).toContain("Some parts of this export aren't supported yet.");
+    expect(host.textContent).not.toContain("If this is an HSBC UK statement");
+  });
+
+  it("does not suggest HSBC UK when Auto-detect wrote data with a warning", async () => {
+    const { host } = await openImport();
+    // A generic CSV ignores the label: the import warns but still writes the shared document.
+    await typeLabel(byLabel<HTMLInputElement>(host, "Account label"), "Joint account");
+    await upload(host, "generic.csv", GENERIC);
+    expect(
+      await body(`${DEMO_ROOT}integrations/bank-statements/finance/bank-transactions.ttl`),
+    ).toContain("Synthetic shop");
+    expect(host.textContent).toContain("Some parts of this export aren't supported yet.");
+    expect(host.textContent).not.toContain("If this is an HSBC UK statement");
+  });
+
+  it("only promises account separation for the four bank CSV exports", async () => {
+    const { host } = await openImport();
+    const hint = host.querySelector("#bank-account-label-hint")?.textContent ?? "";
+    expect(hint).toContain("For Revolut, HSBC UK, Monzo and Starling CSV exports");
+    expect(hint).toContain("OFX, QFX and other CSV files don't use the label");
   });
 
   it("keeps two Monzo accounts apart when their labels differ", async () => {

@@ -19,8 +19,19 @@ export const MAX_BANK_FIELD_CHARS = 16 * 1024;
 /** The explicit `csvFormat` values; omit `csvFormat` to detect the layout from the contents. */
 export const BANK_CSV_FORMATS = ["revolut", "hsbc-uk", "monzo", "starling"] as const;
 export type BankCsvFormat = (typeof BANK_CSV_FORMATS)[number];
-/** Longest accepted `accountLabel`, in UTF-16 code units. */
+/** Longest accepted `accountLabel`, in Unicode code points after `normaliseAccountLabel`. */
 export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
+const INVISIBLE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
+/**
+ * The one form of an `accountLabel` that is hashed into the account folder and stored as its
+ * display label: control and format characters (Unicode Cc and Cf, including zero-width and
+ * bidi controls) removed, then NFC, then trimmed. A plain label is unchanged, so its folder is
+ * the same as before normalisation existed. Stripping precedes NFC so a removed character
+ * cannot leave a decomposed sequence behind; the result is idempotent.
+ */
+export function normaliseAccountLabel(label: string): string {
+  return label.replace(INVISIBLE_LABEL_CHARS, "").normalize("NFC").trim();
+}
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */
   readonly csvFormat?: BankCsvFormat;
@@ -198,13 +209,13 @@ export function validateBankOptions(options: BankStatementOptions): void {
     !(BANK_CSV_FORMATS as readonly string[]).includes(options.csvFormat)
   )
     throw new TypeError("Unsupported bank CSV format");
-  if (
-    options.accountLabel !== undefined &&
-    (typeof options.accountLabel !== "string" ||
-      !hasText(options.accountLabel) ||
-      options.accountLabel.length > MAX_BANK_ACCOUNT_LABEL_CHARS)
-  )
-    throw new TypeError("Account label must contain 1–256 characters");
+  if (options.accountLabel !== undefined) {
+    const label =
+      typeof options.accountLabel === "string" ? normaliseAccountLabel(options.accountLabel) : "";
+    // Code points, so an emoji counts once; the normalised form is what gets stored.
+    if (!label || [...label].length > MAX_BANK_ACCOUNT_LABEL_CHARS)
+      throw new TypeError("Account label must contain 1–256 characters");
+  }
   if (options.currency !== undefined && !currencyCode(options.currency))
     throw new TypeError("Currency must be an uppercase ISO 4217 code supported by the runtime");
   if (options.csvFormat === "hsbc-uk" && !options.accountLabel)
@@ -223,6 +234,8 @@ export class BankCsvParser {
   private legacyRow?: (cells: readonly string[]) => Transaction | undefined;
   private readonly occurrences = new Map<string, number>();
   private readonly formatter: Intl.DateTimeFormat;
+  /** The normalised label: one string for the account hash and the stored display label. */
+  private readonly accountLabel?: string;
   constructor(
     private readonly options: BankStatementOptions,
     private readonly maxRows: number,
@@ -231,6 +244,8 @@ export class BankCsvParser {
     private readonly onBankRow?: (txn: Transaction, legacy?: Transaction) => void,
   ) {
     validateBankOptions(options);
+    this.accountLabel =
+      options.accountLabel === undefined ? undefined : normaliseAccountLabel(options.accountLabel);
     this.formatter = bankDateFormatter(options.timeZone);
     if (maxRows !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(maxRows) || maxRows < 0))
       throw new RangeError("Bank row limit must be a nonnegative safe integer");
@@ -403,7 +418,7 @@ export class BankCsvParser {
       return undefined;
     }
     const label =
-      this.options.accountLabel?.trim() ??
+      this.accountLabel ??
       `${bank === "revolut" ? `Revolut ${product}` : bank === "monzo" ? "Monzo" : "Starling"} ${currency}`;
     const txn: Transaction = {
       bank,
@@ -415,12 +430,7 @@ export class BankCsvParser {
       fee,
       balance,
       sourceId,
-      accountKey: JSON.stringify([
-        bank,
-        this.options.accountLabel?.trim() ?? "",
-        product,
-        currency,
-      ]),
+      accountKey: JSON.stringify([bank, this.accountLabel ?? "", product, currency]),
       accountLabel: label,
     };
     this.onBankRow?.(txn, this.legacyRow?.(cells));

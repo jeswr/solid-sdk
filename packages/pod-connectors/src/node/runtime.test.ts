@@ -1795,6 +1795,12 @@ describe("CLI bank statement options", () => {
       [["--account-label", "--format", "monzo"], /Usage/],
       [["--format", "monzo", "--format", "starling"], /Usage/],
       [["--account-label", "One", "--account-label", "Two"], /Usage/],
+      [[`--account-label=${privateLabel}`], /Usage/],
+      [["--format=monzo"], /Usage/],
+      [["--account-label", `--${privateLabel}`], /Usage/],
+      [["--account-label", "\u200B"], /visible text/],
+      [["--account-label", "\u202E\u200D"], /visible text/],
+      [["--account-label", `${privateLabel}${"\u{1F600}".repeat(257)}`], /at most 256 characters/],
     ].map(([flags, message]) => ({ flags: flags as string[], message: message as RegExp })),
   )("rejects invalid bank values without Pod I/O: $flags", async ({ flags, message }) => {
     const { pod, transport } = fixturePod();
@@ -1841,11 +1847,69 @@ describe("CLI bank statement options", () => {
     expect(podTransport).not.toHaveBeenCalled();
   });
 
+  it("accepts 256 emoji as a label (the limit counts code points)", () => {
+    const accountLabel = "\u{1F600}".repeat(256);
+    expect(
+      parseImportArgs([
+        "import",
+        "bank-statements",
+        "--file",
+        "a.csv",
+        "--account-label",
+        accountLabel,
+      ]).bank,
+    ).toEqual({ accountLabel });
+  });
+
+  it("rejects an invalid bank option before reading the config file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pod-connectors-missing-"));
+    const missing = join(dir, "no-such-config.json");
+    try {
+      for (const flags of [
+        ["--format", "hsbc"],
+        ["--format", "hsbc-uk"],
+        ["--account-label", "\u200B"],
+        ["--account-label=Joint"],
+      ]) {
+        const podTransport = vi.fn();
+        const stderr = vi.fn();
+        expect(
+          await runCli(["import", "bank-statements", "--file", join(dir, "a.csv"), ...flags], {
+            configPath: missing,
+            podTransport,
+            stdout: vi.fn(),
+            stderr,
+          }),
+        ).toBe(EXIT_CODES.config);
+        const message = String(stderr.mock.calls[0]?.[0]);
+        // The bank diagnostic, not the config reader's: parsing ran first.
+        expect(message).toMatch(/--format|--account-label|Usage/);
+        expect(message).not.toContain(missing);
+        expect(message).not.toMatch(/config/i);
+        expect(podTransport).not.toHaveBeenCalled();
+      }
+      // The same command with valid flags does reach the (missing) config file.
+      const stderr = vi.fn();
+      expect(
+        await runCli(
+          ["import", "bank-statements", "--file", join(dir, "a.csv"), "--format", "monzo"],
+          { configPath: missing, podTransport: vi.fn(), stdout: vi.fn(), stderr },
+        ),
+      ).toBe(EXIT_CODES.config);
+      expect(String(stderr.mock.calls[0]?.[0])).toMatch(/^Cannot load config/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("documents the bank options in --help", async () => {
     const stdout = vi.fn();
     expect(await runCli(["--help"], { stdout, stderr: vi.fn() })).toBe(0);
     const help = String(stdout.mock.calls[0]?.[0]);
     expect(help).toContain("--format <auto|revolut|hsbc-uk|monzo|starling>");
     expect(help).toContain("--account-label <text>");
+    expect(help).toContain("Only Revolut, HSBC UK, Monzo and Starling CSV exports use it");
+    expect(help).toContain("OFX/QFX and generic CSV");
+    expect(help).toContain("--flag=value and values starting with -- are rejected");
   });
 });

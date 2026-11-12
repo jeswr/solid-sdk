@@ -47,6 +47,9 @@ export {
 } from "./money-documents.js";
 export { normaliseAmount } from "./values.js";
 
+/** Reported when a host gave an `accountLabel` but the file was OFX/QFX or generic CSV. */
+const ACCOUNT_LABEL_UNUSED =
+  "The account label was not used: labels apply only to Revolut, HSBC UK, Monzo and Starling CSV exports. OFX/QFX and generic CSV files replace the one shared bank transactions document.";
 const ID = "bank-statements";
 const SLUG = "finance/bank-transactions.ttl";
 const metadata: IntegrationMetadata = {
@@ -154,6 +157,8 @@ export function createBankStatementsFileAdapter(
           return { unsupported: [error.message], skipped };
         throw error;
       }
+      // Only the four bank CSV layouts have per-account documents; never echo the label.
+      if (shared && config.accountLabel !== undefined) warnings.push(ACCOUNT_LABEL_UNUSED);
       if (recognised) warnings.push(...(await legacyWarnings(ctx, incoming)));
       // Generic CSV and OFX retain the original shared replacement snapshot,
       // including an empty snapshot. Bank imports only read it for upgrade warnings.

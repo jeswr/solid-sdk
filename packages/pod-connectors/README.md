@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -270,10 +271,22 @@ const adapter = createBankStatementsFileAdapter({
 `csvFormat` can also constrain detection to `revolut`, `monzo` or `starling`.
 Hosts build format pickers from `BANK_CSV_FORMATS` and check user input with the
 adapter's own `validateBankOptions` (labels: visible text, at most
-`MAX_BANK_ACCOUNT_LABEL_CHARS` = 256 characters). The Node CLI and Suite's connect flow
-both pass these options.
+`MAX_BANK_ACCOUNT_LABEL_CHARS` = 256 Unicode code points). The Node CLI and Suite's connect
+flow both pass these options.
 `accountLabel` distinguishes accounts absent from an export; keep it stable across
-overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
+overlapping imports. Only the Revolut, HSBC UK, Monzo and Starling CSV layouts use it.
+OFX/QFX and generic CSV files ignore it, still replace the one shared
+`finance/bank-transactions.ttl`, and the import adds an `unsupported` entry saying the
+label was not used (the entry never repeats the label).
+
+**Label normalisation.** The adapter normalises a label once, and that one string is both
+hashed into the account folder name and stored as the account's `skos:prefLabel`: Unicode
+control and format characters (`Cc`, `Cf`: C0/C1 controls, zero-width characters
+including the joiners inside emoji sequences, bidi controls) are removed, the rest is put
+in NFC, then trimmed. A label that is empty after this is rejected, and the 256 limit
+counts code points of the normalised form, so an emoji counts once. `"Joint\u0001"` and
+`"Joint"`, or the NFC and NFD spellings of `"Café"`, are the same account. A plain label
+is unchanged by normalisation, so its folder is the same as before. Revolut defaults to one account per Product/Currency. Monzo
 and Starling default to one account per bank/currency; provide labels when importing
 multiple accounts.
 Changing or adding an `accountLabel` later creates a new per-account document;
@@ -439,11 +452,15 @@ pod-connectors import bank-statements --file ./monzo-joint.csv --account-label "
 `--format <auto|revolut|hsbc-uk|monzo|starling>` maps to the adapter's `csvFormat`
 (`BANK_CSV_FORMATS`); `auto`, the default, detects the layout, including generic CSV and
 OFX/QFX. `--account-label <text>` maps to `accountLabel` and must pass the adapter's
-`validateBankOptions` (visible text, at most 256 characters). `--format hsbc-uk` requires a
-label, so headerless HSBC UK exports import from the CLI. Give two accounts of the same
-bank different labels, or they share one account folder. Invalid values, repeated flags
-and bank flags on other connectors fail with exit code 2 before any Pod request; the CLI
-never echoes the label.
+`validateBankOptions` (visible text, at most 256 code points once normalised, as above).
+`--format hsbc-uk` requires a label, so headerless HSBC UK exports import from the CLI.
+For Revolut, HSBC UK, Monzo and Starling CSV exports, give two accounts of the same bank
+different labels, or they share one account folder. OFX/QFX and generic CSV ignore the
+label and replace the shared document, so a label cannot keep two such files apart.
+Each value must be its own argument: `--account-label=<text>` and a value starting with
+`--` are rejected with the usage text. Invalid values, repeated flags and bank flags on
+other connectors fail with exit code 2 before the config file is read or any Pod request
+is made; the CLI never echoes the label.
 
 Streaming adapters receive the stat
 size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI never

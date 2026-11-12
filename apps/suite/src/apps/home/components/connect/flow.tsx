@@ -387,7 +387,11 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   {report.unsupported?.length ? (
                     <p>Some parts of this export aren't supported yet.</p>
                   ) : null}
-                  {bank && report.unsupported?.length && bankChoice.format !== "hsbc-uk" ? (
+                  {/* Only when Auto-detect wrote nothing: other warnings come with written data. */}
+                  {bank &&
+                  bankChoice.format === "auto" &&
+                  report.unsupported?.length &&
+                  !(report.state?.counts.items ?? report.written.length) ? (
                     <p>
                       If this is an HSBC UK statement, choose HSBC UK as the bank format, add an
                       account label and sync again.
@@ -507,6 +511,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <label
                     className="hm-connect-drop"
                     htmlFor="connector-file"
+                    aria-disabled={bankProblem ? true : undefined}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
                       event.preventDefault();

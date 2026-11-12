@@ -18,7 +18,10 @@ export const BANK_PROBLEM_ID = "bank-options-problem";
 export type BankFormatChoice = "auto" | BankCsvFormat;
 export interface BankImportChoice {
   readonly format: BankFormatChoice;
-  /** What the user typed; trimmed before it reaches the adapter. */
+  /**
+   * What the user typed; trimmed here, then normalised by the adapter. There is no maxLength:
+   * the adapter's limit counts code points of the normalised label, which maxLength cannot.
+   */
   readonly accountLabel: string;
 }
 export const DEFAULT_BANK_CHOICE: BankImportChoice = { format: "auto", accountLabel: "" };
@@ -93,7 +96,6 @@ export function BankImportOptions({
         type="text"
         autoComplete="off"
         value={value.accountLabel}
-        maxLength={MAX_BANK_ACCOUNT_LABEL_CHARS}
         required={hsbc}
         aria-invalid={problem ? true : undefined}
         aria-describedby={`bank-account-label-hint ${BANK_PROBLEM_ID}`}
@@ -102,7 +104,7 @@ export function BankImportOptions({
       <p id="bank-account-label-hint" className="hm-connect-bank-hint">
         {hsbc
           ? "HSBC UK statements don't say which account they're from, so the label keeps this account's transactions together."
-          : "Name the account if you import more than one from the same bank, such as a joint and a personal account."}{" "}
+          : "For Revolut, HSBC UK, Monzo and Starling CSV exports, name the account if you import more than one from the same bank, such as a joint and a personal account. OFX, QFX and other CSV files don't use the label."}{" "}
         Use the same label every time you import this account.
       </p>
       {/* Always mounted, so a new problem is announced as it appears. */}

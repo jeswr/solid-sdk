@@ -41,8 +41,13 @@ Bank statement options (${BANK_ID} file imports only):
       OFX/QFX; a bank format accepts only that bank's CSV (OFX/QFX is still read).
       Headerless HSBC UK exports need --format hsbc-uk.
   --account-label <text>
-      A stable name for the account (visible text, at most ${MAX_BANK_ACCOUNT_LABEL_CHARS} characters).
-      Required for hsbc-uk; give two accounts of the same bank different labels.
+      A stable name for the account: visible text, at most ${MAX_BANK_ACCOUNT_LABEL_CHARS} characters
+      (code points) after control and format characters are removed and it is trimmed.
+      Required for hsbc-uk. Only Revolut, HSBC UK, Monzo and Starling CSV exports use it:
+      give two accounts of the same bank different labels there. OFX/QFX and generic CSV
+      ignore it (the import reports this) and replace one shared document.
+
+Give each value as its own argument: --flag=value and values starting with -- are rejected.
 `;
 
 /** Stable process exit codes; library users receive the code without terminating their host. */
