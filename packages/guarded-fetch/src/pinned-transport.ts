@@ -142,12 +142,30 @@ function assertCompatibleConfiguration(options: PinOptions, transport?: Transpor
     throw configurationRefusal();
 }
 
+/**
+ * Loads undici lazily. The computed specifier keeps bundlers from following it, and the
+ * try/catch lets Turbopack treat the unresolvable browser-side import as optional rather
+ * than a build error (the same shape as guard.ts's `node:dns/promises` probe).
+ */
+async function loadTransport(): Promise<Transport> {
+  try {
+    return (await import(/* @vite-ignore */ UNDICI_SPECIFIER)) as Transport;
+  } catch (cause) {
+    throw new Error(
+      `undici is not importable: ${cause instanceof Error ? cause.message : String(cause)}`,
+      {
+        cause,
+      },
+    );
+  }
+}
+
 /** Await module loading and configuration checks before the root guard's authority fence. */
 export async function preparePinnedTransport(
   options: PinOptions,
 ): Promise<typeof globalThis.fetch> {
   assertCompatibleConfiguration(options);
-  transportModule ??= import(/* @vite-ignore */ UNDICI_SPECIFIER);
+  transportModule ??= loadTransport();
   const transport = await transportModule;
   assertCompatibleConfiguration(options, transport);
   return createPinnedTransport(transport, options);
