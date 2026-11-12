@@ -39,7 +39,13 @@ import { zipDirectory } from "../google-takeout/zip-reader.js";
 import { writeResource } from "../pod/resource.js";
 import { TypeIndexDataset } from "../pod/type-index.js";
 import { createRegistry } from "../registry.js";
-import { createWhoopAdapter, whoopAdapter } from "./adapter.js";
+import {
+  COMPLETE_CURSOR,
+  createWhoopAdapter,
+  PARTIAL_WARNING,
+  pendingWhoopBatch,
+  whoopAdapter,
+} from "./adapter.js";
 import { createWhoopFileAdapter, MAX_WHOOP_FILE_BYTES, whoopFileAdapter } from "./file-adapter.js";
 import {
   CYCLE,
@@ -124,8 +130,9 @@ describe("WHOOP catalogue and OAuth", () => {
       "read:cycles",
       "read:sleep",
       "read:workout",
-      "offline",
     ]);
+    // Refresh is not implemented, so no long-lived refresh token is requested.
+    expect(adapter?.oauth?.scopes).not.toContain("offline");
   });
   it("uses the shared S256 auth-code flow and proxy form contract without exposing a secret", async () => {
     const config = {
@@ -543,14 +550,17 @@ describe("WHOOP API traversal and failures", () => {
 
 describe("WHOOP hostile files and cancellation", () => {
   it.each([
-    "Sleep onset,sleep_onset,Wake onset\n2026-06-07T22:00:00Z,x,2026-06-08T06:00:00Z",
-    "Unknown,Data\n1,2",
-    "",
-    'Sleep onset,Wake onset\n"unterminated',
-    `${"x".repeat(65537)}\n1`,
-  ])("rejects malformed/ambiguous headers and broken records before writes", async (text) => {
+    [
+      "Sleep onset,sleep_onset,Wake onset\n2026-06-07T22:00:00Z,x,2026-06-08T06:00:00Z",
+      /^Ambiguous WHOOP CSV headers\.$/,
+    ],
+    ["Unknown,Data\n1,2", /^Unrecognised WHOOP CSV headers\.$/],
+    ["", /^Missing WHOOP CSV header\.$/],
+    ['Sleep onset,Wake onset\n"unterminated', /Unterminated quoted CSV record/],
+    [`${"x".repeat(65537)}\n1`, /CSV header exceeds the 64 KiB/],
+  ])("rejects malformed/ambiguous headers and broken records before writes", async (text, error) => {
     const pod = createMemoryPod();
-    await expect(csv(text, "sleeps.csv", pod)).rejects.toThrow();
+    await expect(csv(text, "sleeps.csv", pod)).rejects.toThrow(error);
     expect(pod.get(MONTH)).toBeUndefined();
   });
   it("counts invalid dates, missing zones, numbers and short/extra rows while importing valid rows", async () => {
@@ -603,13 +613,22 @@ describe("WHOOP hostile files and cancellation", () => {
     expect(report.skipped).toBe(1);
   });
   it.each([
-    { "../sleeps.csv": SLEEPS_CSV },
-    { "a/b/c/d/sleeps.csv": SLEEPS_CSV },
-    { "a/sleeps.csv": SLEEPS_CSV, "b/sleeps.csv": SLEEPS_CSV },
-    { "sleeps.csv": "x".repeat(16 * 1024 * 1024 + 1) },
-  ])("rejects unsafe, duplicate and oversized archive entries", async (files) => {
+    // The shared ZIP directory reader already marks dot segments and backslashes invalid;
+    // WHOOP's own path checks are defence in depth behind it.
+    [{ "../sleeps.csv": SLEEPS_CSV }, /^Invalid WHOOP ZIP entry\.$/],
+    [{ "a/./sleeps.csv": SLEEPS_CSV }, /^Invalid WHOOP ZIP entry\.$/],
+    [{ "a\\sleeps.csv": SLEEPS_CSV }, /^Invalid WHOOP ZIP entry\.$/],
+    // An entry the directory reader accepts reaches WHOOP's own depth check.
+    [{ "a/b/c/d/sleeps.csv": SLEEPS_CSV }, /^Unsafe WHOOP ZIP entry path\.$/],
+    [{ "a/sleeps.csv": SLEEPS_CSV, "b/sleeps.csv": SLEEPS_CSV }, /^Duplicate WHOOP export CSV\.$/],
+    // The declared-size check fires before any inflation.
+    [
+      { "sleeps.csv": "x".repeat(16 * 1024 * 1024 + 1) },
+      /^WHOOP CSV exceeds the 16 MiB entry limit\.$/,
+    ],
+  ])("rejects unsafe, duplicate and oversized archive entries", async (files, error) => {
     const pod = createMemoryPod();
-    await expect(fileImport(whoopFileAdapter, archive(files), { pod })).rejects.toThrow();
+    await expect(fileImport(whoopFileAdapter, archive(files), { pod })).rejects.toThrow(error);
     expect(pod.get(MONTH)).toBeUndefined();
   });
   it("requires binary stream/range ports and verifies the archive signature", async () => {
@@ -1467,4 +1486,93 @@ describe("WHOOP review round-two regressions", () => {
     await expect(csv(SLEEPS_CSV, "sleeps.csv", refused)).rejects.toThrow(/Health reader limit/);
     expect(refused.get(MONTH)).toBe(before);
   }, 60_000);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("WHOOP review round-three regressions", () => {
+  const unscored = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      ...SLEEP,
+      id: `pending-${index}`,
+      score_state: "PENDING_SCORE",
+    }));
+
+  it("returns a distinct completion cursor when a resumed traversal imports nothing", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopAdapter({ maxItems: 2, maxRequests: 50 });
+    const requests: URL[] = [];
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      return Response.json({ records: url.pathname.endsWith("/sleep") ? unscored(3) : [] });
+    };
+    const run = (state?: ConnectorState) =>
+      runImport({
+        adapter,
+        mode: "live",
+        sourceAuth: { fetch: transport },
+        podWriter: writer(pod),
+        state,
+      });
+    const first = await run();
+    expect(first.warnings).toEqual([PARTIAL_WARNING]);
+    expect(JSON.parse(first.cursor ?? "{}").newest).toBeUndefined();
+    const second = await run(first.state);
+    expect(second.warnings).toBeUndefined();
+    // Not undefined: the session would otherwise keep the stale partial cursor forever.
+    expect(second.state?.cursor).toBe(COMPLETE_CURSOR);
+    requests.length = 0;
+    const third = await run(second.state);
+    expect(third.warnings).toEqual([PARTIAL_WARNING]);
+    expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+    expect(requests.every((url) => !url.searchParams.has("nextToken"))).toBe(true);
+  });
+
+  it("treats a file-import cursor from a shared host checkpoint as a fresh API traversal", async () => {
+    const requests: URL[] = [];
+    const { report } = await sparseImport(whoopAdapter, WHOOP_FIXTURES, {
+      cursor: JSON.stringify({ file: "0".repeat(64), before: "" }),
+    });
+    expect(report.cursor).toBe("2026-06-08T08:00:00.000Z");
+    await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      podWriter: writer(createMemoryPod()),
+      cursor: JSON.stringify({ file: "0".repeat(64), before: "2026" }),
+      sourceAuth: {
+        fetch: async (input) => {
+          requests.push(new URL(String(input)));
+          return Response.json({ records: [] });
+        },
+      },
+    });
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+    // A malformed cursor is still rejected.
+    await expect(demoImport(whoopAdapter, { cursor: '{"v":2}' })).rejects.toThrow(
+      /^Invalid WHOOP cursor\.$/,
+    );
+  });
+
+  it("keeps the starting high-water cursor in a pending batch for hosts that must pin it", async () => {
+    const adapter = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+    const { report } = await demoImport(adapter, { cursor: "2026-06-01T00:00:00Z" });
+    expect(pendingWhoopBatch(report.cursor)).toEqual({ base: "2026-06-01T00:00:00.000Z" });
+    const fresh = await demoImport(adapter);
+    expect(pendingWhoopBatch(fresh.report.cursor)).toEqual({});
+    for (const cursor of [
+      undefined,
+      "2026-06-01T00:00:00.000Z",
+      COMPLETE_CURSOR,
+      '{"file":"x","before":""}',
+      '{"v":1,"position":',
+    ])
+      expect(pendingWhoopBatch(cursor)).toBeUndefined();
+    // The saved base is validated with the rest of the cursor.
+    await expect(
+      demoImport(adapter, {
+        cursor: JSON.stringify({ v: 1, base: "not-a-time", position: { index: 0, offset: 0 } }),
+      }),
+    ).rejects.toThrow(/^Invalid WHOOP cursor\.$/);
+  });
 });

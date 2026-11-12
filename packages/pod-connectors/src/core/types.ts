@@ -217,7 +217,8 @@ export interface ImportContext {
 
 /** What `import()` returns (documents are reported by the runner). */
 export interface ImportOutcome {
-  /** Actionable notices, including a successfully saved partial batch. */
+  /** Actionable notices, including a successfully saved partial batch. Fixed adapter
+   * strings only: never provider-supplied text (hosts print them). */
   readonly warnings?: readonly string[];
   /** Opaque incremental cursor for the next import, where the API supports it. */
   readonly cursor?: string;

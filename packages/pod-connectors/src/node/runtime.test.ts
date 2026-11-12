@@ -1367,6 +1367,17 @@ describe("CLI import", () => {
       ).toHaveLength(3);
     });
 
+    it("strips control characters from adapter warnings before printing them", async () => {
+      const { opts } = await setup();
+      const real = whoopAdapter.import.bind(whoopAdapter);
+      vi.spyOn(whoopAdapter, "import").mockImplementation(async (ctx) => ({
+        ...(await real(ctx)),
+        warnings: ["\u001b[2Jpartial\r\n\u0007batch"],
+      }));
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      // Without ESC, the remaining "[2J" is inert text.
+      expect(opts.stderr).toHaveBeenCalledWith("[2Jpartialbatch\n");
+    });
     it("classifies a legacy single file cursor into the file slot", async () => {
       const { pod, opts, requests, saved } = await setup();
       const legacy = JSON.stringify({ file: "0".repeat(64), before: "" });

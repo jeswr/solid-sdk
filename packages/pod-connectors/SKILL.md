@@ -267,6 +267,10 @@ returns a warning plus an opaque collection/page/offset cursor; only a completed
 returns the ISO start cursor, which replays seven days rather than an updated-since feed.
 A resumed page shorter than its saved offset replays from row 0; a 400/404 on the resumed
 token restarts that collection once per run with no token (never on fresh tokens).
+An empty completed traversal returns `COMPLETE_CURSOR`, never no cursor; file cursors and
+`COMPLETE_CURSOR` start a fresh API traversal. Batch cursors keep `base` (the starting
+high-water cursor) for Suite's partial-scope pinning via `pendingWhoopBatch`. No `offline`
+scope until refresh exists. Hosts print warnings: keep them fixed strings.
 File batches use content-bound host-owned cursors and select newest-first with a bounded
 heap; preserve the byte caps while scanning sort keys and the row/record caps while parsing
 selected rows, including duplicates and malformed rows. A finished traversal returns the

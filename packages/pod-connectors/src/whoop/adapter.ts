@@ -19,7 +19,8 @@ import {
 } from "./model.js";
 import { vocabMap } from "./vocab-map.js";
 
-const SCOPES = ["read:recovery", "read:cycles", "read:sleep", "read:workout", "offline"] as const;
+// No `offline`: this adapter never refreshes, so it must not request a refresh token.
+const SCOPES = ["read:recovery", "read:cycles", "read:sleep", "read:workout"] as const;
 const DEFAULT_LIMITS: RunLimits = {
   maxRequests: 2_000,
   maxItems: MAX_RECORDS,
@@ -59,6 +60,9 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
       const saved = apiCursor(ctx.cursor);
       const previous = saved.newest ? timestamp(saved.newest) : undefined;
       const start = saved.start;
+      // Only a batch resumed after the start of cycle traversal lacks earlier cycle pages.
+      const resumedBatch =
+        saved.position.index > 0 || saved.position.offset > 0 || saved.position.token !== undefined;
       const itemLimit = Math.min(limits.maxItems, MAX_RECORDS);
       if (!Number.isSafeInteger(limits.maxItems) || itemLimit < 1)
         throw new IntegrationSyncError("whoop", "WHOOP item budget must be positive.");
@@ -129,7 +133,7 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
             const id = sourceId(kind === "recovery" ? row.cycle_id : row.id);
             // A resumed recovery traversal no longer has the earlier cycle pages in memory.
             // Resolve the actual cycle instead of persisting an unbounded id/time map in state.
-            if (kind === "recovery" && id && !cycles.has(id) && ctx.cursor?.startsWith("{")) {
+            if (kind === "recovery" && id && !cycles.has(id) && resumedBatch) {
               if (requests >= limits.maxRequests) {
                 position = { index, token, offset: rowIndex };
                 partial = true;
@@ -232,10 +236,12 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
               v: 1,
               start,
               newest: newest === undefined ? undefined : new Date(newest).toISOString(),
+              base: saved.base,
               position,
-            })
+            } satisfies ApiCursor)
           : newest === undefined
-            ? undefined
+            ? // Never return no cursor: the session would keep the stale batch cursor.
+              COMPLETE_CURSOR
             : new Date(newest).toISOString(),
         warnings: partial ? [PARTIAL_WARNING] : undefined,
         skipped: skipped || undefined,
@@ -248,25 +254,34 @@ export const whoopAdapter = createWhoopAdapter();
 
 const KINDS = ["cycle", "recovery", "sleep", "workout"] as const;
 export const PARTIAL_WARNING = "WHOOP import partial, re-run to continue.";
+/** A completed traversal that found no scored record: equivalent to no cursor. */
+export const COMPLETE_CURSOR = '{"v":1,"complete":true}';
 interface Position {
   index: number;
   token?: string;
   offset: number;
 }
-interface ApiCursor {
+/** A pending batch. `base` is the completed high-water cursor the traversal started from,
+ * which hosts that must not advance a shared checkpoint can restore on completion. */
+export interface ApiCursor {
   v: 1;
   start?: string;
   newest?: string;
+  base?: string;
   position: Position;
 }
 function apiCursor(cursor: string | undefined): ApiCursor {
-  if (cursor === undefined) return { v: 1, position: { index: 0, offset: 0 } };
+  // No cursor, a completed empty traversal, or a file-import batch cursor from a host that
+  // shares one checkpoint between paths: all start a fresh API traversal.
+  if (cursor === undefined || cursor === COMPLETE_CURSOR || cursor.startsWith('{"file":'))
+    return { v: 1, position: { index: 0, offset: 0 } };
   const previous = timestamp(cursor);
   if (previous)
     return {
       v: 1,
       start: new Date(previous.getTime() - LOOKBACK_MS).toISOString(),
       newest: previous.toISOString(),
+      base: previous.toISOString(),
       position: { index: 0, offset: 0 },
     };
   try {
@@ -285,12 +300,29 @@ function apiCursor(cursor: string | undefined): ApiCursor {
       (p.token !== undefined &&
         (typeof p.token !== "string" || !p.token.length || p.token.length > 2048)) ||
       (value.start !== undefined && !timestamp(value.start)) ||
-      (value.newest !== undefined && !timestamp(value.newest))
+      (value.newest !== undefined && !timestamp(value.newest)) ||
+      (value.base !== undefined && !timestamp(value.base))
     )
       throw new Error();
     return value;
   } catch {
     throw new IntegrationSyncError("whoop", "Invalid WHOOP cursor.");
+  }
+}
+
+/** Hosts that must not advance a checkpoint shared with withheld collections can still
+ * pass a pending batch cursor through (the adapter traverses only `ctx.scopes`). Returns the
+ * batch's starting high-water cursor (`base`, absent on a first traversal), or `undefined`
+ * when `cursor` is not a pending WHOOP batch. Does not validate the cursor beyond its shape. */
+export function pendingWhoopBatch(cursor: string | undefined): { base?: string } | undefined {
+  if (!cursor?.startsWith('{"v":1,') || cursor.length > 4096) return undefined;
+  try {
+    const value = JSON.parse(cursor) as Partial<ApiCursor>;
+    if (typeof value.position !== "object" || value.position === null) return undefined;
+    const base = typeof value.base === "string" && timestamp(value.base) ? value.base : undefined;
+    return base === undefined ? {} : { base };
+  } catch {
+    return undefined;
   }
 }
 

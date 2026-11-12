@@ -233,7 +233,7 @@ they must enforce their own streaming limits. Legacy Takeout JSON still has the 
 ## WHOOP
 
 `./adapters/whoop` exports `whoopAdapter`, `createWhoopAdapter(limits?)`,
-`whoopFileAdapter` and `createWhoopFileAdapter(maxRecords?)`. Both paths appear under **one**
+`whoopFileAdapter`, `createWhoopFileAdapter(maxRecords?)` and `pendingWhoopBatch(cursor)`. Both paths appear under **one**
 health catalogue id, `whoop`, like Garmin.
 Hosts inject `createRegistry({ whoop: { clientId, tokenProxyUrl } })` and a separate
 `SourceAuth`. Code exchange defaults to the shared confidential-client token proxy;
@@ -241,8 +241,8 @@ a Node host may instead inject its client secret for direct exchange. Client id 
 keeps the connector in demo mode. Public secretless exchange is not assumed.
 The Tier A OAuth path uses the shared authorization-code/S256 PKCE engine with WHOOP's
 `/oauth/oauth2/auth` and `/oauth/oauth2/token` endpoints. Scopes are `read:recovery`,
-`read:cycles`, `read:sleep`, `read:workout` and `offline`. Tokens remain
-host-owned and in memory; automatic refresh is not implemented by this adapter.
+`read:cycles`, `read:sleep` and `read:workout`. Tokens remain host-owned and in memory.
+Automatic refresh is not implemented, so `offline` (a refresh token) is not requested.
 Provider behavior is exercised with synthetic v2-shaped fixtures only, without live
 verification of client registration or token exchange.
 
@@ -267,7 +267,15 @@ Pass `report.cursor` (or `report.state`) into the next run until traversal compl
 the high-water timestamp alone would skip older pages. A resumed page that now has fewer
 rows than the saved offset is replayed from its first row. If WHOOP rejects or has expired
 the saved page token (HTTP 400/404), that collection restarts once per run from the saved
-start without a token; records are keyed by kind and native id, so the replay is idempotent. Resumed recoveries resolve missing
+start without a token; records are keyed by kind and native id, so the replay is idempotent.
+A completed traversal that imported no scored record returns the distinct
+`{"v":1,"complete":true}` cursor (never no cursor, which would leave a stale batch cursor in
+place); the next run treats it, like a `{"file":…}` cursor from a host sharing one checkpoint
+between paths, as a fresh traversal. Each pending batch cursor records `base`, the completed
+high-water cursor its traversal started from. `pendingWhoopBatch(cursor)` returns `{ base? }`
+for a pending batch: Suite passes pending batches through on a partial scope selection (the
+adapter reads only `ctx.scopes`), so batches advance, and restores `base` on completion so a
+withheld collection's checkpoint never advances. Resumed recoveries resolve missing
 cycle dates through the [documented `cycle/<id>` endpoint](https://developer.whoop.com/api/);
 absent cycles are skipped, never assigned invented dates.
 With `ctx.scopes`, only granted collections are requested; recovery also requires cycles

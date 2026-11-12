@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "@jeswr/pod-connectors/testing";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, click, h, mount } from "./drive-ui-dom";
@@ -62,8 +63,10 @@ it("offers a real WHOOP export import beside its demo/API connection", async () 
 // AUTHORED-BY Codex GPT-6
 it("lists only the WHOOP scopes used by the import", async () => {
   const { host } = await mount(h(ConnectFlow, { service: "whoop" }));
-  expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(5);
+  // Four data scopes; `offline` is no longer requested because refresh is not implemented.
+  expect(host.querySelectorAll('input[type="checkbox"]')).toHaveLength(4);
   expect(host.textContent).not.toContain("Your WHOOP profile");
+  expect(host.textContent).not.toContain("Keep the connection available");
 });
 
 it.each([

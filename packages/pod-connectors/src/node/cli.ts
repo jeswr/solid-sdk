@@ -137,6 +137,9 @@ export async function importFile(path: string, adapter: FileImportAdapter): Prom
   }
 }
 
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
 /** Split a checkpoint into its API and file cursor slots. A checkpoint written before the
  * file slot existed held one shared cursor: classify it by shape, since only a WHOOP file
  * batch cursor is a `{"file":…}` object. */
@@ -243,7 +246,10 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
             mode: "live",
             sourceAuth,
           });
-      for (const warning of report.warnings ?? []) stderr(`${warning}\n`);
+      // Warnings are meant to be fixed adapter strings; still never let one carry terminal
+      // control sequences or unbounded text to stderr.
+      for (const warning of report.warnings ?? [])
+        stderr(`${warning.replace(CONTROL_CHARACTERS, "").slice(0, 500)}\n`);
     } catch {
       if (next) {
         // A full import still preserves the last successful checkpoint on failure.
