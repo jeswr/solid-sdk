@@ -244,7 +244,10 @@ It rejects a stored tag longer than 64 characters before matching the tag patter
 the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
 then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
 Invalid stored guards become failed items and cannot be sent, including through retry.
-`pending()` exposes only the read-only `guard.tag`, never assertions.
+`pending()` exposes only the read-only `guard.tag`, never assertions, and omits a stored tag
+that fails tag validation (that record is already failed). It copies only the documented
+`OutboxItem` fields from each stored item, by name, so other stored keys are neither
+enumerated nor exposed.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,

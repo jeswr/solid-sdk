@@ -249,11 +249,10 @@ function describeRequest(
   return { op: 'create', url, container, name, kind };
 }
 
+/** Read only the fields describeRequest uses; never enumerate a stored item. */
 function recordOperation(record: StoredItem): OutboxOperation {
-  return {
-    ...record.item,
-    createOptions: record.createOptions,
-  };
+  const { op, url, container } = record.item;
+  return { op, url, container, createOptions: record.createOptions };
 }
 
 function storedRequest(record: StoredItem, storage?: StorageClient): RequestDescription {
@@ -316,11 +315,38 @@ function errorMessage(error: unknown): string {
   }
 }
 
-function validateTag(tag: unknown): asserts tag is string {
+function validTag(tag: unknown): tag is string {
   // Length first, so a corrupted stored tag is rejected before the pattern sees it.
-  if (typeof tag !== 'string' || tag.length > 64 || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
-    throw new TypeError('[solid-offline] invalid guard tag');
-  }
+  return typeof tag === 'string' && tag.length <= 64 && /^[a-z][a-z0-9.-]{0,63}$/.test(tag);
+}
+
+function validateTag(tag: unknown): asserts tag is string {
+  if (!validTag(tag)) throw new TypeError('[solid-offline] invalid guard tag');
+}
+
+/** Public item fields in creation order; `guard` and `blocked` are derived separately. */
+const itemFields = [
+  'id',
+  'op',
+  'url',
+  'container',
+  'name',
+  'contentType',
+  'label',
+  'size',
+  'createdAt',
+  'status',
+  'error',
+] as const;
+
+/**
+ * Copy a stored item's public fields by name. A corrupted record's other keys are
+ * never enumerated or exposed.
+ */
+function publicItem(item: OutboxItem): Omit<OutboxItem, 'guard' | 'blocked'> {
+  const copy: Record<string, unknown> = {};
+  for (const key of itemFields) if (Object.hasOwn(item, key)) copy[key] = item[key];
+  return copy as Omit<OutboxItem, 'guard' | 'blocked'>;
 }
 
 /**
@@ -930,10 +956,11 @@ export function createOutbox(options: {
     ready,
     pending: () =>
       records.map((r) => {
-        const { guard: _guard, blocked: _blocked, ...item } = r.item;
+        // An invalid stored tag is omitted; hydration already failed that record.
+        const tag = r.guard?.tag;
         return {
-          ...item,
-          ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
+          ...publicItem(r.item),
+          ...(validTag(tag) ? { guard: { tag } } : {}),
           ...(r.item.status === 'waiting'
             ? guardRequired(policies, storedRequest(r), r.guard)
               ? { blocked: 'guard-required' as const }

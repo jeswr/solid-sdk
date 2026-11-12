@@ -843,7 +843,7 @@ describe('guard validation', () => {
     expect(JSON.stringify(outbox.pending())).not.toContain(secret);
   });
 
-  it('never enumerates stored guard envelopes during hydration', async () => {
+  it('never enumerates stored guard envelopes or items during hydration or pending()', async () => {
     const original = box();
     await enqueue(original);
     original.close();
@@ -870,7 +870,7 @@ describe('guard validation', () => {
           return records.map((record) => ({
             ...record,
             guard: watch(record.guard, 'guard'),
-            item: { ...record.item, guard: watch(record.item.guard, 'item.guard') },
+            item: watch({ ...record.item, guard: watch(record.item.guard, 'item.guard') }, 'item'),
           }));
         },
         set(value: unknown) {
@@ -899,6 +899,7 @@ describe('guard validation', () => {
     await stored((record) => {
       Object.assign(record.guard, extras);
       Object.assign(record.item.guard, extras);
+      Object.assign(record.item, extras);
     });
     original.close();
     const ownKeys = vi.spyOn(Reflect, 'ownKeys');
@@ -910,6 +911,7 @@ describe('guard validation', () => {
     outbox.registerDelegate(tag, delegate);
     await outbox.ready;
     expect(outbox.pending()[0]?.guard).toEqual({ tag });
+    expect(JSON.stringify(outbox.pending())).not.toContain('private-extra');
     expect(
       ownKeys.mock.calls.some(
         ([target]) => typeof target === 'object' && target !== null && 'extra0' in target,
@@ -920,6 +922,52 @@ describe('guard validation', () => {
     await outbox.replay(client.client);
     expect(delegate).toHaveBeenCalledTimes(1);
     expect(outbox.pending()).toEqual([]);
+  });
+
+  it('keeps the public item fields and their order for valid records', async () => {
+    const outbox = box();
+    await enqueue(outbox, { label: 'Upload' });
+    const fields = [
+      'id',
+      'op',
+      'url',
+      'container',
+      'name',
+      'contentType',
+      'label',
+      'size',
+      'createdAt',
+      'status',
+    ];
+    expect(Object.keys(outbox.pending()[0] as object)).toEqual([...fields, 'guard', 'blocked']);
+    outbox.registerDelegate(tag, vi.fn<ReplayDelegate>().mockRejectedValue(new Error('boom')));
+    await outbox.replay(storage().client);
+    expect(Object.keys(outbox.pending()[0] as object)).toEqual([...fields, 'error', 'guard']);
+    expect(outbox.pending()[0]).toMatchObject({ label: 'Upload', status: 'failed', error: 'boom' });
+    outbox.close();
+    const reopened = box();
+    await reopened.ready;
+    expect(Object.keys(reopened.pending()[0] as object)).toEqual([...fields, 'error', 'guard']);
+  });
+
+  it.each([
+    'INVALID',
+    `a${'b'.repeat(64)}`,
+    42,
+  ])('does not surface an invalid stored tag in pending(): %s', async (invalid) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      Object.assign(record.guard, { tag: invalid });
+    });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('invalid stored guard') },
+    ]);
+    expect(outbox.pending()[0]).not.toHaveProperty('guard');
+    expect(JSON.stringify(outbox.pending())).not.toContain(String(invalid));
   });
 
   it('accepts 64-character tags and rejects longer ones', async () => {
@@ -950,6 +998,7 @@ describe('guard validation', () => {
     expect(outbox.pending()).toMatchObject([
       { status: 'failed', error: expect.stringContaining('invalid guard tag') },
     ]);
+    expect(outbox.pending()[0]).not.toHaveProperty('guard');
     const client = storage();
     await outbox.replay(client.client);
     await outbox.retry();

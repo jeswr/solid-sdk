@@ -204,7 +204,9 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   ETag or generated create-only copy name. Delegate context is `{ storage, signal }`, using the
   underlying client and a signal cancelled on close. Use that raw client to avoid recursive
   delivery. Delegate replay failures follow storage classification; failed resolution retains
-  its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions.
+  its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions,
+  and omits an invalid stored tag. It copies the documented `OutboxItem` fields by name, never
+  enumerating (or exposing other keys of) a stored item.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient
