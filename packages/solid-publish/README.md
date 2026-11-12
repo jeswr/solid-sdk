@@ -46,7 +46,8 @@ The suite uses this explicit path because its PodSession contract is Solid, incl
 the demo pod, which has no discovery-description link. `publishRepository(storage, fetch,
 owner, onWarning?)` accepts an existing SDK storage client for integration and tests.
 `onWarning(message)` reports non-fatal Type Index and retained-output warnings (defaults
-to `console.warn`); `openPublishRepository` accepts it in `options`. The suite routes
+to `console.warn`); `openPublishRepository` accepts it in `options`. An unreadable Type
+Index is reported once per repository instance, not on every `listSites()`. The suite routes
 these notices through its global warning toast.
 
 Sources live at `publish/<site>/site.ttl` and `publish/<site>/pages/<id>.ttl`. The
@@ -83,9 +84,14 @@ refreshes all remaining public navigation and RSS; removing the last published p
 also removes the index/feed, empty slug folders and the site's public grant, and clears
 the public URL. Rebuild/repair removes stale validated slug folders strictly within the
 site's own public container, so interrupted renames and unpublishes can be repaired.
+While any page source is in `listPages(site).invalid`, a rebuild deletes no slug folders
+(that page may still be live) and warns with the unreadable URLs; unpublishing then
+removes only its own page's folder.
 It deletes only its `index.html` in a stale slug folder. If extra files prevent deleting
 the folder, it leaves them, installs owner-only folder permissions and warns with the
-folder URL. Rebuilds continue; reusing that slug restores its public folder grant.
+folder URL. Rebuilds continue; reusing that slug restores its public folder grant and
+warns that the retained files are public again. An unreadable slug-folder ACL fails as
+a `PublicationError` naming the folder.
 A failed permission change still surfaces rather than claiming the folder is private.
 It cannot recall reader copies.
 

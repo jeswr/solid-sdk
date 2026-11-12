@@ -20,10 +20,18 @@ export interface PublishSnapshot extends PublishData {
   error: string | null;
 }
 type Change = (data: PublishData) => PublishData;
+/** Shown instead of a failure from an account that is no longer signed in: it names no pod URLs. */
+export const STALE_ACCOUNT_FAILURE =
+  "A Publish change from an account that is no longer signed in didn't finish saving. Switch back to that account and reload to check it.";
+/**
+ * `isCurrent` reports whether this workspace's account is still the signed-in one. Failures
+ * from a write that started or ended under another account never show that account's details.
+ */
 export function createPublishWorkspace(
   repository: PublishRepository,
   root: string,
   failure: (message: string) => void,
+  isCurrent: () => boolean = () => true,
 ) {
   let baseline: PublishData = { sites: [], pages: {}, invalid: [] };
   let pending: { id: number; preview: Change }[] = [];
@@ -135,6 +143,7 @@ export function createPublishWorkspace(
   }
   function mutate(preview: Change, persist: () => Promise<void>): Promise<boolean> {
     const id = ++nextId;
+    const owned = isCurrent();
     ++generation;
     pending = [...pending, { id, preview }];
     guardNavigation(true);
@@ -144,8 +153,9 @@ export function createPublishWorkspace(
         await persist();
         return true;
       } catch (error) {
-        const message =
-          error instanceof PublicationError || error instanceof TypeError
+        const message = !(owned && isCurrent())
+          ? STALE_ACCOUNT_FAILURE
+          : error instanceof PublicationError || error instanceof TypeError
             ? error.message
             : "Couldn't save this change. Your editor draft is still on this device. Reload before trying again.";
         // The provider supplies the shell's global toast, which survives route unmount.

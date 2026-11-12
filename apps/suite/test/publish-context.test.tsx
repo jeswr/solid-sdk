@@ -9,7 +9,10 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { connectPublish } from "../src/apps/publish/lib/data/connect";
 import { PublishProvider, usePublish } from "../src/apps/publish/state/publish-context";
+import { STALE_ACCOUNT_FAILURE } from "../src/apps/publish/state/workspace";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { AccountsContext } from "../src/shell/session/accounts-context";
+import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
 
 vi.mock("../src/apps/publish/lib/data/connect", () => ({ connectPublish: vi.fn() }));
 const session: PodSession = {
@@ -41,6 +44,27 @@ function TriggerFailure() {
       Fail write
     </button>
   );
+}
+const siteData = {
+  name: "Late",
+  description: "",
+  author: "Writer",
+  theme: "paper" as const,
+  inLanguage: "en",
+  created: new Date(),
+  modified: new Date(),
+};
+/** A repository whose createSite stays pending until the test rejects it. */
+function pendingRepository() {
+  const repo = repository();
+  const control: { fail: (cause: Error) => void } = { fail: () => {} };
+  repo.createSite = vi.fn(
+    () =>
+      new Promise<StoredSite>((_resolve, reject) => {
+        control.fail = reject;
+      }),
+  );
+  return { repo, control };
 }
 function fallback(error: boolean, retry: () => void) {
   return (
@@ -298,6 +322,80 @@ describe("Publish React session context", () => {
     );
     await act(async () => host.querySelector("button")?.click());
     expect(errorToast).toHaveBeenCalledWith(expect.stringContaining("site"));
+    errorToast.mockRestore();
+  });
+  it("hides a late failure's pod URLs after the shell switches account away from Publish", async () => {
+    const errorToast = vi.spyOn(toast, "error").mockReturnValue("stale");
+    const live = { id: "account-a", version: 1 };
+    const accounts = {
+      active: { id: "account-a" },
+      sessionVersion: 1,
+      isActiveAccount: (id: string, version?: number) => id === live.id && version === live.version,
+    } as unknown as AccountsContextValue;
+    const { repo, control } = pendingRepository();
+    vi.mocked(connectPublish).mockResolvedValue(repo);
+    let workspace!: ReturnType<typeof usePublish>["workspace"];
+    function Capture() {
+      workspace = usePublish().workspace;
+      return <p>ready</p>;
+    }
+    await act(async () =>
+      root.render(
+        <AccountsContext value={accounts}>
+          <PublishProvider session={session} fallback={fallback}>
+            <Capture />
+          </PublishProvider>
+        </AccountsContext>,
+      ),
+    );
+    let saving!: Promise<boolean>;
+    await act(async () => {
+      saving = workspace.createSite("late", siteData).saved;
+    });
+    await act(async () => root.render(<p>Another route</p>));
+    Object.assign(live, { id: "account-b", version: 2 });
+    control.fail(
+      new PublicationError("Couldn't read permissions for https://pod.example/publish/."),
+    );
+    expect(await saving).toBe(false);
+    expect(errorToast).toHaveBeenCalledExactlyOnceWith(STALE_ACCOUNT_FAILURE);
+    expect(JSON.stringify(errorToast.mock.calls)).not.toContain("pod.example");
+    errorToast.mockRestore();
+  });
+  it("hides a late failure's pod URLs after a standalone session changes account", async () => {
+    const errorToast = vi.spyOn(toast, "error").mockReturnValue("stale");
+    const { repo, control } = pendingRepository();
+    vi.mocked(connectPublish).mockResolvedValueOnce(repo).mockResolvedValueOnce(repository());
+    let workspace!: ReturnType<typeof usePublish>["workspace"];
+    function Capture() {
+      workspace = usePublish().workspace;
+      return <p>{usePublish().session.displayName}</p>;
+    }
+    await act(async () =>
+      root.render(
+        <PublishProvider key="a" session={session} fallback={fallback}>
+          <Capture />
+        </PublishProvider>,
+      ),
+    );
+    let saving!: Promise<boolean>;
+    await act(async () => {
+      saving = workspace.createSite("late", siteData).saved;
+    });
+    const second = { ...session, webId: "https://other.example/me", displayName: "Another writer" };
+    await act(async () =>
+      root.render(
+        <PublishProvider key="b" session={second} fallback={fallback}>
+          <Capture />
+        </PublishProvider>,
+      ),
+    );
+    expect(host.textContent).toBe("Another writer");
+    control.fail(
+      new PublicationError("Couldn't read permissions for https://pod.example/publish/."),
+    );
+    expect(await saving).toBe(false);
+    expect(errorToast).toHaveBeenCalledExactlyOnceWith(STALE_ACCOUNT_FAILURE);
     errorToast.mockRestore();
   });
 });

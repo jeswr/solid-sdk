@@ -99,14 +99,15 @@ export function publishRepository(
     inherited: false,
     source: "",
   };
-  async function permissions(url: string, publicRead: boolean) {
-    const options = {
+  function grantOptions(url: string) {
+    return {
       ...roleOptions,
       kind: url.endsWith("/") ? ("folder" as const) : ("resource" as const),
     };
-    let expected: Awaited<ReturnType<typeof readGrants>>;
+  }
+  async function currentGrants(url: string) {
     try {
-      expected = await readGrants(url, options);
+      return await readGrants(url, grantOptions(url));
     } catch (error) {
       if (isRoleError(error) && error.code === "unsupported")
         throw new UnsupportedPublishAccessError();
@@ -115,6 +116,10 @@ export function publishRepository(
         { cause: error },
       );
     }
+  }
+  async function permissions(url: string, publicRead: boolean) {
+    const options = grantOptions(url);
+    const expected = await currentGrants(url);
     const grants = [
       manager,
       ...(publicRead
@@ -261,6 +266,7 @@ export function publishRepository(
     profile: owner,
     fetch,
   });
+  let indexWarned = false;
   async function listSites(): Promise<PublishListing<StoredSite>> {
     await initialise();
     const urls = new Set<string>();
@@ -278,9 +284,12 @@ export function publishRepository(
         throw new PublicationError("Your pod session has expired. Reconnect to open Publish.", {
           cause,
         });
-      onWarning(
-        "Couldn't read the private Type Index. Publish is showing sites found in its source folder.",
-      );
+      // One notice per repository: every reload would otherwise repeat the same fallback toast.
+      if (!indexWarned)
+        onWarning(
+          "Couldn't read the private Type Index. Publish is showing sites found in its source folder.",
+        );
+      indexWarned = true;
     }
     for (const url of hints) {
       // Discovery hints never widen this app's write boundary.
@@ -467,10 +476,18 @@ export function publishRepository(
       if (!live.has(slug)) await removePageOutput(site, slug);
     }
   }
+  function unreadableWarning(invalid: readonly { url: string }[]) {
+    const sources = invalid.map(({ url }) => url).join(", ");
+    onWarning(
+      `Publish couldn't read these page sources: ${sources}. It left existing public page folders in place. Fix or remove those sources, then update the site to remove stale pages.`,
+    );
+  }
   async function rebuild(site: StoredSite): Promise<StoredSite> {
     const listing = await listPages(site);
     const pages = listing.items.map((p) => p.data).filter((p) => p.status === "published");
-    await cleanStaleOutput(site, pages);
+    // An unreadable page may still be live; never treat it as unpublished and delete its folder.
+    if (listing.invalid.length) unreadableWarning(listing.invalid);
+    else await cleanStaleOutput(site, pages);
     const root = publicUrl(site);
     if (!pages.length) {
       await remove(new URL("index.html", root).href);
@@ -489,8 +506,22 @@ export function publishRepository(
     const renderSite: RenderSite = { ...site.data, publicUrl: root };
     for (const page of pages) {
       const directory = await container(root, page.slug);
-      const access = await readGrants(directory, { ...roleOptions, kind: "folder" });
-      if (access.grants.some((grant) => !grant.inherited)) await permissions(directory, true);
+      const access = await currentGrants(directory);
+      if (access.grants.some((grant) => !grant.inherited)) {
+        // An own ACL without public Read means an earlier unpublish kept extra files private.
+        const wasPrivate = !access.grants.some((grant) => grant.agent.type === "public");
+        await permissions(directory, true);
+        // Some pods list the folder's own access document; it is not a retained file.
+        const policies = new Set(access.grants.map((grant) => grant.source));
+        if (wasPrivate)
+          for await (const entry of storage.listAll(directory))
+            if (!policies.has(entry.url)) {
+              onWarning(
+                `Publish reused ${directory}. Files left in this folder by an earlier unpublish are public again.`,
+              );
+              break;
+            }
+      }
       await output(
         new URL("index.html", directory).href,
         renderPage(renderSite, page, pages),
@@ -553,10 +584,13 @@ export function publishRepository(
     await requireCurrent(page);
     // Remove public bytes before recording draft status; a failed delete never claims privacy.
     const listing = await listPages(site);
-    await cleanStaleOutput(
-      site,
-      listing.items.filter((p) => p.url !== page.url).map((p) => p.data),
-    );
+    // With unreadable pages, remove only this page's folder; theirs may still be live.
+    if (listing.invalid.length) await removePageOutput(site, page.data.slug);
+    else
+      await cleanStaleOutput(
+        site,
+        listing.items.filter((p) => p.url !== page.url).map((p) => p.data),
+      );
     const saved = await savePage(site, page, { ...page.data, status: "draft" });
     return { page: saved, site: await rebuild(site) };
   }

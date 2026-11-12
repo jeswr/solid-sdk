@@ -8,11 +8,13 @@ import {
   type ReactNode,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   useSyncExternalStore,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { connectPublish } from "../lib/data/connect";
 import { createPublishWorkspace, type PublishWorkspace } from "./workspace";
 
@@ -22,6 +24,10 @@ interface PublishContextValue {
   workspace: PublishWorkspace;
 }
 const Context = createContext<PublishContextValue | null>(null);
+const accountKey = (session: PodSession) =>
+  `${session.mode}\n${session.webId}\n${session.storageUrl}`;
+// The account Publish last rendered, for standalone previews without the shell's accounts.
+let renderedAccount: string | undefined;
 export function PublishProvider({
   session,
   children,
@@ -37,6 +43,9 @@ export function PublishProvider({
     repository?: PublishRepository;
     error?: string;
   }>();
+  useLayoutEffect(() => {
+    renderedAccount = accountKey(session);
+  }, [session]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries a failed connection
   useEffect(() => {
     let alive = true;
@@ -81,10 +90,23 @@ function Connected({
   repository: PublishRepository;
   children: ReactNode;
 }) {
-  const workspace = useMemo(
-    () => createPublishWorkspace(repository, session.storageUrl, (message) => toast.error(message)),
-    [repository, session],
-  );
+  const accounts = useOptionalAccounts();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the accounts value changes on every shell render; bind once per session, which changes with its account
+  const workspace = useMemo(() => {
+    const key = accountKey(session);
+    // Captured with this session; the shell check reads live state and survives route unmount.
+    const id = accounts?.active?.id;
+    const version = accounts?.sessionVersion;
+    const isCurrent = () =>
+      renderedAccount === key &&
+      (!accounts || (id !== undefined && accounts.isActiveAccount(id, version)));
+    return createPublishWorkspace(
+      repository,
+      session.storageUrl,
+      (message) => toast.error(message),
+      isCurrent,
+    );
+  }, [repository, session]);
   useEffect(() => {
     void workspace.load();
     return () => {

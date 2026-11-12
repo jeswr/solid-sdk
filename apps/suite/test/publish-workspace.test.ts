@@ -9,7 +9,7 @@ import {
   type StoredSite,
 } from "@jeswr/solid-publish";
 import { describe, expect, it, vi } from "vitest";
-import { createPublishWorkspace } from "../src/apps/publish/state/workspace";
+import { createPublishWorkspace, STALE_ACCOUNT_FAILURE } from "../src/apps/publish/state/workspace";
 
 const root = "https://pod.example/";
 const at = new Date("2026-11-10T10:00:00Z");
@@ -203,6 +203,35 @@ describe("Publish optimistic workspace", () => {
     slow.reject(new Error("late failure"));
     expect(await saving).toBe(false);
     expect(failure).toHaveBeenCalledWith(expect.stringContaining("Couldn't save"));
+  });
+  it("hides a late failure's pod URLs once the account that started the write is gone", async () => {
+    const { repo, site, first } = fixture();
+    let current = true;
+    const failure = vi.fn();
+    const workspace = createPublishWorkspace(repo, root, failure, () => current);
+    await workspace.load();
+    const slow = deferred<StoredPage>();
+    vi.mocked(repo.savePage).mockImplementationOnce(() => slow.promise);
+    const saving = workspace.savePage(site.url, first.url, pageData, "draft");
+    await Promise.resolve();
+    workspace.dispose();
+    current = false;
+    slow.reject(new PublicationError(`Couldn't read permissions for ${first.url}.`));
+    expect(await saving).toBe(false);
+    expect(failure).toHaveBeenCalledExactlyOnceWith(STALE_ACCOUNT_FAILURE);
+    expect(STALE_ACCOUNT_FAILURE).not.toContain(root);
+    // A write that starts after the switch stays generic even if the old account returns later.
+    const queued = deferred<StoredPage>();
+    vi.mocked(repo.savePage).mockImplementationOnce(() => queued.promise);
+    const late = workspace.savePage(site.url, first.url, pageData, "draft");
+    current = true;
+    queued.reject(new PublicationError(`Couldn't read permissions for ${first.url}.`));
+    expect(await late).toBe(false);
+    expect(failure).toHaveBeenLastCalledWith(STALE_ACCOUNT_FAILURE);
+    // While the account is unchanged, the actionable message is kept.
+    vi.mocked(repo.savePage).mockRejectedValueOnce(new PublicationError("Invalid slug"));
+    expect(await workspace.savePage(site.url, first.url, pageData, "draft")).toBe(false);
+    expect(failure).toHaveBeenLastCalledWith("Invalid slug");
   });
   it("finishes queued dependent writes after disposal without notifying unmounted listeners", async () => {
     const { repo, workspace } = fixture();
