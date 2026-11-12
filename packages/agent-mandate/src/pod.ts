@@ -28,17 +28,64 @@ export interface PodMandateOptions {
 }
 
 type Fetch = PodMandateOptions["fetch"];
+const MAX_BODY_BYTES = 256 * 1024;
 
-/** Revocation and key-control evidence must never come from an HTTP cache. */
+/** Evidence must use HTTPS, bypass caches and refuse redirects. */
 function noStore(inner: Fetch): Fetch {
-  return ((input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) =>
-    inner(input, { ...init, cache: "no-store" })) as Fetch;
+  return (async (input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (new URL(url).protocol !== "https:") throw new TypeError("Evidence requires HTTPS");
+    return inner(input, { ...init, cache: "no-store", redirect: "manual" });
+  }) as Fetch;
+}
+
+/** Stop reading immediately at the byte ceiling, before any parser buffers the body. */
+async function readBoundedBody(response: Response): Promise<string | undefined> {
+  const reader = response.body?.getReader();
+  if (!reader) return undefined;
+  let bytes = 0;
+  let text = "";
+  const decoder = new TextDecoder();
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      bytes += chunk.value.byteLength;
+      if (bytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new RangeError("Evidence body exceeds byte limit");
+      }
+      text += decoder.decode(chunk.value, { stream: true });
+    }
+    return text + decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/** The delegated WebID resolver buffers text, so bound its transport first. */
+function boundedProfiles(inner: Fetch): Fetch {
+  return (async (input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) => {
+    const response = await inner(input, init);
+    const text = await readBoundedBody(response);
+    const bounded = new Response(text === undefined ? null : new TextEncoder().encode(text), {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+    // The constructor cannot carry these, but resolver redirect checks require them.
+    Object.defineProperties(bounded, {
+      url: { value: response.url },
+      redirected: { value: response.redirected },
+    });
+    return bounded;
+  }) as Fetch;
 }
 
 /** Bounded browser-safe transport; parsing alone never establishes authority. */
 export function createPodMandateVerifier(options: PodMandateOptions): MandateVerifier {
   const evidenceFetch = noStore(options.fetch);
-  const profileFetch = noStore(options.profileFetch ?? options.fetch);
+  const profileFetch = boundedProfiles(noStore(options.profileFetch ?? options.fetch));
   let statusListCredential: string;
   try {
     statusListCredential = new URL("status.ttl", options.credentialUrl).href;
@@ -76,26 +123,8 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
               (response.url && response.url !== options.credentialUrl)
             )
               return undefined;
-            const reader = response.body?.getReader();
-            if (!reader) return undefined;
-            let bytes = 0;
-            let text = "";
-            const decoder = new TextDecoder();
-            try {
-              for (;;) {
-                const chunk = await reader.read();
-                if (chunk.done) break;
-                bytes += chunk.value.byteLength;
-                if (bytes > 256 * 1024) {
-                  await reader.cancel();
-                  return undefined;
-                }
-                text += decoder.decode(chunk.value, { stream: true });
-              }
-              text += decoder.decode();
-            } finally {
-              reader.releaseLock();
-            }
+            const text = await readBoundedBody(response);
+            if (text === undefined) return undefined;
             const vc = await parseMandateCredential(text);
             return vc?.id === options.credentialUrl ? vc : undefined;
           },
