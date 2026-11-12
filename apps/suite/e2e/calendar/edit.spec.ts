@@ -1,14 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFile } from "node:fs/promises";
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { accessible, prepareCalendar } from "./fixtures";
 
 const fixture = new URL("./fixtures/five-events.ics", import.meta.url);
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
-});
+test.beforeEach(({ page }) => prepareCalendar(page));
 async function open(page: Page, date = "2027-01-01") {
   await page.goto(`/calendar/month?d=${date}`);
   await expect(page.getByRole("grid", { name: "Month calendar" })).toBeVisible();
@@ -64,7 +62,7 @@ test("quick-create, edit one occurrence and delete following with accessible for
   await open(page);
   const popover = await quick(page);
   await popover.getByLabel("Title", { exact: true }).fill("Weekly planning");
-  expect((await new AxeBuilder({ page }).include(".cal-quick").analyze()).violations).toEqual([]);
+  await accessible(page);
   await popover.getByRole("button", { name: "More options", exact: true }).click();
   const form = await editor(page);
   await expect(form.getByLabel("Title", { exact: true })).toHaveValue("Weekly planning");
@@ -73,13 +71,7 @@ test("quick-create, edit one occurrence and delete following with accessible for
   await form.getByLabel("Occurrences", { exact: true }).fill("6");
   await form.getByRole("button", { name: "Add reminder", exact: true }).click();
   await form.getByLabel("Reminder 1", { exact: true }).selectOption("-PT1H");
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .include((page.viewportSize()?.width ?? 0) >= 1024 ? ".cal-editor" : ".cal-editor-page")
-        .analyze()
-    ).violations,
-  ).toEqual([]);
+  await accessible(page);
   await form.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/calendar\/month\?d=2027-01-01$/);
   await expect(planning(page, "2027-01-04")).toHaveCount(1);
@@ -137,9 +129,7 @@ test("imports five fixture events and exports all calendar masters as parseable 
   await page.getByLabel("Import ICS file", { exact: true }).setInputFiles(fixture.pathname);
   const dialog = page.getByRole("dialog", { name: "Import calendar events", exact: true });
   await expect(dialog.getByText("5 events · 0 skipped", { exact: true })).toBeVisible();
-  expect(
-    (await new AxeBuilder({ page }).include(".cal-import-dialog").analyze()).violations,
-  ).toEqual([]);
+  await accessible(page);
   await dialog.getByRole("button", { name: "Import", exact: true }).click();
   await expect(dialog.getByRole("status")).toHaveText("5 imported, 0 failed");
   await dialog.getByRole("button", { name: "Done", exact: true }).click();

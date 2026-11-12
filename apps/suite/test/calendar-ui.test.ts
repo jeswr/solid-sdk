@@ -239,6 +239,9 @@ it("shows two phone indicators, opens the tapped day's agenda and preserves grid
   await key(document.activeElement as HTMLElement, "Enter");
   expect(document.querySelector(".cal-quick")).not.toBeNull();
   await key(document.activeElement as HTMLElement, "Escape");
+  await settle();
+  expect(document.querySelector(".cal-quick")).toBeNull();
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-03");
   const empty = mounted.host.querySelector<HTMLElement>(
     '.cal-month [data-day="2026-11-05"] .cal-month-open',
   ) as HTMLElement;
@@ -409,7 +412,7 @@ it("renders agenda pagination, navigation shortcuts and input exclusions", async
   await key(mounted.host.querySelector("input") as HTMLElement, "t");
   expect(mocks.router.replace).not.toHaveBeenCalled();
 });
-it("renders empty and error states with calendar creation and retry actions", async () => {
+async function withoutCalendars() {
   const session = mocks.session as PodSession;
   mocks.session = {
     ...session,
@@ -421,15 +424,167 @@ it("renders empty and error states with calendar creation and retry actions", as
       ),
     }).fetch,
   };
+}
+async function nameFirstCalendar(name: string) {
+  const dialog = document.querySelector(".cal-create") as HTMLElement;
+  await changeField(dialog.querySelector("input") as HTMLInputElement, name);
+  await act(() =>
+    dialog
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+}
+it("renders first-run explanation with New event and Import .ics actions", async () => {
+  await withoutCalendars();
   const mounted = await mount(screen());
   await settle();
   expect(mounted.host.textContent).toContain("Your calendar starts here");
-  await mounted.unmount();
-  mocks.session = { ...session, fetch: async () => new Response(null, { status: 403 }) };
-  const denied = await mount(screen());
+  expect(mounted.host.textContent).toContain("first calendar");
+  const action = mounted.host.querySelector<HTMLAnchorElement>(".cal-screen a");
+  expect(action?.textContent).toBe("New event");
+  const query = new URL(action?.href as string).searchParams;
+  expect(query.get("start")).toBe("2026-11-01");
+  expect(query.get("end")).toBe("2026-11-02");
+  expect(query.get("return")).toBe("/calendar/week?d=2026-11-01");
+  const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
+  const choose = vi.spyOn(input, "click").mockImplementation(() => undefined);
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Import .ics",
+    ) as HTMLElement,
+  );
+  expect(choose).toHaveBeenCalledOnce();
+  expect(mounted.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+});
+it("creates the first calendar inside the event editor without submitting or losing its draft", async () => {
+  await withoutCalendars();
+  mocks.path = "/calendar/e/new";
+  mocks.extra = { start: "2026-11-01", end: "2026-11-02", return: "/calendar/week?d=2026-11-01" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: "new" }) }));
   await settle();
-  expect(denied.host.querySelector('[role="alert"]')).not.toBeNull();
-  expect(denied.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(editor.querySelector('[aria-label="Title"]') as HTMLInputElement, "First plan");
+  await click(
+    [...editor.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Create calendar"),
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Family");
+  expect((editor.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "First plan",
+  );
+  expect((editor.querySelector('[aria-label="Calendar"]') as HTMLSelectElement).value).toBe(
+    `${DEMO_ROOT}calendar/family.ttl#it`,
+  );
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect(editor.querySelector('[role="alert"]')).toBeNull();
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect(mocks.router.push).toHaveBeenCalledWith("/calendar/week?d=2026-11-01");
+  const account = mocks.session as PodSession;
+  const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/family/`,
+    new Date("2026-11-01"),
+    new Date("2026-11-02"),
+  );
+  expect(events.map((e) => e.data.name)).toEqual(["First plan"]);
+});
+it("imports into the first calendar created from the import dialog", async () => {
+  await withoutCalendars();
+  await mount(screen());
+  await settle();
+  const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
+  const text =
+    "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:first\nSUMMARY:First import\nDTSTART;VALUE=DATE:20261101\nEND:VEVENT\nEND:VCALENDAR";
+  Object.defineProperty(input, "files", {
+    value: [{ name: "first.ics", size: text.length, text: async () => text }],
+    configurable: true,
+  });
+  await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  const dialog = document.querySelector(".cal-import-dialog") as HTMLElement;
+  expect(dialog.textContent).toContain("1 events · 0 skipped");
+  await click(
+    [...dialog.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Create calendar"),
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Imported");
+  expect((dialog.querySelector('[aria-label="Target calendar"]') as HTMLSelectElement).value).toBe(
+    `${DEMO_ROOT}calendar/imported.ttl#it`,
+  );
+  await click(
+    [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Import") as HTMLElement,
+  );
+  await settle();
+  expect(dialog.querySelector('[role="status"]')?.textContent).toBe("1 imported, 0 failed");
+});
+it("renders Nothing scheduled for the visible agenda range and updates it on pagination", async () => {
+  const session = mocks.session as PodSession;
+  mocks.session = {
+    ...session,
+    fetch: createDemoPod({
+      root: DEMO_ROOT,
+      seed: (await buildDemoSeed(NOW)).filter(
+        (file) => !/^calendar\/(work|personal)\/.+\.ttl$/.test(file.path),
+      ),
+    }).fetch,
+  };
+  mocks.path = "/calendar/agenda";
+  const mounted = await mount(screen("agenda"));
+  await settle();
+  const agenda = mounted.host.querySelector(".cal-agenda") as HTMLElement;
+  expect(agenda.textContent).toContain("Nothing scheduled");
+  expect(agenda.textContent).toContain("1 Nov 2026 to 30 Nov 2026");
+  expect(mounted.host.textContent).not.toContain("Your calendar starts here");
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Load more",
+    ) as HTMLElement,
+  );
+  await settle();
+  expect(mounted.host.querySelector(".cal-agenda")?.textContent).toContain(
+    "1 Nov 2026 to 30 Dec 2026",
+  );
+});
+it.each([
+  "unreachable",
+  "load failure",
+])("renders a plain-English %s state and retries successfully", async (failure) => {
+  const session = mocks.session as PodSession;
+  let broken = true;
+  mocks.session = {
+    ...session,
+    fetch: async (input, init) => {
+      if (broken) {
+        if (failure === "unreachable") throw new TypeError("private diagnostic details");
+        return new Response("private diagnostic details", { status: 500 });
+      }
+      return session.fetch(input, init);
+    },
+  };
+  const mounted = await mount(screen());
+  await settle();
+  const error = mounted.host.querySelector('[role="alert"]') as HTMLElement;
+  expect(error.textContent).toContain("Can't reach your storage");
+  expect(error.textContent).toContain(
+    "We couldn't load your calendar. Check your connection and try again.",
+  );
+  expect(error.textContent).not.toContain("private diagnostic");
+  expect(mounted.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+  expect(mounted.host.textContent).not.toContain("Nothing scheduled");
+  broken = false;
+  await click(
+    [...error.querySelectorAll("button")].find((b) => b.textContent === "Retry") as HTMLElement,
+  );
+  await settle();
+  expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+  expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(3);
 });
 it("exposes optimistic mutation hooks and refreshes subscriptions without leaking the old account", async () => {
   let latest: ReturnType<typeof useEventsInRange> | undefined;

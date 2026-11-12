@@ -1,11 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { prepareCalendar } from "./fixtures";
 
 // The demo seed is relative to "today": Sunday 1 Nov 2026, in a Monday-start week.
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
-});
+test.beforeEach(({ page }) => prepareCalendar(page));
 async function open(page: Page, view: "week" | "day" | "month") {
   await page.goto(`/calendar/${view}?d=2026-11-01`);
   await expect(page.getByText(/events loaded/)).toBeAttached();

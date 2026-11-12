@@ -4,68 +4,12 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { buildEvent, serializeDataset } from "../../src/apps/calendar/lib/model/rdf";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { accessible, editDemo, prepareCalendar } from "./fixtures";
 
 const ROOT = "https://alice.demo.pod/";
-/** Change the same durable pod another tab reads, then send its real change notification. */
-async function editDemo(page: Page, edits: { path: string; body: string | null }[]) {
-  return page.evaluate(
-    async ({ root, edits }) => {
-      const request = indexedDB.open("solid-suite-demo", 1);
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const originals: { path: string; body: string }[] = [];
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction("pods", "readwrite");
-        const store = tx.objectStore("pods");
-        const read = store.get(root);
-        read.onsuccess = () => {
-          const stored = read.result as { revision: string; snapshot: DemoPodSnapshot };
-          let resources = [...stored.snapshot.resources];
-          let seq = stored.snapshot.etagSeq;
-          for (const edit of edits) {
-            const url = new URL(edit.path, root).href;
-            const previous = resources.find(([key]) => key === url)?.[1];
-            if (!previous) throw new Error(`Missing demo fixture: ${edit.path}`);
-            originals.push({ path: edit.path, body: new TextDecoder().decode(previous.body) });
-            resources = resources.filter(([key]) => key !== url);
-            if (edit.body !== null)
-              resources.push([
-                url,
-                {
-                  ...previous,
-                  body: new TextEncoder().encode(edit.body),
-                  etag: `"regression-${++seq}"`,
-                },
-              ]);
-          }
-          store.put(
-            {
-              revision: crypto.randomUUID(),
-              snapshot: { ...stored.snapshot, resources, etagSeq: seq },
-            },
-            root,
-          );
-        };
-        tx.oncomplete = () => resolve();
-        tx.onabort = tx.onerror = () => reject(tx.error);
-      });
-      db.close();
-      const channel = new BroadcastChannel("solid-suite-demo-changes");
-      channel.postMessage(root);
-      channel.close();
-      return originals;
-    },
-    { root: ROOT, edits },
-  );
-}
-
 const DATE = "2026-11-01";
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
-});
+test.beforeEach(({ page }) => prepareCalendar(page));
 async function open(page: Page, view = "week") {
   await page.goto(`/calendar/${view}?d=${DATE}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -334,13 +278,7 @@ test("creates a named calendar with a persisted colour", async ({ page }) => {
 for (const view of ["month", "week", "day", "agenda"]) {
   test(`${view} is accessible and fits the viewport`, async ({ page }) => {
     await open(page, view);
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-      .analyze();
-    expect(results.violations).toEqual([]);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await accessible(page);
     if (view === "agenda") {
       await page.getByRole("button", { name: "Load more", exact: true }).click();
       await expect(page.getByRole("button", { name: "Load more", exact: true })).toBeVisible();

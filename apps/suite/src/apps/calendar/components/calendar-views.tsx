@@ -4,7 +4,6 @@
 import {
   Button,
   EmptyState,
-  ErrorState,
   LoadingSkeleton,
   Popover,
   PopoverContent,
@@ -33,7 +32,8 @@ import {
   stepDate,
   visibleRange,
 } from "../state/view";
-import { CreateCalendar, useCalendarNavigation } from "./calendar-app";
+import { useCalendarNavigation } from "./calendar-app";
+import { CalendarEmptyRange, CalendarFirstRun, CalendarLoadError } from "./calendar-states";
 import {
   type ActiveDrag,
   CalendarDragProvider,
@@ -807,9 +807,7 @@ function Agenda({
   const groups = agendaGroups(events, from, to);
   return (
     <div className="cal-agenda">
-      {groups.length === 0 && !incomplete && (
-        <EmptyState title="No events" body="There are no events in this date range." />
-      )}
+      {groups.length === 0 && !incomplete && <CalendarEmptyRange from={from} to={to} />}
       {groups.map(({ day, events: dayEvents }) => (
         <section key={day}>
           <h2>
@@ -846,17 +844,13 @@ export function CalendarScreen({ view }: { view: CalendarView }) {
           ),
           error:
             calendars.status === "error" || state.status === "error" ? (
-              <ErrorState error="unreachable" actions={{ retry: calendars.reload }} />
+              <CalendarLoadError retry={state.reload} />
             ) : undefined,
           empty:
             calendars.status === "ready" &&
             calendars.calendars.length === 0 &&
             !calendars.warnings.length ? (
-              <EmptyState
-                title="Your calendar starts here"
-                body="Create a calendar to keep your events together."
-                primaryAction={<CreateCalendar />}
-              />
+              <CalendarFirstRun date={date} view={view} />
             ) : undefined,
           children: () =>
             state.status === "ready" && (
@@ -897,7 +891,8 @@ function CalendarWarnings({ state }: { state: ReturnType<typeof useEventsInRange
     state.status === "ready" &&
     state.warnings.map((warning, index) => (
       <div className="cal-warning" role="status" key={String(index)}>
-        {warning.title}.{" "}
+        <p>{warning.title}.</p>
+        <p>Some events may be missing. Check your connection and try again.</p>
         <Button variant="ghost" onClick={state.reload}>
           Retry
         </Button>
@@ -929,9 +924,7 @@ export function CalendarSearch() {
       <CalendarWarnings state={state} />
       {renderAsync({
         loading: state.status === "loading" && <LoadingSkeleton />,
-        error: state.status === "error" && (
-          <ErrorState error="unreachable" actions={{ retry: state.reload }} />
-        ),
+        error: state.status === "error" && <CalendarLoadError retry={state.reload} />,
         empty: state.status === "ready" && !state.warnings.length && !matches.length && (
           <EmptyState variant="no-results" query={q} />
         ),

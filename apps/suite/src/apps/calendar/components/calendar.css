@@ -460,6 +460,14 @@
   font-size: 13px;
   background: var(--surface);
 }
+.cal-screen > .suite-async-state,
+.cal-screen > .suite-error-state {
+  margin: 20px;
+}
+.cal-screen .suite-async-state:not(.suite-async-error) .suite-async-tile {
+  color: var(--app-calendar);
+  background: var(--app-calendar-soft);
+}
 @media (max-width: 639px) {
   .cal-top-context h1 {
     font-size: 14px;
@@ -621,6 +629,10 @@
   padding: 0;
 }
 .cal-field {
+  display: grid;
+  gap: 6px;
+}
+.cal-field > label {
   display: grid;
   gap: 6px;
 }

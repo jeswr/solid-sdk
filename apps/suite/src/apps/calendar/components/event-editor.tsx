@@ -56,7 +56,7 @@ import {
   withSourceCalendar,
 } from "../state/editing";
 import { type CalendarInfo, calendarHref, dateKey, eventDateRange, localDate } from "../state/view";
-import { useCalendarNavigation } from "./calendar-app";
+import { CreateCalendar, useCalendarNavigation } from "./calendar-app";
 import { CalendarScreen } from "./calendar-views";
 import { SeriesScopeDialog } from "./series-scope-dialog";
 
@@ -153,25 +153,34 @@ export function CalendarSelect({
   const { calendars } = useCalendarState();
   const list = calendars.status === "ready" ? calendars.calendars : [];
   const selected = list.find((c) => `${c.url}#it` === value);
+  const first = list[0]?.url;
+  useEffect(() => {
+    if (!value && first) onChange(`${first}#it`);
+  }, [value, first, onChange]);
   return (
-    <label className="cal-field">
-      <span>{label}</span>
-      <span className="cal-calendar-select">
-        <span className="cal-swatch" style={{ backgroundColor: selected?.colour }} />
-        <select
-          aria-label={label}
-          value={value}
-          required
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {list.map((c) => (
-            <option key={c.url} value={`${c.url}#it`}>
-              {c.title}
-            </option>
-          ))}
-        </select>
-      </span>
-    </label>
+    <div className="cal-field">
+      <label>
+        <span>{label}</span>
+        <span className="cal-calendar-select">
+          <span className="cal-swatch" style={{ backgroundColor: selected?.colour }} />
+          <select
+            aria-label={label}
+            value={value}
+            required
+            disabled={!list.length}
+            onChange={(e) => onChange(e.target.value)}
+          >
+            {!list.length && <option value="">Create a calendar first</option>}
+            {list.map((c) => (
+              <option key={c.url} value={`${c.url}#it`}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </span>
+      </label>
+      {calendars.status === "ready" && !list.length && <CreateCalendar />}
+    </div>
   );
 }
 function QuickCreate({
