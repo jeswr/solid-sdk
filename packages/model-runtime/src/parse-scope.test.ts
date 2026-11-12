@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -189,6 +190,14 @@ describe("parse scope budgets and binding", () => {
     const scope = createParseScope(ds, { maxClassReads: 0 });
     entity().parse(DOC, ds, { scope });
     expect(() => entity().parse(id, new Store([...ds]), { scope })).toThrow(/different dataset/);
+  });
+
+  it("rejects a scope whose dataset changed size after creation", () => {
+    const ds = store("ex:doc a ex:Target .");
+    const scope = createParseScope(ds);
+    entity().parse(DOC, ds, { scope });
+    for (const quad of [...ds]) ds.delete(quad);
+    expect(() => entity().parse(DOC, ds, { scope })).toThrow(/stale/);
   });
 
   it("rejects forged scopes and exposes immutable exhaustion state", () => {

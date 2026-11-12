@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -27,6 +28,8 @@ export interface ParseOptions {
 
 interface ScopeState {
   readonly dataset: DatasetCore;
+  /** Dataset size at creation: a cheap tripwire for callers that mutate and keep the scope. */
+  readonly size: number;
   readonly maxClassReads: number;
   reads: number;
   exhausted: boolean;
@@ -38,7 +41,13 @@ const states = new WeakMap<ParseScope, ScopeState>();
 
 /**
  * Share class traversal and one budget across parses of ONE unchanged dataset.
- * Discard the scope after any dataset mutation, including writes through a Wrapper.
+ * Discard the scope after any dataset mutation, including writes through a Wrapper
+ * (a size change is detected and throws; same-size edits are the caller's contract).
+ *
+ * Unlike an unscoped parse, whose class check stops at 10,000 reads per call, a scoped
+ * check may use the whole shared budget, so a subclass chain deeper than 10,000 links can
+ * be recognised under a scope but not without one. Write-time migration audits only the
+ * unscoped projection.
  */
 export function createParseScope(
   dataset: DatasetCore,
@@ -48,7 +57,14 @@ export function createParseScope(
     options.maxClassReads === undefined ? DEFAULT_CLASS_READS : options.maxClassReads;
   if (!Number.isSafeInteger(maxClassReads) || maxClassReads < 0 || maxClassReads > MAX_CLASS_READS)
     throw new RangeError("maxClassReads must be an integer between 0 and 1,000,000");
-  const state: ScopeState = { dataset, maxClassReads, reads: 0, exhausted: false, memo: new Map() };
+  const state: ScopeState = {
+    dataset,
+    size: dataset.size,
+    maxClassReads,
+    reads: 0,
+    exhausted: false,
+    memo: new Map(),
+  };
   const scope: ParseScope = Object.freeze({
     get exhausted() {
       return state.exhausted;
@@ -63,6 +79,8 @@ export function checkParseScope(scope: ParseScope, dataset: DatasetCore): void {
   const state = states.get(scope);
   if (!state) throw new TypeError("scope must be created by createParseScope");
   if (state.dataset !== dataset) throw new TypeError("parse scope belongs to a different dataset");
+  if (dataset.size !== state.size)
+    throw new TypeError("parse scope is stale: its dataset changed after the scope was created");
 }
 
 /** The caller supplies the runtime's streaming RDF primitive, preserving DatasetCore support. */
