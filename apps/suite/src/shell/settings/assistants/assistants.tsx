@@ -36,7 +36,8 @@ const decisionLabels: Record<NonNullable<PersonalDataRead["decision"]>, string> 
   prohibited: "Blocked",
   "refuse-all": "All access refused",
 };
-function clientLabel(client: string, serverUrl: string | undefined) {
+function clientLabel(client: string | undefined, serverUrl: string | undefined) {
+  if (!client) return "Unrecognised assistant";
   const url = new URL(client);
   return url.host === (serverUrl ? new URL(serverUrl).host : undefined) &&
     url.pathname.startsWith("/clients/")
@@ -83,8 +84,9 @@ export function ConnectAssistant({ url }: { url: string | undefined }) {
         </p>
       )}
       <p className="assistant-note">
-        In single-user mode, no connection records are written; revoke access by rotating
-        MCP_ACCESS_TOKEN on the assistant server.
+        To disconnect an assistant, remove it in that assistant's connector settings. That stops it
+        using your pod. To also cut off its access on the server, ask whoever runs your assistant
+        server to revoke it.
       </p>
     </section>
   );
@@ -133,15 +135,19 @@ export function PersonalDataReads({
   const current = state?.session === session && state.attempt === attempt ? state : undefined;
   return (
     <section aria-labelledby="personal-data-reads">
-      <h2 id="personal-data-reads">Personal data reads</h2>
+      <h2 id="personal-data-reads">Sensitive data reads</h2>
       <p>
-        Each time a connected assistant reads personal data your pod records, it's listed here. The
-        data itself is never shown.
+        Each time a connected assistant reads sensitive personal data, such as health, biometric or
+        financial details, your pod records it and it's listed here. Other reads, such as your name
+        or address, aren't recorded yet. The data itself is never shown.
       </p>
       {!online ? (
-        <EmptyState variant="not-available-offline" body="Reconnect to load personal data reads." />
+        <EmptyState
+          variant="not-available-offline"
+          body="Reconnect to load sensitive data reads."
+        />
       ) : !current ? (
-        <LoadingSkeleton preset="list" count={3} label="Loading personal data reads" />
+        <LoadingSkeleton preset="list" count={3} label="Loading sensitive data reads" />
       ) : current.status === "error" ? (
         <ErrorState
           error="unreachable"
@@ -149,11 +155,11 @@ export function PersonalDataReads({
         />
       ) : current.rows.length === 0 ? (
         <EmptyState
-          title="No personal data reads yet"
-          body="Recorded personal data reads will appear here."
+          title="No sensitive data reads yet"
+          body="Recorded sensitive data reads will appear here."
         />
       ) : (
-        <ol className="assistant-audit" aria-label="Personal data reads, newest first">
+        <ol className="assistant-audit" aria-label="Sensitive data reads, newest first">
           {current.rows.map((row, index) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: The read-only projection omits activity IDs and may contain identical metadata rows; items have no local state.
             <li key={`${row.at}-${index}`}>
@@ -213,7 +219,7 @@ function AssistantSettingsContent({ retrySession }: { retrySession: () => void }
       ) : state.status === "loading" ? (
         <LoadingSkeleton preset="list" label="Opening your pod" />
       ) : state.status === "signed-out" ? (
-        <p role="status">Sign in to see personal data reads.</p>
+        <p role="status">Sign in to see sensitive data reads.</p>
       ) : (
         <ErrorState error="unreachable" actions={{ retry: retrySession }} />
       )}

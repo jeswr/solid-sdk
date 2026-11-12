@@ -13,7 +13,7 @@ test("assistant setup and personal-data reads", async ({ page }, info) => {
   await page.goto("/settings/assistants");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Assistants");
   await expect(
-    page.getByRole("list", { name: "Personal data reads, newest first" }).getByRole("listitem"),
+    page.getByRole("list", { name: "Sensitive data reads, newest first" }).getByRole("listitem"),
   ).toHaveCount(2);
   await page.evaluate(() => document.fonts.ready);
   if (BASELINED.has(info.project.name))

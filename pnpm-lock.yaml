@@ -5233,6 +5233,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/mcp-connections':
+        specifier: workspace:*
+        version: link:../mcp-connections
       '@microsoft/api-extractor':
         specifier: 7.58.9
         version: 7.58.9(@types/node@26.1.1)

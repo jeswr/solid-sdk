@@ -8,7 +8,12 @@ import { MCP } from "./vocab.js";
 
 export interface PersonalDataRead {
   at: string;
-  client: string;
+  /**
+   * The assistant's IRI. Absent when the entry names no client, several, or one that is not a
+   * credential-free HTTP(S) IRI (such as a URN); the row is still kept, so the view never
+   * under-reports, and callers show it as an unrecognised assistant.
+   */
+  client?: string;
   tool?: string;
   purpose?: string;
   categories: string[];
@@ -44,20 +49,14 @@ class Activity extends TermWrapper {
   row(): PersonalDataRead | undefined {
     const at = this.text(`${PROV}startedAtTime`);
     const clients = this.iris(`${PROV}wasAssociatedWith`);
-    if (!at || !validDate(at) || clients.length !== 1) return;
-    const client = clients[0] as string;
-    try {
-      const url = new URL(client);
-      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return;
-    } catch {
-      return;
-    }
+    if (!at || !validDate(at)) return;
     const row: PersonalDataRead = {
       at: new Date(at).toISOString(),
-      client,
       categories: this.iris(`${DPV}hasPersonalData`),
       source: "monthly",
     };
+    const client = clients.length === 1 ? clients[0] : undefined;
+    if (client && safeClient(client)) row.client = client;
     const purpose = this.iris(`${DPV}hasPurpose`);
     if (purpose.length === 1) row.purpose = purpose[0] as string;
     const tool = this.text(`${MCP}tool`);
@@ -79,6 +78,15 @@ class Activity extends TermWrapper {
 class MonthlyDataset extends DatasetWrapper {
   activities() {
     return this.instancesOf(`${PROV}Activity`, Activity);
+  }
+}
+
+function safeClient(client: string): boolean {
+  try {
+    const url = new URL(client);
+    return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
   }
 }
 

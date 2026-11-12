@@ -237,15 +237,15 @@ describe("monthly audit projection", () => {
     "urn:client",
     "https://u:p@client.example/id",
     "http://[broken",
-  ])("drops unsafe client %s", async (client) => {
+  ])("keeps a row with unsafe client %s, without the client", async (client) => {
     const text = document((node) => {
       activity(node, "urn:bad", undefined, client);
     });
-    expect(await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100)).toEqual(
-      [],
-    );
+    expect(await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100)).toEqual([
+      { at: "2026-11-01T12:00:00.000Z", categories: [], source: "monthly" },
+    ]);
   });
-  it("drops missing/ambiguous/wrong-term fields while retaining valid rows", async () => {
+  it("drops missing/ambiguous dates, keeps unrecognised clients, and retains valid rows", async () => {
     const text = document((node) => {
       activity(node, "urn:ambiguous-date").text(`${PROV}startedAtTime`, "2026-11-02T00:00:00Z");
       activity(node, "urn:ambiguous-client").iri(
@@ -265,13 +265,13 @@ describe("monthly audit projection", () => {
         .iri(`${DPV}hasPurpose`, "urn:second");
     });
     const rows = await monthlyAuditSource.list(reader({ "2026-11.ttl": text }), storage, 100);
-    expect(rows).toEqual([
-      {
-        at: "2026-11-01T12:00:00.000Z",
-        client: "http://client.example/",
-        categories: [],
-        source: "monthly",
-      },
+    const unrecognised = { at: "2026-11-01T12:00:00.000Z", categories: [], source: "monthly" };
+    expect(rows).toHaveLength(3);
+    expect(rows).toContainEqual({ ...unrecognised, client: "http://client.example/" });
+    // The two-client and literal-client rows stay visible as unrecognised assistants.
+    expect(rows.filter((row) => row.client === undefined)).toEqual([
+      unrecognised,
+      { ...unrecognised, at: "2026-11-01T00:00:00.000Z" },
     ]);
   });
   it("bounds aggregate activity count including invalid activities", async () => {

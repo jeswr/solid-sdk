@@ -15,7 +15,8 @@ Only listing 404/410 means empty. Fail the entire view with fixed text for error
 violations, without backend causes/URLs. Never treat unreadable data as a successful empty view.
 Read membership with ldp-container, parse with fetch-rdf and project fields with @rdfjs/wrapper.
 Accept the newest three direct monthly files, at most 256 KiB / 10,000 quads each and at most
-500 activities in total. Drop invalid date/client rows. Return only PersonalDataRead's whitelist,
+500 activities in total. Drop invalid-date rows; keep rows with a missing, ambiguous or
+unsafe client without `client` (never drop them, so the audit view cannot under-report). Return only PersonalDataRead's whitelist,
 never values from unknown predicates or resource URLs. Keep newest-first ordering and row limits.
 
 For S2b, regenerate records from codegen/ + codegen.config.json, never edit src/generated.
