@@ -212,6 +212,37 @@ header rules run first with their existing markers. Redaction is pure, emits no
 diagnostics containing input, and produces a fixpoint, so derived message IDs stay
 stable when capture and storage both redact. Value scanning takes linear time.
 
+### Repairing chats stored before redaction
+
+Older MCP `chat_save` calls stored titles and message text verbatim, and the redaction rules
+have grown since. `migrateRedaction()` is an owner-run repair (bead sst-5ax.39):
+
+```ts
+const report = await chats.migrateRedaction({ dryRun: true }); // counts only, no writes
+await chats.migrateRedaction(); // { conversations, titles, messagesRewritten, messagesReplaced, conflicts }
+```
+
+It walks every provider's conversations and checks each title and message against
+`redactSecrets`. Every change is conditional on the ETag it read, so the port's `read` must
+return ETags; a resource that changed meanwhile (412) is counted in `conflicts` and left for
+the next run.
+
+- Titles, and messages with a source ID, are rewritten in place with `If-Match`. Their ACLs
+  are not touched, and the rest of the conversation metadata (provenance) is kept.
+- A message whose ID was derived from its unredacted text moves to the ID a redacted save
+  derives. The redacted message is created owner-only first (ACL before content, as in
+  `save`), then the original is deleted with `If-Match`.
+- When a redacted copy with the same role, text and time already exists, which is what a
+  replay after the redaction change wrote, the original is deleted and the copy is kept.
+  A copy that does not match aborts the run.
+
+Afterwards no secret matched by the current rules stays in the archive, each message appears
+once, and replaying the original conversation writes nothing. Re-running is safe. The real
+run needs the optional `ChatPodPort.delete(url, { ifMatch })`; a dry run does not. Delete must
+reject an ETag mismatch with status 412, and the server must delete the resource's ACL with it,
+as Solid servers do. `solid-capture redact-archive [--dry-run]` in
+`@jeswr/agent-session-capture` runs it with the owner's MCP configuration.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)

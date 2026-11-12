@@ -89,6 +89,8 @@ export type {
   ChatMessage,
   ChatPodPort,
   ChatProvider,
+  ChatRedactionOptions,
+  ChatRedactionReport,
   ChatRole,
   ChatSummary,
 } from "./chat-writer.js";
