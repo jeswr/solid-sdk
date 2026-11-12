@@ -69,13 +69,23 @@ load during `login()` and `restore()`; call one before fetching when no static r
 Without a WebID, configure roots explicitly. Neither the WebID document's origin nor the OIDC issuer's
 origin is implicitly a resource grant. Profile-linked non-container storage identifiers may resolve to
 LWS descriptions (`id`, `Storage`, `StorageRoot.serviceEndpoint`) or Solid descriptions (`pim:Storage`).
+An advertised root must be a container on the storage identifier's origin and confirm itself through
+an unauthenticated, non-redirected HEAD: exactly one LWS storage Link back to that identifier, or a
+Solid `pim:Storage` type Link on a root that contains the identifier or names it as its only
+`solid:storageDescription`. This includes roots above the identifier; an unconfirmed broader or sibling
+same-origin root grants nothing. At most eight same-origin roots are probed per identifier. Invalid,
+foreign-origin and non-container roots are silently dropped.
 Description requests omit credentials and reject redirects. Profile redirects locate the public
 document; assertions must still name the original WebID. Invalid assertions grant nothing.
 
 A target's `Link` headers, `pim:Storage` type, ancestor responses, storage description, or
-`WWW-Authenticate` challenge never adds a credential root. UMA/LWS authorization servers and exchange
-endpoints must use an already granted storage origin or an explicitly configured AS origin; configure
-such an AS using `boundary.roots`. LWS realms must fit a grant, or identify a description whose root
+`WWW-Authenticate` challenge never adds a credential root. UMA authorization servers must be on the
+requested storage's origin or an explicitly configured root's origin (`boundary.roots`); a storage
+learned from the WebID never authorizes its AS for another storage. UMA RPTs
+are cached per storage and account selection, including after `restore()` reuses one OIDC session
+across storages. LWS authorization servers and exchange endpoints must use an already granted storage
+origin or an explicitly configured AS origin; configure such an AS using `boundary.roots`.
+LWS realms must fit a grant, or identify a description whose root
 contains the resource within that grant. A challenge cannot expand the token audience beyond it.
 These checks apply to both OIDC ID-token and CID subject-token exchanges. An untrusted target receives
 no SDK Authorization header, token-bound DPoP proof, UMA claim token, or LWS subject token.
@@ -265,6 +275,113 @@ with `Content-Type: application/ld+json`, and use that URL as pod-auth's `client
 artifact in each Vercel deploy; keep its contents fixed for that deploy. The script generates the
 file only; the hosting application configures the route and headers. It does not change app builds
 or publish a deployment.
+
+## Multiple accounts (`./accounts`, SDK-APP-02)
+
+```ts
+import { createAccountManager, UnknownAccountError } from '@jeswr/pod-auth/accounts';
+
+const manager = createAccountManager(options); // the same PodAuthOptions as createPodAuth
+await manager.restoreAll();
+await manager.add({ webId: aliceWebId }, { signal });
+await manager.add({ webId: bobWebId });
+await manager.switchTo(aliceWebId); // local storage only; no navigation or network
+await manager.fetch(resource); // selects the active account when called
+await manager.fetchFor(bobWebId)(bobResource); // stays bound to Bob
+const stop = manager.on('expired', webId => showExpired(webId));
+await manager.remove(bobWebId);
+stop();
+manager.dispose(); // cancel work and release listeners; keep remembered sessions
+```
+
+`accounts()` and `active()` return synchronous, credential-free identity copies. `on('change',
+handler)` reports completed add, remove, switch and restore operations. Unknown WebIDs throw
+`UnknownAccountError` (`webId`); asynchronous actions reject with it. A failed or cancelled add
+preserves the account list and active pointer. Repeating a WebID replaces only that account,
+preserving its position. Additions can authorize concurrently, each with a fresh DPoP key and
+credential boundary. Removal selects the first remaining account when the active account is removed.
+
+The sessions store holds a public list of WebIDs and opaque session scopes beside the active
+WebID. These pointers never establish identity: `restoreAll()` asks each core to validate its own
+refresh record and non-extractable key under the existing refresh lock. Accounts restore independently;
+expired or temporarily unavailable accounts cannot prevent another from restoring. Transient failures
+retain their pointers for retry. The persisted active account wins if it restores, otherwise the first
+restored account wins. An expiry event carries that account's WebID. `authFor(webId)` exposes its
+actual core for adapters; `authFor(null)` supplies an anonymous adapter whose login calls `add()`.
+WebID-less agent sessions are outside this manager's contract.
+
+Each core uses a separate public `sessionScope` in its session/key/fence namespace. Calling
+`logout({ scope: 'session' })` requires that option and revokes/purges only the selected scope,
+including its stored key. Ordinary unscoped `logout()` retains its existing all-sessions behavior.
+Manager removal uses scoped logout; replacement retires only the old scope. Replacement and failed-add
+cleanup attempt revocation and local purge even if the OP fails. Cache stores can be shared; storage
+capability caches remain partitioned by storage ID. No credentials move when switching.
+
+Removal matches both WebID and scope, preserving a newer replacement's pointer in other managers.
+Restore adopts the currently remembered scope. Durable sessions are checked before cached credentials
+leave the core; a missing pointer or credential emits expiry, with checks fenced against newer lifecycle
+operations. Disposal also closes pending and retiring cores and cancels revocation deadlines; it keeps
+remembered sessions available for restoration.
+Expiry advances the scope's session generation and refuses fetch/restore until explicit login succeeds.
+Failed or cancelled login leaves that expired state in place. All cores using the same scope share its
+generation; use the manager's separate scopes for independent accounts. `restore({ signal })` supports
+cancelling an OIDC restore, and manager disposal aborts its restores before any further core creation.
+
+For React, use `AccountsProvider` and `useAccounts` from `@jeswr/suite-sdk`; existing `usePodAuth`
+consumers follow the active core. A single account is a manager with one account, so a separate
+single-session fallback is unnecessary. Existing `PodAuthProvider` usage keeps working.
+
+## Open a resource shared from another pod (resource grants)
+
+The credential boundary only covers the account's own storages. To read or write a private
+resource someone shared from their pod, the user consents once and the app records a grant:
+
+```ts
+import { ResourceGrantError } from '@jeswr/pod-auth';
+
+// Only in the click handler of a consent screen that names the origin and resource.
+try {
+  await auth.grantResource('https://alice.example/sheets/budget/');
+  const response = await auth.fetch('https://alice.example/sheets/budget/workbook.json');
+} catch (error) {
+  if (error instanceof ResourceGrantError) showRefusal(error.reason);
+}
+```
+
+There is one grant mechanism with one set of rules, all enforced in the core:
+
+- A grant is a container (trailing `/`, covering its descendants) or one exact resource, in its
+  canonical HTTPS spelling (loopback HTTP only with `allowInsecureLoopback`). Queries, fragments,
+  credentials, dot or encoded segments, `//` and non-canonical spellings are refused
+  (`invalid-url`), as are whole origins (`origin-wide`), anything inside or containing the
+  account's own storages or storage endpoints (`own-storage`), and anything inside a path-based
+  issuer or containing the issuer, its discovery documents, a metadata endpoint or a dot-prefixed
+  path segment on the issuer's origin (`protocol-endpoint`).
+- It needs a signed-in account (`signed-out`) and, where the browser reports user activation, a
+  user gesture (`no-user-activation`). That check is transient (any recent click passes) and absent
+  outside browsers, so it is defence in depth only: the app's consent screen, naming the origin and
+  resource, is the control.
+- Reads and writes inside a grant get the account's Solid-OIDC credentials, reusing its session
+  (no second authorization). A request that starts inside a grant never follows a redirect,
+  natively or after a 401: with the default `redirect: "follow"` it rejects with a `TypeError`, and
+  an explicit `manual` mode returns the redirect as it is. Outside browsers that response exposes
+  its `Location`: never pass it to `auth.fetch` unless `isWithinGrantedScope(location)` is true.
+  Request containers with their trailing slash, since even a same-grant redirect rejects. A grant never becomes a storage
+  (`Identity.storages`), an authorization-server trust anchor, a UMA/LWS resource or a login
+  context, so UMA and LWS exchanges for a granted URL are refused, and a grant server's 401s
+  cannot force the shared session to renew.
+- Grants live in memory on the account's core: each account in an account manager has its own,
+  and logout, expiry, session supersession and `dispose()` end them. Switching accounts neither
+  ends them nor emits a `grants` event. Queued work must record its WebID and grant root, then
+  re-check `manager.authFor(webId).isWithinGrantedScope(url)` and send with
+  `manager.fetchFor(webId)`. A reload asks again.
+- Granting a URL inside an existing grant returns that covering grant, so revoking it ends access
+  to everything beneath it.
+- `grants()` lists them, `revokeResource(grant | root)` ends one before the next request,
+  `isWithinGrantedScope(url)` checks scope synchronously, and `on('grants', …)` reports every change
+  with the new list in `event.grants`. `withinResourceGrants(grants, url)` is the pure matcher.
+
+These members are optional on `PodAuth`; agents and test doubles may omit them.
 
 ## Session lifecycle
 

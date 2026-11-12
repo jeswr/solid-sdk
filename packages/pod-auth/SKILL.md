@@ -1,9 +1,10 @@
 ---
 name: pod-auth
-description: Use when integrating @jeswr/pod-auth login, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
+description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, resource grants for items shared from other pods, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Work with `@jeswr/pod-auth`
 
@@ -26,6 +27,7 @@ refresh CAS and durable retirement. Signing keys are imported non-extractable; b
 | --- | --- |
 | `@jeswr/pod-auth` | `createPodAuth`, credential-bounded fetch, UI hooks and session lifecycle |
 | `@jeswr/pod-auth/react` | Optional `PodAuthProvider` / `usePodAuth` lifecycle mirror |
+| `@jeswr/pod-auth/accounts` | `createAccountManager`, independent account sessions, local switching and restore |
 | `@jeswr/pod-auth/node` | `forClientCredentials` and `forCid` agent factories; `createNodeOidcClient` and `storageDescriptionRoots` (LWS realm checks) for server brokers |
 | `@jeswr/pod-auth/testing` | Node-only mock OP, mock LWS AS and memory store |
 | `@jeswr/pod-auth/directory` | Provider metadata, WebID/provider address resolution and recent providers |
@@ -64,7 +66,7 @@ Construct one core per application session. `ui.getCode` must return the complet
 including `state`, `code` and `iss`, honor cancellation and own popup/redirect cleanup. Choose among
 advertised issuers explicitly; omitting the chooser for multiple issuers throws `AmbiguousIssuerError`.
 Same-hint concurrent login is single-flight; different hints reject while login is pending. Log out
-before switching accounts. `identity()` reads claims only; it never refreshes, contacts an issuer or
+before switching accounts on the same core, or use the account manager below. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 
 Use the pure `./directory` entry point for shared sign-in address handling. `KNOWN_PROVIDERS` is deeply
@@ -117,12 +119,33 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated
   WebID, optionally through its linked LWS/Solid description. Call login/restore first when there are
   no static roots. Identities without WebIDs, including CID agents, need configured storage roots.
+  Description-advertised roots require a container URL on the identifier's origin and an unauthenticated,
+  non-redirected HEAD confirming a Solid `pim:Storage` type Link or exactly one LWS storage Link back to
+  that identifier. Even an ancestor containing the identifier needs confirmation. Drop invalid,
+  foreign-origin, non-container and unconfirmed claims silently. Reuse the engine's `head`, `describes`,
+  `selfIdentifiedSolidRoot` and `parseLinks` helpers; never trust the description alone.
   Never use `AutomaticCredentialBoundary` to authorize response-asserted roots: a target's type Link,
   storage Link/description, ancestor HEADs, challenge realm/AS or redirect destination is not a grant.
-- Apply the boundary's explicit AS-origin policy to UMA and both LWS discovery forms, including CID
-  composition. Exchange endpoints must also use granted origins and reject redirects. LWS audiences
+- Require UMA `as_uri` to use the requested storage's origin or an explicitly configured root's
+  origin (`boundary.trustUmaAuthorizationServer`); a learned storage's AS cannot receive another
+  storage's claim token or supply its RPT. Keep UMA's RPT context keyed by boundary storage and
+  captured account selection, separately from the OIDC session context. Restore may share the OIDC
+  session across storages but must never share their RPTs. Translate the captured UMA context only at
+  the shared-session read, preserving account validation and fences.
+- Apply the boundary's explicit AS-origin policy to both LWS discovery forms, including CID
+  composition. Exchange endpoints must use granted origins and reject redirects. LWS audiences
   must stay inside an existing grant, directly or through a description rooted within it; metadata
   can only narrow authority. Refuse before sending claim/subject tokens to untrusted endpoints.
+- Resource grants (`grantResource`, README "Open a resource shared from another pod") are the only
+  consented foreign-credential mechanism; never add a second one. They live in a third
+  `consented` CredentialBoundary inside `createBoundary`: included in `allows`/`contextKey`, never
+  in `roots()`, `storages()`, `trustsOrigin`, AS/LWS trust (`allowsOwn`) or login contexts.
+  Requests starting in a grant use `redirect: "error"` (index.ts `confined`), and a granted
+  upgrade neither renews the shared session nor becomes `sessionRequest`. Their Solid session context aliases
+  the account's primary root (`contextFor`); UMA/LWS contexts stay per grant and stay untrusted.
+  Validate grants before network, re-validate synchronously at `consent` after awaits, fence on
+  the boundary generation and account, and clear them in `clear()`. Apps call it only from the
+  consent click; the core refuses calls without browser user activation.
 - Keep authenticated fetch's manual redirects and per-hop credential checks. Clear automatic roots
   on logout/session supersession, fence pending identity discovery, and reload profile roots on restore.
 - Keep provider composition in `src/providers.ts`, ordered Solid-OIDC, UMA, then LWS. Share the Solid
@@ -150,10 +173,41 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 
 ## Session lifecycle
 
+`createAccountManager(options)` from `./accounts` owns one fresh core per account. Its synchronous
+`accounts()` / `active()` snapshots contain public Identity values only. `add(hint?, { signal }?)`
+uses a fresh session scope, DPoP key and boundary; failed/cancelled adds preserve existing state.
+Duplicate WebIDs replace only their old scope and retain ordering. `switchTo(webId)` persists
+the active WebID without network/navigation; `fetch` resolves the current active core at call time,
+while `fetchFor(webId)` stays bound to that account. Unknown WebIDs throw `UnknownAccountError`.
+
+`remove(webId)` uses `logout({ scope: 'session' })` on a core with a public `sessionScope`; never
+use an unscoped core's all-sessions logout to remove one account. Each scope isolates credentials,
+keys, restore locks and logout fences; metadata/capability caches may be shared by storage ID.
+`restoreAll()` verifies each remembered pointer through its core's locked refresh/key validation,
+isolates failures, and chooses the persisted active account or first restored. The pointer list is
+not credential authority. `on('change', handler)` observes manager changes; `on('expired', webId => …)`
+identifies the expired account. `authFor(webId)` exposes the real core; null supplies the anonymous
+adapter. `dispose()` cancels work/releases cores without removing persisted credentials.
+Match remembered pointers by WebID **and scope**, including stale removal and restore. Check durable
+presence before cached credentials leave the core; missing pointers count as expiry for established
+durable sessions. Fence asynchronous expiry checks against current identity and lifecycle generations.
+Track every owned core through pending add, retirement and restore. Disposal closes their listeners
+and cancels revocation deadlines immediately, preserving remembered credentials.
+Expiry supersedes the scope's generation and stays latched until explicit login establishes a session;
+fetch and restore cannot revive cached authority. Check manager lifetime after remembered-list reads
+and before constructing cores, and forward its signal into OIDC `restore({ signal })`.
+
+Use suite-sdk's `AccountsProvider` / `useAccounts` for React consumers to follow the active core
+through the existing PodAuthProvider. One account is simply a manager with one account; no
+single-session fallback is needed. Existing PodAuthProvider integrations remain supported.
+
 `restore()` reads a last-active pointer and redeems the refresh token under a Web Lock. Node's keyed
 FIFO fallback coordinates only the current realm, not workers/processes; browsers without Web Locks
 fail closed. Restore permits one `prompt=none` attempt through `ui.getCode` only after definitive
 `invalid_grant`, never interactive fallback or an iframe. Initial interactive login requests consent.
+Concurrent `restore()` calls share one attempt; `restore({ signal })` cancels only that caller's wait,
+the shared attempt stops when every cancellable waiter has left, and a cancelled restore publishes no
+identity and emits no `restore` event.
 
 Persist only refresh records beside the matching non-extractable ES256 private key and exportable
 public key, scoped by issuer/WebID/actual client ID and DPoP public key inside an application namespace.

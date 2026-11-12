@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import type { ResourceGrant } from "./grants.js";
+
 /** Structural key-value seam; values must support structured cloning, including CryptoKeys. */
 export interface KvStore<T extends {} = {}> {
   getItem(key: string): Promise<T | null>;
@@ -35,6 +38,8 @@ export interface PodAuthOptions {
     storageEndpoints?: string[];
   };
   storage?: { sessions: KvStore; caches: KvStore };
+  /** Independent session/key/fence namespace. Keep this public identifier stable across restores. */
+  sessionScope?: string;
   ui: {
     getWebId(): Promise<string>;
     chooseIssuer?(issuers: string[]): Promise<string>;
@@ -73,13 +78,20 @@ export interface LoginHint {
   webId?: string;
   issuer?: string;
 }
-export type AuthEventType = "login" | "logout" | "restore" | "expired" | "challenge";
+export type AuthEventType = "login" | "logout" | "restore" | "expired" | "challenge" | "grants";
 export interface AuthEvent {
   type: AuthEventType;
   identity: Identity | null;
   timestamp: number;
   /** Challenged resource; supplied for challenge events. */
   url?: string;
+  /** The account's resource grants after the change; supplied for grants events. */
+  grants?: readonly ResourceGrant[];
+}
+
+/** Options for one {@link PodAuth.grantResource} call. */
+export interface GrantResourceOptions {
+  signal?: AbortSignal;
 }
 
 /** Options for one {@link PodAuth.login} call. */
@@ -100,13 +112,40 @@ export interface PodAuth {
    * Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
-  /** Restore the remembered account; never requests interactive authorization. */
-  restore(): Promise<Identity | null>;
-  /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
-  logout(): Promise<void>;
+  /**
+   * Restore the remembered account; never requests interactive authorization. Concurrent calls share
+   * one restore. A caller's signal cancels only its own wait; the shared restore stops once every
+   * cancellable waiter has left, and a cancelled restore publishes no identity and emits no event.
+   */
+  restore(options?: { signal?: AbortSignal }): Promise<Identity | null>;
+  /**
+   * Revoke when advertised, purge local credentials, and emit logout even if revocation fails.
+   * `scope: "session"` requires an explicit sessionScope and purges only that scope's sessions/keys.
+   * Without a sessionScope, ordinary logout purges every stored session for this client configuration.
+   */
+  logout(options?: { scope: "session" }): Promise<void>;
+  /** Release this instance and cancel its work without deleting remembered credentials. */
+  dispose?(): void;
   /** Read only the credential-free remembered pointer, without discovery or credential access. */
   remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */
   identity(): Promise<Identity | null>;
   on(event: AuthEventType, handler: (event: AuthEvent) => void): () => void;
+  /**
+   * Let the signed-in account open one resource or container on someone else's storage, which
+   * the user has chosen on a screen naming its origin. Call it only from that user gesture: where
+   * the browser reports user activation, a call without one is refused. The grant receives this
+   * account's credentials for reads and writes alike, and nothing else changes: it never becomes
+   * a storage, an authorization-server trust anchor or a login context, and redirects out of it
+   * get no credentials. Grants stay in memory for this account and end at logout, expiry or
+   * session change. Refusals reject with `ResourceGrantError`; granting a covered URL again
+   * returns the covering grant. Interactive cores only; agents and test doubles may omit it.
+   */
+  grantResource?(url: string, options?: GrantResourceOptions): Promise<ResourceGrant>;
+  /** End a grant (by grant or exact root); true when one was removed. Takes effect on the next request. */
+  revokeResource?(grant: ResourceGrant | string): boolean;
+  /** This account's current resource grants, in the order they were made. */
+  grants?(): readonly ResourceGrant[];
+  /** Whether `url` is inside one of this account's resource grants. Synchronous. */
+  isWithinGrantedScope?(url: string | URL): boolean;
 }
