@@ -40,6 +40,30 @@ test("verifies a Solid token and DPoP proof, parses RDF, and caches all public d
   }
 });
 
+test.each([
+  0, 600_000,
+])("shares discovery, JWKS and profile fetches across 20 concurrent verifications at cache age %s", async (age) => {
+  const f = await resourceFixture();
+  if (age) await f.verify(await f.request());
+  f.time(epoch + age);
+  f.outboundFetch.mockClear();
+  const fetchDocument = f.outboundFetch.getMockImplementation() as typeof fetch;
+  f.outboundFetch.mockImplementation(async (input, init) => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return fetchDocument(input, init);
+  });
+  const requests = await Promise.all(Array.from({ length: 20 }, () => f.request()));
+  const identities = await Promise.all(requests.map(f.verify));
+  expect(identities).toHaveLength(20);
+  for (const identity of identities) expect(identity).toMatchObject({ webid, issuer });
+  for (const url of [
+    `${issuer}/.well-known/openid-configuration`,
+    `${issuer}/jwks`,
+    webid.split("#")[0],
+  ])
+    expect(f.outboundFetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+});
+
 test("requires a DPoP scheme and one proof, never accepts bearer ID tokens", async () => {
   const f = await resourceFixture();
   const request = await f.request();
