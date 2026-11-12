@@ -4,16 +4,14 @@
 /**
  * Drive's adoption of the shell outbox (sst-8xm.74.1). Drive queues only guarded
  * changes, and registers, for exactly the active session, the policy that requires
- * those guards and the delegates that replay them through Drive's own client.
+ * that guard inside Drive's root and the delegate that replays it through Drive's own client.
  */
 import type { QueueingStorageClient } from "@jeswr/suite-sdk/offline";
 import { useEffect } from "react";
 import { useOutboxSession } from "@/shell/sync/outbox-session";
 import type { PodSession } from "../../../lib/session/pod-session";
-import { DRIVE_FOLDER_TAG, DRIVE_TEXT_TAG, driveGuardPolicy } from "../lib/offline/guards";
+import { DRIVE_TAG, driveGuardPolicy } from "../lib/offline/guards";
 import { driveReplayDelegate } from "../lib/offline/replay";
-
-const TAGS = [DRIVE_FOLDER_TAG, DRIVE_TEXT_TAG] as const;
 
 /** The queueing storage for this Drive session's own account, or none. */
 export function useDriveOutbox(session: PodSession): QueueingStorageClient | null {
@@ -28,31 +26,42 @@ export function useDriveOutbox(session: PodSession): QueueingStorageClient | nul
   return outbox.storage;
 }
 
-/** Register Drive's guard policies and replay delegates; refresh listings after replay. */
-export function useDriveReplay(session: PodSession, invalidate: (url: string) => void) {
+/** Run a registration that throws once the session has ended; the next session registers again. */
+function register(run: () => () => void): () => void {
+  try {
+    return run();
+  } catch {
+    return () => {};
+  }
+}
+
+/** Register Drive's guard policy and replay delegate; refresh listings after replay. */
+export function useDriveReplay(
+  session: PodSession,
+  driveRoot: string | undefined,
+  invalidate: (url: string) => void,
+) {
   const outbox = useOutboxSession();
   const matches =
     !!outbox &&
     session.mode !== "demo" &&
     outbox.account.webId === session.webId &&
     outbox.account.storageUrl === session.storageUrl;
-  // Policies apply as soon as the session exists, including while its storage opens.
+  // The policy applies as soon as Drive's root is known, including while storage opens.
   useEffect(() => {
-    if (!outbox || !matches) return;
-    const offs = TAGS.map((tag) =>
-      outbox.registerGuardPolicy(tag, driveGuardPolicy(tag, outbox.account.storageUrl)),
-    );
-    return () => {
-      for (const off of offs) off();
-    };
-  }, [outbox, matches]);
+    if (!outbox || !matches || !driveRoot) return;
+    return register(() => outbox.registerGuardPolicy(DRIVE_TAG, driveGuardPolicy(driveRoot)));
+  }, [outbox, matches, driveRoot]);
   const storage = outbox?.storage;
   useEffect(() => {
     if (!outbox || !matches || !storage) return;
-    const offs = TAGS.map((tag) => outbox.registerReplayDelegate(tag, driveReplayDelegate(tag)));
-    return () => {
-      for (const off of offs) off();
-    };
+    const off = register(() => outbox.registerReplayDelegate(DRIVE_TAG, driveReplayDelegate()));
+    // Items queued while Drive was closed waited for this delegate; replay them now.
+    if (navigator.onLine !== false)
+      void outbox.adapter.reconnected().catch(() => {
+        // Durable failures stay visible in the sync sheet.
+      });
+    return off;
   }, [outbox, matches, storage]);
   const adapter = matches ? outbox?.adapter : undefined;
   useEffect(() => {

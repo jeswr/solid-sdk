@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import "./drive-ui-dom";
 import { createRequire } from "node:module";
+import { StorageError } from "@jeswr/storage-client";
 import { toast } from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 import { afterEach, expect, test, vi } from "vitest";
@@ -9,6 +10,7 @@ import { DetailsPane } from "../src/apps/drive/components/details";
 import { type MenuEntry, useItemMenu } from "../src/apps/drive/components/item-menu";
 import { PreviewBody, PreviewDialog, PreviewPage } from "../src/apps/drive/components/preview";
 import { TextPreview } from "../src/apps/drive/components/text-preview";
+import { DriveAccessError } from "../src/apps/drive/lib/client/access";
 import {
   createSolidDriveClient,
   DriveError,
@@ -1183,4 +1185,30 @@ test("New folder queues only after an unanswered request, and reports a delivere
   await act(async () => expect(await actions.newFolder(DRIVE, "Denied")).toBeUndefined());
   expect(outbox.create).toHaveBeenCalledOnce();
   expect(toast.error).toHaveBeenCalled();
+});
+
+test("a network failure inside Drive's access discovery still queues the save", async () => {
+  const outbox = queueing();
+  const { get } = await setup({ preview: true });
+  vi.spyOn(drive.client, "write").mockRejectedValue(
+    new DriveAccessError(new TypeError("Load failed")),
+  );
+  await editText(get);
+  await save(get);
+  expect(outbox.write).toHaveBeenCalledOnce();
+  expect(toast.success).toHaveBeenCalledWith(
+    "Saved on this device. It will sync when you're back online.",
+  );
+});
+
+test("a conflict found while delivering a fallback save shows the conflict state", async () => {
+  const outbox = queueing();
+  outbox.write.mockRejectedValue(
+    new StorageError("precondition-failed", { url: FILE, method: "PUT", status: 412 }),
+  );
+  const { get } = await setup({ preview: true });
+  vi.spyOn(drive.client, "write").mockRejectedValue(new TypeError("Failed to fetch"));
+  await editText(get);
+  await save(get);
+  expect(get.getByRole("alert").textContent).toBe("This file changed since you opened it");
 });

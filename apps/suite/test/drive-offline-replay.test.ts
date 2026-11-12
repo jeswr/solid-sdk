@@ -2,19 +2,19 @@
 import { StorageError } from "@jeswr/storage-client";
 import type { GuardedDelivery } from "@jeswr/suite-sdk/offline";
 import { expect, it, vi } from "vitest";
-import { isEndpointCapture } from "../src/apps/drive/lib/client/access";
+import { DriveAccessError, isEndpointCapture } from "../src/apps/drive/lib/client/access";
 import {
   createSolidDriveClient,
   type DriveClient,
   DriveError,
 } from "../src/apps/drive/lib/client/client";
 import {
-  DRIVE_FOLDER_TAG,
-  DRIVE_TEXT_TAG,
+  DRIVE_TAG,
   driveGuardPolicy,
   folderGuard,
   textGuard,
 } from "../src/apps/drive/lib/offline/guards";
+import { isNetworkFailure } from "../src/apps/drive/lib/offline/network";
 import { driveReplayDelegate } from "../src/apps/drive/lib/offline/replay";
 import { DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
@@ -49,30 +49,45 @@ const session = (f: Awaited<ReturnType<typeof wacPod>>) => ({
   webId: OWNER,
 });
 
-it("guard policies cover only what Drive queues, inside this storage", () => {
-  const text = driveGuardPolicy(DRIVE_TEXT_TAG, ROOT);
-  expect(text({ op: "write", url: FILE })).toBe(true);
-  expect(text({ op: "write", url: DRIVE })).toBe(false);
-  expect(text({ op: "write", url: `${FILE}.acl` })).toBe(false);
-  expect(text({ op: "write", url: `${DRIVE}.meta` })).toBe(false);
-  expect(text({ op: "write", url: "https://elsewhere.test/drive/a.txt" })).toBe(false);
-  expect(text({ op: "write", url: `${DRIVE}a%2Fb.txt` })).toBe(false);
-  expect(text({ op: "write", url: "https://user:pw@wac.test/drive/a.txt" })).toBe(false);
-  expect(text({ op: "write", url: `${DRIVE}a.txt?x=1` })).toBe(false);
-  expect(text({ op: "write", url: "not a url" })).toBe(false);
-  expect(text({ op: "create", url: DRIVE, container: DRIVE })).toBe(true);
-  expect(text({ op: "create", url: FILE, container: FILE })).toBe(false);
-  expect(text({ op: "delete", url: FILE })).toBe(false);
-  const folder = driveGuardPolicy(DRIVE_FOLDER_TAG, `${ROOT}`);
-  expect(folder({ op: "create", url: DRIVE, container: DRIVE })).toBe(true);
-  expect(folder({ op: "create", url: DRIVE })).toBe(false);
-  expect(folder({ op: "write", url: FILE })).toBe(false);
-  expect(driveGuardPolicy("other.tag", ROOT)({ op: "write", url: FILE })).toBe(false);
-  // A storage root given without its trailing slash still bounds paths.
-  expect(
-    driveGuardPolicy(DRIVE_TEXT_TAG, "https://wac.test/drive")({ op: "write", url: FILE }),
-  ).toBe(true);
-  expect(folderGuard).toEqual({ tag: DRIVE_FOLDER_TAG });
+it("the guard policy claims every change inside Drive's root and nothing outside it", () => {
+  const policy = driveGuardPolicy(DRIVE);
+  expect(policy({ op: "write", url: FILE })).toBe(true);
+  expect(policy({ op: "write", url: `${FILE}.acl` })).toBe(true);
+  expect(policy({ op: "delete", url: FILE })).toBe(true);
+  expect(policy({ op: "create", url: DRIVE, container: DRIVE })).toBe(true);
+  expect(policy({ op: "create", url: `${ROOT}notes/`, container: `${ROOT}notes/` })).toBe(false);
+  expect(policy({ op: "write", url: `${ROOT}notes/a.txt` })).toBe(false);
+  expect(policy({ op: "write", url: "https://elsewhere.test/drive/a.txt" })).toBe(false);
+  expect(policy({ op: "write", url: `${DRIVE}a%2Fb.txt` })).toBe(false);
+  expect(policy({ op: "write", url: "https://user:pw@wac.test/drive/a.txt" })).toBe(false);
+  expect(policy({ op: "write", url: `${DRIVE}a.txt?x=1` })).toBe(false);
+  expect(policy({ op: "write", url: "not a url" })).toBe(false);
+  // A root given without its trailing slash still bounds paths.
+  expect(driveGuardPolicy("https://wac.test/drive")({ op: "write", url: FILE })).toBe(true);
+  expect(driveGuardPolicy("https://wac.test/drive")({ op: "write", url: `${ROOT}drivex/a` })).toBe(
+    false,
+  );
+  expect(folderGuard).toEqual({ tag: DRIVE_TAG, assertions: { kind: "folder" } });
+});
+
+it("counts only fetch failures as network failures, through Drive's wrapping", () => {
+  for (const message of [
+    "Failed to fetch",
+    "NetworkError when attempting to fetch resource.",
+    "Load failed",
+  ]) {
+    expect(isNetworkFailure(new TypeError(message))).toBe(true);
+    expect(isNetworkFailure(new DriveAccessError(new TypeError(message)))).toBe(true);
+  }
+  expect(isNetworkFailure(new StorageError("network", { url: FILE, method: "PUT" }))).toBe(true);
+  expect(isNetworkFailure(new TypeError("The private Type Index needs a strong ETag."))).toBe(
+    false,
+  );
+  expect(isNetworkFailure(new DriveAccessError(new Error("denied")))).toBe(false);
+  expect(isNetworkFailure(undefined)).toBe(false);
+  const loop: { cause?: unknown } = {};
+  loop.cause = loop;
+  expect(isNetworkFailure(loop)).toBe(false);
 });
 
 it("text guards carry the captured discovery as plain JSON", async () => {
@@ -82,8 +97,8 @@ it("text guards carry the captured discovery as plain JSON", async () => {
   const guard = textGuard(version.discovery as NonNullable<typeof version.discovery>);
   expect(JSON.parse(JSON.stringify(guard))).toEqual(guard);
   expect(guard).toMatchObject({
-    tag: DRIVE_TEXT_TAG,
-    assertions: { discovery: version.discovery },
+    tag: DRIVE_TAG,
+    assertions: { kind: "text", discovery: version.discovery },
   });
   for (const bad of [
     null,
@@ -102,7 +117,7 @@ it("text guards carry the captured discovery as plain JSON", async () => {
 it("replays a queued text save through Drive's guarded write", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const delegate = driveReplayDelegate(DRIVE_TEXT_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const result = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
     ctx(),
@@ -119,7 +134,7 @@ it("turns a changed file into an outbox conflict", async () => {
     body: "someone else",
     headers: { "content-type": "text/plain" },
   });
-  const delegate = driveReplayDelegate(DRIVE_TEXT_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const error = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
     ctx(),
@@ -133,7 +148,7 @@ it("refuses a replay whose access discovery changed since the file was opened", 
   const f = await wacPod();
   const { version } = await opened(f);
   f.endpoints.set(FILE, `${FILE}.moved-policy`);
-  const delegate = driveReplayDelegate(DRIVE_TEXT_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const error = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
     ctx(),
@@ -146,14 +161,29 @@ it("refuses a replay whose access discovery changed since the file was opened", 
 it("fails closed on tampered or incomplete queued saves", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const delegate = driveReplayDelegate(DRIVE_TEXT_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const assertions = textGuard(version.discovery as never).assertions;
   for (const delivery of [
     textDelivery(FILE, undefined, assertions),
-    textDelivery(FILE, version.etag, { discovery: { endpoint: 5 } }),
+    textDelivery(FILE, version.etag, { kind: "text", discovery: { endpoint: 5 } }),
     textDelivery(FILE, version.etag, undefined),
+    textDelivery(FILE, version.etag, ["text"]),
+    textDelivery(FILE, version.etag, { kind: "folder" }),
     textDelivery("https://elsewhere.test/a.txt", version.etag, assertions),
+    textDelivery(`${FILE}.acl`, version.etag, assertions),
+    textDelivery(PUBLIC, version.etag, assertions),
+    { ...textDelivery(FILE, version.etag, assertions), purpose: "resolve-both" as const },
     { ...textDelivery(FILE, version.etag, assertions), op: "delete" as const },
+    // Text creates exist only as a conflict's "keep both" copy.
+    {
+      op: "create" as const,
+      url: PUBLIC,
+      container: PUBLIC,
+      body: encode("x"),
+      createOptions: { name: "x.txt" },
+      assertions: assertions ?? null,
+      purpose: "replay" as const,
+    },
   ])
     await expect(delegate(delivery, ctx())).rejects.toMatchObject({ code: "bad-request" });
   expect(await (await f.pod.fetch(FILE)).text()).toBe("public");
@@ -161,7 +191,7 @@ it("fails closed on tampered or incomplete queued saves", async () => {
 
 it("stores a kept copy as a new file through Drive's upload", async () => {
   const f = await wacPod();
-  const delegate = driveReplayDelegate(DRIVE_TEXT_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const result = await delegate(
     {
       op: "create",
@@ -170,6 +200,7 @@ it("stores a kept copy as a new file through Drive's upload", async () => {
       contentType: "text/plain",
       body: encode("kept"),
       createOptions: { name: "placeholder (copy).txt", contentType: "text/plain" },
+      assertions: { kind: "text" },
       purpose: "resolve-both",
     },
     ctx(),
@@ -178,7 +209,14 @@ it("stores a kept copy as a new file through Drive's upload", async () => {
   expect(await (await f.pod.fetch(`${PUBLIC}placeholder%20(copy).txt`)).text()).toBe("kept");
   await expect(
     delegate(
-      { op: "create", url: PUBLIC, container: PUBLIC, body: null, purpose: "resolve-both" },
+      {
+        op: "create",
+        url: PUBLIC,
+        container: PUBLIC,
+        body: null,
+        assertions: { kind: "text" },
+        purpose: "resolve-both",
+      },
       ctx(),
     ),
   ).rejects.toMatchObject({ code: "bad-request" });
@@ -186,7 +224,7 @@ it("stores a kept copy as a new file through Drive's upload", async () => {
 
 it("replays a queued folder as an inherit-verified create", async () => {
   const f = await wacPod();
-  const delegate = driveReplayDelegate(DRIVE_FOLDER_TAG)(session(f));
+  const delegate = driveReplayDelegate()(session(f));
   const result = await delegate(
     {
       op: "create",
@@ -194,6 +232,7 @@ it("replays a queued folder as an inherit-verified create", async () => {
       container: PRIVATE,
       body: null,
       createOptions: { name: "Plans", kind: "container" },
+      assertions: { kind: "folder" },
       purpose: "replay",
     },
     ctx(),
@@ -211,21 +250,75 @@ it("replays a queued folder as an inherit-verified create", async () => {
           container: PRIVATE,
           body: null,
           createOptions,
+          assertions: { kind: "folder" },
           purpose: "replay",
+        },
+        ctx(),
+      ),
+    ).rejects.toMatchObject({ code: "bad-request" });
+  // A folder conflict has no "mine": a write or a resolve delivery is not a folder change.
+  for (const purpose of ["resolve-mine", "resolve-both"] as const)
+    await expect(
+      delegate(
+        {
+          op: "create",
+          url: PRIVATE,
+          container: PRIVATE,
+          body: null,
+          createOptions: { name: "Other", kind: "container" },
+          assertions: { kind: "folder" },
+          purpose,
         },
         ctx(),
       ),
     ).rejects.toMatchObject({ code: "bad-request" });
 });
 
+it("treats a queued folder that now exists as done, and still refuses a clash it can't confirm", async () => {
+  const f = await wacPod();
+  const delegate = driveReplayDelegate()(session(f));
+  const delivery: GuardedDelivery = {
+    op: "create",
+    url: PRIVATE,
+    container: PRIVATE,
+    body: null,
+    createOptions: { name: "Plans", kind: "container" },
+    assertions: { kind: "folder" },
+    purpose: "replay",
+  };
+  expect(await delegate(delivery, ctx())).toMatchObject({ created: true });
+  expect(await delegate(delivery, ctx())).toEqual({
+    url: `${PRIVATE}Plans/`,
+    etag: null,
+    created: false,
+  });
+  const client = {
+    createFolder: vi.fn(async () => {
+      throw new DriveError("conflict", 412, `${PRIVATE}Gone/`);
+    }),
+  } as unknown as DriveClient;
+  const head = vi.fn(async () => new Response(null, { status: 404 }));
+  const clashing = driveReplayDelegate(() => client)({
+    fetch: head as unknown as typeof fetch,
+    storageUrl: ROOT,
+    webId: OWNER,
+  });
+  await expect(
+    clashing({ ...delivery, createOptions: { name: "Gone", kind: "container" } }, ctx()),
+  ).rejects.toMatchObject({ code: "precondition-failed" });
+  expect(head).toHaveBeenCalledWith(`${PRIVATE}Gone/`, expect.objectContaining({ method: "HEAD" }));
+});
+
 it("maps Drive failures onto the outbox's classification", async () => {
   const delivery = textDelivery(FILE, '"v1"', {
+    kind: "text",
     discovery: { endpoint: null, wacHeaders: [], mode: "[]" },
   });
-  const network = new TypeError("Failed to fetch");
   const existing = new StorageError("forbidden", { url: FILE, method: "PUT", status: 403 });
   const cases: [unknown, Partial<StorageError> | unknown][] = [
-    [network, network],
+    // Network failures stay queued whatever the browser calls them, and however Drive wraps them.
+    [new TypeError("Load failed"), { code: "network" }],
+    [new DriveAccessError(new TypeError("Failed to fetch")), { code: "network" }],
     [existing, existing],
     [new DriveError("forbidden", 403, FILE), { code: "forbidden", status: 403 }],
     [new DriveError("conflict", 409, FILE), { code: "conflict", status: 409 }],
@@ -241,22 +334,35 @@ it("maps Drive failures onto the outbox's classification", async () => {
         throw thrown;
       }),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate(
-      DRIVE_TEXT_TAG,
-      () => client,
-    )({
+    const delegate = driveReplayDelegate(() => client)({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,
     });
     const error = await delegate(delivery, ctx()).catch((cause: unknown) => cause);
-    if (expected === network || expected === existing) expect(error).toBe(expected);
+    if (expected === existing) expect(error).toBe(expected);
     else expect(error).toMatchObject(expected as object);
   }
+  // A delivery cut off by the session ending stays queued, whatever Drive made of it.
+  const controller = new AbortController();
+  controller.abort();
+  const client = {
+    discoveryVerifier: () => () => undefined,
+    write: vi.fn(async () => {
+      throw new Error("The outbox account is no longer active");
+    }),
+  } as unknown as DriveClient;
+  await expect(
+    driveReplayDelegate(() => client)({ fetch, storageUrl: ROOT, webId: OWNER })(delivery, {
+      storage: {} as never,
+      signal: controller.signal,
+    }),
+  ).rejects.toMatchObject({ code: "network" });
 });
 
 it("returns the write receipt's ETag when the server sends one, and none otherwise", async () => {
   const delivery = textDelivery(FILE, '"v1"', {
+    kind: "text",
     discovery: { endpoint: null, wacHeaders: [], mode: "[]" },
   });
   for (const [etag, expected] of [
@@ -267,10 +373,7 @@ it("returns the write receipt's ETag when the server sends one, and none otherwi
       discoveryVerifier: () => () => undefined,
       write: vi.fn(async () => (etag ? { etag } : {})),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate(
-      DRIVE_TEXT_TAG,
-      () => client,
-    )({
+    const delegate = driveReplayDelegate(() => client)({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,

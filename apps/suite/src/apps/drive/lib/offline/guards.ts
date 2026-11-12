@@ -1,34 +1,40 @@
 // AUTHORED-BY Claude Opus 5.5
-/** Drive's outbox guard tags and the session policy that requires them (sst-8xm.74.1). */
+/** Drive's outbox guard and the session policy that requires it (sst-8xm.74.1). */
 import type { GuardPolicy, OutboxGuard } from "@jeswr/suite-sdk/offline";
 import type { EndpointCapture } from "../client/access";
 
-export const DRIVE_FOLDER_TAG = "drive.folder";
-export const DRIVE_TEXT_TAG = "drive.text";
+/**
+ * One tag for every Drive change. The outbox lets a policy require only tags other than its
+ * own, so two Drive tags would each refuse the other's creates. The kind travels in the
+ * assertions instead, and the replay delegate dispatches on it.
+ */
+export const DRIVE_TAG = "drive";
+export type DriveGuardKind = "text" | "folder";
 
 /** The guard a queued text save carries: its validator's access discovery, as JSON. */
 export function textGuard(discovery: EndpointCapture): OutboxGuard {
   const { endpoint, wacHeaders, mode } = discovery;
   return {
-    tag: DRIVE_TEXT_TAG,
-    assertions: { discovery: { endpoint, wacHeaders: [...wacHeaders], mode } },
+    tag: DRIVE_TAG,
+    assertions: { kind: "text", discovery: { endpoint, wacHeaders: [...wacHeaders], mode } },
   };
 }
-export const folderGuard: OutboxGuard = { tag: DRIVE_FOLDER_TAG };
+export const folderGuard: OutboxGuard = { tag: DRIVE_TAG, assertions: { kind: "folder" } };
 
-function inside(storageUrl: string, url: string | undefined): url is string {
+/** Whether `url` is a plain, canonical path inside `base` (a container URL). */
+export function inside(base: string, url: string | undefined): url is string {
   if (!url) return false;
   try {
-    const root = new URL(storageUrl);
+    const root = new URL(base);
     const target = new URL(url);
-    const base = root.pathname.endsWith("/") ? root.pathname : `${root.pathname}/`;
+    const prefix = root.pathname.endsWith("/") ? root.pathname : `${root.pathname}/`;
     return (
       target.origin === root.origin &&
       !target.username &&
       !target.password &&
       !target.search &&
       !target.hash &&
-      target.pathname.startsWith(base) &&
+      target.pathname.startsWith(prefix) &&
       !/%2f|%5c/i.test(target.pathname) &&
       !target.pathname.split("/").some((segment) => segment === "." || segment === "..")
     );
@@ -36,23 +42,14 @@ function inside(storageUrl: string, url: string | undefined): url is string {
     return false;
   }
 }
-const isPolicyDocument = (url: string) => /\.(acl|acr|meta)$/i.test(new URL(url).pathname);
+export const isPolicyDocument = (url: string) => /\.(acl|acr|meta)$/i.test(new URL(url).pathname);
 
 /**
- * Which queued operations must carry a Drive guard. Registered for the session, it makes
- * the outbox refuse an unguarded Drive-shaped write and refuse a guarded one outside
- * what Drive queues: text writes to files and folder creates, inside this storage.
+ * Inside Drive's own root, every queued change must carry Drive's guard, so nothing there
+ * replays through a bare storage client. Outside that root the policy claims nothing, and
+ * other apps' queued changes are unaffected. The outbox never applies a policy to items with
+ * its own tag: the replay delegate's re-check is what confines Drive-tagged items.
  */
-export function driveGuardPolicy(tag: string, storageUrl: string): GuardPolicy {
-  return ({ op, url, container }) => {
-    if (tag === DRIVE_TEXT_TAG) {
-      if (op === "write")
-        return inside(storageUrl, url) && !url.endsWith("/") && !isPolicyDocument(url);
-      // "Keep both" stores the queued text as a sibling file.
-      return op === "create" && inside(storageUrl, container) && container.endsWith("/");
-    }
-    if (tag === DRIVE_FOLDER_TAG)
-      return op === "create" && inside(storageUrl, container) && container.endsWith("/");
-    return false;
-  };
+export function driveGuardPolicy(driveRoot: string): GuardPolicy {
+  return ({ url, container }) => inside(driveRoot, container ?? url) || inside(driveRoot, url);
 }
