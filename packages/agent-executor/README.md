@@ -26,6 +26,9 @@ including new denials, removed approvals and availability changes. Both hooks im
 invalidate in-flight authority snapshots across executors sharing the transmission store,
 before waiting for persistence or queue locks; notifications must reach the hook before
 credentials are released.
+`status()` is a read-only display projection of the same verified controls, local
+HALT and current permission: `stopped`, `paused` (no valid current permission) or
+`running`. It grants no authority; transmission always runs the complete gate again.
 Every later attempt evaluates again. Halt, policy and proposal checks also run after
 lookup and before handing over send credentials, closing asynchronous revocation races.
 
@@ -43,6 +46,10 @@ lookup and before handing over send credentials, closing asynchronous revocation
   ties; a later verified Resume clears it only when the local HALT file is absent.
   Unreadable controls or HALT state fail closed. `createHaltFileCheck(io, path)` checks
   the real file on every pass, including dangling symlinks; only ENOENT means absent.
+  Supply `ControlStore.assertNotHalted` using a synchronous filesystem check as well
+  (`createLocalState(...).assertNotHalted` in the daemon). It runs inside the final
+  `io.assertAuthority()` dispatch fence, after transport waits, so a new HALT blocks
+  delivery immediately without waiting for the daemon's next control poll.
 - `ProposalStore` writes executor-owned outbox dispositions and idempotently upserts local
   `TransmissionSettlement` conversation events through `emitTransmission()`, keyed by
   proposal + status. Apply these events with `agent-model.transition`; they record delivery

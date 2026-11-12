@@ -19,4 +19,5 @@ export const feedbackApps: readonly { slug: AppSlug; name: string }[] = [
   { slug: "music", name: "Music" },
   { slug: "money", name: "Money" },
   { slug: "health", name: "Health" },
+  { slug: "agent", name: "Agent" },
 ];

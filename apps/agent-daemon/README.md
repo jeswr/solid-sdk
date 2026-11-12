@@ -83,7 +83,8 @@ Heartbeat RDF is written at startup and every 60 seconds to
 
 The host must construct the executor with fresh, cryptographically verified owner
 controls, approvals and mandates: parsing RDF is insufficient. Its local HALT check
-must read `createLocalState(...).halted` on every gate pass. Wire/action validation,
+must read `createLocalState(...).halted` on every gate pass, and use its
+`assertNotHalted` as the control store's synchronous dispatch check. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
 executor obligations. `proposalWritten` runs before pod publication and must
 idempotently project proposals into the trusted outbox, returning the exact
@@ -108,7 +109,7 @@ provides atomic fsynced cursors and proposal results, local HALT and safe status
 Retain proposal results across cursor retries and process restarts. Use a dedicated
 private credential-store directory whose parent already exists.
 
-The `awp` executable dispatches `run [--connectors]`, `once [--connectors]`, `halt`,
+The `awp` executable dispatches `run [--connectors]`, `once [--connectors]`, `halt`, `resume`,
 `status`, `accounts`, `connectors`, `login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
 `audit <artifact> [--at <instant>]`
 and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
@@ -136,6 +137,62 @@ composition; they never authenticate or send. Preloads
 must be inert until a command needs their capabilities; keep secrets out of argv,
 logs, plist arguments and source control. No deployment module is downloaded or
 loaded from pod data.
+
+## Stop and resume
+
+The settings button and status menu write an owner-signed Halt to `agent/control/`.
+The executor refuses every queued action on the next notification or reconciliation
+pass (at most 30 seconds by default). Revoking the current permission also refuses
+all actions. These checks run again before every send, including after token waits.
+
+`awp halt` atomically writes and fsyncs a mode-0600 `HALT` without taking a lock,
+so a crashed Resume lock holder cannot prevent a new stop. It uses the host's configured private state directory
+(on macOS, use `~/Library/Application Support/jeswr-agent`). Its presence overrides
+every signed Resume, and the executor checks it on every gate pass. Heartbeats
+continue every 60 seconds and report `running`, `paused` (no current valid permission),
+or `stopped` (signed Halt or local HALT). The UI accepts heartbeat state for two minutes;
+an active signed Halt continues to show Stopped even if the daemon is offline.
+When the daemon reports a stop with no signed Halt behind it (a local `awp halt`),
+the UI also offers Resume, which signs an owner Resume only after you type RESUME.
+The heartbeat state only decides whether the button is shown; it is never authority.
+
+`HALT` records its stop time (`halted <ISO time>`). The executor checks it before
+each dispatch, but the check and the send are not one atomic step across processes:
+a send that has already passed its final check can still go out after `awp halt`
+writes the file. A local stop guarantees that no new dispatch starts after it is
+visible, not that an in-flight send is recalled.
+
+To resume, confirm Resume in the UI, then run `awp resume` on the agent's computer
+if HALT exists. The host must supply `createCliHost({ resumeAuthority: {
+ownerWebId, controls } })`, using the executor's **owner-proof-verifying** control
+adapter. The command removes HALT only after a current verified Resume newer than
+the stop time recorded in the file (and its modification time), with no newer Halt,
+and fsyncs the directory. Authorisation is checked again while holding `halt.lock`,
+and a HALT without a readable recorded time is kept. Missing verification,
+expired/future statements, symlinks and a file replaced during verification fail
+closed. Clearing the file never replaces the executor's signed-control and
+permission checks. Resume is idempotent when the file is already absent, and reports
+whether it cleared a stop or found none. Resume serializes through `halt.lock`;
+the executor stays stopped while that lock exists. A Halt racing removal wins.
+After a crashed Resume, establish that the lock holder has stopped before removing
+the leftover `halt.lock`; `awp halt` remains available throughout recovery.
+
+The Resume must be signed **after** the local stop. Its browser timestamp is compared
+strictly with the later of HALT's recorded stop time and its modification time on
+the agent's computer. Clock skew between
+devices can delay or refuse resume; refusal is the safe direction. Correct the clocks
+and sign a new Resume if needed. The command also refuses future-dated statements.
+
+To unload the macOS service independently of pod access:
+
+```sh
+launchctl bootout gui/$UID/org.jeswr.agent
+```
+
+This stops the launchd job; it does not clear HALT or issue Resume. To load the
+installed job again, run
+`launchctl bootstrap gui/$UID "$HOME/Library/LaunchAgents/org.jeswr.agent.plist"`,
+then follow the resume steps.
 
 `install-launchd` asks before any writes. On macOS it creates
 `~/Library/LaunchAgents/org.jeswr.agent.plist` with KeepAlive, RunAtLoad, private
