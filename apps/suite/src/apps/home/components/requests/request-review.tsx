@@ -48,6 +48,7 @@ import {
   type ReadableRequest,
   type RequestCard,
   type ReviewError,
+  recordedMessage,
   requestCards,
   requesterHost,
   requesterName,
@@ -263,15 +264,24 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
     setError(undefined);
     try {
       const result = await requests.decide(entry, decision);
+      // An approval reports the choices it recorded, which another tab may have made: word the
+      // message from those, not from what this sheet sent.
+      const recorded = attempt === "deny" ? undefined : result.recorded;
       let message =
         attempt === "deny"
           ? deniedMessage(name, result.notified)
-          : approval
-            ? approvedMessage(name, cards, approval.selected, result.notified)
-            : finishedMessage(name, result.notified);
-      // A choice-less finish can't know whether the recorded choices had an end date: say it
-      // whenever the result doesn't promise to enforce one.
-      const endDate = approval ? approval.decision.expiresAt !== undefined : attempt === "finish";
+          : recorded
+            ? recordedMessage(name, cards, recorded, result.notified)
+            : approval
+              ? approvedMessage(name, cards, approval.selected, result.notified)
+              : finishedMessage(name, result.notified);
+      // Without recorded choices, a choice-less finish can't know whether they had an end date:
+      // say it whenever the result doesn't promise to enforce one.
+      const endDate = recorded
+        ? recorded.expiresAt !== undefined
+        : approval
+          ? approval.decision.expiresAt !== undefined
+          : attempt === "finish";
       if (endDate && !result.expiryEnforced) message = `${message} ${EXPIRY_NOT_ENFORCED}`;
       toast.success(message);
       finish(attempt === "deny" ? "denied" : "approved");

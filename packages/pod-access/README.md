@@ -664,7 +664,7 @@ if (request) {
     dataTypes: request.dataTypes,
     expiresAt: new Date("2027-01-01T00:00:00Z"),
   }, options);
-  // result.status, grantUrl, receiptUrl, notified, expiryEnforced
+  // result.status, grantUrl, receiptUrl, notified, expiryEnforced, recorded
 }
 // Deny: await decide(request, { approve: false }, options).
 // Detect: await accessModel({ fetch: authenticatedFetch, storage, target? }).
@@ -678,8 +678,14 @@ missing, or non-request member becomes `{ id, status: "unreadable" }`; container
 Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
 notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
 (`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
-only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
-Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, `decidedAt?`,
+and `recorded?`. Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+A pending or Approving entry carries `recorded` (the same `{ dataTypes, role, expiresAt? }` shape
+`decide` returns, below) when the owner's own records already pin an approval of it, for example one
+another tab started and did not finish. That lookup reads only: it writes nothing (not even sealing
+the records folder), attaches nothing while the records folder is missing, unsealed or shared, and
+leaves out a record that can't be read or doesn't validate. Passing the recorded choices back to
+`decide` finishes that approval.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
@@ -717,10 +723,23 @@ the request is still pending. A refusal that only appears later (for example a `
 concurrent edit) is rethrown unchanged and never retried; the approval stays Approving and can be
 retried, and a lost race against another approver that finished reports the approval. Initial CAS races throw `RequestConflictError` with
 the re-read winner's status. Explicitly retrying resumes the pinned decision without resolving
-again or rolling back ACLs. A retry may repeat the same choices or leave them out, but if it passes
-different `dataTypes`, `role` or `expiresAt` it fails with an error saying an earlier approval is
-still finishing, rather than silently granting something other than what the owner just chose. Completed decisions are idempotent; reversing
-approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
+again or rolling back ACLs. A retry that passes no choices at all resumes the pinned ones as
+recorded. A retry that passes any choice is read as a complete payload, where an omitted choice means
+its default (every requested data type, no `role: "viewer"`, no end date), and every choice must match
+the pin: otherwise it fails with an error saying an earlier approval is still finishing, rather than
+silently granting something other than what the owner just chose. So a frozen "until revoked"
+payload is refused against a pin with an end date or a Viewer role. Completed decisions are
+idempotent and grant nothing new, whatever choices the call passes; reversing approval/denial is
+rejected.
+
+An approval's result carries `recorded: { dataTypes, role, expiresAt? }`: the choices its pinned
+decision recorded, which is what was applied. They can differ from the call's own choices when
+another call (another tab) pinned or finished the approval first, so word confirmations from
+`recorded`, not from what was sent. `dataTypes` are the approved types, sorted (the request's own
+when none were chosen); `role` is `viewer` when the approval narrowed to Read, otherwise `editor`
+(each target got the role its requested modes map to, as `RequestDecision.role` means); `expiresAt`
+is absent for access until revoked. A denial has no `recorded`. A pinned end date that is not
+exactly the instant `decide` wrote is refused as an invalid snapshot. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
 **WAC does not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in

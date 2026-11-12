@@ -189,8 +189,12 @@ or an ambiguous percent-encoding (unreserved characters, `%`, `/`, `\`, controls
 and segments ending in a dot or space or containing `::`;
 ordinary encoded names (spaces, non-ASCII) stay shareable; access-control and metadata documents
 (`.acl`, `.acr`, `.meta`) are never targets. A resumed approval
-(pending or Approving) refuses explicit choices (`dataTypes`, `role`, `expiresAt`) that differ from
-the pinned ones. A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
+(pending or Approving) with no choices resumes the pin as recorded; with any choice, an omitted
+`dataTypes`, `role` or `expiresAt` means its default (all requested types, no Viewer narrowing, no
+end date) and every choice must match the pin, else it is refused. An approval's `DecisionResult`
+returns the pin's `recorded` `{ dataTypes, role, expiresAt? }` (what was applied, even when another
+call finished first); `listRequests` attaches the same `recorded` to pending/Approving entries with an
+owner-pinned approval, read-only (`recordsKey(..., seal = false)` never seals or writes). A lost pin or CAS reports the request's re-read status in `RequestConflictError`.
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
 `approved` record returns that earlier grant (nothing new is granted), and the owner cannot record a
 denial for it. Each approved data type
