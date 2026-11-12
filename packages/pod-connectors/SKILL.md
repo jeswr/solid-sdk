@@ -57,6 +57,26 @@ advance checkpoints on failure. The fixture recorder exposes only allowlisted no
 fields under configured public route prefixes; it never saves headers or dynamic URLs. Detailed
 adapter mappings remain owned by their follow-on connector tasks.
 
+CON-A3.1 adds `./sync`: read the README's two-way section and `src/core/sync/types.ts` before
+extending it. Existing adapters remain import-only. TwoWayAdapter inbound mapping resolves
+the existing pod URL with `ctx.sync.resolve` before constructing subjects, then uses
+`ctx.sync.upsert`/`delete` with explicit remote versions/tombstones. One mapped item per
+document; never silently treat a collection document as an item. Keep the single shared
+import-session claim until outbound completes. Write-back and delete propagation default off;
+explicit write grants gate execution. Remote methods use their injected `options.api`,
+enforce conditional versions, and deduplicate durable create keys. Preserve original create
+payload snapshots through retries and later local edits. Never absorb a later pod ETag into
+the baseline of an earlier outbound write. Owner protection precedes sensitive body access;
+read sync resources through the session's `readResource(slug, false)` seam to preserve ETags
+and normalize legacy aliases without retaining a run-long resource cache.
+Unsupported ACL discovery, absent strong validators, incomplete listings, malformed links
+and exceeded bounds fail closed. Link shards are fixed at 64 × 128 records. Canonical hashing
+is exact and complexity-capped, including blank nodes. Keep loser snapshots and 30-day trash
+markers, resume interrupted moves, and never infer a remote deletion from a missing delta
+item. Notifications are finite hints; full scans remain authoritative. Keep health details
+in owner-only links and counts in report/state.sync. Export reference fixtures and the async
+`twoWayConformanceSuite(makeAdapter)` only through ./testing, not the production catalog.
+
 Keep item accounting bounded by written documents: retain document counters, never run-long
 subject identifiers. Replacement resets a document's count to its adapter-supplied local subjects
 (excluding the document URL); merging adds only subjects whose previous stored provenance

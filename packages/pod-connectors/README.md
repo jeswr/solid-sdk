@@ -56,6 +56,7 @@ Entry points:
 - `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
 - `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
+- `./sync`: opt-in two-way sync framework and host ports (CON-A3.1).
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
 - `./adapters/<id>`: each source's existing adapter (OAuth or export-file).
@@ -64,6 +65,121 @@ Entry points:
 
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
 moved fixture tests and the environment-read regression test without production traffic.
+
+## Two-way sync framework (CON-A3.1)
+
+`runTwoWaySync(adapter, connection, ports)` runs inbound then outbound under the same
+per-connector import-session lock, abort boundary and host-owned checkpoint. Existing
+provider adapters remain import-only; this framework does not enable their write-back.
+The reference platform is exported only from `./testing`, and is absent from the catalog.
+`catalogEntry(adapter)` projects optional `twoWay` container/scope capabilities for host UIs.
+
+```ts
+import { runTwoWaySync, createFetchSyncPodWriter } from '@jeswr/pod-connectors/sync';
+
+const report = await runTwoWaySync(adapter, {
+  account: 'account-key',
+  writeBack: true,                 // default false
+  conflictPolicy: 'lww',           // also manual, remote-wins, pod-wins
+  propagateDeletes: false,         // default false
+}, {
+  podWriter: createFetchSyncPodWriter({ ...writerOptions, signal }),
+  sourceAuth,
+  scopes: explicitlyGrantedScopes,
+  state: previousState,
+  signal,
+});
+```
+
+Hosts obtain incremental consent for `adapter.requiredWriteScopes` before turning on
+write-back; the runner checks explicit grants before any I/O. `TwoWayAdapter<Op>` extends
+`IntegrationAdapter` with `fieldsForHash` (mapped predicate IRIs), account-relative leaf
+`writeBackContainers`, `requiredWriteScopes`, `toRemote(resource)`, `applyRemote(op, options)`,
+`findByIdempotencyKey(key, options)` and `deleteRemote(id, options)`. Remote methods receive
+the separate, bounded `options.api` transport and the run signal. Creates MUST deduplicate
+`options.idempotencyKey`; updates and deletes MUST enforce `options.ifMatch` using the
+provider's equivalent conditional-write mechanism. A deleted remote item is an idempotent
+success for `deleteRemote`. `applyRemote` and key lookup return `{ remoteId, remoteVersion }`.
+
+Inbound adapters use `ctx.sync.resolve(remoteId, fallbackSlug)` **before mapping RDF subjects**,
+then `ctx.sync.upsert({ remoteId, remoteVersion, modifiedAt, document })`. This keeps a
+pod-created item's URL when the platform echoes it back. Use `ctx.sync.delete(id, version)`
+only for explicit tombstones.
+`ctx.sync.pendingRemoteIds()` lists writes whose first mapped echo must be fetched even if
+the provider delta omits the connector's own writes. The runner verifies that echo before
+advancing the next checkpoint, so a recovered version cannot hide later platform edits.
+Mapped resources are one item per document; existing aggregate
+collection adapters need a separate item-layout migration. Their mapped writes/removals may
+not bypass `ctx.sync` through `ctx.write`/`ctx.remove`. Unmapped companion documents can use
+the ordinary import ports. Provider timestamps must be server timestamps; pod timestamps
+come from `Last-Modified`. Missing timestamps or differences of at most the default
+120,000 ms skew guard preserve both versions for manual resolution. Explicit policies can
+resolve a retained manual conflict on a subsequent inbound replay; until then it stays manual,
+including when the platform changes again. Canonical content remains authoritative when a
+provider's version or coarse `updated_at` timestamp does not advance.
+Concurrent pod-delete/remote-edit disputes retain the remote snapshot for manual resolution;
+the owner must restore the item or explicitly reset its link before resolving that dispute.
+
+Each account has 64 fixed hash shards under `<account>/links/`, at most 128 links per shard
+(8,192 retained links total, including tombstones). Every record uses typed RDF accessors
+for remote identity/version, pod URL/ETag, canonical baseline, durable create intent, conflict
+and deletion state. Both identity indexes are built in one bounded scan. A shard 412 re-reads
+and merges unrelated record changes, with four attempts; a concurrent change to the same
+record fails closed. Hosts must still serialize runs across processes. Strong ETags are
+required on existing sync resources and link shards. New documents are create-only.
+Sync resource reads use the import session's metadata-preserving `readResource()` seam
+without retaining its precondition cache, so legacy suite vocabulary aliases are normalized
+before canonical hashing and typed outbound access.
+
+`SyncPodWriter` adds finite complete direct-child `list()` and `ensureOwnerOnly()` ports.
+The fetch implementation reads listings through `@solid/object`, consumes advertised
+`solid:etag` values and falls back to resource reads when missing. It requires an advertised
+WAC ACL at the exact resource URL plus `.acl`, then installs owner-only grants **before**
+link/snapshot bodies are read or created; unsupported ACL discovery fails closed. Hosts with
+other permission systems supply an equally strict protection port. Both owner protection
+and full listing completeness are security contracts for custom hosts. The fetch implementation
+refuses partial responses and advertised pagination; hosts needing paged containers supply a
+bounded complete listing port.
+Pass the same signal to the writer and runner so every HTTP request within a port is
+cancelled and checked, including the ACL PUT following its discovery HEAD.
+
+Creates persist their key and an immutable original payload snapshot before the remote call.
+An interrupted create is recovered by key before inbound mapping, including when write-back
+has since been disabled. Later pod edits remain detectable. Successful remote writes update
+the link's remote version and exact submitted pod baseline, suppressing echoes without
+absorbing a racing local edit. Remote deletes first copy into protected `<account>/trash/`,
+mark a 30-day expiry and `prov:wasRevisionOf`, durably record the move, and conditionally
+remove the original. The expiry marker is for host cleanup; the runner never silently purges
+trash. Interrupted trash moves remain counted as pending deletes until removal completes.
+Pod deletions produce health warnings until propagation is explicitly enabled.
+Tombstones prevent automatic resurrection; resetting a deleted link is an explicit host action.
+
+Conflict losers live in protected `<account>/conflicts/`, carry `prov:wasRevisionOf`, and are
+linked from the surviving item. `report.issues` exposes retained links with conflict snapshots
+or pending deletes; `report.conflicts`, `report.pendingDeletes` and `state.sync` expose counts
+for health pages. Manual conflicts block outbound execution. One PROV Activity describes each
+outbound batch, alongside the existing import activity. Failed runs retain the prior checkpoint;
+cancelled runs start no further I/O and retain durable intents for recovery.
+
+One `RunBudget` covers Pod operations, remote operations and source transport requests;
+source response bytes are charged as read (32 MiB per response). Documents are capped at
+10,000 quads, 4 MiB of term text and 65,536 characters per term. Exact canonical mapped-field
+hashes retain datatype, language and graph identity while ignoring serialization, triple
+order and blank labels. Nested RDF triple terms and other unsupported term kinds are refused
+throughout the document, including outside the mapped projection. Complex blank graphs fail
+closed: seven blank nodes, 100,000 quad visits and 32 MiB of canonical comparison text are the
+limits. `maxResources` may lower the
+8,192-entry scan bound. Finite injected notification hints are bounded and validated, and
+force current resource reads even when a listing's ETag lags an edit. They never replace
+complete scans; hosts own subscription lifecycle and missed-event recovery. Companion binary
+writes share the request/byte budgets; mapped item documents must use the RDF sync ports.
+
+Later provider tests call `await twoWayConformanceSuite(makeAdapter)` from `./testing` with
+the documented `TwoWayConformanceFixture` controls over recorded/synthetic transports. It
+checks import/update, crash recovery, no duplicates, echo suppression, all conflict policies,
+skew, delete opt-in and remote deletion. `createFakeTwoWayAdapter()` and `createMemorySyncPod()`
+provide the reference implementation; targeted framework tests exercise validators, bounds,
+abort, shard races and hostile inputs. No production provider APIs are used.
 
 ## Binary resources
 

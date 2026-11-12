@@ -39,6 +39,14 @@ export function connectorState(value: unknown): ConnectorState {
     ...(state.lastSync === undefined ? {} : { lastSync: date(state.lastSync) }),
     ...(state.cursor === undefined ? {} : { cursor: textValue(state.cursor) }),
     lastOutcome: state.lastOutcome,
+    ...(state.sync === undefined
+      ? {}
+      : {
+          sync: {
+            conflicts: count(object(state.sync).conflicts),
+            pendingDeletes: count(object(state.sync).pendingDeletes),
+          },
+        }),
     counts: {
       documents: count(counts.documents),
       items: count(counts.items),

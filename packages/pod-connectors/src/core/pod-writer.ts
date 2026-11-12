@@ -54,8 +54,8 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     async read(slug) {
       const url = resolve(slug);
       try {
-        const { dataset, etag } = await freshRdf(url, podFetch);
-        return { dataset, etag };
+        const { dataset, etag, headers } = await freshRdf(url, podFetch);
+        return { dataset, etag, lastModified: headers.get("last-modified") ?? undefined };
       } catch (error) {
         if (error instanceof RdfFetchError && error.status === 404) return undefined;
         throw error;
@@ -63,7 +63,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     },
     async write(doc, conditions = {}) {
       const url = resolve(doc.slug);
-      await writeResource(url, doc.dataset, {
+      const { etag } = await writeResource(url, doc.dataset, {
         fetchImpl: podFetch,
         etag: conditions.ifMatch,
         createOnly: conditions.ifNoneMatch === "*",
@@ -71,6 +71,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
       });
       return {
         url,
+        etag,
         category: doc.category,
         forClass: doc.forClass,
         skipRegistration: doc.skipRegistration,
