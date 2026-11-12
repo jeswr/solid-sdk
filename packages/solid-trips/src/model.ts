@@ -63,17 +63,21 @@ function timePath(kind: ReservationInput["kind"], field: "start" | "end") {
   return { child: true, predicate: field === "start" ? "departureTime" : "arrivalTime" };
 }
 const XSD = "http://www.w3.org/2001/XMLSchema#";
-/** A date without a clock time is an all-day booking (for example an Event startDate). */
+/**
+ * A date without a clock time is an all-day booking (for example an Event startDate).
+ * An xsd:date may carry a timezone ("2026-12-01Z", "2026-12-01+01:00"); it is still all-day.
+ */
 export const isAllDay = (value: string | undefined): boolean =>
-  !!value && /^\d{4}-\d{2}-\d{2}$/.test(value);
+  !!value && /^\d{4}-\d{2}-\d{2}(?:Z|[+-]\d{2}:\d{2})?$/.test(value);
 /**
  * ISO calendar and clock validation, without inferring a zone for local times.
- * A bare calendar date is accepted as all-day and kept as given.
+ * A calendar date without a clock time, with or without a timezone, is accepted as
+ * all-day and kept as given.
  */
 export function parseReservationTime(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const match =
-    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(Z|[+-]\d{2}:\d{2})?)?$/.exec(
+    /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?)?(Z|[+-]\d{2}:\d{2})?$/.exec(
       value,
     );
   if (!match) return undefined;

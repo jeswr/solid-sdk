@@ -136,8 +136,30 @@ describe("all-day dates", () => {
     expect(parseReservationTime("2026-12-01")).toBe("2026-12-01");
     expect(isAllDay("2026-12-01")).toBe(true);
     expect(isAllDay("2026-12-01T09:00:00Z")).toBe(false);
-    for (const bad of ["2026-02-30", "2026-12-01Z", "2026-12", "2026-12-01T"])
+    for (const bad of ["2026-02-30", "2026-12", "2026-12-01T", "2026-12-01+15:00", "2026-12-01Y"])
       expect(parseReservationTime(bad)).toBeUndefined();
+  });
+  it("accepts a timezoned xsd:date as all-day and keeps it as given", async () => {
+    for (const zoned of ["2026-12-01Z", "2026-12-01+01:00", "2026-12-01-05:00"]) {
+      expect(parseReservationTime(zoned)).toBe(zoned);
+      expect(isAllDay(zoned)).toBe(true);
+    }
+    const ttl = (
+      await readFile(new URL("fixtures/connector.ttl", import.meta.url), "utf8")
+    ).replace('s:startDate "2026-12-01T20:00:00Z"', 's:startDate "2026-12-01+13:00"^^x:date');
+    const items = parseReservations(await parseRdf(ttl, "text/turtle"));
+    const event = items.find((item) => item.kind === "EventReservation") as Reservation;
+    // The offset is not a clock time: the zoned date still sorts before the 12:00 car hire.
+    expect(event.start).toBe("2026-12-01+13:00");
+    const [day] = itinerary({ reservations: items.map((item) => item.id) }, items);
+    expect(day?.date).toBe("2026-12-01");
+    expect(day?.items[0]?.id).toBe(event.id);
+    const written = await serializeReservation(`${root}allday-zoned`, {
+      kind: "EventReservation",
+      start: "2026-12-01Z",
+    });
+    expect(written).toContain('"2026-12-01Z"^^xsd:date');
+    expect(parseReservations(await parseRdf(written, "text/turtle"))[0]?.start).toBe("2026-12-01Z");
   });
   it.each([
     '"2026-12-01"',

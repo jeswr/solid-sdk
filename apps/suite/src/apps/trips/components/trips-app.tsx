@@ -58,7 +58,8 @@ const icons = {
   EventReservation: Ticket,
 };
 function LocalTime({ value }: { value?: string | undefined }) {
-  if (value && isAllDay(value)) return <time dateTime={value}>All day</time>;
+  // HTML date strings carry no zone, so a zoned xsd:date keeps only its calendar day.
+  if (value && isAllDay(value)) return <time dateTime={value.slice(0, 10)}>All day</time>;
   return value ? (
     <time dateTime={value}>
       {value.slice(11, 16)}

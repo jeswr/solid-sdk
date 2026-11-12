@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
-import { type Trip, type TripsStore, UnconfirmedWriteError } from "@jeswr/solid-trips";
+import {
+  deduplicate,
+  isTrusted,
+  type Trip,
+  type TripsStore,
+  UnconfirmedWriteError,
+} from "@jeswr/solid-trips";
 import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import { createTripsState } from "../src/apps/trips/state/trips-state";
@@ -298,4 +304,58 @@ it("keeps a new booking and reloads when the trip write outcome is unknown", asy
   expect(store.load).toHaveBeenCalledOnce();
   expect(failure).toHaveBeenCalledWith(expect.stringContaining("couldn't confirm"));
   expect(state.getSnapshot().trips[0]?.reservations).toContain("https://pod.example/new#it");
+});
+it("does not roll back the target when the source write outcome is unknown", async () => {
+  const save = vi
+    .fn<(trip: Trip) => Promise<Trip>>()
+    .mockResolvedValueOnce({ ...b, reservations: a.reservations, etag: '"target"' })
+    .mockRejectedValueOnce(new UnconfirmedWriteError(new Error("connection reset")))
+    .mockResolvedValue(b);
+  const { state, store, failure } = setup(save);
+  // The source PUT committed: the booking now lives only in the target trip.
+  store.load = vi.fn(async () => ({
+    trips: [
+      { ...a, reservations: [] },
+      { ...b, reservations: a.reservations },
+    ],
+    reservations: [],
+  }));
+  state.move(a.reservations[0] as string, a.id, b.id);
+  await tick();
+  await tick();
+  // A rollback would remove the booking from the target too, leaving it in neither trip.
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(store.load).toHaveBeenCalledOnce();
+  expect(failure).toHaveBeenCalledWith(expect.stringContaining("couldn't confirm"));
+  expect(state.getSnapshot().error).toContain("couldn't confirm");
+  expect(state.getSnapshot().trips[0]?.reservations).toEqual([]);
+  expect(state.getSnapshot().trips[1]?.reservations).toEqual(a.reservations);
+});
+it("marks a pending manual booking as manual so it is trusted while it saves", async () => {
+  const { state } = setup();
+  const booking = {
+    kind: "FlightReservation" as const,
+    provider: "Example",
+    reservationNumber: "ABC",
+  };
+  state.addBooking(a.id, booking);
+  const pending = state.getSnapshot().reservations[0];
+  expect(pending).toMatchObject({ origin: "manual" });
+  expect(pending && isTrusted(pending)).toBe(true);
+  // An untrusted connector duplicate must not outrank the pending manual copy.
+  const unverified = {
+    ...booking,
+    id: "https://pod.example/mail/trips/abc#it",
+    modified: "2026-12-02T00:00:00Z",
+    trust: "unverified" as const,
+  };
+  const pendingItem = pending as NonNullable<typeof pending>;
+  expect(deduplicate([pendingItem, unverified]).map((item) => item.id)).toEqual([pendingItem.id]);
+  // An explicit trust claim on the input is left to isTrusted, as in the store.
+  state.addBooking(a.id, { ...booking, reservationNumber: "DEF", trust: "unverified" });
+  const claimed = state.getSnapshot().reservations.at(-1);
+  expect(claimed?.origin).toBeUndefined();
+  expect(claimed && isTrusted(claimed)).toBe(false);
+  await tick();
+  await tick();
 });

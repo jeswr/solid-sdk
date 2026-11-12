@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import {
   bookingKey,
+  type Reservation,
   type ReservationInput,
   type Trip,
   type TripSnapshot,
@@ -114,7 +115,14 @@ export function createTripsState(
       });
     },
     addBooking(tripId: string, input: ReservationInput) {
-      const temporary = { ...input, id: `pending:${crypto.randomUUID()}` };
+      // Mirror the store's result: a booking in the owner-only manual container that
+      // claims no email trust is trusted (isTrusted), so the pending copy must not show
+      // the unverified badge or rank below a trusted duplicate while it saves.
+      const temporary: Reservation = {
+        ...input,
+        id: `pending:${crypto.randomUUID()}`,
+        ...(input.trust === undefined ? { origin: "manual" as const } : {}),
+      };
       enqueue({
         apply: (snapshot) => ({
           ...snapshot,
@@ -200,6 +208,9 @@ export function createTripsState(
               ),
             };
           } catch (error) {
+            // The source PUT may have committed (booking already removed from it): rolling
+            // the target back then would leave the booking in neither trip. Reload instead.
+            if (error instanceof UnconfirmedWriteError) throw error;
             try {
               await store.saveTrip({ ...to, etag: target.etag });
             } catch {

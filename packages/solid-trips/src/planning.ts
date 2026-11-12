@@ -40,6 +40,8 @@ export function deduplicate(reservations: readonly Reservation[]): Reservation[]
   }
   return [...byKey.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
+/** The clock part of a time; an all-day date, even with a timezone, has none and sorts first. */
+const clock = (value: string | undefined) => (value?.[10] === "T" ? value.slice(11, 19) : "");
 /** Keep calendar dates and local clock spelling; never infer a zone from a place. */
 export function itinerary(trip: Pick<Trip, "reservations">, reservations: readonly Reservation[]) {
   const ids = new Set(trip.reservations);
@@ -55,9 +57,7 @@ export function itinerary(trip: Pick<Trip, "reservations">, reservations: readon
     .map(([date, items]) => ({
       date,
       items: items.sort(
-        (a, b) =>
-          (a.start ?? "").slice(11, 19).localeCompare((b.start ?? "").slice(11, 19)) ||
-          a.id.localeCompare(b.id),
+        (a, b) => clock(a.start).localeCompare(clock(b.start)) || a.id.localeCompare(b.id),
       ),
     }));
 }

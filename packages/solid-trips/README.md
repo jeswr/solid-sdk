@@ -40,7 +40,8 @@ facade validates ISO calendar/clock/offset values and bridges typed xsd:dateTime
 IRI statuses and provider literals/nodes using typed RDF/JS accessors. Invalid times are
 omitted without dropping other booking fields. A bare calendar date (for example an Event
 startDate "2026-12-01", as xsd:string or xsd:date) is an all-day booking (`isAllDay`); it is
-kept as given, sorts first on its day and is written back as xsd:date. Manual writes keep xsd:dateTime and the
+kept as given, sorts first on its day and is written back as xsd:date. A timezoned xsd:date
+("2026-12-01Z", "2026-12-01+01:00") is all-day too; its offset is kept, never read as a clock. Manual writes keep xsd:dateTime and the
 original lexical offset (the generator's Date projection loses it). Booking names live on
 the reservation itself, including transport bookings. Supplying a fetched document URL to
 `parseReservations(dataset, url)` excludes subjects asserted about other documents. `itinerary()` orders original calendar
@@ -108,6 +109,8 @@ Exact divergences pinned in regression tests:
 - Connector string values, booking-level airline/provider and fedcon trust now survive
   parse/group (`test/connector.test.ts`); invalid times are omitted, absent modification
   times stay absent, and booking names persist for all seven reservation classes.
+- Timezoned dates such as "2026-12-01Z" were dropped as invalid; they are now kept as
+  all-day bookings (`test/trust-time-budget.test.ts`).
 - Trust-ranked deduplication, manual bookings without email trust, all-day dates, the load
   budget, unconfirmed trip writes and the CON-A8 writer's one-document-per-item layout
   (`test/fixtures/writer/`) are pinned in `test/trust-time-budget.test.ts`.
