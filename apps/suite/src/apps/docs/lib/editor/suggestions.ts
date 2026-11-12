@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { isHistoryTransaction } from "@tiptap/pm/history";
 import { Fragment, type Mark, type MarkType, type Node, Slice } from "@tiptap/pm/model";
 import {
@@ -150,6 +151,43 @@ export function resolveSuggestions(state: EditorState, accept: boolean, id?: str
     ]);
   writeBreaks(tr, rebuilt);
   return tr;
+}
+
+/**
+ * Edits outside Suggesting mode (and local edits Suggesting mode does not rewrite) move
+ * paragraph edges too. Keep each stored edge on the boundary its tokens map to, and drop
+ * copies a split or join left on other blocks; an edge whose tokens were deleted goes.
+ */
+function remapBreaks(
+  transactions: readonly Transaction[],
+  oldState: EditorState,
+  newState: EditorState,
+): Transaction | null {
+  const mapping = new Mapping();
+  for (const tr of transactions) mapping.appendMapping(tr.mapping);
+  const remaining = new Map<string, BreakSuggestion[]>();
+  let tracked = false;
+  for (const boundary of boundaries(oldState.doc)) {
+    const items = breaks(boundary.node).filter((item) => item.edge === boundary.edge);
+    if (!items.length) continue;
+    tracked = true;
+    const from = mapping.mapResult(boundary.from, 1);
+    const to = mapping.mapResult(boundary.to, 1);
+    if (from.deleted || to.deleted) continue;
+    const key = `${boundary.edge}:${from.pos}:${to.pos}`;
+    remaining.set(key, [...(remaining.get(key) ?? []), ...items]);
+  }
+  // Without stored edges, a split can only copy an empty value.
+  if (!tracked) return null;
+  const rebuilt = new Map<number, BreakSuggestion[]>();
+  for (const boundary of boundaries(newState.doc))
+    rebuilt.set(boundary.pos, [
+      ...(rebuilt.get(boundary.pos) ?? []),
+      ...(remaining.get(`${boundary.edge}:${boundary.from}:${boundary.to}`) ?? []),
+    ]);
+  const tr = newState.tr.setMeta(suggestionAction, true);
+  writeBreaks(tr, rebuilt);
+  return tr.docChanged ? tr : null;
 }
 
 function bypass(tr: Transaction) {
@@ -458,7 +496,9 @@ export function createSuggestionPlugin() {
           true,
         );
       }
-      return rewriteTransactions(transactions, oldState, newState);
+      const rewritten = rewriteTransactions(transactions, oldState, newState);
+      if (rewritten || !transactions.some((tr) => tr.docChanged && !bypass(tr))) return rewritten;
+      return remapBreaks(transactions, oldState, newState);
     },
   });
 }
@@ -472,6 +512,8 @@ export const Suggestions = Extension.create({
         attributes: {
           suggestionBreaks: {
             default: null,
+            // A split must not copy another block's edges; remapBreaks places them.
+            keepOnSplit: false,
             parseHTML: (element: HTMLElement) => {
               try {
                 const value: unknown = JSON.parse(
