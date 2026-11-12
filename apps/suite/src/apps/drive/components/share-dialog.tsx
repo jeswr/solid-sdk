@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import {
@@ -19,6 +20,7 @@ import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
   CONTENTS_DIFFER,
+  isPartialScope,
   loadSharing,
   SharingConflictError,
   SharingIncompleteError,
@@ -27,6 +29,7 @@ import {
   type SharingSnapshot,
 } from "../lib/sharing/adapter";
 import type { SharingRole, SharingSelection, SharingState } from "../lib/sharing/types";
+import { ScopedSharing } from "./share-scoped";
 
 const profile = () => ({ loading: false });
 const COMMENT_REASON = "Commenter is not available for this item yet. Choose Viewer or Editor.";
@@ -94,6 +97,8 @@ export function ShareDialog({
   const [role, setRole] = useState<SharingRole>("viewer");
   const [announcement, setAnnouncement] = useState("");
   const [retry, setRetry] = useState(0);
+  // A folder whose own and contents access differ opens the scope-aware editor.
+  const [scoped, setScoped] = useState(false);
   const focusAfterSave = useRef<HTMLElement | null>(null);
   const done = useRef<HTMLButtonElement>(null);
   const generalId = useId();
@@ -107,6 +112,7 @@ export function ShareDialog({
     setLoading(true);
     setSnapshot(undefined);
     setError("");
+    setScoped(false);
     loadSharing(session, item.url).then(
       (value) => {
         if (live) {
@@ -117,7 +123,8 @@ export function ShareDialog({
       },
       (reason: unknown) => {
         if (live) {
-          setError(reason instanceof Error ? reason.message : "Couldn't load sharing");
+          if (isPartialScope(reason)) setScoped(true);
+          else setError(reason instanceof Error ? reason.message : "Couldn't load sharing");
           setLoading(false);
         }
       },
@@ -231,6 +238,15 @@ export function ShareDialog({
               </Button>
             )}
           </div>
+        )}
+        {scoped && (
+          <ScopedSharing
+            session={session}
+            resource={item.url}
+            disabledReason={disabledReason}
+            onSaved={onSaved}
+            onMatched={() => setRetry((n) => n + 1)}
+          />
         )}
         {!loading && state && (
           <div className="su-stack" aria-busy={saving}>

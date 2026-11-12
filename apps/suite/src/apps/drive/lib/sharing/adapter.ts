@@ -14,8 +14,11 @@ import {
   type RoleGrant,
   type RolesOptions,
   readGrants,
+  readScopedGrants,
   removeGrant,
+  type ScopedGrantSnapshot,
   setGrants,
+  setScopedGrants,
 } from "@jeswr/pod-access/roles";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
 import { SharingError } from "./rdf";
@@ -28,6 +31,7 @@ import {
   UNSUPPORTED_SYSTEM,
   usesEssModes,
   verifyAccess,
+  verifyScopedAccess,
 } from "./verify";
 
 export interface SharingSession {
@@ -217,18 +221,28 @@ export async function loadSharing(
 ): Promise<SharingSnapshot> {
   return (await readSharing(session, resource)).snapshot;
 }
+/** Read through a recording fetch; a refused read is mapped with the documents it saw. */
+async function recorded<T>(
+  session: SharingSession,
+  resource: string,
+  read: (url: string, options: RolesOptions) => Promise<T>,
+): Promise<{ recorder: ReturnType<typeof recordAccess>; grants: T }> {
+  const recorder = recordAccess(session.fetch);
+  try {
+    return {
+      recorder,
+      grants: await read(resource, options({ ...session, fetch: recorder.fetch }, resource)),
+    };
+  } catch (error) {
+    throw loadError(error, await recorder.documents(resource).catch(() => []));
+  }
+}
 /** `loadSharing`, plus the access documents' validators for binding a follow-up write. */
 async function readSharing(
   session: SharingSession,
   resource: string,
 ): Promise<{ snapshot: SharingSnapshot; pins: ReadonlyMap<string, string> }> {
-  const recorder = recordAccess(session.fetch);
-  let grants: GrantSnapshot;
-  try {
-    grants = await readGrants(resource, options({ ...session, fetch: recorder.fetch }, resource));
-  } catch (error) {
-    throw loadError(error, await recorder.documents(resource).catch(() => []));
-  }
+  const { recorder, grants } = await recorded(session, resource, readGrants);
   const state = toSharingState(grants.grants);
   const { contentsDiffer } = await verifyAccess(
     resource,
@@ -436,6 +450,123 @@ export async function applySharing(
       fresh,
       unchanged,
       failures.length ? { cause: failures[0] } : undefined,
+    );
+  return fresh;
+}
+
+/** Whether a load failed only because the folder's own and contents access differ. */
+export function isPartialScope(error: unknown): boolean {
+  const cause = error instanceof SharingError ? error.cause : error;
+  return isRoleError(cause) && cause.code === "partial-scope";
+}
+
+/** A folder's access shown separately for the folder itself and for the items inside it. */
+export interface ScopedSharingSnapshot {
+  readonly resource: string;
+  readonly grants: ScopedGrantSnapshot;
+  readonly folder: SharingState;
+  readonly contents: SharingState;
+  readonly canManage: boolean;
+}
+export interface ScopedSharingSelection {
+  readonly folder: SharingSelection;
+  readonly contents: SharingSelection;
+}
+
+/** Read a folder's access per scope; access the projection dropped fails closed. */
+export async function loadScopedSharing(
+  session: SharingSession,
+  resource: string,
+): Promise<ScopedSharingSnapshot> {
+  const { recorder, grants } = await recorded(session, resource, readScopedGrants);
+  const folder = toSharingState(grants.folder);
+  const contents = toSharingState(grants.contents);
+  await verifyScopedAccess(
+    resource,
+    () => recorder.documents(resource),
+    grants.folder,
+    grants.contents,
+  );
+  const owns = (state: SharingState) =>
+    state.people.some((p) => p.webId === session.webId && p.role === "owner");
+  return { resource, grants, folder, contents, canManage: owns(folder) };
+}
+
+/** The full grant set for one scope: unchanged rows verbatim, changed ones re-planned. */
+function scopeGrants(
+  session: SharingSession,
+  snapshot: ScopedSharingSnapshot,
+  scope: "folder" | "contents",
+  selection: SharingSelection,
+): { grants: RoleGrant[]; changed: boolean } {
+  const view: SharingSnapshot = {
+    resource: snapshot.resource,
+    grants: {
+      url: snapshot.resource,
+      grants: snapshot.grants[scope],
+      version: snapshot.grants.version,
+    },
+    state: snapshot[scope],
+    canManage: snapshot.canManage,
+    contentsDiffer: true,
+  };
+  const plan = toGrants(session, view, selection);
+  // setScopedGrants takes the full set, so an omitted principal is removed directly.
+  return plan
+    ? { grants: plan.grants, changed: true }
+    : { grants: snapshot.grants[scope], changed: false };
+}
+
+/**
+ * Apply a per-scope selection in one conditional write, and report success only when the
+ * reloaded access matches both scopes.
+ */
+export async function applyScopedSharing(
+  session: SharingSession,
+  snapshot: ScopedSharingSnapshot,
+  selection: ScopedSharingSelection,
+): Promise<ScopedSharingSnapshot> {
+  if (!snapshot.canManage) throw new SharingError("Only an owner can change sharing");
+  const folder = scopeGrants(session, snapshot, "folder", selection.folder);
+  const contents = scopeGrants(session, snapshot, "contents", selection.contents);
+  if (!folder.changed && !contents.changed) return snapshot;
+  let writing = false;
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    if (init?.method === "PUT") writing = true;
+    return session.fetch(input, init);
+  };
+  let failure: unknown;
+  try {
+    const result = await setScopedGrants(
+      snapshot.resource,
+      { folder: folder.grants, contents: contents.grants },
+      {
+        ...options({ ...session, fetch }, snapshot.resource),
+        webId: session.webId,
+        expected: snapshot.grants,
+      },
+    );
+    failure = result.failed[0]?.error;
+  } catch (error) {
+    failure = error;
+  }
+  if (failure !== undefined) {
+    if (isRoleError(failure) && failure.code === "conflict") throw new SharingConflictError();
+    throw saveError(failure, writing);
+  }
+  let fresh: ScopedSharingSnapshot;
+  try {
+    fresh = await loadScopedSharing(session, snapshot.resource);
+  } catch (cause) {
+    throw new SharingRefreshError(cause);
+  }
+  const unchanged = [
+    ...unmet(fresh.folder, selection.folder).map((id) => `${id} (this folder)`),
+    ...unmet(fresh.contents, selection.contents).map((id) => `${id} (items inside)`),
+  ];
+  if (unchanged.length)
+    throw new SharingError(
+      `Sharing wasn't saved as chosen for ${unchanged.join(", ")}. Reload to see the current access.`,
     );
   return fresh;
 }
