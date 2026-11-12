@@ -3,6 +3,7 @@ name: shacl-forms
 description: Use when compiling a runtime SHACL form, designing form descriptors, validating form values, or building/parsing/serializing pod response RDF with @jeswr/shacl-forms.
 ---
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Runtime SHACL forms
 
@@ -22,7 +23,9 @@ shapes again. Import all six from `@jeswr/shacl-forms`.
 - Four nested NodeShapes including the root are allowed. Node references must be
   named, explicit NodeShapes; complex paths, aliases and cycles are rejected.
 - `sh:maxLength` is rejected for generator parity; multiline comes only from
-  `dash:singleLine false`. No arbitrary regex compilation.
+  `dash:singleLine false`; `dash:singleLine true` forbids CR/LF in values. No other
+  `dash:*`, `owl:imports` or unreviewed non-SHACL predicate is admitted on shape nodes.
+  Labels are plain `xsd:string` (no language tags); keys cannot contain `.`, `[`, `]`.
 - Date fields accept valid `Date`s, numeric fields numbers, boolean fields booleans.
   `maxCount: 1` parses as a scalar; all other cardinalities parse as arrays.
 - `validate().valid` ignores advisory issues; build throws on violations. Parse
@@ -37,6 +40,7 @@ shapes again. Import all six from `@jeswr/shacl-forms`.
 - `prefixes` comes from `sh:declare`, since DatasetCore has no Turtle prefix map.
   Build/formToShapes stores retain prefixes for serialize in memory.
 - This package is security-critical and browser-safe. Preserve graph, scalar,
-  value-count and depth budgets. Add adversarial tests for any admission change.
+  value-count, depth and per-operation class-walk budgets: pass one shared
+  `ClassWalkBudget` to every `hasDatasetClass` call in a compile or parse. Add adversarial tests for any admission change.
 
 Run the package gate and `pnpm run lint:root`; do not publish without review.

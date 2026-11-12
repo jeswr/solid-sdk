@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 export interface FormModel {
   shape: string;
   targetClass?: string;
@@ -43,6 +44,8 @@ export interface FieldDescriptor {
   message?: string;
   /** sh:class, checked against the response data graph. */
   hasClass?: string;
+  /** `dash:singleLine true`: text values containing CR or LF are rejected on write and dropped on read. */
+  singleLine?: true;
 }
 export interface GroupDescriptor {
   iri: string;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { literalMapper, XSD } from "@jeswr/model-runtime";
 import { DataFactory, Store } from "n3";
 import { compiledForms, compileForm, localName } from "./compile.js";
@@ -35,6 +36,7 @@ const FIELD_KEYS = new Set([
   "pattern",
   "message",
   "hasClass",
+  "singleLine",
 ]);
 /** Validate designer descriptors by admitting their emitted graph through the same compiler. */
 export function formToShapes(form: FormModel): Store {
@@ -152,6 +154,15 @@ export function formToShapes(form: FormModel): Store {
           );
         }
       }
+      if (field.singleLine !== undefined) {
+        if (field.singleLine !== true) fail(`${DASH}singleLine`);
+        put(
+          store,
+          prop,
+          `${DASH}singleLine`,
+          DataFactory.literal("true", DataFactory.namedNode(`${XSD}boolean`)),
+        );
+      }
       if (field.kind === "multiline")
         put(
           store,
@@ -206,6 +217,7 @@ export function formToShapes(form: FormModel): Store {
         !checked ||
         field.key !== checked.key ||
         field.kind !== checked.kind ||
+        field.singleLine !== checked.singleLine ||
         (field.kind === "node") !== !!field.form
       )
         throw new FormAdmissionError(

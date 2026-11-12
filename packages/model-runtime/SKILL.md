@@ -158,7 +158,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 `defineModel`, `validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
 `applyScalarGuards` (scalar constraints only; pair with datatype mappers),
-`hasDatasetClass(doc, subject, requiredClasses)` (bounded data-graph class membership),
+`hasDatasetClass(doc, subject, requiredClasses, budget?)` (bounded data-graph class membership;
+share one `ClassWalkBudget` across an operation's calls — exhaustion returns `false`),
 `tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter
 behaviour stays byte-identical.

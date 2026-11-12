@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/shacl-forms
 
 > **Experimental, AI-agent-generated.** Security-critical runtime in the
@@ -37,7 +38,9 @@ const editableShapes = formToShapes(form);
   scalar values are omitted. It writes via `@rdfjs/wrapper`, using model-runtime
   datatype mappers, `applyScalarGuards`, and `sanitizeText`. Class-constrained IRI
   values are explicitly typed on writes. Nested subjects are minted in the response
-  document, avoiding supplied IRI identities.
+  document from the subject's own fragment (`doc#r1` mints `doc#r1-form-node-1`; a
+  fragment-less subject mints `doc#form-node-1`), skipping the subject and supplied IRI
+  identities, so sibling responses in one document never share children.
 - `parse(form, subject, data: DatasetCore): FormValues` never throws. It drops invalid
   raw values, checks exact literal datatypes/lexical forms and raw cardinality, and
   retains valid siblings. Below a minimum, or above a maximum, the field drops.
@@ -89,6 +92,7 @@ prefix declarations.
 | `sh:datatype` | Only model-runtime `VALIDATED_DATATYPES`; exact mappers reused |
 | String family, anyURI, duration | `text`; reviewed lexical restrictions retained |
 | `xsd:string` + `dash:singleLine false` | `multiline` |
+| Text field + `dash:singleLine true` | `singleLine: true`; values containing CR or LF fail on write (graded by severity) and drop on read |
 | Integer family / decimal, double, float | `integer` / `decimal`, including datatype value-space checks |
 | Boolean / date / dateTime | `boolean` / `date` / `dateTime` |
 | `sh:nodeKind sh:IRI`, `sh:class` | `iri`; class uses bounded data-graph subclass membership |
@@ -98,7 +102,9 @@ prefix declarations.
 | `minInclusive`, `maxInclusive` | Finite numeric bounds on numeric fields only; precision loss rejected |
 | `sh:pattern` | Exactly `^https?://`, `^https://` on IRIs, or `\S` on string projections; imported scalar guards check the original spelling |
 | `sh:severity` | One of Violation (default), Warning, Info |
-| `rdfs:label`, `sh:name`, `description`, `order`, `group`, `message` | Display metadata and issue messages; groups require `sh:PropertyGroup` |
+| `rdfs:label`, `sh:name`, `description`, `order`, `group`, `message` | Display metadata and issue messages; groups require `sh:PropertyGroup`. Labels and other text parameters must be plain `xsd:string`; language-tagged labels are rejected |
+| Field keys (`sh:name`, else predicate local name) | Must not contain `.`, `[` or `]` (issue-key separators) or be a prototype key |
+| Non-SHACL predicates | Shapes, property shapes and groups admit only `rdf:type`, `rdfs:label`, `rdfs:comment` (plus `dash:singleLine` on property shapes); prefix declarations admit only `rdf:type`. Every other predicate, including other `dash:*` and `owl:imports`, is rejected |
 | Other `sh:*`, implicit class targets, complex paths, inline node shapes | Rejected, including orphan unsupported constraints |
 
 Parity is with the reviewed **constraint subset**, not the generator's ontology
@@ -119,7 +125,11 @@ qualified constraints and unknown components fail closed.
 
 Limits: 10,000 shapes quads, 512 Ki UTF-16 graph characters, 256 projected fields
 across nesting, 1,024 enum members, four NodeShapes per branch, 65,536 UTF-16
-characters per response scalar, and 10,000 values per operation. Reads over budget
+characters per response scalar, 10,000 values per operation, and 100,000
+`rdf:type`/`rdfs:subClassOf` reads shared by every class walk in one `compileForm` or
+`parse` call (each walk also keeps model-runtime's 10,000-read cap). An exhausted class
+budget rejects the shapes graph during compilation and stops recognising class-checked
+values during parsing. Reads over budget
 return an empty result; write/validation budget failures are violations. These caps
 bound untrusted input in addition to the shared guards. A supplied DatasetCore's
 own eager `match()` allocation cannot be bounded by a consumer; n3 Stores use lazy

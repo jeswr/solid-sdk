@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   assertWritableQuads,
+  type ClassWalkBudget,
   hasDatasetClass,
   httpIriOrUndefined,
   isSafeAbsoluteIri,
@@ -37,6 +39,16 @@ const PROPERTY = new Set([
   "node",
 ]);
 const NODE = new Set([...META, "targetClass", "property", "declare"]);
+/** Reviewed non-SHACL predicates per subject role; everything else (dash:*, owl:imports, …) fails closed. */
+const DISPLAY = [`${RDF}type`, `${RDFS}label`, `${RDFS}comment`];
+const FOREIGN = {
+  node: new Set(DISPLAY),
+  property: new Set([...DISPLAY, `${DASH}singleLine`]),
+  group: new Set(DISPLAY),
+  declaration: new Set([`${RDF}type`]),
+} as const;
+/** Issue keys use `.` and `[i]` as separators, so field keys must not contain them. */
+const AMBIGUOUS_KEY = /[.[\]]/;
 export const compiledForms = new WeakSet<FormModel>();
 export const localName = (iri: string): string =>
   iri.slice(Math.max(iri.lastIndexOf("#"), iri.lastIndexOf("/")) + 1) || "field";
@@ -59,12 +71,8 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
     } catch {
       reject("RDF term", q.subject.value);
     }
+    // assertWritableQuads is the single IRI/datatype/language policy for admitted terms.
     if (q.graph.termType !== "DefaultGraph") reject("named graph", q.subject.value);
-    for (const t of [q.subject, q.predicate, q.object]) {
-      if (t.termType === "NamedNode" && !isSafeAbsoluteIri(t.value)) reject("IRI", q.subject.value);
-      if (t.termType === "Literal" && !isSafeAbsoluteIri(t.datatype.value))
-        reject("datatype", q.subject.value);
-    }
     store.add(q);
   }
   const all = (subject: Term, predicate: string): Term[] => [...objects(store, subject, predicate)];
@@ -115,10 +123,12 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
     if (
       q.predicate.value.startsWith(SH) ||
       (q.predicate.value === `${RDF}type` &&
-        [`${SH}NodeShape`, `${SH}PropertyShape`].includes(q.object.value))
+        [`${SH}NodeShape`, `${SH}PropertyShape`, `${SH}PropertyGroup`].includes(q.object.value))
     )
       subjects.set(termId(q.subject), q.subject);
   const classGraph = new Store(store);
+  // One read budget for every implicit-class walk in this compile (not per subject).
+  const classBudget: ClassWalkBudget = { reads: 0, limit: LIMIT.classReads };
   let focusId = 0;
   for (const subject of subjects.values()) {
     let focus: ReturnType<typeof DataFactory.namedNode> = DataFactory.namedNode(
@@ -131,8 +141,16 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
       focus = DataFactory.namedNode(`${focus.value}:next`);
     for (const type of all(subject, `${RDF}type`)) put(classGraph, focus, `${RDF}type`, type);
     const doc = new TermWrapper(focus, classGraph, DataFactory);
-    if (hasDatasetClass(doc, focus.value, [`${RDFS}Class`, "http://www.w3.org/2002/07/owl#Class"]))
-      reject("implicit class target", subject.value);
+    const implicit = hasDatasetClass(
+      doc,
+      focus.value,
+      [`${RDFS}Class`, "http://www.w3.org/2002/07/owl#Class"],
+      classBudget,
+    );
+    // An exhausted budget makes the walk answer false; treat that as unknown and reject.
+    if (classBudget.reads > classBudget.limit)
+      reject("class walk limit", subject.value, "subclass graph exceeds the read budget");
+    if (implicit) reject("implicit class target", subject.value);
     const property =
       all(subject, `${SH}path`).length > 0 ||
       store.countQuads(subject, `${RDF}type`, DataFactory.namedNode(`${SH}PropertyShape`), null) >
@@ -142,15 +160,18 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
       0;
     const declaration =
       all(subject, `${SH}prefix`).length > 0 || all(subject, `${SH}namespace`).length > 0;
-    const allowed = declaration
-      ? new Set(["prefix", "namespace"])
-      : group
-        ? new Set(["order"])
-        : property
-          ? PROPERTY
-          : NODE;
+    const role = declaration ? "declaration" : group ? "group" : property ? "property" : "node";
+    const allowed = {
+      declaration: new Set(["prefix", "namespace"]),
+      group: new Set(["order"]),
+      property: PROPERTY,
+      node: NODE,
+    }[role];
     for (const q of store.getQuads(subject, null, null, null)) {
-      if (!q.predicate.value.startsWith(SH)) continue;
+      if (!q.predicate.value.startsWith(SH)) {
+        if (!FOREIGN[role].has(q.predicate.value)) reject(q.predicate.value, subject.value);
+        continue;
+      }
       const component = q.predicate.value.slice(SH.length);
       if (!allowed.has(component)) reject(q.predicate.value, subject.value);
       if (component !== "property" && component !== "declare") one(subject, q.predicate.value);
@@ -236,6 +257,8 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
       const base = name ?? localName(path);
       if (!base || base.length > 4096 || ["__proto__", "prototype", "constructor"].includes(base))
         reject(`${SH}name`, prop.value, "unsafe field key");
+      if (AMBIGUOUS_KEY.test(base))
+        reject(`${SH}name`, prop.value, "field keys cannot contain '.', '[' or ']'");
       let key = base;
       for (let suffix = 2; keys.has(key); suffix++) key = `${base}_${suffix}`;
       keys.add(key);
@@ -243,9 +266,7 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
       const nodeKind = iri(prop, `${SH}nodeKind`);
       const hasClass = iri(prop, `${SH}class`);
       const node = iri(prop, `${SH}node`);
-      if (nodeKind && ![`${SH}IRI`, `${SH}Literal`].includes(nodeKind))
-        reject(`${SH}nodeKind`, prop.value);
-      if (datatype && !VALIDATED_DATATYPES.includes(datatype)) reject(`${SH}datatype`, prop.value);
+      // nodeKind/datatype/pattern allowlists were already enforced for every property subject.
       const isIri = nodeKind === `${SH}IRI` || !!hasClass || !!node || !datatype;
       if (
         (isIri && datatype) ||
@@ -309,16 +330,7 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
       )
         reject(`${SH}minInclusive/maxInclusive`, prop.value);
       const pattern = text(prop, `${SH}pattern`);
-      if (pattern !== undefined) {
-        if (
-          !(
-            (isIri && ["^https?://", "^https://"].includes(pattern)) ||
-            ((isIri || mapper?.jsType === "string") && pattern === "\\S")
-          )
-        )
-          reject(`${SH}pattern`, prop.value);
-        field.pattern = pattern as FieldDescriptor["pattern"];
-      }
+      if (pattern !== undefined) field.pattern = pattern as FieldDescriptor["pattern"];
       const singleLine = one(prop, `${DASH}singleLine`);
       if (singleLine) {
         if (singleLine.termType !== "Literal" || singleLine.datatype.value !== `${XSD}boolean`)
@@ -331,6 +343,7 @@ export function compileForm(shapes: DatasetCore, shapeIri: string): FormModel {
         }
         if (field.kind !== "text") reject(`${DASH}singleLine`, prop.value);
         if (flag === false) field.kind = "multiline";
+        else field.singleLine = true;
       }
       const head = one(prop, `${SH}in`);
       if (head) {

@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   applyScalarGuards,
+  type ClassWalkBudget,
   hasDatasetClass,
   httpIriOrUndefined,
   isSafeAbsoluteIri,
@@ -57,6 +59,9 @@ function optionTerm(
     ? DataFactory.namedNode(option.value)
     : DataFactory.literal(option.value, DataFactory.namedNode(field.datatype ?? `${XSD}string`));
 }
+/** `dash:singleLine true` admits no line breaks (sanitizeText keeps CR/LF). */
+const breaksLine = (field: FieldDescriptor, value: unknown): boolean =>
+  field.singleLine === true && typeof value === "string" && /[\r\n]/.test(value);
 /** Shared scalar write path: check type via mapper, sanitize text, then guard the stored spelling. */
 function writeTerm(field: FieldDescriptor, value: unknown): Term | undefined {
   return tryRead(() => {
@@ -81,6 +86,7 @@ function writeTerm(field: FieldDescriptor, value: unknown): Term | undefined {
       if (typeof value === "string") {
         if (mapper.lexicalValid && !mapper.lexicalValid(value)) return undefined;
         if (!mapper.lexicalValid) value = sanitizeText(value);
+        if (breaksLine(field, value)) return undefined;
       }
       term = mapper.from(value as never, DataFactory);
       mapped = readLiteral(term);
@@ -91,7 +97,12 @@ function writeTerm(field: FieldDescriptor, value: unknown): Term | undefined {
     return term;
   });
 }
-function readTerm(field: FieldDescriptor, term: Term, data: DatasetCore): FormValue | undefined {
+function readTerm(
+  field: FieldDescriptor,
+  term: Term,
+  data: DatasetCore,
+  classBudget: ClassWalkBudget,
+): FormValue | undefined {
   return tryRead(() => {
     if (term.value.length > LIMIT.text) return undefined;
     if (field.options && !field.options.some((option) => term.equals(optionTerm(field, option))))
@@ -106,12 +117,18 @@ function readTerm(field: FieldDescriptor, term: Term, data: DatasetCore): FormVa
       if (
         !iri ||
         (field.hasClass &&
-          !hasDatasetClass(new TermWrapper(term, data, DataFactory), term.value, [field.hasClass]))
+          !hasDatasetClass(
+            new TermWrapper(term, data, DataFactory),
+            term.value,
+            [field.hasClass],
+            classBudget,
+          ))
       )
         return undefined;
       return field.options ? term.value : iri;
     }
     if (term.termType !== "Literal" || term.datatype.value !== field.datatype) return undefined;
+    if (breaksLine(field, term.value)) return undefined;
     const value = readLiteral(term);
     return applyScalarGuards(manifestField(field), value) as FormValue | undefined;
   });
@@ -211,6 +228,10 @@ export function build(form: FormModel, subject: string, values: FormValues): Sto
   const budget = { reads: 0 };
   let childId = 0;
   const occupied = new Set([subject]);
+  // Children extend the subject's own fragment, so sibling responses in one document
+  // (doc#r1, doc#r2) mint disjoint IRIs (doc#r1-form-node-1, doc#r2-form-node-1).
+  const base = new URL(subject);
+  const stem = base.hash.length > 1 ? `${base.hash.slice(1)}-form-node-` : "form-node-";
   // Collect caller-supplied IRI identities before minting child subjects.
   const collect = (model: FormModel, input: FormValues): void => {
     for (const field of model.fields) {
@@ -243,8 +264,8 @@ export function build(form: FormModel, subject: string, values: FormValues): Sto
           if (!record(entry) || validate(field.form, entry).issues.length > 0) continue;
           let child: string;
           do {
-            const url = new URL(subject);
-            url.hash = `form-node-${++childId}`;
+            const url = new URL(base.href);
+            url.hash = `${stem}${++childId}`;
             child = url.href;
           } while (occupied.has(child));
           occupied.add(child);
@@ -274,6 +295,8 @@ export function parse(form: FormModel, subject: string, data: DatasetCore): Form
     if (!safeSubject(subject)) return {};
     form = checkedForm(form);
     const budget = { reads: 0 };
+    // One class-walk budget for the whole parse: exhaustion drops the remaining class-checked values.
+    const classBudget: ClassWalkBudget = { reads: 0, limit: LIMIT.classReads };
     const walk = (
       model: FormModel,
       id: string,
@@ -304,14 +327,17 @@ export function parse(form: FormModel, subject: string, data: DatasetCore): Form
                 term.termType === "NamedNode" &&
                 safeSubject(term.value) &&
                 (!field.hasClass ||
-                  hasDatasetClass(new TermWrapper(term, data, DataFactory), term.value, [
-                    field.hasClass,
-                  ]))
+                  hasDatasetClass(
+                    new TermWrapper(term, data, DataFactory),
+                    term.value,
+                    [field.hasClass],
+                    classBudget,
+                  ))
               ) {
                 const child = walk(field.form, term.value, true, next);
                 if (child.conforms) value = child.values;
               }
-            } else value = readTerm(field, term, data);
+            } else value = readTerm(field, term, data, classBudget);
             if (value !== undefined) valid.push(value);
           }
         const bad = overflow || valid.length < field.minCount || valid.length !== raw.size;

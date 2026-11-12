@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The interpreter — `defineModel(manifest)` turns a validated shape-manifest into
  * a typed model over `@rdfjs/wrapper`: a `Wrapper` class with per-field accessors,
@@ -1265,12 +1266,28 @@ const MAX_LINK_READS = 32;
 /** Bound dataset type/subclass traversal, including duplicate quads across graphs. */
 const MAX_CLASS_READS = 10000;
 
+/**
+ * A caller-owned read budget shared by several public class walks in one operation.
+ * Each walk keeps its own 10,000-read cap; once `reads` exceeds `limit`, every walk
+ * charged to this budget returns false (fail closed) instead of throwing.
+ */
+export interface ClassWalkBudget {
+  reads: number;
+  readonly limit: number;
+}
+
+function sharedRead(shared: ClassWalkBudget | undefined): boolean {
+  if (!shared) return true;
+  return Number.isSafeInteger(shared.limit) && ++shared.reads <= shared.limit;
+}
+
 /** SHACL class membership is rdf:type followed by rdfs:subClassOf* in the data. */
 function hasDatasetClass(
   doc: TermWrapper,
   subject: string,
   required: readonly string[],
   budget?: MigrationBudget,
+  shared?: ClassWalkBudget,
 ): boolean {
   const accepted = new Set(required);
   const pending: Term[] = [];
@@ -1292,7 +1309,7 @@ function hasDatasetClass(
     doc.factory.namedNode(RDF_TYPE),
   )) {
     if (budget) migrationRead(budget);
-    if (++reads > MAX_CLASS_READS) return false;
+    if (++reads > MAX_CLASS_READS || !sharedRead(shared)) return false;
     if (enqueue(type)) return true;
   }
   const subClassOf = doc.factory.namedNode(RDFS_SUBCLASS);
@@ -1300,7 +1317,7 @@ function hasDatasetClass(
     const type = pending.pop() as Term;
     for (const parent of matchObjects(doc.dataset, type, subClassOf)) {
       if (budget) migrationRead(budget);
-      if (++reads > MAX_CLASS_READS) return false;
+      if (++reads > MAX_CLASS_READS || !sharedRead(shared)) return false;
       if (enqueue(parent)) return true;
     }
   }
@@ -1310,14 +1327,16 @@ function hasDatasetClass(
 /**
  * Check SHACL class membership through the data graph's bounded, cycle-safe
  * rdf:type / rdfs:subClassOf walk. Runtime schema interpreters may reuse this
- * without access to the internal migration budget context.
+ * without access to the internal migration budget context. Pass one `budget` to every
+ * call in an operation to bound the operation's total walk, not just each call.
  */
 export function hasDatasetClassForSchema(
   doc: TermWrapper,
   subject: string,
   required: readonly string[],
+  budget?: ClassWalkBudget,
 ): boolean {
-  return hasDatasetClass(doc, subject, required);
+  return hasDatasetClass(doc, subject, required, undefined, budget);
 }
 
 interface NestedTargetResolution {

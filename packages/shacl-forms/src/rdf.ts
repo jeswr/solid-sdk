@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   assertSerializedQuads,
   assertWritableQuads,
@@ -20,6 +21,8 @@ export const LIMIT = {
   depth: 4,
   values: 10000,
   text: 65536,
+  /** Total rdf:type/rdfs:subClassOf reads shared by every class walk in one operation. */
+  classReads: 100000,
 } as const;
 export const termId = (term: Term): string =>
   JSON.stringify([
