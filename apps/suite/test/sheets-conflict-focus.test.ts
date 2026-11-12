@@ -156,6 +156,43 @@ it.each([
   await editor.unmount();
 });
 
+it("opens a private shared workbook with the account after the consent click", async () => {
+  const { book, options, pod } = await setup();
+  const publicFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 401 }));
+  let access = false;
+  const sessionFetch = vi.fn<typeof fetch>(async (input, init) =>
+    access ? pod.fetch(input, init) : new Response(null, { status: 403 }),
+  );
+  const grantResource = vi.fn(async (_url: string) => {});
+  mocks.service = createWorkbookService({
+    ...options,
+    podRoot: "https://pod.example/bob/",
+    fetch: sessionFetch,
+    publicFetch,
+    grantResource,
+  });
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  const alert = () => editor.host.querySelector('[role="alert"]')?.textContent ?? "";
+  const button = () =>
+    [...editor.host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Open with your account"),
+    );
+  expect(alert()).toContain(
+    `${new URL(book.container).host}${new URL(book.container).pathname} only`,
+  );
+  expect(sessionFetch).not.toHaveBeenCalled();
+  await click(button() as HTMLButtonElement);
+  await vi.waitFor(() => expect(alert()).toContain("Ask its owner to share it with you."));
+  expect(grantResource).toHaveBeenCalledExactlyOnceWith(book.container);
+  expect(button()).toBeUndefined();
+  access = true;
+  await click(
+    [...editor.host.querySelectorAll("button")].find((b) => b.textContent === "Retry") as Element,
+  );
+  await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  await editor.unmount();
+});
+
 it.each([
   401, 403,
 ])("explains unsupported private recipient access (%s) before mounting a grid", async (status) => {
@@ -171,7 +208,7 @@ it.each([
   });
   const editor = await mount(h(SheetEditor, { container: book.container }));
   expect(editor.host.querySelector('[role="alert"]')?.textContent).toContain(
-    "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
+    "This spreadsheet is private. You need access from its owner's pod to open it.",
   );
   expect(mocks.mount).not.toHaveBeenCalled();
   expect(publicFetch).toHaveBeenCalledTimes(2);

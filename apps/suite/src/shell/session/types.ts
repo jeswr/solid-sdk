@@ -20,6 +20,11 @@ export interface SessionBackend {
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signOut(account: SuiteAccount): Promise<void>;
   fetchFor(account: SuiteAccount): typeof fetch;
+  /**
+   * Let this account open one resource or container on another person's storage, for this
+   * session only. Call only from the click on a consent screen that names the address.
+   */
+  grantResource?(account: SuiteAccount, url: string): Promise<void>;
   onExpired(cb: () => void): () => void;
 }
 const signInMessages = {

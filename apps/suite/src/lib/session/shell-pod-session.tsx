@@ -44,6 +44,7 @@ export function ShellPodSessionProvider({
   const nativeListeners = useRef(new Set<(url: string) => void>());
   if (binding.current.account !== account)
     binding.current = { account, version: binding.current.version + 1 };
+  const canGrant = accounts.grantResource !== undefined;
   const session = useMemo<PodSession | undefined>(() => {
     if (!account) return undefined;
     const version = binding.current.version;
@@ -121,8 +122,15 @@ export function ShellPodSessionProvider({
         publicFetch,
         disconnect: () => latest.current.signOut(account.id),
       };
-    return { ...common, mode: "solid", publicFetch };
-  }, [account, accounts.sessionVersion]);
+    const grantResource = canGrant
+      ? async (url: string) => {
+          const grant = latest.current.grantResource;
+          if (!usable() || !grant) throw new Error("Sign in to continue");
+          await grant(url);
+        }
+      : undefined;
+    return { ...common, mode: "solid", publicFetch, ...(grantResource && { grantResource }) };
+  }, [account, accounts.sessionVersion, canGrant]);
   useLayoutEffect(() => {
     if (
       process.env.NEXT_PUBLIC_SUITE_TARGET !== "native" ||

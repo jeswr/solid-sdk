@@ -35,9 +35,12 @@ Every policy read is checked regardless of filename, and changed ACL discovery e
 
 Shared links use a separate view-only read path for another pod on the signed-in storage's
 origin, matching Docs' link origin boundary. Public-readable workbooks open anonymously.
-Private workbooks shared from another pod are not supported yet: pod-auth and the session
-layer cannot authorize a single foreign workbook on an existing session. A 401 or 403 explains
-that access is needed from the owner's pod instead of opening the editor.
+A private workbook shared from another pod (401 or 403) says so and, for a Solid account,
+offers "Open with your account" (sst-imb.57.1). That click is the consent: it names the
+workbook container and grants the account that container through pod-auth's resource grants
+until sign-out (`WorkbookService.grantShared`), then reopens it with `openShared(container,
+{ account: true })` through the session, still view-only. Without access the reader is told
+to ask the owner.
 Cross-origin links, credentials in URLs, ambiguous paths and redirects are refused with an
 explanation. Reads stay within the validated workbook;
 mutations remain restricted to the user's own Sheets container. Shared views never acquire a

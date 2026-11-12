@@ -116,6 +116,18 @@ export class WorkbookLinkError extends Error {
   }
 }
 
+/** A shared workbook its reader can't open: anonymously ("private") or with their account. */
+export class PrivateWorkbookError extends WorkbookLinkError {
+  constructor(readonly reason: "private" | "denied") {
+    super(
+      reason === "private"
+        ? "This spreadsheet is private. You need access from its owner's pod to open it."
+        : "Your account doesn't have access to this spreadsheet. Ask its owner to share it with you.",
+    );
+    this.name = "PrivateWorkbookError";
+  }
+}
+
 export interface CreateWorkbookInput {
   readonly title: string;
   /** Engine snapshot; omitted means one empty sheet named "Sheet1". */
@@ -140,8 +152,16 @@ export interface WorkbookService {
   /** Imports a browser-read Excel workbook, preserving supported formats and formulas. */
   createFromXlsx(input: { title: string; data: Uint8Array }): Promise<OpenedWorkbook>;
   open(container: string): Promise<OpenedWorkbook>;
-  /** Public same-origin shared links only; anonymous and view-only, with no redirects. */
-  openShared(container: string): Promise<OpenedWorkbook>;
+  /**
+   * Same-origin shared links, view-only, with no redirects. Anonymous by default; with
+   * `account` the session reads it, which needs a grant from `grantShared` first.
+   */
+  openShared(container: string, options?: { account?: boolean }): Promise<OpenedWorkbook>;
+  /**
+   * Present when the account can open private workbooks shared from another pod: lets the
+   * session read this one container until sign-out. Call only from the consent click.
+   */
+  grantShared?(container: string): Promise<void>;
   /**
    * Writes `workbook.json` with If-Match `base.snapshotEtag` (a freshly read ETag
    * when `force`); that guarded snapshot write owns the revision. Derived CSVs and
@@ -176,6 +196,8 @@ export interface WorkbookServiceOptions {
   /** Storage root (ends in `/`). */
   readonly podRoot: string;
   readonly webId: string;
+  /** Lets `fetch` use the account for one address on another pod (see `grantShared`). */
+  readonly grantResource?: (url: string) => Promise<void>;
   /** Injectable clock for workbook creation and modification dates. */
   readonly now?: () => Date;
 }
