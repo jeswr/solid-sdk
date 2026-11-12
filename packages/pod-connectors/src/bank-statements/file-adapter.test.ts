@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import { type MoneyDocument, parseMoney, V } from "@jeswr/solid-money";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { type FileImportContext, type ImportFile, MAX_FILE_BYTES } from "../core/file-import.js";
@@ -23,22 +25,27 @@ import {
 } from "./file-adapter.js";
 import { HSBC, MONZO, OFX, REVOLUT, REVOLUT_HEADER, REVOLUT_ROWS, STARLING } from "./fixtures.js";
 import { bankDate, subtractAmount } from "./values.js";
-import { BANK, BankInvoice } from "./vocab.js";
 
 function bankDocuments(pod: MemoryPod): string[] {
   return pod.urls().filter((url) => url.includes("/finance/bank/") && url.endsWith(".ttl"));
 }
-function bankDataset(pod: MemoryPod): Store {
-  const result = new Store();
-  for (const url of bankDocuments(pod)) for (const quad of pod.dataset(url)) result.add(quad);
-  return result;
+/** Read back through Suite Money's own parser: the stored Turtle is its wire format. */
+async function moneyDocuments(pod: MemoryPod): Promise<MoneyDocument[]> {
+  return Promise.all(bankDocuments(pod).map((url) => parseMoney(required(pod.get(url)), url)));
+}
+async function transactions(pod: MemoryPod) {
+  return (await moneyDocuments(pod)).flatMap((doc) => doc.transactions());
+}
+async function accounts(pod: MemoryPod) {
+  return (await moneyDocuments(pod)).flatMap((doc) => doc.accounts());
 }
 
 const DOC = `${TEST_POD_ROOT}integrations/bank-statements/finance/bank-transactions.ttl`;
-function invoices(ds: Store): BankInvoice[] {
+const LEGACY = "finance/bank-transactions.ttl";
+function invoices(ds: Store): Invoice[] {
   return ds
     .getSubjects(null, CLASSES.Invoice, null)
-    .map((subject) => new BankInvoice(subject, ds, DataFactory));
+    .map((subject) => new Invoice(subject, ds, DataFactory));
 }
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Expected synthetic result");
@@ -88,20 +95,19 @@ describe("known bank CSV exports", () => {
     expect(report.categories).toEqual(["finance"]);
     expect(report.skipped).toBe(1);
     expect(report.state?.counts.skipped).toBe(1);
-    const ds = bankDataset(pod);
-    const rows = invoices(ds);
+    const rows = await transactions(pod);
     expect(rows).toHaveLength(3);
-    const coffee = required(rows.find((row) => row.name?.includes("café")));
-    expect(coffee.totalPaymentDue).toBe("-12.70");
-    expect(coffee.fee).toBe("0.20 GBP");
+    const coffee = required(rows.find((row) => row.description.includes("café")));
+    expect(coffee.amount).toBe("-12.70");
+    // solid-money has no fee field: the nonzero fee stays in the description.
+    expect(coffee.description).toBe('Synthetic café, "Orbit" (fee 0.20 GBP)');
     expect(coffee.postingTime).toBe("2026-07-01T09:00:00.000Z");
-    expect(coffee.priceCurrency).toBe("GBP");
-    expect(rows.find((row) => row.priceCurrency === "EUR")?.totalPaymentDue).toBe(
-      "9007199254740993.01",
-    );
+    expect(coffee.currency).toBe("GBP");
+    expect(rows.find((row) => row.currency === "EUR")?.amount).toBe("9007199254740993.01");
     expect(new Set(rows.map((row) => row.account)).size).toBe(3);
-    expect(ds.getSubjects(null, BANK.Account, null)).toHaveLength(3);
-    expect(pod.get(report.indexUrl)).toContain(CLASSES.Invoice);
+    expect(await accounts(pod)).toHaveLength(3);
+    expect(pod.get(report.indexUrl)).toContain(V.transactionClass);
+    expect(pod.get(report.indexUrl)).toContain(V.accountClass);
   });
 
   it("uses one account per Product/Currency across multiple rows", () => {
@@ -126,11 +132,13 @@ describe("known bank CSV exports", () => {
       accountLabel: "Everyday HSBC",
     });
     const { pod } = await fileImport(adapter, streamed(`\uFEFF${HSBC}`, size));
-    const rows = invoices(bankDataset(pod));
+    const rows = (await transactions(pod)).sort((a, b) =>
+      a.postingTime.localeCompare(b.postingTime),
+    );
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.totalPaymentDue).toBe("-1234.56");
+    expect(rows[0]?.amount).toBe("-1234.56");
     expect(rows[0]?.postingTime).toBe("2026-07-01");
-    expect(rows[0]?.priceCurrency).toBe("GBP");
+    expect(rows[0]?.currency).toBe("GBP");
     expect(rows[0]?.account).toBe(rows[1]?.account);
   });
 
@@ -142,8 +150,8 @@ describe("known bank CSV exports", () => {
         memoryFile("same.csv", HSBC),
         { pod },
       );
-    expect(invoices(bankDataset(pod))).toHaveLength(4);
-    expect(bankDataset(pod).getSubjects(null, BANK.Account, null)).toHaveLength(2);
+    expect(await transactions(pod)).toHaveLength(4);
+    expect(await accounts(pod)).toHaveLength(2);
   });
 
   it.each([
@@ -151,35 +159,37 @@ describe("known bank CSV exports", () => {
     [STARLING, "-2.50", "GBP"],
   ])("imports per-account documents for Monzo/Starling (%#)", async (text, amount, currency) => {
     const { pod } = await fileImport(bankStatementsFileAdapter, streamed(text, 7));
-    const row = required(invoices(bankDataset(pod))[0]);
-    expect(row.totalPaymentDue).toBe(amount);
-    expect(row.priceCurrency).toBe(currency);
+    const row = required((await transactions(pod))[0]);
+    expect(row.amount).toBe(amount);
+    expect(row.currency).toBe(currency);
     expect(row.postingTime).toBe("2026-07-01");
   });
 
-  it("retains formula characters, quoted multiline text and source ids as inert literals", async () => {
+  it("retains formula characters and quoted multiline text as inert literals", async () => {
     const text = MONZO.replace("Synthetic shop", '"=SUM(1,2)\n+cmd @data -text"');
     const { pod } = await fileImport(bankStatementsFileAdapter, streamed(text, 1));
-    const row = required(invoices(bankDataset(pod))[0]);
-    expect(row.name).toBe("=SUM(1,2)\n+cmd @data -text");
-    expect(row.identifier).toBe("synthetic-1");
+    const row = required((await transactions(pod))[0]);
+    expect(row.description).toBe("=SUM(1,2)\n+cmd @data -text");
+    // The Monzo transaction ID only feeds the hashed subject (no solid-money field).
+    expect(row.id).toMatch(/#txn-[0-9a-f]{64}$/);
+    expect(bankDocuments(pod).some((url) => pod.get(url)?.includes("synthetic-1"))).toBe(false);
   });
 
   it("preserves rows from overlapping statements, independent of filename, order and decimal scale", async () => {
     const pod = createMemoryPod();
     await fileImport(bankStatementsFileAdapter, memoryFile("first.csv", REVOLUT), { pod });
-    const original = new Set(invoices(bankDataset(pod)).map((row) => row.value));
+    const original = new Set((await transactions(pod)).map((row) => row.id));
     const overlap = REVOLUT_ROWS[0]
       .replace("-12.50,0.20", "-12.500,0.200")
       .replace("987.30", "987.300");
     const additional = REVOLUT_ROWS[0].replace("987.30", "974.60");
     const text = `${REVOLUT_HEADER}\n${additional}\n${overlap}`;
     await fileImport(bankStatementsFileAdapter, memoryFile("renamed.csv", text), { pod });
-    const rows = invoices(bankDataset(pod));
+    const rows = await transactions(pod);
     expect(rows).toHaveLength(4);
-    for (const id of original) expect(rows.some((row) => row.value === id)).toBe(true);
+    for (const id of original) expect(rows.some((row) => row.id === id)).toBe(true);
     await fileImport(bankStatementsFileAdapter, memoryFile("again.ofx", text), { pod });
-    expect(invoices(bankDataset(pod))).toHaveLength(4);
+    expect(await transactions(pod)).toHaveLength(4);
   });
 
   it("uses bank ids when available, independent of changed descriptions", async () => {
@@ -190,8 +200,8 @@ describe("known bank CSV exports", () => {
       memoryFile("b.csv", MONZO.replace("Synthetic shop", "Changed")),
       { pod },
     );
-    expect(invoices(bankDataset(pod))).toHaveLength(1);
-    expect(invoices(bankDataset(pod))[0]?.name).toBe("Changed");
+    expect(await transactions(pod)).toHaveLength(1);
+    expect((await transactions(pod))[0]?.description).toBe("Changed");
   });
 
   it("pending-only reports count every skipped row without replacing previous data", async () => {
@@ -211,9 +221,9 @@ describe("known bank CSV exports", () => {
 
 describe("fail-closed bank detection and bounds", () => {
   it("reads the legacy document only for bank imports and omits warnings when absent", async () => {
-    const ctx = { ...context(), read: vi.fn(async () => undefined) };
+    const ctx = { ...context(), read: vi.fn(async (_slug: string) => undefined) };
     const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
-    expect(ctx.read).toHaveBeenCalledExactlyOnceWith("finance/bank-transactions.ttl");
+    expect(ctx.read.mock.calls.filter(([slug]) => slug === LEGACY)).toHaveLength(1);
     expect(outcome?.unsupported).toBeUndefined();
     ctx.read.mockClear();
     await bankStatementsFileAdapter.importFile(
@@ -232,7 +242,7 @@ describe("fail-closed bank detection and bounds", () => {
 
   it("ignores non-Invoices and incomplete or nonmatching legacy values", async () => {
     const store = new Store();
-    const other = new BankInvoice("https://pod.test/other", store, DataFactory);
+    const other = new Invoice("https://pod.test/other", store, DataFactory);
     other.name = "Synthetic shop";
     other.totalPaymentDue = "-5.25";
     other.dateCreated = new Date("2026-07-01T00:00:00Z");
@@ -244,12 +254,15 @@ describe("fail-closed bank detection and bounds", () => {
       [4, "Other", "-5.25", "2026-07-01"],
       [5, "Synthetic shop", "invalid", "2026-07-01"],
     ] as const) {
-      const row = new BankInvoice(`https://pod.test/invoice-${i}`, store, DataFactory).mark();
+      const row = new Invoice(`https://pod.test/invoice-${i}`, store, DataFactory).mark();
       row.name = name;
       row.totalPaymentDue = amount;
       row.dateCreated = new Date(date);
     }
-    const ctx = { ...context(), read: vi.fn(async () => store) };
+    const ctx = {
+      ...context(),
+      read: vi.fn(async (slug: string) => (slug === LEGACY ? store : undefined)),
+    };
     const before = store.size;
     const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
     expect(outcome?.unsupported).toBeUndefined();
@@ -267,37 +280,57 @@ describe("fail-closed bank detection and bounds", () => {
     const store = new Store();
     if (bound === "quads") Object.defineProperty(store, "size", { value: 1_600_001 });
     else if (bound === "characters") {
-      new BankInvoice("https://pod.test/large", store, DataFactory).name = "x".repeat(1024);
+      new Invoice("https://pod.test/large", store, DataFactory).name = "x".repeat(1024);
       const quad = required(store.getQuads(null, null, null, null)[0]);
       vi.spyOn(store, Symbol.iterator).mockImplementation(function* () {
         for (let i = 0; i < 65536; i++) yield quad;
       });
     } else {
       for (let i = 0; i <= 100_000; i++)
-        new BankInvoice(`https://pod.test/i-${i}`, store, DataFactory).mark();
+        new Invoice(`https://pod.test/i-${i}`, store, DataFactory).mark();
     }
-    const ctx = { ...context(), read: vi.fn(async () => store) };
+    const ctx = {
+      ...context(),
+      read: vi.fn(async (slug: string) => (slug === LEGACY ? store : undefined)),
+    };
     const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
     expect(outcome?.unsupported).toEqual([
       "The older shared bank document exceeds the comparison limit; check it manually for duplicate transactions.",
     ]);
-    expect(ctx.write).toHaveBeenCalledOnce();
+    // One account document and one month document.
+    expect(ctx.write).toHaveBeenCalledTimes(2);
     expect(ctx.remove).not.toHaveBeenCalled();
   });
 
-  it("turns a failed legacy read into a warning and still writes the bank document", async () => {
+  it("turns a failed legacy read into a warning and still writes the bank documents", async () => {
     const ctx = {
       ...context(),
-      read: vi.fn(async () => {
-        throw new Error("403 Forbidden");
+      read: vi.fn(async (slug: string) => {
+        if (slug === LEGACY) throw new Error("403 Forbidden");
+        return undefined;
       }),
     };
     const outcome = await bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx);
     expect(outcome?.unsupported).toEqual([
       "Could not check the older shared bank document for duplicate transactions; check it manually.",
     ]);
-    expect(ctx.write).toHaveBeenCalledOnce();
+    expect(ctx.write).toHaveBeenCalledTimes(2);
     expect(ctx.remove).not.toHaveBeenCalled();
+  });
+
+  it("fails without any write when an account or month document cannot be read", async () => {
+    const failure = new Error("403 Forbidden");
+    const ctx = {
+      ...context(),
+      read: vi.fn(async (slug: string) => {
+        if (slug.endsWith("/2026-07.ttl")) throw failure;
+        return undefined;
+      }),
+    };
+    await expect(
+      bankStatementsFileAdapter.importFile(memoryFile("a.csv", MONZO), ctx),
+    ).rejects.toBe(failure);
+    expect(ctx.write).not.toHaveBeenCalled();
   });
 
   it("honours cancellation during the legacy read before any bank write", async () => {
@@ -481,7 +514,7 @@ describe("fail-closed bank detection and bounds", () => {
     const text = `${REVOLUT_HEADER}\n${REVOLUT_ROWS[0].replace(from, to)}\n${REVOLUT_ROWS[3]}`;
     const { pod, report } = await fileImport(bankStatementsFileAdapter, streamed(text, 65536));
     expect(report.skipped).toBe(1);
-    expect(invoices(bankDataset(pod))).toHaveLength(1);
+    expect(await transactions(pod)).toHaveLength(1);
   });
 
   it("skips malformed quoting and excess columns and refuses unterminated quotes", async () => {
@@ -519,7 +552,7 @@ describe("fail-closed bank detection and bounds", () => {
     const text = `${REVOLUT_HEADER}\n${"x".repeat(4 * 1024 * 1024 + 1)}\n${REVOLUT_ROWS[3]}`;
     const outcome = await bankStatementsFileAdapter.importFile(streamed(text, 65536), ctx);
     expect(outcome?.skipped).toBe(1);
-    expect(ctx.write).toHaveBeenCalledOnce();
+    expect(ctx.write).toHaveBeenCalledTimes(2);
   });
 
   it("checks declared and actual file sizes and cancels lying streams", async () => {
@@ -635,7 +668,7 @@ describe("OFX compatibility", () => {
     expect(rows[0]?.value).toBe(`${DOC}#txn-synthetic-groceries-f3e94439`);
     expect(rows[0]?.totalPaymentDue).toBe("-12.50");
     expect(rows[0]?.priceCurrency).toBe("GBP");
-    expect(rows[0]?.account).toBeUndefined();
+    expect(pod.dataset(DOC).getQuads(null, V.account, null, null)).toEqual([]);
     expect(rows[0]?.identifier).toBeUndefined();
     await fileImport(
       bankStatementsFileAdapter,

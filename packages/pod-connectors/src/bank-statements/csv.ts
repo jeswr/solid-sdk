@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import { hasText } from "@jeswr/solid-money";
 import { MAX_CSV_COLUMNS, MAX_CSV_HEADER_CHARS, parseCsv, parseCsvRows } from "../core/csv.js";
 import { MAX_FILE_BYTES, MAX_ROWS } from "../core/file-import.js";
 import { MAX_CSV_RECORD_BYTES } from "../core/file-stream.js";
@@ -55,19 +57,6 @@ const HEADERS = {
     "state",
     "balance",
   ],
-  monzo: [
-    "transaction id",
-    "date",
-    "time",
-    "type",
-    "name",
-    "emoji",
-    "category",
-    "amount",
-    "currency",
-    "local amount",
-    "local currency",
-  ],
   starling: [
     "date",
     "counter party",
@@ -79,15 +68,71 @@ const HEADERS = {
     "notes",
   ],
 } as const;
-const DISTINCTIVE_HEADERS = {
+/**
+ * Monzo exports vary by app version and plan: the short layout has the first 11 columns,
+ * full exports add notes, address, receipt, description, category split and money out/in.
+ * Detection is by column name (any order): every required column, only known columns,
+ * paired columns together, and no duplicates. Anything else is not Monzo.
+ */
+const MONZO_REQUIRED = [
+  "transaction id",
+  "date",
+  "time",
+  "type",
+  "name",
+  "amount",
+  "currency",
+] as const;
+const MONZO_OPTIONAL = [
+  "emoji",
+  "category",
+  "local amount",
+  "local currency",
+  "notes and #tags",
+  "address",
+  "receipt",
+  "description",
+  "category split",
+  "money out",
+  "money in",
+] as const;
+const MONZO_PAIRS = [
+  ["local amount", "local currency"],
+  ["money out", "money in"],
+] as const;
+type BankLayout = keyof typeof HEADERS | "monzo";
+const BANK_LAYOUTS: readonly BankLayout[] = ["revolut", "monzo", "starling"];
+const DISTINCTIVE_HEADERS: Record<BankLayout, readonly string[]> = {
   revolut: ["product", "state", "started date", "completed date"],
-  monzo: ["transaction id", "emoji"],
+  monzo: ["transaction id", "emoji", "local amount", "notes and #tags", "category split"],
   starling: ["counter party", "amount (gbp)", "spending category"],
-} as const;
+};
 const normaliseHeader = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
 
+/** Exact Revolut/Starling layouts; Monzo by its required and known optional columns. */
+function matchesLayout(bank: BankLayout, headers: readonly string[]): boolean {
+  if (bank !== "monzo")
+    return (
+      headers.length === HEADERS[bank].length &&
+      HEADERS[bank].every((header, i) => headers[i] === header)
+    );
+  const names = new Set(headers);
+  const known = new Set<string>([...MONZO_REQUIRED, ...MONZO_OPTIONAL]);
+  return (
+    names.size === headers.length &&
+    headers.every((header) => known.has(header)) &&
+    MONZO_REQUIRED.every((header) => names.has(header)) &&
+    MONZO_PAIRS.every(([left, right]) => names.has(left) === names.has(right))
+  );
+}
+
+/** First candidate with visible text once control characters are stripped (as on write). */
+function visibleText(...candidates: readonly string[]): string | undefined {
+  return candidates.find((candidate) => candidate && hasText(candidate));
+}
+
 export class UnrecognisedBankCsvError extends Error {
-  constructor(headers: readonly string[], bank?: keyof typeof HEADERS) {
+  constructor(headers: readonly string[], bank?: BankLayout) {
     // Bounded diagnostics; JSON quoting keeps control characters inert too.
     super(
       `Unrecognised CSV; ${bank ? `looks like ${bank === "revolut" ? "Revolut" : bank === "monzo" ? "Monzo" : "Starling"} but the columns differ; ` : ""}detected headers: ${JSON.stringify(headers.slice(0, 32).map((h) => h.slice(0, 128)))}${headers.length > 32 || headers.some((h) => h.length > 128) ? " (header list truncated)" : ""}. Choose a supported bank export; headerless HSBC UK requires csvFormat: "hsbc-uk" and accountLabel.`,
@@ -137,7 +182,7 @@ export function validateBankOptions(options: BankStatementOptions): void {
     throw new TypeError("Unsupported bank CSV format");
   if (
     options.accountLabel !== undefined &&
-    (!options.accountLabel.trim() || options.accountLabel.length > 256)
+    (!hasText(options.accountLabel) || options.accountLabel.length > 256)
   )
     throw new TypeError("Account label must contain 1–256 characters");
   if (options.currency !== undefined && !currencyCode(options.currency))
@@ -224,12 +269,8 @@ export class BankCsvParser {
     }
     if (first) {
       const headers = cells.map(normaliseHeader);
-      const banks = Object.keys(HEADERS) as (keyof typeof HEADERS)[];
-      const format = banks.find(
-        (bank) =>
-          headers.length === HEADERS[bank].length &&
-          HEADERS[bank].every((header, i) => headers[i] === header),
-      );
+      const banks = BANK_LAYOUTS;
+      const format = banks.find((bank) => matchesLayout(bank, headers));
       if (
         format &&
         (!this.options.csvFormat || this.options.csvFormat === format) &&
@@ -268,7 +309,7 @@ export class BankCsvParser {
         this.options.csvFormat !== "hsbc-uk" ||
         cells.length !== 3 ||
         !bankDate(cells[0] ?? "", true) ||
-        !cells[1] ||
+        !visibleText(cells[1] ?? "") ||
         normaliseAmount(cells[2] ?? "") === undefined
       )
         throw new UnrecognisedBankCsvError(cells);
@@ -302,14 +343,19 @@ export class BankCsvParser {
           : bank === "monzo"
             ? bankDate(get("date"), true)
             : (bankDate(get("date"), true) ?? bankDate(get("date")));
+    // Fall back to the bank's own description/type columns when the primary text is empty
+    // or only control characters; rows with no visible text at all are skipped.
     const description =
       bank === "hsbc-uk"
-        ? (cells[1] ?? "")
+        ? visibleText(cells[1] ?? "")
         : bank === "monzo"
-          ? get("name")
+          ? visibleText(get("name"), get("description"), get("type"))
           : bank === "starling"
-            ? [get("counter party"), get("reference")].filter(Boolean).join(" — ")
-            : get("description");
+            ? visibleText(
+                [get("counter party"), get("reference")].filter(Boolean).join(" — "),
+                get("type"),
+              )
+            : visibleText(get("description"), get("type"));
     const amount = normaliseAmount(
       bank === "hsbc-uk" ? (cells[2] ?? "") : get(bank === "starling" ? "amount (gbp)" : "amount"),
     );

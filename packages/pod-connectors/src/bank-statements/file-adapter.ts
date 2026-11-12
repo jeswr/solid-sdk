@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/** Bank CSV exports and OFX/QFX share the existing Finance Invoice layout. */
+// AUTHORED-BY Claude Opus 5.5
+/**
+ * Generic CSV and OFX/QFX keep the original shared Finance Invoice document. Known-bank CSV
+ * exports write Suite Money's generated model per account and month (money-documents.ts).
+ */
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
 import {
@@ -13,7 +17,7 @@ import {
 import { csvRecords, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
-import { CLASSES } from "../core/vocab.js";
+import { CLASSES, Invoice } from "../core/vocab.js";
 import {
   BankCsvParser,
   type BankStatementOptions,
@@ -22,9 +26,9 @@ import {
   UnrecognisedBankCsvError,
   validateBankOptions,
 } from "./csv.js";
+import { BankMoneyPlan } from "./money-documents.js";
 import { ofxTransactions } from "./ofx-stream.js";
 import { amountKey, normaliseAmount } from "./values.js";
-import { BankAccount, BankInvoice } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
 export {
@@ -33,6 +37,11 @@ export {
   parseBankCsv,
   type Transaction,
 } from "./csv.js";
+export {
+  BANK_DOCUMENT_BUDGET,
+  type BankDocumentBudget,
+  BankDocumentBudgetError,
+} from "./money-documents.js";
 export { normaliseAmount } from "./values.js";
 
 const ID = "bank-statements";
@@ -67,6 +76,7 @@ export function createBankStatementsFileAdapter(
       if (file.size > MAX_FILE_BYTES) throw new Error("Export exceeds the 64 MiB import limit");
       ctx.progress({ label: "Reading your statement…", done: 0, total: 1 });
       const stores = new Map<string, Store>();
+      const plan = new BankMoneyPlan();
       let skipped = 0;
       let records = 0;
       let shared = false;
@@ -101,36 +111,40 @@ export function createBankStatementsFileAdapter(
           // The scanner counts malformed/pending rows too; this also bounds OFX records.
           if (++records > Math.min(ctx.maxRows, MAX_ROWS))
             throw new Error("Bank statement row cap exceeded; split the export");
-          const accountSlug = txn.accountKey ? await digest(txn.accountKey) : undefined;
-          const slug = txn.bank ? `finance/bank/${txn.bank}-${accountSlug}.ttl` : SLUG;
-          const doc = ctx.resolve(slug);
-          let store = stores.get(slug);
+          if (txn.bank) {
+            // The parser guarantees these for every known-bank row.
+            const { accountKey = "", accountLabel = "", postingTime = "", currency = "" } = txn;
+            plan.add({
+              accountSlug: `${txn.bank}-${await digest(accountKey)}`,
+              accountLabel,
+              identity: await digest(transactionKey(txn)),
+              postingTime,
+              // solid-money has no fee field: a nonzero Revolut fee stays visible in the text.
+              description:
+                txn.fee !== undefined && amountKey(txn.fee) !== "0"
+                  ? `${txn.description} (fee ${txn.fee} ${currency})`
+                  : txn.description,
+              amount: txn.amount,
+              currency,
+            });
+            continue;
+          }
+          const doc = ctx.resolve(SLUG);
+          let store = stores.get(SLUG);
           if (!store) {
             store = new Store();
-            stores.set(slug, store);
+            stores.set(SLUG, store);
           }
           const key = `${records - 1}|${txn.date?.toISOString() ?? ""}|${txn.amount}|${txn.description}`;
-          const identity = txn.bank
-            ? await digest(transactionKey(txn))
-            : recordFragment(txn.description || "transaction", key);
-          const inv = new BankInvoice(`${doc}#txn-${identity}`, store, DataFactory).mark();
+          const inv = new Invoice(
+            `${doc}#txn-${recordFragment(txn.description || "transaction", key)}`,
+            store,
+            DataFactory,
+          ).mark();
           inv.name = txn.description || "Transaction";
           inv.totalPaymentDue = txn.amount;
           if (txn.currency) inv.priceCurrency = txn.currency;
-          if (txn.bank) inv.postingTime = txn.postingTime;
-          else if (txn.date) inv.dateCreated = txn.date;
-          inv.identifier = txn.sourceId;
-          if (txn.fee !== undefined && amountKey(txn.fee) !== "0")
-            inv.fee = `${txn.fee} ${txn.currency}`;
-          if (txn.accountKey) {
-            const account = new BankAccount(
-              `${doc}#account-${accountSlug}`,
-              store,
-              DataFactory,
-            ).mark();
-            account.name = txn.accountLabel;
-            inv.account = account.value;
-          }
+          if (txn.date) inv.dateCreated = txn.date;
         }
       } catch (error) {
         if (error instanceof UnrecognisedBankCsvError)
@@ -149,9 +163,11 @@ export function createBankStatementsFileAdapter(
           category: "finance",
           forClass: CLASSES.Invoice,
           dataset,
-          writeMode: slug === SLUG ? "replace" : "merge",
+          writeMode: "replace",
         });
       }
+      // Reads, plans and budget-checks every account/month document before the first write.
+      await plan.write(ctx);
       // Return skipped even for pending-only statements (no fabricated empty snapshot).
       return { skipped, unsupported: warnings.length ? warnings : undefined };
     },
@@ -275,7 +291,7 @@ async function legacyWarnings(
     if (seen.has(subject.value)) continue;
     if (seen.size >= MAX_ROWS) return capped;
     seen.add(subject.value);
-    const invoice = new BankInvoice(subject, stored, DataFactory);
+    const invoice = new Invoice(subject, stored, DataFactory);
     const key = comparisonKey(invoice.name, invoice.totalPaymentDue, invoice.dateCreated);
     if (key && incoming.has(key)) matches++;
   }
