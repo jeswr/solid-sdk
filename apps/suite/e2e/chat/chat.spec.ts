@@ -218,6 +218,9 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   await page.keyboard.press("Escape");
   // Focus returns to the actions trigger, whose tooltip opens on focus; move focus
   // back to the log so the scan sees the room rather than a transient tooltip.
+  // Radix restores that focus only once the menu's exit animation unmounts it, so
+  // wait for it first: focusing the log earlier would be undone by the restore.
+  await expect(edited.getByRole("button", { name: "Message actions", exact: true })).toBeFocused();
   await log.focus();
   await accessible(page);
   await capture(page, info, "room");

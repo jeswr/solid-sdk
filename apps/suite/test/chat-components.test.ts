@@ -790,6 +790,28 @@ it("members' message menus explain write access and never offer edit/delete or t
   expect(menu.textContent).not.toContain("Delete");
 });
 
+it("opens the edit shortcut on a delivered message before the timeline refetches it", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Shortcut", members: [] });
+  // No change notifications: the timeline only rereads on the 30 s poll, so the delivered
+  // message stays in the outbox while the reader reaches for the shortcut.
+  const { subscribe: _subscribe, ...quiet } = session(pod);
+  const view = await mount(
+    h(ChatProvider, { session: quiet, children: h(RoomView, { url: room.url }) }),
+  );
+  const field = view.host.querySelector("textarea") as HTMLTextAreaElement;
+  await fill(field, "Just delivered");
+  await key(field, "Enter");
+  for (let tick = 0; tick < 100 && view.host.textContent?.includes("Sending…"); tick++)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
+  expect(view.host.querySelector("article")?.textContent).toContain("Just delivered");
+  expect(view.host.textContent).not.toContain("Sending…");
+  await key(field, "ArrowUp");
+  expect(view.host.querySelector("label")?.textContent).toBe("Edit message");
+  expect(field.value).toBe("Just delivered");
+});
+
 it("advances read receipts only to the newest rendered message, never to the current clock", async () => {
   const pod = createDemoPod({ root: ROOT });
   const client = new ChatClient(pod.fetch, ROOT, ME);

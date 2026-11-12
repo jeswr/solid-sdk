@@ -248,9 +248,21 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
     data.creator === session.webId ||
     !!data.memberContainers?.some((member) => member.owner === session.webId);
   const list = messages.data?.messages ?? [];
-  const lastOwn = [...list]
-    .reverse()
-    .find((message) => message.author === session.webId && !message.deleted);
+  // A delivered send stays in the outbox until the timeline rereads it; the shortcut must reach
+  // it meanwhile. Reread messages win, so a later edit or delete is never shadowed.
+  const lastOwn = [
+    ...new Map(
+      [...send.data.filter((item) => !item.status), ...list].map((message) => [
+        message.id,
+        message,
+      ]),
+    ).values(),
+  ]
+    .filter((message) => message.author === session.webId && !message.deleted)
+    .sort(
+      (a, b) => (a.published ?? "").localeCompare(b.published ?? "") || a.id.localeCompare(b.id),
+    )
+    .at(-1);
   return (
     <div className="chat-room">
       <header className="chat-room-header">
