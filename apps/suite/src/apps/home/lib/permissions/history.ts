@@ -17,6 +17,7 @@ import { httpUrl, inStorage, readResource, serializeTurtle, subjectOf } from "..
 import { podScoped, readRecordsDataset, recordsFrom } from "./records";
 import type { GrantRecord } from "./types";
 import { ACL, ODRL, UnsupportedAccessError } from "./vocab";
+import { loadPermissions } from "./walk";
 
 export type HistoryStatus = "granted" | "denied" | "revoked" | "unknown";
 
@@ -209,6 +210,25 @@ async function updateRecord(
   }
 }
 
+/** Whether `place`'s own policy gives `agent` any access, whatever its modes. Fails closed. */
+async function holdsDirectAccess(
+  fetch: typeof globalThis.fetch,
+  storage: string,
+  webId: string,
+  place: string,
+  agent: string,
+): Promise<boolean> {
+  const snapshot = await loadPermissions({ fetch, storage, webId, resource: place });
+  if (snapshot.failures.length || snapshot.truncated) throw new HistoryChangedError();
+  return snapshot.rows.some(
+    (row) =>
+      row.id === agent &&
+      row.lines.some((line) =>
+        line.resources.some((resource) => resource.url === place && !resource.inherited),
+      ),
+  );
+}
+
 /**
  * Revoke an approval from the history. The grant is re-read first and must still name the same
  * recipient and places. Each place's current direct role for the recipient must still be exactly
@@ -247,11 +267,14 @@ export async function revokeHistoryGrant(
       const direct = (await grantsWithRoles(url, { fetch: scoped, root: storage, kind })).filter(
         ({ agent, inherited }) => !inherited && agent.type === "webid" && agent.id === recipient,
       );
-      if (direct.some(({ role }) => role !== current.targetRoles[url]))
+      // The role projection hides access that fits no role (Read and Append, say), so the raw
+      // policy decides whether anything of theirs is left on the place.
+      const held = await holdsDirectAccess(scoped, storage, options.webId, url, recipient);
+      if (direct.some(({ role }) => role !== current.targetRoles[url]) || (held && !direct.length))
         throw new HistoryChangedError(
           "Their access was changed after this approval; change it in Permissions instead",
         );
-      if (direct.length) holding.push(url);
+      if (held || direct.length) holding.push(url);
     }
     for (const kind of ["folder", "resource"] as const) {
       const urls = holding.filter((url) => url.endsWith("/") === (kind === "folder"));

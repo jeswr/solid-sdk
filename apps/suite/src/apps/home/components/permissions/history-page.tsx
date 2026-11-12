@@ -88,6 +88,8 @@ export function ActiveGrantRow({
           console.error("Revoking access failed", caught);
         setError(caught instanceof HistoryRevokeError ? PARTIAL_REVOKE : REVOKE_FAILED);
       }
+    } finally {
+      // A refresh that failed after a successful revoke must not leave the button stuck.
       running.current = false;
       setBusy(false);
     }

@@ -337,6 +337,22 @@ describe("revoking from the history", () => {
     expect(await agentsOn(memory, FILE)).toContain(BOB);
   });
 
+  it("refuses when the recipient holds access on a place that fits no role", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    // Read and Append on the folder: no role, so only the raw policy shows Bob still has access.
+    memory.put(
+      `${FOLDER}.acl`,
+      `${PREFIXES} ${ownerRule(FOLDER, true)} <#bob> a acl:Authorization; acl:agent <${BOB}>;
+        acl:accessTo <${FOLDER}>; acl:default <${FOLDER}>; acl:mode acl:Read, acl:Append.`,
+    );
+    await expect(revokeHistoryGrant(entry, options(memory))).rejects.toBeInstanceOf(
+      HistoryChangedError,
+    );
+    expect(memory.writes()).toEqual([]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+  });
+
   it("refuses a grant record that no longer says what was shown, before any change", async () => {
     const memory = pod();
     const entry = await active(memory);
