@@ -99,6 +99,14 @@ export function validateOptions(options: PodAuthOptions): void {
   if (options.clock !== undefined && typeof options.clock !== "function")
     throw new TypeError("clock must be a function");
   if (
+    options.sessionScope !== undefined &&
+    (typeof options.sessionScope !== "string" ||
+      !/^[a-zA-Z0-9-]{1,128}$/.test(options.sessionScope))
+  )
+    throw new TypeError(
+      "sessionScope must be a public identifier of 1–128 letters, digits or hyphens",
+    );
+  if (
     options.maxReplayBodyBytes !== undefined &&
     (!Number.isSafeInteger(options.maxReplayBodyBytes) || options.maxReplayBodyBytes < 0)
   )

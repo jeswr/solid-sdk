@@ -11,67 +11,25 @@
  * into the shell instead and this folder is deleted.
  */
 
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
 import {
-  Bot,
-  CalendarDays,
-  FileText,
-  HardDrive,
-  HeartPulse,
-  House,
-  Images,
-  Mail,
-  Menu,
-  MessageSquare,
-  Music,
-  Search,
-  SquareCheckBig,
-  StickyNote,
-  Table2,
-  Users,
-  Wallet,
-} from "lucide-react";
+  AppGlyph,
+  type AppSlug,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@jeswr/suite-ui";
+import { Menu, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { useSuiteEnvironment } from "@/shell/environment";
 import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
 import { isEditableTarget } from "@/shell/lib/shortcuts";
+import { appRegistry, visibleApps } from "@/shell/registry";
 import { WalkthroughDock } from "@/welcome/walkthrough";
 
-export type SuiteAppId =
-  | "home"
-  | "drive"
-  | "docs"
-  | "calendar"
-  | "contacts"
-  | "photos"
-  | "mail"
-  | "chat"
-  | "money"
-  | "health"
-  | "tasks"
-  | "music"
-  | "notes"
-  | "sheets"
-  | "agent";
-
-const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
-  { id: "home", label: "Home", href: "/home", icon: House },
-  { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
-  { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
-  { id: "docs", label: "Docs", href: "/docs", icon: FileText },
-  { id: "sheets", label: "Sheets", href: "/sheets", icon: Table2 },
-  { id: "notes", label: "Notes", href: "/notes", icon: StickyNote },
-  { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
-  { id: "photos", label: "Photos", href: "/photos", icon: Images },
-  { id: "mail", label: "Mail", href: "/mail", icon: Mail },
-  { id: "chat", label: "Chat", href: "/chat", icon: MessageSquare },
-  { id: "money", label: "Money", href: "/money", icon: Wallet },
-  { id: "health", label: "Health", href: "/health", icon: HeartPulse },
-  { id: "tasks", label: "Tasks", href: "/tasks", icon: SquareCheckBig },
-  { id: "music", label: "Music", href: "/music", icon: Music },
-  { id: "agent", label: "Agent", href: "/agent", icon: Bot },
-];
+export type SuiteAppId = AppSlug;
 
 export interface SuiteFrameProps {
   app: SuiteAppId;
@@ -90,7 +48,7 @@ export interface SuiteFrameProps {
   children: ReactNode;
 }
 
-function Rail({ app }: { app: SuiteAppId }) {
+function Rail({ app, apps }: { app: SuiteAppId; apps: ReturnType<typeof visibleApps> }) {
   return (
     <nav className="ish-rail" aria-label="Apps">
       <Link href="/drive" className="ish-brand" aria-label="Solid Suite home">
@@ -99,7 +57,7 @@ function Rail({ app }: { app: SuiteAppId }) {
         </svg>
       </Link>
       <ul>
-        {APPS.map(({ id, label, href, icon: Icon }) => (
+        {apps.map(({ slug: id, name: label, basePath: href }) => (
           <li key={id}>
             <Link
               href={href}
@@ -107,7 +65,7 @@ function Rail({ app }: { app: SuiteAppId }) {
               aria-current={id === app ? "page" : undefined}
               title={label}
             >
-              <Icon aria-hidden="true" size={20} strokeWidth={1.75} />
+              <AppGlyph app={id} />
               <span className="ish-rail-label">{label}</span>
             </Link>
           </li>
@@ -157,6 +115,8 @@ export function SuiteFrame({
   children,
 }: SuiteFrameProps) {
   const pathname = usePathname();
+  const env = useSuiteEnvironment();
+  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
   const [drawer, setDrawer] = useState(false);
   const [detailsSide, setDetailsSide] = useState<"bottom" | "right" | "pane">("pane");
   const navigationTrigger = useRef<HTMLButtonElement>(null);
@@ -198,10 +158,10 @@ export function SuiteFrame({
   }, []);
   return (
     <div className="ish-frame" data-app={app} data-has-details={details ? "" : undefined}>
-      <Rail app={app} />
+      <Rail app={app} apps={apps} />
       <aside
         className="ish-sidebar"
-        aria-label={`${APPS.find((a) => a.id === app)?.label} navigation`}
+        aria-label={`${appRegistry.find((a) => a.slug === app)?.name} navigation`}
       >
         {sidebar}
       </aside>
@@ -269,9 +229,9 @@ export function SuiteFrame({
         </Sheet>
       ) : null}
       <nav className="ish-tabbar" aria-label="Apps">
-        {APPS.map(({ id, label, href, icon: Icon }) => (
+        {apps.map(({ slug: id, name: label, basePath: href }) => (
           <Link key={id} href={href} aria-current={id === app ? "page" : undefined}>
-            <Icon aria-hidden="true" size={20} strokeWidth={1.75} />
+            <AppGlyph app={id} />
             <span>{label}</span>
           </Link>
         ))}

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
+  Bot,
   Calendar,
   ContactRound,
   FileText,
@@ -35,6 +36,7 @@ export const APP_ICONS = {
   money: { label: "Money", glyph: "wallet", hue: 130, icon: Wallet },
   health: { label: "Health", glyph: "heart-pulse", hue: 10, icon: HeartPulse },
   permissions: { label: "Permissions", glyph: "shield-check", hue: 225, icon: ShieldCheck },
+  agent: { label: "Agent", glyph: "bot", hue: 205, icon: Bot },
 } as const;
 export type AppId = keyof typeof APP_ICONS;
 export type AppIconProps = {

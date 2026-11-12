@@ -22,6 +22,10 @@ import { navigationErrorCopy } from "../src/navigation/states.js";
 const create = vi.fn();
 const update = vi.fn();
 const retry = vi.fn();
+// Deliberately retain future apps in these fixtures to exercise admission and grouping.
+const fixtureApps = suiteApps.map((app) =>
+  defaultRailPins.includes(app.slug) ? app : { ...app, status: "backlog" as const },
+);
 function stubResizeObserver() {
   vi.stubGlobal(
     "ResizeObserver",
@@ -61,7 +65,7 @@ function Harness({
       {children ?? (
         <AppLauncher
           currentApp="drive"
-          apps={suiteApps.map((app) =>
+          apps={fixtureApps.map((app) =>
             app.slug === "docs"
               ? { ...app, create: [{ id: "document", label: "New document", onSelect: create }] }
               : app,
@@ -410,11 +414,50 @@ it("shows pinned link tooltips on Tab focus and hover while retaining current-pa
 });
 
 describe("AppRail and BottomTabBar", () => {
+  it.each([
+    false,
+    true,
+  ])("keeps rail, tabs and launcher admission in sync with explicit backlog=%s", async (showBacklog) => {
+    // The environment may differ from the server-provided setting; the prop wins everywhere.
+    vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", showBacklog ? "0" : "1");
+    const apps = fixtureApps.filter((app) => ["home", "docs", "calendar"].includes(app.slug));
+    const { unmount } = render(
+      <Harness initial={["home", "docs", "calendar"]}>
+        <AppRail currentApp="home" apps={apps} showBacklog={showBacklog} />
+      </Harness>,
+    );
+    const railLinks = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+    const user = await open();
+    const launcher = screen.getByRole("dialog", { name: "Apps" });
+    expect(
+      within(launcher)
+        .getAllByRole("link", { hidden: true })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual(railLinks);
+    if (showBacklog) {
+      await user.click(screen.getByText("Coming soon"));
+      expect(within(launcher).getByRole("link", { name: "Calendar" })).toBeTruthy();
+    } else expect(within(launcher).queryByRole("link", { name: "Calendar" })).toBeNull();
+    unmount();
+    render(
+      <Harness>
+        <BottomTabBar currentApp="home" apps={apps} showBacklog={showBacklog} />
+      </Harness>,
+    );
+    await user.click(screen.getByRole("button", { name: "More apps" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Apps" }))
+        .getAllByRole("link", { hidden: true })
+        .map((link) => link.getAttribute("href")),
+    ).toEqual(railLinks);
+  });
+
   it("renders six unique visible pins maximum, hides backlog pins, and has labelled bottom slots", async () => {
     render(
       <Harness initial={["drive", "drive", "calendar", "home", "docs", "tasks", "permissions"]}>
         <AppRail
           currentApp="drive"
+          apps={fixtureApps}
           notifications={<button type="button">Notifications</button>}
           offline={<button type="button">Offline</button>}
           account={<button type="button">Account menu</button>}
