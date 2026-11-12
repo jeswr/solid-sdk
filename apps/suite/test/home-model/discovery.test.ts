@@ -500,6 +500,24 @@ describe("domain discovery", () => {
     ).toHaveLength(2);
   });
 
+  it("drops the contact-details card when the profile identity fills the refresh budget", async () => {
+    const body =
+      '<#me> a vcard:Individual ; vcard:fn "Alice Example" ; vcard:hasEmail [ vcard:hasValue <mailto:alice@example.com> ] .';
+    const fetch = fixtureFetch({ [`${STORAGE}profile/card`]: body });
+    // 999 cards already discovered this refresh leave room for exactly one more.
+    const filler = { items: Array.from({ length: 999 }) } as unknown as Parameters<
+      NonNullable<Parameters<typeof discoverDomainItems>[1]["documentCache"]>["set"]
+    >[1];
+    const result = await discoverDomainItems("personal", {
+      storage: STORAGE,
+      fetch,
+      webId: WEB_ID,
+      documentCache: new Map([[`${STORAGE}filler.ttl`, filler]]),
+    });
+    expect(result.items.map((item) => item.dataType?.id)).toEqual(["identity"]);
+    expect(result.truncated).toBe(true);
+  });
+
   it.each([
     true,
     false,
