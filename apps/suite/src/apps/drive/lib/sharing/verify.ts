@@ -195,13 +195,12 @@ function normalized(modes: ReadonlySet<Mode> | undefined): string {
   return [...values].sort().join(" ");
 }
 
-function check(
-  target: string,
+/** Every principal with raw access is in `grants` at the role its modes map to; nobody else. */
+function assertRoles(
+  rows: ReadonlyMap<string, Set<Mode>>,
   kind: ResourceKind,
-  documents: readonly AccessCapture[],
   grants: readonly RoleGrant[],
-): { contentsDiffer: boolean } {
-  const own = effective(target, documents, "resource");
+): void {
   const roles = new Map(
     grants.map((grant) => [
       grant.agent.type === "webid" ? grant.agent.id : grant.agent.type,
@@ -209,10 +208,19 @@ function check(
     ]),
   );
   if (
-    own.size !== roles.size ||
-    [...own].some(([id, modes]) => roles.get(id) !== (modesToRole(modes, kind) ?? null))
+    rows.size !== roles.size ||
+    [...rows].some(([id, modes]) => roles.get(id) !== (modesToRole(modes, kind) ?? null))
   )
     throw new SharingError(UNMAPPED);
+}
+function check(
+  target: string,
+  kind: ResourceKind,
+  documents: readonly AccessCapture[],
+  grants: readonly RoleGrant[],
+): { contentsDiffer: boolean } {
+  const own = effective(target, documents, "resource");
+  assertRoles(own, kind, grants);
   if (kind !== "folder") return { contentsDiffer: false };
   const members = effective(target, documents, "members");
   return {
@@ -236,6 +244,25 @@ export async function verifyAccess(
 ): Promise<{ contentsDiffer: boolean }> {
   try {
     return check(target, kind, await documents(), grants);
+  } catch (error) {
+    throw error instanceof SharingError ? error : new SharingError(UNMAPPED, { cause: error });
+  }
+}
+
+/**
+ * `verifyAccess` for a folder whose own and contents access differ: each scope's effective
+ * access must be exactly the roles shown for that scope (sst-uo4.4).
+ */
+export async function verifyScopedAccess(
+  target: string,
+  documents: () => Promise<readonly AccessCapture[]>,
+  folder: readonly RoleGrant[],
+  contents: readonly RoleGrant[],
+): Promise<void> {
+  try {
+    const captured = await documents();
+    assertRoles(effective(target, captured, "resource"), "folder", folder);
+    assertRoles(effective(target, captured, "members"), "folder", contents);
   } catch (error) {
     throw error instanceof SharingError ? error : new SharingError(UNMAPPED, { cause: error });
   }
