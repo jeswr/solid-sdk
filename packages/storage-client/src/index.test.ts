@@ -30,7 +30,9 @@ test("entry points expose the storage client and testing surface", () => {
   expect(Object.keys(helpers).sort()).toEqual([
     "JsonPatchError",
     "applyJsonPatch",
+    "createAt",
     "displayNameOf",
+    "isExactChildUrl",
     "jsonEqual",
     "retryOnConflict",
   ]);
