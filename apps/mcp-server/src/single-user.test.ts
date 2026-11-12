@@ -113,6 +113,14 @@ it("fails closed on configuration errors, private stores on Vercel and ambiguous
     }),
   ).rejects.toThrow("shared KV");
   await expect(
+    appFromEnvironment({
+      MCP_PUBLIC_ORIGIN: "https://mcp.example",
+      MCP_VAULT_STORE: "memory",
+      MCP_VAULT_KEY: Buffer.alloc(32, 7).toString("base64"),
+      MCP_LWS_AUTHORIZATION_SERVERS: "https://lws.example/,http://cleartext.example/",
+    }),
+  ).rejects.toThrow("invalid_request");
+  await expect(
     podRootFor(
       "https://pod.example/#me",
       async () => new Response("", { headers: { "content-type": "text/turtle" } }),

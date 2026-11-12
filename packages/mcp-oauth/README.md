@@ -106,7 +106,21 @@ a new ES256 DPoP key for each login. It resolves an issuer directly, or falls ba
 WebID's profile only when discovery returns HTTP 404. Ambiguous/missing profile issuers fail;
 malformed discovery, transport failures and issuer mismatches never trigger fallback. After
 OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
-in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
+in its own profile. The broker passes `verifyWebId: false` to the protocol engine and owns this
+binding check once, using its SSRF-guarded fetch-rdf transport for content negotiation and storage
+root discovery in the same profile read. This avoids a second, Turtle-only engine fetch. Refresh
+keeps that session's established profile binding and checks refreshed subject, nonce and WebID;
+it does not repeat the profile read after the OP rotates the refresh token. Remote JSON-LD
+contexts are refused by the RDF parser.
+
+LWS storages are answered by exchanging the session's verified ID token, under pod-auth's
+exchange rule. The resource must be inside a stored root, and the authorization server must
+be on the issuer's origin, a storage root's origin, or listed in `lwsAuthorizationServers`.
+A container realm must be inside a stored root. Any other realm is read as a storage
+description (pod-auth's `storageDescriptionRoots`, without credentials or redirects): it must
+share the resource's origin and advertise a container root that is inside a stored root and
+contains the resource, so a description can never widen the token audience. The broker's transport also refuses any token-exchange POST to another
+origin, so a trusted server's metadata cannot redirect the ID token either.
 
 `complete()` consumes pending login state atomically and returns only `{ id, webId }`. The
 refresh token and private DPoP JWK stay in the vault; access/ID tokens stay in process memory.

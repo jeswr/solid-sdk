@@ -45,5 +45,9 @@ export async function appFromEnvironment(env: NodeJS.ProcessEnv = process.env) {
     ...(store === "file" ? { store: new FileVaultStore(required("MCP_VAULT_DIRECTORY")) } : {}),
     ...(store === "memory" ? { store: new MemoryVaultStore() } : {}),
   });
-  return createApp({ ...options, vault });
+  return createApp({
+    ...options,
+    vault,
+    lwsAuthorizationServers: env.MCP_LWS_AUTHORIZATION_SERVERS?.split(",").filter(Boolean) ?? [],
+  });
 }

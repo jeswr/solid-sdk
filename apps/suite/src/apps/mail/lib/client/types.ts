@@ -44,6 +44,10 @@ export interface MessageView {
   originalUrl?: string;
   read: boolean;
   starred: boolean;
+  /** Filed under Drafts: editable and discardable, never sent from here. */
+  draft: boolean;
+  /** An app-created draft filed in Sent by demo Send; imported Sent mail is excluded. */
+  demoSent: boolean;
   labels: string[];
   attachments: AttachmentView[];
 }

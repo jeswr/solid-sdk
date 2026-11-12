@@ -3,7 +3,12 @@
 import { SERVER_MAX_REPLAY_BODY_BYTES as DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/pod-auth/node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
-import { lwsStorage } from "../test/lws-storage.js";
+import {
+  FOREIGN_AUTHORIZATION_SERVER,
+  LWS_AUTHORIZATION_SERVER,
+  LWS_STORAGE,
+  lwsStorage,
+} from "../test/lws-storage.js";
 import {
   POD_CALLBACK,
   POD_CLIENT,
@@ -22,7 +27,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function brokerFixture(wrapFetch = (op: ReturnType<typeof podIssuer>) => op.fetch) {
+function brokerFixture(
+  wrapFetch = (op: ReturnType<typeof podIssuer>) => op.fetch,
+  extra: { lwsAuthorizationServers?: string[] } = {},
+) {
   const op = podIssuer();
   const store = new MemoryVaultStore();
   const vault = createSessionVault({ key: Buffer.alloc(32, 9).toString("base64"), store });
@@ -33,6 +41,7 @@ function brokerFixture(wrapFetch = (op: ReturnType<typeof podIssuer>) => op.fetc
     vault,
     fetch: wrapFetch(op),
     now: () => now,
+    ...extra,
   };
   const provider = createPodSessionProvider(options);
   const login = async (input = POD_ISSUER) => {
@@ -55,12 +64,33 @@ function brokerFixture(wrapFetch = (op: ReturnType<typeof podIssuer>) => op.fetc
 }
 
 describe("Solid-OIDC pod broker", () => {
+  it("verifies the profile binding once with RDF negotiation and retains it on refresh", async () => {
+    const profiles: Request[] = [];
+    const f = brokerFixture((op) => async (input, init) => {
+      const request = new Request(input instanceof Request ? input.clone() : input, init);
+      if (request.url === "https://alice.example/profile") {
+        expect(request.headers.get("accept")).toContain("application/ld+json");
+        profiles.push(request);
+      }
+      return op.fetch(input, init);
+    });
+    const { session } = await f.login();
+    expect(profiles).toHaveLength(1);
+    f.advance(601);
+    const restored = createPodSessionProvider(f.options);
+    expect((await (await restored.fetchFor(session.id))(`${POD_ROOT}notes`)).status).toBe(200);
+    expect(profiles).toHaveLength(1);
+  });
+
   it("authenticates private LWS reads through the default broker and refreshes after restore", async () => {
     let lws!: ReturnType<typeof lwsStorage>;
-    const f = brokerFixture((op) => {
-      lws = lwsStorage(op);
-      return lws.fetch;
-    });
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
     const { session } = await f.login();
     const fetcher = await f.provider.fetchFor(session.id);
     expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
@@ -81,10 +111,13 @@ describe("Solid-OIDC pod broker", () => {
     "exchange",
   ])("fences LWS credentials when the broker is revoked during %s", async (phase) => {
     let lws!: ReturnType<typeof lwsStorage>;
-    const f = brokerFixture((op) => {
-      lws = lwsStorage(op);
-      return lws.fetch;
-    });
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
     const { session } = await f.login();
     const fetcher = await f.provider.fetchFor(session.id);
     if (phase === "exchange") lws.controls.onExchange = () => f.provider.revoke(session.id);
@@ -94,6 +127,112 @@ describe("Solid-OIDC pod broker", () => {
     expect(
       lws.requests.some((request) => request.headers.get("authorization")?.startsWith("Bearer")),
     ).toBe(false);
+  });
+
+  it.each([
+    ["is the only one listed", () => [FOREIGN_AUTHORIZATION_SERVER], [LWS_AUTHORIZATION_SERVER]],
+    [
+      "is listed before a trusted one",
+      () => [FOREIGN_AUTHORIZATION_SERVER, LWS_AUTHORIZATION_SERVER],
+      [LWS_AUTHORIZATION_SERVER],
+    ],
+    ["is the unconfigured LWS server", () => [LWS_AUTHORIZATION_SERVER], []],
+  ])("never sends the ID token to an authorization server that %s", async (_, servers, configured) => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: configured },
+    );
+    lws.controls.authorizationServers = servers();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    const trusted = configured.length > 0 && servers().includes(LWS_AUTHORIZATION_SERVER);
+    if (trusted)
+      expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    else
+      await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow(
+        "No trusted LWS authorization server",
+      );
+    expect(lws.exchanges).toHaveLength(trusted ? 1 : 0);
+    // Not even discovery: the trust rule runs before anything is fetched from the server.
+    expect(
+      lws.requests.some((request) => request.url.startsWith(FOREIGN_AUTHORIZATION_SERVER)),
+    ).toBe(false);
+  });
+
+  it("refuses a trusted server's token endpoint on another origin before sending the ID token", async () => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
+    lws.controls.tokenEndpoint = `${FOREIGN_AUTHORIZATION_SERVER}exchange`;
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow(
+      "LWS exchange endpoint is not trusted",
+    );
+    expect(
+      lws.requests.some((request) => request.url.startsWith(FOREIGN_AUTHORIZATION_SERVER)),
+    ).toBe(false);
+  });
+
+  it.each([
+    ["a storage description listing a stored root", () => LWS_STORAGE, true],
+    // #405 gate: a same-origin non-container realm the WebID's roots don't contain.
+    [
+      "a same-origin non-container realm outside the stored roots",
+      () => POD_ROOT.slice(0, -1),
+      false,
+    ],
+  ])("answers a legacy challenge for %s only inside the grant", async (_, realm, trusted) => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
+    lws.controls.legacyRealm = realm();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    if (trusted)
+      expect(await (await fetcher(`${POD_ROOT}note.txt`)).text()).toBe("private LWS content");
+    else await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow("are not trusted");
+    expect(lws.exchanges).toHaveLength(trusted ? 1 : 0);
+  });
+
+  it("refuses a legacy storage-description realm whose root is broader than the stored roots", async () => {
+    let lws!: ReturnType<typeof lwsStorage>;
+    const f = brokerFixture(
+      (op) => {
+        lws = lwsStorage(op);
+        return lws.fetch;
+      },
+      { lwsAuthorizationServers: [LWS_AUTHORIZATION_SERVER] },
+    );
+    lws.controls.legacyRealm = LWS_STORAGE;
+    lws.controls.storageRoot = new URL("/", POD_ROOT).href;
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    await expect(fetcher(`${POD_ROOT}note.txt`)).rejects.toThrow("are not trusted");
+    expect(lws.exchanges).toHaveLength(0);
+    expect(lws.requests.some((request) => request.url.startsWith(LWS_AUTHORIZATION_SERVER))).toBe(
+      false,
+    );
+  });
+
+  it("validates configured LWS authorization servers", () => {
+    expect(() =>
+      brokerFixture(undefined, { lwsAuthorizationServers: ["http://lws.example/"] }),
+    ).toThrow();
   });
 
   it("binds PKCE + nonce + DPoP, returns identity only, scopes fetch and retries nonces once", async () => {
@@ -412,7 +551,7 @@ describe("Solid-OIDC pod broker", () => {
   });
 
   it("validates the authenticated WebID against the requested identity and profile issuer", async () => {
-    for (const variant of ["identity", "profile", "refresh", "type"]) {
+    for (const variant of ["identity", "profile", "refresh", "type"] as const) {
       const f = brokerFixture();
       const begin = await f.provider.begin(POD_WEBID, POD_CALLBACK);
       if (variant === "identity") f.op.controls.webId = "https://other.example/profile#me";
@@ -421,7 +560,16 @@ describe("Solid-OIDC pod broker", () => {
       if (variant === "type") f.op.controls.tokenType = "Bearer";
       await expect(
         f.provider.complete(f.op.callback(begin.authorizeUrl), begin.state),
-      ).rejects.toThrow();
+      ).rejects.toThrow(
+        new Error(
+          {
+            identity: "Pod WebID mismatch",
+            profile: "WebID issuer mismatch",
+            refresh: "offline_access was not granted",
+            type: "DPoP tokens required",
+          }[variant],
+        ),
+      );
     }
   });
 
@@ -713,7 +861,10 @@ describe("Solid-OIDC pod broker", () => {
       if (variant === "identity") f.op.controls.refreshWebId = "https://other.example/profile#me";
       if (variant === "claim") vi.spyOn(f.vault, "compareAndSwap").mockResolvedValueOnce(false);
       if (variant === "lifetime") await fetcher(`${POD_ROOT}notes`);
-      else await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow();
+      else
+        await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow(
+          new Error(variant === "identity" ? "Refreshed WebID mismatch" : "Pod session conflict"),
+        );
       vi.restoreAllMocks();
     }
   });

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import * as oauth from "oauth4webapi";
 import { withDPoPNonceRetry } from "./dpopNonce.js";
 import { TokenType } from "./lws/constants.js";
-import { LwsTokenProvider } from "./lws/LwsTokenProvider.js";
+import { type AuthorizationServerPolicy, LwsTokenProvider } from "./lws/LwsTokenProvider.js";
 import { ReactiveAuthenticationClient } from "./ReactiveAuthenticationClient.js";
 import { type HttpOptions, oauthOptions } from "./transport.js";
+import { webIdTrustsIssuer } from "./webId.js";
 
 /** Sensitive Node vault envelope. Never use this format for browser persistence. */
 export type ServerDpopJwk = JsonWebKey;
@@ -30,8 +32,26 @@ export interface ServerOidcOptions {
   redirectUri: string;
   fetch: typeof fetch;
   dpopKeyPair?: ServerDpopKey;
+  /**
+   * Profile transport, required unless verifyWebId is false. Must reject private/loopback IPs,
+   * pin validated DNS answers, recheck every redirect and honor AbortSignal. Never uses fetch as a fallback.
+   */
+  profileFetch?: typeof fetch;
+  /** Verify the WebID profile lists the validated token issuer. Disable only if the caller verifies the binding. Default true. */
+  verifyWebId?: boolean;
+  /**
+   * Resource URLs that may receive credentials; checked before buffering and before every send.
+   * Without this predicate there is no resource boundary: the caller must enforce URL scope.
+   * Discovery and token endpoint requests use fetch; WebID profiles use profileFetch independently.
+   */
+  allows?: (url: URL) => boolean;
   /** Answer LWS challenges with the verified OIDC ID token; credentials stay in memory. */
   lws?: boolean;
+  /**
+   * Decides which authorization servers may receive the ID token in an LWS exchange.
+   * Required when lws is true; construction fails before discovery if absent.
+   */
+  trustAuthorizationServer?: AuthorizationServerPolicy;
 }
 export const SERVER_MAX_REPLAY_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -81,7 +101,21 @@ async function generateKey(): Promise<ServerDpopKey> {
  * The caller owns single-use state, encrypted envelopes, refresh CAS and credential scope.
  */
 export async function createServerOidcClient(options: ServerOidcOptions) {
+  const lwsPolicy = options.lws ? requireLwsPolicy(options.trustAuthorizationServer) : undefined;
+  const verifyWebId = options.verifyWebId !== false;
+  if (verifyWebId && typeof options.profileFetch !== "function")
+    throw new Error("verifyWebId requires an SSRF-guarded profileFetch transport");
   const http: HttpOptions = { fetch: options.fetch };
+  const profileHttp =
+    options.profileFetch === undefined ? undefined : { fetch: options.profileFetch };
+  const allows = options.allows ?? (() => true);
+  const assertAllowed = (url: string) => {
+    if (!allows(new URL(url))) throw new Error("Resource URL is outside the allowed boundary");
+  };
+  const resourceFetch: typeof fetch = (input, init) => {
+    assertAllowed(input instanceof Request ? input.url : input.toString());
+    return options.fetch(input, init);
+  };
   const issuer = new URL(options.issuer);
   const as = await oauth.processDiscoveryResponse(
     issuer,
@@ -98,7 +132,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
   let idTokenExpiresAt = 0;
   let idTokenSubject = "";
   let idTokenClient: unknown;
-  const lws = options.lws
+  const lws = lwsPolicy
     ? new LwsTokenProvider(
         {
           id: JSON.stringify([options.issuer, options.clientId]),
@@ -118,12 +152,15 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
             };
           },
         },
-        { http },
+        {
+          http,
+          trustAuthorizationServer: lwsPolicy,
+        },
       )
     : undefined;
   const resourceHttp: HttpOptions =
     lws === undefined
-      ? http
+      ? { fetch: resourceFetch }
       : {
           fetch: async (input, init) => {
             const request = new Request(input, init);
@@ -133,8 +170,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
             let first = true;
             const reactive = new ReactiveAuthenticationClient({
               providers: [lws],
-              // The broker owns resource scope and checks liveness on every transport call.
-              boundary: { allows: () => true },
+              boundary: { allows: (url) => allows(new URL(url)) },
               fence: lws.fence,
               maxReplayBodyBytes: SERVER_MAX_REPLAY_BODY_BYTES,
               fetch: (attempt) => {
@@ -143,7 +179,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
                   ? new Request(attempt, { headers: request.headers })
                   : attempt;
                 first = false;
-                return options.fetch(outgoing);
+                return resourceFetch(outgoing);
               },
             });
             return reactive.fetch(new Request(request, { headers }));
@@ -170,6 +206,8 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
       const parsed = new URL(id);
       if (parsed.protocol !== "https:" || parsed.username || parsed.password)
         throw new Error("Invalid verified WebID");
+      if (verifyWebId && !(await webIdTrustsIssuer(parsed, claims.iss, undefined, profileHttp)))
+        throw new Error("WebID profile does not trust the configured issuer");
       webId = id;
     } else webId = undefined;
     // Retire cached exchanges and fence in-flight LWS requests before replacing OIDC credentials.
@@ -256,6 +294,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
     currentWebId: () => webId,
     async fetch(input: RequestInfo | URL, init?: RequestInit) {
       const request = new Request(input, { ...init, duplex: "half" } as RequestInit);
+      assertAllowed(request.url);
       const body = await replayBody(request);
       if (!current) throw new Error("No pod credentials");
       // protectedResourceRequest retains nonce state on the handle and generates new proofs.
@@ -288,6 +327,14 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
   };
 }
 export type ServerOidcClient = Awaited<ReturnType<typeof createServerOidcClient>>;
+
+function requireLwsPolicy(
+  policy: AuthorizationServerPolicy | undefined,
+): AuthorizationServerPolicy {
+  if (typeof policy !== "function")
+    throw new Error("lws: true requires trustAuthorizationServer to protect the ID token");
+  return policy;
+}
 
 /** Own and bound the body once, including cancellation before/while reading. */
 async function replayBody(request: Request): Promise<Uint8Array<ArrayBuffer> | null> {
