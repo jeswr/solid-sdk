@@ -47,7 +47,9 @@ async function accessible(page: Page) {
     .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
     .analyze();
   expect(result.violations).toEqual([]);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
+  // A modal dialog makes the page behind it inert, so only check the page heading without one.
+  if ((await page.getByRole("dialog").count()) === 0)
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -178,12 +180,12 @@ test("a required track document fails visibly and Retry reads the repaired docum
   const saved = await breakDocument(page, "music/tracks/catalog.ttl");
   await page.reload();
   await settled(page);
-  await expect(page.getByRole("alert")).toContainText("Couldn’t read your music library");
+  await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toContainText("Couldn’t read your music library");
   await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No tracks yet", exact: true })).toHaveCount(0);
   await accessible(page);
   await repairAndRetry(page, saved);
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Like Amber Sky", exact: true }).filter({ visible: true }),
   ).toBeVisible();
