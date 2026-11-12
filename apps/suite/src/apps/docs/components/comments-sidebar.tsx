@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button } from "@jeswr/suite-ui";
 import { Check, MessageSquare, MoreVertical, X } from "lucide-react";
@@ -354,7 +355,8 @@ export function CommentsControls({
       </VersionAction>
       <Button
         variant="ghost"
-        aria-label={`Comments (${count} open)`}
+        // A comma, not parentheses, so the name still contains the visible count (WCAG 2.5.3).
+        aria-label={`Comments, ${count} open`}
         aria-expanded={open}
         onClick={toggle}
       >
