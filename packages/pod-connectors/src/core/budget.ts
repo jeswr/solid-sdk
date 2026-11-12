@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Resource bounds for source traffic. Every JSON response is read through a byte cap, and an
  * adapter that follows pagination owns one RunBudget per run, so a source that keeps returning
@@ -76,32 +77,51 @@ export async function readJson(
   url: string,
   maxBytes = MAX_JSON_BYTES,
   budget?: RunBudget,
+  signal?: AbortSignal,
 ): Promise<unknown> {
+  if (signal?.aborted)
+    throw new IntegrationSyncError(adapterId, "Source response cancelled or timed out.");
   const tooLarge = () => new ResponseTooLargeError(adapterId, url);
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
-    await res.body?.cancel();
+    void res.body?.cancel().catch(() => {});
     throw tooLarge();
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
   if (res.body) {
     const reader = res.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      try {
-        budget?.bytes(value.byteLength);
-      } catch (error) {
-        await reader.cancel();
-        throw error;
+    let abort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      abort = () => {
+        void reader.cancel().catch(() => {});
+        reject(new IntegrationSyncError(adapterId, "Source response cancelled or timed out."));
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      if (signal?.aborted) abort();
+    });
+    try {
+      for (;;) {
+        const { done, value } = await Promise.race([reader.read(), aborted]);
+        if (signal?.aborted)
+          throw new IntegrationSyncError(adapterId, "Source response cancelled or timed out.");
+        if (done) break;
+        size += value.byteLength;
+        try {
+          budget?.bytes(value.byteLength);
+        } catch (error) {
+          void reader.cancel().catch(() => {});
+          throw error;
+        }
+        if (size > maxBytes) {
+          void reader.cancel().catch(() => {});
+          throw tooLarge();
+        }
+        chunks.push(value);
       }
-      if (size > maxBytes) {
-        await reader.cancel();
-        throw tooLarge();
-      }
-      chunks.push(value);
+    } finally {
+      if (abort) signal?.removeEventListener("abort", abort);
+      reader.releaseLock();
     }
   }
   const bytes = new Uint8Array(size);

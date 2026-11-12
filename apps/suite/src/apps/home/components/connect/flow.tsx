@@ -353,7 +353,14 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   </li>
                 ))}
               </ol>
-              {entry.status === "soon" ? (
+              {entry.status === "cli-only" ? (
+                <div className="hm-connect-result">
+                  <h2 ref={panelHeading} tabIndex={-1}>
+                    CLI only
+                  </h2>
+                  <p>{entry.howTo}</p>
+                </div>
+              ) : entry.status === "soon" ? (
                 <div className="hm-connect-result">
                   {/* A focus target for reconnecting, like every other panel. */}
                   <h2 ref={panelHeading} tabIndex={-1}>

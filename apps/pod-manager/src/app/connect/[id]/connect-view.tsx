@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
 /**
@@ -81,7 +82,9 @@ export function ConnectView({ id }: { id: string }) {
 
       <CategoryList entry={entry} />
 
-      {entry.tier === "A" ? (
+      {entry.cliOnly ? (
+        <section aria-label="CLI only"><h2>CLI only</h2>{entry.requirements.map((requirement) => <p key={requirement}>{requirement}</p>)}</section>
+      ) : entry.tier === "A" ? (
         <TierAFlow entry={entry} />
       ) : entry.tier === "B" ? (
         <TierBFlow entry={entry} />

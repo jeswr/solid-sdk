@@ -3940,6 +3940,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@jeswr/solid-environment':
+        specifier: workspace:*
+        version: link:../solid-environment
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop

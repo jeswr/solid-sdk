@@ -51,6 +51,8 @@ export interface DataCategory {
   readonly classes: readonly string[];
 }
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+const SOSA = "http://www.w3.org/ns/sosa/";
 const SCHEMA = "https://schema.org/";
 const SCHEMA_HTTP = "http://schema.org/";
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
@@ -65,6 +67,12 @@ const AS = "https://www.w3.org/ns/activitystreams#";
  * forms because pods in the wild use either.
  */
 export const CATEGORIES: readonly DataCategory[] = [
+  {
+    id: "environment", label: "Environment", tier: "other", icon: "boxes",
+    assurance: "Only apps you approve can read your environment data.",
+    description: "Indoor air quality, sensors and purifier readings.",
+    classes: [`${SOSA}Observation`, `${SOSA}Sensor`, `${SOSA}FeatureOfInterest`],
+  },
   // ── Common tier ─────────────────────────────────────────────────────────
   {
     id: "identity",

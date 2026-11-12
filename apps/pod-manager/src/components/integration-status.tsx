@@ -1,9 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { Badge } from "@/components/ui/badge";
 import type { IntegrationStatus } from "@/lib/integrations/registry";
 
 /** Tier-honest status chip copy (docs/integrations-catalog.md). */
 export const STATUS_COPY: Record<IntegrationStatus, string> = {
   live: "Connect",
+  "cli-only": "CLI only",
   demo: "Demo",
   "approval-needed": "Coming soon — needs platform approval",
   "export-file": "Import a file",

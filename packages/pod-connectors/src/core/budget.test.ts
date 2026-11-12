@@ -67,3 +67,28 @@ describe("RunBudget", () => {
     new RunBudget("x", { maxRequests: 1, maxItems: 1 }).bytes(1024);
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("aborts a stalled JSON body and cancels its reader without retaining a hostile reason", async () => {
+  const controller = new AbortController();
+  let cancelled = false;
+  const response = new Response(
+    new ReadableStream({
+      cancel() {
+        cancelled = true;
+      },
+    }),
+  );
+  const pending = readJson(
+    response,
+    "vesync",
+    "https://smartapi.vesync.com/",
+    100,
+    undefined,
+    controller.signal,
+  );
+  const check = expect(pending).rejects.toThrow("cancelled or timed out");
+  controller.abort(new Error("private-hostile-reason"));
+  await check;
+  expect(cancelled).toBe(true);
+});

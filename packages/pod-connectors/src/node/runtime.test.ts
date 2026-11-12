@@ -1636,3 +1636,94 @@ describe("CLI cancellation at the Pod write boundary", () => {
     expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("VeSync CLI", () => {
+  it("imports with isolated account credentials and leaves no secrets in reports, logs, errors or the pod", async () => {
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    const sourceRequests: string[] = [];
+    const secrets = [
+      "private-email@example.invalid",
+      "private-plaintext",
+      "private-source-token",
+      "private-account-id",
+    ];
+    const email = secrets[0] ?? "",
+      password = secrets[1] ?? "",
+      passwordHash = hashVeSyncPassword(password);
+    const sourceTransport: typeof fetch = async (input, init) => {
+      sourceRequests.push(String(init?.body));
+      expect(String(init?.body)).not.toContain(password);
+      expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      expect(new Headers(init?.headers).get("dpop")).toBeNull();
+      if (String(input) === VESYNC_API + LOGIN)
+        return Response.json({ code: 0, result: { token: secrets[2], accountID: secrets[3] } });
+      if (String(input) === VESYNC_API + DEVICES)
+        return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { pod, transport: podTransport, requests } = fixturePod();
+    const stdout = vi.fn(),
+      stderr = vi.fn(),
+      run = vi.spyOn(importRunner, "runImport");
+    const options = {
+      configPath: await configPath(),
+      sourceTransport,
+      podTransport,
+      stdout,
+      stderr,
+      vesyncCredentials: async () => ({ email, passwordHash }),
+    };
+    expect(await runCli(["import", "vesync", "--room", "Office"], options)).toBe(0);
+    const report = await run.mock.results[0]?.value;
+    const visible = JSON.stringify({
+      report,
+      stdout: stdout.mock.calls,
+      stderr: stderr.mock.calls,
+      pod: pod.urls().map((url) => pod.get(url)),
+    });
+    for (const secret of [...secrets, passwordHash]) {
+      expect(visible).not.toContain(secret);
+      expect(requests.map(({ body }) => String(body)).join("\n")).not.toContain(secret);
+    }
+    expect(sourceRequests).toHaveLength(3);
+    expect(pod.urls().some((url) => url.includes("environment/vesync-"))).toBe(true);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported vesync"));
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => {
+          throw new Error(secrets.join(" "));
+        },
+      }),
+    ).toBe(3);
+    const errors = JSON.stringify(stderr.mock.calls);
+    for (const secret of [...secrets, passwordHash]) expect(errors).not.toContain(secret);
+  });
+  it("polls with protected checkpoint rereads and exits 130 on SIGINT's abort signal", async () => {
+    vi.useFakeTimers();
+    const { VESYNC_FIXTURES } = await import("../vesync/fixtures.js");
+    const source = vi.fn(fixtureFetch("vesync", VESYNC_FIXTURES));
+    const { transport: podTransport } = fixturePod();
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    const pending = runCli(["import", "vesync", "--watch"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceAuth: { fetch: source },
+      stdout,
+      stderr,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(stdout).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(10 * 60000);
+    await vi.waitFor(() => expect(stdout).toHaveBeenCalledTimes(2));
+    controller.abort();
+    expect(await pending).toBe(130);
+    expect(source).toHaveBeenCalledTimes(4);
+    expect(stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});

@@ -325,6 +325,14 @@
     "./youtube/*": {
       "types": "./dist/youtube/*.d.ts",
       "default": "./dist/youtube/*.js"
+    },
+    "./adapters/vesync": {
+      "types": "./dist/vesync/adapter.d.ts",
+      "default": "./dist/vesync/adapter.js"
+    },
+    "./vesync/*": {
+      "types": "./dist/vesync/*.d.ts",
+      "default": "./dist/vesync/*.js"
     }
   },
   "files": [
@@ -349,7 +357,8 @@
     "fflate": "0.8.3",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.0.3",
-    "postal-mime": "4.1.4"
+    "postal-mime": "4.1.4",
+    "@jeswr/solid-environment": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
