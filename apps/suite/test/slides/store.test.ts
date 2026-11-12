@@ -23,7 +23,6 @@ function setup(decks = [item()]) {
     create: vi.fn(async (deck: Deck) => ({ url: `${container}created.ttl`, etag: '"2"', deck })),
     save: vi.fn(async (current: StoredDeck, deck: Deck) => ({ ...current, etag: '"2"', deck })),
     remove: vi.fn(async () => {}),
-    removeUploads: vi.fn(async () => {}),
   } as unknown as DeckRepository;
   const report = vi.fn();
   const persist = vi.fn();
@@ -506,8 +505,8 @@ describe("several conflicts", () => {
     store.dispose();
     copy.store.dispose();
   });
-  it("keeps the first local copy when the same presentation conflicts again", async () => {
-    const { store, persist } = setup();
+  it("keeps the first local copy and the later one as a separate unsaved copy", async () => {
+    const { store, repo, persist } = setup();
     const first = {
       url: item().url,
       local: newDeck("First edits"),
@@ -523,12 +522,45 @@ describe("several conflicts", () => {
       local: newDeck("Elsewhere"),
       remote: { ...other("Remote 3"), etag: '"7"' },
     };
-    store.restore(JSON.stringify({ conflicts: [elsewhere, first], conflict: second }));
+    // The same record restored twice (say, `conflicts` and the legacy `conflict`) adds no copy.
+    store.restore(JSON.stringify({ conflicts: [elsewhere, first, first], conflict: second }));
     expect(store.getSnapshot().conflicts).toHaveLength(2);
+    expect(store.getSnapshot().decks.map((entry) => entry.deck.name)).toEqual([
+      "Later (your copy)",
+      "Original",
+    ]);
+    expect(store.getSnapshot().pending).toBe(1);
+    const saved = JSON.parse(persist.mock.calls.at(-1)?.[0] as string);
+    expect(saved.drafts).toEqual([expect.objectContaining({ unsaved: true })]);
     expect(store.resolveConflict(false)).toBeUndefined();
     expect(store.getSnapshot().conflict?.local.name).toBe("First edits");
     expect(store.getSnapshot().conflict?.remote.deck.name).toBe("Remote 2");
     expect(JSON.parse(persist.mock.calls.at(-1)?.[0] as string).conflicts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(650);
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Later (your copy)" }),
+    );
+    expect(repo.save).not.toHaveBeenCalled();
+    store.dispose();
+  });
+  it("keeps different local edits from a repeated live conflict as an unsaved copy", async () => {
+    const { store, repo } = setup();
+    vi.mocked(repo.save).mockImplementation(async (current, deck) => {
+      throw new DeckConflictError(deck, { ...current, deck: newDeck("Theirs"), etag: '"9"' });
+    });
+    store.edit(item().url, newDeck("First try"));
+    await store.flush();
+    store.edit(item().url, newDeck("Second try"));
+    await store.flush();
+    expect(store.getSnapshot().conflicts).toHaveLength(1);
+    expect(store.getSnapshot().conflict?.local.name).toBe("First try");
+    expect(store.getSnapshot().decks.map((entry) => entry.deck.name)).toContain(
+      "Second try (your copy)",
+    );
+    await vi.advanceTimersByTimeAsync(650);
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Second try (your copy)" }),
+    );
     store.dispose();
   });
 });
@@ -576,38 +608,79 @@ describe("cleanup", () => {
     await vi.advanceTimersByTimeAsync(6000);
     expect(repo.remove).toHaveBeenCalledTimes(1);
   });
-  it("removes a deleted deck's uploads that no other presentation shows", async () => {
-    const shared = `${container}shared.png`;
-    const own = `${container}own.png`;
+  it("never deletes an image when a deck is deleted", async () => {
+    const own = `${container}11111111-1111-4111-8111-111111111111-own.png`;
+    const shared = `${container}22222222-2222-4222-8222-222222222222-shared.png`;
     const first = { ...item(), deck: withImage(newDeck("A"), own) };
     first.deck.slides.push({ ...first.deck.slides[0], id: "second", image: shared } as never);
     const second = { ...other(), deck: withImage(newDeck("B"), shared) };
     const { store, repo } = setup([first, second]);
     store.remove(first.url);
-    await vi.advanceTimersByTimeAsync(6000);
-    expect(repo.removeUploads).toHaveBeenCalledWith([own]);
-    vi.mocked(repo.removeUploads).mockRejectedValueOnce(new Error("offline"));
     store.remove(second.url);
     await vi.advanceTimersByTimeAsync(6000);
-    expect(repo.removeUploads).toHaveBeenLastCalledWith([shared]);
     expect(store.getSnapshot().decks).toEqual([]);
+    // Deleting a deck removes only the presentation files: no other repository call is made.
+    expect(vi.mocked(repo.remove).mock.calls.map(([removed]) => removed.url)).toEqual([
+      first.url,
+      second.url,
+    ]);
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(repo.save).not.toHaveBeenCalled();
+    expect(Object.keys(repo).sort()).toEqual(["container", "create", "remove", "save"]);
     store.dispose();
   });
-  it("keeps uploads a deck in the undo window or a conflict still uses", async () => {
-    const image = `${container}kept.png`;
-    const first = { ...item(), deck: withImage(newDeck("A"), image) };
-    const second = { ...other(), deck: withImage(newDeck("B"), image) };
-    const { store, repo } = setup([first, second]);
-    store.restore(
-      JSON.stringify({
-        conflicts: [{ url: item().url, local: withImage(newDeck("L"), image), remote: item() }],
-      }),
+});
+describe("unsaved creations", () => {
+  it("saves and deletes a real file named like a draft instead of re-creating it", async () => {
+    const real: StoredDeck = { ...item("Real"), url: `${container}draft-real.ttl` };
+    const { store, repo, persist } = setup([real]);
+    store.edit(real.url, newDeck("Edited"));
+    expect(JSON.parse(persist.mock.calls.at(-1)?.[0] as string).drafts[0].unsaved).toBeUndefined();
+    await store.flush();
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(repo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ url: real.url }),
+      expect.objectContaining({ name: "Edited" }),
+      false,
     );
-    store.remove(first.url);
-    await vi.advanceTimersByTimeAsync(3000);
-    store.remove(second.url);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(repo.removeUploads).toHaveBeenLastCalledWith([]);
+    // A restored record without the unsaved flag is an update too.
+    const next = setup([real]);
+    next.store.restore(JSON.stringify({ drafts: [{ ...real, deck: newDeck("Restored") }] }));
+    await next.store.flush();
+    expect(next.repo.create).not.toHaveBeenCalled();
+    expect(next.repo.save).toHaveBeenCalledTimes(1);
+    store.remove(real.url);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(repo.remove).toHaveBeenCalledWith(expect.objectContaining({ url: real.url }));
     store.dispose();
+    next.store.dispose();
+  });
+  it("restores unsaved creations, including deleted ones, by their flag", async () => {
+    const { store, persist } = setup([]);
+    const kept = store.add(newDeck("Kept"));
+    const gone = store.add(newDeck("Gone"));
+    store.remove(gone);
+    const saved = persist.mock.calls.at(-1)?.[0] as string;
+    expect(JSON.parse(saved).drafts).toEqual([
+      expect.objectContaining({ url: kept, unsaved: true }),
+    ]);
+    expect(JSON.parse(saved).trash).toEqual([
+      expect.objectContaining({ url: gone, unsaved: true }),
+    ]);
+    const next = setup([]);
+    next.store.restore(saved);
+    next.store.undo(gone);
+    await next.store.flush();
+    expect(next.repo.create).toHaveBeenCalledTimes(2);
+    expect(next.repo.save).not.toHaveBeenCalled();
+    const last = setup([]);
+    last.store.restore(saved);
+    await vi.advanceTimersByTimeAsync(6000);
+    // The deleted creation never reached the pod, so nothing is deleted there.
+    expect(last.repo.remove).not.toHaveBeenCalled();
+    expect(last.repo.create).toHaveBeenCalledTimes(1);
+    store.dispose();
+    next.store.dispose();
+    last.store.dispose();
   });
 });

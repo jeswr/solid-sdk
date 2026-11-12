@@ -4,14 +4,20 @@
  * its own entry and keeps the others, so two tabs never overwrite each other's unsaved work.
  * A new window adopts the entries of windows that have closed: with Web Locks, a window is
  * open while it holds its lock; without them, an entry untouched for `staleAfter` counts as
- * closed.
+ * closed. With Web Locks, an adopting window also claims each closed window's lock (if it is
+ * still free) and holds it until it closes, so two windows opening at once never both adopt
+ * the same drafts.
  */
 interface Entry {
   at: number;
   value: string;
 }
 interface Locks {
-  request(name: string, callback: () => Promise<void>): Promise<unknown>;
+  request(
+    name: string,
+    options: { ifAvailable?: boolean },
+    callback: (lock: unknown) => Promise<void>,
+  ): Promise<unknown>;
   query(): Promise<{ held?: { name?: string }[] }>;
 }
 export interface DraftStorage {
@@ -58,21 +64,40 @@ export function createDraftStorage(
   const prefix = `${key}:window:`;
   const adopted = new Set<string>();
   let release: (() => void) | undefined;
+  /** Settles when this window closes; every lock it holds is held until then. */
+  const holding = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   /** Settles once this window holds its lock (or could not take it). */
   let acquired: Promise<void> | undefined;
   if (locks) {
-    const holding = new Promise<void>((resolve) => {
-      release = resolve;
-    });
     acquired = new Promise<void>((resolve) => {
       locks
-        .request(`${prefix}${id}`, () => {
+        .request(`${prefix}${id}`, {}, () => {
           resolve();
           return holding;
         })
         .catch(() => resolve());
     });
   }
+  /**
+   * Takes a closed window's lock if it is free and keeps it while this window is open, so no
+   * other window adopts the same entry. Resolves false when another window holds it, and
+   * undefined when the lock could not be requested at all.
+   */
+  const claim = (owner: string): Promise<boolean | undefined> =>
+    new Promise((resolve) => {
+      try {
+        (locks as Locks)
+          .request(`${prefix}${owner}`, { ifAvailable: true }, (lock) => {
+            resolve(Boolean(lock));
+            return lock ? holding : Promise.resolve();
+          })
+          .catch(() => resolve(undefined));
+      } catch {
+        resolve(undefined);
+      }
+    });
   const read = (): Record<string, Entry> => {
     const raw = storage().getItem(key);
     if (raw === null) return {};
@@ -111,8 +136,16 @@ export function createDraftStorage(
         if (owner === id) continue;
         const open = live ? live.has(owner) : now() - entry.at < staleAfter;
         if (open) continue;
+        let value = entry.value;
+        if (locks && !adopted.has(owner)) {
+          if ((await claim(owner)) === false) continue;
+          // Another window may have adopted and cleared the entry before the claim.
+          const latest = read()[owner];
+          if (!latest) continue;
+          value = latest.value;
+        }
         adopted.add(owner);
-        values.push(entry.value);
+        values.push(value);
       }
       return values;
     },

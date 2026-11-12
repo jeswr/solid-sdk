@@ -108,10 +108,23 @@ it("discovers real pods and propagates discovery failure instead of guessing a p
       webId: "https://unavailable.example/profile#me",
     } as unknown as PodSession),
   ).rejects.toThrow();
-  // The demo pod advertises no storage description; only demo sessions may assume Solid.
+  // The demo pod advertises a storage description, so discovery opens it in any mode.
   const demo = await demoSession();
-  await expect(connectSlides({ ...demo, mode: "solid" } as PodSession)).rejects.toMatchObject({
+  await expect(connectSlides({ ...demo, mode: "solid" } as PodSession)).resolves.toMatchObject({
+    container: `${DEMO_ROOT}slides/`,
+  });
+  // A pod that advertises none is opened as plain Solid only in demo sessions.
+  const bare = {
+    ...demo,
+    fetch: vi.fn(async () => new Response(null, { status: 200 })),
+    storageUrl: "https://undescribed.example/",
+    webId: "https://undescribed.example/profile/card#me",
+  } as unknown as PodSession;
+  await expect(connectSlides({ ...bare, mode: "solid" } as PodSession)).rejects.toMatchObject({
     code: "no-storage-link",
+  });
+  await expect(connectSlides(bare)).resolves.toMatchObject({
+    container: "https://undescribed.example/slides/",
   });
   expect(newDeck().slides).toHaveLength(1);
 });

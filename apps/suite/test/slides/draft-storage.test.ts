@@ -20,14 +20,24 @@ function lockManager() {
   const held = new Set<string>();
   return {
     held,
-    request: vi.fn(async (name: string, callback: () => Promise<void>) => {
-      held.add(name);
-      try {
-        await callback();
-      } finally {
-        held.delete(name);
-      }
-    }),
+    request: vi.fn(
+      async (
+        name: string,
+        options: { ifAvailable?: boolean },
+        callback: (lock: unknown) => Promise<void>,
+      ) => {
+        if (held.has(name)) {
+          if (options.ifAvailable) return callback(null);
+          throw new Error("this stand-in does not queue");
+        }
+        held.add(name);
+        try {
+          await callback({ name });
+        } finally {
+          held.delete(name);
+        }
+      },
+    ),
     query: vi.fn(async () => ({ held: [...held].map((name) => ({ name })) })),
   };
 }
@@ -57,6 +67,8 @@ it("adopts drafts from closed windows only, using Web Locks to tell which are op
   await vi.waitFor(() => expect(locks.held.size).toBe(1));
   const next = createDraftStorage(key, { storage, locks, id: "next" });
   expect(await next.load()).toEqual([record("closed")]);
+  // The adopting window holds the closed window's lock while it is open.
+  expect(locks.held.has(`${key}:window:closed`)).toBe(true);
   next.save(record("closed"));
   const saved = JSON.parse(storage().getItem(key) as string);
   expect(Object.keys(saved.windows).sort()).toEqual(["next", "open"]);
@@ -71,9 +83,11 @@ it("treats a lock query without a held list as no open windows", async () => {
   const { storage } = memory();
   createDraftStorage(key, { storage, locks: null, id: "gone", now: Date.now }).save(record("gone"));
   const locks = {
-    request: vi.fn(async (_name: string, callback: () => Promise<void>) => {
-      void callback();
-    }),
+    request: vi.fn(
+      async (_name: string, _options: unknown, callback: (lock: unknown) => Promise<void>) => {
+        void callback({});
+      },
+    ),
     query: vi.fn(async () => ({})),
   };
   expect(await createDraftStorage(key, { storage, locks, id: "new" }).load()).toEqual([
@@ -153,9 +167,18 @@ it("uses browser storage and Web Locks by default", async () => {
     const window = createDraftStorage(key);
     window.save(record("default"));
     expect(values.get(key)).toContain("default");
-    // The shared lock stub has no query(), so liveness falls back to entry age.
-    expect(await createDraftStorage(key, { staleAfter: 0 }).load()).toEqual([record("default")]);
+    // The shared lock stub has no query(), so liveness falls back to entry age, but the
+    // open window still holds its lock, so no other window can claim its drafts.
+    expect(await createDraftStorage(key, { staleAfter: 0 }).load()).toEqual([]);
     window.dispose();
+    await vi.waitFor(async () => {
+      const adopter = createDraftStorage(key, { staleAfter: 0 });
+      try {
+        expect(await adopter.load()).toEqual([record("default")]);
+      } finally {
+        adopter.dispose();
+      }
+    });
     for (const navigator of [undefined, {}]) {
       vi.stubGlobal("navigator", navigator);
       const plain = createDraftStorage(key, { staleAfter: 0 });
@@ -165,4 +188,47 @@ it("uses browser storage and Web Locks by default", async () => {
   } finally {
     vi.unstubAllGlobals();
   }
+});
+it("claims each adopted entry with a Web Lock so two windows opening at once never both adopt it", async () => {
+  const { storage } = memory();
+  const locks = lockManager();
+  const crashedLock = `${key}:window:crashed`;
+  // A crashed window: its entry stays, its lock is gone.
+  createDraftStorage(key, { storage, locks: null, id: "crashed" }).save(record("crashed"));
+  // Both new windows query before either claims, so both see no live owner.
+  locks.query.mockResolvedValue({ held: [] });
+  const a = createDraftStorage(key, { storage, locks, id: "a" });
+  const b = createDraftStorage(key, { storage, locks, id: "b" });
+  const [first, second] = await Promise.all([a.load(), b.load()]);
+  expect([...first, ...second]).toEqual([record("crashed")]);
+  const [winner, loser] = first.length ? [a, b] : [b, a];
+  const winnerLock = `${key}:window:${first.length ? "a" : "b"}`;
+  // A later window read the record before the adopter saved and closed: its claim succeeds,
+  // but the entry is gone by then, so it adopts nothing.
+  const late = createDraftStorage(key, { storage, locks, id: "late" });
+  locks.query.mockImplementationOnce(async () => {
+    winner.save(record("adopted"));
+    winner.dispose();
+    await vi.waitFor(() => expect(locks.held.has(crashedLock)).toBe(false));
+    return { held: [{ name: winnerLock }] };
+  });
+  expect(await late.load()).toEqual([]);
+  late.dispose();
+  loser.dispose();
+});
+it("keeps the age rule when a claim cannot be requested", async () => {
+  const { storage } = memory();
+  createDraftStorage(key, { storage, locks: null, id: "old", now: () => 0 }).save(record("old"));
+  const throwing = {
+    request: vi.fn(
+      (_name: string, options: { ifAvailable?: boolean }, callback: (lock: unknown) => unknown) => {
+        if (options.ifAvailable) throw new Error("blocked");
+        return Promise.resolve(callback({}));
+      },
+    ),
+    query: vi.fn(async () => ({ held: [] })),
+  };
+  const window = createDraftStorage(key, { storage, locks: throwing as never, id: "w" });
+  expect(await window.load()).toEqual([record("old")]);
+  window.dispose();
 });

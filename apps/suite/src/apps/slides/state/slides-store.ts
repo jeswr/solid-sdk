@@ -6,7 +6,6 @@ import {
   DeckConflictError,
   type DeckRepository,
   DeckVersionError,
-  deckImages,
   decodeDeck,
   renumber,
   type StoredDeck,
@@ -51,6 +50,8 @@ export class SlidesStore {
   private exitSaving: Promise<void> | undefined;
   private trash = new Map<string, Removal>();
   private sent = new Map<string, Deck[]>();
+  /** Creations not yet on the pod: they use temporary URLs until the pod names them. */
+  private unsaved = new Set<string>();
   constructor(
     private repository: DeckRepository,
     decks: StoredDeck[],
@@ -67,10 +68,6 @@ export class SlidesStore {
       this.listeners.delete(listener);
     };
   };
-  /** Unsaved creations use temporary URLs until the pod names them. */
-  private isDraft(url: string) {
-    return url.startsWith(`${this.repository.container}draft-`);
-  }
   private publish(patch: Partial<SlidesSnapshot>) {
     const conflicts = patch.conflicts ?? this.state.conflicts;
     this.state = {
@@ -83,12 +80,15 @@ export class SlidesStore {
     try {
       this.persist(
         JSON.stringify({
-          drafts: this.state.decks.filter((entry) => this.dirty.has(entry.url)),
+          drafts: this.state.decks
+            .filter((entry) => this.dirty.has(entry.url))
+            .map((entry) => (this.unsaved.has(entry.url) ? { ...entry, unsaved: true } : entry)),
           conflicts: this.state.conflicts,
           trash: [...this.trash].map(([url, removed]) => ({
             url,
             item: removed.item,
             deadline: removed.deadline,
+            ...(this.unsaved.has(removed.item.url) ? { unsaved: true } : {}),
           })),
         }),
       );
@@ -131,6 +131,7 @@ export class SlidesStore {
           restored,
         ];
         this.dirty.set(restored.url, ++this.generation);
+        if (draft.unsaved === true) this.unsaved.add(restored.url);
       } catch {
         failed++;
       }
@@ -141,11 +142,13 @@ export class SlidesStore {
     ]) {
       try {
         const remote = this.decodeStored(conflict.remote);
-        this.state.conflicts = this.withConflict(this.state.conflicts, {
+        // withConflict may replace the state with one that holds an extra copy.
+        const conflicts = this.withConflict(this.state.conflicts, {
           url: remote.url,
           local: decodeDeck(JSON.stringify(conflict.local)),
           remote,
         });
+        this.state.conflicts = conflicts;
       } catch {
         failed++;
       }
@@ -154,6 +157,11 @@ export class SlidesStore {
       try {
         if (!this.inCollection(removed.url) || !Number.isFinite(removed.deadline)) continue;
         const item = this.decodeStored(removed.item);
+        // An unsaved creation is never deleted from the pod, and an undo resumes creating it.
+        if (removed.unsaved === true) {
+          this.unsaved.add(item.url);
+          this.dirty.set(item.url, ++this.generation);
+        }
         const deletion: Removal = { item, deadline: removed.deadline, timer: undefined };
         deletion.timer = setTimeout(
           () => {
@@ -171,20 +179,35 @@ export class SlidesStore {
     if (failed) this.report("A saved draft could not be opened. Your pod files are unchanged.");
     if (this.dirty.size) this.schedule();
   }
-  /** The first conflict for a presentation keeps its local edits; a later one updates the pod side. */
+  /**
+   * The first conflict for a presentation keeps its local edits; a later one updates the pod
+   * side, and its different local edits become a separate unsaved copy instead of being lost.
+   * The copy is added to the decks in place; the caller publishes.
+   */
   private withConflict(conflicts: DeckConflict[], next: DeckConflict): DeckConflict[] {
     const existing = conflicts.find((entry) => entry.url === next.url);
     if (!existing) return [...conflicts, next];
+    if (JSON.stringify(existing.local) !== JSON.stringify(next.local)) {
+      const copy = this.draft({ ...next.local, name: `${next.local.name} (your copy)` });
+      this.state = { ...this.state, decks: [copy, ...this.state.decks] };
+      this.schedule();
+    }
     return conflicts.map((entry) =>
       entry === existing ? { ...existing, remote: next.remote } : entry,
     );
   }
-  add(deck: Deck): string {
+  /** Registers an unsaved creation without publishing it. */
+  private draft(deck: Deck): StoredDeck {
     const url = `${this.repository.container}draft-${crypto.randomUUID()}.ttl`;
+    this.unsaved.add(url);
     this.dirty.set(url, ++this.generation);
-    this.publish({ decks: [{ url, etag: "", deck }, ...this.state.decks] });
+    return { url, etag: "", deck };
+  }
+  add(deck: Deck): string {
+    const created = this.draft(deck);
+    this.publish({ decks: [created, ...this.state.decks] });
     this.schedule();
-    return url;
+    return created.url;
   }
   edit(url: string, deck: Deck) {
     url = this.resolveUrl(url);
@@ -243,7 +266,7 @@ export class SlidesStore {
     for (const [url, version] of [...this.dirty]) {
       const item = this.state.decks.find((entry) => entry.url === url);
       if (!item) continue;
-      if (updatesOnly && this.isDraft(url)) continue;
+      if (updatesOnly && this.unsaved.has(url)) continue;
       if (!(await this.saveOne(url, item, version, keepalive))) return;
     }
     if (this.dirty.size && !updatesOnly) this.schedule();
@@ -257,7 +280,7 @@ export class SlidesStore {
     let current = item;
     for (let attempt = 0; ; attempt++) {
       try {
-        if (this.isDraft(url)) {
+        if (this.unsaved.has(url)) {
           this.settleSaved(url, await this.repository.create(current.deck), version);
           return true;
         }
@@ -293,12 +316,13 @@ export class SlidesStore {
           continue;
         }
         this.dirty.delete(url);
+        const conflicts = this.withConflict(this.state.conflicts, {
+          url,
+          local: latest,
+          remote: error.remote,
+        });
         this.publish({
-          conflicts: this.withConflict(this.state.conflicts, {
-            url,
-            local: latest,
-            remote: error.remote,
-          }),
+          conflicts,
           decks: this.state.decks.map((entry) => (entry.url === url ? error.remote : entry)),
         });
         this.report(
@@ -312,6 +336,7 @@ export class SlidesStore {
     if (url !== saved.url) {
       this.aliases.set(url, saved.url);
     }
+    this.unsaved.delete(url);
     if (this.dirty.get(url) === version || !this.dirty.has(url)) this.dirty.delete(url);
     else {
       this.dirty.delete(url);
@@ -354,33 +379,24 @@ export class SlidesStore {
     this.publish({ decks: [removed.item, ...this.state.decks] });
     if (this.dirty.has(url)) this.schedule();
   }
-  /** Images another known presentation, deleted-but-undoable deck or conflict still shows. */
-  private imagesInUse(): Set<string> {
-    const decks = [
-      ...this.state.decks.map((entry) => entry.deck),
-      ...[...this.trash.values()].map((removed) => removed.item.deck),
-      ...this.state.conflicts.flatMap((conflict) => [conflict.local, conflict.remote.deck]),
-    ];
-    return new Set(decks.flatMap(deckImages));
-  }
+  /**
+   * Deletes the presentation file only. Its uploaded images stay: another window, device or
+   * unsaved draft may still show them, and unused uploads are not garbage-collected yet.
+   */
   private async deleteAfterUndo(url: string, removed: Removal) {
     if (this.saving) await this.saving;
     if (this.trash.get(url) !== removed) return;
     try {
-      if (!this.isDraft(removed.item.url)) await this.repository.remove(removed.item);
+      if (!this.unsaved.has(removed.item.url)) await this.repository.remove(removed.item);
       this.dirty.delete(url);
       this.dirty.delete(removed.item.url);
+      this.unsaved.delete(removed.item.url);
       this.trash.delete(url);
       this.publish({});
     } catch {
       this.undo(url);
       this.report("Couldn't delete this presentation. It has been restored.");
-      return;
     }
-    const inUse = this.imagesInUse();
-    await this.repository
-      .removeUploads(deckImages(removed.item.deck).filter((image) => !inUse.has(image)))
-      .catch(() => {});
   }
   /** Saves what is pending and carries out confirmed deletions instead of dropping them. */
   dispose() {

@@ -30,13 +30,10 @@ export interface DeckListing {
 /** Largest presentation document read, enforced while streaming. */
 export const DECK_BYTE_LIMIT = 4 * 1024 * 1024;
 const LIST_CONCURRENCY = 4;
-/** Empty placeholders older than this are interrupted creates, not creates in flight. */
+/** Zero-byte placeholders older than this are interrupted creates, not creates in flight. */
 const UNFINISHED_GRACE_MS = 10 * 60 * 1000;
-/** Uploaded images older than this that no presentation references are removed. */
-const ORPHAN_UPLOAD_GRACE_MS = 24 * 60 * 60 * 1000;
 const DECK_TYPES = ["text/turtle", "application/ld+json"];
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
-const UPLOAD_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[^/]+$/;
 const SAMPLE_NAME = /^[a-z0-9][a-z0-9-]*\.ttl$/;
 
 class UnfinishedDeckError extends Error {
@@ -73,14 +70,6 @@ export function isStrongEtag(etag: string | null | undefined): boolean {
 function mediaType(value: string | null | undefined): string {
   return value?.split(";")[0]?.trim().toLowerCase() ?? "";
 }
-function nameOf(url: string): string {
-  const path = new URL(url).pathname;
-  try {
-    return decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-  } catch {
-    return "";
-  }
-}
 function olderThan(modified: Date | null, age: number, now: number): boolean {
   return modified !== null && now - modified.getTime() > age;
 }
@@ -91,9 +80,19 @@ async function eachLimited<T>(items: readonly T[], limit: number, run: (item: T)
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
-/** Uploaded slide images referenced by a presentation. */
-export function deckImages(deck: Deck): string[] {
-  return deck.slides.flatMap((slide) => (slide.image ? [slide.image] : []));
+/** Passes a body through unchanged, counting its bytes. */
+function countBytes(body: ReadableStream<Uint8Array> | null) {
+  const counter = { bytes: 0, body: null as ReadableStream<Uint8Array> | null };
+  counter.body =
+    body?.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          counter.bytes += chunk.byteLength;
+          controller.enqueue(chunk);
+        },
+      }),
+    ) ?? null;
+  return counter;
 }
 
 /** Shared collection I/O. All network operations go through the injected scoped client. */
@@ -127,9 +126,10 @@ export function createDeckRepository(
       void response.body?.cancel().catch(() => {});
       throw new InvalidDeckError(response.etag);
     }
+    const counted = countBytes(response.body);
     let dataset: Awaited<ReturnType<typeof parseRdf>>;
     try {
-      dataset = await parseRdf(response.body ?? "", response.contentType, {
+      dataset = await parseRdf(counted.body ?? "", response.contentType, {
         baseIRI: url,
         maxBytes: DECK_BYTE_LIMIT,
         signal,
@@ -138,24 +138,11 @@ export function createDeckRepository(
       signal?.throwIfAborted();
       throw new InvalidDeckError(response.etag, { cause });
     }
-    if (dataset.size === 0) throw new UnfinishedDeckError(response.etag);
+    // Only a zero-byte body is a placeholder; other files without triples are not presentations.
+    if (dataset.size === 0 && counted.bytes === 0) throw new UnfinishedDeckError(response.etag);
     const deck = parseDeck(url, dataset);
     if (!deck) throw new InvalidDeckError(response.etag);
     return { url, etag: response.etag ?? "", deck };
-  };
-  const isUpload = (url: string) => {
-    if (!url.startsWith(container) || url.slice(container.length).includes("/")) return false;
-    return UPLOAD_NAME.test(nameOf(url));
-  };
-  const removeUploads = async (urls: readonly string[]) => {
-    await eachLimited([...new Set(urls)].filter(isUpload), LIST_CONCURRENCY, async (url) => {
-      try {
-        const { etag } = await storage.head(url);
-        if (etag && isStrongEtag(etag)) await storage.delete(url, { ifMatch: etag });
-      } catch {
-        /* Best effort: a missing or busy upload stays for a later sweep. */
-      }
-    });
   };
   const create = async (deck: Deck, name = `${crypto.randomUUID()}.ttl`): Promise<StoredDeck> => {
     const created = await storage.create(container, "", {
@@ -199,18 +186,16 @@ export function createDeckRepository(
     read,
     /**
      * One unreadable or invalid file never hides the rest: it is reported in `broken`.
-     * Reads run a few at a time. Empty placeholders left by interrupted creates are skipped,
-     * and removed once old. Old uploaded images that no presentation references are removed,
-     * but only when every presentation could be read.
+     * Reads run a few at a time. Zero-byte placeholders left by interrupted creates are
+     * skipped, and removed once old. Uploaded images are never removed here: unused uploads
+     * are not garbage-collected yet.
      */
     async list(): Promise<DeckListing> {
       const files: Entry[] = [];
-      const uploads: Entry[] = [];
       for await (const item of storage.listAll(container, { maxBytes: 4 * 1024 * 1024 })) {
         if (item.kind === "container") continue;
         const type = mediaType(item.contentType);
         if (type ? DECK_TYPES.includes(type) : item.url.endsWith(".ttl")) files.push(item);
-        else if ((!type || IMAGE_TYPES.includes(type)) && isUpload(item.url)) uploads.push(item);
       }
       const decks: StoredDeck[] = [];
       const broken: BrokenDeck[] = [];
@@ -234,17 +219,6 @@ export function createDeckRepository(
           });
         }
       });
-      if (!broken.length) {
-        const used = new Set(decks.flatMap((entry) => deckImages(entry.deck)));
-        await removeUploads(
-          uploads
-            .filter(
-              (item) =>
-                !used.has(item.url) && olderThan(item.modified, ORPHAN_UPLOAD_GRACE_MS, time),
-            )
-            .map((item) => item.url),
-        );
-      }
       return {
         decks: decks.sort((a, b) => b.deck.modified.getTime() - a.deck.modified.getTime()),
         broken: broken.sort((a, b) => a.url.localeCompare(b.url)),
@@ -305,8 +279,6 @@ export function createDeckRepository(
         ifMatch: await strongVersion(current.url, current.etag || null),
       });
     },
-    /** Best effort: deletes this collection's uploaded images; other URLs are ignored. */
-    removeUploads,
     async uploadImage(file: Blob, name: string): Promise<string> {
       if (!IMAGE_TYPES.includes(file.type))
         throw new TypeError("Choose a PNG, JPEG, WebP or GIF image");

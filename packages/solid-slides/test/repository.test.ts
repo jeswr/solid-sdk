@@ -11,7 +11,6 @@ import {
   DECK_BYTE_LIMIT,
   DeckConflictError,
   DeckVersionError,
-  deckImages,
   isStrongEtag,
 } from "../src/repository.js";
 
@@ -390,61 +389,52 @@ describe("cleanup", () => {
     expect(await repo.list()).toEqual({ decks: [], broken: [] });
     await expect(storage.head(placeholder.url)).rejects.toMatchObject({ code: "not-found" });
   });
-  it("removes old uploads no presentation uses, but only when every deck could be read", async () => {
+  it("treats only a zero-byte body as a placeholder; other files without triples are invalid", async () => {
+    const time = Date.now();
+    const { repo, storage } = setup("solid", () => time + DAY);
+    await repo.initialise();
+    const comment = await storage.create(repo.container, "# just a comment\n", {
+      name: "comment.ttl",
+      contentType: "text/turtle",
+    });
+    const whitespace = await storage.create(repo.container, "\n", {
+      name: "blank.ttl",
+      contentType: "text/turtle",
+    });
+    const unmapped = await storage.create(repo.container, '{"name": "No context"}', {
+      name: "unmapped.jsonld",
+      contentType: "application/ld+json",
+    });
+    await expect(repo.read(comment.url)).rejects.toThrow("not a valid presentation");
+    await expect(repo.read(unmapped.url)).rejects.toThrow("not a valid presentation");
+    expect((await repo.list()).broken).toEqual(
+      [comment.url, whitespace.url, unmapped.url].sort().map((url) => ({ url, reason: "invalid" })),
+    );
+    for (const url of [comment.url, whitespace.url, unmapped.url])
+      await expect(storage.head(url)).resolves.toBeTruthy();
+  });
+  it("never deletes uploaded images, even ones no presentation uses", async () => {
     let time = Date.now();
     const { repo, storage } = setup("solid", () => time);
     await repo.initialise();
     const png = () => new Blob(["image"], { type: "image/png" });
     const used = await repo.uploadImage(png(), "used.png");
-    const orphan = await repo.uploadImage(png(), "orphan.png");
+    const unused = await repo.uploadImage(png(), "unused.png");
     const deck = newDeck("Pictures");
     deck.slides = [{ ...(deck.slides[0] as (typeof deck.slides)[number]), image: used }];
-    expect(deckImages(deck)).toEqual([used]);
-    expect(deckImages(newDeck())).toEqual([]);
-    await repo.create(deck);
-    await storage.create(repo.container, "keep", { name: "manual.png", contentType: "image/png" });
-    await repo.list();
-    await expect(storage.head(orphan)).resolves.toBeTruthy();
-    time += 2 * DAY;
-    const broken = await storage.create(repo.container, "<broken", {
-      name: "broken.ttl",
-      contentType: "text/turtle",
-    });
-    await repo.list();
-    await expect(storage.head(orphan)).resolves.toBeTruthy();
-    await storage.delete(broken.url, { ifMatch: (await storage.head(broken.url)).etag as string });
-    await repo.list();
-    await expect(storage.head(orphan)).rejects.toMatchObject({ code: "not-found" });
-    await expect(storage.head(used)).resolves.toBeTruthy();
-    await expect(storage.head(`${repo.container}manual.png`)).resolves.toBeTruthy();
-  });
-  it("removes only this collection's uploads, ignoring failures", async () => {
-    const { repo, storage } = setup();
-    await repo.initialise();
-    const upload = await repo.uploadImage(new Blob(["i"], { type: "image/png" }), "a.png");
-    const other = await storage.create(repo.container, "x", {
-      name: "notes.png",
-      contentType: "image/png",
-    });
+    const stored = await repo.create(deck);
     const remove = vi.spyOn(storage, "delete");
-    await repo.removeUploads([
-      upload,
-      upload,
-      other.url,
-      `${root}elsewhere/${upload.split("/").pop()}`,
-      `${repo.container}nested/${upload.split("/").pop()}`,
-    ]);
+    await repo.list();
+    time += 30 * DAY;
+    await repo.list();
+    expect(remove).not.toHaveBeenCalled();
+    await repo.remove(stored);
+    await repo.list();
     expect(remove).toHaveBeenCalledTimes(1);
-    await expect(storage.head(other.url)).resolves.toBeTruthy();
-    await expect(storage.head(upload)).rejects.toMatchObject({ code: "not-found" });
-    const weak = await repo.uploadImage(new Blob(["i"], { type: "image/png" }), "w.png");
-    const head = storage.head.bind(storage);
-    vi.spyOn(storage, "head").mockImplementationOnce(withEtag(head as never, 'W/"1"'));
-    await repo.removeUploads([weak, `${repo.container}%E0%A4%A.png`]);
-    await expect(storage.head(weak)).resolves.toBeTruthy();
-    remove.mockRejectedValueOnce(new Error("offline"));
-    const second = await repo.uploadImage(new Blob(["i"], { type: "image/png" }), "b.png");
-    await expect(repo.removeUploads([second])).resolves.toBeUndefined();
+    expect(remove).toHaveBeenCalledWith(stored.url, expect.anything());
+    await expect(storage.head(used)).resolves.toBeTruthy();
+    await expect(storage.head(unused)).resolves.toBeTruthy();
+    expect("removeUploads" in repo).toBe(false);
   });
 });
 describe("app-owned sample files", () => {
