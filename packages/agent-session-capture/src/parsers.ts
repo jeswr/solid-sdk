@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import type { ChatConversation, ChatMessage } from "@jeswr/solid-chat-interop";
+import {
+  type ChatConversation,
+  type ChatMessage,
+  normalizeChatAccount,
+  redactChatAccount,
+} from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { createHash } from "crypto";
 import { redactConversation } from "./redact.js";
@@ -14,6 +19,22 @@ export interface CapturedSession {
 /** Internal deterministic opaque identifiers; source identifiers never become pod paths. */
 export function digest(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+/** Optional owner-chosen account label for source identity and redacted provenance. */
+export interface AccountOptions {
+  account?: string;
+}
+
+/** Scope opaque source identity before redacting the label; no-label IDs retain their old bytes. */
+export function conversationAccount(conversationId: string, account?: string) {
+  const label = normalizeChatAccount(account);
+  return label === undefined
+    ? { conversationId }
+    : {
+        conversationId: digest(["chat-account-v1", label, conversationId]),
+        account: redactChatAccount(label),
+      };
 }
 
 /** Narrow untrusted JSON without coercing foreign values. */
@@ -74,7 +95,12 @@ function codexSessionId(entries: Record<string, unknown>[], source: string): str
   return canonical;
 }
 
-function session(provider: "claude" | "codex", entries: Record<string, unknown>[], source: string) {
+function session(
+  provider: "claude" | "codex",
+  entries: Record<string, unknown>[],
+  source: string,
+  account?: string,
+) {
   const projects = new Set<string>();
   const ids = new Set<string>();
   for (const entry of entries) {
@@ -89,7 +115,8 @@ function session(provider: "claude" | "codex", entries: Record<string, unknown>[
     projectDirectories: [...projects],
     conversation: {
       provider,
-      conversationId: digest([provider, id]),
+      ...conversationAccount(digest([provider, id]), account),
+      channel: "hook" as const,
       title: provider === "claude" ? "Claude Code session" : "Codex session",
       messages: [] as ChatMessage[],
     },
@@ -115,9 +142,13 @@ function append(
 }
 
 /** Parse Claude Code JSONL: user/assistant text and tool names, without arguments/results/thinking. */
-export function parseClaudeTranscript(jsonl: string, source = "claude"): CapturedSession {
+export function parseClaudeTranscript(
+  jsonl: string,
+  source = "claude",
+  options: AccountOptions = {},
+): CapturedSession {
   const entries = rows(jsonl);
-  const result = session("claude", entries, source);
+  const result = session("claude", entries, source, options.account);
   const seen = new Set<string>();
   entries.forEach((entry, line) => {
     if (entry.type !== "user" && entry.type !== "assistant") return;
@@ -141,9 +172,13 @@ export function parseClaudeTranscript(jsonl: string, source = "claude"): Capture
 }
 
 /** Parse Codex rollout response_item rows; event_msg mirrors, reasoning and tool outputs are dropped. */
-export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedSession {
+export function parseCodexTranscript(
+  jsonl: string,
+  source = "codex",
+  options: AccountOptions = {},
+): CapturedSession {
   const entries = rows(jsonl);
-  const result = session("codex", entries, source);
+  const result = session("codex", entries, source, options.account);
   const seen = new Set<string>();
   const occurrences = new Map<string, number>();
   let turnId: string | undefined;

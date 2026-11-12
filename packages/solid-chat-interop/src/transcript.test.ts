@@ -36,6 +36,20 @@ describe("renderTranscript", () => {
     expect(out).not.toMatch(/fixture|[\u200B\u2060]/u);
     expect(out.split(emoji)).toHaveLength(3);
   });
+
+  it("escapes and redacts account metadata like titles", () => {
+    const out = renderTranscript({
+      provider: "codex",
+      conversationId: "c",
+      title: "T",
+      account: "*Work* ghp_fixtureSecret",
+      channel: "hook",
+      messages: [],
+    });
+    expect(out).toContain("Account: \\*Work\\* \\[REDACTED TOKEN\\]");
+    expect(out).toContain("Channel: hook");
+    expect(out).not.toContain("ghp_fixtureSecret");
+  });
   it("renders a title, provenance line and one fenced section per message", () => {
     expect(
       renderTranscript({
@@ -101,6 +115,7 @@ describe("renderTranscript", () => {
   it.each([
     { provider: "other" },
     { conversationId: "a`b" },
+    { channel: "token=fixture-secret" },
     { messages: [{ role: "user\n# x", text: "t", createdAt: DAY1 }] },
   ])("rejects unvalidated library input %#", (override) => {
     expect(() =>

@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import type { ChatConversation } from "@jeswr/solid-chat-interop";
+import {
+  type ChatConversation,
+  normalizeChatAccount,
+  redactChatAccount,
+} from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { randomUUID } from "crypto";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -14,7 +18,7 @@ import { redactConversation } from "./redact.js";
 /** Local queue envelope. It never contains authentication credentials or raw transcript records. */
 export interface QueueEntry extends CapturedSession {
   version: 1;
-  target: { podRoot: string; webId: string };
+  target: { podRoot: string; webId: string; account?: string };
 }
 
 /** Atomically persist private capture state, including discovery checkpoints. */
@@ -105,11 +109,13 @@ export async function enqueue(directory: string, entry: QueueEntry, signal: Abor
 
 function conversation(value: unknown): ChatConversation {
   const c = record(value);
+  const account = normalizeChatAccount(c.account as string | undefined);
   if (
     (c.provider !== "claude" && c.provider !== "codex") ||
     typeof c.conversationId !== "string" ||
     !/^[a-f0-9]{64}$/.test(c.conversationId) ||
     typeof c.title !== "string" ||
+    (c.channel !== undefined && c.channel !== "hook") ||
     !Array.isArray(c.messages)
   )
     throw new Error("Invalid capture conversation");
@@ -117,6 +123,8 @@ function conversation(value: unknown): ChatConversation {
     provider: c.provider,
     conversationId: c.conversationId,
     title: c.title,
+    ...(account === undefined ? {} : { account: redactChatAccount(account) }),
+    channel: "hook",
     messages: c.messages.map((value) => {
       const m = record(value);
       if (
@@ -151,7 +159,12 @@ export async function replay(
       entry = record(JSON.parse(await readRegular(path, signal, true)));
       if (name !== `${digest(entry)}.json` || entry.version !== 1) continue;
       const account = record(entry.target);
-      if (account.podRoot !== target.podRoot || account.webId !== target.webId) continue;
+      if (
+        account.podRoot !== target.podRoot ||
+        account.webId !== target.webId ||
+        account.account !== target.account
+      )
+        continue;
       if (
         !Array.isArray(entry.projectDirectories) ||
         entry.projectDirectories.length === 0 ||

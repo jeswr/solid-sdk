@@ -81,7 +81,9 @@ export {
 //     accessor lives on the Node-only `./shape` subpath; the raw shape file is
 //     available browser-side via the `./shapes/message.shacl.ttl` asset export. ---
 
+export { chatConversationId, normalizeChatAccount, redactChatAccount } from "./chat-account.js";
 export type {
+  ChatChannel,
   ChatConversation,
   ChatListOptions,
   ChatMessage,
@@ -90,15 +92,16 @@ export type {
   ChatRole,
   ChatSummary,
 } from "./chat-writer.js";
-
 // AUTHORED-BY Codex GPT-6.1-Sol
 export {
+  CHAT_CHANNELS,
   CHAT_PROVIDERS,
   CHAT_ROLES,
   ChatWriter,
   chatPortStatus,
   validateWacAcl,
 } from "./chat-writer.js";
+export { ConversationProvenanceDoc } from "./conversation-provenance.js";
 // --- credential redaction, applied by ChatWriter to every stored title and message ---
 export {
   type RedactConversationOptions,
@@ -127,8 +130,10 @@ export {
   DCT_CREATOR,
   DCT_IS_REPLACED_BY,
   DCT_TITLE,
+  DCT_TYPE,
   DEFAULT_MEDIA_TYPE,
   FOAF,
+  FOAF_ACCOUNT_NAME,
   FOAF_MAKER,
   MEETING,
   MEETING_LONG_CHAT,
@@ -136,6 +141,9 @@ export {
   PC_CHAT_ROOM,
   PREFIXES,
   PROV,
+  PROV_ACTIVITY,
+  PROV_AGENT,
+  PROV_GENERATED_AT_TIME,
   PROV_WAS_ATTRIBUTED_TO,
   PROV_WAS_DERIVED_FROM,
   PROV_WAS_GENERATED_BY,

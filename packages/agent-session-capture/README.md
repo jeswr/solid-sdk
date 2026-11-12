@@ -28,6 +28,17 @@ The default HTTP transport uses the DNS-pinned guarded-fetch Node adapter;
 loopback is allowed only when explicitly present in operator configuration.
 Tokens and DPoP keys stay in process memory.
 
+Set optional `account` in the same private JSON config, or `SOLID_MCP_ACCOUNT`, to
+an owner-chosen label such as `Work`. Library `CaptureOptions.account` and
+`ExportImportOptions.account` override it. Labels are NFC-normalized and trimmed,
+1–64 UTF-16 code units, and reject control/format characters, including trimmed
+edges. Labels use title redaction before queueing/upload; if redaction grows past
+64 characters the whole label becomes `[REDACTED]`. Source conversation IDs are
+hashed with the normalized label before redaction, so two accounts stay distinct
+even when their stored labels redact identically. Without a label, previous IDs
+remain byte-identical. Hook metadata uses channel `hook`; export imports use
+`export`. ChatWriter preserves the first creation time, account and channel.
+
 ## Commands and hooks
 
 When the bin is available on PATH:
@@ -181,6 +192,10 @@ credentials or raw transcript records are queued. Local project paths are retain
 only to recheck opt-out; they are never included in uploaded conversations.
 Snapshots are bound to the configured pod root **and** owner WebID, so changing
 accounts cannot replay old data to a different pod or owner.
+An opaque account scope also binds labelled snapshots to their source account;
+changing the configured label retains the previous backlog until that account is
+selected again. Sequence/progress checkpoints are independent per account.
+Legacy queued snapshots without account/channel replay as unlabelled `hook` captures.
 
 Codex retries queued snapshots before scanning rollouts, including when no
 new rollout exists. Claude queues its current transcript before network I/O so
@@ -204,7 +219,10 @@ checkpoints and sequence assignments. Config and opt-out checks still apply befo
 The root exports `runCapture(args, options?)`, `parseClaudeTranscript(jsonl, source?)`,
 `parseCodexTranscript(jsonl, source?)`, `redactSecrets(text)`, and their public types.
 It also exports `runExportImport(args, options?)`, `parseChatgptExport(json)`, and
-`parseClaudeExport(json)`. Export parsers return redacted `ChatConversation[]`
+`parseClaudeExport(json)`. Export parsers accept optional `{account}` as their
+second argument; transcript parsers accept it as their third argument after `source`.
+Parsers return already scoped IDs, redacted account labels and the appropriate
+channel. Export parsers return redacted `ChatConversation[]`
 and throw on malformed top-level JSON or exceeded limits; the import runner
 returns `0 | 1` and suppresses error details.
 Parser results include redacted `ChatConversation` values and local-only project

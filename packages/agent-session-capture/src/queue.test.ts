@@ -350,6 +350,11 @@ describe("offline queue", () => {
     { conversationId: 7 },
     { conversationId: "unsafe/path" },
     { title: null },
+    { account: 7 },
+    { account: "" },
+    { account: "a".repeat(65) },
+    { account: "a\u200bb" },
+    { channel: "export" },
     { messages: null },
     { messages: [null] },
     { messages: [{ id: 3 }] },
@@ -366,6 +371,23 @@ describe("offline queue", () => {
     await replay(directory, target, save, signal());
     expect(save).not.toHaveBeenCalled();
     expect(await files()).toHaveLength(1);
+  });
+
+  it("replays legacy queued snapshots as hook captures without adding an account", async () => {
+    delete entry.conversation.channel;
+    await store(entry);
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal());
+    expect(save).toHaveBeenCalledWith({ ...entry.conversation, channel: "hook" });
+  });
+
+  it("normalizes and re-redacts queued account labels before replay", async () => {
+    entry.conversation.account = " token=fixture-secret ";
+    await store(entry);
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal());
+    expect(save).toHaveBeenCalledWith({ ...entry.conversation, account: "token=[REDACTED]" });
+    expect(await files()).toEqual([]);
   });
 
   it("handles both providers/all captured roles and does not starve valid entries after failures", async () => {

@@ -14,6 +14,7 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
 import { type AccountSummary, listAccounts } from "../lib/data/accounts";
+import { type BudgetFile, loadBudgetHistory } from "../lib/data/budget";
 import { loadCategories } from "../lib/data/categories";
 import { moneyRoot } from "../lib/data/container";
 import { allTransactions, type LedgerFilters, ledgerRows } from "../lib/data/ledger";
@@ -25,6 +26,8 @@ export interface Snapshot {
   categories: Category[];
   /** Categorisation rules, in priority order. */
   rules: SavedRule[];
+  budgets: BudgetFile[];
+  budgetProblem?: unknown;
   /**
    * Why the rules couldn't be loaded, if they couldn't: the file's contents are
    * unusable, or the read failed. Imports fall back to category names meanwhile.
@@ -47,6 +50,7 @@ const empty: Snapshot = {
   transactions: [],
   categories: [],
   rules: [],
+  budgets: [],
 };
 export function MoneyProvider({ session, children }: { session: PodSession; children: ReactNode }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -84,7 +88,11 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
           failure instanceof RulesFileError ? ("invalid" as const) : ("unavailable" as const),
       }),
     );
-    return { accounts, transactions, categories: result.categories, ...rules };
+    const budgets = await loadBudgetHistory(session).then(
+      (budgets) => ({ budgets, budgetProblem: undefined }),
+      (budgetProblem: unknown) => ({ budgets: [], budgetProblem }),
+    );
+    return { accounts, transactions, categories: result.categories, ...rules, ...budgets };
   }, [session, today]);
   const refresh = useCallback(async () => {
     const request = ++generation.current;

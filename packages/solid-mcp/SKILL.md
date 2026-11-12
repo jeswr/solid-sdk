@@ -52,6 +52,13 @@ Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for R
 reads; generic byte reads must retain the backend default representation.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
+Chat saves explicitly use channel `mcp` and scope source IDs with
+`chatConversationId(id, account)` before saving. Validate optional account inputs
+with `normalizeChatAccount`; use ChatWriter for label redaction and immutable
+first-write PROV/FOAF/DCMI metadata. Reads/exports use stored IDs and expose account
+and channel; escape account transcript headers like titles. Keep no-account ID
+derivation unchanged. Shared CLI config accepts `account` / `SOLID_MCP_ACCOUNT`
+for capture/import callers, independently of the tool's explicit account input.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
@@ -122,3 +129,32 @@ the target, with no unscoped, malformed or unknown rules; otherwise leave the AC
 untouched and return the fixed protection diagnostic. Read existing ACLs with strong
 ETags and mutate with `If-Match` / `If-None-Match: *`. Test ports explicitly advertise
 WAC metadata via `test/wac-memory-pod.ts`.
+
+## Packaging (prepared, not published)
+
+Keep `packaging/server.json` as the sole registry source. Read `packaging/README.md`
+before changing descriptors or builder/validator scripts. Use the vendored registry
+2025-12-11 and MCPB v0.3 schemas offline. `packaging:check` derives environment names
+from `cli-config.ts`, checks the real loader and compares both tool inventories to
+an actual in-memory MCP `tools/list`, including aliases and read-only hints.
+Run it after a fresh build. The package tests exercise it after the gate builds.
+Keep package.json's `mcpName` equal to server.json's `name`; preserve it in mirrors.
+
+The MCPB UI deliberately requires an issuer-based credential group; omit optional
+empty env strings, keep secrets sensitive and read-only true. `packaging:build`
+rebuilds the package, fully bundles the CLI's remaining runtime dependencies, refuses
+non-builtin external imports, generates deterministic `THIRD_PARTY_NOTICES.txt`
+from input packages' names, versions, license metadata and LICENSE files (fail
+closed when missing), and writes a deterministic ZIP under ignored
+`packaging/out/`. Smoke-test that archive outside the workspace without node_modules.
+Never ship packaging through `files`. Keep two plugins: remote-only `solid-pod`
+with capture hooks, and stdio-only `solid-pod-local`, forwarding only pod root
+and read-only with `${SOLID_MCP_READONLY:-true}`. Other local settings use the
+regular 0600 CLI config file. Plugin MCP/hook JSON must not carry `$comment`.
+Hooks use the capture README's stdin interface, `solid-capture claude` on PATH,
+and a 30-second timeout. Capture is private and not on npm; the documented npx
+alternative needs future publication. Startup killed before queueing leaves no
+snapshot. Verify Node >=24 against Desktop's bundled runtime before submission.
+The ChatGPT JSON is our own planning descriptor, not an OpenAI schema.
+These are local preparation artifacts;
+do not publish, submit, upload, deploy or enable anything as part of this work.

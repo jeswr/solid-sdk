@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { chatConversationId } from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
@@ -51,6 +52,27 @@ describe("real-shaped redacted JSONL", () => {
       "[REDACTED] Safe [REDACTED TOKEN]",
       "[REDACTED]",
     ]);
+  });
+
+  it.each([
+    ["claude", parseClaudeTranscript],
+    ["codex", parseCodexTranscript],
+  ] as const)("scopes %s accounts before redaction and retains hook provenance", async (provider, parser) => {
+    const text = readFileSync(new URL(`./fixtures/${provider}.jsonl`, import.meta.url), "utf8");
+    const original = parser(text).conversation;
+    expect(original.conversationId).toBe(digest([provider, `${provider}-fixture-session`]));
+    const chat = parser(text, provider, { account: " Work " }).conversation;
+    expect(chat).toMatchObject({ account: "Work", channel: "hook" });
+    expect(chat.conversationId).toBe(await chatConversationId(original.conversationId, "Work"));
+    expect(parser(text, provider, { account: "Personal" }).conversation.conversationId).not.toBe(
+      chat.conversationId,
+    );
+    expect(parser(text, provider, { account: "token=fixture-secret" }).conversation.account).toBe(
+      "token=[REDACTED]",
+    );
+    expect(() => parser(text, provider, { account: "a\u200db" })).toThrow(
+      "Invalid chat account label",
+    );
   });
   it.each([
     ["claude", parseClaudeTranscript, ["user", "assistant", "tool", "assistant"]],
