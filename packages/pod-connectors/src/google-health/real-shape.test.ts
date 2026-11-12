@@ -6,6 +6,10 @@
  */
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import {
+  type SyntheticHealthData,
+  syntheticHealthApi,
+} from "../../test-support/google-health-api.js";
 import { createGoogleOAuthConfig } from "../adapters/google/oauth.js";
 import { IntegrationAuthError, RateLimitedError } from "../core/errors.js";
 import { runImport } from "../core/import-runner.js";
@@ -23,7 +27,6 @@ import { fitbitAdapter } from "../fitbit/adapter.js";
 import { createGoogleHealthAdapter, type GoogleHealthOptions } from "./adapter.js";
 import { point } from "./api.js";
 import { createGoogleHealthSourceAuth } from "./source-auth.js";
-import { type SyntheticHealthData, syntheticHealthApi } from "./testing.js";
 
 const V4 = "https://health.googleapis.com/v4/users/me/dataTypes";
 const ROOT = `${TEST_POD_ROOT}integrations/fitbit/`;
@@ -54,7 +57,7 @@ const run5 = (overrides: Record<string, unknown> = {}) => ({
       civilEndTime: civil("2026-06-08", 7, 43),
     },
     exerciseType: "RUNNING",
-    displayName: "Run",
+    displayName: "Running",
     metricsSummary: { distanceMillimeters: 5_200_000 },
     ...overrides,
   },
@@ -248,7 +251,7 @@ describe("Google Health v4 point shape (R1)", () => {
     expect(point("exercise", run5())).toMatchObject({
       start: "2026-06-08T12:12:00.000Z",
       end: "2026-06-08T12:43:00.000Z",
-      activity: "Run",
+      activity: "Running",
       exerciseType: "RUNNING",
       distanceKm: 5.2,
       wallStart: "2026-06-08T07:12:00.000Z",
@@ -360,21 +363,28 @@ describe("Google Health import behaviour", () => {
   });
 
   describe("unrecognised response shape (R2)", () => {
-    it("fails, keeping the checkpoint, when a window's points do not parse at all", async () => {
+    it("stops only that type, keeping its checkpoint, when its points do not parse at all", async () => {
       // The synthetic profile the adapter used to expect is not the documented shape.
       const legacyShape = { time: "2026-06-09T07:12:00Z", heartRate: { beatsPerMinute: 72 } };
+      const onWarning = vi.fn();
       const r = run(
         synthetic({}, { extra: (type) => (type === "heart-rate" ? [legacyShape] : []) }),
-        {
-          state: prior,
-        },
+        { state: prior, onWarning },
       );
-      await expect(r.result).rejects.toThrow(/unrecognised Google Health response shape/);
-      expect(r.onState).toHaveBeenLastCalledWith({ ...prior, lastOutcome: "error" });
-      expect(r.pod.urls().some((u) => u.includes("/health/"))).toBe(false);
+      const report = await r.result;
+      const cursors = cursorsOf(report.cursor);
+      expect(cursors["heart-rate"]).toBe("2026-06-09T00:00:00.000Z");
+      expect(cursors.weight).toBe("2026-06-10T00:00:00.000Z");
+      expect(onWarning).toHaveBeenCalledWith(
+        expect.stringContaining("[google-health:unrecognised-shape]"),
+      );
+      expect(r.onState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ lastOutcome: "success" }),
+      );
+      expect(r.pod.urls().some((u) => u.includes("/heart-rate/"))).toBe(false);
     });
 
-    it("fails when more than 10% of a window's points are unrecognised, and skips fewer", async () => {
+    it("stops a type once its unrecognised points this run pass the threshold, and skips fewer", async () => {
       const good = Array.from({ length: 9 }, (_, i) =>
         hr(`2026-06-09T07:${String(10 + i)}:00Z`, "70"),
       );
@@ -385,7 +395,7 @@ describe("Google Health import behaviour", () => {
         ),
         { state: prior },
       );
-      await expect(many.result).rejects.toThrow(/unrecognised Google Health response shape/);
+      expect(cursorsOf((await many.result).cursor)["heart-rate"]).toBe("2026-06-09T00:00:00.000Z");
       const few = run(
         synthetic(
           { points: { "heart-rate": [...good, hr("2026-06-09T08:00:00Z", "71")] } },

@@ -19,6 +19,35 @@ import { HEALTH_VOCAB, HealthAction, HealthMetric } from "./vocab-map.js";
 
 const ACTIVITIES = "health/activities.ttl";
 
+/**
+ * Legacy Fitbit activity names → the documented v4 `Exercise.exerciseType` values they stand
+ * for. The enum values are from the v4 reference; the Fitbit names are legacy log names
+ * (VERIFY). Used only to tell apart legacy rows that share a wall-clock start, because v4's
+ * displayName is generated and localized ("Running" for a Fitbit "Run").
+ */
+const FITBIT_EXERCISE_TYPES: Readonly<Record<string, readonly string[]>> = {
+  Walk: ["WALKING"],
+  Run: ["RUNNING"],
+  Bike: ["BIKING"],
+  Swim: ["SWIMMING"],
+  Hike: ["HIKING"],
+  Elliptical: ["ELLIPTICAL"],
+  Weights: ["WEIGHTLIFTING", "WEIGHTS"],
+  Yoga: ["YOGA"],
+  Treadmill: ["TREADMILL", "TREADMILL_WALK"],
+};
+/** Legacy rows kept per wall-clock second; more is never resolved (bounded memory). */
+const MAX_WALL_ROWS = 16;
+/** Whether a stored Fitbit activity name names the same kind of session as a v4 point. */
+function sameKind(name: string | undefined, p: HealthPoint): boolean {
+  if (name === undefined) return false;
+  if (name === p.activity) return true;
+  const types = Object.hasOwn(FITBIT_EXERCISE_TYPES, name)
+    ? FITBIT_EXERCISE_TYPES[name]
+    : undefined;
+  return !!p.exerciseType && !!types?.includes(p.exerciseType);
+}
+
 interface Existing {
   key: string;
   identifier: string;
@@ -37,7 +66,8 @@ export class HealthMapper {
   skipped = 0;
   warnings = 0;
   private readonly byTime = new Map<string, Existing | null>();
-  private readonly byLegacyWall = new Map<string, Existing | null>();
+  /** Legacy Fitbit rows by stored wall-clock start, to the second. */
+  private readonly byLegacyWall = new Map<string, Existing[]>();
   private readonly bySource = new Map<string, Existing | null>();
   private readonly byKey = new Map<string, Existing>();
   /** Activity subjects this run already wrote, across windows. */
@@ -90,7 +120,12 @@ export class HealthMapper {
       const key = `${start.toISOString()}|${ex.exerciseType}`;
       this.byTime.set(key, this.byTime.has(key) ? null : entry);
       // Fitbit stored local wall-clock time with a Z suffix; only legacy rows match that way.
-      if (!google) this.byLegacyWall.set(key, this.byLegacyWall.has(key) ? null : entry);
+      if (!google) {
+        const wall = start.toISOString().slice(0, 19);
+        const rows = this.byLegacyWall.get(wall) ?? [];
+        if (rows.length <= MAX_WALL_ROWS) rows.push(entry);
+        this.byLegacyWall.set(wall, rows);
+      }
     }
   }
 
@@ -107,21 +142,30 @@ export class HealthMapper {
     const own = this.byKey.get(p.key);
     if (own) return own;
     // A legacy Fitbit row whose logId equals a numeric Google id is the same activity only
-    // when its type matches and its stored wall-clock start lies within any civil offset;
-    // otherwise the Google session keeps its own `google-health-exercise-<id>` subject.
+    // when its stored wall-clock start lies within any civil offset and it starts at the
+    // session's wall clock or names the same kind; otherwise the Google session keeps its
+    // own `google-health-exercise-<id>` subject.
     const legacy =
       p.nativeId && /^\d{1,32}$/.test(p.nativeId) ? this.byKey.get(p.nativeId) : undefined;
     if (
       legacy &&
       !legacy.google &&
-      legacy.exerciseType === p.activity &&
       legacy.start !== undefined &&
-      Math.abs(legacy.start - Date.parse(p.start)) <= MAX_OFFSET_MS
+      Math.abs(legacy.start - Date.parse(p.start)) <= MAX_OFFSET_MS &&
+      (sameKind(legacy.exerciseType, p) ||
+        new Date(legacy.start).toISOString().slice(0, 19) === p.wallStart?.slice(0, 19))
     )
       return legacy;
     const byTime = this.byTime.get(`${p.start}|${p.activity}`);
     if (byTime !== undefined) return byTime;
-    return p.wallStart ? this.byLegacyWall.get(`${p.wallStart}|${p.activity}`) : undefined;
+    // A legacy row starting at this session's wall clock (to the second) is this session when
+    // it is the only one, whatever its name; several are told apart by kind, else skipped.
+    const rows = p.wallStart ? this.byLegacyWall.get(p.wallStart.slice(0, 19)) : undefined;
+    if (!rows) return undefined;
+    if (rows.length === 1) return rows[0];
+    if (rows.length > MAX_WALL_ROWS) return null;
+    const kind = rows.filter((row) => sameKind(row.exerciseType, p));
+    return kind.length === 1 ? kind[0] : null;
   }
 
   /** Exercise sessions into the legacy activities document; sleep sessions one per document. */

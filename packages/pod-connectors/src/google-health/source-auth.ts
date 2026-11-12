@@ -16,6 +16,9 @@ const credential = (value: unknown): value is string =>
   value.length <= 16_384 &&
   /^[A-Za-z0-9._~+/-]+=*$/.test(value);
 
+/** Method-override headers (Google API conventions), stripped from every forwarded request. */
+const METHOD_OVERRIDES = ["x-http-method-override", "x-http-method", "x-method-override"];
+
 /**
  * The one non-GET request forwarded: a dailyRollUp query (read-only, but a POST by the API's
  * design) to the Health origin with no query string and a bounded JSON string body, which can
@@ -133,8 +136,12 @@ export function createGoogleHealthSourceAuth(options: {
           "not-configured",
           "Google Health transport accepts reads only.",
         );
+      // A method override would let Google treat a forwarded read as a write: never send one.
+      const headers = new Headers(snapshot.init?.headers ?? request?.headers);
+      for (const name of METHOD_OVERRIDES) headers.delete(name);
+      const forwarded: RequestInit = { ...snapshot.init, headers };
       const used = token;
-      const response = await auth().fetch(snapshot.input, snapshot.init);
+      const response = await auth().fetch(snapshot.input, forwarded);
       if (response.status !== 401) return response;
       await response.body?.cancel();
       signal?.throwIfAborted();
@@ -145,7 +152,7 @@ export function createGoogleHealthSourceAuth(options: {
         await refreshing;
       }
       signal?.throwIfAborted();
-      return auth().fetch(snapshot.input, snapshot.init);
+      return auth().fetch(snapshot.input, forwarded);
     },
   };
 }

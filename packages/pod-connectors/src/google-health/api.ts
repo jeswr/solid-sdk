@@ -407,9 +407,13 @@ function parse(type: HealthType, raw: unknown): HealthPoint {
   const base = { type, start, end, source, updateTime, nativeId, sourceUrl };
 
   if (type === "exercise") {
+    // proto3 JSON omits defaults: an absent displayName (empty) is refused as a value, and an
+    // absent exerciseType is EXERCISE_TYPE_UNSPECIFIED, which is imported.
+    if (payload.displayName === undefined) return refuse();
     const activity = text(payload.displayName);
-    if (typeof payload.exerciseType !== "string") return shape();
-    const exerciseType = ENUM.test(payload.exerciseType) ? payload.exerciseType : refuse();
+    const rawType = payload.exerciseType ?? "EXERCISE_TYPE_UNSPECIFIED";
+    if (typeof rawType !== "string") return shape();
+    const exerciseType = ENUM.test(rawType) ? rawType : refuse();
     let distanceKm: number | undefined;
     if (payload.metricsSummary !== undefined) {
       if (!record(payload.metricsSummary)) return shape();
@@ -436,7 +440,10 @@ function parse(type: HealthType, raw: unknown): HealthPoint {
   if (rawStages.length > MAX_STAGES) return refuse();
   const stages: NonNullable<HealthPoint["stages"]> = [];
   for (const stage of rawStages) {
-    if (!record(stage) || typeof stage.type !== "string") return shape();
+    if (!record(stage)) return shape();
+    // An absent stage type is proto3's omitted TYPE_UNSPECIFIED: a value refusal.
+    if (stage.type === undefined) return refuse();
+    if (typeof stage.type !== "string") return shape();
     const from = instant(stage.startTime);
     const to = instant(stage.endTime);
     utcOffset(stage.startUtcOffset);
@@ -537,6 +544,42 @@ async function quotaDenied(res: Response): Promise<boolean> {
   return reasons.some((reason) => typeof reason === "string" && QUOTA_REASONS.has(reason));
 }
 
+/**
+ * Whether a 400 to dailyRollUp names its range or end (google.rpc.BadRequest field violations
+ * or the error message; VERIFY). Only this yes/no leaves the function, never the body.
+ */
+async function rangeRefused(res: Response): Promise<boolean> {
+  let body: unknown;
+  try {
+    body = await readJson(res, ID, "Google Health error", 16 * 1024);
+  } catch {
+    return false;
+  }
+  const error = record(body) && record(body.error) ? body.error : undefined;
+  if (!error) return false;
+  if (typeof error.message === "string" && /\b(range|end)\b/i.test(error.message.slice(0, 1024)))
+    return true;
+  const details = Array.isArray(error.details) ? error.details.slice(0, 16) : [];
+  return details.some(
+    (d) =>
+      record(d) &&
+      Array.isArray(d.fieldViolations) &&
+      d.fieldViolations
+        .slice(0, 16)
+        .some((v) => record(v) && typeof v.field === "string" && /^range(\.|$)/.test(v.field)),
+  );
+}
+
+/** Google refused a dailyRollUp range (400 naming the range or its end). */
+export class RollupRangeError extends IntegrationSyncError {
+  constructor() {
+    super(ID, "Google Health answered 400 to a daily roll-up range; checkpoint unchanged.", {
+      status: 400,
+    });
+    this.name = "RollupRangeError";
+  }
+}
+
 async function request(
   ctx: ImportContext,
   url: string,
@@ -574,6 +617,8 @@ async function request(
         "exchange-failed",
         `Google Health denied access (403). ${REAUTHORIZE}`,
       );
+    if (res.status === 400 && body !== undefined && (await rangeRefused(res)))
+      throw new RollupRangeError();
     await res.body?.cancel().catch(() => {});
     if (throttled || res.status >= 500) {
       const raw = res.headers.get("retry-after");
@@ -609,12 +654,14 @@ export class PageCapError extends IntegrationSyncError {
 export const UNRECOGNISED =
   "unrecognised Google Health response shape; the checkpoint is unchanged.";
 /**
- * More than a tenth of a window's points (or all of them) are not the documented shape: the
- * API changed, so stop before writing anything rather than silently skip real data.
+ * Whether one type's points this run (counted across its windows) show the API changed shape:
+ * more than a tenth of at least 20 points, or every one of at least 3, are not the documented
+ * shape. Fewer odd points are skipped like invalid values.
  */
-function guardShape(received: number, unrecognised: number): void {
-  if (unrecognised > 0 && (unrecognised === received || unrecognised * 10 > received))
-    throw new IntegrationSyncError(ID, `The import found an ${UNRECOGNISED}`);
+export function unrecognisedShape(received: number, unrecognised: number): boolean {
+  return (
+    (received >= 20 && unrecognised * 10 > received) || (received >= 3 && unrecognised === received)
+  );
 }
 function validPage(raw: unknown, member: string, max: number): raw is Record<string, unknown[]> {
   return (
@@ -656,11 +703,23 @@ export interface WindowBatch {
   points: HealthPoint[];
   /** Invalid points (the cursor still advances past them). */
   skipped: number;
-  /** Unfinished or still-processing points: hold the type cursor at this window. */
+  /** Points that can still change (see LIVE_END_MS): hold the type cursor at this window. */
   transient: boolean;
   /** Same-key, same-source points with different contents resolved deterministically. */
   conflicts: number;
+  /** Points received, and those of them not in the documented shape. */
+  received: number;
+  unrecognised: number;
+  /** Unfinished exercise / unprocessed sleep too old to change: written as reported. */
+  staleUnfinished: number;
+  staleUnprocessed: number;
 }
+/**
+ * An unfinished exercise is held (retried next run) while its start is within the 48 h
+ * overlap or its reported end is within this span after the run clock; an unprocessed sleep
+ * while its end is within the overlap. Older ones are final and written as reported.
+ */
+export const LIVE_END_MS = 6 * HOUR_MS;
 
 /** Fetch every page of one list window, validating each envelope and point before any write. */
 export async function fetchWindow(
@@ -673,10 +732,17 @@ export async function fetchWindow(
 ): Promise<WindowBatch> {
   const points = new Map<string, HealthPoint>();
   const pagination = new Pagination(ID);
-  const batch: WindowBatch = { points: [], skipped: 0, transient: false, conflicts: 0 };
+  const batch: WindowBatch = {
+    points: [],
+    skipped: 0,
+    transient: false,
+    conflicts: 0,
+    received: 0,
+    unrecognised: 0,
+    staleUnfinished: 0,
+    staleUnprocessed: 0,
+  };
   const size = pageSize(type);
-  let received = 0;
-  let unrecognised = 0;
   let token: string | undefined;
   for (let page = 0; page < maxPages; page++) {
     const url = new URL(endpoint(type));
@@ -687,28 +753,33 @@ export async function fetchWindow(
     if (!validPage(raw, "dataPoints", size)) throw invalidPage();
     const list = raw.dataPoints ?? [];
     budget.items(list.length);
-    received += list.length;
+    batch.received += list.length;
     for (const value of list) {
       const normalized = parsePoint(type, value);
       if (typeof normalized === "string") {
         batch.skipped++;
-        if (normalized === "shape") unrecognised++;
+        if (normalized === "shape") batch.unrecognised++;
         continue;
       }
       // Samples and exercise belong to the window holding their start; sleep (filtered by
       // its end) to the window holding its end.
       const at = Date.parse(type === "sleep" ? normalized.end : normalized.start);
-      const owned = at >= window.start && at < window.end;
-      // A session this window owns that is still running at the run's clock, or a point the
-      // provider dates after the clock: retry it next run.
-      if ((owned && Date.parse(normalized.end) > until) || (!owned && at >= until)) {
-        batch.transient = true;
-        batch.skipped++;
-        continue;
+      // A point outside the window (even one dated after the run clock) belongs to another
+      // window, which a later run still reads: the cursor never passes the run clock.
+      if (at < window.start || at >= window.end) continue;
+      const end = Date.parse(normalized.end);
+      if (end > until) {
+        // Still running at the run clock: hold while it can still finish, else write as is.
+        if (Date.parse(normalized.start) >= until - OVERLAP_MS || end <= until + LIVE_END_MS) {
+          batch.transient = true;
+          batch.skipped++;
+          continue;
+        }
+        batch.staleUnfinished++;
+      } else if (normalized.pending) {
+        if (end >= until - OVERLAP_MS) batch.transient = true;
+        else batch.staleUnprocessed++;
       }
-      // Otherwise a point outside the window belongs to another window, which owns it.
-      if (!owned) continue;
-      if (normalized.pending) batch.transient = true;
       budget.items(normalized.stages?.length ?? 0);
       const previous = points.get(normalized.key);
       if (previous && JSON.stringify(previous) !== JSON.stringify(normalized)) {
@@ -717,7 +788,6 @@ export async function fetchWindow(
       } else points.set(normalized.key, normalized);
     }
     if (!raw.nextPageToken) {
-      guardShape(received, unrecognised);
       batch.points = [...points.values()];
       return batch;
     }
@@ -730,6 +800,8 @@ export interface RollupBatch {
   totals: DailyTotal[];
   skipped: number;
   conflicts: number;
+  received: number;
+  unrecognised: number;
 }
 const civilDate = (ms: number) => {
   const d = new Date(ms);
@@ -749,14 +821,12 @@ export async function fetchRollup(
 ): Promise<RollupBatch> {
   const totals = new Map<string, DailyTotal>();
   const pagination = new Pagination(ID);
-  const batch: RollupBatch = { totals: [], skipped: 0, conflicts: 0 };
+  const batch: RollupBatch = { totals: [], skipped: 0, conflicts: 0, received: 0, unrecognised: 0 };
   const size = pageSize(type);
   const [first, last] = [
     new Date(window.start).toISOString().slice(0, 10),
     new Date(window.end).toISOString().slice(0, 10),
   ];
-  let received = 0;
-  let unrecognised = 0;
   let token: string | undefined;
   for (let page = 0; page < maxPages; page++) {
     const raw = await request(ctx, endpoint(type), budget, {
@@ -768,13 +838,13 @@ export async function fetchRollup(
     if (!validPage(raw, "rollupDataPoints", size)) throw invalidPage();
     const list = raw.rollupDataPoints ?? [];
     budget.items(list.length);
-    received += list.length;
+    batch.received += list.length;
     for (const value of list) {
       const total = parseRollup(type, value);
       if (total === null) continue;
       if (typeof total === "string") {
         batch.skipped++;
-        if (total === "shape") unrecognised++;
+        if (total === "shape") batch.unrecognised++;
         continue;
       }
       if (total.date < first || total.date >= last) continue;
@@ -785,7 +855,6 @@ export async function fetchRollup(
       } else totals.set(total.date, total);
     }
     if (!raw.nextPageToken) {
-      guardShape(received, unrecognised);
       batch.totals = [...totals.values()];
       return batch;
     }

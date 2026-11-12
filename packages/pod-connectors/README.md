@@ -637,7 +637,9 @@ quotes its source: the official v4 discovery document
 the `users.dataTypes.dataPoints` reference text, because developers.google.com was unreachable
 from the authoring sandbox. Assumptions that document does not state carry a **VERIFY** note
 there. They cover omitted zero-valued fields and offsets, the UTC-14 to UTC+14 offset range,
-generated exercise display names, future rollup range ends and rate-limit 403 reasons.
+generated exercise display names, the Fitbit activity names matched to exercise types, future
+rollup range ends, rollup 400 errors naming the range, method-override headers and rate-limit
+403 reasons.
 Fixtures are synthetic and follow the documented shapes. None of this has been run against a
 live account.
 
@@ -662,8 +664,11 @@ civilEndTime}`. It accepts nanosecond RFC 3339 times, which it truncates to mill
 Duration offsets such as `"-18000s"`. int64 values may arrive as JSON numbers or as bounded
 decimal strings; `"NaN"`, `"Infinity"`, exponents, signs and fractions are refused. Heart rate
 must be 1–300 bpm. Weight is `weightGrams` (stored in kg). Exercise reads `displayName`, the
-`exerciseType` enum and `metricsSummary.distanceMillimeters`. Sleep stages use the documented
-`AWAKE|LIGHT|DEEP|REM|ASLEEP|RESTLESS` types, stored in lower case.
+`exerciseType` enum and `metricsSummary.distanceMillimeters`. Proto3 JSON omits default
+values, so an absent `exerciseType` is `EXERCISE_TYPE_UNSPECIFIED` and the session is imported.
+An absent `displayName` (the empty string) is refused as a value. Sleep stages use the
+documented `AWAKE|LIGHT|DEEP|REM|ASLEEP|RESTLESS` types, stored in lower case; a stage without
+a type is refused as a value.
 
 OAuth uses `createGoogleOAuthConfig('health')` with offline access and S256 PKCE.
 Use `adapter.createSourceAuth(config, token, pristineSourceFetch)` (or
@@ -674,7 +679,9 @@ keeps tokens in memory, and preserves cancellation through refresh and replay. B
 forwards exactly one request form: a `POST` to
 `/v4/users/me/dataTypes/{steps|distance|total-calories}/dataPoints:dailyRollUp` with no query
 and a JSON string body of at most 4 KiB, which it can replay after a refresh. That request
-reads data; the API defines it as a POST.
+reads data; the API defines it as a POST. Every forwarded request has its
+`X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override` headers removed, so a read
+cannot be turned into another method at Google.
 Web clients refresh through their configured token proxy; Desktop clients use the
 Google token endpoint and their locally supplied client secret when needed. A refresh keeps
 the token's granted scopes current. A 401 that survives the refresh, or a 403 without a rate
@@ -692,21 +699,25 @@ Fitbit stored each activity's local wall-clock start with a `Z` suffix. A Google
 therefore updates a stored Fitbit activity in place, keeping its subject and identifier, when
 any of these hold:
 - it carries the stored Google resource URL;
-- its numeric Google id equals the Fitbit `logId`, its display name equals the stored type, and
-  the two starts are at most 14 hours apart;
+- its numeric Google id equals the Fitbit `logId`, the two starts are at most 14 hours apart,
+  and the stored row starts at the session's wall clock or names the same kind (below);
 - its true UTC start and display name match;
-- its wall-clock start and display name match a legacy (non-Google) row. The wall clock comes
-  from `civilStartTime`, else from `startTime` plus `startUtcOffset`, and never from the
-  timestamp string's own offset.
+- its wall-clock start equals, to the second, that of exactly one legacy (non-Google) row,
+  whatever the names. The wall clock comes from `civilStartTime`, else from `startTime` plus
+  `startUtcOffset`, and never from the timestamp string's own offset. When several legacy rows
+  share that start, the one naming the same kind wins: the same name, or a Fitbit name whose
+  documented v4 `exerciseType` matches (Walk → WALKING, Run → RUNNING, Bike → BIKING, Swim →
+  SWIMMING, Hike → HIKING, Elliptical → ELLIPTICAL, Weights → WEIGHTLIFTING or WEIGHTS, Yoga →
+  YOGA, Treadmill → TREADMILL or TREADMILL_WALK). If that does not single one out, the session
+  is skipped and counted.
 
 Otherwise a named session keeps its own subject, `google-health-exercise-<id>`. That includes
 a numeric id that equals an unrelated Fitbit `logId`, so such a session is never skipped or
 blocked. A nameless session is keyed by its start and `exerciseType`. Ambiguous or repeated
 legacy matches are skipped and counted, never guessed and never fatal. Sleep sessions are keyed
 by resource name (`sleep-<id>`), else by start, so a revised session updates in place. Google
-only generates display names other than "Walking" for WALKING, and those are not enumerated. A
-Fitbit row whose label differs from Google's name is therefore left alone and the session is
-imported beside it. Other legacy exercises survive increments. There was no Fitbit file
+generates display names ("Running" for a Fitbit "Run"), so names are never required to match;
+an updated legacy row takes Google's display name. Other legacy exercises survive increments. There was no Fitbit file
 importer in this package. The deprecated `fitbit` entry remains resolvable for existing
 connections and fixture demos, is excluded from new-connection catalogs, and refuses live runs
 with Google Health guidance.
@@ -750,11 +761,24 @@ lookback window, with an `onWarning` note.
 Invalid values are counted as `skipped`, and the cursor still advances past them. These include
 out-of-range values, a 0 bpm heart rate, stages outside their session, unknown enum values and
 names over 256 characters. A point in an unrecognised shape is different: a missing payload or
-time member, a mistyped field or an unparsable literal. If such points make up all of a
-window's points, or more than 10% of them, the run fails with "unrecognised Google Health
-response shape" and the checkpoint is unchanged. Two cases hold a type's cursor at a window. An
-exercise that starts in the window but ends after the run's clock is unfinished, and is
-retried. A sleep whose `metadata.processed` is false is written but re-read. Each window
+time member, a mistyped field or an unparsable literal. Shape is judged per type across the
+run's windows. When more than 10% of at least 20 points, or all of at least 3, are
+unrecognised, that type stops before writing the window that crossed the threshold. Its
+checkpoint is kept unchanged and `onWarning` gets `[google-health:unrecognised-shape]`. Other
+types continue, and the run succeeds. Fewer unrecognised points are skipped like invalid
+values.
+
+Only points that can still change hold a type's cursor at their window. An exercise that
+starts in the window but ends after the run's clock is unfinished. It is held and retried
+while it started within the last 48 hours or its reported end is within 6 hours after the
+clock. A sleep whose `metadata.processed` is false is written, and re-read while it ended
+within the last 48 hours. Older unfinished or unprocessed points are final. They are written
+with the reported fields, never hold the cursor, and are not re-read. `onWarning` gets
+`[google-health:stale-unfinished]` or `[google-health:stale-unprocessed]` with their count. A
+point the provider dates after the run's clock belongs to a later window, which the next run
+reads, so it is ignored. If `dailyRollUp` answers 400 with an error naming the range or its
+end, that range is retried once ending the day after the run's UTC date, and later ranges stop
+there. Any other 400 fails the run. Each window
 validates every page before its documents are written. Proto3 pages that omit an empty list or
 token are accepted. Conditional ETags are preserved. Source deletions are not inferred.
 Stored activity reconciliation refuses more than 100,000 subjects or 1,000,000 quads.
@@ -775,7 +799,8 @@ times with bounded backoff (at most 60 seconds per wait), respecting Retry-After
 authenticated session separately caps HTTP traffic, including refresh and replay, at 4,096
 requests. Cancellation ends waits immediately. Demo fixtures are shifted by whole days into the
 lookback window, RFC 3339 strings and civil dates alike, so the fixture demo shows data at any
-date. Tests use `./google-health/testing`'s `syntheticHealthApi`. It answers only the documented
+date. Tests use `syntheticHealthApi` from `test-support/google-health-api.ts`, which is neither
+shipped nor exported. It answers only the documented
 request forms, in descending start order with proto3 omissions, and throws on any other request.
 The tests cover pagination, overlaps, compatibility, refresh, backoff, budgets, malformed
 inputs, provenance and stable re-imports without provider traffic.

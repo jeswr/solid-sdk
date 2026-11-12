@@ -59,7 +59,7 @@ export const EXERCISE = {
       civilEndTime: civil("2026-06-08", 7, 43),
     },
     exerciseType: "RUNNING",
-    displayName: "Run",
+    displayName: "Running",
     activeDuration: "1860s",
     metricsSummary: { distanceMillimeters: 5_200_000, steps: "6120", caloriesKcal: 432 },
     updateTime: "2026-06-08T08:00:00Z",

@@ -18,12 +18,15 @@ import {
   MAX_OFFSET_MS,
   OVERLAP_MS,
   PageCapError,
+  RollupRangeError,
   record,
   rollupDays,
   sample,
   summary,
   TYPES,
   timestamp,
+  UNRECOGNISED,
+  unrecognisedShape,
   type Window,
 } from "./api.js";
 import { demoFixtures } from "./fixtures.js";
@@ -43,7 +46,10 @@ export interface GoogleHealthOptions {
   readonly now?: () => Date;
   /**
    * Non-personal diagnostics: resolved duplicate conflicts, skipped unmappable records, a type
-   * stopped at the page cap, and an older checkpoint restarted at the lookback window.
+   * stopped at the page cap, an older checkpoint restarted at the lookback window, and the
+   * fixed-code warnings `[google-health:unrecognised-shape]` (a type stopped, its checkpoint
+   * kept), `[google-health:stale-unfinished]` and `[google-health:stale-unprocessed]` (points
+   * too old to change, written as reported).
    */
   readonly onWarning?: (message: string) => void;
 }
@@ -211,20 +217,37 @@ export function createGoogleHealthAdapter({
         const rollup = summary(type);
         let through: number | undefined;
         let hold = Number.POSITIVE_INFINITY;
+        // Shape is judged per type across this run's windows, never one window alone.
+        let received = 0;
+        let unrecognised = 0;
+        let shapeStop = false;
+        let staleUnfinished = 0;
+        let staleUnprocessed = 0;
+        /** Count a fetched window; true when this type must stop before writing it. */
+        const unrecognisedNow = (batch: { received: number; unrecognised: number }) => {
+          received += batch.received;
+          unrecognised += batch.unrecognised;
+          shapeStop = unrecognisedShape(received, unrecognised);
+          return shapeStop;
+        };
 
         /** Read and write one window; false ends this type's run (budget or page cap). */
         const visit = async (window: Window): Promise<boolean> => {
           try {
             if (rollup) {
               const batch = await fetchRollup(ctx, type, window, budget, maxPages);
+              if (unrecognisedNow(batch)) return false;
               skipped += batch.skipped;
               conflicts += batch.conflicts;
               for (const total of batch.totals.sort((a, b) => a.date.localeCompare(b.date)))
                 for (const doc of mapper.daily(total)) await ctx.write(doc);
             } else {
               const batch = await fetchWindow(ctx, type, window, budget, maxPages, until);
+              if (unrecognisedNow(batch)) return false;
               skipped += batch.skipped;
               conflicts += batch.conflicts;
+              staleUnfinished += batch.staleUnfinished;
+              staleUnprocessed += batch.staleUnprocessed;
               if (batch.transient) hold = Math.min(hold, window.start);
               if (type === "exercise" && batch.points.length > 0 && !indexed) {
                 mapper.indexActivities(await ctx.read("health/activities.ttl"));
@@ -265,15 +288,42 @@ export function createGoogleHealthAdapter({
         if (rollup) {
           // Civil dates as UTC-midnight instants: from the first re-read date through the civil
           // "today" of the most eastern offset. A date is final once it has ended everywhere.
-          const last = floorDay(until + MAX_OFFSET_MS) + DAY_MS;
+          // If Google refuses a range ending after the run's UTC date, retry once ending there.
+          let last = floorDay(until + MAX_OFFSET_MS) + DAY_MS;
+          const clamped = floorDay(until) + DAY_MS;
           const final = Math.max(from, floorDay(until - MAX_OFFSET_MS));
-          for (let start = from; start < last; start += rollupDays(type) * DAY_MS)
-            if (!(await visit({ start, end: Math.min(start + rollupDays(type) * DAY_MS, last) })))
-              break;
+          const step = rollupDays(type) * DAY_MS;
+          for (let start = from; start < last; start += step) {
+            let ok: boolean;
+            try {
+              ok = await visit({ start, end: Math.min(start + step, last) });
+            } catch (error) {
+              if (!(error instanceof RollupRangeError) || last <= clamped) throw error;
+              last = clamped;
+              // A range wholly after the run's UTC date has nothing final to read yet.
+              ok = start < last && (await visit({ start, end: Math.min(start + step, last) }));
+            }
+            if (!ok) break;
+          }
           if (through !== undefined) through = Math.min(through, final);
         } else {
           for (let start = from; start < until; start += DAY_MS)
             if (!(await visit({ start, end: Math.min(start + DAY_MS, until) }))) break;
+        }
+        if (staleUnfinished)
+          onWarning(
+            `[google-health:stale-unfinished] Google Health wrote ${staleUnfinished} exercise session(s) still unfinished 48 h after they started, as reported; they are not re-read.`,
+          );
+        if (staleUnprocessed)
+          onWarning(
+            `[google-health:stale-unprocessed] Google Health wrote ${staleUnprocessed} sleep session(s) still unprocessed 48 h after they ended, as reported; they are not re-read.`,
+          );
+        if (shapeStop) {
+          // Odd points this run may have been real data: keep the stored checkpoint unchanged.
+          onWarning(
+            `[google-health:unrecognised-shape] Google Health ${type} stopped: ${UNRECOGNISED}`,
+          );
+          continue;
         }
         if (through !== undefined) next[type] = { through: Math.min(through, hold), at: until };
       }

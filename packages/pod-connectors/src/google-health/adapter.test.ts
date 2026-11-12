@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { syntheticHealthApi } from "../../test-support/google-health-api.js";
 import { IntegrationAuthError } from "../core/errors.js";
 import { fixtureFetch } from "../core/fixture-fetch.js";
 import { adapterContainerUrl, createSourceAuth, runImport } from "../core/import-runner.js";
@@ -46,7 +47,6 @@ import {
   STEPS,
 } from "./fixtures.js";
 import { HealthMapper, healthDocuments } from "./mapping.js";
-import { syntheticHealthApi } from "./testing.js";
 import { HEALTH_VOCAB } from "./vocab-map.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/fitbit/`;
@@ -119,7 +119,7 @@ const exerciseAt = (local: string, offset = "+00:00", extra: Raw = {}, payload: 
         civilEndTime: civil(localEnd),
       },
       exerciseType: "RUNNING",
-      displayName: "Run",
+      displayName: "Running",
       metricsSummary: { distanceMillimeters: 5_200_000 },
       ...payload,
     },
@@ -215,20 +215,17 @@ describe("Google Health successor", () => {
 
   it("updates an equivalent legacy Fitbit exercise in place with the same id and fields, preserving other legacy items", async () => {
     const { pod: legacy } = await demoImport(fitbitAdapter);
-    const fields = (ex: ExerciseAction) => [
-      ex.name,
-      ex.identifier,
-      ex.exerciseType,
-      ex.duration,
-      ex.distance,
-      ex.startTime,
-    ];
+    const fields = (ex: ExerciseAction) => [ex.identifier, ex.duration, ex.distance, ex.startTime];
     const iri = `${ACT}#activity-51817963271`;
-    const before = fields(new ExerciseAction(iri, legacy.dataset(ACT), DataFactory));
+    const stored = new ExerciseAction(iri, legacy.dataset(ACT), DataFactory);
+    const before = fields(stored);
+    expect([stored.name, stored.exerciseType]).toEqual(["Run", "Run"]);
     await demoImport(gh, { pod: legacy });
     const after = new ExerciseAction(iri, legacy.dataset(ACT), DataFactory);
     expect(after.types.has(CLASSES.ExerciseAction)).toBe(true);
     expect(fields(after)).toEqual(before);
+    // Google's generated display name ("Running" for a Fitbit "Run") replaces the legacy name.
+    expect([after.name, after.exerciseType]).toEqual(["Running", "Running"]);
     expect(
       new ExerciseAction(`${ACT}#activity-51817991042`, legacy.dataset(ACT), DataFactory).name,
     ).toBe("Walk");
@@ -249,7 +246,7 @@ describe("Google Health successor", () => {
       fresh.dataset(ACT),
       DataFactory,
     );
-    expect([own.identifier, own.name, own.distance]).toEqual(["51817963271", "Run", "5.2 km"]);
+    expect([own.identifier, own.name, own.distance]).toEqual(["51817963271", "Running", "5.2 km"]);
   });
 
   it("moves demo fixtures (instants and civil dates) by whole days into the first-import lookback", async () => {
@@ -362,7 +359,7 @@ describe("Google Health successor", () => {
           pod.dataset(ACT),
           DataFactory,
         ).name,
-      ).toBe("Run");
+      ).toBe("Running");
       expect(cursorsOf(report.cursor).exercise).toBe(UNTIL);
     });
   });
@@ -811,7 +808,7 @@ describe("Google Health successor", () => {
     expect(r.pod.urls().some((u) => u.includes("/sleep/"))).toBe(false);
   });
 
-  it("holds the cursor at the window of a future (transient) point; other windows advance", async () => {
+  it("ignores a point dated after the run clock without holding; a later run's window owns it", async () => {
     const now = "2026-06-11T07:12:00Z";
     const r = run(
       syntheticHealthApi(
@@ -824,8 +821,8 @@ describe("Google Health successor", () => {
       { cursor: checkpoint({ "heart-rate": "2026-06-09T07:12:00.000Z" }), adapter: adapterAt(now) },
     );
     const report = await r.result;
-    expect(report.skipped).toBe(1);
-    expect(cursorsOf(report.cursor)["heart-rate"]).toBe("2026-06-11T00:00:00.000Z");
+    expect(report.skipped).toBeUndefined();
+    expect(cursorsOf(report.cursor)["heart-rate"]).toBe("2026-06-11T07:12:00.000Z");
     expect(report.written.some((d) => d.url.endsWith("/heart-rate/2026-06-08.ttl"))).toBe(true);
   });
 
@@ -1079,7 +1076,7 @@ describe("Google Health successor", () => {
     ).toEqual(["PT31M"]);
   });
 
-  it("matches a numeric Google id to a legacy logId only with the same type within 14 h, never overwriting another row", () => {
+  it("matches a numeric Google id to a legacy logId only with the same kind or wall clock within 14 h, never overwriting another row", () => {
     const iri = `${ACT}#activity-51817963271`;
     const own = `${ACT}#activity-google-health-exercise-51817963271`;
     const p = point("exercise", EXERCISE)!;
@@ -1094,7 +1091,7 @@ describe("Google Health successor", () => {
     // No stored start, another type, too far apart, or a Google-derived row: a new subject.
     expect(subjects((ex) => (ex.name = "Legacy"))).toEqual(new Set([own]));
     for (const [type, start] of [
-      ["Walk", "2026-06-08T07:12:00Z"],
+      ["Walk", "2026-06-08T09:12:00Z"],
       ["Run", "2026-06-07T07:12:00Z"],
     ])
       expect(
@@ -1110,13 +1107,18 @@ describe("Google Health successor", () => {
         new Provenance(iri, ds, DataFactory).derivedFrom.add(SOURCE_ORIGIN);
       }),
     ).toEqual(new Set([own]));
-    // The same type within any civil offset of the legacy wall clock: the legacy row.
-    expect(
-      subjects((ex) => {
-        ex.exerciseType = "Run";
-        ex.startTime = new Date("2026-06-08T02:12:00Z");
-      }),
-    ).toEqual(new Set([iri]));
+    // The same kind (Fitbit "Run" is RUNNING) within any civil offset, or another name at the
+    // session's own wall clock (v4 display names are generated): the legacy row.
+    for (const [type, start] of [
+      ["Run", "2026-06-08T02:12:00Z"],
+      ["Walk", "2026-06-08T07:12:00Z"],
+    ])
+      expect(
+        subjects((ex) => {
+          ex.exerciseType = type;
+          ex.startTime = new Date(start as string);
+        }),
+      ).toEqual(new Set([iri]));
   });
 
   it("serializes Google Health and Fitbit imports against their shared container", async () => {

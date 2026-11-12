@@ -13,7 +13,7 @@
  * - `POST …/dataPoints:dailyRollUp` with a `CivilTimeInterval` range, `windowSizeDays: 1`
  *   and `pageSize` within the documented maximum (14 for total-calories, 90 otherwise).
  */
-import type { HealthType } from "./api.js";
+import type { HealthType } from "../src/google-health/api.js";
 
 type Raw = Record<string, unknown>;
 export interface SyntheticHealthData {
