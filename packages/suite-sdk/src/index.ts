@@ -25,6 +25,8 @@ export {
   roomInvitation,
   shareNotification,
 } from "@jeswr/pod-access/notify";
+export type { ResourceGrant, ResourceGrantRefusal } from "@jeswr/pod-auth";
+export { ResourceGrantError, withinResourceGrants } from "@jeswr/pod-auth";
 export type { AccountsSession } from "./accounts.js";
 export { AccountsProvider, useAccounts } from "./accounts.js";
 export type { UseInboxResult } from "./use-inbox.js";
@@ -41,6 +43,8 @@ export type {
   UsernameAvailability,
 } from "./use-registration.js";
 export { RegistrationError, useRegistration } from "./use-registration.js";
+export type { ResourceGrants } from "./use-resource-grants.js";
+export { useResourceGrants } from "./use-resource-grants.js";
 
 /** Deliver a template using the current actor, or a complete activity with an explicit actor. */
 export type NotifyAction = (

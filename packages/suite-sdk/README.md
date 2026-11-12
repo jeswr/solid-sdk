@@ -66,6 +66,21 @@ for cancellation, scoped removal, expiry and storage details.
 A single account is just a manager with one account; no single-session fallback is needed.
 Existing applications can continue using `PodAuthProvider` directly.
 
+### Resources shared from another pod
+
+```tsx
+import { useResourceGrants } from '@jeswr/suite-sdk';
+
+const { supported, grants, grant, revoke, isWithinGrantedScope } = useResourceGrants();
+// In the consent screen's "Open with your account" click handler:
+await grant('https://alice.example/rooms/1/');
+```
+
+`useResourceGrants()` mirrors the active account's pod-auth resource grants and refreshes on every
+change, so apps never touch the core. Switching accounts shows that account's grants; logout ends
+them. Use `isWithinGrantedScope` (or the pure `withinResourceGrants`) to drop queued work for a
+revoked grant. The rules are pod-auth's; see its README.
+
 ## Offline (`SDK-APP-08`)
 
 The same entry re-exports `createPageCache`, `PageCache`, `PageCacheOptions`,

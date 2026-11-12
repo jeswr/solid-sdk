@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
@@ -28,6 +29,7 @@ import {
   XASProvider,
 } from "@jeswr/reactive-authentication";
 import { createBoundary } from "./boundary.js";
+import { ResourceGrantError } from "./grants.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { secureUrl } from "./options.js";
@@ -360,7 +362,12 @@ export function createProviders(
     const selection = JSON.stringify(selected);
     if (restoredContext !== undefined && selection === JSON.stringify(restoredContext.selected))
       return restoredContext.context;
-    const key = await boundary.contextKey(request);
+    let key = await boundary.contextKey(request);
+    // A consented grant uses the account's own Solid-OIDC session (the context login or restore
+    // established), so opening a shared resource needs no second authorization. Its DPoP-bound
+    // token is the one every storage already receives; UMA and LWS keep their own contexts.
+    if (boundary.consented(key))
+      key = await boundary.contextKey(new Request(boundary.roots()[0] ?? bootstrapUri));
     if (
       loginContext !== undefined &&
       selection === JSON.stringify(loginContext.selected) &&
@@ -668,6 +675,42 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
+    /**
+     * Checks and records a consented resource grant for the signed-in account. The issuer's
+     * metadata names the endpoints a grant may not contain. `current` is checked synchronously
+     * just before the grant is recorded, after every await.
+     */
+    grant: async (
+      url: string,
+      issuer: string,
+      signal: AbortSignal,
+      created: () => number,
+      current: () => boolean,
+    ) => {
+      const started = boundary.generation();
+      const generation = fence.signal;
+      // Refuse malformed, origin-wide and own-storage grants before any network access.
+      boundary.grantRoot(url);
+      const as = await asProvider.getAuthorizationServer(
+        new Request(boundary.roots()[0] ?? bootstrapUri, {
+          signal: AbortSignal.any([signal, lifetime, generation]),
+        }),
+      );
+      signal.throwIfAborted();
+      lifetime.throwIfAborted();
+      if (!current()) throw new ResourceGrantError("signed-out");
+      const endpoints = Object.entries(as)
+        .filter(([name, value]) => /(_endpoint|_uri)$/.test(name) && typeof value === "string")
+        .map(([, value]) => value as string)
+        .filter((value) => URL.canParse(value));
+      return boundary.consent(
+        url,
+        created(),
+        { issuer, endpoints: [as.issuer, ...endpoints] },
+        started,
+        generation,
+      );
+    },
     restore: async (account: import("./sessions.js").ActiveAccount, signal: AbortSignal) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.

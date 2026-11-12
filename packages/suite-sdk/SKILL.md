@@ -1,13 +1,14 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk accounts, resource grants (useResourceGrants), registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/suite-sdk
 
-The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()`, SDK-APP-05's `useRegistration()` and SDK-APP-07's `useNotify()`, `useInbox()` and
+The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()` and `useResourceGrants()`, SDK-APP-05's `useRegistration()` and SDK-APP-07's `useNotify()`, `useInbox()` and
 notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
@@ -23,6 +24,11 @@ or session state here. Existing usePodAuth/useNotify/useInbox/registration consu
 core and its fetch. Empty managers use the anonymous lifecycle adapter; login delegates to add.
 Subscribe only after React commit, refresh immediately after subscribing to cover render races,
 and unsubscribe on replacement/unmount. Keep snapshots cached between change events.
+
+`useResourceGrants()` returns `{ supported, grants, grant, revoke, isWithinGrantedScope }` for the
+active core's pod-auth resource grants (the one consented foreign-grant mechanism). It subscribes to
+the core's `grants` event through `useSyncExternalStore`; the signed-out adapter reports
+`supported: false`. Call `grant` only from a consent click naming the origin.
 
 A single account is a manager with one account; no single-session fallback is needed. Existing
 PodAuthProvider usage remains supported. Read pod-auth's skill for per-account boundaries, scoped
