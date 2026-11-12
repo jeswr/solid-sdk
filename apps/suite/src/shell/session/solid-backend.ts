@@ -380,10 +380,10 @@ export class SolidBackend implements SessionBackend {
       if ("issuer" in hint ? target.kind !== "issuer" : target.kind !== "webid")
         throw new SignInError("invalid-url");
       attempt.signal.throwIfAborted();
-      if (this.#expired) {
+      if (this.#expired && this.#identity) {
         // Retain the accepted grant snapshot even after expiry. Reading current account metadata
         // cannot distinguish a fresh authorization for that same account in another tab.
-        const identity = this.#identity ?? { webId: null, issuer: "" };
+        const identity = this.#identity;
         const result = await this.#retire(identity, "reauthenticate");
         attempt.signal.throwIfAborted();
         if (started !== this.#version) throw new SignInError("cancelled");
@@ -407,8 +407,9 @@ export class SolidBackend implements SessionBackend {
         this.#expired = false;
         this.#restoring = undefined;
       } else {
-        // No account is held, for example after a skipped sign-out. A login would install a new
-        // namespace owner and supersede another tab's live session, so adopt or refuse it first.
+        // No account is held: after a skipped sign-out, or when a cold restore expired without
+        // an accepted snapshot to retire. A login would install a new namespace owner and
+        // supersede another tab's live session, so adopt or refuse it first.
         const adopted = await this.#adoptLiveSession(core, target, attempt.signal, started);
         if (adopted) return adopted;
       }

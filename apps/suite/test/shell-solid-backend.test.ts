@@ -522,8 +522,30 @@ describe("Solid shell over pod-auth", () => {
     });
     expect(await h.backend.restore()).toBeNull();
     expect((await h.backend.signIn({ issuer: alice.issuer })).webId).toBe(alice.webId);
-    expect(h.auth.retireIfOwnedBy).toHaveBeenCalledExactlyOnceWith({ webId: null, issuer: "" });
+    // No accepted snapshot means no grant to retire; nothing is remembered, so login proceeds.
+    expect(h.auth.retireIfOwnedBy).not.toHaveBeenCalled();
+    expect(h.auth.login).toHaveBeenCalledOnce();
     expect(h.auth.logout).not.toHaveBeenCalled();
+  });
+
+  it("gates sign-in after a cold restore expires but keeps the remembered pointer", async () => {
+    const h = harness();
+    h.auth.restore.mockImplementation(async () => {
+      h.emit("expired");
+      return null;
+    });
+    h.auth.remembered.mockResolvedValue([{ webId: alice.webId, issuer: alice.issuer }]);
+    expect(await h.backend.restore()).toBeNull();
+    for (const hint of [{ issuer: alice.issuer }, { webId: bob.webId }]) {
+      await expect(h.backend.signIn(hint)).rejects.toEqual(new SignInError("session-elsewhere"));
+    }
+    expect(h.auth.login).not.toHaveBeenCalled();
+    const account = await h.backend.signIn({ webId: alice.webId });
+    expect(account.webId).toBe(alice.webId);
+    expect(h.auth.login).toHaveBeenCalledExactlyOnceWith({ webId: alice.webId }, expect.anything());
+    expect(h.auth.retireIfOwnedBy).not.toHaveBeenCalled();
+    expect(h.auth.logout).not.toHaveBeenCalled();
+    expect((await h.backend.fetchFor(account)(account.storageUrl)).ok).toBe(true);
   });
 
   it("signs in again after another tab signs out and removes the owner record", async () => {
