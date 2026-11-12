@@ -126,22 +126,28 @@ export class TaskMove {
     const dataset = latest.destination.dataset;
     this.copyAttempts.set(url, latest.original);
     let destination: Resource;
+    const phase = { committed: false };
     try {
-      destination = await this.io.write(url, dataset, { create: true });
+      destination = await this.io.write(url, dataset, { create: true }, phase);
     } catch (error) {
-      // A definitive rejection cannot have committed, regardless of read-back access.
+      // A rejected create (including 412 when another writer created the URL first) cannot
+      // have committed, and must never adopt another writer's resource as our copy.
       if (
+        !phase.committed &&
         error instanceof ModelError &&
         error.status >= 400 &&
-        error.status < 500 &&
-        error.status !== 412
+        error.status < 500
       ) {
         this.copyAttempts.delete(url);
         throw error;
       }
+      // Our create committed and only its read-back failed, or the outcome is unknown. Keep
+      // the attempt until a read resolves it, so a failed read-back is retried, not forgotten.
       const confirmed = await this.io.optional(url);
-      this.copyAttempts.delete(url);
-      if (!confirmed) throw error;
+      if (!confirmed) {
+        if (!phase.committed) this.copyAttempts.delete(url);
+        throw error;
+      }
       destination = confirmed;
     }
     Object.assign(copy, { original: latest.original, destination });
@@ -168,23 +174,46 @@ export class TaskMove {
           await this.reconcileCopy(previous ?? copy, copy);
         }
         // Retain changed source revisions permanently, with their confirmed copies untouched.
-        const removable = latest.filter((copy) =>
+        // A retained revision also keeps everything it refers to, e.g. a changed reply keeps
+        // its root, so the retained source stays reachable.
+        const referenced = new Set<string>();
+        const refer = (resource: Resource) => {
+          for (const quad of resource.dataset)
+            if (quad.object.termType === "NamedNode") referenced.add(quad.object.value);
+        };
+        const unchanged = (copy: ResourceCopy) =>
           copies.some(
             (entry) =>
               entry.original.url === copy.original.url &&
               entry.original.etag === copy.original.etag,
-          ),
+          );
+        for (const copy of latest) if (!unchanged(copy)) refer(copy.original);
+        const removable = latest.filter(
+          (copy) => unchanged(copy) && !referenced.has(`${copy.original.url}#it`),
         );
         if (removable.length === 0) return moved;
         // A stable mapping permits deletion. Leave room for another scan afterwards,
         // so a late reply cannot turn successful cleanup into an invisible orphan.
         if (added || pass === 2) continue;
-        for (const { original } of [...removable].reverse()) {
+        // Referring resources go first, so a conditional-delete conflict on a reply is known
+        // before its root is considered.
+        const targets = new Set<string>();
+        for (const { original } of removable)
+          for (const quad of original.dataset)
+            if (quad.object.termType === "NamedNode") targets.add(quad.object.value);
+        const ordered = [...removable].sort(
+          (a, b) =>
+            Number(targets.has(`${a.original.url}#it`)) -
+            Number(targets.has(`${b.original.url}#it`)),
+        );
+        for (const { original } of ordered) {
+          if (referenced.has(`${original.url}#it`)) continue;
           try {
             await this.io.remove(original.url, original.etag);
           } catch (error) {
             const current = await this.io.optional(original.url);
             if (current && current.etag === original.etag) throw error;
+            if (current) refer(current);
           }
         }
       }

@@ -460,7 +460,93 @@ describe("comment lifecycle with projects and task moves", () => {
       committed ? ["*"] : ["*", "*"],
     );
     expect(pod.files.has(lateReply.url)).toBe(committed && newerSource);
-    expect(pod.files.has(root.url)).toBe(false);
+    // A retained reply keeps its root, so it stays listed in the source.
+    expect(pod.files.has(root.url)).toBe(committed && newerSource);
+  });
+
+  it("keeps an unchanged source root when only its reply changes after copying", async () => {
+    const { store, pod, source, target, task, comments, root, reply } = await setup();
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        await comments.edit(reply, "Edited reply");
+    };
+    const moved = await store.moveTaskToProject(task, source, target, "moved");
+    expect((await store.comments(target, moved).list())[0]?.replies[0]?.text).toBe("Reply");
+    expect(pod.files.has(root.url)).toBe(true);
+    expect(pod.files.has(reply.url)).toBe(true);
+    const threads = await comments.list();
+    expect(threads[0]?.root.url).toBe(root.url);
+    expect(threads[0]?.replies.map((entry) => entry.text)).toEqual(["Edited reply"]);
+  });
+
+  it("keeps the root when a reply's conditional delete conflicts during cleanup", async () => {
+    const { store, pod, source, target, task, comments, root, reply } = await setup();
+    let edited = false;
+    pod.intercept = async (request) => {
+      if (!edited && request.method === "DELETE" && request.url === reply.url) {
+        edited = true;
+        await comments.edit(reply, "Edited during cleanup");
+      }
+    };
+    await store.moveTaskToProject(task, source, target, "moved");
+    expect(edited).toBe(true);
+    expect(pod.files.has(reply.url)).toBe(true);
+    expect(pod.files.has(root.url)).toBe(true);
+    expect(pod.mutations().some((r) => r.method === "DELETE" && r.url === root.url)).toBe(false);
+  });
+
+  it("never adopts a resource another writer created when the copy create is rejected", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let lateReply: Awaited<ReturnType<typeof comments.reply>> | undefined;
+    let attemptedUrl: string | undefined;
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        lateReply = await comments.reply(root, "Late reply");
+      if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
+        attemptedUrl = request.url;
+        pod.seed(request.url, '<#it> <http://purl.org/dc/terms/title> "Unrelated" .');
+        return new Response(null, { status: 412 });
+      }
+    };
+    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    expect(attemptedUrl).toBeDefined();
+    if (!lateReply) throw new Error("Missing late reply");
+    expect(pod.files.has(lateReply.url)).toBe(true);
+    expect(pod.files.has(root.url)).toBe(true);
+  });
+
+  it("keeps a committed copy whose read-back is forbidden, adopting it once access returns", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const move = store.prepareTaskMove(task, source, target, "moved");
+    let lateReply: Awaited<ReturnType<typeof comments.reply>> | undefined;
+    let attemptedUrl: string | undefined;
+    let forbidden = true;
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url)
+        lateReply = await comments.reply(root, "Late reply");
+      if (!pod.files.has(task.url) && request.method === "PUT" && request.url.endsWith(".ttl")) {
+        attemptedUrl = request.url;
+        pod.seed(request.url, request.body);
+        // Committed, but without a validator: RdfIO reads it back.
+        return new Response(null, { status: 201 });
+      }
+      if (forbidden && attemptedUrl === request.url && request.method === "GET")
+        return new Response(null, { status: 403 });
+    };
+    await expect(move.run()).rejects.toThrow("Some comments are still moving. Retry");
+    expect(attemptedUrl).toBeDefined();
+    forbidden = false;
+    pod.intercept = undefined;
+    const moved = await move.run();
+    expect(
+      (await store.comments(target, moved).list())[0]?.replies.find((r) => r.url === attemptedUrl),
+    ).toMatchObject({ text: "Late reply" });
+    expect(
+      pod.mutations().filter((r) => r.method === "PUT" && r.url === attemptedUrl),
+    ).toHaveLength(1);
+    if (!lateReply) throw new Error("Missing late reply");
+    expect(pod.files.has(lateReply.url)).toBe(false);
   });
 
   it("adopts an independently edited destination after an uncertain PUT without writing it again", async () => {
