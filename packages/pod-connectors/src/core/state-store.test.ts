@@ -323,3 +323,73 @@ it("preserves rows it cannot interpret and stamps enabledAt on update", async ()
     42,
   ]);
 });
+
+it("skips a needs-reauth disable when the owner re-enabled during the run, including on 412", async () => {
+  const h = fixture(),
+    store = createConnectionStore(h.options);
+  await store.read();
+  const latched = "2026-11-01T11:00:00.000Z",
+    owner = "2026-11-01T12:05:00.000Z";
+  await store.write([
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: latched },
+  ]);
+  const disable = {
+    connectorId: "spotify",
+    account: "fixture",
+    enabled: false,
+    status: "needs-reauth" as const,
+    enabledAt: latched,
+  };
+  // Re-enabled before the save: no write, owner's values kept.
+  await store.read();
+  await store.write([
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: owner },
+  ]);
+  h.requests.length = 0;
+  await store.update(disable);
+  expect(h.requests.filter((r) => r.method === "PUT")).toEqual([]);
+  expect(await store.read()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: owner },
+  ]);
+  // Re-enabled concurrently with the save: the 412 merge skips the disable.
+  await store.write([
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: latched },
+  ]);
+  let raced = false;
+  const io: typeof fetch = async (input, init) => {
+    if (String(input) === store.url && init?.method === "PUT" && !raced) {
+      raced = true;
+      await h.pod.fetch(store.url, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify([
+          {
+            connectorId: "spotify",
+            account: "fixture",
+            enabled: true,
+            enabledAt: owner,
+            intervalMinutes: 30,
+          },
+        ]),
+      });
+    }
+    return h.io(input, init);
+  };
+  await createConnectionStore({ ...h.options, fetch: io }).update(disable);
+  expect(raced).toBe(true);
+  expect(await store.read()).toEqual([
+    {
+      connectorId: "spotify",
+      account: "fixture",
+      enabled: true,
+      enabledAt: owner,
+      intervalMinutes: 30,
+    },
+  ]);
+  // Unchanged enabledAt (here: absent on both sides) still disables.
+  await store.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  await store.update({ ...disable, enabledAt: undefined });
+  expect(await store.read()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: false, status: "needs-reauth" },
+  ]);
+});

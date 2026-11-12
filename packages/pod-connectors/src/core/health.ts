@@ -17,7 +17,8 @@ export interface ConnectorHealthInput {
  * True when the owner re-enabled the connection after its needs-reauth latch: the row's
  * `enabledAt` differs from the value the latch recorded (string comparison, so no clocks
  * are compared). Latches written before that field existed fall back to "`enabledAt` newer
- * than the latching run's `lastRunEndedAt`", ignoring values more than five minutes ahead.
+ * than the latching run's `lastRunEndedAt`", ignoring values more than five minutes ahead;
+ * a legacy latch itself stamped more than five minutes ahead is cleared by any `enabledAt`.
  */
 export function connectorReenabled(
   enabledAt: string | undefined,
@@ -27,9 +28,10 @@ export function connectorReenabled(
   if (latch.latchedEnabledAt !== undefined) return (enabledAt ?? "") !== latch.latchedEnabledAt;
   if (enabledAt === undefined) return false;
   const at = Date.parse(enabledAt);
-  return (
-    Number.isFinite(at) && at <= now + MAX_FUTURE_SKEW_MS && at > Date.parse(latch.lastRunEndedAt)
-  );
+  if (!Number.isFinite(at)) return false;
+  // A legacy latch stamped beyond the skew window has no usable time: any re-enable clears it.
+  if (Date.parse(latch.lastRunEndedAt) > now + MAX_FUTURE_SKEW_MS) return true;
+  return at <= now + MAX_FUTURE_SKEW_MS && at > Date.parse(latch.lastRunEndedAt);
 }
 /** One connection. Partial imports count as successful checkpoints; errors take precedence. */
 export function connectorHealth(

@@ -16,6 +16,12 @@ export function connectionRows(value: unknown): readonly unknown[] {
     throw new Error("Invalid connector connections");
   return value;
 }
+function normalisedEnabledAt(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length > 64 || !Number.isFinite(Date.parse(value)))
+    return null;
+  return new Date(value).toISOString();
+}
 const isRow = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
@@ -50,18 +56,29 @@ export function createConnectionStore(options: {
     write: (rows: readonly unknown[], signal?: AbortSignal) => store.write(rows, signal),
     /**
      * Change only enablement, status and (when given) `enabledAt` of one row, merging
-     * concurrent edits on 412. A missing row throws ConnectionRemovedError.
+     * concurrent edits on 412. A missing row throws ConnectionRemovedError. A needs-reauth
+     * disable (`enabled: false, status: 'needs-reauth'`) is conditional: it applies only
+     * while the row's `enabledAt` equals `connection.enabledAt` (both absent counts as
+     * equal); otherwise the owner re-enabled during the run and the row is left unchanged.
      */
     async update(connection: ConnectorConnection, signal?: AbortSignal): Promise<void> {
       const [next] = connectorConnections([connection]);
       if (!next) throw new Error("Invalid connector connection");
+      const latching = !next.enabled && next.status === "needs-reauth";
       for (let attempt = 0; attempt < 3; attempt++) {
         const current = (await store.read(signal)) ?? [];
         let found = false;
+        let superseded = false;
         const merged = current.map((row) => {
           if (!isRow(row) || row.connectorId !== next.connectorId || row.account !== next.account)
             return row;
           found = true;
+          // A needs-reauth disable applies only while the row still carries the enabledAt
+          // the latch recorded; a changed value is the owner's re-enable and is kept.
+          if (latching && normalisedEnabledAt(row.enabledAt) !== next.enabledAt) {
+            superseded = true;
+            return row;
+          }
           // Preserve a concurrent interval edit and any fields this version does not know.
           const kept = Object.fromEntries(Object.entries(row).filter(([key]) => key !== "status"));
           return {
@@ -72,6 +89,7 @@ export function createConnectionStore(options: {
           };
         });
         if (!found) throw new ConnectionRemovedError();
+        if (superseded && merged.every((row, i) => row === current[i])) return;
         try {
           await store.write(merged, signal);
           return;

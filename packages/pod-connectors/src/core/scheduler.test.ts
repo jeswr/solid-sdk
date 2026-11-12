@@ -1349,3 +1349,130 @@ it("gives a waiting setEnabled priority over new pool claims and lets stop() awa
   await stop;
   expect(stopped).toBe(true);
 });
+
+describe("third review: skewed checkpoints and legacy latches", () => {
+  const futureState = (failing = true) => {
+    const far = AT + 365 * 86_400_000;
+    const account: ConnectorState = {
+      ...legacy,
+      lastSync: iso(far),
+      health: {
+        lastRunStartedAt: iso(far),
+        lastRunEndedAt: iso(far),
+        outcome: failing ? "failed" : "ok",
+        counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+        consecutiveFailures: 0,
+        intervalMinutes: 60,
+        nextRunAt: iso(far + 3_600_000),
+      },
+    };
+    return { ...legacy, accounts: { fixture: account } };
+  };
+  it("respects back-off over 10 ticks when a future lastSync meets a failing source (500)", async () => {
+    let runs = 0;
+    const h = harness(undefined, {
+      runner: async () => {
+        runs++;
+        throw new IntegrationSyncError("spotify", "private", { status: 500 });
+      },
+    });
+    h.states.set("spotify", futureState(false));
+    for (let i = 0; i < 10; i++) {
+      await h.scheduler.tick();
+      h.setNow(AT + (i + 1) * 30_000);
+    }
+    expect(runs).toBe(1);
+    const account = h.states.get("spotify")?.accounts?.fixture;
+    // The untrusted checkpoint time is dropped; the cursor survives.
+    expect(account?.lastSync).toBeUndefined();
+    expect(account?.cursor).toBe("old");
+    expect(account?.health).toMatchObject({
+      outcome: "failed",
+      lastRunEndedAt: iso(AT),
+      nextRunAt: iso(AT + 900_000),
+    });
+    // Fresh processes with no snapshot follow the persisted back-off too.
+    await new ConnectorScheduler(h.options).tick();
+    expect(runs).toBe(1);
+    h.setNow(AT + 900_000);
+    await h.scheduler.tick();
+    expect(runs).toBe(2);
+  });
+  it("respects Retry-After over 10 ticks when a future lastSync meets a rate limit", async () => {
+    let runs = 0;
+    const h = harness(undefined, {
+      runner: async () => {
+        runs++;
+        throw new RateLimitedError("spotify", "https://secret.example", 7_200);
+      },
+    });
+    h.states.set("spotify", futureState());
+    for (let i = 0; i < 10; i++) {
+      await h.scheduler.tick();
+      h.setNow(AT + (i + 1) * 600_000);
+    }
+    expect(runs).toBe(1);
+    expect(h.states.get("spotify")?.accounts?.fixture?.health?.nextRunAt).toBe(iso(AT + 7_200_000));
+    h.setNow(AT + 7_200_000);
+    await h.scheduler.tick();
+    expect(runs).toBe(2);
+  });
+  it("follows a trusted attempt's back-off even with a future lastSync", () => {
+    const state = {
+      ...legacy,
+      lastSync: iso(AT + 365 * 86_400_000),
+      health: {
+        lastRunStartedAt: iso(AT),
+        lastRunEndedAt: iso(AT),
+        outcome: "failed" as const,
+        counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+        consecutiveFailures: 1,
+        intervalMinutes: 60,
+        nextRunAt: iso(AT + 900_000),
+      },
+    };
+    expect(connectorNextRunAt(connection(), state, 60, AT + 60_000)).toBe(AT + 900_000);
+    // Without any attempt, the future lastSync alone makes it due now.
+    expect(connectorNextRunAt(connection(), { ...legacy, lastSync: state.lastSync }, 60, AT)).toBe(
+      0,
+    );
+  });
+  it("sanitises a future connectedAt to the run's start time", async () => {
+    const h = harness(undefined, {
+      runner: async () => {
+        throw new IntegrationSyncError("spotify", "private", { status: 500 });
+      },
+    });
+    const far = iso(AT + 365 * 86_400_000);
+    h.states.set("spotify", {
+      ...legacy,
+      accounts: { fixture: { ...legacy, connectedAt: far, lastSync: far } },
+    });
+    await h.scheduler.tick();
+    expect(h.states.get("spotify")?.accounts?.fixture?.connectedAt).toBe(iso(AT));
+  });
+  it("clears a legacy latch stamped beyond the skew window with any enabledAt", () => {
+    const latch: ConnectorRunHealth = {
+      lastRunStartedAt: iso(AT + 365 * 86_400_000),
+      lastRunEndedAt: iso(AT + 365 * 86_400_000),
+      outcome: "needs-reauth",
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+      consecutiveFailures: 1,
+      intervalMinutes: 60,
+    };
+    const state = { ...legacy, health: latch };
+    expect(connectorNextRunAt(connection(), state, 60, AT)).toBeUndefined();
+    expect(
+      connectorNextRunAt({ ...connection(), enabledAt: iso(AT - 86_400_000) }, state, 60, AT),
+    ).toBe(0);
+    // A recorded latchedEnabledAt still uses the exact comparison only.
+    expect(
+      connectorNextRunAt(
+        { ...connection(), enabledAt: iso(AT) },
+        { ...legacy, health: { ...latch, latchedEnabledAt: iso(AT) } },
+        60,
+        AT,
+      ),
+    ).toBeUndefined();
+  });
+});

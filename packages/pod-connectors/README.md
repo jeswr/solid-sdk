@@ -819,7 +819,12 @@ none). The latch clears in any process as soon as the row's `enabledAt` differs 
 that recorded value — a string comparison, so the writer's and scheduler's clocks are
 never compared. An unchanged `enabledAt` keeps the latch. (Latches written before
 `latchedEnabledAt` existed fall back to "`enabledAt` newer than the latching run's
-`lastRunEndedAt`", ignoring values more than five minutes ahead.)
+`lastRunEndedAt`", ignoring values more than five minutes ahead; such a latch that is
+itself stamped more than five minutes ahead is cleared by any `enabledAt`.) The
+scheduler's needs-reauth disable is conditional: `createConnectionStore().update` applies
+it only while the row's `enabledAt` still equals the value the latch recorded, including
+after a 412 re-read, so an owner's re-enable during the run is never reverted. Custom
+`saveConnection` ports should apply the same rule.
 
 The scheduler is a continuous worker pool (default cap two, maximum 16): whenever a
 worker frees up it starts the connection that is most overdue. It keeps single-flight
@@ -864,10 +869,14 @@ and enables the host setting. `stop()` aborts and drains active work. Run signal
 both the runner and source/Pod transports. After cancellation no new state/config write
 starts; the previous checkpoint remains due for replay, as for a manually cancelled import.
 
-Clock skew: a stored attempt is untrusted, and the connection due immediately, when its
-`lastRunEndedAt` or `lastSync` is more than five minutes ahead of the scheduler's clock,
-or its `nextRunAt` lies beyond `now + max(interval, 24 h)`. A state stamped a year ahead
-therefore runs on the first tick; the run then schedules from its own clock. The
+Clock skew: an attempt whose `health.lastRunEndedAt` is within five minutes of the
+scheduler's clock is trusted and its `nextRunAt` (back-off, Retry-After) is followed;
+only a `nextRunAt` beyond `now + max(interval, 24 h)` makes it due now. Without a trusted
+attempt, a `lastRunEndedAt` or `lastSync` more than five minutes ahead makes the
+connection due immediately, so a state stamped a year ahead runs on the first tick and
+then schedules from its own clock. Every persisted run (failed or successful) drops a
+`lastSync` more than five minutes ahead and replaces such a `connectedAt` with the run's
+start time, so a failing source cannot be re-run on every pass. The
 needs-reauth latch is clock-independent and still holds. Timestamps more than five
 minutes ahead are also untrusted elsewhere: they lose `mergeAccountState`
 comparisons, and `connectorHealth` reports `stale` instead of `ok`. When the stored

@@ -290,11 +290,13 @@ failure never rejects a tick. `health.counts` describe the latest attempt's docu
 changes; old `counts` remain the last successful import's document/item counters. Keep
 account cursors separate (legacy cursor only for a sole connection; never rewrite root
 checkpoint fields), merge fresh snapshots after 412, distrust timestamps more than five
-minutes ahead (a future-dated stored attempt makes the connection due now) and never roll
+minutes ahead (follow a trusted attempt's back-off; with none, a future-dated stored time
+makes the connection due now; persist no future lastSync/connectedAt) and never roll
 back a newer successful cursor. Reauth (or two consecutive 401s; 403 stays a backed-off
 `forbidden` failure and never invalidates) is latched durably, recording the row's
 `enabledAt` in `latchedEnabledAt`, until that value changes (string compare) or an
-explicit setEnabled, which takes priority over pool claims for its container;
+explicit setEnabled, which takes priority over pool claims for its container. The
+latch's settings disable is conditional on the row's enabledAt being unchanged;
 cancellation starts no further state/config I/O. Owner-JSON stores protect their ACL
 once per instance and on create, poll with If-None-Match, and `peek` is read-only.
 The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.

@@ -205,10 +205,11 @@ export function connectorBackoffMs(failures: number, random: () => number = Math
   );
 }
 /**
- * Due instant in epoch ms (0 = now), or undefined when disabled/latched. A stored attempt
- * is untrusted, and the connection due now, when its `lastRunEndedAt` or `lastSync` is
- * more than five minutes ahead of `now`, or its `nextRunAt` lies beyond
- * `now + max(interval, 24 h)`: a skewed clock can never park a connection.
+ * Due instant in epoch ms (0 = now), or undefined when disabled/latched. A trusted attempt
+ * (`health.lastRunEndedAt` within five minutes of `now`) is followed, including its
+ * back-off; only a `nextRunAt` beyond `now + max(interval, 24 h)` makes it due now. With
+ * no trusted attempt, a `lastRunEndedAt` or `lastSync` more than five minutes ahead makes
+ * the connection due now: a skewed clock can never park a connection.
  */
 export function connectorNextRunAt(
   connection: ConnectorConnection,
@@ -225,14 +226,10 @@ export function connectorNextRunAt(
     return connectorReenabled(connection.enabledAt, health, now) ? 0 : undefined;
   const ahead = (at: string | undefined) =>
     at !== undefined && Date.parse(at) > now + MAX_FUTURE_SKEW_MS;
-  if (
-    ahead(health?.lastRunEndedAt) ||
-    ahead(state?.lastSync) ||
-    (health?.nextRunAt !== undefined && Date.parse(health.nextRunAt) > horizon)
-  )
-    return 0;
   const clamp = (at: number) => Math.min(at, horizon);
-  if (health?.nextRunAt) {
+  if (health && !ahead(health.lastRunEndedAt)) {
+    if (!health.nextRunAt) return clamp(Date.parse(health.lastRunEndedAt) + interval * 60_000);
+    if (Date.parse(health.nextRunAt) > horizon) return 0;
     if (
       (health.outcome === "ok" || health.outcome === "partial") &&
       interval !== health.intervalMinutes
@@ -240,8 +237,22 @@ export function connectorNextRunAt(
       return clamp(Date.parse(health.lastRunEndedAt) + interval * 60_000);
     return clamp(Date.parse(health.nextRunAt));
   }
-  const previous = health?.lastRunEndedAt ?? state?.lastSync;
-  return previous ? clamp(Date.parse(previous) + interval * 60_000) : 0;
+  if (health || ahead(state?.lastSync)) return 0;
+  return state?.lastSync ? clamp(Date.parse(state.lastSync) + interval * 60_000) : 0;
+}
+/** Drop checkpoint times stamped more than five minutes ahead before persisting them. */
+function trustedCheckpoint(
+  checkpoint: ConnectorAccountState,
+  started: string,
+  now: number,
+): ConnectorAccountState {
+  const limit = now + MAX_FUTURE_SKEW_MS;
+  const { lastSync, ...rest } = checkpoint;
+  return {
+    ...rest,
+    ...(lastSync !== undefined && Date.parse(lastSync) <= limit ? { lastSync } : {}),
+    connectedAt: Date.parse(checkpoint.connectedAt) > limit ? started : checkpoint.connectedAt,
+  };
 }
 function errorClass(error: unknown, signal: AbortSignal): ConnectorErrorClass {
   if (signal.aborted) return "aborted";
@@ -494,6 +505,8 @@ export class ConnectorScheduler {
     }
     // Cancellation starts no further Pod/config I/O, matching the runner's abort contract.
     if (signal.aborted) return false;
+    // A failed run must not carry a future-dated checkpoint forward (it would stay due).
+    checkpoint = trustedCheckpoint(checkpoint, started, this.now());
     const ended = new Date(Math.max(this.now(), Date.parse(started))).toISOString();
     const failures =
       outcome === "ok" || outcome === "partial"
