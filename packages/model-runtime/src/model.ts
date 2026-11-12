@@ -943,9 +943,17 @@ function makeWrapperClass(
   for (const plan of plans) {
     const { field } = plan;
     if (field.collection === "ordered") {
-      resetters.set(field.name, (doc, values) =>
-        writeOrdered(doc, plan, values, () => beforeWrite(doc, field), true),
-      );
+      resetters.set(field.name, (doc, values) => {
+        // The explicit reset rewrites the same item nodes as the setter, so it is staged and
+        // validated exactly like the setter whenever a write constraint applies.
+        if (hasWriteConstraints(context)) {
+          stagedWrite(doc, context, { owner, iri: doc.value, field }, (staged) =>
+            writeOrdered(staged, plan, values, undefined, true),
+          );
+        } else {
+          writeOrdered(doc, plan, values, () => beforeWrite(doc, field), true);
+        }
+      });
       Object.defineProperty(Wrapper.prototype, field.name, {
         get(this: TermWrapper) {
           return readOrdered(this, plan);

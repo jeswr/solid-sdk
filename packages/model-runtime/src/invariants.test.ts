@@ -5,12 +5,14 @@ import { describe, expect, it } from "vitest";
 import {
   defineModel,
   type EntityInvariant,
+  type EntityWrapper,
   type InvariantExpression,
   type ManifestEntity,
   ManifestError,
   type ManifestField,
   type ManifestNode,
   type ModelManifest,
+  resetOrderedField,
   validateManifest,
 } from "./index.js";
 
@@ -1158,6 +1160,16 @@ describe("ordered setters in models with write constraints", () => {
     expect(snapshot(store)).toEqual(before);
     w.steps = ["two", "three"];
     expect(e.parse(URL, store)).toEqual({ steps: ["two", "three"] });
+  });
+  it("stages resetOrderedField and refuses a reset that breaks a co-typed item", () => {
+    const e = entity(steps());
+    const store = e.build(URL, { steps: ["one"] });
+    const w = new e.Wrapper(URL, store, F) as unknown as EntityWrapper;
+    const before = snapshot(store);
+    expect(() => resetOrderedField(w, "steps", ["one", "forbidden"])).toThrow(violates("Step"));
+    expect(snapshot(store)).toEqual(before);
+    resetOrderedField(w, "steps", ["two"]);
+    expect(e.parse(URL, store)).toEqual({ steps: ["two"] });
   });
 });
 

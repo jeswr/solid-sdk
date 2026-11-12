@@ -160,7 +160,7 @@ resetOrderedField(wrapper, "instructions", ["Serve"]); // values default to [] (
 | Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray writes and surviving item counts outside outer `sh:minCount`/`sh:maxCount` throw `TypeError` before mutation, at every severity. Ordered `minCount`/`maxCount` above 256 fail manifest validation. |
 | Write identity | `<document>#<resolvedFieldName>-<n>`, where n is a positive decimal integer without leading zeros; occupied unrelated/shared IRIs, and cleaned-up item IRIs that still carry any other triple, are skipped and the item class is asserted. Invalid scalar writes drop members just as other collection writes do; surviving positions are consecutive. |
 | Replacement | Clear owner links; remove only matching item class, position and value triples from safe same-document nodes explicitly typed with the item class, matching exactly `#<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner subjects, and exclusively referenced by that owner/field. Preserve every other node's triples, unrelated predicates/types, and shared/foreign data; preserved triples stay on their old node, whose IRI is not reused for a new member. |
-| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear when the minimum permits. When owner links are present but fail validation, every setter assignment (including `undefined`/`[]`) throws `TypeError` before mutation; `resetOrderedField(wrapper, name, values = [])` is the only explicit discard (same array/cap/outer-cardinality checks, and it stays usable past the 256-link stored cap). Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
+| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear when the minimum permits. When owner links are present but fail validation, every setter assignment (including `undefined`/`[]`) throws `TypeError` before mutation; `resetOrderedField(wrapper, name, values = [])` is the only explicit discard (same array/cap/outer-cardinality checks, the same staged write-constraint validation as the setter, and it stays usable past the 256-link stored cap). Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
 
 Manifest validation rejects missing/unknown descriptor keys, unsafe or overlapping predicate
 IRIs, invalid severity or unwritable position bounds, outer counts above `MAX_ORDERED_ITEMS`, item classes owned as migration aliases,
@@ -344,7 +344,8 @@ runtime has no diagnostic callback, so it does not evaluate them (they can neith
 an entity nor exhaust a budget, on reads or writes); their messages remain in the manifest
 and SHACL.
 
-In a composite, a child's Violation constraints bind its parent however the link is graded.
+In a composite, a child's Violation invariants and Violation-graded fixed values bind its
+parent however the link is graded; its other constraints do not (see below).
 Whenever the link has a raw object, the containing parse rejects if any value node of the
 link fails a Violation invariant of the child node, or lacks the exact term of a
 Violation-graded fixed value among the raw objects of that field's predicate (or a read alias).
@@ -354,8 +355,12 @@ class-only (`sh:class`) link checks only the value nodes that are instances of t
 class or the child's type IRIs, since only those are SHACL focuses of the child. Behind an
 optional link, every other child failure still drops the child, as before. This covers
 malformed or ambiguous values, a missing required field, advisory constraints, and a
-present fixed value made ambiguous by a second value. A required link still rejects on any
-child failure. Why: an optional link must not hide a child that an external SHACL validator
+present fixed value made ambiguous by a second value, and a child failing `sh:in`, a datatype
+or a cardinality constraint, even though an external SHACL validator rejects the parent for
+those. Advisory invariants stay unevaluated even behind `sh:node`, where real SHACL reports
+a failing nested Warning as a Violation of the parent. Whether optional links should keep
+dropping such children is an open maintainer decision (tracker, needs:jesse). A required
+link still rejects on any child failure. Why: an optional link must not hide a child that an external SHACL validator
 of the emitted shapes.ttl rejects; the probe is a child carrying
 `not(hasValue(flag, true))` whose data says `flag true`.
 
