@@ -141,7 +141,7 @@ export function createImportSession(
       const container = writer.resolve(doc.registrationContainer);
       if (!container.endsWith("/") || !result.url.startsWith(container))
         throw new IntegrationSyncError(id, "Registration container must contain the document.");
-      registered = { ...result, registrationContainer: container };
+      registered = { ...registered, registrationContainer: container };
     }
     for (const request of registrationsFor([registered])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);
