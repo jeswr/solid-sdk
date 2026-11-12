@@ -1,6 +1,33 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "@playwright/test";
 
+test("guided feedback includes Agent and its debrief", async ({ page }) => {
+  await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
+  await page.goto("/feedback");
+  await page.getByRole("button", { name: "Guided interview", exact: true }).click();
+  for (let i = 0; i < 3; i++) await page.getByRole("button", { name: "Skip", exact: true }).click();
+  const agent = page.getByRole("button", { name: "Agent", exact: true });
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Continue with these apps", exact: true }).click();
+  await page.getByRole("button", { name: "Demo pod", exact: true }).click();
+  await expect(
+    page
+      .getByText("Thinking back to Agent, tell me what you did first, and then what.", {
+        exact: true,
+      })
+      .last(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Skip", exact: true }).click();
+  await expect(
+    page.getByRole("group", {
+      name: "Overall, how easy or difficult was what you tried in Agent?",
+    }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "6 out of 7", exact: true }).click();
+  await expect(page.getByLabel("Your answer", { exact: true })).toBeVisible();
+});
+
 test("guided interview taps a scale, confirms read-back and submits", async ({ page }) => {
   let count = 0;
   await page.addInitScript(() =>

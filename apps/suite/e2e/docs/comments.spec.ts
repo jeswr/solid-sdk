@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/__docs-comments-reset", (route) =>
@@ -17,6 +18,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__docs-comments-reset");
+  await seedDemoSession(page);
 });
 
 test("anchors, replies, resolves, reopens and persists a comment after editing before its text", async ({
@@ -50,10 +52,18 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await expect(highlight).toHaveText("word");
   const thread = panel.getByRole("article");
   await expect(thread).toContainText("Check this word");
+  const author = thread.getByText("Alice Wilder", { exact: true });
+  await expect(author).toBeVisible();
+  await expect(author).toHaveAttribute("title", "https://alice.demo.pod/profile/card#me");
+  await expect(author).toHaveAccessibleDescription("https://alice.demo.pod/profile/card#me");
+  await expect(
+    thread.getByText("https://alice.demo.pod/profile/card#me", { exact: true }),
+  ).toHaveCount(0);
   await thread.getByRole("button", { name: "Reply to thread", exact: true }).click();
   await thread.getByRole("textbox", { name: "Reply", exact: true }).fill("Agreed");
   await thread.getByRole("button", { name: "Reply", exact: true }).click();
   await expect(thread).toContainText("Agreed");
+  await expect(author).toHaveCount(2);
   // The reply left "word" selected: typing before the caret reaches the start
   // would replace it, so retry until the caret is collapsed at the start.
   await expect(async () => {
@@ -96,4 +106,5 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await page.getByRole("button", { name: "Comments (1 open)", exact: true }).click();
   await expect(panel.getByRole("article")).toContainText("Check this word");
   await expect(panel.getByRole("article")).toContainText("Agreed");
+  await expect(author).toHaveCount(2);
 });

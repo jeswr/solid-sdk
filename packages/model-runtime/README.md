@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -77,6 +78,31 @@ await bookmark.parseDocument(resourceUrl, body, contentType); // via @jeswr/fetc
 new bookmark.Wrapper(subjectIri, store, factory); // direct typed accessor (extends TermWrapper)
 ```
 
+Multi-subject scans should use an explicit **parse scope** so subjects sharing a class
+do not repeat its subclass walk:
+
+```ts
+import { createParseScope } from "@jeswr/model-runtime";
+
+const scope = createParseScope(dataset, { maxClassReads: 100_000 });
+const records = resourceUrls.map((url) => bookmark.parse(url, dataset, { scope }));
+if (scope.exhausted) throw new Error("Document class scan exceeded its budget");
+```
+
+`createParseScope(dataset, options?)` memoises membership by RDF class term and required-class
+set, sharing one raw `rdf:type` / `rdfs:subClassOf` read budget across flat roots, composite
+roots and nested `sh:class` checks. The default is 100,000 reads; `maxClassReads` must be an
+integer from 0 to the hard maximum of 1,000,000. Attempting another read beyond the budget
+sets read-only `scope.exhausted` to `true`; that check and every later membership check fail
+closed, including cached matches. Normal required/optional link grading still applies.
+Passing a scope to `parse` with a different dataset throws `TypeError`, even for equal quads.
+**Discard the scope after any mutation of the dataset.** It never tracks invalidation;
+build, setters, live-set mutations and `mark` never consult scopes. Each new document or
+changed dataset needs a new scope. Without `{ scope }`, the existing independent 10,000-read
+budget per class check and all parse behavior remain unchanged. `parseDocument` parses a new
+dataset internally; scopes apply to `parse(resourceUrl, dataset, options?)` on an existing dataset.
+The `ParseScope`, `ParseScopeOptions` and `ParseOptions` types are exported.
+
 `build` preserves the facade's non-validating write contract: missing/invalid required values
 are dropped and may leave a typed shell. Call `parse(resourceUrl, builtStore)` and require a defined
 result before publishing when MUST validation is needed. `serialize` uses the same build contract.
@@ -148,7 +174,7 @@ Aliases do not bypass the reserved-name or unknown-key checks.
   raw-union `maxCount` (including malformed terms) and guarded raw-term-union `minCount`,
   before deduplicating JS values. Required sets reject every invalid raw member.
 - Type checks accept a subject's `rdf:type` reaching any canonical or alias class through
-  `rdfs:subClassOf*` in the data graph. The cycle-safe walk shares a 10,000 raw-read budget
+  `rdfs:subClassOf*` in the data graph. Without a parse scope, the cycle-safe walk shares a 10,000 raw-read budget
   across all accepted classes per check and fails closed on exhaustion. `mark()` removes
   explicit alias types, adds canonical types, and preserves subclass and unrelated types.
   Builds and setters write canonical predicates only; every setter, including `undefined`
@@ -176,9 +202,15 @@ parsed results throw the exported `MigrationError` before any output is emitted.
 shares a 10,000-read/visit budget across candidate scanning, class walks and re-parsing;
 exhaustion also throws `MigrationError`. This includes rejecting cleanup that would repair
 invalid required data or expose a previously masked default. The input store stays unchanged.
-The same checked migration runs before every mutation (build, setters, live-set
+The same checked migration runs before mutations that can migrate aliases (build, setters, live-set
 `add`/`delete`/`clear`, `mark()`), so a no-op write can never silently repair or change a
-record; a failed check throws `MigrationError` and leaves the live dataset untouched. Set
+record through alias cleanup; a failed check throws `MigrationError` and leaves the live dataset untouched.
+A write skips the migration copy and audit when its field has no predicate aliases (or
+`mark` has no type aliases) and no other owner in any migration-context manifest declares
+aliases. This includes wholly alias-free models on large shared datasets. Other owners
+are treated conservatively because co-typing and data-graph ancestry can overlap their
+focus nodes. The direct write still applies every field guard and text sanitization;
+when migration is possible, its audit and shared 10,000-read budget are unchanged. Set
 projections are compared by membership, not iteration order. `defineModel(input, {
 migrationManifest })` lets a per-node view run those checks against its full owning model;
 the primary manifest's checks still run too, so the option can never weaken a write.
