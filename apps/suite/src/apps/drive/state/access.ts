@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 
@@ -10,6 +11,7 @@ import { useResourceVersion } from "./resource";
 /** One access summary for Details and copied-link confirmations. */
 export function sharingSummary(state: SharingState, webId: string): string {
   if (state.link !== "none") return "Anyone with the link";
+  if (state.groups?.length) return "Shared with groups";
   const others = state.people.filter((person) => person.webId !== webId);
   if (others.length) return `People you've shared with: ${others.length}`;
   return state.people.length ? "Only you" : "No one";

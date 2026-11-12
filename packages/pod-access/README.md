@@ -398,10 +398,54 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
-(`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
-`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
-It does not change the offline root API.
+`readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
+`isRoleError`, `isGrantableTarget`, `isSealed`, `isSecuring`, `sealAccess`, `unsealAccess`, `sealDataset`, and
+their documented types (`Role`, `ResourceKind`, `AgentRef`,
+`RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
+`GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
+`AccessModesSnapshot`). It does not change the offline root API.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+`readAccessModes(url, options)` returns `{ url, resource, members, governedBy, version }`: every principal's
+raw modes (`{ agent, modes }`, Write implying Append), including principals whose modes map to no
+role (Append only, Write without Read, Control without edit), which `readGrants` omits. Use it,
+not the role projection, for security checks such as "only the owner can change this".
+`resource` is the effective policy of the resource itself (its own document, else the nearest
+ancestor's inherited rules); for a container URL `members` is what its members inherit (its own
+member-scope `acl:default` rules, else the inherited ones), and it is empty otherwise. It never
+refuses a folder whose scopes differ (it reports both), but refuses conditional policies like
+`readGrants`. `governedBy` is the resource whose own WAC document applies (`url` itself, or the
+nearest ancestor it inherits from; `null` when none does; `url` under ACP), so a caller can insist
+that a document inherits its folder's access instead of carrying its own. Its `version` equals
+`readGrants`' token for the same options, so it can guard a later `setGrants`
+(`expected: { [url]: version }`).
+
+`sealAccess(url, options)` marks `url`'s OWN access document with the caller's seal
+(`<doc> pa:sealedBy <webId>`, `pa:` = `https://jeswr.org/ns/pod-access#`), conditionally on its
+ETag and keeping every other statement; `isSealed(url, options)` reads it, counting only the
+caller's seal on the resource's own document (never an inherited one); `unsealAccess` removes it
+(a no-op without an own document). Only an agent with Control on the resource can write the seal,
+so it records that its owner verified what the resource governs (for example that a folder was
+empty when it was made owner-only). Seal last, after that verification, so a failure part-way
+leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
+`sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
+access document built offline (such as a seeded demo pod).
+
+`setGrants(urls, grants, { ..., securing: true })` also writes the caller's securing mark
+(`<doc> pa:securingBy <webId>`) into each own access document it writes, in the same conditional
+write as the policy (a document that would otherwise be unchanged is written to add it), so no
+state has the new policy without the mark. It records that the owner started securing the
+resource from access others held and has not sealed it yet, so what the resource governs was
+written, at least in part, by others. `isSecuring(url, options)` reads it like `isSealed` (the
+caller's mark on the resource's own document only). Sealing (`sealAccess`, `sealDataset`) removes
+the caller's mark in the same write; role edits and `unsealAccess` keep it. Only an agent with
+Control on the resource can write or remove it.
+
+`isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
+false for anything outside storage, the storage root (with or without its slash), `settings/` and
+any extra top-level folder named in `reserved`, with everything under them, `.acl`/`.acr`/`.meta`
+documents, queries, fragments, empty segments, ambiguous percent-encodings and Windows aliases,
+compared case-insensitively by decoded path.
 
 ```ts
 import { readGrants, setGrants } from "@jeswr/pod-access/roles";

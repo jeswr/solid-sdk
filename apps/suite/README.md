@@ -94,3 +94,47 @@ before the handler runs, with a non-JSON 413. Each audio request carries just on
 of at most 3 MB; the final JSON submit is capped at 1 MB. Ten clips never share one request.
 All turn, audio and submit failures, including non-JSON platform errors, show friendly local
 messages and keep the in-memory download available.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Groups and family (sst-581h)
+
+Settings → Groups & family manages shareable `vcard:Group` documents in the owner's
+`groups/` container, separately from Contacts' private labels. Names and member WebIDs
+are publicly readable so the Solid server can resolve `acl:agentGroup`; only the owner
+can change membership. The UI explains this before creation. Group sharing is disabled
+on ACP, LWS and unknown access models.
+
+Drive/Docs and the shared Tasks/Sheets dialogs offer groups with member counts, preserve
+symbolic group grants when people are edited, and send each member one inbox Announce
+attempt per group/resource. Removing a group from a multi-resource item (a Tasks project)
+removes the data folder first, and the dialog keeps listing a group while any backing resource
+still holds it. Permissions displays groups and expandable membership.
+Removing a member ends group-derived access when the server next checks membership;
+other grants, server caches and downloaded copies are unaffected. Deletion first displays
+the owner's pod resources using the group, rescans, and removes those grants. An incomplete
+or unsupported scan blocks deletion. Foreign-pod grants cannot be enumerated here.
+
+Family setup marks one group, creates optional Calendar, Photos and Tasks spaces through
+the existing application models, grants Viewer or Editor access, and sends one invitation
+attempt per member. The Family calendar is always a new, uniquely named calendar
+(`calendar/family-<uuid>.ttl`); an existing calendar folder is never adopted and shared.
+The Family Photos space is the album. Album membership only references photos, so adding a photo
+to an album shared with groups grants those groups Viewer access to the photo's item document,
+original and thumbnail (`apps/photos/lib/data/album-groups.ts`). Only photos the owner's own
+edit added are extended (never members a group Editor wrote meanwhile), and only the item's own
+binaries count (`originals/<id>.<ext>`, `thumbs/<id>.webp`, as upload names them), so an Editor
+can't point a shared photo at another one. A reference or binary with any other name is skipped,
+never fatal to the rest. A failure is reported and the album edit is kept. Removing a photo from
+the album does not revoke that access.
+Progress/notification receipts are kept privately in `settings/group-sharing/`. Failed delivery does not undo permissions; claims are recorded
+before delivery to prevent duplicate notifications. Multi-resource setup/deletion is not
+atomic: partial failures are shown for review and explicit recovery.
+
+If the groups or settings folder holds files written while it was unverified (an earlier build,
+or an ACL editor that dropped the seal), Settings → Groups & family says "N group files were
+changed outside the suite" and offers Keep or Remove (Remove asks for confirmation); nothing is
+deleted until the owner chooses. The demo seeds a fictional Family and Garden team, with the
+`groups/` and `settings/group-sharing/` ACLs sealed as group sharing leaves a folder it verified
+(see suite-groups: content in an unsealed folder is never trusted). Library behavior and its limitations are
+in [suite-groups](../../packages/suite-groups/README.md); `e2e/groups.spec.ts` covers creation,
+Drive sharing and Permissions in all configured widths and themes.

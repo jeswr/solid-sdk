@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
+import { peopleWac, wacGroupIds } from "@jeswr/suite-groups";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
@@ -101,7 +103,7 @@ export class WacSharingAdapter implements SharingAdapter {
       documents: [
         {
           model: "wac" as const,
-          dataset: doc.dataset,
+          dataset: peopleWac(doc.dataset),
           source: doc.source,
           governingResource: doc.resource,
           inherited: false,
@@ -117,7 +119,11 @@ export class WacSharingAdapter implements SharingAdapter {
   }
   private project(documents: LoadedDocument[]): SharingState {
     const current = readSharing(this.input(documents));
+    const groups = [
+      ...new Set(documents.flatMap((doc) => wacGroupIds(doc.dataset, doc.resource, doc.source))),
+    ];
     return {
+      ...(groups.length ? { groups } : {}),
       people: current.people.map(({ webId, role }) => ({ webId, role })),
       general:
         current.link === "none" ? { mode: "restricted" } : { mode: "link", role: current.link },
@@ -302,6 +308,7 @@ export class WacSharingAdapter implements SharingAdapter {
       scoped.values(predicate).delete(identifier);
       isolated.values(`${ACL}agent`).clear();
       isolated.values(`${ACL}agentClass`).clear();
+      isolated.values(`${ACL}agentGroup`).clear();
       isolated.values(predicate).add(identifier);
       isolated.values(`${ACL}accessTo`).delete(resource);
       if (container) {

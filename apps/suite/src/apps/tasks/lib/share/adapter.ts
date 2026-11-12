@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { safeHttpIri } from "@jeswr/rdf-serialize";
+import { peopleWac, preserveGroupWac, wacGroupIds } from "@jeswr/suite-groups";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -108,7 +110,7 @@ export class TasksSharingAdapter implements SharingAdapter {
         documents: [
           {
             model: "wac",
-            dataset: document.dataset,
+            dataset: peopleWac(document.dataset),
             source: document.url,
             governingResource: resource,
             inherited: false,
@@ -117,7 +119,9 @@ export class TasksSharingAdapter implements SharingAdapter {
       },
     });
     if (current.link !== "none") throw new ShareError("unsupported");
+    const groups = wacGroupIds(document.dataset, resource, document.url);
     return {
+      ...(groups.length ? { groups } : {}),
       people: current.people.map(({ webId, role }) => ({ webId, role })),
       general: { mode: "restricted" },
       canManage: current.people.some(
@@ -258,16 +262,22 @@ export class TasksSharingAdapter implements SharingAdapter {
     const lower = this.intersect(state.people, existing.people);
     signal.throwIfAborted();
     if (folder && !this.samePeople(lower, existing.people)) {
-      folder = await this.io.write(`${folderUrl}.acl`, policy(folderUrl, lower), {
-        etag: folder.etag,
-      });
+      folder = await this.io.write(
+        `${folderUrl}.acl`,
+        preserveGroupWac(policy(folderUrl, lower), folder.dataset),
+        {
+          etag: folder.etag,
+        },
+      );
     }
     try {
       // Only an owner reaches this path. A failed change repairs revocations without widening.
       if (mode === "all" && (forceFolderWrite || !this.samePeople(lower, state.people))) {
         await this.io.write(
           `${folderUrl}.acl`,
-          policy(folderUrl, state.people),
+          folder
+            ? preserveGroupWac(policy(folderUrl, state.people), folder.dataset)
+            : policy(folderUrl, state.people),
           folder ? { etag: folder.etag } : { create: true },
         );
       }
@@ -323,7 +333,9 @@ export class TasksSharingAdapter implements SharingAdapter {
       try {
         await this.io.write(
           `${folderUrl}.acl`,
-          policy(folderUrl, lower),
+          folder
+            ? preserveGroupWac(policy(folderUrl, lower), folder.dataset)
+            : policy(folderUrl, lower),
           folder ? { etag: folder.etag } : { create: true },
         );
         const trackerAcl = (await this.acl(url, signal))?.etag;
