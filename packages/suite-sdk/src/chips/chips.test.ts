@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { Editor, Mark, Node } from "@tiptap/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -15,7 +16,7 @@ import {
   resolveChip,
   textChips,
 } from "./index.js";
-import { createChipExtension } from "./tiptap.js";
+import { createChipExtension, downgradePastedPeople } from "./tiptap.js";
 
 const person: ChipRef = {
   iri: "https://bob.example/profile#me",
@@ -286,7 +287,7 @@ describe("live resolution", () => {
 });
 
 describe("framework-neutral chip extension", () => {
-  function editor(content: string | object) {
+  function editor(content: string | object, link = true) {
     return new Editor({
       extensions: [
         Node.create({ name: "doc", topNode: true, content: "paragraph+" }),
@@ -298,12 +299,16 @@ describe("framework-neutral chip extension", () => {
           renderHTML: () => ["p", 0],
         }),
         Node.create({ name: "text", group: "inline" }),
-        Mark.create({
-          name: "link",
-          addAttributes: () => ({ href: { default: null } }),
-          parseHTML: () => [{ tag: "a[href]" }],
-          renderHTML: ({ HTMLAttributes }) => ["a", HTMLAttributes, 0],
-        }),
+        ...(link
+          ? [
+              Mark.create({
+                name: "link",
+                addAttributes: () => ({ href: { default: null } }),
+                parseHTML: () => [{ tag: "a[href]" }],
+                renderHTML: ({ HTMLAttributes }) => ["a", HTMLAttributes, 0],
+              }),
+            ]
+          : []),
         createChipExtension(),
       ],
       content,
@@ -346,5 +351,95 @@ describe("framework-neutral chip extension", () => {
     expect(unsafe.getHTML()).toContain("<span>Bob Meadow</span>");
     valid.destroy();
     unsafe.destroy();
+  });
+  it("downgrades pasted person chips to plain links and keeps other chips", () => {
+    const target = editor("<p></p>");
+    target.view.pasteHTML(
+      `<p>Hi <a data-chip data-chip-kind="person" data-chip-label="Bob" href="${person.iri}">Bob</a> ` +
+        `<a data-chip data-chip-kind="file" data-chip-label="Report" href="${file.iri}">Report</a></p>`,
+      new Event("paste") as ClipboardEvent,
+    );
+    const inline = target.getJSON().content?.[0]?.content ?? [];
+    expect(inline.some((node) => node.type === "chip" && node.attrs?.kind === "person")).toBe(
+      false,
+    );
+    expect(inline).toContainEqual({
+      type: "text",
+      text: "Bob",
+      marks: [{ type: "link", attrs: { href: person.iri } }],
+    });
+    expect(inline).toContainEqual({ type: "chip", attrs: file });
+    expect(target.getHTML()).not.toContain('data-chip-kind="person"');
+    target.destroy();
+  });
+  it("keeps chips moved by a drag that started in the same editor", () => {
+    const source = editor({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "chip", attrs: person }] }],
+    });
+    const slice = source.state.doc.slice(0, source.state.doc.content.size);
+    const transform = (dragging: unknown) => {
+      Object.assign(source.view, { dragging });
+      let result = slice;
+      source.view.someProp("transformPasted", (f) => {
+        result = f(result, source.view, false);
+      });
+      return result;
+    };
+    expect(transform({ slice, move: true })).toBe(slice);
+    expect(transform(null).content.toJSON()).toEqual([
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: person.label,
+            marks: [{ type: "link", attrs: { href: person.iri } }],
+          },
+        ],
+      },
+    ]);
+    Object.assign(source.view, { dragging: null });
+    source.destroy();
+  });
+  it("falls back to the IRI, plain text without a link mark, and drops empty chips", () => {
+    const plain = editor("<p></p>", false);
+    const chips = (attrs: ChipRef[]) =>
+      plain.schema.nodes.paragraph.create(
+        null,
+        attrs.map((ref) => plain.schema.nodes.chip.create(ref)),
+      );
+    const downgraded = downgradePastedPeople(
+      plain.schema.nodes.doc.create(
+        null,
+        chips([
+          { ...person, label: "" },
+          { ...person, iri: "", label: "" },
+        ]),
+      ).content,
+      plain.schema,
+    );
+    expect(downgraded.toJSON()).toEqual([
+      { type: "paragraph", content: [{ type: "text", text: person.iri }] },
+    ]);
+    const linked = editor("<p></p>");
+    const unsafe = downgradePastedPeople(
+      linked.schema.nodes.doc.create(
+        null,
+        linked.schema.nodes.paragraph.create(null, [
+          linked.schema.text("x"),
+          linked.schema.nodes.chip.create({ ...person, iri: "bad" }),
+        ]),
+      ).content,
+      linked.schema,
+    );
+    expect(unsafe.toJSON()).toEqual([
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: `x${person.label}` }],
+      },
+    ]);
+    plain.destroy();
+    linked.destroy();
   });
 });

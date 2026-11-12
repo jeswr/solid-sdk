@@ -305,6 +305,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                                   entry.title,
                                   format,
                                   session,
+                                  entry.url,
                                 );
                                 toast.success(`Downloaded ${name}`);
                               })

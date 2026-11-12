@@ -246,7 +246,9 @@ to that same WebID/storage session on restart. Construction and speculative rend
 `@jeswr/suite-sdk/chips` provides `ChipRef`, `chipCandidates` over the existing search facade,
 `resolveChip` (session-scoped, 30-second display metadata cache), text-composer helpers and
 once-on-save mention notification drafts/delivery. `@jeswr/suite-sdk/chips/tiptap` exports
-`createChipExtension`, an inline atom whose fallback HTML is a normal resource anchor.
+`createChipExtension`, an inline atom whose fallback HTML is a normal resource anchor. Person
+chips that arrive by paste, or by a drop from outside the editor, become plain links
+(`downgradePastedPeople`): foreign HTML can forge chip anchors, and a paste must not send mentions.
 The suite-ui package supplies `Chip` hover cards and the keyboard-accessible `ChipPicker`.
 See [SKILL.md](./SKILL.md) for lifecycle and receipt guarantees.
 
@@ -263,6 +265,10 @@ notify on import or remote merge. Collaborative editors can track local deltas w
 and send acknowledged additions through `notifySavedChips`. `htmlChipRefs` validates raw absolute
 HTTP(S) hrefs. `createMentionNotifier` validates before receipts and isolates per-person failures.
 
-`podScopedFetch` and `isOwnPodIri` from `./pod-scoped-fetch` keep authenticated reads inside the
-user's storage path. Foreign reads bypass the session transport/cache and omit credentials,
-referrers and native caching; redirects are refused. Resolve foreign chips only on hover/focus.
+`podScopedFetch(fetch, roots)` and `isOwnPodIri(iri, roots)` from `./pod-scoped-fetch` keep
+authenticated reads inside one or more container roots (a string or an array). Each root gets
+guarded-fetch's strict path-prefix check (same origin, segment boundary, no userinfo, no encoded
+delimiters); in-scope requests refuse redirects. Chips pass only the user's storage; an app may
+add the containers an opened resource owns (Docs adds a shared document's own folder). Foreign
+reads bypass the session transport/cache, omit credentials, referrers and native caching, and
+follow redirects (WebIDs often 303). Resolve foreign chips only on hover/focus.

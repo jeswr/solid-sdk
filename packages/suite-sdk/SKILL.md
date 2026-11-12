@@ -178,13 +178,17 @@ ranks label prefixes first and deduplicates exact IRIs. Search errors propagate.
 `resolveChip(iri, { fetch, label?, kind? })` reads display metadata through fetch-rdf and
 wrapper accessors. Its bounded 30-second cache belongs to the supplied session transport.
 Unreadable resources keep the stored label and a lock icon; non-RDF files retain their
-stored metadata. Use `podScopedFetch` from `./pod-scoped-fetch`: only `isOwnPodIri` storage descendants
-use the session transport; foreign reads bypass it with credentials omitted, no referrer,
-no native cache and no redirects. Mount resolution is for own-pod resources only;
+stored metadata. Use `podScopedFetch(fetch, roots)` from `./pod-scoped-fetch`: only
+`isOwnPodIri(iri, roots)` descendants of a root use the session transport, with redirects
+refused. Chips pass only the user's storage; extra roots are for containers an opened resource
+owns. Foreign reads bypass it with credentials omitted, no referrer, no native cache, and follow
+redirects. Mount resolution is for own-pod resources only;
 foreign resources resolve on explicit hover/focus. Server callers still need DNS pinning.
 
 `createChipExtension()` on the separate `./chips/tiptap` entry is a framework-neutral inline
-atom with `{iri, kind, label}` attributes and ordinary anchor HTML. Consumers provide picker
+atom with `{iri, kind, label}` attributes and ordinary anchor HTML. Pasted person chips, and
+those dropped from outside the editor, become plain links (`downgradePastedPeople`), so a paste
+never sends mentions. Consumers provide picker
 and node-view integration. No new domain model or search index is created. `chipQuery`,
 `chipText` and `textChips` support plain-text composers, preserving kind and resource IRI.
 

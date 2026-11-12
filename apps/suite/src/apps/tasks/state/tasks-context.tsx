@@ -132,16 +132,17 @@ function useTasksValue(session: PodSession) {
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
       updateTask: async (...args: Parameters<typeof cache.updateTask>) => {
-        const saved = await cache.updateTask(...args);
-        if (saved)
+        // Diff against the cached revision the change applied to, not the UI's captured item.
+        const revision = await cache.updateTaskRevision(...args);
+        if (revision)
           void notifySavedText(
             session,
-            saved.url,
-            args[0].task.description ?? "",
-            saved.task.description ?? "",
-            saved.task.title ?? "Task",
+            revision.after.url,
+            revision.before.task.description ?? "",
+            revision.after.task.description ?? "",
+            revision.after.task.title ?? "Task",
           ).catch(() => {});
-        return saved;
+        return revision?.after;
       },
       updateProject: cache.updateProject.bind(cache),
       moveTaskToProject: cache.moveTaskToProject.bind(cache),

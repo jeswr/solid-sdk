@@ -204,7 +204,8 @@ it("keeps the outbox instance across session-object rerenders while a send is in
     release = resolve;
   });
   const sending = vi.spyOn(ChatClient.prototype, "send").mockImplementation(async function (
-    ...args
+    this: ChatClient,
+    ...args: Parameters<ChatClient["send"]>
   ) {
     await delayed;
     return original.apply(this, args);

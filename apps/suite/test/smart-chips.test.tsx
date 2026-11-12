@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import { createRequire } from "node:module";
 import { chipText } from "@jeswr/suite-sdk/chips";
@@ -12,15 +13,18 @@ const { cleanup, fireEvent, render, screen, waitFor } = requireUi(
 ) as typeof import("../../../packages/suite-ui/node_modules/@testing-library/react");
 
 import { htmlChipRefs } from "@jeswr/suite-sdk/chips";
+import { type AnyExtension, Editor, getSchema } from "@tiptap/react";
+import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseInline } from "../src/apps/chat/lib/text/inline";
+import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { importHtml, normaliseDestinations } from "../src/apps/docs/lib/convert/schema";
 import { parseDocumentHtml } from "../src/apps/docs/lib/editor/parse-html";
 import { documentStatistics } from "../src/apps/docs/lib/outline";
 import { notesExtensions } from "../src/apps/notes/editor/extensions";
-import { ChipText, ChipTextarea, chipHref } from "../src/components/chips";
+import { ChipText, ChipTextarea, chipHref, suiteChipExtension } from "../src/components/chips";
 
 afterEach(cleanup);
 
@@ -167,5 +171,31 @@ describe("shared suite chip adapters", () => {
         '<a href="https://bob.example/#me" data-chip data-chip-kind="person" data-chip-label="Bob">Bob</a><a href="https://pod.example/file" data-chip data-chip-kind="file">File</a>',
       ),
     ).toEqual([{ iri: "https://bob.example/#me", kind: "person", label: "Bob" }]);
+  });
+  it("turns pasted person chips into plain links in the Docs and Notes editors", () => {
+    const doc = prosemirrorJSONToYDoc(getSchema(baseExtensions(fetch)), {
+      type: "doc",
+      content: [{ type: "paragraph" }],
+    });
+    const chip = (extensions: readonly AnyExtension[]): AnyExtension[] =>
+      extensions.map((extension) => (extension.name === "chip" ? suiteChipExtension() : extension));
+    const editors = [
+      new Editor({ extensions: chip(editorExtensions(doc, fetch)) }),
+      new Editor({ extensions: chip(notesExtensions(fetch)), content: "<p></p>" }),
+    ];
+    for (const editor of editors) {
+      const pasted: string[] = [];
+      editor.on("update", ({ transaction }) => pasted.push(transaction.getMeta("uiEvent")));
+      editor.view.pasteHTML(
+        '<p>Hi <a href="https://bob.example/#me" data-chip data-chip-kind="person" data-chip-label="Bob">Bob</a></p>',
+        new Event("paste") as ClipboardEvent,
+      );
+      expect(pasted).toContain("paste");
+      expect(editor.getText()).toContain("Hi Bob");
+      expect(editor.getHTML()).toContain('href="https://bob.example/#me"');
+      expect(htmlChipRefs(editor.getHTML())).toEqual([]);
+      editor.destroy();
+    }
+    doc.destroy();
   });
 });

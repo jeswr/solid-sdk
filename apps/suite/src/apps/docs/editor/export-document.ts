@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex
-
-import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
+// AUTHORED-BY Claude Opus 5.5
 import { generateHTML, type JSONContent } from "@tiptap/react";
 import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -8,15 +7,21 @@ import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
 import { htmlDocument } from "../lib/convert/schema";
 import { normaliseImageDestination } from "../lib/editor/destination";
+import { documentScopedFetch } from "./document-fetch";
 import { baseExtensions } from "./extensions";
 import { imagePng } from "./image-blob";
 import { loadDocumentContent } from "./persistence";
 
 export type DownloadFormat = "docx" | "md" | "html";
-export async function readExportImage(session: PodSession, src: string): Promise<ExportImage> {
+/** `resource` is the exported document: images in its own container are read with credentials. */
+export async function readExportImage(
+  session: PodSession,
+  src: string,
+  resource?: string,
+): Promise<ExportImage> {
   const url = normaliseImageDestination(src);
   if (!url) throw new Error("Invalid image URL");
-  const response = await podScopedFetch(session.fetch, session.storageUrl)(url, {
+  const response = await documentScopedFetch(session, () => resource)(url, {
     redirect: "error",
   });
   if (!response.ok) throw new Error("Image unavailable");
@@ -33,6 +38,7 @@ export async function downloadDocument(
   title: string,
   format: DownloadFormat,
   session: PodSession,
+  resource?: string,
 ) {
   const name = `${title || "Untitled document"}.${format}`;
   const blob =
@@ -42,7 +48,7 @@ export async function downloadDocument(
         ? new Blob([htmlDocument(generateHTML(json, baseExtensions(globalThis.fetch)), title)], {
             type: "text/html;charset=utf-8",
           })
-        : await Packer.toBlob(await toDocx(json, (src) => readExportImage(session, src)));
+        : await Packer.toBlob(await toDocx(json, (src) => readExportImage(session, src, resource)));
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

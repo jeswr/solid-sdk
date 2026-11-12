@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
-import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import {
   AppIcon,
   Avatar,
@@ -28,6 +27,7 @@ import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { editorActions } from "../editor/actions";
 import { copyDocument } from "../editor/copy";
+import { documentScopedFetch } from "../editor/document-fetch";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { focusDocument } from "../editor/focus";
@@ -173,7 +173,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       immediatelyRender: false,
       extensions: editorExtensions(
         runtime.doc,
-        podScopedFetch(runtime.session.fetch, runtime.session.storageUrl),
+        documentScopedFetch(runtime.session, () => runtime.stored?.url),
       ).map((extension) => (extension.name === "chip" ? suiteChipExtension() : extension)),
       editable: !runtime.readOnly,
       autofocus: runtime.stored ? false : "start",
@@ -226,7 +226,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           editor.getHTML(),
           editor.getJSON(),
           !transaction.getMeta(ySyncPluginKey)?.isChangeOrigin &&
-            !transaction.getMeta("suiteChipImport"),
+            !transaction.getMeta("suiteChipImport") &&
+            transaction.getMeta("uiEvent") !== "paste",
         );
         setRevision((n) => n + 1);
         if (!transaction.getMeta("docsSlashClosed")) {
@@ -546,6 +547,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                   title,
                   format,
                   runtime.session,
+                  runtime.stored?.url,
                 );
                 toast.success(`Downloaded ${name}`);
               })

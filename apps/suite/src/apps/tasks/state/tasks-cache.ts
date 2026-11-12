@@ -838,6 +838,18 @@ export class TasksCache {
     /** Composite operations retry their complete intent rather than this write alone. */
     onRetry?: () => void,
   ): Promise<StoredTask | undefined> {
+    return this.updateTaskRevision(item, change, onRetry).then((revision) => revision?.after);
+  }
+  /**
+   * {@link updateTask}, also returning the cached revision the change was applied to. That can be
+   * newer than the caller's `item` (a remote refresh may land in between), so diffs against it
+   * describe only this edit.
+   */
+  updateTaskRevision(
+    item: StoredTask,
+    change: (task: TaskItem) => void,
+    onRetry?: () => void,
+  ): Promise<{ before: StoredTask; after: StoredTask } | undefined> {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -853,9 +865,13 @@ export class TasksCache {
     return this.mutate(
       apply,
       async () => {
-        const task = await this.store.updateTask(this.task(project.url, item.url), change);
+        const before = this.task(project.url, item.url);
+        const task = await this.store.updateTask(before, change);
         this.undoRepairs.get(item.url)?.supersede(task);
-        return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
+        return {
+          result: { before, after: task },
+          commit: (state) => replaceTask(state, project.url, item.url, task),
+        };
       },
       onRetry ??
         (() => {

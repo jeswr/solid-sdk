@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import type { Editor } from "@tiptap/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommentsControls, CommentsSidebar } from "../components/comments-sidebar";
+import { documentScopedFetch } from "../editor/document-fetch";
 import type { DocumentPersistence } from "../editor/persistence";
 import { captureCommentAnchor, resolveCommentAnchor } from "../lib/editor/comment-anchors";
 import { commentKey } from "../lib/editor/comment-decorations";
@@ -25,7 +25,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
         ? new DocumentCommentStore(
             docContainerUrls(resource).comments,
             resource,
-            podScopedFetch(runtime.session.fetch, runtime.session.storageUrl),
+            documentScopedFetch(runtime.session, () => resource),
           )
         : undefined,
     [resource, runtime.session],

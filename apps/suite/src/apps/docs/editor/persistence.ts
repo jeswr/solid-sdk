@@ -43,6 +43,7 @@ import {
 } from "../lib/model/incarnation";
 import { DocumentVersionStore } from "../lib/model/versions";
 import { copyDocument } from "./copy";
+import { documentScopedFetch } from "./document-fetch";
 import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
 import { hasUnconfirmedLocalState, loadPersistedLocalState } from "./local-state";
@@ -1313,7 +1314,10 @@ export class DocumentPersistence {
       this.state = this.conflict ? "failed" : "saved";
       if (this.state === "saved" && this.stored && !this.stopped) {
         void this.automaticVersions.afterSave(
-          new DocumentVersionStore(docContainerUrls(this.stored.url).versions, this.session.fetch),
+          new DocumentVersionStore(
+            docContainerUrls(this.stored.url).versions,
+            documentScopedFetch(this.session, () => this.stored?.url),
+          ),
           this.doc,
           this.doc.getXmlFragment("prosemirror").length > 0 &&
             (wordCount(this.json).words > 0 ||

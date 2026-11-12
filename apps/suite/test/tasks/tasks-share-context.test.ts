@@ -204,3 +204,39 @@ it("passes unchanged descriptions for unrelated task edits and prior text for ne
     "New title",
   );
 });
+
+it("diffs mentions against the cached revision a change applied to, not the captured item", async () => {
+  const { context } = await provider();
+  const inbox = context.projects[0];
+  if (!inbox) throw new Error("Missing Inbox");
+  let task: Awaited<ReturnType<typeof context.createTask>>;
+  await act(async () => {
+    task = await context.createTask(inbox, { title: "Title", description: "Before" });
+  });
+  if (!task) throw new Error("Missing task");
+  const captured = task;
+  const mentioned = 'Before @[Bob](https://bob.example/profile#me "chip:person")';
+  // Another client adds a mention; the refresh lands after the UI captured `task`.
+  await context.cache.store.updateTask(captured, (item) => {
+    item.description = mentioned;
+  });
+  await act(async () => {
+    await context.cache.invalidate(captured.url);
+  });
+  mentionSaved.mockClear();
+  let saved: typeof task | undefined;
+  await act(async () => {
+    saved = await context.updateTask(captured, (item) => {
+      item.title = "Renamed";
+    });
+  });
+  expect(saved?.task.description).toBe(mentioned);
+  expect(mentionSaved).toHaveBeenCalledTimes(1);
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    captured.url,
+    mentioned,
+    mentioned,
+    "Renamed",
+  );
+});
