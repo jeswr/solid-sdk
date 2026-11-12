@@ -210,6 +210,15 @@ the client supplied by `withOutbox` or the most recent `replay`. Progress is rep
 in bytes at start `(0, size)` and successful completion `(size, size)`; streaming upload
 progress is a later improvement. Deletes have size zero.
 
+`enqueue({ ..., initialStatus: 'failed' })` stores an intent that replay skips until an explicit
+`retry(id)`, for imports that must keep a failure visible; the default is `'waiting'`, and any
+other value throws `TypeError` before anything is stored. `discard(id)` takes an item ID (not a
+conflict ID) and deletes that intent in any status, including a conflict, which then leaves
+`conflicts()`. It does not wait for the replay lock, so another tab's in-flight replay, retry or
+`'mine'`/`'both'` resolution cannot be cancelled: an already-started request may still complete.
+A late status update from that request never resurrects the discarded record, and a late
+success removes nothing else.
+
 For application policy checks, pass `guard: { tag, assertions? }` to `enqueue` or to the
 decorated `write`, `writeRdf`, `create`, and `delete` options alongside `offline: 'queue'`:
 
@@ -302,6 +311,11 @@ only the conflicted item; call `replay(storage)` to resume items held behind it.
 
 The queue and its BroadcastChannel use the full WebID in a separate namespace. Reopen the same
 WebID's outbox to recover unsent changes; `await outbox.purge()` explicitly discards them.
+`createOutbox({ webId, namespace })` opens an application's own queue for that WebID: its own
+database, BroadcastChannel and replay lock, so its `pending()`, `replay`, `retry` and `purge`
+never see or change records of the default queue or of another namespace (and a shell sync UI
+over the default queue never lists them). Namespaces match `/^[a-z][a-z0-9.-]{0,63}$/`; anything
+else throws `TypeError` before storage opens. Omitting it keeps the default queue.
 **Logout purges read caches but retains the outbox.** `offline.close()`/`logout()` removes online
 listeners and aborts replay; instantiate/register the next client only for its active session.
 The configured queue's WebID must match `createOfflineClient`'s WebID. `outbox.close()` releases

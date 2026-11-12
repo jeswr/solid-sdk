@@ -1158,6 +1158,8 @@ interface OutboxOperation {
     container?: string;
     name?: string;
     label?: string;
+    /** Defaults to waiting. Imports may preserve failures that require an explicit Retry. */
+    initialStatus?: 'waiting' | 'failed';
     createOptions?: Omit<CreateOptions, 'signal'>;
     deleteOptions?: {
         recursive?: boolean;
@@ -1208,6 +1210,8 @@ interface Outbox {
     replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
     /** Uses the client supplied to withOutbox or the most recent replay. */
     retry(id?: string): Promise<void>;
+    /** Drop an intent, even during replay. An already-started request may still complete. */
+    discard(id: string): Promise<void>;
     resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
     on(event: 'change' | 'conflict', listener: () => void): () => void;
     /** Deletes only this WebID's queue. Logout deliberately does not call this. */
@@ -1231,11 +1235,16 @@ interface QueueingStorageClient extends StorageClient {
     create(container: string, body: Body | null, opts?: CreateOptions & QueueOption): Promise<QueueingWriteResult>;
     delete(url: string, opts?: DeleteOptions & QueueOption): Promise<void>;
 }
-/** A separate DB from read metadata: logout may purge the cache, never unsent writes. */
+/**
+ * A separate DB from read metadata: logout may purge the cache, never unsent writes.
+ * `namespace` gives an application its own queue (database, channel and replay lock) for the
+ * same WebID, so its replay never sees, sends or changes another queue's records.
+ */
 declare function createOutbox(options: {
     webId: string;
     idb?: IDBFactory;
     now?: () => number;
+    namespace?: string;
 }): Outbox;
 /** Opt-in only. Patch/move and every read keep the wrapped client's behavior. */
 declare function withOutbox(client: StorageClient, outbox: Outbox): QueueingStorageClient;
