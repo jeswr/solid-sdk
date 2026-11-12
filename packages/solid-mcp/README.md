@@ -552,3 +552,23 @@ The public exports `loadCliConfig(env?, home?)`, `createCliFetch(config, fetch?)
 and `createChatPodPort(config)` let `@jeswr/agent-session-capture` reuse the stdio
 configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapter
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
+
+## Packaging (prepared, not published)
+
+[`packaging/`](./packaging/README.md) contains the single registry `server.json`,
+an MCPB v0.3 manifest, a copyable Claude Code marketplace and our own ChatGPT
+planning descriptor and submission procedure. Nothing is published, submitted,
+uploaded or enabled.
+After building workspace prerequisites, `pnpm run build && pnpm run packaging:check`
+validates offline against vendored schemas and a real server's `tools/list`.
+`pnpm run packaging:build` rebuilds and produces the deterministic, self-contained
+Node >=24 `packaging/out/solid-mcp-<version>.mcpb` locally, including deterministic
+third-party license notices from the bundle inputs. The output is ignored,
+and `files` excludes all packaging artifacts from npm and mirrors. Tests run the
+validator and isolated bundle startup. See the packaging README for configuration
+choices, separate remote/local plugins, deferred npm distribution and the capture
+hooks' local `solid-capture claude` command (SessionEnd needs
+`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=30000`; the plugin timeout alone does not raise
+Claude Code's 1.5-second SessionEnd budget). The private
+capture package is not on npm; hooks need a local installation today. The package's
+`mcpName` matches the registry name and survives mirror manifest rewriting.
