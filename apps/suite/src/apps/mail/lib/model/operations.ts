@@ -52,19 +52,21 @@ export async function loadFolders(store: MailStore, root: string) {
       .filter((message) => !message.isRead)
       .map((message) => message.partOfThread ?? message.value),
   );
-  return folderCounts(combined).map((count) => ({
-    ...count,
-    unreadThreads: new Set(
-      all
-        .filter(
-          (message) =>
-            count.folder.messageIris.has(message.value) ||
-            message.folderIris.has(count.folder.value),
-        )
-        .map((message) => message.partOfThread ?? message.value)
-        .filter((thread) => unread.has(thread)),
-    ).size,
-  }));
+  return folderCounts(combined).map((count) => {
+    // Read the guarded member set once: each live `has` re-validates every member.
+    const members = new Set(count.folder.messageIris);
+    return {
+      ...count,
+      unreadThreads: new Set(
+        all
+          .filter(
+            (message) => members.has(message.value) || message.folderIris.has(count.folder.value),
+          )
+          .map((message) => message.partOfThread ?? message.value)
+          .filter((thread) => unread.has(thread)),
+      ).size,
+    };
+  });
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
   const folder = await store.load(documentOf(folderIri));

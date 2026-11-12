@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Ported from apps/pod-mail; original author credited below.
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5 (indexed find* lookups)
 /**
  * `MailboxDataset` — a whole mail document wrapped as a `DatasetWrapper`.
  *
@@ -66,6 +67,30 @@ export class MailboxDataset extends DatasetWrapper {
     }
   }
 
+  /**
+   * The `usableInstancesOf` member whose IRI is `iri`, found by an indexed lookup
+   * of its explicit type quad instead of enumerating (and wrapping) every instance,
+   * so a find stays O(1) in the document size. Same acceptance rules: the subject must
+   * carry the exact explicit type, and a subject the generated wrapper refuses is absent.
+   */
+  private usableInstance<T>(
+    iri: string,
+    klass: string,
+    Wrapper: new (subject: string, dataset: MailboxDataset, factory: typeof this.factory) => T,
+  ): T | undefined {
+    const typed = this.match(
+      this.factory.namedNode(iri),
+      this.factory.namedNode(RDF_TYPE),
+      this.factory.namedNode(klass),
+    );
+    if (typed.size === 0) return undefined;
+    try {
+      return new Wrapper(iri, this, this.factory);
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Wrap (or mint) a message at the given subject IRI in this dataset. */
   message(iri: string): Message {
     return new Message(iri, this, this.factory);
@@ -108,26 +133,17 @@ export class MailboxDataset extends DatasetWrapper {
 
   /** Find a single message by IRI, or undefined if not present. */
   findMessage(iri: string): Message | undefined {
-    for (const m of this.messages) {
-      if (m.value === iri) return m;
-    }
-    return undefined;
+    return this.usableInstance(iri, Classes.EmailMessage, Message);
   }
 
   /** Find a single thread by IRI, or undefined if not present. */
   findThread(iri: string): Thread | undefined {
-    for (const t of this.threads) {
-      if (t.value === iri) return t;
-    }
-    return undefined;
+    return this.usableInstance(iri, Classes.Conversation, Thread);
   }
 
   /** Find a single folder by IRI, or undefined if not present. */
   findFolder(iri: string): Folder | undefined {
-    for (const f of this.folders) {
-      if (f.value === iri) return f;
-    }
-    return undefined;
+    return this.usableInstance(iri, Classes.Folder, Folder);
   }
 }
 
