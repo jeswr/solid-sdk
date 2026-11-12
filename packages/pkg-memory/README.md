@@ -285,3 +285,7 @@ Existing ACL replacement requires a strong ETag and If-Match; absent ACLs use If
 The optional allowAclUrl predicate constrains every discovered ACL before access. Transport and
 conditional-write failures propagate. NanopubStore uses this same helper without changing its
 existing Memory protection unavailable or storage-error contracts.
+
+`SPECIAL_CATEGORIES` is the frozen, readonly inventory behind `isSpecialCategory`.
+Browser consumers can import it from `@jeswr/pkg-memory/categories`, which has no Node
+or RDF imports. The root entry also exports it; financial data remains separate.

@@ -14,10 +14,10 @@ import {
   LoadingSkeleton,
 } from "@jeswr/suite-ui";
 import { useEffect, useState } from "react";
-import { useOnline } from "@/apps/home/components/connect/use-online";
-import { dpvPurposeLabel } from "@/apps/home/lib/permissions/dpvLabels";
 import { boundedRead } from "@/lib/session/bounded-read";
 import type { PodSession } from "@/lib/session/types";
+import { dpvPurposeLabel } from "@/shell/lib/dpv-labels";
+import { useOnline } from "@/shell/lib/use-online";
 import {
   type AssistantConnection,
   connectionName,

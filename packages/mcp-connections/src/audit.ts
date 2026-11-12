@@ -12,7 +12,7 @@ export interface PersonalDataRead {
   tool?: string;
   purpose?: string;
   categories: string[];
-  decision?: "permit" | "prohibited" | "refuse-all";
+  decision?: "permit" | "confirm-required" | "prohibited" | "refuse-all";
   resourceCount?: number;
   source: "monthly" | "chain";
 }
@@ -61,9 +61,14 @@ class Activity extends TermWrapper {
     const purpose = this.iris(`${DPV}hasPurpose`);
     if (purpose.length === 1) row.purpose = purpose[0] as string;
     const tool = this.text(`${MCP}tool`);
-    if (tool) row.tool = tool;
+    if (tool && /^[A-Za-z0-9_.-]{1,64}$/.test(tool)) row.tool = tool;
     const decision = this.text(`${MCP}decision`);
-    if (decision === "permit" || decision === "prohibited" || decision === "refuse-all")
+    if (
+      decision === "permit" ||
+      decision === "confirm-required" ||
+      decision === "prohibited" ||
+      decision === "refuse-all"
+    )
       row.decision = decision;
     const resources = this.iris(`${PROV}used`);
     if (resources.length) row.resourceCount = resources.length;

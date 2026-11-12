@@ -21,6 +21,17 @@ Connection names also label matching audit rows. Demo pods include list/disconne
 rotating `MCP_ACCESS_TOKEN`; such servers write no connection records.
 See `src/shell/settings/assistants/SKILL.md` for maintenance and test rules.
 
+Assistant audit categories use the shared MCP labels, including all memory special categories
+and Financial. Decision tokens display as plain user text and timestamps use the viewer's
+local timezone. The registered-assistant label requires a /clients/ path on the configured
+MCP server host; other clients show their host and a path shortened to 32 characters,
+without query or fragment. Session-opening failures offer Retry, which reopens the provider.
+The audit, Contacts and agent readers share guarded-fetch's bounded strict UTF-8 reader;
+malformed UTF-8 fails closed. Their existing byte budgets and size-error messages remain.
+Audit/listing and connection reads share one uncached, scoped, redirect-refusing HTTP 200 path,
+with 256 KiB and 64 KiB byte caps respectively and the validator for those exact bytes.
+Assistant visual snapshots run only for 375-light and 1280-dark; axe runs in all six projects.
+
 ## Pilot feedback
 
 `/feedback` is available without signing in. It offers a guided interview and a quick note,

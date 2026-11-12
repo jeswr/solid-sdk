@@ -6,7 +6,7 @@ import { DEMO_ROOT } from "../src/lib/demo-pod/constants";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { seedAssistants } from "../src/lib/demo-pod/seed-assistants";
 import type { PodSession } from "../src/lib/session/types";
-import { auditRead } from "../src/shell/settings/assistants/read";
+import { auditRead, readDocument } from "../src/shell/settings/assistants/read";
 
 function session(fetch: typeof globalThis.fetch): PodSession {
   return {
@@ -67,6 +67,47 @@ describe("assistant audit transport and demo fixture", () => {
         signal: expect.any(AbortSignal),
       }),
     );
+  });
+  it("shares exact bytes, media type and validator with connection reads and enforces their smaller cap", async () => {
+    const target = auditContainer(DEMO_ROOT);
+    const read = session(
+      async () =>
+        new Response("é".repeat(32 * 1024), {
+          headers: { "content-type": "text/turtle; charset=utf-8", etag: '"fresh"' },
+        }),
+    );
+    expect(await readDocument(read, target, signal(), 64 * 1024)).toEqual({
+      text: "é".repeat(32 * 1024),
+      contentType: "text/turtle; charset=utf-8",
+      etag: '"fresh"',
+    });
+    await expect(readDocument(read, target, signal(), 64 * 1024 - 1)).rejects.toEqual(
+      new Error("Personal data reads unavailable"),
+    );
+    const cancel = vi.fn();
+    await expect(
+      readDocument(
+        session(
+          async () =>
+            new Response(new ReadableStream({ cancel }), {
+              headers: { "content-length": String(64 * 1024 + 1) },
+            }),
+        ),
+        target,
+        signal(),
+        64 * 1024,
+      ),
+    ).rejects.toEqual(new Error("Personal data reads unavailable"));
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+  it.each([201, 204, 206])("refuses non-document success status %s", async (status) => {
+    await expect(
+      readDocument(
+        session(async () => new Response(null, { status })),
+        auditContainer(DEMO_ROOT),
+        signal(),
+      ),
+    ).rejects.toMatchObject({ status, message: "Personal data reads unavailable" });
   });
   it.each([
     301, 302, 401, 403, 404, 410, 500,
@@ -148,5 +189,61 @@ describe("assistant audit transport and demo fixture", () => {
         controller.signal,
       )(auditContainer(DEMO_ROOT)),
     ).rejects.toThrow();
+  });
+  it("cancels a late response after abort and a rejected null-body HTTP response", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const read = auditRead(
+      session(async () => {
+        controller.abort(new Error("cancelled"));
+        return new Response(new ReadableStream({ cancel }));
+      }),
+      controller.signal,
+    );
+    await expect(read(auditContainer(DEMO_ROOT))).rejects.toThrow("cancelled");
+    expect(cancel).toHaveBeenCalled();
+    await expect(
+      auditRead(
+        session(async () => new Response(null, { status: 403 })),
+        signal(),
+      )(auditContainer(DEMO_ROOT)),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("accepts the matching final URL and sanitizes body and cancellation errors", async () => {
+    const target = auditContainer(DEMO_ROOT);
+    const response = new Response("ok");
+    Object.defineProperty(response, "url", { value: target });
+    expect(
+      (
+        await auditRead(
+          session(async () => response),
+          signal(),
+        )(target)
+      ).text,
+    ).toBe("ok");
+    const badBody = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("secret backend"));
+      },
+    });
+    await expect(
+      auditRead(
+        session(async () => new Response(badBody)),
+        signal(),
+      )(target),
+    ).rejects.toEqual(new Error("Personal data reads unavailable"));
+    const cancel = vi.fn().mockRejectedValue(new Error("secret cancellation"));
+    await expect(
+      auditRead(
+        session(
+          async () =>
+            new Response(new ReadableStream({ cancel }), {
+              status: 403,
+            }),
+        ),
+        signal(),
+      )(target),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(cancel).toHaveBeenCalled();
   });
 });

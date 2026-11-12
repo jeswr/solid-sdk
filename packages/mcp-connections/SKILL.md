@@ -28,3 +28,10 @@ the hashed record URL. classifyConnection never grants authority: only a parsed 
 without revokedAt is live. Only verified token/grant identities may select irreversible vault
 revocation; transport failures are unavailable, never proof of revocation. PodChain implementation is MCP-A1c. Single-user revoke means rotating MCP_ACCESS_TOKEN.
 Update this skill and README for public changes and maintain exhaustive 100% coverage.
+
+Use the exported PERSONAL_DATA_CATEGORY_LABELS / personalDataCategoryLabel for category
+copy. Their special-category inventory comes from pkg-memory's browser-safe /categories
+entry, with Financial added separately. Never import pkg-memory's Node-dependent root
+into browser source. Tool names must match ^[A-Za-z0-9_.-]{1,64}$ or be dropped.
+Project only the four decisions permit, confirm-required, prohibited and refuse-all.
+Keep the audit layout parity test against NanopubStore's sibling audit container.

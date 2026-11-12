@@ -25,3 +25,14 @@ refetching/reapplying once on 412. Already revoked succeeds; all other failures 
 "Couldn't disconnect. Try again." Abort on account/offline transitions and ignore late replies.
 Show matched connection names in audit rows without expanding its field whitelist. Browser,
 shell-css and six-project visual specs include connected/disconnect states; never cache authority. Mention token rotation for single-user servers.
+
+Use mcp-connections' personalDataCategoryLabel for every audit category, and map the four
+decision tokens to readable text. Format dates with Intl.DateTimeFormat in the viewer's
+local timezone (do not force UTC). Only a /clients/ URL whose host equals the configured
+MCP server host gets the registered-assistant label; otherwise show host and shortened path.
+Never display query or fragment. Session Retry remounts PodSessionProvider to reopen it.
+One readDocument path consumes readBoundedText from guarded-fetch with a 256 KiB audit/listing
+cap, a 64 KiB connection-record cap and an abort signal; require HTTP 200 and fresh uncached
+bytes, and retain fixed, cause-free errors. useOnline and dpvPurposeLabel live in shell/lib.
+Share e2e/visual/baselines.ts with the component spec: screenshot 375-light and 1280-dark,
+run axe for every viewport/theme. Keep all assistants/*.ts logic, including connections.ts, at 100% coverage.

@@ -217,4 +217,37 @@ describe("connection list and owner disconnect", () => {
     expect(count).toBe(100);
     expect(max).toBeLessThanOrEqual(6);
   });
+  it("falls back to creation time and orders equal timestamps by record URL", async () => {
+    const f = await fixture();
+    const original = await listConnections(f.account, signal());
+    for (const { url, record } of original.rows)
+      await f.pod.fetch(url, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: buildConnectionRecord(url, { ...record, lastUsed: undefined, created: new Date(at) }),
+      });
+    const result = await listConnections(f.account, signal());
+    expect(result.rows.map(({ url }) => url)).toEqual(original.rows.map(({ url }) => url).sort());
+  });
+  it.each([
+    "redirected",
+    "different final URL",
+    "matching final URL",
+  ])("checks the disconnect response's %s and ignores cancellation failures", async (kind) => {
+    const f = await fixture();
+    const cancel = vi.fn().mockRejectedValue(new Error("secret cancellation"));
+    f.fetch.mockImplementation(async (input, init) => {
+      if (init?.method !== "PUT") return f.pod.fetch(input, init);
+      const response = new Response(new ReadableStream({ cancel }));
+      Object.defineProperty(response, "redirected", { value: kind === "redirected" });
+      Object.defineProperty(response, "url", {
+        value: kind === "different final URL" ? "https://foreign.example/record.ttl" : f.url,
+      });
+      return response;
+    });
+    const edit = disconnectConnection(f.account, f.url, signal());
+    if (kind === "matching final URL") await expect(edit).resolves.toBeUndefined();
+    else await expect(edit).rejects.toEqual(new Error("Couldn't disconnect. Try again."));
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });
