@@ -42,7 +42,10 @@
   "devDependencies": {
     "@jeswr/federation-codegen": "workspace:*",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.26.1"
+    "@types/n3": "^1.26.1",
+    "@biomejs/biome": "^2.0.0",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
   },
   "engines": {
     "node": ">=24"
