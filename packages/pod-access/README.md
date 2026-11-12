@@ -486,6 +486,15 @@ legacy folder access. Only ESS own-ACR management (`acp:access` or own-ACR
 `acp:accessControl`) is exempt from this comparison. Member management through
 `acp:memberAccess` or own-ACR `acp:memberAccessControl` remains scoped and causes
 `partial-scope`, even when the same policy also grants own-ACR management.
+
+To view or change such a folder, use the scope-aware pair. `readScopedGrants(folderUrl, options)`
+returns `{ url, folder, contents, version }`, the roles on the folder itself and on its contents.
+`setScopedGrants(folderUrl, { folder, contents }, { ...options, expected })` sets the full
+explicit set for each scope in one conditional write to the folder's own access document. Both
+need `kind: "folder"` and the CSS dialect, and refuse a comments container. Setting needs a folder
+that already has its own access document, and you must keep Control on both scopes. Equal
+roles share one rule. Different roles get separate folder-only and contents-only rules, after
+which `readGrants` again reports `partial-scope` until the scopes match.
 Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by

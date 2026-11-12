@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // Conditional apply, inherited ACL copying and lockout guard adapted from Drive
 // sharing/apply.ts (Codex), branch claude/project-thread-okz5l7.
 import type { Term } from "@rdfjs/types";
@@ -17,6 +18,7 @@ import {
   MATERIALIZED_FROM,
   materialize,
   properties,
+  pruneAcp,
   readPolicy,
   removeAcpAgent,
   replaceWac,
@@ -29,6 +31,8 @@ import type {
   Role,
   RoleGrant,
   RolesOptions,
+  ScopedGrantSelection,
+  ScopedGrantSnapshot,
   SetGrantsOptions,
   SetGrantsResult,
 } from "./types.js";
@@ -675,6 +679,269 @@ export async function removeGrant(
   options: GrantMutationOptions,
 ): Promise<SetGrantsResult> {
   return applyBatch(urls, options, (url) => prepareAgent(url, agent, options));
+}
+type Scope = "folder" | "contents";
+const SCOPES: readonly Scope[] = ["folder", "contents"];
+/** Scoped roles exist only for a folder's own policy in the CSS dialect, without comments. */
+function requireScopedFolder(url: string, options: RolesOptions): void {
+  if (options.kind !== "folder" || !url.endsWith("/"))
+    throw roleError("unsupported", url, "Folder and contents roles apply only to folders");
+  if ((options.implementation ?? "css") !== "css" || options.commentsContainer !== undefined)
+    throw roleError(
+      "unsupported",
+      url,
+      "Folder and contents roles support only the CSS dialect without a comments container",
+    );
+}
+/** Project one scope: the folder's own rules for that scope plus governing ancestor rules. */
+function projectScope(snapshot: Snapshot, options: RolesOptions, scope: Scope): RoleGrant[] {
+  const members = scope === "contents";
+  const effective = rows(snapshot, snapshot.documents, members);
+  return snapshot.documents.flatMap((document) =>
+    [...rows(snapshot, [document], members)].flatMap(([key, row]) => {
+      const projected = role(effective.get(key) as Row, snapshot.model, options);
+      if (projected === undefined) return [];
+      return [
+        {
+          agent: row.agent,
+          role: projected,
+          inherited: document.resource !== snapshot.resource,
+          source: document.url,
+        },
+      ];
+    }),
+  );
+}
+/**
+ * Read a folder's roles separately for the folder and for its contents. Unlike `readGrants`,
+ * a folder whose two scopes differ is shown rather than refused (`partial-scope`).
+ */
+export async function readScopedGrants(
+  url: string,
+  options: RolesOptions,
+): Promise<ScopedGrantSnapshot> {
+  requireScopedFolder(url, options);
+  const snapshot = await load(url, options);
+  return {
+    url,
+    folder: projectScope(snapshot, options, "folder"),
+    contents: projectScope(snapshot, options, "contents"),
+    version: version(snapshot, options),
+  };
+}
+function desiredScope(
+  snapshot: Snapshot,
+  options: GrantMutationOptions,
+  scope: Scope,
+  grants: readonly RoleGrant[],
+): { current: Map<string, Row>; desired: Map<string, Row> } {
+  const members = scope === "contents";
+  const own = snapshot.own as NonNullable<Snapshot["own"]>;
+  const current = rows(snapshot, [own], members);
+  const projected = projectScope(snapshot, options, scope);
+  const explicit = new Set(grants.filter((g) => !g.inherited).map((g) => agentKey(g.agent)));
+  const seen = new Set<string>();
+  const desired = new Map<string, Row>();
+  for (const grant of grants) {
+    validateMetadata(grant);
+    const key = agentKey(grant.agent);
+    const id = `${key}:${grant.inherited}:${grant.inherited ? grant.source : ""}`;
+    if (seen.has(id)) throw roleError("invalid-response", "", "Duplicate role grant");
+    seen.add(id);
+    if (grant.inherited) {
+      if (
+        !projected.some(
+          (g) =>
+            g.inherited &&
+            agentKey(g.agent) === key &&
+            g.role === grant.role &&
+            g.source === grant.source,
+        )
+      )
+        throw roleError(
+          "inherited-grant",
+          snapshot.resource,
+          "Inherited grants must be changed at their governing document",
+        );
+      const retained = current.get(key);
+      if (retained && !explicit.has(key)) desired.set(key, retained);
+      continue;
+    }
+    const previous = current.get(key);
+    // An unchanged selection keeps its exact raw modes.
+    if (
+      previous &&
+      projected.some((g) => !g.inherited && agentKey(g.agent) === key && g.role === grant.role)
+    ) {
+      desired.set(key, previous);
+      continue;
+    }
+    if (snapshot.model === "wac" && grant.agent.type === "app")
+      throw roleError("unsupported", snapshot.resource, "WAC cannot express app identities");
+    if (snapshot.model === "acp" && grant.agent.type === "group")
+      throw roleError("unsupported", snapshot.resource, "ACP groups require a membership snapshot");
+    // CSS dialect: a manager's Control is a resource mode, never a separate ACR grant.
+    const modes = rolesToModes(grant.role, "folder", { ...options, model: snapshot.model });
+    desired.set(key, { agent: grant.agent, modes: new Set(modes.resource) });
+  }
+  // A richer explicit policy cannot silently disappear through a lossy role projection.
+  for (const [key, row] of current)
+    if (
+      role(row, snapshot.model, options) === undefined &&
+      !sameModes(row.modes, desired.get(key)?.modes ?? new Set())
+    )
+      throw roleError(
+        "unsupported",
+        snapshot.resource,
+        "Partial permissions need a richer policy model",
+      );
+  return { current, desired };
+}
+async function prepareScoped(
+  url: string,
+  selection: ScopedGrantSelection,
+  options: GrantMutationOptions & { expected?: ScopedGrantSnapshot },
+): Promise<Write[]> {
+  requireScopedFolder(url, options);
+  const snapshot = await load(url, options);
+  if (
+    options.expected !== undefined &&
+    (options.expected.url !== url || options.expected.version !== version(snapshot, options))
+  )
+    throw roleError("conflict", url, "Grant snapshot is stale or does not cover this URL");
+  const own = snapshot.own;
+  // Without its own policy a folder's two scopes are the same inherited rules.
+  if (!own)
+    throw roleError(
+      "unsupported",
+      url,
+      "This folder inherits its access; give it its own sharing before setting separate contents access",
+    );
+  const plans = {
+    folder: desiredScope(snapshot, options, "folder", selection.folder),
+    contents: desiredScope(snapshot, options, "contents", selection.contents),
+  };
+  const empty = new Set<Mode>();
+  const changed = [
+    ...new Set(SCOPES.flatMap((s) => [...plans[s].current.keys(), ...plans[s].desired.keys()])),
+  ].filter((key) =>
+    SCOPES.some(
+      (s) =>
+        !sameModes(
+          plans[s].current.get(key)?.modes ?? empty,
+          plans[s].desired.get(key)?.modes ?? empty,
+        ),
+    ),
+  );
+  if (!changed.length) return [];
+  // The caller must keep direct Control on both the folder and its contents (or inherit it).
+  const me = agentKey({ type: "webid", id: options.webId });
+  const inherited =
+    snapshot.model === "acp"
+      ? rows(
+          snapshot,
+          snapshot.documents.filter((d) => d !== own),
+        )
+      : new Map<string, Row>();
+  if (
+    !inherited.get(me)?.modes.has("control") &&
+    SCOPES.some((s) => !plans[s].desired.get(me)?.modes.has("control"))
+  )
+    throw roleError(
+      "owner-lockout",
+      url,
+      "Cannot remove your own manager/Control access from the folder or its contents",
+    );
+  const validEtag = (etag: string | null): boolean =>
+    etag !== null && /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
+  for (const document of [own, ...snapshot.documents])
+    if (!validEtag(document.etag))
+      throw roleError(
+        "precondition-required",
+        document.url,
+        "A source ETag is required to change sharing",
+      );
+  const dataset = new Store([...own.dataset]);
+  const agentOf = (key: string): AgentRef =>
+    (
+      plans.folder.desired.get(key) ??
+      plans.contents.desired.get(key) ??
+      plans.folder.current.get(key) ??
+      (plans.contents.current.get(key) as Row)
+    ).agent;
+  const modesOf = (scope: Scope, key: string) => plans[scope].desired.get(key)?.modes ?? empty;
+  if (snapshot.model === "wac") {
+    for (const key of changed)
+      replaceWac(dataset, url, agentOf(key), [...modesOf("folder", key)], true, [
+        ...modesOf("contents", key),
+      ]);
+  } else {
+    for (const key of changed)
+      removeAcpAgent(dataset, url, snapshot.ownUrl, agentOf(key), "css", true);
+    const both: Row[] = [];
+    const folderOnly: Row[] = [];
+    const contentsOnly: Row[] = [];
+    for (const key of changed) {
+      const folder = modesOf("folder", key);
+      const contents = modesOf("contents", key);
+      if (folder.size && sameModes(folder, contents))
+        both.push({ agent: agentOf(key), modes: folder });
+      else {
+        if (folder.size) folderOnly.push({ agent: agentOf(key), modes: folder });
+        if (contents.size) contentsOnly.push({ agent: agentOf(key), modes: contents });
+      }
+    }
+    for (const [selected, members] of [
+      [both, true],
+      [folderOnly, false],
+      [contentsOnly, "only"],
+    ] as const)
+      if (selected.length) appendAcp(dataset, url, snapshot.ownUrl, selected, "css", members);
+    // A change that only removes access appends nothing, so prune its detached policies here.
+    pruneAcp(dataset);
+  }
+  // Re-read generated RDF through the same strict role policy boundary before persistence.
+  const emitted = {
+    url: snapshot.ownUrl,
+    resource: snapshot.resource,
+    model: snapshot.model,
+    dataset,
+    policy: readPolicy(dataset, snapshot.resource, snapshot.ownUrl, snapshot.model, "css"),
+    etag: null,
+  };
+  const reread = { ...snapshot, documents: [emitted] };
+  for (const scope of SCOPES) {
+    const after = rows(reread, [emitted], scope === "contents");
+    const desired = plans[scope].desired;
+    for (const key of new Set([...after.keys(), ...desired.keys()]))
+      if (!sameModes(after.get(key)?.modes ?? empty, desired.get(key)?.modes ?? empty))
+        throw roleError(
+          "invalid-response",
+          snapshot.ownUrl,
+          "Serialized roles differ from the plan",
+        );
+  }
+  return [
+    {
+      resource: snapshot.resource,
+      url: snapshot.ownUrl,
+      etag: own.etag,
+      body: await serialize(dataset),
+      snapshot,
+    },
+  ];
+}
+/**
+ * Set a folder's full role sets for the folder and for its contents separately. The folder must
+ * have its own policy; the caller keeps Control on both scopes. With `expected` (from
+ * `readScopedGrants`), any change since that read is a `conflict`. Unrelated rules are kept.
+ */
+export async function setScopedGrants(
+  url: string,
+  selection: ScopedGrantSelection,
+  options: GrantMutationOptions & { expected?: ScopedGrantSnapshot },
+): Promise<SetGrantsResult> {
+  return applyBatch([url], options, (target) => prepareScoped(target, selection, options));
 }
 async function applyBatch(
   urls: string[],
