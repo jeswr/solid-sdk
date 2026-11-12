@@ -437,6 +437,45 @@ test("a refresh for another context during a reauthorization redeems its own ref
   expect((await auth.fetch(`${f.op.root}private`)).status).toBe(200);
 });
 
+test("a same-instance upgrade whose pointer write outlives an abandoned login still completes", async () => {
+  const f = await twoContexts();
+  const opened = Promise.withResolvers<void>();
+  // A popup the user closes: it settles only when the attempt is abandoned.
+  const getCode = vi.fn(async (_url: URL, signal: AbortSignal) => {
+    opened.resolve();
+    return await new Promise<string>((_, reject) =>
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+    );
+  });
+  const auth = f.load({ getCode });
+  const abandon = new AbortController();
+  const signingIn = auth.login(
+    { webId: f.op.webId! },
+    { signal: abandon.signal, reauthorize: true },
+  );
+  const abandoned = expect(signingIn).rejects.toThrow();
+  await opened.promise;
+  // Hold this tab's other-context upgrade at its pointer write (inside the namespace lock).
+  const writing = Promise.withResolvers<void>();
+  const written = Promise.withResolvers<void>();
+  const set = f.sessions.setItem.getMockImplementation()!;
+  f.sessions.setItem.mockImplementation(async (key, value) => {
+    if (key.endsWith('"active"]')) {
+      writing.resolve();
+      await written.promise;
+    }
+    await set(key, value);
+  });
+  const fetching = auth.fetch(`${other}resource`);
+  await writing.promise;
+  // The attempt ends (outside the lock) while that write is pending.
+  abandon.abort();
+  await abandoned;
+  written.resolve();
+  await expect(fetching).resolves.toMatchObject({ status: 200 });
+  expect(f.named("active")).toMatchObject({ webId: f.op.webId, context: expect.any(String) });
+});
+
 test("a rejected unguarded login restores the owner it replaced, not one seen when it began", async () => {
   const f = fixture();
   const popup = pausedCode(f.op);

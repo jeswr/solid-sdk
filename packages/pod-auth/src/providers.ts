@@ -12,13 +12,13 @@ import {
   type ContextKey,
   type CredentialRequest,
   type CredentialSource,
-  contextKey,
   createBrowserCaches,
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   type HttpOptions,
   nonReactiveFetch,
   OidcIdTokenSource,
+  oidcSessionKey,
   ReactiveFetchManager,
   type RefreshSessionRecord,
   SelfIssuedJwtSource,
@@ -809,19 +809,10 @@ export function createProviders(
     const selected = await selectionFor(request);
     const context = await contextFor(request, selected);
     if (reauthorizing) {
-      // Bypass only this context's stored credential: the engine's OidcSession key for the namespace,
-      // default account, issuer, callback, scopes and context. Other contexts still refresh normally.
+      // Bypass only this context's stored credential, keyed exactly as the engine's OidcSession keys it.
+      // Other contexts still refresh normally.
       const as = await asProvider.getAuthorizationServer(request);
-      persistence.bypass(
-        await contextKey("oidc", [
-          namespace,
-          "default",
-          as.issuer,
-          redirectUri,
-          sessionOptions.scopes.join(" "),
-          context,
-        ]),
-      );
+      persistence.bypass(await oidcSessionKey(redirectUri, sessionOptions, as.issuer, context));
     }
     await solidProvider.upgrade(request);
     granted();

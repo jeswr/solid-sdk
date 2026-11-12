@@ -104,6 +104,9 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
 `fence` to `SolidUmaTokenProvider`'s `session` option to reuse the Solid credential context, or to
 `OidcIdTokenSource`'s `session` and `context` options for LWS exchange. A different fence is rejected.
 Without these options, the providers retain their independent-session behavior.
+`oidcSessionKey(callbackUri, options, issuer, context)` returns the key an `OidcSession` built with that
+callback and those `namespace`/`account`/`scopes` options uses for one stored session (cache, session store
+and lock), so a composing layer can address it without re-deriving the formula.
 
 ## Automatic credential boundary
 

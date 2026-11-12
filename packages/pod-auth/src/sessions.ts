@@ -447,8 +447,10 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
      */
     remember: async (value: ActiveAccount, publishing = true) => {
       if (publishing) await check(value);
+      // The attempt can end (outside the namespace lock) while the pointer write is pending.
+      const current = attempt;
       await store.setItem("active", value);
-      if (!publishing) attempt!.expected.pointer = pointerKey(value);
+      if (!publishing && current !== undefined) current.expected.pointer = pointerKey(value);
     },
     forgetPointer: async () => await store.removeItem("active"),
     keys: async () => (await catalog()).map((a) => a.key),
