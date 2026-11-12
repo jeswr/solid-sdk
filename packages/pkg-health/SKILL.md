@@ -64,11 +64,25 @@ per-fact full-dataset scans or global caches.
 Use `importAssistantTurtle(text, { owner, assistant: { iri, label }, batchId, generatedAt })`
 for non-nanopub assistant exports. It accepts both schema.org schemes and pkg namespaces,
 validates each fact/source/product before building, and skips invalid facts with fixed
-aggregate reasons. Scalar aliases must agree, except names that differ only in case;
-repeated source names/dates keep the first name and earliest date (source dates stay
-dates; sub-millisecond source times truncate). Over-long quotes are dropped, never cut;
-a fact needs one usable quote. All patient/about links must name the owner.
-Each source/quote pair becomes evidence, with the assistant as worker and attributed agent.
+aggregate reasons. Scalar aliases must agree, except NFC-normalized case-only name
+variants; keep the original literal of the first variant in Unicode code-point order.
+Repeated source titles keep the first non-empty title in code-point order (or an explicit
+empty title when all are empty). Source dates compare by calendar day, dropping date
+zones without changing the day; a dateTime wins over a date on the same UTC day, and
+dateTimes then compare by instant. Source dates stay dates; sub-millisecond source times
+truncate. Refuse zone-less dateTimes and UTC years outside 0001–9999 on facts and sources.
+Over-long quotes are dropped, never cut; a fact needs one usable quote. Every subject
+alias must name the owner: canonical/legacy health patient, FHIR subject and both schema.org
+schemes' about/subject/patient. Share this predicate list with the projector. Fact candidates
+have a recognised fact type or a patient/subject link; source-only about links do not count.
+Foreign/mixed-subject CreativeWorks are invalid sources (referencing facts skip InvalidSource).
+Emit only sources referenced by accepted claims; unreferenced sources and sources used only
+by skipped facts must not reach the RDF. With one derived source, pair each usable quote
+with it. With multiple sources, emit quote-free evidence for each, and attach quotes only
+to a stable assistant-export batch document (`pkgId("assistant-export", batchId)`, id/url;
+title `${assistant.label} export`, created `generatedAt`, model assistant label). Emit that
+export source only if an accepted claim uses it; preserve quotes in projected provenance.
+The assistant is the worker and attributed agent.
 Generated local import facets preserve qualitative observations, date/dateTime precision,
 statement schedules, source creation/model metadata and note labels. See the README's
 import gaps before extending admission. Keep independent exports in separate batches with

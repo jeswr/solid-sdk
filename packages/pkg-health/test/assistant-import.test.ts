@@ -5,7 +5,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as memory from "@jeswr/pkg-memory";
+import { DataFactory as df } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { codePointOrder, termOrder } from "../src/assistant-import.js";
 import { importAssistantTurtle, importHealthExport, projectHealthFacts } from "../src/index.js";
 import { batch, claim, condition, generatedAt, owner } from "./helpers.js";
 
@@ -34,6 +36,18 @@ const source = `ex:source a s:CreativeWork ; s:name "Fictional discussion" ; s:d
 const fact = `ex:fact a h:Observation ; h:patient <${owner}> ; s:name "Fictional observation" ; h:value "3.25"^^xsd:decimal ;
 prov:wasDerivedFrom ex:source ; oa:exact "Fictional quote" ; p:epistemicStatus "SelfReportedExplicit" ; p:validityStatus "Current" .`;
 const minimal = prefixes + source + fact;
+const exportSource = memory.pkgId("assistant-export", options.batchId);
+const subjectPredicates = [
+  "https://jeswr.org/ns/sectors/health#patient",
+  "https://w3id.org/jeswr/sectors/health#patient",
+  "http://hl7.org/fhir/subject",
+  "https://schema.org/subject",
+  "http://schema.org/subject",
+  "https://schema.org/patient",
+  "http://schema.org/patient",
+  "https://schema.org/about",
+  "http://schema.org/about",
+];
 const fixture = new URL("./fixtures/assistant.ttl", import.meta.url);
 async function roundtrip(text: string) {
   const result = await importAssistantTurtle(text, options);
@@ -105,38 +119,51 @@ it("imports every fictional type, both namespaces, exact provenance and beliefs 
     belief: "might",
   });
   const observed = result.view.facts.find((f) => f.label === "Fictional ferritin");
-  expect(observed?.provenance.sources).toEqual([
-    {
-      iri: "https://example.org/assistant-export/2026-11-01/source-a",
-      kind: "document",
-      title: "Fictional health conversation",
-      model: options.assistant.label,
-      created: "2026-10-01T09:30:00.000Z",
-      url: "https://example.org/assistant-export/2026-11-01/source-a",
-      threadId: undefined,
-    },
-    {
-      iri: "https://example.org/assistant-export/2026-11-01/source-b",
-      kind: "document",
-      title: "Fictional follow-up",
-      model: options.assistant.label,
-      created: "2026-10-15T11:00:00.000Z",
-      url: "https://example.org/assistant-export/2026-11-01/source-b",
-      threadId: undefined,
-    },
-  ]);
-  expect(observed?.provenance.evidence.map((e) => [e.source, e.quote]).sort()).toEqual([
-    [
-      "https://example.org/assistant-export/2026-11-01/source-a",
-      "I confirmed the fictional result.",
-    ],
-    ["https://example.org/assistant-export/2026-11-01/source-a", "My fictional result was 42.5."],
-    [
-      "https://example.org/assistant-export/2026-11-01/source-b",
-      "I confirmed the fictional result.",
-    ],
-    ["https://example.org/assistant-export/2026-11-01/source-b", "My fictional result was 42.5."],
-  ]);
+  expect(observed?.provenance.sources).toEqual(
+    expect.arrayContaining([
+      {
+        iri: "https://example.org/assistant-export/2026-11-01/source-a",
+        kind: "document",
+        title: "Fictional health conversation",
+        model: options.assistant.label,
+        created: "2026-10-01T09:30:00.000Z",
+        url: "https://example.org/assistant-export/2026-11-01/source-a",
+        threadId: undefined,
+      },
+      {
+        iri: "https://example.org/assistant-export/2026-11-01/source-b",
+        kind: "document",
+        title: "Fictional follow-up",
+        model: options.assistant.label,
+        created: "2026-10-15T11:00:00.000Z",
+        url: "https://example.org/assistant-export/2026-11-01/source-b",
+        threadId: undefined,
+      },
+      expect.objectContaining({
+        iri: exportSource,
+        kind: "document",
+        title: `${options.assistant.label} export`,
+        model: options.assistant.label,
+        created: "2026-11-10T12:00:00.000Z",
+      }),
+    ]),
+  );
+  expect(observed?.provenance.sources).toHaveLength(3);
+  expect(observed?.provenance.evidence).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        source: "https://example.org/assistant-export/2026-11-01/source-a",
+        quote: undefined,
+      }),
+      expect.objectContaining({
+        source: "https://example.org/assistant-export/2026-11-01/source-b",
+        quote: undefined,
+      }),
+      expect.objectContaining({ source: exportSource, quote: "I confirmed the fictional result." }),
+      expect.objectContaining({ source: exportSource, quote: "My fictional result was 42.5." }),
+    ]),
+  );
+  expect(observed?.provenance.evidence).toHaveLength(4);
   for (const f of result.view.facts) {
     expect(f.categories).toEqual(["https://w3id.org/dpv/pd#MedicalHealth"]);
     expect(f.provenance.agent).toEqual(options.assistant);
@@ -171,9 +198,269 @@ it("combines identical aliases without hiding conflicting identities", async () 
   expect((await roundtrip(text)).view.facts).toHaveLength(1);
 });
 
-it("retains every valid source, including unreferenced documents, in batch RDF", async () => {
+it.each(subjectPredicates)("checks every owner alias: %s", async (predicate) => {
+  const alias = `<${predicate}>`;
+  const owned = minimal.replace(`h:patient <${owner}>`, `${alias} <${owner}>`);
+  expect((await roundtrip(owned)).view.facts).toHaveLength(1);
+  for (const link of [`${alias} <https://example.org/other>`, `${alias} "Fictional owner"`]) {
+    const result = await importAssistantTurtle(
+      minimal.replace(`h:patient <${owner}>`, `h:patient <${owner}> ; ${link}`),
+      options,
+    );
+    expect(result.skipped).toEqual({ count: 1, reasons: { OtherSubject: 1 } });
+    const output = await memory.serializeNanopublications(result.value);
+    for (const value of [
+      "Fictional observation",
+      "Fictional quote",
+      "Fictional discussion",
+      "https://example.org/export/fact",
+      "https://example.org/export/source",
+    ])
+      expect(output).not.toContain(value);
+  }
+});
+
+it.each(
+  subjectPredicates.filter((p) => !p.endsWith("about")),
+)("counts untyped fact candidates linked through %s", async (predicate) => {
+  const body = fact.replace("a h:Observation ;", "").replace("h:patient", `<${predicate}>`);
+  const result = await importAssistantTurtle(prefixes + source + body, options);
+  expect(result.skipped).toEqual({ count: 1, reasons: { UnsupportedType: 1 } });
+});
+
+it.each(
+  subjectPredicates,
+)("refuses a source with a foreign subject alias: %s", async (predicate) => {
+  const invalid = source.replace(
+    "a s:CreativeWork",
+    `a s:CreativeWork ; <${predicate}> <https://example.org/other>`,
+  );
+  const result = await importAssistantTurtle(prefixes + invalid + fact, options);
+  expect(result.skipped.reasons.InvalidSource).toBe(1);
+  expect(result.value.nanopubs).toEqual([]);
+  const output = await memory.serializeNanopublications(result.value);
+  expect(output).not.toContain("Fictional discussion");
+  expect(output).not.toContain("https://example.org/export/source");
+});
+
+it("does not count CreativeWork about links as facts and refuses mixed-owner sources", async () => {
+  const linked = source.replace("a s:CreativeWork", `a s:CreativeWork ; schema:about <${owner}>`);
+  const empty = await importAssistantTurtle(prefixes + linked, options);
+  expect(empty.skipped).toEqual({ count: 0, reasons: {} });
+  expect(await memory.serializeNanopublications(empty.value)).not.toContain("Fictional discussion");
+  expect((await roundtrip(prefixes + linked + fact)).skipped.count).toBe(0);
+  const mixed = await importAssistantTurtle(
+    prefixes +
+      linked.replace("a s:CreativeWork", "a s:CreativeWork ; s:about <https://example.org/other>") +
+      fact,
+    options,
+  );
+  expect(mixed.skipped).toEqual({ count: 1, reasons: { InvalidSource: 1 } });
+});
+
+it("omits a source referenced only by a skipped foreign fact", async () => {
+  const unused = source
+    .replaceAll("ex:source", "ex:foreign-source")
+    .replace("Fictional discussion", "Fictional foreign title");
+  const foreign = fact
+    .replaceAll("ex:fact", "ex:foreign-fact")
+    .replaceAll("ex:source", "ex:foreign-source")
+    .replace(owner, "https://example.org/other")
+    .replace("Fictional observation", "Fictional foreign observation")
+    .replace("Fictional quote", "Fictional foreign quote");
+  const result = await roundtrip(minimal + unused + foreign);
+  expect(result.skipped).toEqual({ count: 1, reasons: { OtherSubject: 1 } });
+  expect(result.view.facts).toHaveLength(1);
+  const output = await memory.serializeNanopublications(result.value);
+  for (const value of [
+    "foreign-source",
+    "foreign-fact",
+    "Fictional foreign title",
+    "Fictional foreign observation",
+    "Fictional foreign quote",
+  ])
+    expect(output).not.toContain(value);
+});
+
+it("orders whole RDF terms without a locale, and names by Unicode code points", () => {
+  const value = df.literal("Fictional");
+  expect(termOrder(value, value)).toBe(0);
+  expect(
+    termOrder(
+      df.literal("Fictional", df.namedNode("https://example.org/a")),
+      df.literal("Fictional", df.namedNode("https://example.org/b")),
+    ),
+  ).toBeLessThan(0);
+  expect(termOrder(df.literal("Fictional", "en"), df.literal("Fictional", "fr"))).toBeLessThan(0);
+  expect(termOrder(df.namedNode("https://example.org/a"), value)).toBeGreaterThan(0);
+  expect(codePointOrder("same", "same")).toBe(0);
+  expect(codePointOrder("same", "same prefix")).toBeLessThan(0);
+  expect(codePointOrder("\uE000", "😀")).toBeLessThan(0);
+});
+
+it("emits identical bytes when localeCompare is reversed", async () => {
+  const input = await readFile(fixture, "utf8");
+  const expected = await memory.serializeNanopublications(
+    (await importAssistantTurtle(input, options)).value,
+  );
+  const compare = String.prototype.localeCompare;
+  vi.spyOn(String.prototype, "localeCompare").mockImplementation(function (
+    this: string,
+    other: string,
+  ) {
+    return -compare.call(this, other);
+  });
+  const actual = await memory.serializeNanopublications(
+    (await importAssistantTurtle(input, options)).value,
+  );
+  expect(actual).toBe(expected);
+});
+
+it("orders NFC and NFD quotes deterministically in either input order", async () => {
+  const imported = await Promise.all(
+    ['"Fictional café", "Fictional café"', '"Fictional café", "Fictional café"'].map((quotes) =>
+      importAssistantTurtle(minimal.replace('"Fictional quote"', quotes), options),
+    ),
+  );
+  expect(imported[0]?.value.nanopubs[0]?.evidence.map((e) => e.quote)).toEqual([
+    "Fictional café",
+    "Fictional café",
+  ]);
+  const bytes = await Promise.all(
+    imported.map(({ value }) => memory.serializeNanopublications(value)),
+  );
+  expect(bytes[0]).toBe(bytes[1]);
+});
+
+it.each([
+  { sources: 1, quotes: ["Fictional first quote", "Fictional second quote"] },
+  { sources: 2, quotes: ["Fictional quote"] },
+  { sources: 2, quotes: ["x".repeat(301), "Fictional short quote"] },
+])("preserves evidence pairing for $sources sources and quotes $quotes", async ({
+  sources,
+  quotes,
+}) => {
+  const input =
+    prefixes +
+    source +
+    source.replaceAll("ex:source", "ex:second") +
+    fact
+      .replace(
+        "prov:wasDerivedFrom ex:source",
+        `prov:wasDerivedFrom ${sources === 1 ? "ex:source" : "ex:source, ex:second"}`,
+      )
+      .replace('"Fictional quote"', quotes.map((q) => JSON.stringify(q)).join(", "));
+  const result = await roundtrip(input);
+  expect(result.skipped.count).toBe(0);
+  expect(result.view.facts).toHaveLength(1);
+  const evidence = result.view.facts[0]?.provenance.evidence ?? [];
+  const usable = quotes.filter((q) => [...q].length <= 300);
+  if (sources === 1) {
+    expect(evidence.map((e) => ({ source: e.source, quote: e.quote }))).toEqual(
+      usable.map((quote) => ({ source: "https://example.org/export/source", quote })),
+    );
+    expect(result.view.sources).toHaveLength(1);
+  } else {
+    expect(evidence.filter((e) => e.quote === undefined).map((e) => e.source)).toEqual([
+      "https://example.org/export/second",
+      "https://example.org/export/source",
+    ]);
+    expect(
+      evidence
+        .filter((e) => e.quote !== undefined)
+        .map((e) => ({ source: e.source, quote: e.quote })),
+    ).toEqual(usable.map((quote) => ({ source: exportSource, quote })));
+    expect(result.view.sources).toHaveLength(3);
+  }
+  expect(await memory.serializeNanopublications(result.value)).not.toContain("x".repeat(301));
+});
+
+it("omits the export source when a multi-source claim is skipped", async () => {
+  const input =
+    prefixes +
+    source +
+    source.replaceAll("ex:source", "ex:second") +
+    fact
+      .replace("prov:wasDerivedFrom ex:source", "prov:wasDerivedFrom ex:source, ex:second")
+      .replace("Fictional observation", "Fictional observation\\u2028");
+  const result = await importAssistantTurtle(input, options);
+  expect(result.skipped).toEqual({ count: 1, reasons: { InvalidFact: 1 } });
+  const output = await memory.serializeNanopublications(result.value);
+  expect(output).not.toContain(exportSource);
+  expect(output).not.toContain(`${options.assistant.label} export`);
+});
+
+it.each([
+  [
+    '"2026-10-01T23:00:00Z"^^xsd:dateTime, "2026-10-01-14:00"^^xsd:date',
+    "2026-10-01T23:00:00.000Z",
+  ],
+  [
+    '"2026-10-01+14:00"^^xsd:date, "2026-10-01T00:00:00Z"^^xsd:dateTime',
+    "2026-10-01T00:00:00.000Z",
+  ],
+  ['"2026-10-02T00:00:00Z"^^xsd:dateTime, "2026-10-01-14:00"^^xsd:date', "2026-10-01"],
+  [
+    '"2026-10-01+14:00"^^xsd:date, "2026-09-30T23:00:00Z"^^xsd:dateTime',
+    "2026-09-30T23:00:00.000Z",
+  ],
+  [
+    '"2026-10-01T20:00:00Z"^^xsd:dateTime, "2026-10-01T09:00:00Z"^^xsd:dateTime',
+    "2026-10-01T09:00:00.000Z",
+  ],
+  ['"2026-10-01Z"^^xsd:date, "2026-10-01+14:00"^^xsd:date', "2026-10-01"],
+])("selects source dates by calendar day and precision: %s", async (dates, expected) => {
+  const result = await roundtrip(minimal.replace('"2026-10-01T12:00:00Z"^^xsd:dateTime', dates));
+  expect(result.view.sources[0]?.created).toBe(expected);
+});
+
+it.each([
+  "2026-10-01T12:00:00",
+  "0001-01-01T00:00:00+14:00",
+  "9999-12-31T23:00:00-14:00",
+  "9999-12-31T24:00:00Z",
+])("refuses zone-less or out-of-range UTC fact/source dateTimes: %s", async (value) => {
+  const badFact = await importAssistantTurtle(
+    minimal.replace(
+      's:name "Fictional observation"',
+      `s:name "Fictional observation" ; s:validFrom "${value}"^^xsd:dateTime`,
+    ),
+    options,
+  );
+  expect(badFact.skipped).toEqual({ count: 1, reasons: { InvalidFact: 1 } });
+  const badSource = await importAssistantTurtle(
+    minimal.replace("2026-10-01T12:00:00Z", value),
+    options,
+  );
+  expect(badSource.skipped).toEqual({ count: 1, reasons: { InvalidSource: 1 } });
+  expect(await memory.serializeNanopublications(badSource.value)).not.toContain(
+    "Fictional discussion",
+  );
+});
+
+it("compares NFC-normalized names and retains the original first code-point variant", async () => {
+  const input = minimal.replace(
+    's:name "Fictional observation"',
+    's:name "Fictional Café", "Fictional Café", "fictional café"',
+  );
+  const result = await roundtrip(input);
+  expect(result.skipped.count).toBe(0);
+  expect(result.view.facts[0]?.label).toBe("Fictional Café");
+  const titles = await roundtrip(
+    minimal.replace(
+      's:name "Fictional discussion"',
+      's:name "", "😀 fictional title", "\\uE000 fictional title"',
+    ),
+  );
+  expect(titles.view.sources[0]?.title).toBe("\uE000 fictional title");
+});
+
+it("omits unreferenced sources from batch RDF", async () => {
   const result = await importAssistantTurtle(
-    minimal + source.replaceAll("ex:source", "ex:unused"),
+    minimal +
+      source
+        .replaceAll("ex:source", "ex:unused")
+        .replace("Fictional discussion", "Fictional unused title"),
     options,
   );
   const graph = memory.readNamedGraph(
@@ -181,8 +468,12 @@ it("retains every valid source, including unreferenced documents, in batch RDF",
     memory.pkgId("batch", options.batchId, "sources"),
   );
   expect([...graph].some((q) => q.subject.value === "https://example.org/export/unused")).toBe(
-    true,
+    false,
   );
+  const output = await memory.serializeNanopublications(result.value);
+  expect(output).not.toContain("unused");
+  expect(output).not.toContain("Fictional unused title");
+  expect(output).not.toContain(exportSource);
   expect(projectHealthFacts(result.value, { owner }).sources).toHaveLength(1);
 });
 
@@ -479,13 +770,13 @@ it("drops over-long quotes but keeps a fact with another exact quote", async () 
   expect(only.skipped).toEqual({ count: 1, reasons: { InvalidEvidence: 1 } });
 });
 
-it("accepts a named URN export and preserves local/dateTime dates as UTC", async () => {
+it("accepts a named URN export and preserves zoned dateTime dates as UTC", async () => {
   const body = minimal
     .replaceAll("ex:fact", "<urn:example.org:health-export:2026:fact>")
     .replaceAll("ex:source", "<urn:example.org:health-export:2026:source>")
     .replace(
       'h:value "3.25"^^xsd:decimal',
-      'h:value "Normal" ; s:validFrom "2026-10-01T12:00:00.123000"^^xsd:dateTime ; s:validThrough "2026-10-02T12:00:00+02:00"^^xsd:dateTime',
+      'h:value "Normal" ; s:validFrom "2026-10-01T12:00:00.123000Z"^^xsd:dateTime ; s:validThrough "2026-10-02T12:00:00+02:00"^^xsd:dateTime',
     );
   const result = await roundtrip(body);
   expect(result.skipped.count).toBe(0);

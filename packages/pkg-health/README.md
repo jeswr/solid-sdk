@@ -206,7 +206,10 @@ The local importer uses pkg-memory's existing `parseReferenceRdf` suite-parser b
 It accepts both schema.org schemes and both `https://w3id.org/jeswr/pkg#` and
 `https://jeswr.org/ns/pkg#` status predicates. Scalar aliases are combined; conflicting
 values refuse the fact. It requires one recognised fact type and exclusively owner
-`health:patient`/`schema:about` links. Missing or mixed owner links refuse the fact.
+subject links: canonical/legacy `health:patient`, FHIR `subject`, and schema.org
+`about`, `subject` and `patient` in either scheme. Missing or mixed owner links refuse
+the fact. Candidates have a recognised fact type or a patient/subject link; a
+CreativeWork with only an `about` link is a source, not a fact candidate.
 Conditions and medicines use memory templates; observations, encounters, immunizations
 and owner-linked PropertyValue notes use generated builders. Observation string units
 become `health:unitCode`. Statement labels and string `doseSchedule` are preserved;
@@ -216,16 +219,26 @@ Note names are retained as labels and property IDs. Optional descriptions remain
 SelfReportedExplicit stays explicit, Inferred stays inferred, Uncertain becomes
 SelfReportedHedged; Current stays Current and Past becomes Historical. Every claim
 carries MedicalHealth and explicit attribution to the assistant, which is also the
-batch worker. Every valid CreativeWork becomes a document batch source, including
-unreferenced sources. Generated source metadata retains its title, creation time and
+batch worker. Only valid CreativeWorks referenced by accepted claims become document
+batch sources. A source with any foreign or invalid subject link is invalid, and its
+referencing facts skip InvalidSource. Unreferenced sources and sources referenced only
+by skipped facts are omitted from the RDF. Generated source metadata retains its title, creation time and
 the assistant label as model. Assistant exports may repeat a source's name or creation
-date: the first non-empty name in code-point order and the earliest date are kept. A
+date: the first non-empty title in Unicode code-point order and the earliest date are kept
+(an explicitly empty title is preserved if all titles are empty). Source dates compare by
+calendar day, dropping an `xsd:date` timezone without changing its day. On the same UTC
+calendar day a dateTime wins over a date; among dateTimes the earliest instant wins. A
 source `xsd:date` stays a date with no invented time of day; sub-millisecond digits of a
 source `xsd:dateTime` are truncated, because source times are provenance metadata, not
-facts. Fact and medicine names that differ only in letter case are one name (the first in
-code-point order); genuinely different names refuse the fact. Each exact quote is paired with every derived-from source;
-quotes remain attached to their own claim. Unreferenced sources are absent from the
-projected provenance view, as usual.
+facts. Fact and medicine names are NFC-normalized before comparing case-only variants;
+the first variant in Unicode code-point order is kept with its original literal.
+Genuinely different names refuse the fact. With exactly one derived-from source, each
+usable quote is paired with it. With multiple sources, each gets one evidence entry
+without a quote; the usable quotes attach to one stable batch document source for the
+assistant export (`pkgId("assistant-export", batchId)`). That source has the assistant's
+label plus ` export` as title, `generatedAt` as creation time, and the assistant label as
+model. It is emitted only when an accepted claim uses it. Quotes remain visible in each
+claim's provenance without claiming that every derived source said the quoted text.
 
 `skipped` counts fact nodes once, with fixed aggregate reasons: OtherSubject,
 UnsupportedType, UnknownEpistemicStatus, UnknownValidityStatus, InvalidEvidence,
@@ -243,7 +256,8 @@ is refused. Quotes must be nonempty and at most 300 Unicode code points, as requ
 the memory builder; quotes are never truncated. An over-long quote is dropped, and the
 fact is kept when another usable quote remains (otherwise InvalidEvidence). Generated date facets retain date vs
 dateTime precision, normalize dateTime offsets to UTC, and drop date timezone suffixes
-without changing the calendar day. Nonzero sub-millisecond dateTime precision on a fact is
+without changing the calendar day. Zone-less dateTimes are refused on facts and sources;
+UTC conversion must keep the year within 0001–9999. Nonzero sub-millisecond dateTime precision on a fact is
 skipped rather than rounded. These are local import limits, not changes to the clinical sector
 or pkg-memory's hash/normalization policy.
 

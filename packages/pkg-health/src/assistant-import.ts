@@ -16,7 +16,7 @@ import type { DatasetCore, Literal, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
 import { entities } from "./generated/model.js";
-import { H, RDF_TYPE, ReadNode, S, XSD } from "./read.js";
+import { H, RDF_TYPE, ReadNode, S, SUBJECT_LINK_PREDICATES, XSD } from "./read.js";
 import { temporalTime } from "./temporal.js";
 import { HealthGraphError } from "./types.js";
 
@@ -48,12 +48,20 @@ function requireValue<T>(value: T | undefined): T {
   return value;
 }
 /** Aliases are combined: neither namespace can conceal a conflicting scalar. */
-function terms(node: ReadNode, predicates: string[]): Term[] {
+function terms(node: ReadNode, predicates: readonly string[]): Term[] {
   const result: Term[] = [];
   for (const predicate of predicates)
     for (const term of node.terms(predicate))
       if (!result.some((other) => term.equals(other))) result.push(term);
-  return result.sort((a, b) => a.value.localeCompare(b.value));
+  return result.sort(termOrder);
+}
+/** A total, locale-free order includes literal datatype and language. */
+export function termOrder(a: Term, b: Term): number {
+  const key = (term: Term) =>
+    `${term.termType}\u0000${term.value}\u0000${term.termType === "Literal" ? term.datatype.value : ""}\u0000${term.termType === "Literal" ? term.language : ""}`;
+  const left = key(a),
+    right = key(b);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 function one(node: ReadNode, predicates: string[]): Term | undefined {
   const values = terms(node, predicates);
@@ -71,18 +79,26 @@ function text(node: ReadNode, predicates: string[]): string | undefined {
   return value === undefined ? undefined : string(value);
 }
 /**
- * Read one display name. Names that differ only in letter case are the same name
+ * Read one display name. NFC-equivalent, case-only variants are the same name
  * (assistant exports repeat them); the first in code-point order is kept. Names
  * that genuinely differ are refused rather than guessed between.
  */
 function name(node: ReadNode): string | undefined {
   const names = [...new Set(terms(node, schema("name")).map(string))].sort(codePointOrder);
-  if (new Set(names.map((n) => n.toLowerCase())).size > 1) throw new Skip("InvalidFact");
+  if (new Set(names.map((n) => n.normalize("NFC").toLowerCase())).size > 1)
+    throw new Skip("InvalidFact");
   return names[0];
 }
-/** Code-point order for distinct strings (RDF literal sets never repeat a value). */
-function codePointOrder(a: string, b: string): number {
-  return a < b ? -1 : 1;
+/** Unicode code-point order, including equal strings and prefix names. */
+export function codePointOrder(a: string, b: string): number {
+  const left = [...a],
+    right = [...b];
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    const difference = (left[i] as string).codePointAt(0) as number;
+    const other = (right[i] as string).codePointAt(0) as number;
+    if (difference !== other) return difference - other;
+  }
+  return left.length - right.length;
 }
 function iri(term: Term): string {
   if (term.termType !== "NamedNode" || !isSafeAbsoluteIri(term.value))
@@ -93,13 +109,21 @@ function iri(term: Term): string {
 function validate(node: ReadNode): void {
   canonicalizeAssertion(new Store([...node.dataset.match(node.term)]));
 }
-function date(term: Term): Literal {
+function checkedDate(term: Term, reason: string): Literal {
   if (
     term.termType !== "Literal" ||
     ![`${XSD}date`, `${XSD}dateTime`].includes(term.datatype.value) ||
     temporalTime(term) === undefined
   )
-    throw new Skip("InvalidFact");
+    throw new Skip(reason);
+  if (term.datatype.value === `${XSD}dateTime`) {
+    const year = new Date(temporalTime(term) as number).getUTCFullYear();
+    if (!/(?:Z|[+-]\d\d:\d\d)$/.test(term.value) || year < 1 || year > 9999) throw new Skip(reason);
+  }
+  return term;
+}
+function date(value: Term): Literal {
+  const term = checkedDate(value, "InvalidFact");
   // Generated Date fields cannot preserve sub-millisecond precision. Refuse loss.
   if (/\.\d{3}\d*[1-9]\d*(?:Z|[+-]|$)/.test(term.value)) throw new Skip("UnsupportedDatePrecision");
   return term;
@@ -125,9 +149,15 @@ function appendDates(graph: Store, node: ReadNode): void {
     graph.addQuads([...model.build(node.value, { [field]: value })]);
   }
 }
-function readSource(term: Term, dataset: DatasetCore, model: string): Source | undefined {
+function readSource(
+  term: Term,
+  dataset: DatasetCore,
+  model: string,
+  owner: string,
+): Source | undefined {
   try {
     const node = new ReadNode(iri(term), dataset);
+    if (node.owners.some((t) => t.termType !== "NamedNode" || t.value !== owner)) return undefined;
     validate(node);
     // Assistant exports may repeat source names and creation dates. Keep the first
     // name in code-point order and the earliest date, so output is deterministic.
@@ -135,38 +165,34 @@ function readSource(term: Term, dataset: DatasetCore, model: string): Source | u
     if (!names.length) return undefined;
     // An explicitly empty title is kept only when no non-empty title exists.
     const title = (names.filter(Boolean).sort(codePointOrder)[0] ?? "") as string;
-    let earliest: { literal: Literal; time: number } | undefined;
-    for (const value of terms(node, schema("dateCreated"))) {
-      const literal = sourceDate(value);
-      const time = temporalTime(literal) as number;
-      if (!earliest || time < earliest.time) earliest = { literal, time };
-    }
+    const time = (literal: Literal) =>
+      literal.datatype.value === `${XSD}date`
+        ? Date.parse(`${literal.value.slice(0, 10)}T00:00:00Z`)
+        : (temporalTime(literal) as number);
+    const dates = terms(node, schema("dateCreated"))
+      .map((value) => checkedDate(value, "InvalidSource"))
+      .sort(
+        (a, b) =>
+          Math.floor(time(a) / 86400000) - Math.floor(time(b) / 86400000) ||
+          Number(a.datatype.value === `${XSD}date`) - Number(b.datatype.value === `${XSD}date`) ||
+          time(a) - time(b) ||
+          termOrder(a, b),
+      );
+    const earliest = dates[0];
     if (!earliest) return undefined;
-    const isDate = earliest.literal.datatype.value === `${XSD}date`;
+    const isDate = earliest.datatype.value === `${XSD}date`;
     return {
       id: node.value,
       url: node.value,
       kind: "document",
       title,
       // A calendar date stays a date; never invent a time of day for it.
-      ...(isDate
-        ? { date: earliest.literal.value }
-        : { created: new Date(earliest.time).toISOString() }),
+      ...(isDate ? { date: earliest.value } : { created: new Date(time(earliest)).toISOString() }),
       model,
     };
   } catch {
     return undefined;
   }
-}
-/** Source dates are provenance metadata: sub-millisecond digits are truncated. */
-function sourceDate(term: Term): Literal {
-  if (
-    term.termType !== "Literal" ||
-    ![`${XSD}date`, `${XSD}dateTime`].includes(term.datatype.value) ||
-    temporalTime(term) === undefined
-  )
-    throw new Skip("InvalidSource");
-  return term;
 }
 function assertion(node: ReadNode, kind: string, owner: string): Store {
   const label = requireValue(name(node));
@@ -293,8 +319,8 @@ export async function importAssistantTurtle(
     )
       sourceTerms.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
     if (
-      q.predicate.value === `${H}patient` ||
-      schema("about").includes(q.predicate.value) ||
+      (SUBJECT_LINK_PREDICATES.includes(q.predicate.value) &&
+        !schema("about").includes(q.predicate.value)) ||
       (q.predicate.value === RDF_TYPE &&
         q.object.termType === "NamedNode" &&
         factTypes.has(q.object.value))
@@ -302,17 +328,26 @@ export async function importAssistantTurtle(
       ids.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
   }
   const sources = new Map<string, Source>();
-  for (const term of [...sourceTerms.values()].sort((a, b) => a.value.localeCompare(b.value))) {
-    const source = readSource(term, dataset, config.assistant.label);
+  for (const term of [...sourceTerms.values()].sort(termOrder)) {
+    const source = readSource(term, dataset, config.assistant.label, config.owner);
     if (source) sources.set(source.id, source);
   }
   const claims: Claim[] = [];
+  const exportSource: Source = {
+    id: pkgId("assistant-export", config.batchId),
+    url: pkgId("assistant-export", config.batchId),
+    kind: "document",
+    title: `${config.assistant.label} export`,
+    created: config.generatedAt,
+    model: config.assistant.label,
+  };
+  const acceptedSources = new Map<string, Source>();
   const reasons: Record<string, number> = {};
-  for (const term of [...ids.values()].sort((a, b) => a.value.localeCompare(b.value))) {
+  for (const term of [...ids.values()].sort(termOrder)) {
     try {
       iri(term);
       const node = new ReadNode(term, dataset);
-      const owners = terms(node, [`${H}patient`, ...schema("about")]);
+      const owners = node.owners;
       if (
         !owners.length ||
         owners.some((t) => t.termType !== "NamedNode" || t.value !== config.owner)
@@ -363,21 +398,30 @@ export async function importAssistantTurtle(
         validity: validityToken === "Past" ? "Historical" : "Current",
         attributed_to: config.assistant.iri,
         categories: ["pd:MedicalHealth"],
-        evidence: factSources.flatMap((source) =>
-          quotes.map((quote) => ({ source: source.id, quote })),
-        ),
+        evidence:
+          factSources.length === 1
+            ? quotes.map((quote) => ({ source: (factSources[0] as Source).id, quote }))
+            : [
+                ...factSources.map((source) => ({ source: source.id })),
+                ...quotes.map((quote) => ({ source: exportSource.id, quote })),
+              ],
       });
+      for (const source of factSources) acceptedSources.set(source.id, source);
+      if (factSources.length > 1) acceptedSources.set(exportSource.id, exportSource);
     } catch (error) {
       const reason = error instanceof Skip ? error.reason : "InvalidFact";
       reasons[reason] = (reasons[reason] ?? 0) + 1;
     }
   }
   try {
+    const emittedSources = [...acceptedSources.values()].sort((a, b) =>
+      termOrder(df.namedNode(a.id), df.namedNode(b.id)),
+    );
     const value = await buildNanopublications(
       {
         batch_id: config.batchId,
         worker: { agent_id: config.assistant.iri, agent_label: config.assistant.label },
-        sources: [...sources.values()],
+        sources: emittedSources,
         claims,
       },
       { owner: config.owner, generatedAt: config.generatedAt },
@@ -389,7 +433,7 @@ export async function importAssistantTurtle(
       value.dataset,
       df,
     );
-    for (const source of sources.values())
+    for (const source of emittedSources)
       for (const record of [
         entities.DigitalDocument.build(source.id, { name: source.title }),
         entities.AssistantSourceMetadata.build(source.id, {
@@ -413,9 +457,11 @@ export async function importAssistantTurtle(
           entities.AssistantAnnotation.build(evidence.id, { hasTarget: target }),
           entities.AssistantEvidenceTarget.build(target, {
             hasSource: evidence.source,
-            hasSelector: selector,
+            hasSelector: evidence.quote === undefined ? undefined : selector,
           }),
-          entities.AssistantQuoteSelector.build(selector, { exact: evidence.quote }),
+          ...(evidence.quote === undefined
+            ? []
+            : [entities.AssistantQuoteSelector.build(selector, { exact: evidence.quote })]),
         ])
           for (const quad of record) provenance.add(quad);
       }
