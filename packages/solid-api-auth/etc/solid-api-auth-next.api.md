@@ -45,6 +45,12 @@ export interface AuthLogger {
 export type BidirectionalMode = "strict" | "warn" | "off";
 
 // @public
+export function createIssuerKeyResolver(options: IssuerKeyResolverOptions): ResolveIssuer;
+
+// @public
+export function createResourceTokenVerifier(options: ResourceTokenVerifierOptions): (request: Request) => Promise<ResourceIdentity>;
+
+// @public
 export class DpopApiVerifier {
     constructor(options: DpopApiVerifierOptions);
     authenticate(request: RequestLike): Promise<ApiCredentials>;
@@ -89,6 +95,15 @@ export class InProcessReplayStore implements ReplayStore {
 
 // @public
 export function isLoopbackHttp(issuer: string): boolean;
+
+// @public
+export interface IssuerKeyResolverOptions {
+    allowInsecureLoopback?: boolean;
+    maxEntries?: number;
+    now?: () => number;
+    outboundFetch: typeof fetch;
+    timeoutMs?: number;
+}
 
 // @public
 export interface IssuerKeys {
@@ -138,6 +153,28 @@ export interface RequestUrlOptions {
 
 // @public
 export type ResolveIssuer = (issuer: string) => Promise<IssuerKeys> | IssuerKeys;
+
+// @public
+export interface ResourceIdentity {
+    clientId: unknown;
+    expiresAt: number;
+    issuer: string;
+    webid: string;
+}
+
+// @public
+export interface ResourceReplayStore {
+    insertIfAbsent(key: string, ttlMs: number): Promise<boolean>;
+}
+
+// @public
+export interface ResourceTokenVerifierOptions {
+    allowLoopbackForTests?: boolean;
+    now?: () => number;
+    outboundFetch: typeof fetch;
+    publicUrl: string;
+    store: ResourceReplayStore;
+}
 
 // @public
 export class TokenBucketRateLimiter implements RateLimiter {

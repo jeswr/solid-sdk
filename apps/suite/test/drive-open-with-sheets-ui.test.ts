@@ -82,6 +82,9 @@ import { encodeRef } from "../src/lib/refs";
 
 let control: OpenWithSheetsControl | undefined;
 function Hook({ item }: { item: DriveItem | undefined }) {
+  return h(DriveUiProvider, null, h(SheetsHook, { item }));
+}
+function SheetsHook({ item }: { item: DriveItem | undefined }) {
   control = useOpenWithSheets(item);
   return null;
 }
@@ -116,6 +119,38 @@ describe("Drive Sheets conversion control", () => {
     await act(() => control?.run());
     expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
     expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("respects an unsaved preview edit before opening and after converting", async () => {
+    let allow = false;
+    function Guarded({ item }: { item: DriveItem }) {
+      const ui = useDriveUi();
+      if (!guarded) guarded = ui.registerPreviewGuard(() => allow);
+      control = useOpenWithSheets(item);
+      return null;
+    }
+    let guarded: (() => void) | undefined;
+    await mount(h(DriveUiProvider, null, h(Guarded, { item: BOOK })));
+    await act(() => control?.run());
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    guarded?.();
+    guarded = undefined;
+    const result = deferred<{ container: string }>();
+    mocks.create.mockReturnValue(result.promise);
+    allow = true;
+    await mount(h(DriveUiProvider, null, h(Guarded, { item: CSV })));
+    let pending: Promise<void> | undefined;
+    await act(() => {
+      pending = control?.run();
+    });
+    // The user starts another unsaved edit while the conversion runs.
+    allow = false;
+    await act(async () => {
+      result.resolve({ container: BOOK.url });
+      await pending;
+    });
+    expect(invalidate).toHaveBeenCalledWith(BOOK.url);
+    expect(mocks.router.push).not.toHaveBeenCalled();
   });
 
   it("converts once, shows progress, invalidates the workbook and opens its editor", async () => {

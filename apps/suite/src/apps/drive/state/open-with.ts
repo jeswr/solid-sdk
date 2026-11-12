@@ -8,6 +8,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { useNeedsConnection } from "@/shell/sync/requires-online";
 import type { DriveItem } from "../lib/client/client";
 import { useDrive } from "./drive-context";
+import { useDriveUi } from "./ui";
 
 type OpenWithState =
   | { readonly kind: "open"; readonly href: string }
@@ -80,6 +81,8 @@ export function createOpenWithController(target: OpenWithTarget) {
 
   function useOpenWith(item: DriveItem | undefined): OpenWithControl | undefined {
     const { session, invalidate } = useDrive();
+    // An unsaved text edit in the preview may veto leaving it (#406).
+    const { mayLeavePreview } = useDriveUi();
     const router = useRouter();
     const connection = useNeedsConnection();
     const base = item && target.state(item, { storageUrl: session.storageUrl });
@@ -97,6 +100,7 @@ export function createOpenWithController(target: OpenWithTarget) {
     });
     if (!state) return undefined;
     const run = async () => {
+      if (!mayLeavePreview()) return;
       if (state.kind === "open") {
         router.push(state.href);
         return;
@@ -114,7 +118,7 @@ export function createOpenWithController(target: OpenWithTarget) {
             description: result.warning,
             duration: Number.POSITIVE_INFINITY,
           });
-        router.push(result.href);
+        if (mayLeavePreview()) router.push(result.href);
       } catch (error) {
         toast.dismiss(loading);
         toast.error(`Couldn't open ${item.name} with ${target.name}`, {
