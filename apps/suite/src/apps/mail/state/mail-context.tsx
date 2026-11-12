@@ -43,7 +43,7 @@ interface MailContextValue {
 const Context = createContext<MailContextValue | null>(null);
 export function MailProvider({ session, children }: { session: PodSession; children: ReactNode }) {
   const client = useMemo(
-    () => new MailClient(session.fetch, session.storageUrl, session.webId),
+    () => new MailClient(session.fetch, session.storageUrl, session.webId, session.mode),
     [session],
   );
   const [account, choose] = useState("imported");

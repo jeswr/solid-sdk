@@ -124,6 +124,30 @@ test("details summarize share.get, deduplicate people, exclude owner and gate Ma
   expect(screen.getByText("Only you")).toBeDefined();
   expect(screen.queryByRole("button", { name: "Manage access" })).toBeNull();
 });
+test("details can embed their content without standalone pane chrome in every state", async () => {
+  const { container, rerender } = render(<ItemDetails title="Plan" />);
+  expect(screen.getByRole("region", { name: "Details" }).getAttribute("data-variant")).toBe(
+    "standalone",
+  );
+  for (const props of [
+    { title: "Plan", access: { grants: [], canManage: false } },
+    { state: { status: "loading" } as const },
+    { selection: { count: 3, totalSize: 3000 } },
+  ]) {
+    rerender(<ItemDetails variant="embedded" {...props} />);
+    expect(screen.getByRole("region", { name: "Details" }).getAttribute("data-variant")).toBe(
+      "embedded",
+    );
+    await accessible(container);
+  }
+});
+test("embedded details title sits one level below the pane heading", () => {
+  const { rerender } = render(<ItemDetails title="Plan" />);
+  expect(screen.getByRole("heading", { level: 2, name: "Plan" })).toBeTruthy();
+  rerender(<ItemDetails variant="embedded" title="Plan" />);
+  expect(screen.queryByRole("heading", { level: 2, name: "Plan" })).toBeNull();
+  expect(screen.getByRole("heading", { level: 3, name: "Plan" })).toBeTruthy();
+});
 test("public, signed-in, group and app grants cannot be misrepresented as private", () => {
   for (const [agent, copy] of [
     [{ kind: "public" }, "Anyone with the link"],

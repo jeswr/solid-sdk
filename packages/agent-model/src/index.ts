@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 /** Public channel-neutral agent model API. */
 
+export * from "./account-descriptors.js";
 export * from "./binding-controls.js";
 export * from "./core/canonical.js";
 export * from "./core/conversation.js";

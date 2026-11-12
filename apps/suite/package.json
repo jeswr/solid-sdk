@@ -42,6 +42,7 @@
     "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dav-bridge": "workspace:*",
     "@jeswr/solid-health-diary": "workspace:*",
+    "@jeswr/solid-sheets": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
