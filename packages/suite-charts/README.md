@@ -136,6 +136,7 @@ association; the consuming app supplies any interpretation.
 
 ```ts
 interface TimelineChartProps extends ChartBase {
+  formatX?: (t: number) => string; // epoch milliseconds; axis, tooltips and table
   lanes: readonly {
     id: string; label: string;
     items: readonly {
@@ -165,6 +166,8 @@ Omitted `now` is captured in an effect at mount. Server and initial client rende
 show the start marker without an open-ended extension until that effect runs; inject
 `now` to render the extension immediately or update the prop to advance it.
 Table times, including numeric timestamps and offset strings, are formatted in UTC.
+Pass `formatX` to localise all displayed timeline dates, including ongoing bounds;
+without it, axis dates and ISO UTC tooltip/table timestamps retain their defaults.
 Single-instant domains are padded by one day on each side.
 Labels sit to the left at widths of at least 480px and above each lane below 480px.
 The chart grows vertically when needed for many lanes. `range` limits the visible

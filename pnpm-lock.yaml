@@ -2433,6 +2433,12 @@ importers:
       '@jeswr/ldp-container':
         specifier: workspace:*
         version: link:../../packages/ldp-container
+      '@jeswr/pkg-health':
+        specifier: workspace:*
+        version: link:../../packages/pkg-health
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../../packages/pkg-memory
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
@@ -2469,6 +2475,9 @@ importers:
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
+      '@jeswr/suite-charts':
+        specifier: workspace:*
+        version: link:../../packages/suite-charts
       '@jeswr/suite-sdk':
         specifier: workspace:*
         version: link:../../packages/suite-sdk

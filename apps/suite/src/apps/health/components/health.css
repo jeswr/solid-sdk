@@ -685,3 +685,193 @@
   cursor: wait;
   text-decoration: none;
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.hlt-knowledge,
+.hlt-knowledge-tabs,
+.hlt-knowledge [data-slot="tabs-content"] {
+  min-width: 0;
+  width: 100%;
+}
+.hlt-knowledge .hlt-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hlt-knowledge h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.hlt-knowledge h3,
+.hlt-knowledge-detail h3 {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.hlt-knowledge-stack {
+  display: grid;
+  gap: var(--space-5);
+  min-width: 0;
+}
+.hlt-knowledge-grid,
+.hlt-knowledge-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-4);
+}
+.hlt-knowledge-grid article > ul {
+  margin-top: var(--space-3);
+  padding-left: var(--space-4);
+}
+.hlt-knowledge-stats .sc-stat-tile {
+  min-width: 0;
+}
+.hlt-knowledge-capital::first-letter {
+  text-transform: uppercase;
+}
+.hlt-knowledge-file {
+  display: grid;
+  gap: var(--space-2);
+}
+.hlt-knowledge-file form {
+  margin-top: var(--space-2);
+}
+.hlt-knowledge-file input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  padding: var(--space-3);
+  color: var(--foreground);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+}
+.hlt-knowledge-file input::file-selector-button {
+  border: 1px solid var(--input);
+  border-radius: var(--radius-sm);
+  color: var(--foreground);
+  background: var(--surface-2);
+  font: inherit;
+  padding: var(--space-2);
+  margin-right: var(--space-2);
+}
+.hlt-knowledge-owner {
+  display: block;
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.hlt-knowledge-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  width: 100%;
+  height: auto;
+  justify-content: flex-start;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+}
+.hlt-knowledge-tablist [role="tab"] {
+  flex: 1 0 auto;
+  min-height: var(--control-h);
+  color: var(--foreground-muted);
+}
+.hlt-knowledge-tablist [role="tab"][data-state="active"] {
+  color: var(--foreground);
+}
+.hlt-knowledge-list,
+.hlt-knowledge-facts {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.hlt-knowledge-list > li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.hlt-knowledge-list > li:last-child {
+  border-bottom: 0;
+}
+.hlt-knowledge-list button,
+.hlt-knowledge-detail section > button {
+  max-width: 100%;
+  white-space: normal;
+  height: auto;
+  min-height: var(--control-h);
+}
+.hlt-knowledge-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  color: var(--foreground);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.hlt-knowledge-fact:hover {
+  background: var(--surface-2);
+}
+.hlt-knowledge-fact > span:not(.hlt-knowledge-badge) {
+  grid-column: 1 / -1;
+  font-size: var(--text-sm);
+}
+.hlt-knowledge-badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  width: fit-content;
+  height: fit-content;
+}
+.hlt-knowledge-detail {
+  overflow-wrap: anywhere;
+}
+.hlt-knowledge-fields {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+.hlt-knowledge-fields dt {
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.hlt-knowledge-fields dd {
+  margin: var(--space-1) 0 0;
+}
+.hlt-knowledge-evidence {
+  margin: 0;
+  padding: var(--space-3);
+  border-left: 2px solid var(--border);
+  background: var(--surface-2);
+}
+.hlt-knowledge-evidence blockquote {
+  margin: 0 0 var(--space-2);
+  white-space: pre-wrap;
+}
+.hlt-knowledge-evidence figcaption {
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.hlt-knowledge :where(a, button, input):focus-visible,
+.hlt-knowledge-detail :where(a, button, input, summary):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+@media (max-width: 359px) {
+  .hlt-knowledge-fact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
