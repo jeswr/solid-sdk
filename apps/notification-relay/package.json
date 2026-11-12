@@ -19,6 +19,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-api-auth": "workspace:*",
     "jose": "^6.2.3"
   },
   "devDependencies": {
