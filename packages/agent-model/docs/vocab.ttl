@@ -3,6 +3,11 @@
 @prefix agent: <https://jeswr.org/ns/agent#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
 
+agent:account rdfs:comment "The account described by account-specific capability observations; conveys no authority.";
+    rdfs:label "account".
+agent:grantedScopes rdfs:comment "Ordered provider scope names reported by the daemon for the referenced account; informative, never permission to act.";
+    rdfs:label "grantedScopes".
+
 agent:Account rdfs:comment "A channel account descriptor; its channelHandle value is a salted hash, never a raw handle.";
     rdfs:label "Account".
 agent:Acknowledgement rdfs:comment "Migrated M1 lifecycle or intent term Acknowledgement.";
