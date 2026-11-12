@@ -13,7 +13,7 @@ import {
   root,
   selection,
 } from "../../test/roles-helpers.js";
-import { ACL, serialize } from "../rdf.js";
+import { ACL, ACP, serialize } from "../rdf.js";
 import { readGrants, readScopedGrants, setScopedGrants } from "./index.js";
 import * as roleRdf from "./rdf.js";
 import { properties, roots } from "./rdf.js";
@@ -191,12 +191,18 @@ for (const model of ["wac", "acp"] as const)
           contents: [manager],
         }),
       ).toMatchObject({ code: "inherited-grant" });
-      expect(await fail({ folder: [manager, manager], contents: [manager] })).toMatchObject({
-        code: "invalid-response",
-      });
-      expect(
-        await fail({ folder: [manager, { ...selection(), purpose: "x" }], contents: [manager] }),
-      ).toMatchObject({ code: "unsupported" });
+      // Malformed selections are refused before any request, like setGrants.
+      const requests = mem.calls.length;
+      for (const [chosen, code] of [
+        [{ folder: [manager, manager], contents: [manager] }, "invalid-response"],
+        [
+          { folder: [manager], contents: [manager, { ...selection(), purpose: "x" }] },
+          "unsupported",
+        ],
+        [{ folder: [manager, selection("commenter")], contents: [manager] }, "unsupported"],
+      ] as const)
+        await expect(setScopedGrants(folder, chosen, options)).rejects.toMatchObject({ code });
+      expect(mem.calls.length).toBe(requests);
       expect(
         await fail({
           folder: [
@@ -413,4 +419,97 @@ it("keeps a direct ACP grant when the selection lists only that person's inherit
   const after = await readScopedGrants(folder, options);
   for (const scope of [after.folder, after.contents])
     expect(scope).toContainEqual({ ...person, source: `${folder}.acr` });
+});
+
+it("writes ACP contents-only and folder-only controls on the folder's own resource", async () => {
+  const mem = memoryAccess("acp");
+  mem.attach(folder, await fixture("acp", folder, [manager, selection()], true));
+  const options = { ...mem.options, kind: "folder" as const, webId: owner };
+  const people = selection("viewer", { type: "webid", id: other });
+  expect(
+    (
+      await setScopedGrants(
+        folder,
+        { folder: [manager, selection()], contents: [manager, people] },
+        options,
+      )
+    ).failed,
+  ).toEqual([]);
+  const dataset = await parseRdf(required(mem.docs.get(`${folder}.acr`)).body, "text/turtle");
+  const placements = (agent: string) =>
+    roots(dataset).flatMap((acr) =>
+      (["accessControl", "memberAccessControl"] as const).flatMap((name) =>
+        [...acr[name]]
+          .filter((control) =>
+            [...control.apply].some((policy) =>
+              [...policy.allOf].some((matcher) => matcher.agent.has(agent)),
+            ),
+          )
+          .map(() => [properties(acr, dataset).iris(`${ACP}resource`)[0], name]),
+      ),
+    );
+  expect(placements(bob)).toEqual([[folder, "accessControl"]]);
+  expect(placements(other)).toEqual([[folder, "memberAccessControl"]]);
+  expect(
+    placements(owner)
+      .map(([, name]) => name)
+      .sort(),
+  ).toEqual(["accessControl", "memberAccessControl"]);
+});
+
+it("lets a caller who inherits ACP Control drop their own direct Control on one scope", async () => {
+  const mem = memoryAccess("acp");
+  mem.attach(root, await fixture("acp", root, [manager], true));
+  mem.attach(folder, await fixture("acp", folder, [manager, selection()], true));
+  const options = { ...mem.options, kind: "folder" as const, webId: owner };
+  const read = await readScopedGrants(folder, options);
+  const inherited = read.folder.filter((g) => g.inherited);
+  expect(inherited).toHaveLength(1);
+  expect(
+    (
+      await setScopedGrants(
+        folder,
+        {
+          folder: [...inherited, manager, selection()],
+          // Listing the inherited row would keep the direct one (as setGrants does), so omit it.
+          contents: [selection()],
+        },
+        { ...options, expected: read },
+      )
+    ).failed,
+  ).toEqual([]);
+  const after = await readScopedGrants(folder, options);
+  expect(after.contents.filter((g) => !g.inherited)).toEqual([
+    { ...selection(), source: `${folder}.acr` },
+  ]);
+  // Without that inherited Control, the same change is a lockout.
+  const alone = memoryAccess("acp");
+  alone.attach(folder, await fixture("acp", folder, [manager, selection()], true));
+  await expect(
+    setScopedGrants(
+      folder,
+      { folder: [manager, selection()], contents: [selection()] },
+      { ...alone.options, kind: "folder" as const, webId: owner },
+    ),
+  ).rejects.toMatchObject({ code: "owner-lockout" });
+});
+
+it("refuses to write when the folder's access changed between reading and writing", async () => {
+  const mem = memoryAccess("wac");
+  mem.attach(folder, await fixture("wac", folder, [manager, selection()], true));
+  const options = { ...mem.options, kind: "folder" as const, webId: owner };
+  let reads = 0;
+  mem.intercept((url, init) => {
+    // The second GET (applyBatch's revalidation) sees a newer version.
+    if (url === `${folder}.acl` && (init.method ?? "GET") === "GET" && ++reads === 2)
+      mem.put(url, required(mem.docs.get(url)).body, '"2"');
+    return undefined;
+  });
+  const result = await setScopedGrants(
+    folder,
+    { folder: [manager, selection()], contents: [manager, selection("editor")] },
+    options,
+  );
+  expect(result.failed[0]?.error).toMatchObject({ code: "conflict" });
+  expect(mem.writes()).toHaveLength(0);
 });

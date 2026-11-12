@@ -740,14 +740,9 @@ function desiredScope(
   const current = rows(snapshot, [own], members);
   const projected = projectScope(snapshot, options, scope);
   const explicit = new Set(grants.filter((g) => !g.inherited).map((g) => agentKey(g.agent)));
-  const seen = new Set<string>();
   const desired = new Map<string, Row>();
   for (const grant of grants) {
-    validateMetadata(grant);
     const key = agentKey(grant.agent);
-    const id = `${key}:${grant.inherited}:${grant.inherited ? grant.source : ""}`;
-    if (seen.has(id)) throw roleError("invalid-response", "", "Duplicate role grant");
-    seen.add(id);
     if (grant.inherited) {
       if (
         !projected.some(
@@ -941,6 +936,19 @@ export async function setScopedGrants(
   selection: ScopedGrantSelection,
   options: GrantMutationOptions & { expected?: ScopedGrantSnapshot },
 ): Promise<SetGrantsResult> {
+  // Refuse malformed selections before any request, as setGrants does.
+  for (const scope of SCOPES) {
+    const seen = new Set<string>();
+    for (const grant of selection[scope]) {
+      validateMetadata(grant);
+      // Comments need a comments container, which this path refuses.
+      if (grant.role === "commenter" && !grant.inherited)
+        throw roleError("unsupported", url, "Folder and contents roles cannot grant Commenter");
+      const id = `${agentKey(grant.agent)}:${grant.inherited}:${grant.inherited ? grant.source : ""}`;
+      if (seen.has(id)) throw roleError("invalid-response", url, "Duplicate role grant");
+      seen.add(id);
+    }
+  }
   return applyBatch([url], options, (target) => prepareScoped(target, selection, options));
 }
 async function applyBatch(

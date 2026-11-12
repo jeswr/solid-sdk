@@ -315,7 +315,8 @@ share one rule (WAC `accessTo`+`default`, ACP `accessControl`+`memberAccessContr
 get a resource-only and a members-only rule (`replaceWac(..., memberModes)`,
 `appendAcp(..., "only")`). Generated RDF is re-read per scope before the PUT; ACP removals run
 `pruneAcp`. Unrelated principals, unprojectable rules and inherited rows keep the same rules as
-`setGrants`.
+`setGrants`. Malformed selections (metadata, duplicates, Commenter) throw before any request. A
+split folder stays `partial-scope` for every other role operation, moves and request approvals.
 
 `movePreservingAccess(storage, from, destinationContainer, options)` extends the role mutation
 options with `name?`, `acceptReset?`, and `signal?`. Native moves bypass access. Emulated Solid

@@ -494,7 +494,12 @@ explicit set for each scope in one conditional write to the folder's own access 
 need `kind: "folder"` and the CSS dialect, and refuse a comments container. Setting needs a folder
 that already has its own access document, and you must keep Control on both scopes. Equal
 roles share one rule. Different roles get separate folder-only and contents-only rules, after
-which `readGrants` again reports `partial-scope` until the scopes match.
+which `readGrants` again reports `partial-scope` until the scopes match. While they differ,
+`setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess` and access-request approvals all
+refuse the folder with `partial-scope`. Control inherited from an ancestor ACP policy also counts
+toward keeping Control. An inherited row in a selection keeps that person's direct rule, as with
+`setGrants`; leave it out to change the direct rule. Commenter is refused, because comments need
+a comments container.
 Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
