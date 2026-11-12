@@ -1625,6 +1625,167 @@ describe("Drive content retry list", () => {
     expect(pod.get(RetryUrl)).toBeUndefined();
   });
 
+  /** A download that only ends when its request signal aborts. */
+  const stalled = (init?: RequestInit) =>
+    new Promise<Response>((_, reject) =>
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
+    );
+  /** Like fixtureMediaFetch, but media handlers receive the request init (and its signal). */
+  const sourceWith = (
+    routes: readonly FixtureRoute[],
+    media: Record<string, (init?: RequestInit) => Promise<Response>>,
+  ) => {
+    const json = fixtureFetch("google-drive", routes);
+    return vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const handler = media[url];
+      return handler ? handler(init) : json(input, init);
+    });
+  };
+  const seeded = async (n: number) => {
+    const { pod, podWriter } = setup();
+    const stale = files(n);
+    await seed(
+      pod,
+      stale.map((file) => [metaIri(file.id), "1"]),
+    );
+    const routes: FixtureRoute[] = [
+      changes({ changes: [], newStartPageToken: "1001" }),
+      ...stale.map((file) => ({ url: fileUrl(file.id), json: file })),
+    ];
+    return { pod, podWriter, stale, routes };
+  };
+
+  // Ports the round-4 delta-review probe.
+  it("returns the cursor and carries entries when the run deadline expires mid-retry", async () => {
+    const { pod, podWriter, stale, routes } = await seeded(3);
+    const api = sourceWith(
+      routes,
+      Object.fromEntries(stale.map((file) => [mediaUrl(file.id), stalled])),
+    );
+    const report = await runImport({
+      adapter: googleDriveAdapter,
+      mode: "live",
+      sourceAuth: { fetch: api },
+      podWriter,
+      cursor: "1000",
+      limits: { maxDurationMs: 300 },
+    });
+    expect(report.cursor).toBe("1001");
+    expect(retried(api)).toEqual(["retry-0"]);
+    // Interrupted and unreached entries keep their attempt counts.
+    expect(saved(pod)).toEqual(new Map(stale.map((file) => [metaIri(file.id), 1])));
+  });
+
+  it("rejects with the caller's reason when cancelled mid-retry and leaves the list as it was", async () => {
+    const { pod, podWriter, stale, routes } = await seeded(2);
+    const before = pod.get(RetryUrl);
+    const controller = new AbortController();
+    const reason = new Error("user cancelled");
+    const api = sourceWith(
+      routes,
+      Object.fromEntries(
+        stale.map((file) => [
+          mediaUrl(file.id),
+          (init?: RequestInit) => {
+            setTimeout(() => controller.abort(reason), 10);
+            return stalled(init);
+          },
+        ]),
+      ),
+    );
+    await expect(
+      runImport({
+        adapter: googleDriveAdapter,
+        mode: "live",
+        sourceAuth: { fetch: api },
+        podWriter,
+        cursor: "1000",
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(pod.get(RetryUrl)).toBe(before);
+  });
+
+  it("starts no retry within the time reserve, under default and small limits", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const [limits, elapse] of [
+        [undefined, 1_800_000 - 30_000], // 30 s left: under one response timeout
+        [{ maxDurationMs: 1_000 }, 600], // 400 ms left: under half of the allowance
+      ] as const) {
+        const { pod, stale, routes } = await seeded(2);
+        const api = sourceWith(routes, {});
+        // Time passes outside any source request (which has its own response timeout): while
+        // the retry list is read, after the change set is stored.
+        const podWriter = createFetchPodWriter({
+          adapterId: "google-drive",
+          webId: TEST_WEBID,
+          profileDocumentUrl: TEST_PROFILE_DOC,
+          podRoot: TEST_POD_ROOT,
+          fetch: async (input, init) => {
+            if ((init?.method ?? "GET") === "GET" && String(input) === RetryUrl)
+              await vi.advanceTimersByTimeAsync(elapse);
+            return pod.fetch(input, init);
+          },
+        });
+        const report = await runImport({
+          adapter: googleDriveAdapter,
+          mode: "live",
+          sourceAuth: { fetch: api },
+          podWriter,
+          cursor: "1000",
+          ...(limits ? { limits } : {}),
+        });
+        expect(report.cursor).toBe("1001");
+        expect(retried(api)).toEqual([]);
+        expect(saved(pod)).toEqual(new Map(stale.map((file) => [metaIri(file.id), 1])));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts other per-file retry failures as attempts and still returns the cursor", async () => {
+    const { pod, podWriter } = setup();
+    const [forbidden, broken, exhausted] = files(3);
+    if (!forbidden || !broken || !exhausted) throw new Error("Missing fixture");
+    await seed(pod, [
+      [metaIri(forbidden.id), "1"],
+      [metaIri(broken.id), "1"],
+      [metaIri(exhausted.id), String(MAX_RETRY_ATTEMPTS - 1)],
+    ]);
+    const api = sourceWith(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        { url: fileUrl(forbidden.id), json: forbidden },
+        { url: fileUrl(broken.id), json: { error: {} }, status: 500 },
+        { url: fileUrl(exhausted.id), json: exhausted },
+      ],
+      {
+        [mediaUrl(forbidden.id)]: async () =>
+          Response.json({ error: { reason: "cannotDownloadAbusiveFile" } }, { status: 403 }),
+        [mediaUrl(exhausted.id)]: async () => new Response(null, { status: 503 }),
+      },
+    );
+    const report = await runImport({
+      adapter: googleDriveAdapter,
+      mode: "live",
+      sourceAuth: { fetch: api },
+      podWriter,
+      cursor: "1000",
+    });
+    expect(report.cursor).toBe("1001");
+    expect(report.skipped).toBe(3);
+    expect(retried(api)).toEqual([broken.id, exhausted.id, forbidden.id].sort());
+    expect(saved(pod)).toEqual(
+      new Map([
+        [metaIri(forbidden.id), 2],
+        [metaIri(broken.id), 2],
+      ]),
+    );
+  });
+
   it("keeps at most 10,000 entries and rewrites an oversized list", async () => {
     const { run, pod } = setup();
     const ids = Array.from({ length: 10_005 }, (_, i) => `big-${String(i).padStart(5, "0")}`);

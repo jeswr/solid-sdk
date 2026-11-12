@@ -139,12 +139,14 @@ and the total deadline apply to downloads too. A per-response timeout saves meta
 cancellation still fail the import. Timed-out files are listed in `drive/_content-retry.ttl`
 (their metadata subjects with a timed-out attempt count, at most 10,000 entries) and an
 incremental run re-reads each one that its change list omits (`files/<id>`, one request and
-one item) and downloads it again. A file is dropped after 3 timed-out attempts
+one item) and downloads it again. A file is dropped after 3 attempts that time out or fail
 (`MAX_RETRY_ATTEMPTS`), after a successful or otherwise-skipped download, or on a 404.
 Retries are best-effort after the change set is committed: none starts with less than one
-response timeout (or half of `maxDurationMs`) remaining, and a request, item, byte or
-duration budget failure among them stops retrying, carries the remaining entries forward
-and still returns the new cursor. Foreign, non-canonical, malformed or excess entries are
+response timeout (or half of the effective `maxDurationMs`, default 30 minutes) remaining; a
+request, item, byte or duration budget failure among them stops retrying and carries the
+remaining entries forward with unchanged counts; any other per-file failure (an HTTP error,
+a Pod write) counts an attempt and a skipped item. The run still returns the new cursor;
+only caller cancellation fails it, leaving the list unchanged. Foreign, non-canonical, malformed or excess entries are
 dropped on load (and the list rewritten), never failing the run. The retry list's
 `DriveContentRetry`/`DriveRetryEntry` accessors are hand-written like `DriveMetadata`, and
 move to codegen with the rest of this package's models. A request-capped retry reuses already-linked

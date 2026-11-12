@@ -4,7 +4,7 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { RunBudgetExceededError } from "../core/budget.js";
+import { DEFAULT_RUN_LIMITS, RunBudgetExceededError } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText } from "../core/safe.js";
@@ -143,9 +143,12 @@ export function createGoogleDriveAdapter({
       const carried = new Set<string>();
       if (incremental) {
         const pending = [...retry.ids.keys()].filter((id) => !snapshot.files.has(id));
-        // The snapshot is already committed: retries are best-effort, so a run that runs out
-        // of time or budget among them still saves the remaining entries and its cursor.
-        const reserve = Math.min(SOURCE_RESPONSE_TIMEOUT_MS, (ctx.limits?.maxDurationMs ?? 0) / 2);
+        // The snapshot is already committed: retries are best-effort. Running out of time or
+        // budget carries the remaining entries forward, and any other per-file failure counts
+        // an attempt; either way the run saves the list and returns its cursor. Only the
+        // caller's cancellation fails the run here.
+        const maxDurationMs = ctx.limits?.maxDurationMs ?? DEFAULT_RUN_LIMITS.maxDurationMs;
+        const reserve = Math.min(SOURCE_RESPONSE_TIMEOUT_MS, maxDurationMs / 2);
         let stopped = false;
         for (const id of pending) {
           if (!stopped && ctx.budget.remainingMs <= reserve) stopped = true;
@@ -154,11 +157,13 @@ export function createGoogleDriveAdapter({
               await sync.retryContent(id);
               continue;
             } catch (error) {
-              if (
-                !(error instanceof RunBudgetExceededError) ||
-                (ctx.signal?.aborted && ctx.signal.reason !== error)
-              )
-                throw error;
+              // The run signal also carries the deadline, whose reason is a budget error.
+              if (ctx.signal?.aborted && !(ctx.signal.reason instanceof RunBudgetExceededError))
+                throw ctx.signal.reason;
+              if (!(error instanceof RunBudgetExceededError)) {
+                sync.retryFailed(id);
+                continue;
+              }
               stopped = true;
             }
           carried.add(id);
@@ -178,8 +183,8 @@ interface Snapshot {
 }
 class Sync {
   skipped = 0;
-  /** Files whose content timed out in this run. */
-  private readonly timedOut = new Set<string>();
+  /** Files whose content timed out, or whose retry failed, in this run. */
+  private readonly unfinished = new Set<string>();
   private readonly api: typeof fetch;
   constructor(
     private readonly ctx: ImportContext,
@@ -261,7 +266,7 @@ class Sync {
       try {
         attempts = new DriveRetryEntry(iri, stored, DataFactory).attempts ?? 1;
       } catch {
-        continue; // Several or malformed counts.
+        continue; // A count that is not a numeric literal (the first of several is used).
       }
       if (Number.isInteger(attempts) && attempts >= 1 && attempts < MAX_RETRY_ATTEMPTS)
         entries.push([id, attempts]);
@@ -269,6 +274,12 @@ class Sync {
     entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     for (const [id, attempts] of entries.slice(0, MAX_RETRY_FILES)) ids.set(id, attempts);
     return { ids, stored: true, clean: ids.size === listed };
+  }
+
+  /** A retry failed for another per-file reason: counted as an attempt and as skipped. */
+  retryFailed(id: string): void {
+    this.unfinished.add(id);
+    this.skipped++;
   }
 
   /** Re-reads one previously timed-out file's metadata and stores it, downloading again. */
@@ -293,8 +304,9 @@ class Sync {
   }
 
   /**
-   * Replaces the list with this run's timeouts (counting attempts) plus `carried` entries the
-   * run did not reach. A file is dropped after MAX_RETRY_ATTEMPTS timeouts or a success.
+   * Replaces the list with this run's timeouts and failed retries (counting attempts) plus
+   * `carried` entries the run did not reach. A file is dropped after MAX_RETRY_ATTEMPTS
+   * attempts or a success.
    */
   async saveRetry(
     previous: { ids: ReadonlyMap<string, number>; stored: boolean; clean: boolean },
@@ -302,7 +314,7 @@ class Sync {
   ): Promise<void> {
     const next = new Map<string, number>();
     for (const id of carried) next.set(id, previous.ids.get(id) ?? 1);
-    for (const id of this.timedOut) {
+    for (const id of this.unfinished) {
       const attempts = (previous.ids.get(id) ?? 0) + 1;
       if (attempts < MAX_RETRY_ATTEMPTS) next.set(id, attempts);
     }
@@ -427,8 +439,8 @@ class Sync {
     for (const id of arr(file.parents))
       if (validId(id)) item.parents.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
     const content = folder ? [] : await this.content(file, item, old, path, mimeType);
-    if (item.contentSkipped === "timeout") this.timedOut.add(file.id);
-    else this.timedOut.delete(file.id);
+    if (item.contentSkipped === "timeout") this.unfinished.add(file.id);
+    else this.unfinished.delete(file.id);
     const staged: string[] = [];
     try {
       for (const doc of content) {

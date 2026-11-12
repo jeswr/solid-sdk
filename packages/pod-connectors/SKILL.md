@@ -85,9 +85,11 @@ Downloads still consume requests and deadlines. Only a source response timeout b
 `contentSkipped: "timeout"`; run budget failures and caller cancellation must propagate.
 Timed-out file ids persist in `drive/_content-retry.ttl` with attempt counts; incremental runs
 re-read and retry those their change list omits, dropping a file after `MAX_RETRY_ATTEMPTS`
-(3). Retries are best-effort after the committed change set: stop on low `remainingMs` or a
-caught `RunBudgetExceededError` (the one place it is caught; caller cancel still propagates),
-carry unreached entries and return the cursor. Drop invalid or excess entries on load.
+(3). Retries are best-effort after the committed change set: stop when `remainingMs` is
+within min(60 s, half the effective `maxDurationMs`) or on a caught `RunBudgetExceededError`
+(the one place it is caught) and carry unreached entries; count any other per-file error as
+an attempt. Return the cursor; only caller cancellation (a run-signal reason that is not a
+budget error) propagates. Drop invalid or excess entries on load.
 Preserve unchanged-representation reuse and
 test that request-capped retries make progress with content larger than the run JSON allowance.
 
