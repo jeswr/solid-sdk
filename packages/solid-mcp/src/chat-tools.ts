@@ -5,6 +5,8 @@ import {
   CHAT_ROLES,
   type ChatPodPort,
   ChatWriter,
+  chatConversationId,
+  normalizeChatAccount,
   renderTranscript,
 } from "@jeswr/solid-chat-interop";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -143,15 +145,31 @@ export function registerChatTools(
   });
   const provider = z.enum(CHAT_PROVIDERS);
   const id = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
+  const account = z
+    .string()
+    .max(256)
+    .refine((value) => {
+      try {
+        normalizeChatAccount(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Invalid chat account label")
+    .describe(
+      "Optional owner-chosen account label (1-64 characters). With an account, conversationId is the SOURCE conversation id; the stored id is derived from both, so never pass an id returned by chat_list here.",
+    )
+    .optional();
   server.registerTool(
     "chat_save",
     {
       description:
-        "Save a redacted conversation under private/chats with owner-only, server-advertised WAC ACLs and create-only messages.",
+        "Save a redacted AS2 conversation under private/chats with owner-only, server-advertised WAC ACLs and create-only messages. Requires readOnly:false. Message IDs are immutable; first title wins. When `account` is set, conversationId must be the source conversation id (the stored id is derived from account and source id); to append to a stored conversation, resend the same source id and account.",
       inputSchema: {
         provider,
         conversationId: id,
         title: z.string(),
+        account,
         messages: z.array(
           z.object({
             id: id.optional(),
@@ -174,7 +192,14 @@ export function registerChatTools(
           throw new Error(
             "write disabled: server is read-only (set readOnly:false to enable writes)",
           );
-        const saved = await writer().save(conversation);
+        const saved = await writer().save({
+          ...conversation,
+          conversationId: await chatConversationId(
+            conversation.conversationId,
+            conversation.account,
+          ),
+          channel: "mcp",
+        });
         return await result((await new PodOutput(pod).resource(saved)) ?? {});
       } catch (e) {
         return error(e);
@@ -188,6 +213,7 @@ export function registerChatTools(
         "List saved conversations in URL order. since is exclusive (latest message time); cursor is the previous nextCursor.",
       inputSchema: {
         provider: provider.optional(),
+        account,
         since: z.iso.datetime({ offset: true }).optional(),
         cursor: z.string().optional(),
         limit: z.number().int().min(1).max(100).optional(),
@@ -243,7 +269,14 @@ export function registerChatTools(
         const conversation = await writer().get(provider, conversationId);
         const permitted = await new PodOutput(pod).resource(conversation);
         return await result(
-          permitted ? { url: permitted.url, markdown: renderTranscript(permitted) } : {},
+          permitted
+            ? {
+                url: permitted.url,
+                ...(permitted.account === undefined ? {} : { account: permitted.account }),
+                ...(permitted.channel === undefined ? {} : { channel: permitted.channel }),
+                markdown: renderTranscript(permitted),
+              }
+            : {},
         );
       } catch (e) {
         return error(e);

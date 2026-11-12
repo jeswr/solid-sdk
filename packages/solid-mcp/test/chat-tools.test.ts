@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { type ChatConversation, ChatWriter } from "@jeswr/solid-chat-interop";
+import {
+  type ChatConversation,
+  ChatWriter,
+  ConversationProvenanceDoc,
+  chatConversationId,
+} from "@jeswr/solid-chat-interop";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -131,10 +137,157 @@ async function seedChat(pod: ReturnType<typeof fakePod>, conversation: ChatConve
     discoverAcl: createChatPodPort(config).discoverAcl,
     read: (url) => operation(() => port.read(url)),
     write: (...args) => operation(() => port.write(...args)),
-  }).save(conversation);
+  }).save({ channel: "export", ...conversation });
 }
 
 describe("MCP chat tools over the scoped fetch port", () => {
+  it("scopes two accounts and exposes their mcp provenance through get, list and export", async () => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    try {
+      for (const account of ["Personal", "Work *team*"]) {
+        const saved = json(
+          await client.callTool({ name: "chat_save", arguments: { ...input, account } }),
+        );
+        const id = await chatConversationId(input.conversationId, account);
+        expect(saved).toMatchObject({ url: `${ROOT}private/chats/claude/${id}/`, saved: 2 });
+        expect(saved.url).not.toContain(account);
+        const got = json(
+          await client.callTool({
+            name: "chat_get",
+            arguments: { provider: "claude", conversationId: id },
+          }),
+        );
+        expect(got).toMatchObject({ account, channel: "mcp", generatedAtTime: expect.any(String) });
+        const before = new Map(pod.resources);
+        expect(
+          json(
+            await client.callTool({
+              name: "chat_save",
+              arguments: { ...input, account: ` ${account} ` },
+            }),
+          ),
+        ).toMatchObject({ saved: 0, skipped: 2 });
+        expect(pod.resources).toEqual(before);
+        const exported = json(
+          await client.callTool({
+            name: "chat_export",
+            arguments: { provider: "claude", conversationId: id },
+          }),
+        );
+        expect(exported).toMatchObject({ account, channel: "mcp" });
+        expect(exported.markdown).toContain("Channel: mcp");
+        expect(exported.markdown).toContain(
+          account === "Personal" ? "Account: Personal" : "Account: Work \\*team\\*",
+        );
+      }
+      expect(
+        json(await client.callTool({ name: "chat_list", arguments: {} })).conversations,
+      ).toHaveLength(2);
+      expect(
+        json(await client.callTool({ name: "chat_list", arguments: { account: "Personal" } }))
+          .conversations,
+      ).toMatchObject([{ account: "Personal", channel: "mcp" }]);
+      const secret = "token=fixture-secret";
+      const saved = await client.callTool({
+        name: "chat_save",
+        arguments: { ...input, account: secret },
+      });
+      expect(saved.isError).toBeFalsy();
+      const id = await chatConversationId(input.conversationId, secret);
+      const got = json(
+        await client.callTool({
+          name: "chat_get",
+          arguments: { provider: "claude", conversationId: id },
+        }),
+      );
+      expect(got.account).toBe("token=[REDACTED]");
+      expect(JSON.stringify([...pod.resources])).not.toContain("fixture-secret");
+    } finally {
+      await client.close();
+    }
+  });
+
+  it.each([
+    null,
+    7,
+    "",
+    " ",
+    "a".repeat(65),
+    "x\n",
+    "a\u200bb",
+    "a\u0000b",
+  ])("refuses invalid account tool inputs before pod I/O %#", async (account) => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    try {
+      expect(
+        (await client.callTool({ name: "chat_save", arguments: { ...input, account } })).isError,
+      ).toBe(true);
+      expect((await client.callTool({ name: "chat_list", arguments: { account } })).isError).toBe(
+        true,
+      );
+      expect(pod.requests).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("replays and exports legacy unlabelled metadata at its original resource ID", async () => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    try {
+      const saved = json(await client.callTool({ name: "chat_save", arguments: input }));
+      const metadataUrl = `${saved.url}_conversation.ttl`;
+      const metadata = pod.resources.get(metadataUrl);
+      const dataset = await parseRdf(metadata?.body ?? "", "text/turtle");
+      const doc = new ConversationProvenanceDoc(`${metadataUrl}#it`, dataset, DataFactory);
+      doc.generatedAt = undefined;
+      doc.generatedBy = undefined;
+      pod.resources.set(metadataUrl, {
+        body: await serialize([...dataset], { format: "text/turtle" }),
+        contentType: "text/turtle",
+      });
+      const before = new Map(pod.resources);
+      expect(json(await client.callTool({ name: "chat_save", arguments: input }))).toMatchObject({
+        url: saved.url,
+        saved: 0,
+        skipped: 2,
+      });
+      expect(pod.resources).toEqual(before);
+      for (const name of ["chat_get", "chat_export"]) {
+        const result = json(
+          await client.callTool({
+            name,
+            arguments: { provider: input.provider, conversationId: input.conversationId },
+          }),
+        );
+        expect(result.url).toBe(saved.url);
+        expect(result).not.toHaveProperty("account");
+        expect(result).not.toHaveProperty("channel");
+        expect(result).not.toHaveProperty("generatedAtTime");
+        if (name === "chat_export") expect(result.markdown).not.toMatch(/Account:|Channel:/);
+      }
+    } finally {
+      await client.close();
+    }
+  });
+
   it("reports ChatWriter's create conflict on replay without a redundant PUT", async () => {
     const f = fakePod();
     const url = `${ROOT}private/chats/claude/chat/m-message.ttl`;

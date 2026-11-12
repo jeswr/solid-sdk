@@ -81,6 +81,7 @@ Environment variables override individual JSON fields:
 | `SOLID_MCP_CLIENT_SECRET` | `clientSecret` | CSS client-credentials token secret |
 | `SOLID_MCP_OIDC_ISSUER` | `oidcIssuer` | Issuer used for OIDC discovery |
 | `SOLID_MCP_TOKEN_URL` | `tokenUrl` | Explicit token endpoint; overrides discovery |
+| `SOLID_MCP_ACCOUNT` | `account` | Optional owner-chosen conversation account label for capture/export imports |
 
 Provide both credentials and either the issuer or token endpoint. Partial auth
 settings or failed login stop startup; there is no anonymous fallback after an auth
@@ -479,34 +480,52 @@ All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and requi
 narrow path confined to server-advertised ACLs inside `private/chats/`. Generic
 mutation tools continue to refuse those ACLs.
 
-- `chat_save({provider, conversationId, title, messages})` requires `readOnly:false`
-  and saves redacted, owner-only chats with ACLs provisioned before content.
+- `chat_save({provider, conversationId, account?, title, messages})` requires `readOnly:false`,
+  returns `{url, saved, skipped}` and saves redacted, owner-only chats with ACLs provisioned
+  before content.
   Messages are `{id?, role, text, createdAt}`. Providers: `claude`, `chatgpt`, `codex`.
   Roles: `system`, `user`, `assistant`, `tool`; dates require an explicit timezone.
-- `chat_list({provider?, since?, cursor?, limit?})` returns `{conversations, nextCursor?}`.
+- `chat_list({provider?, account?, since?, cursor?, limit?})` returns `{conversations, nextCursor?}`.
   Summaries include URL, provider, conversation ID, title and latest message time
   (`updatedAt`, absent for empty conversations). URL order and an exclusive cursor
   provide paging; `since` is exclusive against latest message time, before paging.
   Limit defaults to 20, maximum 100. Reuse filters when following a cursor.
 - `chat_get({provider, conversationId})` returns the conversation plus its URL and
   messages ordered by time, then ID.
-- `chat_export({provider, conversationId})` returns `{url, markdown}`: the same
+- `chat_export({provider, conversationId})` returns `{url, account?, channel?, markdown}`: the same
   conversation as a Markdown transcript to paste into another account. Titles and
   text are redacted again on export, and each message sits in its own code fence.
 
-Storage is `<podRoot>private/chats/<provider>/<conversationId>/`. IDs use 1–200
-letters, digits, underscores or hyphens. The fetch adapter retains pod-scope and
-redirect checks and accepts only Turtle/N3-family RDF for chats, preventing remote
-JSON-LD context loads. ChatWriter provisions only server-advertised WAC ACLs inside
-`private/chats/`, through the current guarded port. Its dedicated ACL path accepts
-only the exact owner-only body built by ChatWriter and rechecks the association before
-mutation. New ACLs use `If-None-Match: *`; changed existing ACLs must be dedicated to
-the target and have a strong ETag for `If-Match`. Identical owner-only ACLs need no
-replacement on replay. Existing chat data requested with `If-None-Match: *` returns
-412 locally without sending a redundant PUT; this replay handling is confined to
-`private/chats/`. Missing/unsafe discovery and shared ACLs fail before content;
-there is no fallback to inherited permissions. Generic `pod_write` and `solid_write`
-continue to refuse these ACLs.
+Every new MCP save records channel `mcp`, the first writer creation time and, when
+supplied, account provenance through typed PROV/FOAF/DCMI accessors. `account` is an
+owner-chosen label: 1–64 UTF-16 code units after NFC + trim, with no control/format
+characters (including trimmed edges). It is redacted like titles; a redaction that
+grows past 64 characters hides the whole label. Labels never appear in paths.
+`chat_save` scopes source `conversationId` by the normalized account before
+redaction; the same source ID under two accounts produces distinct resources, and
+replaying the same inputs is idempotent. With no account, IDs remain unchanged.
+Use the stored ID from the returned URL or `chat_list` for `chat_get`/`chat_export`.
+`chat_get` and list summaries include `account?`, `channel?`, `generatedAtTime?`;
+export includes escaped Account and Channel headers. First provenance wins on
+replay; legacy metadata may omit those fields. The account list filter matches
+the normalized, redacted label before pagination. Config `account` is consumed by
+capture/import commands; `chat_save` uses only its explicit tool input.
+
+Storage is `<podRoot>private/chats/<provider>/<conversationId>/`. First title and
+message contents win; retrying an existing ID skips it. IDs use 1–200 letters, digits,
+underscores or hyphens. Omitted message IDs are deterministic hashes; capture callers
+should supply source IDs to distinguish otherwise identical events. The fetch adapter
+retains pod-scope and redirect checks and accepts only Turtle/N3-family RDF for chats,
+preventing remote JSON-LD context loads. ChatWriter provisions only server-advertised
+WAC ACLs inside `private/chats/`, through the current guarded port. Its dedicated ACL
+path accepts only the exact owner-only body built by ChatWriter and rechecks the
+association before mutation. New ACLs use `If-None-Match: *`; changed existing ACLs
+must be dedicated to the target and have a strong ETag for `If-Match`. Identical
+owner-only ACLs need no replacement on replay. Existing chat data requested with
+`If-None-Match: *` returns 412 locally without sending a redundant PUT; this replay
+handling is confined to `private/chats/`. Missing/unsafe discovery and shared ACLs
+fail before content; there is no fallback to inherited permissions. Generic
+`pod_write` and `solid_write` continue to refuse these ACLs.
 Listing skips containers whose conversation metadata returns 404,
 while preserving permission, transport and message-read errors.
 
@@ -581,3 +600,23 @@ configuration, DPoP login, pod scope and WAC discovery behavior. The chat adapte
 keeps write permission checks; callers must supply `readOnly: false` explicitly.
 Capture uses the same narrow, owner-only chat ACL path as `chat_save`; generic
 mutation tools continue to refuse ACL provisioning.
+
+## Packaging (prepared, not published)
+
+[`packaging/`](./packaging/README.md) contains the single registry `server.json`,
+an MCPB v0.3 manifest, a copyable Claude Code marketplace and our own ChatGPT
+planning descriptor and submission procedure. Nothing is published, submitted,
+uploaded or enabled.
+After building workspace prerequisites, `pnpm run build && pnpm run packaging:check`
+validates offline against vendored schemas and a real server's `tools/list`.
+`pnpm run packaging:build` rebuilds and produces the deterministic, self-contained
+Node >=24 `packaging/out/solid-mcp-<version>.mcpb` locally, including deterministic
+third-party license notices from the bundle inputs. The output is ignored,
+and `files` excludes all packaging artifacts from npm and mirrors. Tests run the
+validator and isolated bundle startup. See the packaging README for configuration
+choices, separate remote/local plugins, deferred npm distribution and the capture
+hooks' local `solid-capture claude` command (SessionEnd needs
+`CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS=30000`; the plugin timeout alone does not raise
+Claude Code's 1.5-second SessionEnd budget). The private
+capture package is not on npm; hooks need a local installation today. The package's
+`mcpName` matches the registry name and survives mirror manifest rewriting.

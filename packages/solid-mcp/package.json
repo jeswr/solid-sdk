@@ -1,5 +1,6 @@
 {
   "name": "@jeswr/solid-mcp",
+  "mcpName": "io.github.jeswr/solid-mcp",
   "version": "0.2.0",
   "description": "A Model Context Protocol (MCP) server that exposes a Solid pod to MCP clients (Claude Desktop, etc.) as Resources + Tools (list / read / search / write) over an injectable authenticated Solid fetch. Read-only by default; pod-scope-guarded. Experimental, AI-agent-generated.",
   "type": "module",
@@ -34,7 +35,9 @@
     "lint": "biome check src test scripts",
     "lint:fix": "biome check --write src test scripts",
     "test": "npm run build:deps && vitest run",
-    "test:coverage": "npm run build:deps && vitest run --coverage"
+    "test:coverage": "npm run build:deps && vitest run --coverage",
+    "packaging:check": "node scripts/validate-packaging.mjs",
+    "packaging:build": "node scripts/build-mcpb.mjs"
   },
   "keywords": [
     "mcp",
@@ -85,7 +88,10 @@
     "@types/n3": "^1.16.0",
     "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.10",
+    "ajv": "^8.18.0",
+    "ajv-formats": "3.0.1",
     "esbuild": "^0.28.1",
+    "fflate": "0.8.3",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },

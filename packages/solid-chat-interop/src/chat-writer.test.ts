@@ -1,13 +1,32 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import {
+  LiteralAs,
+  LiteralFrom,
+  NamedNodeAs,
+  NamedNodeFrom,
+  OptionalAs,
+  SetFrom,
+} from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { chatConversationId, normalizeChatAccount, redactChatAccount } from "./chat-account.js";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
 import { ownerOnlyChatAcl } from "./index.js";
+import { ConversationProvenanceDoc } from "./conversation-provenance.js";
 import { parseAs2, storeToTurtle } from "./reconcile.js";
 import { redactSecrets } from "./redact.js";
+import {
+  DCT_TYPE,
+  FOAF_ACCOUNT_NAME,
+  PROV_ACTIVITY,
+  PROV_AGENT,
+  PROV_GENERATED_AT_TIME,
+  PROV_WAS_ATTRIBUTED_TO,
+  PROV_WAS_GENERATED_BY,
+  XSD,
+} from "./vocab.js";
 
 const ROOT = "https://alice.example/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -67,6 +86,7 @@ function conversation(overrides: Partial<ChatConversation> = {}): ChatConversati
     provider: "claude",
     conversationId: "thread-1",
     title: "A chat",
+    channel: "mcp",
     messages: [
       { id: "msg-1", role: "user", text: 'Hello "world" <x>', createdAt: DAY1 },
       { id: "msg-2", role: "assistant", text: "Hello back", createdAt: DAY2 },
@@ -76,6 +96,318 @@ function conversation(overrides: Partial<ChatConversation> = {}): ChatConversati
 }
 
 describe("ChatWriter", () => {
+  it("keeps two account-scoped conversations distinct and their first provenance immutable", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(DAY1);
+      const ids = await Promise.all(
+        ["Personal", "Work"].map((account) => chatConversationId("thread-1", account)),
+      );
+      expect(new Set(ids).size).toBe(2);
+      for (const [index, account] of ["Personal", "Work"].entries()) {
+        const id = ids[index] as string;
+        const input = conversation({
+          conversationId: id,
+          account,
+          channel: "export",
+          generatedAtTime: DAY2,
+        });
+        const { url } = await writer.save(input);
+        expect(url).not.toContain(account);
+        const metadataUrl = `${url}_conversation.ttl`;
+        const before = await pod.read(metadataUrl);
+        const dataset = await parseRdf(decoder.decode(before.body), "text/turtle");
+        const doc = new ConversationProvenanceDoc(`${metadataUrl}#it`, dataset, DataFactory);
+        expect(doc.attributedTo).toBe(`${metadataUrl}#account`);
+        expect(doc.generatedBy).toBe(`${metadataUrl}#capture`);
+        expect(doc.generatedAt?.toISOString()).toBe(DAY1);
+        const agent = new ConversationProvenanceDoc(
+          doc.attributedTo as string,
+          dataset,
+          DataFactory,
+        );
+        expect([...agent.types]).toEqual([PROV_AGENT]);
+        expect(agent.accountName).toBe(account);
+        const capture = new ConversationProvenanceDoc(
+          doc.generatedBy as string,
+          dataset,
+          DataFactory,
+        );
+        expect([...capture.types]).toEqual([PROV_ACTIVITY]);
+        expect(capture.channel).toBe("export");
+        // Datatype is part of the serialization contract, in addition to typed values.
+        expect(
+          [...dataset].find((q) => q.predicate.value === PROV_GENERATED_AT_TIME)?.object,
+        ).toMatchObject({ datatype: { value: `${XSD}dateTime` } });
+        vi.setSystemTime(DAY2);
+        expect(await writer.save({ ...input, channel: "hook" })).toMatchObject({
+          saved: 0,
+          skipped: 2,
+        });
+        expect(await pod.read(metadataUrl)).toEqual(before);
+        expect(await writer.get("claude", id)).toMatchObject({
+          account,
+          channel: "export",
+          generatedAtTime: DAY1,
+        });
+        vi.setSystemTime(DAY1);
+      }
+      expect((await writer.list()).conversations).toHaveLength(2);
+      expect((await writer.list({ account: " Work " })).conversations).toMatchObject([
+        { account: "Work" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("normalizes account identity, redacts stored labels, and preserves no-label IDs", async () => {
+    expect(await chatConversationId("thread-1")).toBe("thread-1");
+    expect(await chatConversationId("thread-1", " Cafe\u0301 ")).toBe(
+      await chatConversationId("thread-1", "Café"),
+    );
+    expect(normalizeChatAccount(" a ")).toBe("a");
+    expect(normalizeChatAccount("a".repeat(64))).toHaveLength(64);
+    expect(normalizeChatAccount("e\u0301".repeat(64))).toBe("é".repeat(64));
+    expect(redactChatAccount(`${"a".repeat(56)} token=a`)).toBe("[REDACTED]");
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const account = "token=fixture-secret";
+    const id = await chatConversationId("thread-1", account);
+    expect(id).not.toBe(await chatConversationId("thread-1", "token=other-secret"));
+    await writer.save(conversation({ account, conversationId: id }));
+    expect((await writer.get("claude", id)).account).toBe("token=[REDACTED]");
+    expect(JSON.stringify(pod.writes)).not.toContain("fixture-secret");
+    for (const resource of pod.resources.values())
+      expect(decoder.decode(resource.body)).not.toContain("fixture-secret");
+    const { url } = await writer.save(conversation());
+    const dataset = await parseRdf(
+      decoder.decode((await pod.read(`${url}_conversation.ttl`)).body),
+      "text/turtle",
+    );
+    const doc = new ConversationProvenanceDoc(`${url}_conversation.ttl#it`, dataset, DataFactory);
+    expect(doc.attributedTo).toBeUndefined();
+    expect([
+      ...new ConversationProvenanceDoc(`${url}_conversation.ttl#account`, dataset, DataFactory)
+        .types,
+    ]).toEqual([]);
+    expect(doc.generatedAt).toBeInstanceOf(Date);
+    expect(doc.generatedBy).toBe(`${url}_conversation.ttl#capture`);
+  });
+
+  it.each([
+    "",
+    " ",
+    "a".repeat(65),
+    "a\n",
+    "a\u0000b",
+    "a\u007fb",
+    "a\u0085b",
+    "a\u200db",
+    "a\u202eb",
+    2,
+    null,
+  ])("rejects invalid account labels without writes %#", async (account) => {
+    const pod = new MemoryPod();
+    const label = account as string;
+    expect(() => normalizeChatAccount(label)).toThrow("Invalid chat account label");
+    await expect(chatConversationId("thread-1", label)).rejects.toThrow(
+      "Invalid chat account label",
+    );
+    await expect(new ChatWriter(pod).save(conversation({ account: label }))).rejects.toThrow(
+      "Invalid chat account label",
+    );
+    await expect(new ChatWriter(pod).list({ account: label })).rejects.toThrow(
+      "Invalid chat account label",
+    );
+    expect(pod.writes).toEqual([]);
+  });
+
+  it.each([
+    undefined,
+    "email",
+    "",
+    "MCP",
+  ])("refuses an absent or unsupported capture channel %#", async (channel) => {
+    const pod = new MemoryPod();
+    await expect(
+      new ChatWriter(pod).save(conversation({ channel: channel as "mcp" })),
+    ).rejects.toThrow(/channel/);
+    expect(pod.writes).toEqual([]);
+  });
+
+  it("replays legacy no-account metadata at its original URL without synthesizing provenance", async () => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const { url } = await writer.save(conversation());
+    const metadataUrl = `${url}_conversation.ttl`;
+    const resource = await pod.read(metadataUrl);
+    const dataset = await parseRdf(decoder.decode(resource.body), "text/turtle");
+    const doc = new ConversationProvenanceDoc(`${metadataUrl}#it`, dataset, DataFactory);
+    doc.generatedAt = undefined;
+    doc.generatedBy = undefined;
+    // Account and activity nodes are not followed or fetched when provenance is absent.
+    const before = await storeToTurtle(dataset);
+    resource.body = new TextEncoder().encode(before);
+    await writer.save(conversation());
+    expect(decoder.decode((await pod.read(metadataUrl)).body)).toBe(before);
+    expect(await writer.get("claude", "thread-1")).toEqual({
+      ...conversation({ channel: undefined }),
+      url,
+      channel: undefined,
+    });
+  });
+
+  it.each([
+    "account-link",
+    "account-type",
+    "account-label",
+    "account-label-long",
+    "account-label-empty",
+    "account-label-control",
+    "account-label-iri",
+    "account-duplicate",
+    "capture-link",
+    "capture-type",
+    "capture-duplicate",
+    "channel",
+    "channel-iri",
+    "channel-language",
+    "channel-duplicate",
+    "timestamp-invalid",
+    "timestamp-invalid-date",
+    "timestamp-feb-30",
+    "timestamp-non-leap-feb-29",
+    "timestamp-hour-24",
+    "timestamp-nozone",
+    "timestamp-date",
+    "timestamp-duplicate",
+  ])("fails closed on malformed stored provenance: %s", async (mutation) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const { url } = await writer.save(conversation({ account: "Work" }));
+    const metadataUrl = `${url}_conversation.ttl`;
+    const resource = await pod.read(metadataUrl);
+    const dataset = await parseRdf(decoder.decode(resource.body), "text/turtle");
+    const doc = new ConversationProvenanceDoc(`${metadataUrl}#it`, dataset, DataFactory);
+    const agent = new ConversationProvenanceDoc(doc.attributedTo as string, dataset, DataFactory);
+    const capture = new ConversationProvenanceDoc(doc.generatedBy as string, dataset, DataFactory);
+    if (mutation === "account-link") doc.attributedTo = "https://evil.example/agent";
+    if (mutation === "account-type") agent.types.clear();
+    if (mutation === "account-label") agent.accountName = undefined;
+    if (mutation === "account-label-long") agent.accountName = "a".repeat(65);
+    if (mutation === "account-label-empty") agent.accountName = " ";
+    if (mutation === "account-label-control") agent.accountName = "a\u200bb";
+    if (mutation === "account-label-iri")
+      OptionalAs.object(agent, FOAF_ACCOUNT_NAME, "https://evil.example/", NamedNodeFrom.string);
+    if (mutation === "account-duplicate")
+      SetFrom.subjectPredicate(
+        doc,
+        PROV_WAS_ATTRIBUTED_TO,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ).add(`${metadataUrl}#another-account`);
+    if (mutation === "capture-link") doc.generatedBy = "https://evil.example/capture";
+    if (mutation === "capture-type") capture.types.clear();
+    if (mutation === "capture-duplicate")
+      SetFrom.subjectPredicate(
+        doc,
+        PROV_WAS_GENERATED_BY,
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ).add(`${metadataUrl}#another-capture`);
+    if (mutation === "channel") capture.channel = "other";
+    if (mutation === "channel-iri")
+      OptionalAs.object(capture, DCT_TYPE, "mcp", NamedNodeFrom.string);
+    if (mutation === "channel-language")
+      OptionalAs.object(capture, DCT_TYPE, { lang: "en", string: "mcp" }, LiteralFrom.langString);
+    if (mutation === "channel-duplicate")
+      SetFrom.subjectPredicate(capture, DCT_TYPE, LiteralAs.string, LiteralFrom.string).add("hook");
+    if (mutation === "timestamp-invalid" || mutation === "timestamp-nozone")
+      OptionalAs.object(
+        doc,
+        PROV_GENERATED_AT_TIME,
+        [`${XSD}dateTime`, mutation === "timestamp-invalid" ? "invalid" : "2026-10-24T12:00:00"],
+        LiteralFrom.datatypeTuple,
+      );
+    if (mutation === "timestamp-invalid-date")
+      OptionalAs.object(
+        doc,
+        PROV_GENERATED_AT_TIME,
+        [`${XSD}dateTime`, "2026-99-99T00:00:00Z"],
+        LiteralFrom.datatypeTuple,
+      );
+    if (
+      mutation === "timestamp-feb-30" ||
+      mutation === "timestamp-non-leap-feb-29" ||
+      mutation === "timestamp-hour-24"
+    )
+      OptionalAs.object(
+        doc,
+        PROV_GENERATED_AT_TIME,
+        [
+          `${XSD}dateTime`,
+          {
+            "timestamp-feb-30": "2026-02-30T00:00:00Z",
+            "timestamp-non-leap-feb-29": "2025-02-29T12:00:00+01:00",
+            "timestamp-hour-24": "2026-10-24T24:00:00Z",
+          }[mutation],
+        ],
+        LiteralFrom.datatypeTuple,
+      );
+    if (mutation === "timestamp-date")
+      OptionalAs.object(doc, PROV_GENERATED_AT_TIME, new Date(DAY1), LiteralFrom.date);
+    if (mutation === "timestamp-duplicate")
+      SetFrom.subjectPredicate(
+        doc,
+        PROV_GENERATED_AT_TIME,
+        LiteralAs.date,
+        LiteralFrom.dateTime,
+      ).add(new Date(DAY2));
+    resource.body = new TextEncoder().encode(await storeToTurtle(dataset));
+    await expect(writer.get("claude", "thread-1")).rejects.toThrow();
+    await expect(writer.list()).rejects.toThrow();
+    expect(pod.reads.every((read) => read.startsWith(ROOT))).toBe(true);
+  });
+
+  it.each([
+    ["2024-02-29T23:59:59.5+14:00", "2024-02-29T09:59:59.500Z"],
+    ["2000-02-29T00:00:00Z", "2000-02-29T00:00:00.000Z"],
+    ["2026-12-31T23:59:59-12:00", "2027-01-01T11:59:59.000Z"],
+  ])("reads valid calendar timestamp %s", (value, iso) => {
+    const doc = new ConversationProvenanceDoc("https://pod.example/c#it", new Store(), DataFactory);
+    OptionalAs.object(
+      doc,
+      PROV_GENERATED_AT_TIME,
+      [`${XSD}dateTime`, value],
+      LiteralFrom.datatypeTuple,
+    );
+    expect(doc.generatedAt?.toISOString()).toBe(iso);
+  });
+
+  it.each([
+    "1900-02-29T00:00:00Z",
+    "2026-04-31T00:00:00Z",
+    "2026-13-01T00:00:00Z",
+    "2026-00-10T00:00:00Z",
+    "2026-01-00T00:00:00Z",
+    "2026-01-01T23:60:00Z",
+    "2026-01-01T23:00:60Z",
+    "2026-01-01T00:00:00+15:00",
+    "2026-01-01T00:00:00+01:60",
+  ])("rejects impossible calendar timestamp %s", (value) => {
+    const doc = new ConversationProvenanceDoc("https://pod.example/c#it", new Store(), DataFactory);
+    OptionalAs.object(
+      doc,
+      PROV_GENERATED_AT_TIME,
+      [`${XSD}dateTime`, value],
+      LiteralFrom.datatypeTuple,
+    );
+    expect(() => doc.generatedAt).toThrow("Invalid conversation provenance timestamp");
+  });
+
   it("writes canonical AS2 and preserves immutable message IDs on re-save", async () => {
     const pod = new MemoryPod();
     const writer = new ChatWriter(pod);
@@ -101,7 +433,7 @@ describe("ChatWriter", () => {
     ).toEqual({ ...first, saved: 0, skipped: 2 });
     expect(decoder.decode((await pod.read(messageUrl)).body)).toBe(before);
     const got = await writer.get("claude", "thread-1");
-    expect(got).toEqual({ ...input, url: first.url });
+    expect(got).toEqual({ ...input, url: first.url, generatedAtTime: expect.any(String) });
     const writes = pod.writes.filter((w) => /m-msg-.*\.ttl$/.test(w.url));
     expect(writes.every((w) => w.cond.ifNoneMatch === "*")).toBe(true);
     const assistant = await parseAs2(
