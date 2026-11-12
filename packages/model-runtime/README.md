@@ -106,13 +106,16 @@ Reads require a Literal typed exactly `xsd:decimal`. Exact fields reject `in`, n
 bounds, text guards and non-lexical defaults at manifest validation. Without the key,
 the number mapping is unchanged. `fieldLiteralMapper(datatype, decimal)` is the single
 resolution used by the runtime, manifest validation and the generator's emitted types.
+Exact values compare by lexical, not numeric value: in a set, `has("10.5")` and
+`delete("10.5")` do not match a stored `"10.50"`, and a parse of `10.5, 10.50` keeps both.
 
 **Closed string pattern.** `guards.stringPattern: "upper-alpha-3"` (only on an `xsd:string`
 literal) keeps exactly three ASCII uppercase letters (`isUpperAlpha3`), the projection of
 `sh:pattern "^[A-Z]{3}$"` (the ISO 4217 alphabetic code shape; list membership is domain
 policy). It is checked character by character, never as a regex from manifest text, and the
 value is validated raw: write sanitization is skipped so `"US\u0000D"` drops instead of
-being repaired to `USD`.
+being repaired to `USD`. Manifest validation therefore rejects `trim`, `dropBlank` and
+`sanitizeText` alongside a `stringPattern`.
 
 The XSD string family (`normalizedString`, `token`, `language`, `NMTOKEN`, `Name`, `NCName`,
 `ID`, `IDREF`, `ENTITY` and their list types) has closed lexical checks on reads and writes.

@@ -549,6 +549,20 @@ describe("manifest validation fails closed", () => {
     expect(check(field)).toThrow(message);
   });
 
+  it.each([
+    "trim",
+    "dropBlank",
+    "sanitizeText",
+  ] as const)("rejects stringPattern combined with %s (the pattern sees the raw value)", (key) => {
+    const field = literal({
+      datatype: STR,
+      collection: "set",
+      maxCount: undefined,
+      guards: { stringPattern: "upper-alpha-3", [key]: true },
+    });
+    expect(check(field)).toThrow(new RegExp(`stringPattern cannot be combined with ${key}`));
+  });
+
   it("rejects decimal on a nested composite link", () => {
     const entity = {
       name: "C",

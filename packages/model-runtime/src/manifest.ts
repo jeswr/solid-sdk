@@ -564,6 +564,13 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
       expandDatatype(datatype as string) !== `${XSD}string`)
   )
     fail("stringPattern requires an xsd:string literal field");
+  // The pattern validates the raw value: a guard that rewrites it first (trim, blank
+  // dropping, sanitization) would make build accept what a read of the same pod term rejects.
+  if (g.stringPattern !== undefined) {
+    for (const key of ["trim", "dropBlank", "sanitizeText"] as const) {
+      if (g[key] !== undefined) fail(`stringPattern cannot be combined with ${key}`);
+    }
+  }
   if (field.decimal !== undefined) {
     // The exact mapping has no reviewed exact enum / text-guard projection: fail closed
     // rather than interpret a numeric member or a text guard against a decimal lexical.
