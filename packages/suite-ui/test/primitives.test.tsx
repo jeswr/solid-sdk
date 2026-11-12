@@ -26,6 +26,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   IconButton,
   Progress,
@@ -42,6 +45,48 @@ vi.stubGlobal(
   },
 );
 afterEach(cleanup);
+it.each([
+  "pointer",
+  "keyboard",
+])("portals a submenu outside its scrollable parent and selects by %s", async (activation) => {
+  const select = vi.fn();
+  render(
+    <section data-density="compact">
+      <DropdownMenu>
+        <DropdownMenuTrigger>Task actions</DropdownMenuTrigger>
+        <DropdownMenuContent style={{ maxHeight: 120, overflowY: "auto" }}>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>Move to section</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent aria-label="Sections" className="consumer-menu">
+              <DropdownMenuItem onSelect={select}>Doing</DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </section>,
+  );
+  const trigger = screen.getByRole("button", { name: "Task actions" });
+  fireEvent.keyDown(trigger, { key: "Enter" });
+  const subTrigger = await screen.findByRole("menuitem", { name: "Move to section" });
+  if (activation === "pointer") fireEvent.click(subTrigger);
+  else fireEvent.keyDown(subTrigger, { key: "ArrowRight" });
+  const submenu = await screen.findByRole("menu", { name: "Move to section" });
+  const parent = document.querySelector('[data-slot="dropdown-menu-content"]');
+  expect(parent).not.toBeNull();
+  expect(parent?.contains(submenu)).toBe(false);
+  expect(submenu.closest("[inert]")).toBeNull();
+  expect(submenu.getAttribute("data-density")).toBe("compact");
+  expect(submenu.classList.contains("consumer-menu")).toBe(true);
+  const item = within(submenu).getByRole("menuitem", { name: "Doing" });
+  if (activation === "pointer") fireEvent.click(item);
+  else {
+    await waitFor(() => expect(document.activeElement).toBe(item));
+    fireEvent.keyDown(item, { key: "Enter" });
+  }
+  expect(select).toHaveBeenCalledOnce();
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+});
 it("IconButton pairs its name with a keyboard tooltip and prevents disabled activation", async () => {
   const onClick = vi.fn();
   render(
