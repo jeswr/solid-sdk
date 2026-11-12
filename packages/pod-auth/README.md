@@ -70,9 +70,11 @@ Without a WebID, configure roots explicitly. Neither the WebID document's origin
 origin is implicitly a resource grant. Profile-linked non-container storage identifiers may resolve to
 LWS descriptions (`id`, `Storage`, `StorageRoot.serviceEndpoint`) or Solid descriptions (`pim:Storage`).
 An advertised root must be a container on the storage identifier's origin and confirm itself through
-an unauthenticated, non-redirected HEAD: a Solid `pim:Storage` type Link or exactly one LWS storage Link
-back to that identifier. This includes roots above the identifier; an unconfirmed broader same-origin
-root grants nothing. Invalid, foreign-origin and non-container roots are silently dropped.
+an unauthenticated, non-redirected HEAD: exactly one LWS storage Link back to that identifier, or a
+Solid `pim:Storage` type Link on a root that contains the identifier or names it as its only
+`solid:storageDescription`. This includes roots above the identifier; an unconfirmed broader or sibling
+same-origin root grants nothing. At most eight same-origin roots are probed per identifier. Invalid,
+foreign-origin and non-container roots are silently dropped.
 Description requests omit credentials and reject redirects. Profile redirects locate the public
 document; assertions must still name the original WebID. Invalid assertions grant nothing.
 

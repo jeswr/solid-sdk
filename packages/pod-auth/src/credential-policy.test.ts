@@ -8,6 +8,7 @@ import { createMockLwsAs, createMockOp } from "./testing.js";
 
 const attacker = "https://attacker.example/";
 const storageType = '<http://www.w3.org/ns/pim/space#Storage>; rel="type"';
+const solidDescription = "http://www.w3.org/ns/solid/terms#storageDescription";
 const lwsLink = '<https://pod.example/storage>; rel="https://www.w3.org/ns/lws#storage"';
 afterEach(() => vi.unstubAllGlobals());
 
@@ -252,7 +253,11 @@ test.each([
 ])("LWS identity descriptions validate id, type, service and endpoint: %#", async (document) => {
   const boundary = policy(async (input, init) => {
     if (new Request(input, init).method === "HEAD")
-      return new Response(null, { headers: { link: storageType } });
+      return new Response(null, {
+        headers: {
+          link: `${storageType}, <https://pod.example/description>; rel="${solidDescription}"`,
+        },
+      });
     return String(input).startsWith("https://id.example")
       ? profile("https://pod.example/description")
       : Response.json(document);
@@ -271,7 +276,11 @@ test.each([
 ])("identity descriptions fail closed or parse Solid roots: %s", async (kind) => {
   const boundary = policy(async (input, init) => {
     if (new Request(input, init).method === "HEAD")
-      return new Response(null, { headers: { link: storageType } });
+      return new Response(null, {
+        headers: {
+          link: `${storageType}, <https://pod.example/description>; rel="${solidDescription}"`,
+        },
+      });
     if (String(input).startsWith("https://id.example"))
       return profile("https://pod.example/description");
     if (kind === "failure") throw new Error("offline");

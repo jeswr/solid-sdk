@@ -331,3 +331,54 @@ test("the UMA AS check refuses a learned storage's origin and accepts the resour
     false,
   );
 });
+
+test("a Solid storage type alone cannot confirm a sibling of the identifier", async () => {
+  const sibling = "https://pod.example/bob/";
+  const f = descriptionFixture(
+    sibling,
+    "solid",
+    () => new Response(null, { headers: { link: `<${storageType}>; rel="type"` } }),
+  );
+  await f.boundary.learn(f.op.webId, new AbortController().signal);
+  expect(f.boundary.allows(`${sibling}private`)).toBe(false);
+  expect(f.boundary.roots()).toEqual([storage]);
+});
+
+test("at most eight same-origin description roots are probed", async () => {
+  const op = createMockOp({ storages: [storage] });
+  const advertised = Array.from({ length: 12 }, (_, i) => `https://pod.example/r${i}/`);
+  const heads: string[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === "HEAD") {
+      heads.push(request.url);
+      return new Response(null, { status: 404 });
+    }
+    if (request.url === storage) return turtleTypes(advertised);
+    return op.fetch(request);
+  };
+  const boundary = createBoundary({}, { fetch });
+  await boundary.learn(op.webId, new AbortController().signal);
+  expect(heads).toHaveLength(8);
+  expect(boundary.roots()).toEqual([storage]);
+});
+
+test.each([
+  ["a back-link to the identifier", true],
+  ["a back-link to another description", false],
+])("a Solid sibling root is confirmed only by %s", async (_label, matches) => {
+  const sibling = "https://pod.example/bob/";
+  const description = matches ? storage : "https://pod.example/bob/description";
+  const f = descriptionFixture(
+    sibling,
+    "solid",
+    () =>
+      new Response(null, {
+        headers: {
+          link: `<${storageType}>; rel="type", <${description}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+        },
+      }),
+  );
+  await f.boundary.learn(f.op.webId, new AbortController().signal);
+  expect(f.boundary.allows(`${sibling}private`)).toBe(matches);
+});
