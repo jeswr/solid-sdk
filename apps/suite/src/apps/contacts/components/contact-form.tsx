@@ -12,7 +12,6 @@ import {
   AlertDialogTitle,
   Button,
   EmptyState,
-  ErrorState,
   Form,
   IconButton,
   Input,
@@ -40,13 +39,13 @@ import { duplicateContacts } from "../lib/import-export";
 import type { ContactData, Snapshot } from "../lib/model";
 import { useContact, useContactMutations } from "../state/contacts-context";
 import { type ContactPatch, contactLabels, encodeContactRef } from "../state/data";
+import { ContactLoadError } from "./contact-load-error";
 
 export function ContactEditor({ contactRef }: { contactRef?: string }) {
   const state = useContact(contactRef ?? "");
   if (state.status === "loading")
     return <LoadingSkeleton preset="detail" label="Loading contact form" />;
-  if (state.status === "error")
-    return <ErrorState error="unreachable" actions={{ retry: state.retry }} />;
+  if (state.status === "error") return <ContactLoadError onRetry={state.retry} />;
   if (!state.book)
     return (
       <EmptyState

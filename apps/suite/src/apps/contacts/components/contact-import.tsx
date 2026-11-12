@@ -6,7 +6,6 @@ import {
   type DroppedFiles,
   DropZoneOverlay,
   EmptyState,
-  ErrorState,
   Input,
   LoadingSkeleton,
   Select,
@@ -26,6 +25,7 @@ import {
 } from "../lib/import-export";
 import { useAddressBook, useContactMutations } from "../state/contacts-context";
 import { encodeContactRef } from "../state/data";
+import { ContactLoadError } from "./contact-load-error";
 
 export function ContactImport() {
   const state = useAddressBook();
@@ -92,8 +92,7 @@ export function ContactImport() {
   };
   if (state.status === "loading")
     return <LoadingSkeleton preset="detail" label="Loading import wizard" />;
-  if (state.status === "error")
-    return <ErrorState error="unreachable" actions={{ retry: state.retry }} />;
+  if (state.status === "error") return <ContactLoadError onRetry={state.retry} />;
   if (!state.book)
     return (
       <EmptyState
@@ -130,6 +129,7 @@ export function ContactImport() {
           <div className="con-form-actions">
             <Button
               variant={source === "files" ? "default" : "outline"}
+              aria-pressed={source === "files"}
               onClick={() => {
                 setSource("files");
                 setError("");
@@ -140,6 +140,7 @@ export function ContactImport() {
             </Button>
             <Button
               data-requires-online="true"
+              aria-pressed={source === "dav"}
               aria-describedby={!online ? "con-dav-offline" : undefined}
               disabled={!online || busy}
               variant={source === "dav" ? "default" : "outline"}
@@ -259,7 +260,12 @@ export function ContactImport() {
                   <tr key={index}>
                     <td>
                       <Checkbox
-                        aria-label={`Include ${row.data.name}`}
+                        aria-label={`Include ${row.data.name || "Unnamed contact"}`}
+                        aria-describedby={
+                          row.duplicates.length || row.warnings.length
+                            ? `con-import-warnings-${index}`
+                            : undefined
+                        }
                         checked={row.include}
                         disabled={!row.valid}
                         onCheckedChange={(checked) =>
@@ -276,7 +282,7 @@ export function ContactImport() {
                       {row.data.emails?.map((email) => email.replace(/^mailto:/i, "")).join(", ")}
                     </td>
                     <td>{row.data.phones?.join(", ")}</td>
-                    <td>
+                    <td id={`con-import-warnings-${index}`}>
                       {row.duplicates.length > 0 && (
                         <p className="con-duplicate">
                           Possible duplicate: {row.duplicates.join(", ")}. Matching email or phone.

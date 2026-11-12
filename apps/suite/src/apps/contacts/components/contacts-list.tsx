@@ -8,11 +8,10 @@ import {
   type DataColumn,
   DataTable,
   EmptyState,
-  ErrorState,
   LoadingSkeleton,
   renderAsync,
 } from "@jeswr/suite-ui";
-import { Star, Users } from "lucide-react";
+import { Search, Star, Users } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
@@ -26,6 +25,7 @@ import {
 } from "../lib/list";
 import { useContacts, useStarred } from "../state/contacts-context";
 import { decodeContactRef, encodeContactRef, filterContacts } from "../state/data";
+import { ContactLoadError } from "./contact-load-error";
 
 export function ContactAvatar({
   contact,
@@ -91,6 +91,9 @@ export function ContactsList({
   const { stars, toggle } = useStarred();
   const params = useSearchParams();
   const query = params.get("q") ?? "";
+  const clearedParams = new URLSearchParams(params.toString());
+  clearedParams.delete("q");
+  const clearSearchHref = path + (clearedParams.size ? `?${clearedParams}` : "");
   const [stickyLetter, setStickyLetter] = useState("");
   let groupUrl: string | undefined;
   try {
@@ -268,9 +271,7 @@ export function ContactsList({
         loading: state.status === "loading" && (
           <LoadingSkeleton preset="table" label="Loading contacts" />
         ),
-        error: state.status === "error" && (
-          <ErrorState error="unreachable" actions={{ retry: state.retry }} />
-        ),
+        error: state.status === "error" && <ContactLoadError onRetry={state.retry} />,
         empty: !state.book ? (
           <EmptyState
             title="Create your address book"
@@ -300,12 +301,24 @@ export function ContactsList({
                   ? "Try another search or label."
                   : path === "/contacts/starred"
                     ? "Star a contact to find them here."
-                    : "Add someone to your address book."
+                    : "Keep contact details together in your pod. Add a contact or import a vCard file."
             }
+            icon={query ? <Search aria-hidden="true" /> : <Users aria-hidden="true" />}
             primaryAction={
               <Button asChild>
-                <Link href="/contacts/new">New contact</Link>
+                {query ? (
+                  <Link href={clearSearchHref}>Clear search</Link>
+                ) : (
+                  <Link href="/contacts/new">New contact</Link>
+                )}
               </Button>
+            }
+            secondaryAction={
+              !query && !group && path !== "/contacts/starred" && !imported ? (
+                <Button variant="outline" asChild>
+                  <Link href="/contacts/import">Import</Link>
+                </Button>
+              ) : undefined
             }
           />
         ) : null,

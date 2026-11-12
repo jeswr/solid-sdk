@@ -1,13 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { accessible, test } from "./helpers";
 
-async function accessible(page: Page) {
-  const result = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(result.violations).toEqual([]);
-}
 async function newContact(page: Page) {
   await page.goto("/contacts");
   await expect(page.locator(".con-list-heading").getByRole("status")).toHaveText("40 contacts");

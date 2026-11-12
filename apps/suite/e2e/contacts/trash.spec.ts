@@ -1,18 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { accessible, test } from "./helpers";
 
 const row = (page: Page, name: string) => page.getByRole("row", { name, exact: true });
 const count = (page: Page) => page.locator(".con-list-heading").getByRole("status");
 const trashItem = (page: Page, name: string) =>
   page.getByRole("list", { name: "Trash", exact: true }).getByRole("listitem", { name });
-async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Contacts · Solid Suite");
-  const result = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(result.violations).toEqual([]);
-}
+
 async function navigation(page: Page, name: RegExp) {
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();

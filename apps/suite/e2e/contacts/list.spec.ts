@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { accessible, test } from "./helpers";
 
 const rows = (page: Page) => page.locator("[data-collection-item]");
 const row = (page: Page, name: string) => page.getByRole("row", { name, exact: true });
@@ -24,13 +24,7 @@ async function navigation(page: Page, name: RegExp) {
       .getByRole("link", { name })
       .click();
 }
-async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Contacts · Solid Suite");
-  const result = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(result.violations).toEqual([]);
-}
+
 async function search(page: Page, query: string) {
   const input = page.getByRole("searchbox", { name: "Search Contacts", exact: true });
   await input.fill(query);
