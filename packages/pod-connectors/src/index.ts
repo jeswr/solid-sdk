@@ -14,6 +14,8 @@ export * from "./core/pod-writer.js";
 export * from "./core/scheduler.js";
 export * from "./core/state.js";
 export * from "./core/state-store.js";
+/** Conditional storage-client-backed Pod writer. */
+export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
 export * from "./core/types.js";
 /** File adapter registry. */
 export * from "./file-adapters.js";
