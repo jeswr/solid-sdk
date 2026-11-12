@@ -156,7 +156,7 @@ const RANGE_PROBLEMS: Record<string, string> = {
 export function verifyRange(
   entries: readonly LedgerEntry[],
   head?: AuditHead,
-  through = head?.seq,
+  through?: number,
 ): RangeCheck {
   const fail = (problem: string, firstBadSeq?: number): RangeCheck => ({
     ok: false,
@@ -164,15 +164,31 @@ export function verifyRange(
     firstBadSeq,
     scope: AUDIT_SCOPE,
   });
-  if (head && !auditHeadSchema.safeParse(head).success) return fail("Malformed head");
-  if (through !== undefined && !auditHeadSchema.shape.seq.safeParse(through).success)
+  // Validate one snapshot of the head and use only it: the caller's object may change or
+  // throw on a later read.
+  let snapshot: AuditHead | undefined;
+  if (head) {
+    let parsed: ReturnType<typeof auditHeadSchema.safeParse>;
+    try {
+      parsed = auditHeadSchema.safeParse(head);
+    } catch {
+      return fail("Malformed head");
+    }
+    if (!parsed.success) return fail("Malformed head");
+    snapshot = parsed.data;
+  }
+  const end = through === undefined ? snapshot?.seq : through;
+  if (end !== undefined && !auditHeadSchema.shape.seq.safeParse(end).success)
     return fail("Invalid range endpoint");
   const { result: chain, entries: parsedEntries } = checkChain(entries, true);
   if (!chain.ok) return fail(RANGE_PROBLEMS[chain.problem as string] as string, chain.firstBadSeq);
   const last = parsedEntries.at(-1);
-  if (through !== undefined && (!last || last.seq < through))
-    return fail(`Record ${through} is missing`, through);
-  if (head && last && (last.seq > head.seq || (last.seq === head.seq && last.hash !== head.hash)))
+  if (end !== undefined && (!last || last.seq < end)) return fail(`Record ${end} is missing`, end);
+  if (
+    snapshot &&
+    last &&
+    (last.seq > snapshot.seq || (last.seq === snapshot.seq && last.hash !== snapshot.hash))
+  )
     return fail("Head mismatch", last.seq);
   return { ok: true, scope: AUDIT_SCOPE };
 }
@@ -180,7 +196,7 @@ export function verifyRange(
 export function verifyLatestRange(
   entries: readonly LedgerEntry[],
   head: AuditHead | undefined,
-  through = head?.seq,
+  through?: number,
 ): RangeCheck {
   if (!head && entries.length) return { ok: false, problem: HEAD_MISSING, scope: AUDIT_SCOPE };
   return verifyRange(entries, head, through);
