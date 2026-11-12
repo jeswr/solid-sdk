@@ -11,6 +11,7 @@ import {
   addGrant,
   isGrantableTarget,
   readAccessModes,
+  readGrants,
   removeGrant,
   type SetGrantsResult,
   setGrants,
@@ -236,7 +237,12 @@ export class GroupDirectory {
         ("family" in data && typeof data.family !== "string")
       )
         throw new Error("Group settings are unreadable");
-      if (!(await ownerOnlyAccess(this.session, this.settingsUrl)))
+      // Trust needs the document's policy AND its folder's (who could create, replace or
+      // delete it); both are checked before provisioning ever rewrites the folder.
+      if (
+        !(await ownerOnlyAccess(this.session, this.settingsUrl)) ||
+        !(await ownerOnlyAccess(this.session, this.settingsContainer))
+      )
         throw new Error("Group settings must be owner-only before they can be used");
       return { data: data as Settings, etag: etag(read.etag) };
     } catch (error) {
@@ -245,8 +251,13 @@ export class GroupDirectory {
     }
   }
   private async updateSettings(change: (settings: Settings) => void) {
+    // Validate existing settings under the policy they were written with, BEFORE provisioning
+    // makes the folder owner-only: content another agent could write is refused, never trusted.
+    const before = await this.settings();
     await this.provision(this.settingsContainer, false);
     const current = await this.settings();
+    if (current.etag !== before.etag)
+      throw new Error("Group settings changed while they were being secured. Reload and try again");
     change(current.data);
     const body = JSON.stringify(current.data);
     if (current.etag)
@@ -465,6 +476,32 @@ export class GroupDirectory {
         ),
       );
     return this.notifyOnce(id, target, shareNotification(target, role).summary as string);
+  }
+  /**
+   * Contents follow their collection: every shareable group with access to `source` (a shared
+   * album, say) gets Viewer access to `resources` (an added photo's document and binaries).
+   * Returns the groups granted. It sends no notification; sharing the collection already did.
+   */
+  async extend(source: string, resources: readonly string[]): Promise<string[]> {
+    this.target(source);
+    const targets = [...new Set(resources)].map((url) => this.target(url));
+    const held = new Set(
+      (await readGrants(source, this.options(source))).grants.flatMap((grant) =>
+        grant.agent.type === "group" ? [grant.agent.id] : [],
+      ),
+    );
+    if (!held.size || !targets.length) return [];
+    const granted = (await this.list()).map((group) => group.id).filter((group) => held.has(group));
+    for (const id of granted)
+      for (const url of targets)
+        check(
+          await addGrant(
+            [url],
+            { agent: { type: "group", id }, role: "viewer", inherited: false, source: "" },
+            this.options(url),
+          ),
+        );
+    return granted;
   }
   async setupFamily(id: string, spaces: readonly FamilySpace[]) {
     if (spaces.some((space) => space.role !== "viewer" && space.role !== "editor"))

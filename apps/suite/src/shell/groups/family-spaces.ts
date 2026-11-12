@@ -29,19 +29,14 @@ export function familySpaces(
           return [url, eventContainer(url)];
         }
         if (key === "photos") {
+          // Album membership is a reference: Photos extends the album's group access to each
+          // photo's document, original and thumbnail as photos are added (album-groups.ts).
           const album = await createAlbum(
             photoStorage(session.fetch, session.storageUrl),
             "Family",
             new Date().toISOString(),
           );
-          // The dedicated photo container is a space for future original image uploads.
-          const { storage } = await client();
-          const container = await storage.create(
-            new URL("photos/", session.storageUrl).href,
-            null,
-            { name: `family-${crypto.randomUUID()}`, kind: "container" },
-          );
-          return [album.url, container.url];
+          return [album.url];
         }
         const store = new TaskStore({
           storage: session.storageUrl,

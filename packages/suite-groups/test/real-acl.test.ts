@@ -240,6 +240,121 @@ describe("owner-only settings with real ACLs", () => {
   });
 });
 
+describe("settings written under an earlier untrusted policy (review round 2)", () => {
+  const folder = `${root}settings/group-sharing/`;
+  async function preexisting(folderPolicy: EffectivePolicy, ownAcl?: EffectivePolicy) {
+    const fixture = await pod();
+    const { directory, storage, putAcl } = fixture;
+    const group = await directory.create("Family", [bob]);
+    await storage.create(root, null, { name: "settings", kind: "container" });
+    await storage.create(`${root}settings/`, null, { name: "group-sharing", kind: "container" });
+    // Written while the folder still let another agent write: never provisioned by us.
+    await storage.create(
+      folder,
+      JSON.stringify({
+        family: group.id,
+        notices: [],
+        spaces: { [JSON.stringify([group.id, "calendar"])]: [`${root}private/`] },
+      }),
+      { name: "state.json", contentType: "application/json" },
+    );
+    await putAcl(folder, folderPolicy);
+    if (ownAcl) await putAcl(settings, ownAcl);
+    return { ...fixture, group };
+  }
+  it.each([
+    ["Write", policy(ownerRule(), rule(agent(mallory), ["write"]))],
+    ["Append", policy(ownerRule(), rule({ kind: "authenticated" }, ["append"]))],
+    [
+      "members-only Append",
+      policy(ownerRule(), rule({ kind: "authenticated" }, ["append"], "members")),
+    ],
+  ])("refuses pre-existing state.json whose folder grants a non-owner %s, before provisioning would make it owner-only", async (_name, folderPolicy) => {
+    const { directory, group, puts, acls, notify } = await preexisting(folderPolicy);
+    const before = acls.get(`${folder}.acl`)?.body;
+    const create = vi.fn();
+    const start = puts.length;
+    await expect(
+      directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]),
+    ).rejects.toThrow("settings must be owner-only");
+    await expect(directory.setFamily(group.id)).rejects.toThrow("settings must be owner-only");
+    await expect(directory.notifyOnce(group.id, group.id, "Invite")).rejects.toThrow("owner-only");
+    await expect(directory.list()).rejects.toThrow("settings must be owner-only");
+    // Provisioning never ran, so the untrusted content was not laundered into owner-only state.
+    expect(puts.slice(start)).toEqual([]);
+    expect(acls.get(`${folder}.acl`)?.body).toBe(before);
+    expect(create).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+  it("refuses an owner-only state.json ACL inside a folder others can write", async () => {
+    const { directory, group, puts } = await preexisting(
+      policy(ownerRule(), rule(agent(mallory), ["write"])),
+      policy(ownerRule("resource")),
+    );
+    const start = puts.length;
+    await expect(directory.setFamily(group.id)).rejects.toThrow("settings must be owner-only");
+    expect(puts.slice(start)).toEqual([]);
+  });
+  it("trusts pre-existing settings whose folder and document were owner-only all along", async () => {
+    const { directory, group } = await preexisting(policy(ownerRule()));
+    expect((await directory.list())[0]).toMatchObject({ id: group.id, family: true });
+  });
+});
+
+describe("collection contents follow the collection's groups (review round 2)", () => {
+  it("grants every listed group holding the source Viewer access to added contents", async () => {
+    const { directory, storage, fetch, putAcl, puts, acls } = await pod();
+    const group = await directory.create("Family", [bob]);
+    const other = await directory.create("Unshared", [mallory]);
+    const album = await storage.create(root, "a", {
+      name: "album.ttl",
+      contentType: "text/turtle",
+    });
+    const photo = await storage.create(root, "p", {
+      name: "photo.ttl",
+      contentType: "text/turtle",
+    });
+    const original = await storage.create(root, "o", {
+      name: "photo.jpg",
+      contentType: "image/jpeg",
+    });
+    // Nothing shared yet: no reads of the contents' access, no writes.
+    const start = puts.length;
+    expect(await directory.extend(album.url, [photo.url])).toEqual([]);
+    expect(puts.slice(start)).toEqual([]);
+    await directory.share(group.id, album.url, "editor");
+    expect(await directory.extend(album.url, [])).toEqual([]);
+    expect(await directory.extend(album.url, [photo.url, original.url, photo.url])).toEqual([
+      group.id,
+    ]);
+    for (const url of [photo.url, original.url]) {
+      const grants = (await readGrants(url, { fetch, root, model: "wac" })).grants;
+      // Viewer only, whatever the collection role, and never the unshared group.
+      expect(grants.filter((grant) => grant.agent.type === "group")).toEqual([
+        expect.objectContaining({ agent: { type: "group", id: group.id }, role: "viewer" }),
+      ]);
+      expect(acls.get(`${url}.acl`)?.body).not.toContain(other.id);
+    }
+    // A group on the collection that is not a shareable group in this pod is not extended.
+    const foreign = `${root}groups/foreign.ttl#this`;
+    await putAcl(
+      album.url,
+      policy(ownerRule("resource"), rule({ kind: "group", group: foreign }, ["read"], "resource")),
+    );
+    const before = puts.length;
+    expect(await directory.extend(album.url, [photo.url])).toEqual([]);
+    expect(puts.slice(before)).toEqual([]);
+  });
+  it.each([
+    [root, `${root}photo.ttl`],
+    [`${root}album.ttl`, `${root}settings/x`],
+    [`${root}album.ttl`, `${root}groups/a.ttl`],
+  ])("refuses reserved collections or contents (%s, %s)", async (source, target) => {
+    const { directory } = await pod();
+    await expect(directory.extend(source, [target])).rejects.toThrow(GROUP_TARGET);
+  });
+});
+
 describe("ownerOnlyAccess with real ACLs", () => {
   it("checks raw modes, including the scope a new child inherits", async () => {
     const { storage, fetch, putAcl } = await pod();

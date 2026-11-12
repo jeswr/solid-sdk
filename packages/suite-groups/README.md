@@ -70,3 +70,11 @@ no principal other than the owner holding anything but Read (so no Append, Write
 private or writable group membership fails closed before grants are issued.
 Existing settings documents must also have owner-only access before their Family space URLs or
 notification receipts are trusted. An individual document ACL cannot bypass the private folder.
+Both the document's and the settings folder's raw modes are checked under their CURRENT policy
+before provisioning rewrites the folder, so settings another agent could have written are refused,
+never laundered into trusted state. Fix the folder's access (an explicit owner decision) to use
+them. Settings that appear while the folder is being secured fail with a reload error.
+
+`extend(source, resources)` lets a collection's contents follow it: every shareable group with
+access to `source` (e.g. the Family album) gets Viewer access to `resources` (e.g. an added photo's
+document, original and thumbnail), with the same target checks as `share` and no notification.

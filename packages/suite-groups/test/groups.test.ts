@@ -913,3 +913,25 @@ describe("group grant limits and receipt pruning (review round 1)", () => {
     expect(notify).toHaveBeenCalledTimes(1);
   });
 });
+
+it("refuses settings that appear while the settings folder is being secured", async () => {
+  const { directory, storage, notify } = make();
+  const group = await directory.create("Family", [bob]);
+  const original = vi.mocked(setGrants).getMockImplementation();
+  vi.mocked(setGrants).mockImplementation(async (urls, grants, options) => {
+    if (urls[0] === `${root}settings/group-sharing/`)
+      // Another writer creates state.json between the trust check and provisioning.
+      await storage.create(
+        `${root}settings/group-sharing/`,
+        JSON.stringify({ notices: [], spaces: { x: [`${root}x`] } }),
+        { name: "state.json", contentType: "application/json" },
+      );
+    return (original as NonNullable<typeof original>)(urls, grants, options);
+  });
+  await expect(directory.setFamily(group.id)).rejects.toThrow(
+    "changed while they were being secured",
+  );
+  // Only a writer the (owner-only) folder admitted can win this race, i.e. the owner's other
+  // tab; the caller reloads instead of overwriting it.
+  expect(notify).not.toHaveBeenCalled();
+});

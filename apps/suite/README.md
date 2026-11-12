@@ -118,6 +118,10 @@ Family setup marks one group, creates optional Calendar, Photos and Tasks spaces
 the existing application models, grants Viewer or Editor access, and sends one invitation
 attempt per member. The Family calendar is always a new, uniquely named calendar
 (`calendar/family-<uuid>.ttl`); an existing calendar folder is never adopted and shared.
+The Family Photos space is the album. Album membership only references photos, so adding a photo
+to an album shared with groups grants those groups Viewer access to the photo's item document,
+original and thumbnail (`apps/photos/lib/data/album-groups.ts`); a failure is reported and the
+album edit is kept. Removing a photo from the album does not revoke that access.
 Progress/notification receipts are kept privately in `settings/group-sharing/`. Failed delivery does not undo permissions; claims are recorded
 before delivery to prevent duplicate notifications. Multi-resource setup/deletion is not
 atomic: partial failures are shown for review and explicit recovery.
