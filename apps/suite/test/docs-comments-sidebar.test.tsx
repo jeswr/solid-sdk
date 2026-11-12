@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 import { Editor, EditorContent, getSchema } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import { DataFactory, Store } from "n3";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
@@ -12,6 +13,8 @@ import {
   screen,
   waitFor,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
+import { saveChat } from "../src/apps/chat/lib/model/io";
+import { ChatNode, NS } from "../src/apps/chat/lib/model/rdf";
 import {
   type CommentActions,
   CommentComposer,
@@ -76,7 +79,14 @@ beforeEach(() => {
     stored: { url: resource },
     online: true,
     readOnly: true,
-    session: { webId, storageUrl: "https://pod.example/", displayName: "Alice", fetch: pod.fetch },
+    session: {
+      mode: "solid",
+      webId,
+      storageUrl: "https://pod.example/",
+      displayName: "Alice",
+      fetch: pod.fetch,
+      publicFetch: vi.fn().mockResolvedValue(new Response(null, { status: 404 })),
+    },
   } as unknown as DocumentPersistence;
   root = {
     url: "https://pod.example/docs/plan/comments/one.ttl",
@@ -110,6 +120,25 @@ afterEach(() => {
   runtime.doc.destroy();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+it("shows profile names for comment authors and replies, retaining the WebID as a description", async () => {
+  const profile = new Store();
+  new ChatNode(webId, profile, DataFactory).setText(`${NS.FOAF}name`, "Alice Profile");
+  await saveChat(runtime.session.fetch, runtime.session.storageUrl, webId, profile, {
+    ifNoneMatch: "*",
+  });
+  vi.spyOn(DocumentCommentStore.prototype, "list").mockResolvedValue([
+    { ...thread, replies: [{ ...root, url: "reply", kind: "reply" }] },
+  ]);
+  render(<Harness />);
+  fireEvent.click(button("Comments (0 open)"));
+  await waitFor(() => expect(screen.getAllByText("Alice Profile")).toHaveLength(2));
+  for (const author of screen.getAllByText("Alice Profile")) {
+    expect(author.title).toBe(webId);
+    expect(author.getAttribute("aria-description")).toBe(webId);
+  }
+  expect(screen.getByRole("article").getAttribute("aria-label")).toBe("Alice Profile: word");
+  expect(screen.queryByText(webId, { exact: true })).toBeNull();
 });
 it("creates, highlights and persists a comment on a read-only document; replies, edits, resolves and reopens", async () => {
   const view = render(<Harness />);
@@ -163,7 +192,7 @@ it("activates from highlights, follows edits, labels orphan threads, and support
   render(<Harness />);
   await waitFor(() => expect(button("Comments (1 open)")).toBeTruthy());
   await act(async () => commentKey.getState(editor.state)?.activate?.(root.url));
-  const article = await screen.findByRole("article", { name: `${webId}: word` });
+  const article = await screen.findByRole("article", { name: "pod.example: word" });
   expect(article).toBe(document.activeElement);
   fireEvent.keyDown(article, { key: "a" });
   fireEvent.keyDown(article, { key: "Escape" });
@@ -343,6 +372,7 @@ it("supports pure sidebar replies, resolved threads by another author and menu E
   };
   const props = {
     threads: [{ root: { ...root, resolved: true, creator: "Bob" }, replies: [] }],
+    authorName: (creator: string) => creator,
     active: undefined,
     composer: undefined,
     reason: undefined,
