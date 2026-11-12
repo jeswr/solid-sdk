@@ -44,6 +44,12 @@ The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain u
 problem details; other operations retain their usual HTTP error mapping.
 
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
+Solid `create(container, body, { exactUrl, contentType })` preserves a canonical direct child's
+URL spelling (for example `system:inbox.ttl`), sending `If-None-Match: *`. `exactUrl` is mutually
+exclusive with `name`; foreign, nested, query/fragment and kind-mismatched targets fail before
+I/O. With `kind: 'container'` the exact URL must end in `/`. LWS rejects this option as
+`unsupported`, retaining server-assigned identifiers. The memory backend enforces both policies and creates missing Solid parents only after
+accepting the body, matching exact PUT behavior.
 See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 
 `head`, `list`, and `listAll` accept `{ revalidate: true }` to revalidate cached HTTP

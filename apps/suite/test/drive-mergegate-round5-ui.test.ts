@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { beforeEach, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { encodeRef } from "../src/lib/refs";
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     list: vi.fn(),
     stat: vi.fn(),
     read: vi.fn(),
+    readVersion: vi.fn(async () => ({ body: await mocks.client.read() })),
     createFolder: vi.fn(),
     move: vi.fn(),
     remove: vi.fn(),

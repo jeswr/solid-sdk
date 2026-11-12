@@ -4,6 +4,7 @@
 
 import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { SearchIcon } from "lucide-react";
+import { Slot } from "radix-ui";
 import type * as React from "react";
 import { cn } from "../../lib/utils.js";
 
@@ -85,12 +86,25 @@ function CommandList({ className, ...props }: React.ComponentProps<typeof Comman
   );
 }
 
-function CommandEmpty({ ...props }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+// cmdk hard-codes role="presentation" on Empty. A disabled option gives an empty
+// listbox its required child without registering a selectable cmdk item.
+function CommandEmpty({
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<typeof CommandPrimitive.Empty>) {
+  const empty = useCommandState((state) => state.filtered.count === 0);
+  if (!empty) return null;
+  const Comp = asChild ? Slot.Root : "div";
   return (
-    <CommandPrimitive.Empty
-      data-slot="command-empty"
-      className="py-6 text-center text-sm"
+    <Comp
       {...props}
+      role="option"
+      aria-disabled="true"
+      aria-selected="false"
+      cmdk-empty=""
+      data-slot="command-empty"
+      className={cn("py-6 text-center text-sm", className)}
     />
   );
 }
