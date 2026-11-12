@@ -27,6 +27,50 @@ unsubscribe();
 await subscription.close();
 ```
 
+For views that only need refresh hints, `watchInvalidations` owns discovery, scoping,
+fallback selection and the first-live/resync refresh policy:
+
+```ts
+import { watchInvalidations } from '@jeswr/pod-notifications';
+
+const origin = new URL(topicUrl).origin;
+const watch = watchInvalidations({
+  fetch: authenticatedFetch,
+  topics: [topicUrl], // LWS batches multiple topics; Solid subscribes per topic.
+  scope: url => new URL(url).origin === origin,
+  onInvalidate: event => refreshView(event.object),
+  pollIntervalMs: 30_000,
+  signal: abortController.signal,
+});
+await watch.ready;
+// Own the handle immediately so unmount/logout can cancel pending discovery too.
+await watch.close();
+```
+
+The caller's `scope` predicate sees HTTP(S) equivalents of WS(S) URLs. It bounds every
+fetch (including discovery, listings, streams and DELETEs), the advertised notification
+service and `receiveFrom`; all requests use `redirect: 'error'`. URL syntax, HTTPS/WSS
+and the opt-in literal-loopback exception are checked independently of scope. Rejected
+push destinations, unavailable push, unsupported subscription endpoints (404/405/410/501),
+missing WebSocket constructors (including NSS) and missing LWS EventSource constructors
+switch permanently to polling at `pollIntervalMs`. Transient push failures retain SDK
+reconnection. Inject `socketFactory` or `eventSourceFactory` to supply a missing transport.
+`push: false` forces polling. A zero interval disables every polling fallback.
+
+One fresh discovery supplies both storage and the first push connection; reconnects
+rediscover. With a resolved storage, polling diffs ETags and membership and reconciles
+after its baseline. If discovery fails or its claimed storage cannot contain the scoped
+topics, the watcher instead emits full-refresh `Update` hints for each topic every interval,
+without repeating discovery or making further requests. This keeps already-readable
+collaborator resources current even without discoverable storage metadata. Refresh hints
+pause offline; the next interval after coming online resumes them. A discovery/read/push 403
+closes the watch; failed cleanup DELETEs remain best effort.
+`ready` rejects invalid arguments; transport/discovery failures use the fallbacks above.
+`close()` is idempotent, aborts pending work, fences callbacks and awaits current cleanup.
+Callbacks receive `{ type, object }` hints and should arrange authoritative reads; callback
+exceptions cannot stop the watch. `storage` optionally supplies a scoped discovery hint;
+it never widens `scope`. Timers, clock and transport factories remain injectable.
+
 `plan()` selects the first advertised usable channel: WebSocket, SSE, LWS webhook with a
 configured relay, legacy WebSocket, then polling. It reads `storage.features.liveUpdates`
 without I/O; unavailable/unknown features cannot select push. Advertised WebSocket, SSE and
@@ -42,6 +86,9 @@ a 24-hour expiry. Optional Solid `state`, `rate` and `endAt` fields are omitted.
 returned `receiveFrom` opens a plain WebSocket without a subprotocol or auth headers.
 LWS `subscription` URLs are retained and DELETEd on disconnect/close, best effort; `close()`
 awaits outstanding deletions. A late subscribe response after cancellation is also cleaned up.
+Solid channels with a valid `id` or `@id` on the subscription service's origin receive the
+same best-effort DELETE cleanup, including late responses. Missing, malformed or foreign
+ids are ignored; server expiry remains the fallback. Caller scope also bounds these DELETEs.
 
 HTTP endpoints must use HTTPS and sockets must use WSS. `receiveFrom` and LWS subscription
 URLs must have the same host (including port) as the storage or discovered subscription
