@@ -2,6 +2,7 @@
 import type {
   ConnectorAccountState,
   ConnectorErrorClass,
+  ConnectorRunClaim,
   ConnectorRunHealth,
   ConnectorState,
 } from "./types.js";
@@ -18,6 +19,7 @@ export const CONNECTOR_ERROR_CLASSES: readonly ConnectorErrorClass[] = [
   "source-or-pod",
   "unexpected",
   "aborted",
+  "timeout",
 ];
 
 export function jsonObject(value: unknown): Record<string, unknown> {
@@ -82,6 +84,16 @@ function health(value: unknown): ConnectorRunHealth {
     intervalMinutes: intervalMinutes(h.intervalMinutes),
   };
 }
+function claim(value: unknown): ConnectorRunClaim {
+  const c = jsonObject(value);
+  if (typeof c.holder !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(c.holder))
+    throw new Error("Invalid run claim");
+  return { holder: c.holder, expiresAt: date(c.expiresAt) };
+}
+/** Validate one account checkpoint (as persisted) without the root's `accounts` map. */
+export function connectorCheckpoint(value: unknown): ConnectorAccountState {
+  return checkpoint(value);
+}
 function checkpoint(value: unknown): ConnectorAccountState {
   const s = jsonObject(value),
     counts = jsonObject(s.counts);
@@ -109,12 +121,20 @@ function checkpoint(value: unknown): ConnectorAccountState {
 export function connectorState(value: unknown): ConnectorState {
   const s = jsonObject(value),
     base = checkpoint(s);
-  if (s.accounts === undefined) return base;
+  let claims: Record<string, ConnectorRunClaim> | undefined;
+  if (s.claims !== undefined) {
+    const entries = Object.entries(jsonObject(s.claims));
+    if (entries.length > MAX_CONNECTIONS) throw new Error("Too many connector claims");
+    claims = Object.create(null) as Record<string, ConnectorRunClaim>;
+    for (const [id, value] of entries) claims[accountId(id)] = claim(value);
+  }
+  const withClaims = claims && Object.keys(claims).length ? { ...base, claims } : base;
+  if (s.accounts === undefined) return withClaims;
   const entries = Object.entries(jsonObject(s.accounts));
   if (entries.length > MAX_CONNECTIONS) throw new Error("Too many connector accounts");
   const accounts: Record<string, ConnectorAccountState> = Object.create(null);
   for (const [id, state] of entries) accounts[accountId(id)] = checkpoint(state);
-  return { ...base, accounts };
+  return { ...withClaims, accounts };
 }
 
 /** Peer/host timestamps further ahead than this are untrusted (clock skew). */
@@ -166,7 +186,7 @@ export function mergeAccountState(
   };
 }
 function withoutAccounts(state: ConnectorState): ConnectorAccountState {
-  const { accounts: _accounts, ...rest } = state;
+  const { accounts: _accounts, claims: _claims, ...rest } = state;
   return rest;
 }
 /**
@@ -183,7 +203,7 @@ export function connectorAccountState(
   if (state.accounts)
     return Object.hasOwn(state.accounts, account) ? state.accounts[account] : undefined;
   if (connectionsForConnector !== 1) return undefined;
-  const { accounts: _accounts, ...legacy } = state;
+  const { accounts: _accounts, claims: _claims, ...legacy } = state;
   return legacy;
 }
 

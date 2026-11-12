@@ -14,7 +14,9 @@ import {
   connectorBackoffMs,
   connectorConnections,
   connectorNextRunAt,
+  DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
   MAX_CONNECTOR_BACKOFF_MS,
+  MAX_CONNECTOR_RUN_TIMEOUT_MS,
   parseConnectorConnections,
 } from "./scheduler.js";
 import {
@@ -24,8 +26,14 @@ import {
   updateConnectorState,
 } from "./state.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
-import type { ConnectorRunHealth, ConnectorState, IntegrationAdapter, PodWriter } from "./types.js";
-import { ConnectionRemovedError, ReauthoriseError } from "./types.js";
+import type {
+  ConnectorAccountState,
+  ConnectorRunHealth,
+  ConnectorState,
+  IntegrationAdapter,
+  PodWriter,
+} from "./types.js";
+import { ConnectionRemovedError, NoVaultError, ReauthoriseError } from "./types.js";
 import { CLASSES, MusicRecording } from "./vocab.js";
 
 const AT = Date.parse("2026-11-01T12:00:00.000Z");
@@ -54,6 +62,9 @@ function deferred<T = void>() {
   });
   return { resolve, promise };
 }
+/** State writes carrying an attempt's health (a run's claim write carries none). */
+const healthWrites = (calls: readonly unknown[][]) =>
+  calls.filter((call) => call.some((arg) => JSON.stringify(arg ?? null).includes('"health"')));
 function report(o: RunImportOptions): ImportReport {
   return {
     adapterId: o.adapter.metadata.id,
@@ -381,7 +392,8 @@ describe("scheduler execution", () => {
     await pass;
     expect(signal?.aborted).toBe(true);
     expect(drained).toHaveBeenCalledOnce();
-    expect(h.writes).not.toHaveBeenCalled();
+    // Only the run's claim was written before shutdown; no health after it.
+    expect(healthWrites(h.writes.mock.calls)).toEqual([]);
     expect(h.saveConnection).not.toHaveBeenCalled();
     await h.scheduler.tick();
     expect(h.tokenSource.accessToken).toHaveBeenCalledTimes(1);
@@ -408,7 +420,7 @@ describe("scheduler execution", () => {
         read: async () => states.get(id),
         write: async (state) => {
           states.set(id, state);
-          written.resolve();
+          if (state.accounts?.fixture?.health) written.resolve();
         },
       }),
     });
@@ -459,8 +471,9 @@ describe("scheduler execution", () => {
       },
       stateStore: () => ({
         read: async () => undefined,
-        write: async () => {
-          throw new Error("secret");
+        // The run's claim persists; every health write (and its fallback) fails.
+        write: async (state) => {
+          if (JSON.stringify(state).includes('"health"')) throw new Error("secret");
         },
       }),
     });
@@ -656,7 +669,7 @@ it("passes cancellation to a real runner's in-flight source fetch and releases i
   await entered.promise;
   await h.scheduler.stop();
   await pass;
-  expect(h.writes).not.toHaveBeenCalled();
+  expect(healthWrites(h.writes.mock.calls)).toEqual([]);
   const writer = await h.options.podWriter(connection(), new AbortController().signal);
   const second = harness(undefined, {
     runner: undefined,
@@ -788,7 +801,9 @@ it("checks cancellation between a pending health read and its conditional write 
     }),
   });
   await h.scheduler.tick(controller.signal);
-  expect(write).not.toHaveBeenCalled();
+  // The run's claim write precedes the run; the health write never starts.
+  expect(write).toHaveBeenCalledOnce();
+  expect(healthWrites(write.mock.calls)).toEqual([]);
   expect(h.saveConnection).not.toHaveBeenCalled();
 });
 
@@ -1362,7 +1377,7 @@ describe("adversarial review fixes (CON-A2)", () => {
       expect(h.scheduler.list()[0]).toMatchObject({ enabled: false, status: "needs-reauth" });
     });
   });
-  it("does not let a 6-hour run of A delay B's 15-minute schedule (continuous pool)", async () => {
+  it("does not let a long (100-minute) run of A delay B's 15-minute schedule (continuous pool)", async () => {
     vi.useFakeTimers({ now: AT });
     try {
       const starts: Record<string, number[]> = { spotify: [], github: [] };
@@ -1375,11 +1390,12 @@ describe("adversarial review fixes (CON-A2)", () => {
         {
           now: () => Date.now(),
           sleep: undefined,
+          runTimeoutMs: MAX_CONNECTOR_RUN_TIMEOUT_MS,
           runner: async (o) => {
             const id = o.adapter.metadata.id;
             starts[id]?.push(Date.now());
             if (id === "spotify" && starts.spotify?.length === 1) {
-              await new Promise((resolve) => setTimeout(resolve, 6 * 3_600_000));
+              await new Promise((resolve) => setTimeout(resolve, 100 * 60_000));
               aFinished = true;
             }
             return report(o);
@@ -1388,11 +1404,11 @@ describe("adversarial review fixes (CON-A2)", () => {
       );
       const controller = new AbortController();
       const loop = h.scheduler.run(controller.signal);
-      await vi.advanceTimersByTimeAsync(6 * 3_600_000 - 60_000);
+      await vi.advanceTimersByTimeAsync(100 * 60_000 - 60_000);
       expect(aFinished).toBe(false);
       expect(starts.spotify).toHaveLength(1);
       // B ran every 15 minutes (within one 30-second poll) while A was busy.
-      expect(starts.github?.length).toBeGreaterThanOrEqual(23);
+      expect(starts.github?.length).toBeGreaterThanOrEqual(6);
       const gaps = (starts.github ?? []).slice(1).map((t, i) => t - (starts.github?.[i] ?? 0));
       expect(Math.max(...gaps)).toBeLessThanOrEqual(900_000 + 30_000);
       await vi.advanceTimersByTimeAsync(120_000);
@@ -1426,7 +1442,7 @@ describe("adversarial review fixes (CON-A2)", () => {
     controller.abort();
     await loop;
     expect(aborted).toBe(true);
-    expect(h.writes).not.toHaveBeenCalled();
+    expect(healthWrites(h.writes.mock.calls)).toEqual([]);
   });
 });
 
@@ -1600,5 +1616,183 @@ describe("third review: skewed checkpoints and legacy latches", () => {
         AT,
       ),
     ).toBeUndefined();
+  });
+});
+describe("merge-gate review fixes (CON-A2)", () => {
+  const stuck = () => new Promise<never>(() => undefined);
+  it("frees the worker at the run time limit and records a backed-off timeout", async () => {
+    vi.useFakeTimers({ now: AT });
+    try {
+      let runnerSignal: AbortSignal | undefined;
+      const h = harness(undefined, {
+        // A provider that accepts the request and never answers, ignoring cancellation.
+        runner: async (o) => {
+          runnerSignal = o.signal;
+          return stuck();
+        },
+      });
+      let done = false;
+      const pass = h.scheduler.tick().then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(DEFAULT_CONNECTOR_RUN_TIMEOUT_MS - 1_000);
+      expect(done).toBe(false);
+      expect(runnerSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await pass;
+      expect(done).toBe(true);
+      expect(runnerSignal?.aborted).toBe(true);
+      const health = h.states.get("spotify")?.accounts?.fixture?.health;
+      expect(health).toMatchObject({
+        outcome: "failed",
+        errorClass: "timeout",
+        consecutiveFailures: 1,
+      });
+      expect(Date.parse(health?.nextRunAt ?? "") - Date.parse(health?.lastRunEndedAt ?? "")).toBe(
+        900_000,
+      );
+      expect(h.states.get("spotify")?.claims?.fixture).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("bounds a token source that never answers with the configured limit", async () => {
+    vi.useFakeTimers({ now: AT });
+    try {
+      let tokenSignal: AbortSignal | undefined;
+      const accessToken = vi.fn(async (_id: string, _account: string, signal?: AbortSignal) => {
+        tokenSignal = signal;
+        return stuck();
+      });
+      const h = harness(undefined, { runTimeoutMs: 60_000, tokenSource: { accessToken } });
+      const pass = h.scheduler.tick();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await pass;
+      expect(tokenSignal?.aborted).toBe(true);
+      expect(h.runner).not.toHaveBeenCalled();
+      expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+        outcome: "failed",
+        errorClass: "timeout",
+      });
+      for (const runTimeoutMs of [0, 999, 2 * 60 * 60_000 + 1, Number.NaN])
+        expect(() => harness(undefined, { runTimeoutMs })).toThrow("Invalid connector run timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("skips a host without a vault quietly: no needs-reauth, no settings write, in-memory back-off", async () => {
+    const accessToken = vi.fn(async () => {
+      throw new NoVaultError();
+    });
+    const onRunError = vi.fn();
+    const h = harness(undefined, { tokenSource: { accessToken }, onRunError });
+    await h.scheduler.tick();
+    expect(accessToken).toHaveBeenCalledOnce();
+    expect(h.runner).not.toHaveBeenCalled();
+    expect(h.saveConnection).not.toHaveBeenCalled();
+    expect(h.scheduler.list()[0]).toEqual(connection());
+    expect(h.states.get("spotify")?.accounts?.fixture?.health).toBeUndefined();
+    expect(h.states.get("spotify")?.claims?.fixture).toBeUndefined();
+    expect(onRunError).not.toHaveBeenCalled();
+    // Not retried on every pass: it waits for the in-memory back-off.
+    await h.scheduler.tick();
+    expect(accessToken).toHaveBeenCalledOnce();
+    h.setNow(AT + 900_000);
+    await h.scheduler.tick();
+    expect(accessToken).toHaveBeenCalledTimes(2);
+  });
+  it("turns an invalid returned checkpoint into a durable failed attempt that keeps the cursor", async () => {
+    const states = new Map<string, ConnectorState>([
+      ["spotify", { ...legacy, lastSync: iso(AT - 3_600_000) }],
+    ]);
+    let imports = 0;
+    const host = () =>
+      harness(undefined, {
+        runner: async (o) => {
+          imports++;
+          return { ...report(o), state: { ...legacy, cursor: "   " } };
+        },
+        stateStore: (id) => ({
+          read: async () => states.get(id),
+          write: async (s) => {
+            states.set(id, s);
+          },
+        }),
+      });
+    // Three fresh processes (cron `once`, crash-looping daemon) import only once.
+    for (let n = 0; n < 3; n++) await host().scheduler.tick();
+    expect(imports).toBe(1);
+    const account = states.get("spotify")?.accounts?.fixture;
+    expect(account?.cursor).toBe("old");
+    expect(account?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unexpected",
+      consecutiveFailures: 1,
+    });
+  });
+  it("falls back to a health-only save when the checkpoint cannot be persisted", async () => {
+    const states = new Map<string, ConnectorState>([
+      ["spotify", { ...legacy, lastSync: iso(AT - 3_600_000) }],
+    ]);
+    let imports = 0;
+    const onRunError = vi.fn();
+    const host = () =>
+      harness(undefined, {
+        onRunError,
+        runner: async (o) => {
+          imports++;
+          return report(o);
+        },
+        stateStore: (id) => ({
+          read: async () => states.get(id),
+          write: async (s) => {
+            // The new checkpoint (cursor "new") is unpersistable, e.g. over the size cap.
+            if (JSON.stringify(s).includes('"cursor":"new"')) throw new Error("secret bounds");
+            states.set(id, s);
+          },
+        }),
+      });
+    await host().scheduler.tick();
+    expect(onRunError).toHaveBeenCalledWith(expect.anything(), "unexpected");
+    const account = states.get("spotify")?.accounts?.fixture;
+    expect(account?.cursor).toBe("old");
+    expect(states.get("spotify")?.claims?.fixture).toBeUndefined();
+    expect(account?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unexpected",
+      consecutiveFailures: 1,
+    });
+    expect(Date.parse(account?.health?.nextRunAt ?? "")).toBe(AT + 900_000);
+    expect(JSON.stringify(states.get("spotify"))).not.toContain("secret");
+    // The back-off is durable: a fresh process does not re-import before it.
+    await host().scheduler.tick();
+    expect(imports).toBe(1);
+  });
+  it("never lets a stored nextRunAt park a successful connection beyond its interval", () => {
+    const ok = (outcome: "ok" | "partial"): ConnectorAccountState => ({
+      ...legacy,
+      health: {
+        lastRunStartedAt: iso(AT - 60_000),
+        lastRunEndedAt: iso(AT - 60_000),
+        outcome,
+        counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+        consecutiveFailures: 0,
+        intervalMinutes: 15,
+        nextRunAt: iso(AT + 23 * 3_600_000),
+      },
+    });
+    const c = { ...connection(), intervalMinutes: 15 };
+    expect(connectorNextRunAt(c, ok("ok"), 15, AT)).toBe(AT - 60_000 + 900_000);
+    expect(connectorNextRunAt(c, ok("partial"), 15, AT)).toBe(AT - 60_000 + 900_000);
+    // An earlier nextRunAt is still followed.
+    const early = ok("ok");
+    const soon = { ...early, health: { ...early.health, nextRunAt: iso(AT + 60_000) } };
+    expect(connectorNextRunAt(c, soon as ConnectorAccountState, 15, AT)).toBe(AT + 60_000);
+    // A failure's back-off may exceed the interval (bounded by the 24 h horizon).
+    const failed = {
+      ...early,
+      health: { ...early.health, outcome: "failed" as const, consecutiveFailures: 3 },
+    };
+    expect(connectorNextRunAt(c, failed, 15, AT)).toBe(AT + 23 * 3_600_000);
   });
 });

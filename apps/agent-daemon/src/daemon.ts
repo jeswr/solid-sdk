@@ -6,6 +6,7 @@ import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
+import { DEFAULT_CONNECTOR_RUN_TIMEOUT_MS } from "@jeswr/pod-connectors";
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
@@ -357,6 +358,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
       : connectorController.signal;
     let connectorTask: Promise<void> = Promise.resolve();
     const disposers: (() => void)[] = [];
+    /** One connectors pass, bounded by the job's run limit (it cannot hold the lease). */
+    const connectorPass = async (job: NonNullable<DaemonOptions["connectors"]>) => {
+      if (signal?.aborted) return;
+      const limit = new AbortController();
+      const handle = timers.setTimeout(
+        () => limit.abort(),
+        job.runTimeoutMs ?? DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
+      );
+      try {
+        await job.tick(AbortSignal.any([connectorSignal, limit.signal]));
+      } catch {
+        o.log?.(scrubLog("Connectors pass failed"));
+      } finally {
+        timers.clearTimeout(handle);
+      }
+    };
     const invalidate = (kind: "control" | "approval") => {
       // Invoke synchronously: the executor fences in-flight snapshots before waiting.
       try {
@@ -430,18 +447,11 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await maintain();
       armMaintenance();
       // Connector sync is isolated: its failures are logged and never fault the daemon.
-      if (o.connectors) {
-        if (repeat && signal)
-          connectorTask = o.connectors.run(connectorSignal).catch(() => {
-            o.log?.(scrubLog("Connectors pass failed"));
-          });
-        else
-          try {
-            await o.connectors.tick(connectorSignal);
-          } catch {
-            o.log?.(scrubLog("Connectors pass failed"));
-          }
-      }
+      // A single pass runs after ingest and the outbox (below), so it never delays them.
+      if (o.connectors && repeat && signal)
+        connectorTask = o.connectors.run(connectorSignal).catch(() => {
+          o.log?.(scrubLog("Connectors pass failed"));
+        });
       do {
         if (signal?.aborted) break;
         const at = now();
@@ -456,7 +466,10 @@ export function createDaemon(o: DaemonOptions): Daemon {
         if (fault) throw new Error("Authority reconciliation failed");
         if (signal?.aborted) break;
         await o.executor.runOutboxOnce();
-        if (!repeat || !signal) break;
+        if (!repeat || !signal) {
+          if (o.connectors) await connectorPass(o.connectors);
+          break;
+        }
         await pause(
           Math.max(
             1,

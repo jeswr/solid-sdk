@@ -253,9 +253,21 @@ export interface ConnectorState {
   readonly health?: ConnectorRunHealth;
   /** Independent cursors and health, keyed by a host-owned opaque account id. */
   readonly accounts?: Readonly<Record<string, ConnectorAccountState>>;
+  /**
+   * Root only: expiring cross-host run claims keyed by account id. A scheduler writes its
+   * claim conditionally before fetching a token and removes it when the run ends; other
+   * hosts skip that connection until `expiresAt`.
+   */
+  readonly claims?: Readonly<Record<string, ConnectorRunClaim>>;
 }
 
-export type ConnectorAccountState = Omit<ConnectorState, "accounts">;
+export type ConnectorAccountState = Omit<ConnectorState, "accounts" | "claims">;
+
+/** A cross-host run claim: a random per-run holder id and its expiry instant (ISO). */
+export interface ConnectorRunClaim {
+  readonly holder: string;
+  readonly expiresAt: string;
+}
 
 export interface ConnectorRunCounts {
   readonly created: number;
@@ -272,7 +284,9 @@ export type ConnectorErrorClass =
   | "conflict"
   | "source-or-pod"
   | "unexpected"
-  | "aborted";
+  | "aborted"
+  /** The run exceeded the scheduler's run time limit. */
+  | "timeout";
 
 export interface ConnectorRunHealth {
   readonly lastRunStartedAt: string;
@@ -293,7 +307,12 @@ export interface ConnectorRunHealth {
 
 /** The vault lane supplies this port. Credentials must never enter persisted state. */
 export interface TokenSource {
-  accessToken(connectorId: string, account: string): Promise<string>;
+  /**
+   * The run's signal aborts at shutdown or the run time limit; the scheduler stops waiting
+   * then even if the vault ignores it. Throw ReauthoriseError for a missing or revoked
+   * grant and NoVaultError when this host has no vault at all.
+   */
+  accessToken(connectorId: string, account: string, signal?: AbortSignal): Promise<string>;
   /**
    * Optional: discard a cached grant confirmed invalid — called only after two
    * consecutive source 401 (access token rejected) outcomes, never for 403s, rate limits
@@ -317,6 +336,17 @@ export class ReauthoriseError extends Error {
   constructor() {
     super("Connector authorisation is required.");
     this.name = "ReauthoriseError";
+  }
+}
+
+/**
+ * This host has no token vault (a capability gap, not a revoked grant). The scheduler
+ * skips the run without recording health, latching needs-reauth or changing settings.
+ */
+export class NoVaultError extends Error {
+  constructor() {
+    super("No token vault on this host.");
+    this.name = "NoVaultError";
   }
 }
 

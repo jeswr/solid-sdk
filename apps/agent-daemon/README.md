@@ -347,9 +347,11 @@ Owner UIs that re-enable a connection must write `enabled: true`, drop `status` 
 `enabledAt` to the current ISO instant; any daemon process then clears the needs-reauth
 latch, because the value differs from the one the latch recorded (no clock comparison). The job itself never enables connections.
 
-The default `pendingVaultTokenSource` deliberately throws `ReauthoriseError`.
-It is the sst-3erb vault integration stub: enabled connections become disabled with
-`needs-reauth`, without provider traffic. A trusted host can later inject its
+The default `pendingVaultTokenSource` deliberately throws `NoVaultError` ("no token vault
+on this host"). It is the sst-3erb vault integration stub: each due run is skipped without
+provider traffic, without latching `needs-reauth` and without changing the owner's shared
+settings, so another host (or the owner's app) with working grants keeps syncing; the
+connection backs off in memory. A trusted host can later inject its
 vault-backed `TokenSource` (optionally with `invalidate`, called only after two
 consecutive source 401s confirm an invalid access token, only for the grant that run
 used and never when the owner's re-enable superseded the latch; it should discard only
@@ -357,8 +359,11 @@ a token matching that grant), registry and separate
 pristine `sourceFetch`. The canonical `profileDocumentUrl` comes from the host's profile
 load; composition without it uses the configured owner's document and refuses redirects.
 
-The job is isolated from the daemon. `once` runs one connectors pass inside a try/catch
-and continues to ingest. `run` polls connections every 30 seconds independently of
+The job is isolated from the daemon. `once` runs one connectors pass after channel ingest
+and `runOutboxOnce` (approved transmissions never wait for connectors), bounded by the
+job's run limit (`runTimeoutMs`, default 15 minutes) and wrapped in a try/catch. Each
+connector run has the same limit, and runs are claimed per account in the shared state, so
+a launchd and a cloud host sharing one pod do not import the same connection twice. `run` polls connections every 30 seconds independently of
 channel ingestion and feeds a continuous worker pool (cap two), so a long run never
 delays another connector's schedule. A failed pass logs the fixed
 `Connectors pass failed` message, never faults the daemon, and backs off on its own

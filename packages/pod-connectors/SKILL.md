@@ -302,7 +302,19 @@ is disabled only while it still carries the run-start enabledAt and the save was
 superseded; otherwise the current row stays untouched. `TokenSource.invalidate` runs
 only for the grant in use for the rejected run, after an applied (or row-removed) save
 with no superseding enabledAt; vaults discard only a token matching that grant.
-Cancellation starts no further state/config I/O. Owner-JSON stores protect their ACL
+Cancellation starts no further state/config I/O. Before the token fetch a run writes
+an expiring claim (`state.claims[account]`, random holder, `expiresAt` = run limit +
+2 min finish + 5 min skew) conditionally; a 412 or another holder's unexpired claim skips
+quietly (no health), defers the connection until expiry, and only an expired (or
+implausibly distant) claim is taken over; the outcome's persist releases it. Each run
+is bounded by `runTimeoutMs` (default 15 min, 1 s to 2 h): its signal reaches token
+source, Pod writer, runner and transports, waits are cut only at the limit (shutdown
+still drains), and a timeout is a backed-off `timeout` failure; finishing I/O has its
+own 2 min bound. `NoVaultError` skips the run (claim released, no health/latch/settings,
+in-memory back-off). Validate a returned checkpoint before success; an unsavable one
+falls back to a health-only failed attempt so back-off is durable. Ok/partial runs are
+due at min(nextRunAt, lastRunEndedAt + interval). Owner-JSON ACL targets must be resource
+ACLs beside the document, never containers or container `.acl`s. Owner-JSON stores protect their ACL
 once per instance and on create, poll with If-None-Match, and `peek` is read-only.
 The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
 Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.

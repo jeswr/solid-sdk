@@ -14,16 +14,19 @@ import {
   accountId,
   type ConnectorStateStore,
   connectorAccountState,
+  connectorCheckpoint,
   intervalMinutes,
   MAX_CONNECTIONS,
   MAX_FUTURE_SKEW_MS,
   mergeAccountState,
+  StateConflictError,
   trustedTime,
   updateConnectorState,
 } from "./state.js";
 import type {
   ConnectorAccountState,
   ConnectorErrorClass,
+  ConnectorRunClaim,
   ConnectorRunCounts,
   ConnectorRunHealth,
   ConnectorState,
@@ -31,7 +34,7 @@ import type {
   PodWriter,
   TokenSource,
 } from "./types.js";
-import { ConnectionRemovedError, ReauthoriseError } from "./types.js";
+import { ConnectionRemovedError, NoVaultError, ReauthoriseError } from "./types.js";
 
 export interface ConnectorConnection {
   readonly connectorId: string;
@@ -203,7 +206,19 @@ export interface ConnectorSchedulerOptions {
   readonly onRunError?: (connection: ConnectorConnection, errorClass: ConnectorErrorClass) => void;
   /** Fixture seam; production always defaults to the shared import runner. */
   readonly runner?: (options: RunImportOptions) => Promise<ImportReport>;
+  /**
+   * Hard limit for one run (claim, token, Pod writer and import), default 15 minutes,
+   * between 1 second and 2 hours. A run past it is cancelled and recorded as a failed
+   * `timeout` attempt with back-off.
+   */
+  readonly runTimeoutMs?: number;
 }
+export const DEFAULT_CONNECTOR_RUN_TIMEOUT_MS = 15 * 60_000;
+export const MAX_CONNECTOR_RUN_TIMEOUT_MS = 2 * 60 * 60_000;
+/** Separate bound for the post-run state/settings/vault calls. */
+const FINISH_TIMEOUT_MS = 2 * 60_000;
+/** No host's claim can legitimately expire later than this ahead of the reader's clock. */
+const MAX_CLAIM_MS = MAX_CONNECTOR_RUN_TIMEOUT_MS + FINISH_TIMEOUT_MS + 2 * MAX_FUTURE_SKEW_MS;
 export const MAX_CONNECTOR_BACKOFF_MS = 24 * 60 * 60 * 1_000;
 const RETRY_MS = 15 * 60 * 1_000;
 /** Positive jitter avoids retries below the interval floor, including the first failure. */
@@ -218,7 +233,8 @@ export function connectorBackoffMs(failures: number, random: () => number = Math
 /**
  * Due instant in epoch ms (0 = now), or undefined when disabled/latched. A trusted attempt
  * (`health.lastRunEndedAt` within five minutes of `now`) is followed, including its
- * back-off; only a `nextRunAt` beyond `now + max(interval, 24 h)` makes it due now. With
+ * back-off; only a `nextRunAt` beyond `now + max(interval, 24 h)` makes it due now. An
+ * ok/partial attempt is due no later than `lastRunEndedAt + interval`. With
  * no trusted attempt, a `lastRunEndedAt` or `lastSync` more than five minutes ahead makes
  * the connection due now: a skewed clock can never park a connection.
  */
@@ -241,11 +257,15 @@ export function connectorNextRunAt(
   if (health && !ahead(health.lastRunEndedAt)) {
     if (!health.nextRunAt) return clamp(Date.parse(health.lastRunEndedAt) + interval * 60_000);
     if (Date.parse(health.nextRunAt) > horizon) return 0;
-    if (
-      (health.outcome === "ok" || health.outcome === "partial") &&
-      interval !== health.intervalMinutes
-    )
-      return clamp(Date.parse(health.lastRunEndedAt) + interval * 60_000);
+    if (health.outcome === "ok" || health.outcome === "partial") {
+      // A success is never parked beyond its own interval by a stored nextRunAt.
+      const byInterval = Date.parse(health.lastRunEndedAt) + interval * 60_000;
+      return clamp(
+        interval !== health.intervalMinutes
+          ? byInterval
+          : Math.min(Date.parse(health.nextRunAt), byInterval),
+      );
+    }
     return clamp(Date.parse(health.nextRunAt));
   }
   if (health || ahead(state?.lastSync)) return 0;
@@ -285,6 +305,45 @@ const emptyCounts = (): ConnectorRunCounts => ({
   unchanged: 0,
   skipped: 0,
 });
+class RunTimeoutError extends Error {
+  constructor() {
+    super("Connector run exceeded its time limit.");
+    this.name = "TimeoutError";
+  }
+}
+/** A cancellable timer signal (fake-timer friendly, unlike AbortSignal.timeout). */
+function deadline(ms: number): { readonly signal: AbortSignal; clear(): void } {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new RunTimeoutError()), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
+}
+/** Stop waiting when `signal` aborts, even if `work` ignores it (a hung provider or vault). */
+function bounded<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return work;
+  if (signal.aborted) {
+    work.catch(() => undefined);
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    work.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
+}
+function withoutClaim(state: ConnectorState, account: string): ConnectorState {
+  const { claims, ...rest } = state;
+  const kept = Object.entries(claims ?? {}).filter(([id]) => id !== account);
+  return kept.length ? { ...rest, claims: Object.fromEntries(kept) } : rest;
+}
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const finish = () => {
@@ -309,6 +368,9 @@ export class ConnectorScheduler {
   private readonly registry: Registry;
   private readonly now: () => number;
   private readonly concurrency: number;
+  private readonly runTimeoutMs: number;
+  /** A run's claim covers its limit, the finishing writes and the clock-skew allowance. */
+  private readonly claimTtlMs: number;
   private readonly lifetime = new AbortController();
   /** Cached state per connector container; absent means not yet loaded. */
   private readonly snapshots = new Map<string, ConnectorState | undefined>();
@@ -316,6 +378,8 @@ export class ConnectorScheduler {
   private readonly containers = new Map<string, Promise<void>>();
   /** In-memory back-off for runs that failed outside the import (e.g. persistence). */
   private readonly faults = new Map<string, { failures: number; retryAt: number }>();
+  /** This scheduler's latest claim holder per connection (its own stale claim is no bar). */
+  private readonly holders = new Map<string, string>();
   /** Connector containers with a pending exclusive (owner) operation. */
   private readonly waiting = new Map<string, number>();
   private readonly exclusives = new Set<Promise<void>>();
@@ -334,6 +398,14 @@ export class ConnectorScheduler {
     this.concurrency = options.concurrency ?? 2;
     if (!Number.isSafeInteger(this.concurrency) || this.concurrency < 1 || this.concurrency > 16)
       throw new Error("Invalid connector concurrency");
+    this.runTimeoutMs = options.runTimeoutMs ?? DEFAULT_CONNECTOR_RUN_TIMEOUT_MS;
+    if (
+      !Number.isSafeInteger(this.runTimeoutMs) ||
+      this.runTimeoutMs < 1_000 ||
+      this.runTimeoutMs > MAX_CONNECTOR_RUN_TIMEOUT_MS
+    )
+      throw new Error("Invalid connector run timeout");
+    this.claimTtlMs = this.runTimeoutMs + FINISH_TIMEOUT_MS + MAX_FUTURE_SKEW_MS;
     this.apply(options.connections);
   }
   private apply(value: unknown) {
@@ -385,6 +457,10 @@ export class ConnectorScheduler {
       }
     }
     if (due === undefined) return undefined;
+    // Another host's unexpired claim defers this connection until it expires.
+    const snapshot = this.snapshots.get(c.connectorId);
+    if (this.claimedElsewhere(c, snapshot, now))
+      due = Math.max(due, Date.parse(this.claimOf(c, snapshot)?.expiresAt ?? ""));
     return fault ? Math.max(due, fault.retryAt) : due;
   }
   private next(now: number): ConnectorConnection | undefined {
@@ -450,57 +526,114 @@ export class ConnectorScheduler {
   }
   private async execute(c: ConnectorConnection, signal: AbortSignal): Promise<boolean> {
     if (!c.enabled || c.status === "needs-reauth" || signal.aborted) return false;
-    const store = this.options.stateStore(c.connectorId, signal);
-    const state = await store.read();
+    // The run time limit bounds everything up to the outcome, including the claim.
+    const limit = deadline(this.runTimeoutMs);
+    try {
+      return await this.attempt(c, signal, limit.signal);
+    } finally {
+      limit.clear();
+    }
+  }
+  private async attempt(
+    c: ConnectorConnection,
+    signal: AbortSignal,
+    timeout: AbortSignal,
+  ): Promise<boolean> {
+    // Work observes `run` (shutdown or limit); waits are cut only at the limit, so shutdown
+    // still drains cooperative work while a hung provider or vault frees the worker.
+    const run = AbortSignal.any([signal, timeout]);
+    const store = this.options.stateStore(c.connectorId, run);
+    const state = await bounded(store.read(), timeout);
     signal.throwIfAborted();
     this.snapshots.set(c.connectorId, state);
     const previous = this.account(c, state),
       interval = this.interval(c);
     const due = connectorNextRunAt(c, previous, interval, this.now());
     if (due === undefined || due > this.now()) return false;
+    // Another host (or tab) holds an unexpired claim: skip quietly, writing nothing.
+    if (this.claimedElsewhere(c, state, this.now())) return false;
+    const holder = globalThis.crypto.randomUUID();
+    this.holders.set(key(c), holder);
     const started = new Date(this.now()).toISOString();
-    let checkpoint: ConnectorAccountState = previous ?? {
+    const claimed = this.withClaim(c, state, {
+      holder,
+      expiresAt: new Date(this.now() + this.claimTtlMs).toISOString(),
+    });
+    try {
+      await bounded(store.write(claimed), timeout);
+    } catch (error) {
+      // A concurrent writer won the conditional write: re-read before deciding again.
+      if (!(error instanceof StateConflictError) || signal.aborted) throw error;
+      this.snapshots.delete(c.connectorId);
+      return false;
+    }
+    this.snapshots.set(c.connectorId, claimed);
+    const fresh: ConnectorAccountState = previous ?? {
       connectedAt: started,
       lastOutcome: "error",
       counts: { documents: 0, items: 0, skipped: 0 },
     };
+    let checkpoint = fresh;
     let counts = emptyCounts();
     let outcome: ConnectorRunHealth["outcome"] = "failed";
     let code: ConnectorErrorClass | undefined;
     let retryAfterMs = 0;
     try {
-      const token = await this.options.tokenSource.accessToken(c.connectorId, c.account);
-      signal.throwIfAborted();
+      const token = await bounded(
+        this.options.tokenSource.accessToken(c.connectorId, c.account, run),
+        timeout,
+      );
+      run.throwIfAborted();
       if (!token || token.length > 65_536 || !/^[\x21-\x7e]+$/.test(token))
         throw new Error("Invalid source credential");
       const adapter = this.adapter(c);
       const tokens = { accessToken: token, tokenType: "Bearer" };
-      const sourceFetch = abortableFetch(this.options.sourceFetch, signal);
+      const sourceFetch = abortableFetch(this.options.sourceFetch, run);
       const sourceAuth =
         adapter.oauth && adapter.createSourceAuth
           ? adapter.createSourceAuth(adapter.oauth, tokens, sourceFetch)
           : createSourceAuth(c.connectorId, adapter, tokens, sourceFetch);
-      signal.throwIfAborted();
-      const podWriter = await this.options.podWriter(c, signal);
-      signal.throwIfAborted();
-      const report = await (this.options.runner ?? runImport)({
-        adapter,
-        mode: "live",
-        podWriter,
-        sourceAuth,
-        state: previous,
-        signal,
-        onRunCounts: (value) => {
-          counts = value;
-        },
-      });
-      signal.throwIfAborted();
+      run.throwIfAborted();
+      const podWriter = await bounded(Promise.resolve(this.options.podWriter(c, run)), timeout);
+      run.throwIfAborted();
+      const report = await bounded(
+        (this.options.runner ?? runImport)({
+          adapter,
+          mode: "live",
+          podWriter,
+          sourceAuth,
+          state: previous,
+          signal: run,
+          onRunCounts: (value) => {
+            counts = value;
+          },
+        }),
+        timeout,
+      );
+      run.throwIfAborted();
       counts = report.counts ?? { ...counts, skipped: report.skipped ?? counts.skipped };
       const ended = new Date(this.now()).toISOString();
-      checkpoint = { ...(report.state ?? checkpoint), lastSync: ended, lastOutcome: "success" };
+      // Validate the adapter's checkpoint before treating the run as a success: an
+      // unpersistable one becomes a failed attempt that keeps the previous cursor.
+      checkpoint = connectorCheckpoint({
+        ...(report.state ?? checkpoint),
+        lastSync: ended,
+        lastOutcome: "success",
+      });
       outcome = counts.skipped > 0 ? "partial" : "ok";
     } catch (error) {
-      code = errorClass(error, signal);
+      if (error instanceof NoVaultError && !run.aborted) {
+        // A host capability gap, not a revoked grant: release the claim, record nothing.
+        const finish = deadline(FINISH_TIMEOUT_MS);
+        try {
+          await this.release(c, holder, signal, finish.signal);
+        } finally {
+          finish.clear();
+        }
+        this.backOff(c);
+        return false;
+      }
+      code = signal.aborted ? "aborted" : timeout.aborted ? "timeout" : errorClass(error, signal);
       if (error instanceof RateLimitedError) {
         const seconds = error.retryAfterSeconds;
         if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0)
@@ -512,23 +645,63 @@ export class ConnectorScheduler {
         previous?.health?.outcome === "failed" &&
         previous.health.errorClass === "unauthorised";
       outcome = code === "reauthorise" || unauthorisedAgain ? "needs-reauth" : "failed";
-      checkpoint = { ...checkpoint, lastOutcome: "error" };
+      checkpoint = { ...fresh, lastOutcome: "error" };
     }
-    // Cancellation starts no further Pod/config I/O, matching the runner's abort contract.
+    // Cancellation starts no further Pod/config I/O, matching the runner's abort contract;
+    // the claim then expires on its own.
     if (signal.aborted) return false;
+    const finish = deadline(FINISH_TIMEOUT_MS);
+    try {
+      return await this.finish(c, signal, finish.signal, {
+        holder,
+        started,
+        previous,
+        fresh,
+        checkpoint,
+        counts,
+        outcome,
+        code,
+        retryAfterMs,
+        interval,
+      });
+    } finally {
+      finish.clear();
+    }
+  }
+  /** Persist the attempt's outcome under the finishing deadline and release the claim. */
+  private async finish(
+    c: ConnectorConnection,
+    signal: AbortSignal,
+    limit: AbortSignal,
+    run: {
+      readonly holder: string;
+      readonly started: string;
+      readonly previous: ConnectorAccountState | undefined;
+      readonly fresh: ConnectorAccountState;
+      readonly checkpoint: ConnectorAccountState;
+      readonly counts: ConnectorRunCounts;
+      readonly outcome: ConnectorRunHealth["outcome"];
+      readonly code: ConnectorErrorClass | undefined;
+      readonly retryAfterMs: number;
+      readonly interval: number;
+    },
+  ): Promise<boolean> {
+    const { holder, started, previous, counts, outcome, code, interval } = run;
+    const io = AbortSignal.any([signal, limit]);
     // A failed run must not carry a future-dated checkpoint forward (it would stay due).
-    checkpoint = trustedCheckpoint(checkpoint, started, this.now());
+    const checkpoint = trustedCheckpoint(run.checkpoint, started, this.now());
     const ended = new Date(Math.max(this.now(), Date.parse(started))).toISOString();
-    const failures =
-      outcome === "ok" || outcome === "partial"
-        ? 0
-        : Math.min(Number.MAX_SAFE_INTEGER, (previous?.health?.consecutiveFailures ?? 0) + 1);
-    const delay = failures
-      ? Math.min(
-          MAX_CONNECTOR_BACKOFF_MS,
-          Math.max(connectorBackoffMs(failures, this.options.random), retryAfterMs),
-        )
-      : interval * 60_000;
+    const failuresAfter = Math.min(
+      Number.MAX_SAFE_INTEGER,
+      (previous?.health?.consecutiveFailures ?? 0) + 1,
+    );
+    const backoff = () =>
+      Math.min(
+        MAX_CONNECTOR_BACKOFF_MS,
+        Math.max(connectorBackoffMs(failuresAfter, this.options.random), run.retryAfterMs),
+      );
+    const failures = outcome === "ok" || outcome === "partial" ? 0 : failuresAfter;
+    const delay = failures ? backoff() : interval * 60_000;
     const health: ConnectorRunHealth = {
       lastRunStartedAt: started,
       lastRunEndedAt: ended,
@@ -544,7 +717,35 @@ export class ConnectorScheduler {
         : { nextRunAt: new Date(Date.parse(ended) + delay).toISOString() }),
     };
     if (outcome !== "needs-reauth") {
-      await this.persist(c, { ...checkpoint, health }, previous, signal);
+      try {
+        await this.persist(c, { ...checkpoint, health }, previous, io, holder, limit);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        // The checkpoint could not be saved (bounds, repeated conflicts): keep the previous
+        // checkpoint and save only a failed attempt, so the back-off is durable.
+        const failed: ConnectorRunHealth = {
+          lastRunStartedAt: started,
+          lastRunEndedAt: ended,
+          outcome: "failed",
+          counts,
+          errorClass: errorClass(error, signal),
+          consecutiveFailures: failuresAfter,
+          intervalMinutes: interval,
+          nextRunAt: new Date(Date.parse(ended) + backoff()).toISOString(),
+        };
+        await this.persist(
+          c,
+          {
+            ...trustedCheckpoint({ ...run.fresh, lastOutcome: "error" }, started, this.now()),
+            health: failed,
+          },
+          previous,
+          io,
+          holder,
+          limit,
+        );
+        throw error;
+      }
       return true;
     }
     // The latch belongs to the row as it was at run start (`c`). An owner re-enable that
@@ -558,12 +759,13 @@ export class ConnectorScheduler {
       current && !superseded ? { ...current, enabled: false, status: "needs-reauth" } : undefined;
     if (current && disabled) this.replace(current, disabled);
     // Persist health even if the host config write fails; the health latch also fails closed.
-    await this.persist(c, { ...checkpoint, health }, previous, signal);
+    await this.persist(c, { ...checkpoint, health }, previous, io, holder, limit);
     signal.throwIfAborted();
     if (current && disabled) {
       let skipped = false;
       try {
-        skipped = (await this.options.saveConnection(disabled, signal)) === "superseded";
+        skipped =
+          (await bounded(this.options.saveConnection(disabled, io), limit)) === "superseded";
       } catch (error) {
         if (!(error instanceof ConnectionRemovedError)) throw error;
       }
@@ -578,58 +780,155 @@ export class ConnectorScheduler {
     // re-enable superseded the latch (in memory or in the stored settings).
     if (code === "unauthorised" && !superseded && this.options.tokenSource.invalidate) {
       try {
-        await this.options.tokenSource.invalidate({
-          connectorId: c.connectorId,
-          account: c.account,
-        });
+        await bounded(
+          Promise.resolve(
+            this.options.tokenSource.invalidate({
+              connectorId: c.connectorId,
+              account: c.account,
+            }),
+          ),
+          limit,
+        );
       } catch {
         // Best effort: the durable latch already blocks further source traffic.
       }
     }
     return true;
   }
+  /** In-memory back-off without a run-error report (e.g. no vault on this host). */
+  private backOff(c: ConnectorConnection) {
+    const k = key(c);
+    const failures = Math.min(1_000, (this.faults.get(k)?.failures ?? 0) + 1);
+    this.faults.set(k, {
+      failures,
+      retryAt: this.now() + connectorBackoffMs(failures, this.options.random),
+    });
+  }
   /** Swap one in-memory row object for another, only while `from` is still installed. */
   private replace(from: ConnectorConnection, to: ConnectorConnection) {
     this.connections = this.connections.map((other) => (other === from ? to : other));
+  }
+  private claimLive(claim: ConnectorRunClaim | undefined, now: number): claim is ConnectorRunClaim {
+    if (!claim) return false;
+    const at = Date.parse(claim.expiresAt);
+    // A claim expiring beyond any run's limit (forged, or a skewed clock) is not trusted.
+    return at > now && at <= now + MAX_CLAIM_MS;
+  }
+  private claimOf(c: ConnectorConnection, state: ConnectorState | undefined) {
+    return state?.claims && Object.hasOwn(state.claims, c.account)
+      ? state.claims[c.account]
+      : undefined;
+  }
+  /** An unexpired claim not left by this scheduler's own last run of the connection. */
+  private claimedElsewhere(c: ConnectorConnection, state: ConnectorState | undefined, now: number) {
+    const claim = this.claimOf(c, state);
+    return this.claimLive(claim, now) && claim.holder !== this.holders.get(key(c));
+  }
+  /** The stored document plus this run's claim; live claims of other accounts are kept. */
+  private withClaim(
+    c: ConnectorConnection,
+    state: ConnectorState | undefined,
+    claim: ConnectorRunClaim,
+  ): ConnectorState {
+    const now = this.now();
+    const claims: Record<string, ConnectorRunClaim> = Object.create(null);
+    for (const [account, other] of Object.entries(state?.claims ?? {}))
+      if (account !== c.account && this.claimLive(other, now)) claims[account] = other;
+    claims[c.account] = claim;
+    // A new document gets a placeholder root (replaced by the first persisted attempt) and
+    // an empty account map, so no checkpoint is fabricated for any account.
+    const base: ConnectorState = state ?? {
+      connectedAt: new Date(now).toISOString(),
+      lastOutcome: "error",
+      counts: { documents: 0, items: 0, skipped: 0 },
+      accounts: {},
+    };
+    return { ...base, claims };
+  }
+  /** Remove this run's claim (only while it is still the stored one). */
+  private async release(
+    c: ConnectorConnection,
+    holder: string,
+    signal: AbortSignal,
+    limit: AbortSignal,
+  ) {
+    const io = AbortSignal.any([signal, limit]);
+    const store = this.options.stateStore(c.connectorId, io);
+    for (let attempt = 0; ; attempt++) {
+      const current = await bounded(store.read(), limit);
+      signal.throwIfAborted();
+      if (!current || this.claimOf(c, current)?.holder !== holder) {
+        this.snapshots.set(c.connectorId, current);
+        return;
+      }
+      const next = withoutClaim(current, c.account);
+      try {
+        await bounded(store.write(next), limit);
+        this.snapshots.set(c.connectorId, next);
+        return;
+      } catch (error) {
+        if (!(error instanceof StateConflictError) || attempt === 2) throw error;
+      }
+    }
   }
   private async persist(
     c: ConnectorConnection,
     next: ConnectorAccountState,
     base: ConnectorAccountState | undefined,
     signal: AbortSignal,
+    holder?: string,
+    limit?: AbortSignal,
   ): Promise<ConnectorState> {
     const store = this.options.stateStore(c.connectorId, signal);
     const guarded: ConnectorStateStore = {
-      read: unlessAborted(signal, () => store.read()),
-      write: unlessAborted(signal, (state: ConnectorState) => store.write(state)),
+      read: unlessAborted(signal, () => bounded(store.read(), limit)),
+      write: unlessAborted(signal, (state: ConnectorState) => bounded(store.write(state), limit)),
     };
-    const result = await updateConnectorState(guarded, (current) => {
+    const result = await updateConnectorState(guarded, (stored) => {
       const now = this.now();
+      // This run's claim is released with its outcome; any other claim is kept.
+      const current =
+        stored && holder && this.claimOf(c, stored)?.holder === holder
+          ? withoutClaim(stored, c.account)
+          : stored;
       const account = mergeAccountState(this.account(c, current), next, { now, base });
       const accounts: Record<string, ConnectorAccountState> = { ...current?.accounts };
       accounts[c.account] = account;
       // Root checkpoint fields stay as written by their owner (legacy CLI); only creation
-      // writes them. The root health summarises the most recent trusted attempt.
+      // (or a claim's placeholder root) writes them. The root health summarises the most
+      // recent trusted attempt.
       const rootHealth =
         current?.health &&
         trustedTime(current.health.lastRunEndedAt, now) >
           trustedTime(account.health?.lastRunEndedAt, now)
           ? current.health
           : (account.health ?? current?.health);
-      const root: ConnectorAccountState = current
+      const placeholder =
+        !current ||
+        (!current.health &&
+          current.lastSync === undefined &&
+          current.cursor === undefined &&
+          current.accounts !== undefined &&
+          Object.keys(current.accounts).length === 0);
+      const root: ConnectorAccountState = placeholder
         ? {
+            connectedAt: account.connectedAt,
+            lastOutcome: account.lastOutcome,
+            counts: account.counts,
+          }
+        : {
             connectedAt: current.connectedAt,
             ...(current.lastSync === undefined ? {} : { lastSync: current.lastSync }),
             ...(current.cursor === undefined ? {} : { cursor: current.cursor }),
             lastOutcome: current.lastOutcome,
             counts: current.counts,
-          }
-        : {
-            connectedAt: account.connectedAt,
-            lastOutcome: account.lastOutcome,
-            counts: account.counts,
           };
-      return { ...root, ...(rootHealth ? { health: rootHealth } : {}), accounts };
+      return {
+        ...root,
+        ...(rootHealth ? { health: rootHealth } : {}),
+        ...(current?.claims ? { claims: current.claims } : {}),
+        accounts,
+      };
     });
     this.snapshots.set(c.connectorId, result);
     return result;
@@ -802,6 +1101,7 @@ export class ConnectorScheduler {
       if (rows(this.connections, id) !== rows(parsed.connections, id)) this.snapshots.delete(id);
     const keep = new Set(parsed.connections.map(key));
     for (const k of [...this.faults.keys()]) if (!keep.has(k)) this.faults.delete(k);
+    for (const k of [...this.holders.keys()]) if (!keep.has(k)) this.holders.delete(k);
     this.connections = parsed.connections;
     this.invalidRows = parsed.invalid;
     this.pump();

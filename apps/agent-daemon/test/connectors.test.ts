@@ -3,6 +3,7 @@
 import {
   createConnectionStore,
   IntegrationSyncError,
+  NoVaultError,
   ReauthoriseError,
 } from "@jeswr/pod-connectors";
 import { expect, it, vi } from "vitest";
@@ -54,14 +55,20 @@ function fixture() {
     },
   };
 }
-it("wires owner-only connection loading, vault stub, durable needs-reauth and safe health listing", async () => {
+it("wires owner-only connection loading, durable needs-reauth and safe health listing", async () => {
   const h = fixture(),
     config = createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
   await config.read();
   await config.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
   const runner = vi.fn(),
     log = vi.fn();
-  const job = createConnectorsJob({ ...h.options, runner, log });
+  // A real vault reports a missing or revoked grant.
+  const tokenSource = {
+    accessToken: async () => {
+      throw new ReauthoriseError();
+    },
+  };
+  const job = createConnectorsJob({ ...h.options, runner, log, tokenSource });
   await job.tick();
   expect(runner).not.toHaveBeenCalled();
   expect(await config.read()).toEqual([
@@ -74,11 +81,36 @@ it("wires owner-only connection loading, vault stub, durable needs-reauth and sa
   expect(h.pod.resources.get(`${ROOT}integrations/spotify/state.json`)?.body).toContain(
     '"outcome":"needs-reauth"',
   );
-  await expect(pendingVaultTokenSource.accessToken("spotify", "fixture")).rejects.toBeInstanceOf(
-    ReauthoriseError,
-  );
   await job.tick();
   expect(runner).not.toHaveBeenCalled();
+});
+it("skips every run on a host without a vault, leaving shared settings and state untouched", async () => {
+  const h = fixture(),
+    config = createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
+  await config.read();
+  const rows = [{ connectorId: "spotify", account: "fixture", enabled: true }];
+  await config.write(rows);
+  const runner = vi.fn(),
+    log = vi.fn();
+  const job = createConnectorsJob({ ...h.options, runner, log });
+  await job.tick();
+  await job.tick();
+  expect(runner).not.toHaveBeenCalled();
+  // Another host with a working vault (or the owner's app) is not stopped by this one.
+  expect(await config.read()).toEqual(rows);
+  const state = h.pod.resources.get(`${ROOT}integrations/spotify/state.json`)?.body ?? "";
+  expect(state).not.toContain("needs-reauth");
+  expect(state).not.toContain('"health"');
+  expect(state).not.toContain('"claim"');
+  expect(await job.list()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: true, health: "stale" },
+  ]);
+  await expect(pendingVaultTokenSource.accessToken("spotify", "fixture")).rejects.toBeInstanceOf(
+    NoVaultError,
+  );
+  await expect(pendingVaultTokenSource.accessToken("spotify", "fixture")).rejects.toThrow(
+    "No token vault on this host.",
+  );
 });
 it("refreshes settings and executes the existing runner seam with a source token and cancellation signal", async () => {
   const h = fixture(),
@@ -97,7 +129,11 @@ it("refreshes settings and executes the existing runner seam with a source token
   const job = createConnectorsJob({ ...h.options, tokenSource, runner });
   const controller = new AbortController();
   await job.tick(controller.signal);
-  expect(tokenSource.accessToken).toHaveBeenCalledWith("spotify", "fixture");
+  expect(tokenSource.accessToken).toHaveBeenCalledWith(
+    "spotify",
+    "fixture",
+    expect.any(AbortSignal),
+  );
   expect(runner).toHaveBeenCalledWith(
     expect.objectContaining({
       mode: "live",
@@ -285,7 +321,14 @@ it("schedules valid rows when another row is invalid", async () => {
 it("a fresh process sees the owner's durable re-enable through enabledAt", async () => {
   const h = fixture();
   const config = await seed(h, [{ connectorId: "spotify", account: "fixture", enabled: true }]);
-  await createConnectorsJob({ ...h.options }).tick();
+  await createConnectorsJob({
+    ...h.options,
+    tokenSource: {
+      accessToken: async () => {
+        throw new ReauthoriseError();
+      },
+    },
+  }).tick();
   expect((await config.read())?.[0]).toMatchObject({ enabled: false, status: "needs-reauth" });
   // The owner's UI re-enables: enabled, no status, newer enabledAt.
   await config.read();

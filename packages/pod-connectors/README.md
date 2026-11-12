@@ -333,7 +333,8 @@ memory through this factory. An explicit `options.sourceAuth` bypasses login and
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
-The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
+The ACL must be a resource ACL in the same directory as `state.json` (never a container or
+a container's `.acl`). Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
 Conditional JSON PUTs reject stale ETags and concurrent creates. Once the CLI is cancelled it
 sends no further Pod or source request, so a cancelled run leaves the checkpoint unchanged. State persistence failures
@@ -842,9 +843,34 @@ loop; `idle()` waits for in-flight runs and pending exclusive operations. A wait
 `setEnabled` takes priority over new pool claims for its container, so it waits for at
 most the run already in flight; `stop()` also awaits it. `run(signal)` is a cancellable 30-second
 dispatch loop that drains workers on exit, with injectable `now`, `sleep` and
-`random` ports. Separate hosts still need an exclusive host lease or other external
-serialization for imports into the same connector container; conditional health
-updates do not provide a distributed import lock.
+`random` ports.
+
+**Cross-host run claims.** Before fetching a token, a run writes an expiring claim to the
+connector's `state.json` (`claims[<account>] = { holder, expiresAt }`, a random per-run
+holder) with a conditional write (`If-Match`, or `If-None-Match: *` on creation). A 412,
+or another holder's unexpired claim, skips the run quietly: no health or settings write,
+and the connection is not reconsidered until the claim expires. `expiresAt` is the run
+limit plus two minutes for the finishing writes plus the five-minute skew allowance, so
+a claim is taken over only after its holder's run has ended or timed out. A claim
+expiring more than two hours and nine minutes ahead (forged or skewed) is not trusted.
+The run's final health write removes its claim (only while it is still the stored one);
+a cancelled run's claim simply expires. This bounds double imports by two hosts, tabs
+or deploy overlaps sharing a pod to the stale-claim window; a document the scheduler
+creates for a claim gets a placeholder root that its first attempt replaces.
+
+**Run time limit.** Each run (claim, token, Pod writer and import) is bounded by
+`runTimeoutMs` (default `DEFAULT_CONNECTOR_RUN_TIMEOUT_MS`, 15 minutes; 1 second to
+2 hours). Its signal, combined with the shutdown signal, reaches the token source
+(`accessToken(connectorId, account, signal)`), the Pod writer, the runner and source/Pod
+transports, and the scheduler stops waiting at the limit even if a provider or vault
+ignores it. A timed-out run records a failed attempt with `errorClass: 'timeout'` and the
+usual back-off. The finishing state/settings/vault calls have their own two-minute bound.
+Shutdown still drains cooperative work.
+
+**No vault.** A token source that throws `NoVaultError` (this host has no vault) skips the
+run: the claim is released, nothing else is written (no health, latch or settings change)
+and the connection backs off in memory. `ReauthoriseError` stays reserved for a vault
+reporting a missing or revoked grant.
 
 Due times come from a cached snapshot of each connector's state, loaded once, refreshed
 after every run and reloaded when that connector's settings change. A pass reads a
@@ -854,10 +880,15 @@ state document only for connections that are due (and then re-checks against it)
 One connection never fails another: a run failure is recorded in its health, and a
 failure outside the import (state or settings persistence) backs off that connection
 alone in memory, reported through the optional `onRunError(connection, errorClass)`
-hook with a fixed class. Neither rejects `tick`. A connection removed mid-run keeps its
+hook with a fixed class. A returned checkpoint is validated before the run counts as a
+success (an invalid one becomes a failed attempt that keeps the previous cursor), and
+when the checkpoint cannot be saved (size bounds, repeated conflicts) the scheduler saves
+a failed attempt with the previous checkpoint instead, so the back-off survives restarts
+and `once` invocations. Neither rejects `tick`. A connection removed mid-run keeps its
 health and skips its settings write quietly.
 
-Successful/partial runs schedule the next interval from completion. Failures retry
+Successful/partial runs schedule the next interval from completion; a stored `nextRunAt`
+can bring such a run forward but never past `lastRunEndedAt + interval`. Failures retry
 with exponential delays starting at 15 minutes, multiplied by random jitter in
 [1, 1.25], capped at 24 hours; a `RateLimitedError` delays at least its
 `retryAfterSeconds` (same cap). A success resets the failure counter.
@@ -901,6 +932,7 @@ checkpoint meaning. Scheduler state adds:
   `failed`, `needs-reauth`), `counts` (`created`, `updated`, `unchanged`, `skipped`),
   allowlisted `errorClass`, `consecutiveFailures`, effective `intervalMinutes`
   and optional `nextRunAt`.
+- `claims`: expiring cross-host run claims keyed by opaque account id (see above).
 - `accounts`: independent checkpoints and health keyed by opaque account id.
   An account-free legacy checkpoint migrates only when exactly one settings row names
   that connector; otherwise the legacy cursor is dropped and the account imports in full.
@@ -921,6 +953,9 @@ import with skipped source records and still advances its successful checkpoint.
 State requires a strong ETag and sends `If-Match` (or `If-None-Match: *` on creation).
 On 412, the scheduler rereads and reapplies its per-account merge, at most three
 attempts. Concurrent other-account state and newer successful cursors survive.
+The advertised ACL must be a resource ACL in the JSON document's own directory: a
+container (`…/`), a container's ACL (`…/.acl`) or another directory's resource is refused
+before any write, so a misconfigured server cannot have an inherited container ACL replaced.
 Both settings and state install the advertised in-container owner-only WAC ACL once
 per store instance (memoised after success) and again before creating the resource;
 later reads never rewrite it. Reads send `If-None-Match` with the last ETag and

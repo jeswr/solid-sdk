@@ -14,16 +14,21 @@ import {
   createConnectorStateStore,
   createFetchPodWriter,
   createRegistry,
+  DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
+  NoVaultError,
   parseConnectorConnections,
-  ReauthoriseError,
   type TokenSource,
 } from "@jeswr/pod-connectors";
 import { scrubLog } from "./logging.js";
 
-/** CON-A2 / sst-3erb seam. Replace only from a trusted host when the token vault lands. */
+/**
+ * CON-A2 / sst-3erb seam. Replace only from a trusted host when the token vault lands.
+ * "No vault on this host" skips each run without latching needs-reauth or touching the
+ * owner's shared settings, so hosts that do have a vault keep syncing.
+ */
 export const pendingVaultTokenSource: TokenSource = {
   async accessToken() {
-    throw new ReauthoriseError();
+    throw new NoVaultError();
   },
 };
 export interface ConnectorConnectionHealth {
@@ -37,6 +42,8 @@ export interface ConnectorConnectionHealth {
 }
 export interface ConnectorsJob {
   tick(signal?: AbortSignal): Promise<void>;
+  /** The per-run limit; the daemon also bounds a once-mode pass by it. */
+  readonly runTimeoutMs?: number;
   /** Never rejects: failed passes log a fixed message and back off independently. */
   run(signal: AbortSignal): Promise<void>;
   list(signal?: AbortSignal): Promise<readonly ConnectorConnectionHealth[]>;
@@ -54,6 +61,8 @@ export interface ConnectorsJobOptions {
   readonly sleep?: ConnectorSchedulerOptions["sleep"];
   readonly log?: (message: string) => void;
   readonly runner?: ConnectorSchedulerOptions["runner"];
+  /** Per-run limit (default 15 minutes); see ConnectorSchedulerOptions.runTimeoutMs. */
+  readonly runTimeoutMs?: number;
 }
 /** Job poll cadence and its failure back-off: 30 s doubling to 30 min, reset after success. */
 export const CONNECTORS_POLL_MS = 30_000;
@@ -77,6 +86,7 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 /** Both launchd and cloud hosts use this job under their existing exclusive process lease. */
 export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
   const registry = o.registry ?? createRegistry();
+  const runTimeoutMs = o.runTimeoutMs ?? DEFAULT_CONNECTOR_RUN_TIMEOUT_MS;
   const settings = () =>
     createConnectionStore({ podRoot: o.podRoot, webId: o.webId, fetch: o.podFetch });
   // Long-lived stores protect their ACL once; polling uses conditional GETs.
@@ -136,6 +146,7 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
       now: o.now,
       sleep: o.sleep,
       runner: o.runner,
+      runTimeoutMs,
       onRunError: () => o.log?.(scrubLog("Connector run failed")),
     });
   }
@@ -170,6 +181,7 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
   };
   return {
     tick,
+    runTimeoutMs,
     async run(signal) {
       let failures = 0;
       try {

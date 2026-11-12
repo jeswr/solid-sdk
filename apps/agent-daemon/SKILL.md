@@ -83,9 +83,10 @@ CON-A2 adds createConnectorsJob and `awp connectors`. The job is opt-in: compose
 creates it only for `connectors: { enabled: true }`, which `awp run|once --connectors`
 requests from the lazy composition; embedded hosts inject it explicitly. Keep settings at
 owner-only integrations/connections.json, state at the existing connector state.json, and
-the pendingVaultTokenSource stub throwing ReauthoriseError until sst-3erb supplies the
-trusted vault port. Connector failures never fault the daemon: once mode wraps the pass
-in try/catch, run mode polls with its own 30 s→30 min back-off and fixed log messages.
+the pendingVaultTokenSource stub throwing NoVaultError (skip: no needs-reauth, no shared
+settings change) until sst-3erb supplies the trusted vault port. Connector failures never
+fault the daemon: once mode runs the pass after ingest and runOutboxOnce, bounded by the
+job's run limit (default 15 min) and wrapped in try/catch; run mode polls with its own 30 s→30 min back-off and fixed log messages.
 Poll settings with conditional GETs over long-lived stores (ACL once per store), keep
 listing read-only, and abort and drain the job before executor drain and lease release on
 both local/launchd and cloud hosts. CLI health lists project opaque ids and

@@ -71,7 +71,20 @@ export function createOwnerJsonStore<T>(o: OwnerJsonOptions<T>) {
     const target = assertWithinPodScope(o.root, new URL(links[0]?.[1] as string, url).href, {
       allowRoot: false,
     });
-    if (target === url || new URL(target).hash || new URL(target).search)
+    // Only a resource ACL beside the JSON document: never a container (`…/`) or a
+    // container's ACL (`…/.acl`), whose owner-only replacement would drop the inherited
+    // `acl:default` grants of every document under that container.
+    const at = new URL(target).pathname,
+      own = new URL(url).pathname;
+    const parent = (path: string) => path.slice(0, path.lastIndexOf("/") + 1);
+    if (
+      target === url ||
+      new URL(target).hash ||
+      new URL(target).search ||
+      at.endsWith("/") ||
+      at.endsWith("/.acl") ||
+      parent(at) !== parent(own)
+    )
       throw new Error("Invalid ACL target");
     aclUrl = target;
     return target;

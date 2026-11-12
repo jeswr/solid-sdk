@@ -31,6 +31,7 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
+import { DEFAULT_CONNECTOR_RUN_TIMEOUT_MS } from "@jeswr/pod-connectors";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
   buildBitstringStatusListCredential,
@@ -1383,6 +1384,65 @@ it("runs the connectors job once under the process lease before releasing it", a
   expect(tick).toHaveBeenCalledOnce();
   expect(connectors.run).not.toHaveBeenCalled();
   expect(h.state.held()).toBe(false);
+});
+it("runs the once-mode connectors pass after ingest and the outbox, bounded by the run limit", async () => {
+  vi.useFakeTimers({ now: AT });
+  const h = harness(),
+    order: string[] = [];
+  h.ingest.list.mockImplementation(async () => {
+    order.push("ingest");
+    return { items: [], next: "one" };
+  });
+  h.executor.runOutboxOnce.mockImplementation(async () => {
+    order.push("outbox");
+    return {};
+  });
+  let passSignal: AbortSignal | undefined;
+  // A connector pass that never finishes on its own (e.g. a hung provider).
+  const hung = () =>
+    vi.fn(async (signal?: AbortSignal) => {
+      order.push("connectors");
+      passSignal = signal;
+      await new Promise<void>((resolve) =>
+        signal?.addEventListener("abort", () => resolve(), { once: true }),
+      );
+    });
+  const connectors = {
+    tick: hung(),
+    run: vi.fn(),
+    list: vi.fn(),
+    runTimeoutMs: 120_000,
+  };
+  let done = false;
+  const pass = createDaemon({ ...h.options, now: Date.now, connectors })
+    .once()
+    .then(() => {
+      done = true;
+    });
+  await vi.advanceTimersByTimeAsync(0);
+  // Approved outbox items are sent before any connector traffic.
+  expect(order).toEqual(["ingest", "outbox", "connectors"]);
+  expect(h.state.held()).toBe(true);
+  await vi.advanceTimersByTimeAsync(119_000);
+  expect(done).toBe(false);
+  await vi.advanceTimersByTimeAsync(1_000);
+  await pass;
+  expect(passSignal?.aborted).toBe(true);
+  expect(h.state.held()).toBe(false);
+  // Without a job-specific limit the default run limit applies.
+  const other = harness(),
+    defaulted = { ...connectors, runTimeoutMs: undefined, tick: hung() };
+  let finished = false;
+  const second = createDaemon({ ...other.options, now: Date.now, connectors: defaulted })
+    .once()
+    .then(() => {
+      finished = true;
+    });
+  await vi.advanceTimersByTimeAsync(DEFAULT_CONNECTOR_RUN_TIMEOUT_MS - 1_000);
+  expect(finished).toBe(false);
+  await vi.advanceTimersByTimeAsync(1_000);
+  await second;
+  expect(defaulted.tick).toHaveBeenCalledOnce();
 });
 it("aborts and drains background connectors before executor drain and lease release", async () => {
   const h = harness(),

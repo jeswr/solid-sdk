@@ -2,9 +2,9 @@
 // AUTHORED-BY Claude Opus 5.5
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createConnectionStore } from "./connections-store.js";
-import { ConnectorScheduler } from "./scheduler.js";
+import { ConnectorScheduler, type ConnectorSchedulerOptions } from "./scheduler.js";
 import { connectorState } from "./state.js";
 import { createConnectorStateStore } from "./state-store.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
@@ -46,7 +46,13 @@ it("writes health with If-Match and merges another account and newer checkpoint 
   });
   let conflict = true;
   const io: typeof fetch = async (input, init) => {
-    if (String(input) === url && init?.method === "PUT" && conflict) {
+    // The conflict lands on the health write (the run's claim write precedes it).
+    if (
+      String(input) === url &&
+      init?.method === "PUT" &&
+      String(init.body).includes('"health"') &&
+      conflict
+    ) {
       conflict = false;
       await h.pod.fetch(url, {
         method: "PUT",
@@ -86,7 +92,8 @@ it("writes health with If-Match and merges another account and newer checkpoint 
   expect(state.accounts?.fixture?.cursor).toBe("newer-host");
   expect(state.accounts?.fixture?.health?.outcome).toBe("ok");
   const puts = h.requests.filter((r) => r.url === url && r.method === "PUT");
-  expect(puts.map((p) => p.headers.get("if-match"))).toEqual(['"v1"', '"v2"']);
+  expect(puts.map((p) => p.headers.get("if-match"))).toEqual(['"v1"', '"v2"', '"v3"']);
+  expect(state.claims?.fixture).toBeUndefined();
   const acl = new AclResource(h.pod.dataset(`${url}.acl`), DataFactory);
   expect([...acl.authorizations]).toHaveLength(1);
   expect([...([...acl.authorizations][0]?.agent ?? [])]).toEqual([TEST_WEBID]);
@@ -397,4 +404,140 @@ it("skips a needs-reauth disable when the owner re-enabled during the run, inclu
   expect(await store.read()).toEqual([
     { connectorId: "spotify", account: "fixture", enabled: false, status: "needs-reauth" },
   ]);
+});
+
+describe("cross-host run claims", () => {
+  const url = `${TEST_POD_ROOT}integrations/spotify/state.json`;
+  const okReport = async () => ({
+    adapterId: "spotify",
+    mode: "live" as const,
+    written: [],
+    categories: [],
+    indexUrl: "https://pod.example/index",
+    state: { ...base, lastSync: AT, cursor: "run" },
+  });
+  /** One host: its own scheduler and its own long-lived state store on the shared pod. */
+  function host(
+    h: ReturnType<typeof fixture>,
+    clock: () => number,
+    runner: ConnectorSchedulerOptions["runner"],
+  ) {
+    const store = createConnectorStateStore({ ...h.options, adapterId: "spotify" });
+    return new ConnectorScheduler({
+      connections: [{ connectorId: "spotify", account: "fixture", enabled: true }],
+      now: clock,
+      tokenSource: { accessToken: async () => "synthetic" },
+      sourceFetch: vi.fn(),
+      saveConnection: vi.fn(),
+      podWriter: vi.fn(),
+      stateStore: () => ({ read: () => store.read(), write: (s) => store.write(s) }),
+      runner,
+    });
+  }
+  const stored = (h: ReturnType<typeof fixture>) =>
+    connectorState(JSON.parse(h.pod.get(url) ?? "null"));
+  it("runs a due connection once across two hosts sharing one pod", async () => {
+    const h = fixture();
+    const clock = () => Date.parse(AT);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const runner = vi.fn(async () => {
+      entered();
+      await gate;
+      return okReport();
+    });
+    const a = host(h, clock, runner),
+      b = host(h, clock, runner);
+    const pass = a.tick();
+    await started;
+    // A holds an unexpired claim: B skips quietly, writing nothing.
+    const claim = stored(h).claims?.fixture;
+    expect(claim?.holder).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+    expect(Date.parse(claim?.expiresAt ?? "")).toBeGreaterThan(Date.parse(AT));
+    h.requests.length = 0;
+    await b.tick();
+    expect(h.requests.filter((r) => r.method === "PUT" && r.url === url)).toEqual([]);
+    release();
+    await pass;
+    expect(runner).toHaveBeenCalledOnce();
+    expect(stored(h).claims?.fixture).toBeUndefined();
+    expect(stored(h).accounts?.fixture?.health?.outcome).toBe("ok");
+    // Racing claims on one pod: the conditional write lets exactly one host run.
+    const raced = fixture();
+    const both = vi.fn(okReport);
+    await Promise.all([host(raced, clock, both).tick(), host(raced, clock, both).tick()]);
+    expect(both).toHaveBeenCalledOnce();
+    expect(stored(raced).accounts?.fixture?.health?.outcome).toBe("ok");
+    expect(stored(raced).accounts?.fixture?.health?.errorClass).toBeUndefined();
+  });
+  it("takes over only an expired (or implausibly long) foreign claim", async () => {
+    const h = fixture();
+    let now = Date.parse(AT);
+    const plant = async (expiresAt: string) => {
+      const current = h.pod.get(url);
+      const claims = { fixture: { holder: "other-host", expiresAt } };
+      await h.pod.fetch(url, {
+        method: "PUT",
+        body: JSON.stringify(current ? { ...JSON.parse(current), claims } : { ...base, claims }),
+        headers: { "content-type": "application/json" },
+      });
+    };
+    await plant(new Date(now + 10 * 60_000).toISOString());
+    const runner = vi.fn(okReport);
+    const scheduler = host(h, () => now, runner);
+    h.requests.length = 0;
+    await scheduler.tick();
+    expect(runner).not.toHaveBeenCalled();
+    expect(h.requests.filter((r) => r.method === "PUT" && r.url === url)).toEqual([]);
+    // The skipped connection waits for the claim to expire instead of re-reading.
+    h.requests.length = 0;
+    await scheduler.tick();
+    expect(h.requests.filter((r) => r.url === url)).toEqual([]);
+    now += 10 * 60_000;
+    await scheduler.tick();
+    expect(runner).toHaveBeenCalledOnce();
+    expect(stored(h).claims?.fixture).toBeUndefined();
+    // A claim expiring far beyond any run's limit is not trusted (forged or skewed).
+    await plant(new Date(now + 365 * 86_400_000).toISOString());
+    const fresh = host(h, () => now + 3 * 3_600_000, runner);
+    await fresh.tick();
+    expect(runner).toHaveBeenCalledTimes(2);
+    expect(stored(h).claims?.fixture).toBeUndefined();
+  });
+});
+it("refuses a container or out-of-directory ACL target for a private JSON resource", async () => {
+  const h = fixture();
+  for (const link of [
+    `<${TEST_POD_ROOT}integrations/.acl>; rel="acl"`,
+    '<./.acl>; rel="acl"',
+    '<./>; rel="acl"',
+    `<${TEST_POD_ROOT}integrations/spotify/.acl>; rel="acl"`,
+    `<${TEST_POD_ROOT}integrations/spotify/connections.json.acl>; rel="acl"`,
+  ]) {
+    const io: typeof fetch = vi.fn(
+      async () => new Response(null, { status: 404, headers: { link } }),
+    );
+    // Refused before any ACL write (the root itself already fails the scope check).
+    await expect(createConnectionStore({ ...h.options, fetch: io }).read()).rejects.toThrow(
+      /Invalid ACL target|target URL/,
+    );
+    expect(io).toHaveBeenCalledTimes(1);
+  }
+  const io: typeof fetch = vi.fn(
+    async () =>
+      new Response(null, {
+        status: 404,
+        headers: { link: `<${TEST_POD_ROOT}integrations/spotify/.acl>; rel="acl"` },
+      }),
+  );
+  await expect(
+    createConnectorStateStore({ ...h.options, fetch: io, adapterId: "spotify" }).read(),
+  ).rejects.toThrow("Invalid ACL target");
+  expect(io).toHaveBeenCalledTimes(1);
 });
