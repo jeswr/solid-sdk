@@ -1288,7 +1288,7 @@ it("retains offline intents and replays them on online, while rejecting invalid 
     await api?.create(url, data);
   });
   expect(status).toBe("Saved on this device, will sync");
-  expect(localStorage.getItem(`suite:calendar:outbox:${DEMO_WEBID}`)).toContain("Offline");
+  expect(localStorage.getItem(`suite:calendar:outbox:${DEMO_WEBID}`)).toBeNull();
   offline = false;
   await act(() => window.dispatchEvent(new Event("online")));
   await settle();

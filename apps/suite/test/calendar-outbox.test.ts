@@ -1,386 +1,429 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
+import { eventIntent } from "../src/apps/calendar/state/event-channel";
+import { outboxKey } from "../src/apps/calendar/state/outbox";
 import {
-  createEventOutbox,
-  type OutboxStorage,
-  outboxKey,
-} from "../src/apps/calendar/state/outbox";
-import type { EventWrite } from "../src/apps/calendar/state/repository";
+  CalendarHttpError,
+  data,
+  fixture,
+  legacyStorage,
+  root,
+  url,
+  webId,
+  write,
+} from "./calendar-outbox-fixture";
 
-const web = "https://pod.example/profile#me";
-const write: EventWrite = {
-  kind: "create",
-  url: "https://pod.example/calendar/work/e.ttl",
-  data: {
-    name: "2026-11-01T12:00:00Z",
-    start: new Date("2026-11-01T12:00Z"),
-    end: new Date("2026-11-01T13:00Z"),
-    timeZone: "America/New_York",
-    recurrence: {
-      frequency: "WEEKLY",
-      until: new Date("2026-12-01"),
-      exceptDate: [new Date("2026-11-08T12:00Z"), "2026-11-15"],
-    },
-    reminders: [{ triggerOffset: "-PT5M" }, { triggerTime: new Date("2026-11-01T11:30Z") }],
-  },
-};
-function store(): OutboxStorage {
-  const data = new Map<string, string>();
-  return {
-    getItem: (key) => data.get(key) ?? null,
-    setItem: (key, value) => {
-      data.set(key, value);
-    },
-  };
-}
-function setup(
-  storage = store(),
-  send: (w: EventWrite) => Promise<void> = async () => {},
-  allowed: (write: EventWrite) => void = vi.fn(),
-) {
-  const changed = vi.fn();
-  const box = createEventOutbox(web, storage, send, changed, allowed);
-  return { box, changed, storage, allowed };
-}
-it("persists before sending and revives only known dates on next load", async () => {
-  const storage = store();
-  const offline = vi.fn(async () => {
-    throw new TypeError("Calendar network unavailable");
-  });
-  const { box, changed } = setup(storage, offline);
-  await box.save(write);
-  expect(changed).toHaveBeenLastCalledWith([write], true);
-  const send = vi.fn(async () => {});
-  const next = setup(storage, send);
-  next.box.restore();
-  const revived = next.changed.mock.calls[0]![0][0] as typeof write;
-  expect(revived.data.start).toBeInstanceOf(Date);
-  expect(revived.data.name).toBe(write.data.name);
-  expect(revived.data.timeZone).toBe("America/New_York");
-  expect(revived.data.recurrence?.until).toBeInstanceOf(Date);
-  expect(revived.data.recurrence?.exceptDate?.[0]).toBeInstanceOf(Date);
-  expect(revived.data.recurrence?.exceptDate?.[1]).toBe("2026-11-15");
-  expect(revived.data.reminders?.[1]?.triggerTime).toBeInstanceOf(Date);
-  await next.box.flush();
-  expect(send).toHaveBeenCalledOnce();
-  expect(JSON.parse(storage.getItem(outboxKey(web))!).writes).toEqual([]);
-});
-it("serializes writes, shares a flush, retains offline order and retries", async () => {
-  let finish!: () => void;
-  const send = vi.fn(
-    () =>
-      new Promise<void>((resolve) => {
-        finish = resolve;
-      }),
+it("persists JSON intents in the shared outbox, reopens with revived dates and replays via the domain writer", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const first = fixture();
+  first.register();
+  first.connect();
+  await first.adapter.save(write);
+  expect(first.send).not.toHaveBeenCalled();
+  expect(first.legacy.getItem(outboxKey(webId))).toContain('"writes":[]');
+  const [row] = await first.adapter.channel.pending(first.outbox);
+  expect(row?.intent?.write).toEqual(write);
+  expect(row?.intent?.write.kind !== "delete" && row?.intent?.write.data.start).toBeInstanceOf(
+    Date,
   );
-  const { box } = setup(store(), send);
-  const first = box.save(write);
-  const second = box.save({ ...write, url: "https://pod.example/calendar/work/f.ttl" });
-  const flush = box.flush();
-  expect(box.flush()).toBe(flush);
-  finish();
-  await Promise.resolve();
-  await Promise.resolve();
-  finish();
-  await Promise.all([first, second, flush]);
-  expect(send).toHaveBeenCalledTimes(2);
-  let network = true;
-  const next = setup(store(), async () => {
-    if (network) throw new TypeError("Calendar network unavailable");
-  });
-  await next.box.save(write);
-  await next.box.save({ ...write, url: "https://pod.example/calendar/work/f.ttl" });
-  expect(next.changed).toHaveBeenLastCalledWith(expect.any(Array), true);
-  network = false;
-  await next.box.flush();
-  expect(next.changed).toHaveBeenLastCalledWith([], false);
+  first.outbox.close();
+  const next = fixture({ idb: first.idb });
+  await next.outbox.ready;
+  await next.outbox.replay(next.raw);
+  expect(next.outbox.pending()[0]?.blocked).toBe("no-delegate");
+  next.register();
+  next.connect();
+  await next.adapter.flush();
+  expect(next.changed).toHaveBeenLastCalledWith([write], true);
+  vi.stubGlobal("navigator", { onLine: true });
+  await next.outbox.replay(next.raw);
+  await vi.waitFor(() => expect(next.changed).toHaveBeenLastCalledWith([], false));
+  expect(next.send).toHaveBeenCalledOnce();
+  expect((await next.io.loadEvent(url))?.data.name).toBe(data.name);
+  expect(next.outbox.pending()).toEqual([]);
 });
-it("rolls back non-network failures and validates before writes", async () => {
-  const failure = new Error("412");
-  const { box, changed } = setup(store(), async () => {
-    throw failure;
-  });
-  await expect(box.save(write)).rejects.toBe(failure);
-  expect(changed).toHaveBeenLastCalledWith([], false);
-  const invalid = setup(
-    store(),
-    async () => {},
-    () => {
-      throw new Error("outside pod");
-    },
-  );
-  await expect(invalid.box.save(write)).rejects.toThrow("outside pod");
-  const persisted = store();
-  persisted.setItem(outboxKey(web), JSON.stringify({ v: 1, webId: web, writes: [write] }));
-  const replay = setup(
-    persisted,
-    async () => {},
-    () => {
-      throw new Error("removed calendar");
-    },
-  );
-  await replay.box.flush();
-  expect(replay.changed).toHaveBeenLastCalledWith([], false);
-  const type = setup(store(), async () => {
-    throw new TypeError("invalid event");
-  });
-  await expect(type.box.save(write)).rejects.toThrow("invalid event");
+it("delivers online immediately with the session fetch and returns the latest confirmed ETag", async () => {
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.save(write);
+  expect(f.transport).toHaveBeenCalled();
+  expect(f.outbox.pending()).toEqual([]);
+  const item = await f.io.loadEvent(url);
+  expect(await f.adapter.resolve(url, null)).toBe(item?.etag);
+  expect(await f.adapter.resolve(url, '"remote"')).toBe('"remote"');
+  await f.adapter.save({ kind: "delete", url, etag: item?.etag as string });
+  await expect(f.adapter.resolve(url, null)).rejects.toThrow("Reload");
 });
-it("ignores corrupt, oversized, invalid and foreign envelopes", () => {
-  for (const raw of [
-    "bad",
-    JSON.stringify({ v: 2, webId: web, writes: [] }),
-    JSON.stringify({ v: 1, webId: "other", writes: [write] }),
-    JSON.stringify({ v: 1, webId: web, writes: {} }),
-    JSON.stringify({ v: 1, webId: web, writes: Array(101).fill(write) }),
-    ...[
-      { ...write, kind: "bad" },
-      { ...write, url: 5 },
-      { kind: "delete", url: write.url, etag: "" },
-      { kind: "delete", url: write.url, etag: "*" },
-      { kind: "delete", url: write.url, etag: 'W/"1"' },
-      { ...write, data: { ...write.data, start: "bad" } },
-    ].map((w) => JSON.stringify({ v: 1, webId: web, writes: [w] })),
-  ]) {
-    const storage = store();
-    storage.setItem(outboxKey(web), raw);
-    const { box, changed } = setup(storage);
-    box.restore();
-    expect(changed).toHaveBeenLastCalledWith([], false);
-  }
+it("queues a network failure, retries from the real outbox, and preserves a 412 as a conflict", async () => {
+  const f = fixture();
+  f.register();
+  f.connect();
+  f.transport.mockRejectedValueOnce(new TypeError("unreachable"));
+  await f.adapter.save(write);
+  expect(f.outbox.pending()).toHaveLength(1);
+  await f.outbox.retry();
+  expect(f.outbox.pending()).toEqual([]);
+  vi.stubGlobal("navigator", { onLine: false });
+  await f.adapter.save({ kind: "update", url, etag: '"stale"', data: { ...data, name: "Local" } });
+  vi.stubGlobal("navigator", { onLine: true });
+  await f.outbox.replay(f.raw);
+  expect(f.outbox.pending()[0]?.status).toBe("conflict");
+  expect(f.outbox.conflicts()).toHaveLength(1);
+  expect(f.failed).toHaveBeenLastCalledWith(expect.any(CalendarHttpError), true);
+  expect((await f.io.loadEvent(url))?.data.name).toBe(data.name);
 });
-it("restores date-only/minimal/delete/update writes and works with blocked storage", async () => {
-  const storage = store();
-  const minimal: EventWrite = {
-    kind: "update",
-    url: write.url,
-    etag: '"1"',
-    data: {
-      name: "Day",
-      start: "2026-11-01",
-      recurrence: { frequency: "DAILY", until: "2026-12-01" },
-    },
-  };
-  const deleted: EventWrite = { kind: "delete", url: write.url, etag: '"2"' };
-  storage.setItem(
-    outboxKey(web),
+it("chains offline updates and deletes after a create and survives reopening between deliveries", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.save(write);
+  expect(await f.adapter.resolve(url, null, false)).toBe("");
+  await expect(f.adapter.resolve(url, null)).rejects.toThrow("Reconnect");
+  await f.adapter.save({ kind: "update", url, etag: "", data: { ...data, name: "Edited" } });
+  await f.adapter.save({ kind: "delete", url, etag: "" });
+  expect(f.outbox.pending()).toHaveLength(3);
+  // Only the first request lands; the rest stay durable for the replacement session.
+  let puts = 0;
+  f.transport.mockImplementation(async (input, init) => {
+    if (init?.method === "PUT" && ++puts === 2) throw new TypeError("offline again");
+    return f.pod.fetch(input, init);
+  });
+  vi.stubGlobal("navigator", { onLine: true });
+  await f.outbox.replay(f.raw);
+  expect(f.outbox.pending()).toHaveLength(2);
+  f.outbox.close();
+  const next = fixture({ idb: f.idb });
+  next.transport.mockImplementation((input, init) => f.pod.fetch(input, init));
+  next.register();
+  next.connect();
+  await next.adapter.flush();
+  await next.outbox.replay(next.raw);
+  expect(next.outbox.pending()).toEqual([]);
+  await expect(f.io.loadEvent(url)).rejects.toThrow();
+});
+it("leaves dependent edits conflicted when a remote writer changed the prerequisite", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.save(write);
+  await f.adapter.save({ kind: "update", url, etag: "", data: { ...data, name: "Local edit" } });
+  f.transport.mockImplementation(async (input, init) => {
+    const response = await f.pod.fetch(input, init);
+    if (init?.method === "PUT") {
+      const item = await f.io.loadEvent(url);
+      await f.io.saveEvent(url, { ...data, name: "Remote" }, { etag: item?.etag as string });
+    }
+    return response;
+  });
+  vi.stubGlobal("navigator", { onLine: true });
+  await f.outbox.replay(f.raw);
+  expect(f.outbox.pending()[0]?.status).toBe("conflict");
+  expect((await f.io.loadEvent(url))?.data.name).toBe("Remote");
+});
+it("does not overtake a pending intent when an online edit arrives", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.save(write);
+  vi.stubGlobal("navigator", { onLine: true });
+  await f.adapter.save({ kind: "update", url, etag: "", data: { ...data, name: "New" } });
+  expect(f.send).not.toHaveBeenCalled();
+  expect(f.outbox.pending()).toHaveLength(2);
+  await f.outbox.replay(f.raw);
+  expect((await f.io.loadEvent(url))?.data.name).toBe("New");
+});
+it("imports this WebID's valid legacy entries once, drops corrupt entries individually and keeps other accounts untouched", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const legacy = legacyStorage();
+  legacy.setItem(
+    outboxKey(webId),
     JSON.stringify({
       v: 1,
-      webId: web,
+      webId,
       writes: [
-        { ...minimal, data: { name: "No rule", start: "2026-11-01" } },
-        minimal,
-        deleted,
-        {
-          ...minimal,
-          data: { name: "Minimal", start: "2026-11-01", recurrence: { frequency: "DAILY" } },
-        },
+        { bad: true },
+        write,
+        { ...write, data: { ...data, description: "x".repeat(65536) } },
+        { kind: "delete", url, etag: "*" },
       ],
     }),
   );
-  const { box, changed } = setup(storage);
-  box.restore();
-  expect(changed.mock.calls[0]![0][0].data.start).toBe("2026-11-01");
-  await box.flush();
-  const broken = {
-    getItem: () => {
-      throw Error();
-    },
-    setItem: () => {
-      throw Error();
-    },
-  };
-  const next = setup(broken);
-  next.box.restore();
-  await next.box.save(write);
-  expect(next.changed).toHaveBeenLastCalledWith([], false);
+  legacy.setItem(outboxKey("other"), "foreign");
+  const f = fixture({ legacy });
+  f.register();
+  const disconnect = f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toHaveLength(1);
+  expect(JSON.parse(legacy.getItem(outboxKey(webId)) as string).writes).toEqual([]);
+  expect(legacy.getItem(outboxKey("other"))).toBe("foreign");
+  disconnect();
+  f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toHaveLength(1);
 });
-it("bounds the queue by count and size", async () => {
-  const { box } = setup(store(), async () => {
-    throw new TypeError("Calendar network unavailable");
+it("deduplicates migration after a failed legacy checkpoint and retains records on database failure", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const legacy = legacyStorage();
+  legacy.setItem(outboxKey(webId), JSON.stringify({ v: 1, webId, writes: [write] }));
+  const set = vi.spyOn(legacy, "setItem").mockImplementationOnce(() => {
+    throw new Error("quota");
   });
-  for (let i = 0; i < 100; i++)
-    await box.save({ ...write, url: `https://pod.example/calendar/work/${i}.ttl` });
-  await expect(box.save(write)).rejects.toThrow("full");
-  const next = setup();
-  await expect(
-    next.box.save({ ...write, data: { ...write.data, description: "x".repeat(512001) } }),
-  ).rejects.toThrow("full");
+  const f = fixture({ legacy });
+  f.register();
+  const stop = f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toHaveLength(1);
+  stop();
+  f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toHaveLength(1);
+  expect(set).toHaveBeenCalled();
+  expect(JSON.parse(legacy.getItem(outboxKey(webId)) as string).writes).toEqual([]);
 });
-it("rebases queued conditional writes on the ETag returned by the preceding replay", async () => {
-  const storage = store();
-  const update: EventWrite = { kind: "update", url: write.url, etag: '"old"', data: write.data };
-  const unrelated: EventWrite = { ...update, url: `${write.url}-other` };
-  storage.setItem(
-    outboxKey(web),
-    JSON.stringify({ v: 1, webId: web, writes: [update, update, unrelated, write] }),
+it("rejects invalid, foreign and unavailable sessions and fences disconnected submissions", async () => {
+  const f = fixture();
+  await expect(f.adapter.save(write)).rejects.toThrow("storage is still opening");
+  const other = fixture({ webId: `${root}bob#me` });
+  expect(() =>
+    f.adapter.connect({
+      outbox: other.outbox,
+      storage: other.storage,
+      signal: other.controller.signal,
+    }),
+  ).toThrow("identity mismatch");
+  f.controller.abort();
+  expect(() => f.connect()).toThrow();
+  const next = fixture();
+  next.register();
+  const stop = next.connect();
+  await next.adapter.flush();
+  stop();
+  await expect(next.adapter.save(write)).rejects.toThrow("storage is still opening");
+});
+it("requires confirmation for compound steps and never retains their unsent operations", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture();
+  f.register();
+  f.connect();
+  await expect(f.adapter.save(write, true)).rejects.toThrow("Reconnect");
+  expect(f.outbox.pending()).toEqual([]);
+  await f.adapter.save(write);
+  await expect(f.adapter.save({ kind: "delete", url, etag: "" }, true)).rejects.toThrow(
+    "Reconnect",
   );
-  const seen: EventWrite[] = [];
-  const box = createEventOutbox(
-    web,
-    storage,
-    async (current) => {
-      seen.push({ ...current });
-      return '"new"';
-    },
-    () => {},
-    () => {},
+  expect(f.outbox.pending()).toHaveLength(1);
+});
+it("keeps demo delivery in memory, retries offline work and never writes persistence", async () => {
+  const f = fixture({ demo: true });
+  f.adapter.restore();
+  f.send.mockRejectedValueOnce(new TypeError("Calendar network unavailable"));
+  await f.adapter.save(write);
+  expect(f.changed).toHaveBeenLastCalledWith([write], true);
+  expect(f.legacy.getItem(outboxKey(webId))).toBeNull();
+  await f.adapter.flush();
+  expect(f.changed).toHaveBeenLastCalledWith([], false);
+  expect(f.outbox.pending()).toEqual([]);
+  f.send.mockRejectedValueOnce(new Error("denied"));
+  await expect(f.adapter.save({ ...write, url: `${root}calendar/work/other.ttl` })).rejects.toThrow(
+    "denied",
   );
-  await box.flush();
-  expect(seen[0]).toMatchObject({ etag: '"old"' });
-  expect(seen[1]).toMatchObject({ etag: '"new"' });
-  expect(seen[2]).toMatchObject({ etag: '"old"' });
-  expect(seen[3]?.kind).toBe("create");
+  expect(f.changed).toHaveBeenLastCalledWith([], false);
+});
+it("rejects domain errors and invalid validators without losing unrelated retained intents", async () => {
+  const f = fixture();
+  f.register();
+  f.connect();
+  for (const etag of ["", "*", 'W/"weak"', "unquoted"])
+    await expect(f.adapter.save({ kind: "delete", url, etag })).rejects.toThrow("Reload");
+  f.send.mockRejectedValueOnce(new Error("denied"));
+  await expect(f.adapter.save(write)).rejects.toThrow("denied");
+  vi.stubGlobal("navigator", { onLine: false });
+  await f.adapter.save(write);
+  await f.adapter.channel.enqueue(
+    f.outbox,
+    eventIntent({ ...write, url: `${root}calendar/work/unrelated.ttl` }),
+  );
+  expect(f.outbox.pending()).toHaveLength(2);
+  await expect(
+    f.adapter.save({ ...write, data: { ...data, description: "x".repeat(70000) } }),
+  ).rejects.toThrow();
 });
 
 it.each([
-  "update",
-  "delete",
-] as const)("chains a %s on an in-flight create and uses its ETag", async (kind) => {
-  let finish!: (etag: string) => void;
-  const send = vi.fn(async (current: EventWrite) => {
-    if (current.kind === "create")
-      return await new Promise<string>((resolve) => {
-        finish = resolve;
-      });
-    return '"edited"';
-  });
-  const box = createEventOutbox(
-    web,
-    store(),
-    send,
-    () => {},
-    () => {},
+  "{broken",
+  { v: 2, webId, writes: [write] },
+  { v: 1, webId: "other", writes: [write] },
+  { v: 1, webId, writes: {} },
+  { v: 1, webId, writes: Array(101).fill(write) },
+])("drops invalid legacy envelopes without delivering them: %j", async (envelope) => {
+  const legacy = legacyStorage();
+  legacy.setItem(
+    outboxKey(webId),
+    typeof envelope === "string" ? envelope : JSON.stringify(envelope),
   );
-  const first = box.save({ ...write });
-  const dependent: EventWrite =
-    kind === "update"
-      ? { kind, url: write.url, etag: "", data: { ...write.data, name: "Edited draft" } }
-      : { kind, url: write.url, etag: "" };
-  const second = box.save(dependent);
-  expect(send).toHaveBeenCalledOnce();
-  finish('"created"');
-  await Promise.all([first, second]);
-  expect(send.mock.calls[1]?.[0]).toMatchObject({ kind, etag: '"created"' });
-  expect(await box.resolve(write.url, null)).toBe('"edited"');
+  const f = fixture({ legacy });
+  f.register();
+  f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toEqual([]);
+  expect(JSON.parse(legacy.getItem(outboxKey(webId)) as string).writes).toEqual([]);
 });
-it("resolves the latest local ETag even after a preceding write has finished", async () => {
-  const box = createEventOutbox(
-    web,
-    store(),
-    async () => '"new"',
-    () => {},
-    () => {},
-  );
-  await box.save({ ...write });
-  expect(await box.resolve(write.url, null)).toBe('"new"');
-  expect(await box.resolve(write.url, '"remote"')).toBe('"remote"');
-  expect(await box.resolve(`${write.url}-other`, '"other"')).toBe('"other"');
-  for (const etag of [null, "", "*", 'W/"weak"'])
-    await expect(box.resolve(`${write.url}-unknown`, etag)).rejects.toThrow("Reload");
-  const noTag = createEventOutbox(
-    web,
-    store(),
-    async () => null,
-    () => {},
-    () => {},
-  );
-  await noTag.save({ ...write });
-  await expect(noTag.resolve(write.url, null)).rejects.toThrow("Reload");
+it("retains unavailable legacy storage and fences a migration disconnected before its lock starts", async () => {
+  const legacy = {
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: vi.fn(),
+  };
+  const f = fixture({ legacy });
+  f.register();
+  f.connect();
+  await f.adapter.flush();
+  expect(legacy.setItem).not.toHaveBeenCalled();
+  const pending = fixture();
+  pending.register();
+  const stop = pending.connect();
+  stop();
+  await pending.adapter.flush();
+  expect(pending.outbox.pending()).toEqual([]);
 });
-it("waits for pending writes before resolving preconditions and surfaces prerequisite rejection", async () => {
-  let reject!: (error: Error) => void;
-  const failure = new Error("412");
-  const send = vi.fn(
+it("imports chained updates/deletes without Web Locks and refuses writes after a pending delete", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const legacy = legacyStorage();
+  legacy.setItem(
+    outboxKey(webId),
+    JSON.stringify({
+      v: 1,
+      webId,
+      writes: [
+        write,
+        { kind: "update", url, data: { ...data, name: "After" }, etag: '"1"' },
+        { kind: "delete", url, etag: '"2"' },
+      ],
+    }),
+  );
+  const f = fixture({ legacy });
+  f.register();
+  f.connect();
+  await f.adapter.flush();
+  expect(f.outbox.pending()).toHaveLength(3);
+  await expect(f.adapter.save({ kind: "update", url, etag: '"3"', data })).rejects.toThrow(
+    "Reload",
+  );
+  expect(await f.adapter.resolve(url, '"local"', false)).toBe('"local"');
+  vi.stubGlobal("navigator", { onLine: true });
+  await f.outbox.replay(f.raw);
+  expect(f.outbox.pending()).toEqual([]);
+});
+it("rejects compound operations behind durable prerequisites while leaving unrelated resources alone", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture({ recovery: { fetch: globalThis.fetch, storageUrl: root, warn: vi.fn() } });
+  f.register();
+  f.connect();
+  await f.adapter.save(write);
+  await expect(
+    f.adapter.compound?.(
+      { ...write, url: `${root}calendar/work/replacement.ttl` },
+      { kind: "delete", url, etag: '"old"' },
+      { current: undefined },
+    ),
+  ).rejects.toThrow("Reconnect");
+  expect(f.outbox.pending()).toHaveLength(1);
+});
+it("single-flights demo flushes, retains offline failures and rejects non-network failures", async () => {
+  const f = fixture({ demo: true });
+  f.send.mockRejectedValue(new TypeError("Calendar network unavailable"));
+  await f.adapter.save(write);
+  await expect(f.adapter.resolve(url, null)).rejects.toThrow("Reconnect");
+  expect(await f.adapter.resolve(url, null, false)).toBe("");
+  expect(await f.adapter.resolve(url, '"queued"', false)).toBe('"queued"');
+  f.send.mockRejectedValueOnce(new Error("permission denied"));
+  await expect(f.adapter.flush()).rejects.toThrow("permission denied");
+  let finish!: (value: string) => void;
+  f.send.mockImplementationOnce(
     () =>
-      new Promise<string>((_resolve, fail) => {
-        reject = fail;
+      new Promise((resolve) => {
+        finish = resolve;
       }),
   );
-  const box = createEventOutbox(
-    web,
-    store(),
-    send,
-    () => {},
-    () => {},
-  );
-  const first = box.save({ ...write });
-  const firstRejected = expect(first).rejects.toBe(failure);
-  const second = box.save({ kind: "delete", url: write.url, etag: "" });
-  const secondRejected = expect(second).rejects.toBe(failure);
-  const resolved = box.resolve(write.url, null);
-  const resolvedRejected = expect(resolved).rejects.toBe(failure);
-  reject(failure);
-  await Promise.all([firstRejected, secondRejected, resolvedRejected]);
-  expect(send).toHaveBeenCalledOnce();
+  const first = f.adapter.flush();
+  const second = f.adapter.flush();
+  expect(second).toBe(first);
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  finish('"saved"');
+  await first;
+  expect(f.changed).toHaveBeenLastCalledWith([], false);
 });
-it("coalesces edits to offline creates, cancels unsent creates and refuses unconfirmed compound writes", async () => {
-  const send = vi.fn(async () => {
-    throw new TypeError("Calendar network unavailable");
-  });
-  const { box, changed } = setup(store(), send);
-  await box.save({ ...write });
-  await expect(box.resolve(write.url, null)).rejects.toThrow("Reconnect");
-  await box.save({
+it("keeps optimistic same-resource submissions ordered and fences a stale binding during submission", async () => {
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.flush();
+  let finish!: (etag: string) => void;
+  f.send.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = f.adapter.save(write);
+  await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+  const second = f.adapter.save({
     kind: "update",
-    url: write.url,
+    url,
     etag: "",
-    data: { ...write.data, name: "Queued edit" },
+    data: { ...data, name: "Second" },
   });
-  expect(changed).toHaveBeenLastCalledWith(
-    [
-      expect.objectContaining({
-        kind: "create",
-        data: expect.objectContaining({ name: "Queued edit" }),
-      }),
-    ],
-    true,
-  );
-  expect(await box.resolve(write.url, null, false)).toBe("");
-  expect(await box.resolve(write.url, '"queued"', false)).toBe('"queued"');
-  await box.save({ kind: "delete", url: write.url, etag: "" });
-  expect(changed).toHaveBeenLastCalledWith([], true);
-  for (const etag of ["", "*", 'W/"weak"'])
-    await expect(box.save({ kind: "delete", url: write.url, etag })).rejects.toThrow("Reload");
+  const rejected = expect(second).rejects.toThrow();
+  finish('"first"');
+  await first;
+  await rejected;
+  const stop = f.connect();
+  const read = vi.spyOn(f.adapter.channel, "pending");
+  read.mockImplementationOnce(async () => {
+    stop();
+    return [];
+  });
+  await expect(
+    f.adapter.save({ ...write, url: `${root}calendar/work/fenced.ttl` }),
+  ).rejects.toThrow("session changed");
+});
+it("drops an error row from the overlay and tolerates refresh failure until the next change", async () => {
+  const f = fixture();
+  f.register();
+  f.connect();
+  await f.adapter.flush();
+  const read = vi
+    .spyOn(f.adapter.channel, "pending")
+    .mockRejectedValueOnce(new Error("idb unavailable"));
+  await f.outbox.enqueue({
+    op: "write",
+    url,
+    contentType: "application/json",
+    body: "{}",
+    guard: { tag: "calendar.event-v1" },
+  });
+  await f.adapter.flush();
+  expect(read).toHaveBeenCalled();
+  expect(f.changed).toHaveBeenLastCalledWith([], true);
 });
 
-it("requires confirmed compound writes and removes unsent steps when the network disappears", async () => {
-  const { box, changed, storage } = setup(store(), async () => {
-    throw new TypeError("Calendar network unavailable");
+it("handles an unconfirmed step removed by another consumer before its submission settles", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const f = fixture();
+  f.register();
+  f.connect();
+  const submit = f.adapter.channel.submit.bind(f.adapter.channel);
+  vi.spyOn(f.adapter.channel, "submit").mockImplementationOnce(async (storage, intent) => {
+    const result = await submit(storage, intent);
+    const queued = f.outbox.pending()[0];
+    if (queued) await f.outbox.discard(queued.id);
+    return result;
   });
-  await expect(box.save({ ...write }, true)).rejects.toThrow("Reconnect");
-  expect(changed).toHaveBeenLastCalledWith([], true);
-  expect(JSON.parse(storage.getItem(outboxKey(web))!).writes).toEqual([]);
-  await expect(box.save({ kind: "delete", url: write.url, etag: '"1"' }, true)).rejects.toThrow(
-    "Reconnect",
-  );
-  expect(changed).toHaveBeenLastCalledWith([], true);
-  const next = setup();
-  await next.box.save({ ...write }, true);
-  expect(next.changed).toHaveBeenLastCalledWith([], false);
-});
-
-it("rejects dependent intents without dropping unrelated queued resources", async () => {
-  let fail!: (error: Error) => void;
-  const failure = new Error("failed create");
-  const send = vi.fn(async (current: EventWrite) => {
-    if (current.url === write.url)
-      return await new Promise<string>((_resolve, reject) => {
-        fail = reject;
-      });
-    return '"unrelated"';
-  });
-  const box = createEventOutbox(
-    web,
-    store(),
-    send,
-    () => {},
-    () => {},
-  );
-  const first = box.save({ ...write });
-  const rejected = expect(first).rejects.toBe(failure);
-  const other = box.save({ ...write, url: `${write.url}-other` });
-  fail(failure);
-  await Promise.all([rejected, other]);
-  expect(send).toHaveBeenCalledTimes(2);
+  await expect(f.adapter.save(write, true)).rejects.toThrow("Reconnect");
+  expect(f.outbox.pending()).toEqual([]);
 });

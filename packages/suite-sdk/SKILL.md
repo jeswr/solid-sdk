@@ -45,7 +45,11 @@ Preserve the explicit DNS-pinning requirement for Node transports and all redire
 puts small JSON domain intents on guarded outbox writes. Tags match
 `/^[a-z][a-z0-9.-]{0,63}$/`; use a versioned name such as `chat.message-v1`.
 `submit(session.storage, intent)` validates the JSON round trip before storing bytes and
-returns the queueing write result. The default encoded limit is 64 KiB. The destination
+returns the queueing write result. The default encoded limit is 64 KiB.
+`await channel.enqueue(outbox, intent)` validates identically and persists directly without an
+online attempt. Use it when the caller must keep an intent behind retained prerequisites;
+replay, blocking and conflicts remain owned by the outbox. It returns after persistence,
+not delivery. Online sends without retained prerequisites use `submit`. The destination
 must belong to the channel's `matches(url)` scope. A delegate performs the domain mutation;
 intent bytes are never delivered as a raw PUT. The write signature's required `ifMatch`
 is a placeholder; the domain delegate obtains the actual validator.

@@ -208,7 +208,6 @@ export function eventMutations(
   invalidate: () => void,
   failed: (error: unknown, conflict: boolean) => void,
 ) {
-  const io = calendarIO(account.fetch, account.storageUrl);
   const pending = new Map<number, EventWrite>();
   // A range acknowledges these by identity only after its own revalidation finishes.
   const confirmed = new Map<string, EventWrite>();
@@ -217,7 +216,8 @@ export function eventMutations(
   const etags = new Map<string, string>();
   const conflicts = new Map<string, number>();
   let next = 0;
-  return async (write: EventWrite): Promise<string | null> => {
+  return async (write: EventWrite, fetch = account.fetch): Promise<string | null> => {
+    const io = calendarIO(fetch, account.storageUrl);
     const id = ++next;
     pending.set(id, write);
     publish();

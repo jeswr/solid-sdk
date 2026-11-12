@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { type PodSession, usePodSessionState } from "@/lib/session/pod-session";
+import { useOutboxSession } from "@/shell/sync/outbox-session";
 import { type CalendarEvent, expandEvent, validateEvent } from "../lib/model";
 import { eventDocument } from "./editing";
 import { createEventOutbox } from "./outbox";
@@ -84,6 +85,7 @@ function SessionCalendarProvider({
   session: PodSession;
   children: ReactNode;
 }) {
+  const outboxSession = useOutboxSession();
   const [calendars, setCalendars] = useState<CalendarsState>({ status: "loading" });
   const [prefs, updatePrefs] = useState<Preferences>({ hidden: [], view: "week", weekStart: 1 });
   const [revision, setRevision] = useState(0);
@@ -206,19 +208,51 @@ function SessionCalendarProvider({
           if (write.kind !== "delete") validateEvent(write.data);
         },
         { ...session, warn: (message) => toast.error(message) },
+        {
+          demo: session.mode === "demo",
+          storageUrl: session.storageUrl,
+          conflict: () => {
+            toast.error("This event changed elsewhere. The latest version has been loaded.");
+            reload();
+          },
+          calendars: () => {
+            const current = calendarRef.current;
+            return current.status === "ready" ? current.calendars : [];
+          },
+        },
       ),
-    [session, mutate],
+    [session, mutate, reload],
   );
   const ready = calendars.status === "ready";
   useEffect(() => {
+    if (!ready || !outboxSession?.storage || outboxSession.account.webId !== session.webId) return;
+    const unregister = outbox.channel.register(outboxSession);
+    const disconnect = outbox.connect({
+      outbox: outboxSession.outbox,
+      storage: outboxSession.storage,
+      signal: outboxSession.signal,
+    });
+    void outbox
+      .flush()
+      .then(() => {
+        if (navigator.onLine !== false && !outboxSession.signal.aborted)
+          return outboxSession.adapter.reconnected();
+      })
+      .catch(() => {});
+    return () => {
+      disconnect();
+      unregister();
+    };
+  }, [outbox, outboxSession, outboxSession?.storage, session.webId, ready]);
+  useEffect(() => {
     if (!ready) return;
     outbox.restore();
-    const retry = () => {
-      void outbox.flush();
+    const recover = () => {
+      void outbox.flush().catch(() => {});
     };
-    retry();
-    addEventListener("online", retry);
-    return () => removeEventListener("online", retry);
+    recover();
+    addEventListener("online", recover);
+    return () => removeEventListener("online", recover);
   }, [outbox, ready]);
   const create = useCallback(
     async (title: string, colour: string) => {

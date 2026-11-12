@@ -5,7 +5,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
 import { buildEvent, CalendarHttpError } from "../lib/model";
 import type { SeriesReplacement } from "./editing";
-import { type OutboxStorage, reviveEventWrite } from "./outbox";
+import { type OutboxStorage, reviveEventWrite } from "./event-write";
 import type { EventWrite } from "./repository";
 
 type Create = Extract<EventWrite, { kind: "create" }>;

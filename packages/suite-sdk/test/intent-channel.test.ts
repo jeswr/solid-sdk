@@ -272,3 +272,28 @@ it("decodes pending items and reports invalid entries while skipping other tags"
     expect(item.intent).toBeUndefined();
   }
 });
+
+it("validates explicit enqueue and persists in order without attempting online delivery", async () => {
+  const { channel, deliver, storage, context } = setup();
+  const outbox = box();
+  channel.register(session(outbox, context));
+  await channel.enqueue(outbox, intent);
+  await channel.enqueue(outbox, { ...intent, content: "second" });
+  await expect(channel.enqueue(outbox, { ...intent, path: "bad.txt" })).rejects.toThrow(
+    "destination",
+  );
+  await expect(
+    channel.enqueue(outbox, { ...intent, content: 7 } as unknown as typeof intent),
+  ).rejects.toThrow("Invalid intent body");
+  expect(deliver).not.toHaveBeenCalled();
+  expect((await channel.pending(outbox)).map((row) => row.intent?.content)).toEqual([
+    "private-body",
+    "second",
+  ]);
+  await outbox.replay(storage);
+  expect(deliver.mock.calls.map(([value]) => value)).toEqual([
+    intent,
+    { ...intent, content: "second" },
+  ]);
+  expect(outbox.pending()).toEqual([]);
+});

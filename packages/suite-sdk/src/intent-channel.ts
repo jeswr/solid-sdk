@@ -29,6 +29,8 @@ export interface IntentChannel<T> {
   readonly tag: string;
   /** Validate before storing anything, then deliver now or queue on network failure. */
   submit(storage: QueueingStorageClient, intent: T): Promise<QueueingWriteResult>;
+  /** Persist without an online attempt, for intents ordered behind retained work. */
+  enqueue(outbox: Outbox, intent: T): Promise<void>;
   pending(outbox: Outbox): Promise<Array<PendingIntent<T>>>;
   /** Install for one shell session after its storage opens. Cleanup is idempotent. */
   register(session: IntentSession): () => void;
@@ -68,28 +70,32 @@ export function createIntentChannel<T>(options: {
       throw new TypeError("Invalid intent destination");
     }
   }
+  function prepare(intent: T) {
+    let body: Uint8Array;
+    let validated: T;
+    try {
+      const json = JSON.stringify(intent);
+      validated = decode(JSON.parse(json));
+      body = encoder.encode(json);
+      if (body.byteLength > maxBytes) throw invalid();
+    } catch {
+      throw invalid();
+    }
+    return { url: target(validated), body, contentType: "application/json", guard: { tag } };
+  }
   return {
     tag,
     async submit(storage, intent) {
-      let body: Uint8Array;
-      let validated: T;
-      try {
-        const json = JSON.stringify(intent);
-        // The parsed value, not the caller object, is the replay validation boundary.
-        validated = decode(JSON.parse(json));
-        body = encoder.encode(json);
-        if (body.byteLength > maxBytes) throw invalid();
-      } catch {
-        throw invalid();
-      }
-      return storage.write(target(validated), body, {
-        contentType: "application/json",
-        // Required by StorageClient's write signature. Guarded delivery obtains
-        // its own domain validator and can never fall back to a raw write.
+      const { url, body, ...options } = prepare(intent);
+      return storage.write(url, body, {
+        ...options,
+        // The delegate obtains the actual domain validator.
         ifMatch: "*",
         offline: "queue",
-        guard: { tag },
       });
+    },
+    async enqueue(outbox, intent) {
+      await outbox.enqueue({ op: "write", ...prepare(intent) });
     },
     async pending(outbox) {
       await outbox.ready;

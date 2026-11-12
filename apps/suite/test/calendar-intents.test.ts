@@ -389,7 +389,7 @@ it("runs a foreground compound through the outbox with a durable checkpoint befo
       const [record] = p.journal.list();
       expect(record?.original).toEqual(original);
       expect(record?.created).toEqual(created);
-      expect(JSON.parse(p.storage.getItem(outboxKey(web)) as string).writes).toEqual([]);
+      expect(p.storage.getItem(outboxKey(web))).toBeNull();
       if (request.url === original.url) {
         expect(record?.replacementEtag).toBeTruthy();
         expect(record?.attemptingOriginal).toBe(true);
@@ -397,7 +397,11 @@ it("runs a foreground compound through the outbox with a durable checkpoint befo
     }
     return undefined;
   });
-  const box = createEventOutbox(web, p.storage, p.send, vi.fn(), p.allowed, p.recovery);
+  const box = createEventOutbox(web, p.storage, p.send, vi.fn(), p.allowed, p.recovery, {
+    demo: true,
+    storageUrl: root,
+    calendars: () => [],
+  });
   box.restore();
   expect(await box.compound?.(created, original, replacement)).toBe(true);
   expect(p.journal.list()).toEqual([]);
@@ -448,7 +452,11 @@ it("falls back to the original in-memory compound flow when journal storage is b
       throw Error("blocked");
     },
   };
-  const box = createEventOutbox(web, storage, p.send, vi.fn(), p.allowed, p.recovery);
+  const box = createEventOutbox(web, storage, p.send, vi.fn(), p.allowed, p.recovery, {
+    demo: true,
+    storageUrl: root,
+    calendars: () => [],
+  });
   const replacement: SeriesReplacement = { current: undefined };
   await applySeriesPlan({
     plan: { created: data, original: original.data },
