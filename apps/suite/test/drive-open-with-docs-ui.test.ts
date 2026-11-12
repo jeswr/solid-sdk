@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { FileText } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
@@ -83,6 +84,9 @@ const writable = (modes: string) =>
 
 let control: OpenWithDocsControl | undefined;
 function Hook({ item }: { item: DriveItem | undefined }) {
+  return h(DriveUiProvider, null, h(DocsHook, { item }));
+}
+function DocsHook({ item }: { item: DriveItem | undefined }) {
   control = useOpenWithDocs(item);
   return null;
 }
