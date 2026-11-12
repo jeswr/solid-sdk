@@ -44,7 +44,25 @@ async function poll(label, probe, timeout = 30000) {
   throw new Error(`Timed out: ${label}`);
 }
 
-/** Request-only CDP. No console/network event logging or credentials returned to the host. */
+/** Origin and path only: queries and fragments can carry OAuth state, codes or challenges. */
+function redactUrl(value) {
+  try {
+    const url = new URL(value);
+    return ["data:", "blob:"].includes(url.protocol) ? url.protocol : url.origin + url.pathname;
+  } catch {
+    return "invalid-url";
+  }
+}
+const redactText = (value) =>
+  String(value ?? "")
+    .replace(/[?#][^\s"'<>)]*/gu, "")
+    .slice(0, 160);
+
+/**
+ * Request-only CDP, plus opt-in diagnostics captured only before sign-in completes: request
+ * method/origin/path/status, Chromium error enums, and exception/console text with URL queries
+ * stripped. No headers, bodies or credentials are ever retained.
+ */
 class Devtools {
   pending = new Map();
   nextId = 0;
@@ -60,11 +78,40 @@ class Devtools {
         return;
       }
       // Opt-in failure capture: Chromium error codes and CORS enums only, never URLs or bodies.
-      if (message.method === "Network.loadingFailed" && client.failures) {
-        const { errorText, blockedReason, corsErrorStatus } = message.params ?? {};
-        client.failures.push(
-          [errorText, blockedReason, corsErrorStatus?.corsError].filter(Boolean).join(" "),
+      if (message.method === "Network.loadingFailed" && (client.failures || client.requests)) {
+        const { requestId, errorText, blockedReason, corsErrorStatus } = message.params ?? {};
+        const failure = [errorText, blockedReason, corsErrorStatus?.corsError]
+          .filter(Boolean)
+          .join(" ");
+        client.failures?.push(failure);
+        const line = client.requests?.get(requestId);
+        if (line) client.requests.set(requestId, `${line} -> failed ${failure}`);
+        return;
+      }
+      if (message.method === "Network.requestWillBeSent" && client.requests) {
+        const { requestId, request } = message.params ?? {};
+        client.requests.set(requestId, `${request?.method} ${redactUrl(request?.url)}`);
+        return;
+      }
+      if (message.method === "Network.responseReceived" && client.requests) {
+        const { requestId, response } = message.params ?? {};
+        const line = client.requests.get(requestId);
+        if (line) client.requests.set(requestId, `${line} -> ${response?.status}`);
+        return;
+      }
+      if (message.method === "Runtime.exceptionThrown" && client.exceptions) {
+        const details = message.params?.exceptionDetails;
+        client.exceptions.push(
+          `exception ${redactText(details?.exception?.description ?? details?.text)}`,
         );
+        return;
+      }
+      if (message.method === "Runtime.consoleAPICalled" && client.exceptions) {
+        const { type, args } = message.params ?? {};
+        if (type === "error" || type === "warning")
+          client.exceptions.push(
+            `${type} ${redactText((args ?? []).map((a) => a.value ?? a.description ?? a.type).join(" "))}`,
+          );
         return;
       }
       const pending = client.pending.get(message.id);
@@ -233,6 +280,10 @@ async function trustedRun(tlsDir) {
       } catch {
         pages[name] = "unavailable";
       }
+    }
+    if (app?.requests) {
+      pages.requests = [...app.requests.values()].slice(-30);
+      pages.exceptions = (app.exceptions ?? []).slice(-8);
     }
     if (app && seed) {
       // Status codes or error names only: tells TLS/CORS/network failure apart from a bad profile.
@@ -486,6 +537,11 @@ async function trustedRun(tlsDir) {
       input.dispatchEvent(new Event('input', { bubbles: true })); return true;
     })()`),
     );
+    // Opt-in, pre-credential capture: which discovery step a stalled sign-in reached.
+    app.requests = new Map();
+    app.exceptions = [];
+    await app.command("Network.enable").catch(() => {});
+    await app.command("Runtime.enable").catch(() => {});
     await clickText(app, "Continue");
     await poll(
       "real Custom Tab",
@@ -503,6 +559,9 @@ async function trustedRun(tlsDir) {
       (page) => page.type === "page" && page.url.startsWith(`${ORIGIN}/`),
     );
     login.customTab = true;
+    // Stop capture before any credential or token can reach the app WebView.
+    app.requests = undefined;
+    app.exceptions = undefined;
     await poll("CSS password form", () =>
       browser.evaluate(
         `!!document.querySelector('#email') && !!document.querySelector('#password')`,
