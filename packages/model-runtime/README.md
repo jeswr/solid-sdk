@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 4.8 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
@@ -80,6 +81,14 @@ new bookmark.Wrapper(subjectIri, store, factory); // direct typed accessor (exte
 `build` preserves the facade's non-validating write contract: missing/invalid required values
 are dropped and may leave a typed shell. Call `parse(resourceUrl, builtStore)` and require a defined
 result before publishing when MUST validation is needed. `serialize` uses the same build contract.
+
+`applyScalarGuards(field, value)` and `hasDatasetClass(doc, subject, requiredClasses)`
+are also public for runtime schema interpreters. The former drops scalars outside
+the reviewed closed guards; it does not validate datatypes. The latter reuses the
+bounded, cycle-safe data-graph class walk without exposing migration context. An optional
+fourth argument, a caller-owned `ClassWalkBudget` (`{ reads, limit }`), is charged by every walk
+that receives it; once `reads` exceeds `limit` those walks return `false` (never throw), so an
+interpreter can bound a whole operation's class checks, not just each call.
 
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so

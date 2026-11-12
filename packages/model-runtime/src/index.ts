@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 /**
  * `@jeswr/model-runtime` — the ONE audited generic runtime for the
  * federation-codegen pipeline. It interprets a JSON shape-manifest to parse /
@@ -61,11 +63,14 @@ export {
 } from "./manifest.js";
 
 export {
+  applyScalarGuards,
+  type ClassWalkBudget,
   type DefineModelOptions,
   defineModel,
   type EntityData,
   type EntityWrapper,
   type EntityWrapperConstructor,
+  hasDatasetClassForSchema as hasDatasetClass,
   MigrationError,
   type Model,
   type ModelEntity,
