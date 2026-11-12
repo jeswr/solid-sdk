@@ -55,6 +55,7 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       return [];
     }
     const attrs = sanitiseStyleAttrs({ ...node.attrs });
+    delete attrs.suggestionBreaks;
     if (node.type === "image") {
       const link = node.marks?.find((mark) => mark.type === "link");
       if (link) attrs.link = normaliseImageLink(link.attrs);
