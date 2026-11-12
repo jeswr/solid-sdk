@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { constants, lstatSync, mkdirSync, opendirSync, realpathSync, unlinkSync } from "node:fs";
-import { type FileHandle, lstat, mkdir, open, opendir, rename, unlink } from "node:fs/promises";
+import {
+  type FileHandle,
+  link,
+  lstat,
+  mkdir,
+  open,
+  opendir,
+  rename,
+  unlink,
+} from "node:fs/promises";
 import { dirname, join, parse, resolve } from "node:path";
 import { getuid, platform } from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -16,7 +25,15 @@ import {
 const MAX_FILE_BYTES = MAX_SEALED_CHARS + 16 * 1024;
 const TEMP_NAME =
   /^[a-f0-9]{64}\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.tmp$/;
+const STALE_NAME =
+  /^[a-f0-9]{64}\.lock\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.stale$/;
 const MAX_SCAN_ENTRIES = 10000;
+function leftover(name: string): boolean {
+  return TEMP_NAME.test(name) || STALE_NAME.test(name);
+}
+function sameFile(a: import("node:fs").Stats, b: import("node:fs").Stats): boolean {
+  return a.dev === b.dev && a.ino === b.ino;
+}
 function safeFile(stat: import("node:fs").Stats): boolean {
   return (
     stat.isFile() &&
@@ -100,7 +117,7 @@ export class FileVaultStore implements VaultStore {
       let count = 0;
       for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
         if (++count > MAX_SCAN_ENTRIES) throw new ConnectorVaultError();
-        if (!TEMP_NAME.test(entry.name)) continue;
+        if (!leftover(entry.name)) continue;
         const path = join(this.directory, entry.name);
         try {
           const stat = lstatSync(path);
@@ -129,29 +146,33 @@ export class FileVaultStore implements VaultStore {
       const deadline = Date.now() + 65000;
       while (!lock) {
         if (Date.now() >= deadline) throw new ConnectorVaultError();
+        let created: FileHandle;
         try {
-          lock = await open(
+          created = await open(
             path,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
             0o600,
           );
-          if (!safeFile(await lock.stat())) throw new ConnectorVaultError();
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          try {
-            const stat = await lstat(path);
-            if (!safeFile(stat) || stat.isSymbolicLink()) throw new ConnectorVaultError();
-            if (Date.now() - stat.mtimeMs > 60000) {
-              const current = await lstat(path);
-              if (current.ino === stat.ino && current.mtimeMs === stat.mtimeMs) await unlink(path);
-              continue;
-            }
-          } catch (error) {
-            if (!missing(error)) throw error;
-          }
+          if (await this.breakStaleLock(path)) continue;
           if (Date.now() >= deadline) throw new ConnectorVaultError();
           await delay(25);
+          continue;
         }
+        try {
+          const stat = await created.stat();
+          if (!safeFile(stat)) {
+            // Remove the name only while it still refers to the file this handle created.
+            const current = await lstat(path);
+            if (sameFile(current, stat)) await unlink(path);
+            throw new ConnectorVaultError();
+          }
+        } catch (error) {
+          await created.close().catch(() => {});
+          throw error;
+        }
+        lock = created;
       }
     } catch {
       await Promise.allSettled([lock?.close(), dir?.close()]);
@@ -173,16 +194,63 @@ export class FileVaultStore implements VaultStore {
     } finally {
       clearInterval(timer);
       await heartbeat;
-      await this.releaseLock(path, held, dir);
+      try {
+        await this.releaseLock(path, held, dir);
+      } catch {
+        // Keep the callback's value or error. An unreleased lock goes stale after 60 seconds.
+      }
     }
+  }
+  /**
+   * Take over a lock whose owner stopped renewing it. Returns true to retry acquisition now.
+   * The atomic rename claims exactly one file; it is deleted only if it is the file judged stale.
+   * Any other file is a live owner's lock and is restored without clobbering the lock path.
+   */
+  private async breakStaleLock(path: string): Promise<boolean> {
+    let stat: import("node:fs").Stats;
+    try {
+      stat = await lstat(path);
+    } catch (error) {
+      if (missing(error)) return true;
+      throw error;
+    }
+    if (stat.isSymbolicLink() || !safeFile(stat)) throw new ConnectorVaultError();
+    if (Date.now() - stat.mtimeMs <= 60000) return false;
+    const claimed = `${path}.${globalThis.crypto.randomUUID()}.stale`;
+    try {
+      await rename(path, claimed);
+    } catch (error) {
+      if (missing(error)) return true;
+      throw error;
+    }
+    let moved: import("node:fs").Stats;
+    try {
+      moved = await lstat(claimed);
+    } catch (error) {
+      if (missing(error)) return true;
+      throw error;
+    }
+    if (sameFile(moved, stat)) {
+      await removeTemporary(claimed);
+      return true;
+    }
+    // Another waiter replaced the lock first. link() never overwrites, so a lock created at the
+    // path meanwhile is kept; the claimed file then ages out and its owner's release mismatches.
+    try {
+      await link(claimed, path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return true;
+      throw error;
+    }
+    await removeTemporary(claimed);
+    return true;
   }
   private async releaseLock(path: string, held: FileHandle, dir: FileHandle): Promise<void> {
     try {
       try {
         const stat = await held.stat();
         const current = await lstat(path);
-        if (!safeFile(current) || current.ino !== stat.ino || current.dev !== stat.dev)
-          throw new ConnectorVaultError();
+        if (!safeFile(current) || !sameFile(current, stat)) throw new ConnectorVaultError();
         await unlink(path);
       } finally {
         try {
@@ -277,7 +345,7 @@ export class FileVaultStore implements VaultStore {
     for await (const entry of directory) {
       if (entry.isSymbolicLink() || !entry.isFile()) throw new ConnectorVaultError();
       if (++scanned > MAX_SCAN_ENTRIES) throw new ConnectorVaultError();
-      if (TEMP_NAME.test(entry.name)) continue;
+      if (leftover(entry.name)) continue;
       if (++count > MAX_VAULT_RECORDS * 2 + 1) throw new ConnectorVaultError();
       if (/^[a-f0-9]{64}$/.test(entry.name)) {
         if (names.length >= MAX_VAULT_RECORDS) throw new ConnectorVaultError();

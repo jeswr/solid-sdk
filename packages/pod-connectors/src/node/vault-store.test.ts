@@ -235,12 +235,203 @@ describe("private file vault store", () => {
       }),
     ).rejects.toThrow("callback failed");
     await expect(fs.stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+    // The claimed stale file was the one judged stale, so the takeover deleted it.
+    expect(await fs.readdir(directory)).toEqual([]);
     expect(await store.withLock(id, async () => 42)).toBe(42);
     await fs.writeFile(lock, "", { mode: 0o644 });
     await fails(store.withLock(id, async () => {}));
     await fs.unlink(lock);
     await fs.symlink(join(directory, "missing"), lock);
     await fails(store.withLock(id, async () => {}));
+  });
+  it("restores a live lock claimed by mistake so only one holder exists", async () => {
+    const { directory, store } = await fixture();
+    const owner = new FileVaultStore(directory);
+    const lock = join(directory, `${name}.lock`);
+    await fs.writeFile(lock, "", { mode: 0o600 });
+    const old = new Date(Date.now() - 61000);
+    await fs.utimes(lock, old, old);
+    // Keep the judged inode allocated so the owner's lock cannot reuse its number.
+    const judgedHandle = await fs.open(lock, "r");
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const events: string[] = [];
+    let holders = 0;
+    let maxHolders = 0;
+    const hold = async (label: string, wait?: Promise<void>) => {
+      maxHolders = Math.max(maxHolders, ++holders);
+      events.push(`${label}-entered`);
+      if (wait) {
+        entered.resolve();
+        await wait;
+      }
+      events.push(`${label}-released`);
+      holders--;
+      return label;
+    };
+    let ownerLock: fsSync.Stats | undefined;
+    let first: Promise<string> | undefined;
+    const originalRename = fs.rename;
+    vi.spyOn(fs, "rename").mockImplementation(async (from, to) => {
+      if (String(to).endsWith(".stale") && !first) {
+        // Between this waiter's staleness judgement and its rename, the owner claimed and
+        // deleted the stale lock, then acquired a fresh one at the same path.
+        await fs.unlink(lock);
+        first = owner.withLock(id, () => hold("owner", release.promise));
+        await entered.promise;
+        ownerLock = await fs.lstat(lock);
+      }
+      return originalRename(from, to);
+    });
+    const originalLink = fs.link;
+    const linked = vi.spyOn(fs, "link").mockImplementation((...args) => originalLink(...args));
+    try {
+      const second = store.withLock(id, () => hold("waiter"));
+      await vi.waitFor(async () => {
+        expect(linked).toHaveBeenCalledTimes(1);
+        expect((await fs.readdir(directory)).filter((entry) => entry.endsWith(".stale"))).toEqual(
+          [],
+        );
+      });
+      // The owner's lock is back under the original name, as the only link to that file.
+      const restored = await fs.lstat(lock);
+      expect([restored.dev, restored.ino, restored.nlink]).toEqual([
+        ownerLock?.dev,
+        ownerLock?.ino,
+        1,
+      ]);
+      expect(events).toEqual(["owner-entered"]);
+      release.resolve();
+      expect(await first).toBe("owner");
+      expect(await second).toBe("waiter");
+      expect(events).toEqual([
+        "owner-entered",
+        "owner-released",
+        "waiter-entered",
+        "waiter-released",
+      ]);
+      expect(maxHolders).toBe(1);
+      // The owner's normal release removed its restored lock; nothing is left behind.
+      expect(await fs.readdir(directory)).toEqual([]);
+    } finally {
+      release.resolve();
+      await judgedHandle.close();
+    }
+  });
+  it("leaves a claimed live lock to age out when a third lock already holds the path", async () => {
+    const { directory, store } = await fixture();
+    const lock = join(directory, `${name}.lock`);
+    await fs.writeFile(lock, "", { mode: 0o600 });
+    const old = new Date(Date.now() - 61000);
+    await fs.utimes(lock, old, old);
+    // Keep the judged inode allocated so the replacement cannot reuse its number.
+    const judgedHandle = await fs.open(lock, "r");
+    const judged = await judgedHandle.stat();
+    let replacement: fsSync.Stats | undefined;
+    let third: fsSync.Stats | undefined;
+    const originalRename = fs.rename;
+    vi.spyOn(fs, "rename").mockImplementation(async (from, to) => {
+      if (String(to).endsWith(".stale") && !replacement) {
+        // Another waiter claimed and deleted the stale lock, then acquired a fresh one.
+        await fs.unlink(lock);
+        await fs.writeFile(lock, "", { mode: 0o600, flag: "wx" });
+        replacement = await fs.lstat(lock);
+      }
+      return originalRename(from, to);
+    });
+    const originalLink = fs.link;
+    vi.spyOn(fs, "link").mockImplementation(async (...args) => {
+      if (!third) {
+        // A third party acquired the now-empty path before the restore.
+        await fs.writeFile(lock, "", { mode: 0o600, flag: "wx" });
+        third = await fs.lstat(lock);
+      }
+      return originalLink(...args);
+    });
+    try {
+      const second = store.withLock(id, async () => "second");
+      await vi.waitFor(() => expect(third).toBeDefined());
+      const claimed = (await fs.readdir(directory)).filter((entry) => entry.endsWith(".stale"));
+      expect(claimed).toHaveLength(1);
+      expect(claimed[0]).toMatch(new RegExp(`^${name}\\.lock\\.[0-9a-f-]{36}\\.stale$`));
+      const claimedPath = join(directory, claimed[0] as string);
+      const kept = await fs.lstat(claimedPath);
+      // Neither lock was deleted or overwritten by the failed restore.
+      expect([kept.dev, kept.ino, kept.nlink]).toEqual([replacement?.dev, replacement?.ino, 1]);
+      expect(kept.ino).not.toBe(judged.ino);
+      const current = await fs.lstat(lock);
+      expect([current.dev, current.ino]).toEqual([third?.dev, third?.ino]);
+      // The third holder releases; the waiter then acquires and releases normally.
+      await fs.unlink(lock);
+      expect(await second).toBe("second");
+      await expect(fs.lstat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+      expect((await fs.lstat(claimedPath)).ino).toBe(replacement?.ino);
+      // A claimed leftover never breaks list/put budgets and ages out like a temp file.
+      await store.put(id, "sealed");
+      expect(await store.list()).toEqual([id]);
+      const aged = new Date(Date.now() - 11 * 60 * 1000);
+      await fs.utimes(claimedPath, aged, aged);
+      new FileVaultStore(directory);
+      expect(await fs.readdir(directory)).toEqual([name]);
+    } finally {
+      await judgedHandle.close();
+    }
+  });
+  it("keeps the callback outcome when releasing the lock fails", async () => {
+    const { directory, store } = await fixture();
+    const lock = join(directory, `${name}.lock`);
+    const originalUnlink = fs.unlink;
+    vi.spyOn(fs, "unlink").mockImplementation(async (path) => {
+      if (String(path) === lock) throw Object.assign(new Error(sensitive), { code: "EIO" });
+      return originalUnlink(path);
+    });
+    expect(await store.withLock(id, async () => "value")).toBe("value");
+    await originalUnlink(lock);
+    const failure = new Error("callback failed");
+    await expect(
+      store.withLock(id, async () => {
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+    await originalUnlink(lock);
+    const vault = new ConnectorTokenVault(await generateBrowserVaultKey(), store);
+    expect(await vault.withLock?.(key, async () => "wrapped")).toBe("wrapped");
+    await originalUnlink(lock);
+  });
+  it.each([
+    false,
+    true,
+  ])("removes its own lock when the post-create safety check fails (path replaced: %s)", async (replaced) => {
+    const { directory, store } = await fixture();
+    const lock = join(directory, `${name}.lock`);
+    const originalOpen = fs.open;
+    let replacement: fsSync.Stats | undefined;
+    vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+      const handle = await originalOpen(...args);
+      if (String(args[0]) !== lock) return handle;
+      const stat = handle.stat.bind(handle);
+      vi.spyOn(handle, "stat").mockImplementation(async () => {
+        const result = await stat();
+        // A hard link appeared between create and check.
+        result.nlink = 2;
+        if (replaced && !replacement) {
+          await fs.unlink(lock);
+          await fs.writeFile(lock, "", { mode: 0o600, flag: "wx" });
+          replacement = await fs.lstat(lock);
+        }
+        return result;
+      });
+      return handle;
+    });
+    await fails(store.withLock(id, async () => {}));
+    if (replaced) {
+      const current = await fs.lstat(lock);
+      expect([current.dev, current.ino]).toEqual([replacement?.dev, replacement?.ino]);
+    } else {
+      await expect(fs.lstat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+      vi.restoreAllMocks();
+      expect(await store.withLock(id, async () => "next")).toBe("next");
+    }
   });
   it("serializes contending child processes using the same file record lock", async () => {
     const { directory, root } = await fixture();

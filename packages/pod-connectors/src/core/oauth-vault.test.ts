@@ -75,7 +75,9 @@ describe("OAuth refresh vault wiring", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
   it("returns the second 401 without a refresh loop and masks source transport errors", async () => {
-    const { options } = await fixture();
+    const { vault, options } = await fixture();
+    // With a vault the stored record, not the in-memory copy, keeps the session connected.
+    await vault.put(key, { refreshToken: sensitive, obtainedAt: 1 });
     const send = vi.fn<typeof fetch>(async (input) =>
       String(input) === config.tokenEndpoint
         ? Response.json({ access_token: "new" })
@@ -183,6 +185,7 @@ describe("OAuth refresh vault wiring", () => {
   });
   it("fails closed if rotation cannot be persisted and masks network/parser/validation errors", async () => {
     const { vault, options } = await fixture();
+    await vault.put(key, { refreshToken: sensitive, obtainedAt: 1 });
     vi.spyOn(vault, "put").mockRejectedValue(new Error(sensitive));
     const failures: (typeof fetch)[] = [
       async () => {

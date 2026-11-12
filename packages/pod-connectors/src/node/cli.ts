@@ -5,7 +5,7 @@ import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { env as nodeEnv, stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
-import { IntegrationAuthError } from "../core/errors.js";
+import { IntegrationAuthError, UnreadableCredentialError } from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -15,7 +15,7 @@ import {
 import { createSourceAuth, runImport } from "../core/import-runner.js";
 import { createOAuthSourceAuth, getOAuthToken } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
-import type { ConnectorState, SourceAuth } from "../core/types.js";
+import type { ConnectorState, SourceAuth, TokenSet } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
 import { ConnectorTokenVault, importVaultKey } from "../vault.js";
@@ -43,6 +43,11 @@ export interface CliOptions {
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
+  /**
+   * Defaults to true. False never starts loopback login: a missing or unreadable refresh
+   * credential exits with the auth code (3) and a reconnect message instead.
+   */
+  readonly interactiveLogin?: boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -225,15 +230,24 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         account: sourceConfig.account ?? "default",
         signal: options.signal,
       };
-      const token =
-        (await getOAuthToken(command.id, sourceConfig, sourceFetch, vaultOptions)) ??
-        (await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
-          ...vaultOptions,
-          openAuthorizationUrl:
-            options.openAuthorizationUrl ??
-            ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
-          signal: options.signal,
-        }));
+      const interactive = options.interactiveLogin !== false;
+      let token: TokenSet | undefined;
+      try {
+        token = await getOAuthToken(command.id, sourceConfig, sourceFetch, vaultOptions);
+      } catch (error) {
+        // An undecryptable record (e.g. a rotated key) would fail every rerun; the code exchange
+        // below replaces it without reading it. Revocation still requires an explicit rerun.
+        if (!(error instanceof UnreadableCredentialError) || !interactive) throw error;
+      }
+      if (!token && !interactive)
+        throw new IntegrationAuthError(command.id, "reauthorise", "Reconnect this source account.");
+      token ??= await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+        ...vaultOptions,
+        openAuthorizationUrl:
+          options.openAuthorizationUrl ??
+          ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
+        signal: options.signal,
+      });
       sourceAuth = vault
         ? createOAuthSourceAuth(adapter, sourceConfig, sourceFetch, { ...vaultOptions, token })
         : (adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??

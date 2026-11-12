@@ -246,7 +246,10 @@ standard base64 encoding of exactly 32 random bytes to retain encrypted refresh 
 A key without `--vault` prints one stderr warning and continues with memory-only credentials.
 An invalid key with both settings fails closed. The CLI tries refresh before interactive login and persists
 rotation before using the access token. Revocation deletes the record and reports exit 3
-with a reconnect message; re-run explicitly to log in again. Set `connectors[id].account`
+with a reconnect message; re-run explicitly to log in again. An unreadable record (for example
+after a key rotation) starts loopback login, whose code exchange replaces it. Library hosts may
+pass `interactiveLogin: false` to `runCli` to never start login: missing or unreadable
+credentials then exit 3. Set `connectors[id].account`
 to a stable provider account id or owner-chosen label (default `default`). Use a separate
 directory per owner/configuration and label per provider account. Changing either selects
 a different record. Access tokens, Pod credentials and client secrets remain in memory.
@@ -790,7 +793,8 @@ const browserVault = new ConnectorTokenVault(await store.getOrCreateKey(), store
 `ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
 `delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only).
 `put` replaces ciphertext without decrypting the old record, so a fresh login with a rotated
-key can recover it. Refreshing an unreadable record raises typed `reauthorise`. Records
+key can recover it. Refreshing an unreadable record raises `UnreadableCredentialError`, an
+`IntegrationAuthError` subclass with `reason: 'reauthorise'`, so hosts may start login. Records
 contain `refreshToken`, epoch-ms `obtainedAt`, optional `scope`, `tokenType`, refresh-credential `expiresAt`, and `providerMeta`.
 Access-token expiry stays in the live `TokenSet`. Unknown record fields are rejected.
 Metadata is plain JSON with credential-shaped fields refused; keep secrets out of metadata
@@ -824,7 +828,15 @@ It removes its own regular, current-uid temp files older than ten minutes on con
 and before list/put budget checks; temp files never consume the name budget. Enumeration
 has a separate 10,000-entry work cap. Refreshes use per-record exclusive 0600 lock files;
 stale locks break after 60 seconds by mtime, active owners renew mtime, and release runs in
-`finally`. Contention waits at most 65 seconds before failing closed.
+`finally`. A waiter takes over a stale lock by renaming it to `<lock>.<uuid>.stale` and deletes
+that file only if its device and inode match the lock it judged stale. Otherwise the file is
+another owner's live lock: it is restored with a non-clobbering `link` back to the lock name and
+the renamed name is removed; if a third lock already holds that name, the renamed file is left
+to age out (its owner's release then sees a mismatch). Either way the waiter retries.
+Leftover `.stale` files age out like temp files. A newly created lock that fails its safety check is unlinked, after the same
+device/inode comparison, before failing. A failed release never replaces the callback's value
+or error; the unreleased lock goes stale. Contention waits at most 65 seconds before failing
+closed.
 `IndexedDbVaultStore.getOrCreateKey()` elects one key in a read/write transaction and stores
 it via structured clone in the same database as records; writes resolve only after commit.
 Version changes close and clear the cached handle; the next call reopens.
@@ -836,6 +848,9 @@ origin/script security responsibilities.
 Pass `{ vault, account, signal? }` as the final argument to code exchange, `authorize`, or
 refresh helpers. `authorizeLoopback` accepts these in its options. `getOAuthToken` returns a
 live supplied token, refreshes saved credentials, or returns undefined for interactive login.
+With a vault, a missing record means disconnected: an in-memory refresh credential raises
+`reauthorise` instead of reviving the account (vault-less sessions keep their in-memory
+credential). Undefined is returned only when neither a record nor an in-memory credential exists.
 Refresh holds the optional store lock across reread, token exchange and put/delete, using
 any newer saved refresh token before sending. On `invalid_grant`, compare with the sent
 token before deleting; if a newer token exists, retry once with it and never loop. A rejected

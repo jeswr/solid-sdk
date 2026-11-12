@@ -281,8 +281,11 @@ vault hosts use createOAuthSourceAuth.
 Hold optional VaultStore/ConnectorTokenVault.withLock across reread + refresh + put/delete.
 Use the newest saved credential; on invalid_grant compare before deletion and retry once
 with a newer credential, never loop. Current invalid grants raise typed reauthorise;
-other failures retain records. Unreadable refresh records raise typed reauthorise, but fresh
-code exchange may replace them without decrypting the previous ciphertext. Disconnect
+other failures retain records. Unreadable refresh records raise UnreadableCredentialError
+(reason reauthorise), but fresh code exchange may replace them without decrypting the previous
+ciphertext; the interactive CLI falls through to loopback login, interactiveLogin false exits 3.
+With a vault a missing record means disconnected: an in-memory refresh token raises
+reauthorise; only vault-less sessions fall back to it. Disconnect
 waits for its in-flight refresh then deletes under the account lock. Memory uses a bounded
 per-key mutex; IndexedDB uses navigator.locks or a shared in-process fallback. Clear the
 IDB handle on versionchange. Custom stores without locks require host serialization.
@@ -290,9 +293,11 @@ IDB handle on versionchange. Custom stores without locks require host serializat
 File stores canonicalize ancestor aliases once at construction, check the real path and
 refuse final-directory/record symlinks. Windows construction throws the POSIX requirement.
 Per-record O_EXCL 0600 locks break after 60 seconds by mtime, renew while active, wait at
-most 65 seconds and always release in finally. Clean only own-pattern regular current-uid
-temps older than ten minutes at construction and before list/put budgets; exclude temps
-from the name budget and retain a separate bounded scan. CLI --vault without
-CONNECTOR_VAULT_KEY exits 2 naming the variable; a key alone warns on stderr and continues
+most 65 seconds and always release in finally. Stale takeover renames to `<lock>.<uuid>.stale`,
+unlinks only on a dev+ino match, otherwise restores via link() (EEXIST: leave it to age out)
+and retries. Unlink a new lock failing its safety check (dev+ino verified). Release failure
+never masks the callback outcome. Clean only own-pattern regular current-uid temps and claimed `.stale` locks older
+than ten minutes at construction and before list/put budgets; exclude them from the name budget
+and retain a separate bounded scan. CLI --vault without CONNECTOR_VAULT_KEY exits 2 naming the variable; a key alone warns on stderr and continues
 in memory. connectors[id].account defaults to default. Use fixtures for hostile/error
 paths and assert secret-free errors.

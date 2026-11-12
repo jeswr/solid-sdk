@@ -48,6 +48,18 @@ export class IntegrationAuthError extends IntegrationError {
   }
 }
 
+/**
+ * A saved refresh credential exists but cannot be decrypted or validated (for example after a
+ * vault key rotation). `reason` stays `reauthorise`; a fresh code exchange replaces the record
+ * without reading it, so interactive hosts may start login instead of stopping.
+ */
+export class UnreadableCredentialError extends IntegrationAuthError {
+  constructor(adapterId: string) {
+    super(adapterId, "reauthorise", "Reconnect this source account.");
+    this.name = "UnreadableCredentialError";
+  }
+}
+
 /** A pull from the source API (or a pod write during import) failed. */
 export class IntegrationSyncError extends IntegrationError {
   /** The URL that failed, when known. */

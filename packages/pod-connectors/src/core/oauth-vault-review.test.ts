@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { spotifyAdapter } from "../spotify/adapter.js";
 import { createSpotifySourceAuth } from "../spotify/source-auth.js";
 import { ConnectorTokenVault, generateBrowserVaultKey, MemoryVaultStore } from "../vault.js";
+import { UnreadableCredentialError } from "./errors.js";
 import {
   createOAuthSourceAuth,
   exchangeCodeForToken,
@@ -137,15 +138,60 @@ describe("adversarial refresh regressions", () => {
       Response.json({ access_token: "AT2", refresh_token: "RT2" }),
     );
     const options = { vault, account: key.account };
-    await expect(getOAuthToken("spotify", config, send, options)).rejects.toMatchObject({
+    const unreadable = await getOAuthToken("spotify", config, send, options).catch((e) => e);
+    expect(unreadable).toBeInstanceOf(UnreadableCredentialError);
+    expect(unreadable).toMatchObject({
       reason: "reauthorise",
+      message: "Reconnect this source account.",
     });
+    expect(unreadable.cause).toBeUndefined();
     await expect(refreshAccessToken("spotify", config, "RT1", send, options)).rejects.toMatchObject(
       { reason: "reauthorise" },
     );
     expect(send).not.toHaveBeenCalled();
     await exchangeCodeForToken("spotify", config, params, send, options);
     expect((await vault.get(key))?.refreshToken).toBe("RT2");
+  });
+  it("a disconnect is not undone by another session's in-memory refresh credential", async () => {
+    const { store, cryptoKey, vault, options } = await fixture();
+    const send = vi.fn<typeof fetch>(async () =>
+      Response.json({ access_token: "AT2", refresh_token: "RT2" }),
+    );
+    const live = {
+      accessToken: "AT1",
+      refreshToken: "RT1",
+      tokenType: "Bearer",
+      expiresAt: Date.now() + 60_000,
+    };
+    const a = createOAuthSourceAuth(spotifyAdapter, config, send, { ...options, token: live });
+    const b = createOAuthSourceAuth(spotifyAdapter, config, send, {
+      vault: new ConnectorTokenVault(cryptoKey, store),
+      account: key.account,
+      token: { ...live, expiresAt: 0 },
+    });
+    await a.disconnect();
+    await expect(b.fetch("https://api.spotify.com/v1/me")).rejects.toMatchObject({
+      reason: "reauthorise",
+    });
+    await expect(b.fetch("https://api.spotify.com/v1/me")).rejects.toMatchObject({
+      reason: "reauthorise",
+    });
+    await expect(refreshAccessToken("spotify", config, "RT1", send, options)).rejects.toMatchObject(
+      { reason: "reauthorise" },
+    );
+    await expect(
+      getOAuthToken("spotify", config, send, { ...options, token: { ...live, expiresAt: 0 } }),
+    ).rejects.toMatchObject({ reason: "reauthorise" });
+    expect(send).not.toHaveBeenCalled();
+    expect(await store.list()).toEqual([]);
+    expect(await vault.get(key)).toBeUndefined();
+    // No stored or in-memory credential still lets the host start interactive login.
+    expect(await getOAuthToken("spotify", config, send, options)).toBeUndefined();
+    // Vault-less sessions keep their in-memory refresh credential.
+    await expect(refreshAccessToken("spotify", config, "RT1", send)).resolves.toMatchObject({
+      accessToken: "AT2",
+      refreshToken: "RT2",
+    });
   });
   it("refuses the Spotify-specific factory when given a vault", async () => {
     const { vault } = await fixture();

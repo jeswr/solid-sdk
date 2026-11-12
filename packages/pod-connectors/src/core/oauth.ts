@@ -17,7 +17,7 @@
  */
 import { type ConnectorTokenVault, ConnectorVaultError, type VaultRecord } from "../vault.js";
 import { readJson } from "./budget.js";
-import { IntegrationAuthError } from "./errors.js";
+import { IntegrationAuthError, UnreadableCredentialError } from "./errors.js";
 import { createSourceAuth } from "./import-runner.js";
 import { clearToken } from "./token-store.js";
 import type { IntegrationAdapter, OAuthAppConfig, SourceAuth, TokenSet } from "./types.js";
@@ -302,8 +302,7 @@ async function readSaved(
   try {
     return await options?.vault?.get({ connectorId: adapterId, account: options.account });
   } catch (error) {
-    if (error instanceof ConnectorVaultError)
-      throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+    if (error instanceof ConnectorVaultError) throw new UnreadableCredentialError(adapterId);
     throw error;
   }
 }
@@ -322,6 +321,11 @@ async function refreshWithinLock(
     await options?.vault?.delete(key);
     throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
   }
+  // With a vault, the record is the source of truth: a missing record means another session
+  // disconnected (or revocation deleted it), so an in-memory credential must not revive it.
+  // Without a stored or in-memory credential the host may still start interactive login.
+  if (options?.vault && !saved && refreshToken)
+    throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
   let sent = saved?.refreshToken ?? refreshToken;
   if (!sent) return undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
