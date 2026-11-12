@@ -51,6 +51,7 @@ export const en = {
     startPage: "Start page",
   },
   shell: {
+    refreshing: "Refreshing content",
     feedback: "Give feedback",
     skip: "Skip to main content",
     sections: "{name} sections",

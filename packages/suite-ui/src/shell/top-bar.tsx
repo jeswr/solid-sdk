@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import { ArrowLeft, Menu, PanelRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { IconButton } from "../components/ui/icon-button.js";
@@ -47,6 +48,7 @@ export function TopBar({
   detailsToggle,
   refreshing = false,
 }: TopBarProps) {
+  const t = useT();
   return (
     <header className="suite-topbar">
       {back && (
@@ -110,8 +112,8 @@ export function TopBar({
       {bell}
       {account}
       {refreshing && (
-        <div className="suite-refresh-progress" role="status" aria-label="Refreshing content">
-          <span className="suite-visually-hidden">Refreshing content</span>
+        <div className="suite-refresh-progress" role="status" aria-label={t("shell.refreshing")}>
+          <span className="suite-visually-hidden">{t("shell.refreshing")}</span>
         </div>
       )}
     </header>

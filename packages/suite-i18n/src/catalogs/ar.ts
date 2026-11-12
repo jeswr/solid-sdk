@@ -54,6 +54,7 @@ export const ar = {
     startPage: "صفحة البداية",
   },
   shell: {
+    refreshing: "جارٍ تحديث المحتوى",
     feedback: "إرسال ملاحظات",
     skip: "الانتقال إلى المحتوى الرئيسي",
     sections: "أقسام {name}",

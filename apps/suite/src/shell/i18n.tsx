@@ -14,7 +14,14 @@ import {
 import { I18nProvider, useLocale, useT } from "@jeswr/suite-i18n/react";
 import { DirectionProvider } from "@jeswr/suite-ui";
 import { Languages } from "lucide-react";
-import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useAllPreferences } from "./settings/preferences";
 
 type Choice = Locale | "";
@@ -25,12 +32,14 @@ interface LanguageChoice {
 }
 const LanguageContext = createContext<LanguageChoice | null>(null);
 
-function DocumentLocale() {
+/** `resolved` is false only for the hydration render, whose English must not undo the boot script. */
+function DocumentLocale({ resolved }: { resolved: boolean }) {
   const locale = useLocale();
   useLayoutEffect(() => {
+    if (!resolved) return;
     document.documentElement.lang = locale;
     document.documentElement.dir = dir(locale);
-  }, [locale]);
+  }, [locale, resolved]);
   return null;
 }
 
@@ -44,6 +53,7 @@ export function SuiteI18nProvider({ children }: { children: ReactNode }) {
   const { preferences, ready, update } = useAllPreferences();
   const [device, setDevice] = useState<Choice>("");
   const [languages, setLanguages] = useState<readonly string[]>([]);
+  const [resolved, setResolved] = useState(false);
   useLayoutEffect(() => {
     const browser = () => setLanguages(navigator.languages);
     const storage = (event: StorageEvent) => {
@@ -51,6 +61,7 @@ export function SuiteI18nProvider({ children }: { children: ReactNode }) {
     };
     browser();
     setDevice(readDeviceLocale());
+    setResolved(true);
     addEventListener("languagechange", browser);
     addEventListener("storage", storage);
     return () => {
@@ -59,25 +70,32 @@ export function SuiteI18nProvider({ children }: { children: ReactNode }) {
     };
   }, []);
   const account = ready ? preferences.locale : "";
+  // Mirror only when the account's choice changes, never in reaction to the device key: each
+  // tab has its own active account, so reacting to another tab's write would ping-pong.
+  const mirrored = useRef("");
   useLayoutEffect(() => {
-    if (account && account !== device) {
-      writeDeviceLocale(account);
-      setDevice(account);
-    }
-  }, [account, device]);
-  const value = account || device;
+    if (account === mirrored.current) return;
+    mirrored.current = account;
+    if (!account) return;
+    const next = account === "auto" ? "" : account;
+    writeDeviceLocale(next);
+    setDevice(next);
+  }, [account]);
+  // "auto" follows the browser even when another account left a device choice behind.
+  const value: Choice = account === "auto" ? "" : account || device;
   const choose = (next: Choice) => {
     writeDeviceLocale(next);
     setDevice(next);
+    mirrored.current = next || "auto";
     // A no-op while signed out; the device choice carries over to the next sign-in.
-    update("locale", next);
+    update("locale", next || "auto");
   };
   const locale = negotiateLocale(value, languages);
   return (
     <I18nProvider locale={locale}>
       <DirectionProvider dir={dir(locale)}>
         <LanguageContext.Provider value={{ value, choose }}>
-          <DocumentLocale />
+          <DocumentLocale resolved={resolved} />
           {children}
         </LanguageContext.Provider>
       </DirectionProvider>

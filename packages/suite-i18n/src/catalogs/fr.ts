@@ -54,6 +54,7 @@ export const fr = {
     startPage: "Page de démarrage",
   },
   shell: {
+    refreshing: "Actualisation du contenu",
     feedback: "Donner votre avis",
     skip: "Aller au contenu principal",
     sections: "Sections de {name}",

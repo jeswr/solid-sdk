@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -177,7 +178,7 @@ export function TaskDetail({
       </h2>
       <header className="tsk-detail-header">
         <Button className="tsk-detail-back" variant="ghost" size="sm" onClick={onClose}>
-          <ArrowLeft size={16} aria-hidden="true" />
+          <ArrowLeft size={16} className="suite-rtl-mirror" aria-hidden="true" />
           Back
         </Button>
         <Popover open={moveOpen} onOpenChange={setMoveOpen}>

@@ -165,3 +165,40 @@ it("requires the provider for the picker binding", () => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   expect(() => render(<Orphan />)).toThrow("useLanguageChoice requires SuiteI18nProvider");
 });
+it("never writes the device key back in reaction to another tab's write", () => {
+  localStorage.setItem(preferencesKey("first"), JSON.stringify({ locale: "de" }));
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("de");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("de");
+  // Another tab, signed in as an account that prefers French, mirrors its choice.
+  localStorage.setItem(DEVICE_LOCALE_KEY, "fr");
+  const write = vi.spyOn(Storage.prototype, "setItem");
+  const remove = vi.spyOn(Storage.prototype, "removeItem");
+  fireEvent(window, new StorageEvent("storage", { key: DEVICE_LOCALE_KEY }));
+  expect(write).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(document.documentElement.lang).toBe("de");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("fr");
+});
+it("stores Automatic per account, so it follows the browser rather than another account's choice", () => {
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["pt-PT"]);
+  const view = render(<SignedOut />);
+  fireEvent.change(screen.getByRole("combobox", { name: "Idioma" }), { target: { value: "" } });
+  expect(parsePreferences(localStorage.getItem(preferencesKey("first"))).locale).toBe("auto");
+  expect(screen.getByRole("combobox", { name: "Idioma" })).toHaveProperty("value", "");
+  // Another account (or tab) leaves a device choice behind; "auto" still follows the browser.
+  localStorage.setItem(DEVICE_LOCALE_KEY, "ar");
+  fireEvent(window, new StorageEvent("storage", { key: DEVICE_LOCALE_KEY }));
+  expect(document.documentElement.lang).toBe("pt");
+  view.unmount();
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("pt");
+  // Loading an Automatic account mirrors it: the device follows the browser too.
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
+  // An account that never chose keeps the device's choice.
+  localStorage.setItem(DEVICE_LOCALE_KEY, "ar");
+  account.id = "second";
+  cleanup();
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("ar");
+});

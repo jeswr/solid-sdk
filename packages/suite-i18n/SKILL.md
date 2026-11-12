@@ -30,8 +30,12 @@ before that (signed out, or while the session restores) the device choice applie
 browser languages. It mirrors each explicit choice to the device key, updates document
 `lang`/`dir` before paint, and wraps the tree in suite-ui's `DirectionProvider` so Radix
 menus and popovers follow RTL. Change the language only through `useLanguageChoice()` or
-`<LanguageSelect>` / `<LanguagePicker>` in `apps/suite/src/shell/i18n.tsx` (the empty string
-means automatic); they write the account preference and the device key together. The root
+`<LanguageSelect>` / `<LanguagePicker>` in `apps/suite/src/shell/i18n.tsx`; they write the
+account preference and the device key together. In the picker the empty string means automatic;
+the account stores that as `"auto"` (follow the browser even if another account left a device
+choice), while an account's `""` means never chosen, so the device choice applies. The device
+key is mirrored only when the account's choice changes, never in reaction to the key itself,
+because each tab has its own active account. The root
 layout inlines `localeBootScript()` so the first paint already has the right direction.
 
 Keep one copy of this package in the host and `@jeswr/suite-ui` (`workspace:*`); a duplicate

@@ -17,6 +17,7 @@ import {
   suiteApps,
   useDirection,
 } from "../src/index.js";
+import { TopBar } from "../src/shell/top-bar.js";
 import { SignInCard } from "../src/sign-in/sign-in-card.js";
 
 let rail: Partial<RailPreferencesBinding> = {};
@@ -218,4 +219,18 @@ it("translates sign-in controls and help while preserving host titles", () => {
   fireEvent.click(screen.getByRole("button", { name: "¿Qué es un WebID?" }));
   expect(screen.getByRole("heading", { name: "¿Qué es un WebID?" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Cerrar" })).toBeTruthy();
+});
+
+it("translates the top bar's refresh status and mirrors breadcrumb separators", () => {
+  const { container } = render(
+    <I18nProvider locale="ar">
+      <TopBar appName="Docs" refreshing />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("status", { name: "جارٍ تحديث المحتوى" })).toBeTruthy();
+  expect(container.textContent).toContain("جارٍ تحديث المحتوى");
+  for (const file of ["breadcrumbs.tsx", "ui/breadcrumb.tsx"])
+    expect(readFileSync(`src/components/${file}`, "utf8")).not.toMatch(
+      /<ChevronRight(?![^>]*suite-rtl-mirror)[^>]*\/>/,
+    );
 });

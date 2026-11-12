@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -229,7 +230,7 @@ export function ThreadView({
             <>
               <div className="mail-actions">
                 <Link className="mail-back" href={back}>
-                  <ArrowLeft size={18} aria-hidden="true" />
+                  <ArrowLeft size={18} className="suite-rtl-mirror" aria-hidden="true" />
                   Back
                 </Link>
                 <IconButton

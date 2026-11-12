@@ -5,7 +5,8 @@ import { z } from "zod";
 import { START_PAGE } from "./next";
 
 export const preferencesSchema = z.object({
-  locale: z.enum(["", ...locales]).catch(""),
+  /** "" = never chosen (the device choice applies); "auto" = explicitly follow the browser. */
+  locale: z.enum(["", "auto", ...locales]).catch(""),
   theme: z.enum(["system", "light", "dark"]).catch("system"),
   density: z.enum(["comfortable", "compact"]).catch("comfortable"),
   fontScale: z.enum(["90", "100", "110"]).catch("100"),

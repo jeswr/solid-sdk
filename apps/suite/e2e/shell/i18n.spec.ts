@@ -63,8 +63,24 @@ test("signed-out language choice applies on the sign-in page and survives reload
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expect(page.getByRole("heading", { name: "تسجيل الدخول إلى Solid Suite" })).toBeAttached();
+  // Record every <html dir> change with the parser state: the inline head script runs while the
+  // document is still loading, before any deferred Next.js chunk can hydrate.
+  await page.addInitScript(() => {
+    const seen: { dir: string; state: DocumentReadyState }[] = [];
+    (window as unknown as { suiteDirLog: typeof seen }).suiteDirLog = seen;
+    // The init script can run before <html> exists, so observe the document's whole subtree.
+    new MutationObserver((records) => {
+      for (const record of records)
+        if (record.target === document.documentElement)
+          seen.push({ dir: document.documentElement.dir, state: document.readyState });
+    }).observe(document, { attributes: true, attributeFilter: ["dir"], subtree: true });
+  });
   await page.reload();
-  // The pre-hydration script sets the direction before React runs.
+  const log = await page.evaluate(
+    () => (window as unknown as { suiteDirLog: { dir: string; state: string }[] }).suiteDirLog,
+  );
+  expect(log[0]).toEqual({ dir: "rtl", state: "loading" });
+  expect(log.map((entry) => entry.dir)).not.toContain("ltr");
   expect(await page.evaluate(() => document.documentElement.dir)).toBe("rtl");
   await expect(page.getByRole("combobox", { name: "اللغة", exact: true })).toHaveValue("ar");
   await page.getByRole("combobox", { name: "اللغة", exact: true }).selectOption("en");

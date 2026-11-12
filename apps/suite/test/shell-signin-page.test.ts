@@ -84,7 +84,7 @@ it("keeps add-account sign-in open and never redirects an expired session", asyn
 it("keeps sign-in failures as codes and translates them at render", async () => {
   fixture.status = "signed-out";
   fixture.signIn.mockRejectedValueOnce(new SignInError("cancelled"));
-  const page = (locale: string) => h(I18nProvider, { locale }, h(SignInPage));
+  const page = (locale: string) => h(I18nProvider, { locale, children: h(SignInPage) });
   const view = await mount(page("es"));
   const input = view.host.querySelector("input[type=url]") as HTMLInputElement;
   await act(() => {
