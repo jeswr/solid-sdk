@@ -77,6 +77,9 @@
   --app-permissions: oklch(0.5 0.11 225);
   --app-permissions-soft: oklch(0.94 0.03 225);
   --presence-permissions: oklch(0.6 0.14 225);
+  --app-agent: oklch(0.5 0.11 205);
+  --app-agent-soft: oklch(0.94 0.03 205);
+  --presence-agent: oklch(0.6 0.14 205);
   --glyph: oklch(1 0 0);
   /* Stable schema:color values; project dots meet 3:1 on sidebar surfaces. */
   --project-red: #b91c1c;
@@ -232,6 +235,8 @@
   --app-health-soft: oklch(0.3 0.05 10);
   --app-permissions: oklch(0.74 0.1 225);
   --app-permissions-soft: oklch(0.3 0.05 225);
+  --app-agent: oklch(0.74 0.1 205);
+  --app-agent-soft: oklch(0.3 0.05 205);
   --glyph: oklch(0.16 0.012 240);
   --project-red: #f87171;
   --project-orange: #fb923c;

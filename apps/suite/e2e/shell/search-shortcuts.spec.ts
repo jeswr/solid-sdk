@@ -160,7 +160,7 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await expect(dialog.getByRole("group", { name: "Go to" })).toBeVisible();
   await expect(dialog.getByRole("group", { name: "Create" })).toBeVisible();
   await expect(dialog.getByRole("group", { name: "Recent" })).toBeVisible();
-  await expect(dialog.getByRole("option", { name: /Calendar/ })).toHaveCount(0);
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toBeVisible();
   await capture(page, info, "palette");
   const input = dialog.getByRole("combobox");
   await input.fill("New document");
@@ -179,6 +179,21 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(trigger).toBeFocused();
+});
+
+test("palette hides an explicit backlog app unless backlog is enabled", async ({ page }) => {
+  await ready(page, "command-palette");
+  const state = page.getByLabel("Fixture state");
+  const trigger = page.getByRole("button", { name: "Open command palette" });
+  const dialog = page.getByRole("dialog", { name: "Command palette" });
+  await state.selectOption("backlog");
+  await trigger.click();
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toHaveCount(0);
+  await expect(dialog.getByRole("option", { name: /^Drive/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await state.selectOption("backlog-visible");
+  await trigger.click();
+  await expect(dialog.getByRole("option", { name: /^Calendar/ })).toBeVisible();
 });
 
 for (const [component, triggerName, dialogName] of [

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
@@ -40,6 +41,16 @@ describe("generateModel — pilot generation", () => {
     const result = generateModel(input());
     expect(result.admission.ok).toBe(true);
     expect(result.admission.violations.filter((v) => v.severity === "error")).toEqual([]);
+  });
+
+  it("flat entity declarations accept parse scopes without changing projected data types", () => {
+    const dts = generateModel(input()).artifacts["model.d.ts"];
+    expect(dts).toContain(
+      "parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): BookmarkData | undefined;",
+    );
+    expect(dts).toContain(
+      'import type { EntityWrapper, ModelManifest, ParseOptions } from "@jeswr/model-runtime";',
+    );
   });
 
   it("produces exactly the committed package artifacts (no drift)", () => {

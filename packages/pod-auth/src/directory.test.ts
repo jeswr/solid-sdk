@@ -53,13 +53,11 @@ test("the default directory is ordered, deeply frozen and has no remote icons", 
   expect(KNOWN_PROVIDERS.map((provider) => provider.id)).toEqual([
     "solidcommunity",
     "inrupt",
-    "solidweb",
     "teamid",
   ]);
   expect(KNOWN_PROVIDERS.map((provider) => provider.name)).toEqual([
     "solidcommunity.net",
     "Inrupt PodSpaces",
-    "solidweb.org",
     "teamid.live",
   ]);
   expect(KNOWN_PROVIDERS[0]?.signUpUrl).toBe(

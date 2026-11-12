@@ -3,6 +3,7 @@ name: model-runtime
 description: Use when loading a generated domain model (model.js from @jeswr/federation-codegen), calling defineModel on a shape-manifest, reading or writing pod RDF through generated entities, or changing the audited guard set in @jeswr/model-runtime.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
@@ -22,6 +23,27 @@ const ttl = await bookmark.serialize(resourceUrl, data); // n3.Writer Turtle
 const parsed = await bookmark.parseDocument(resourceUrl, body, contentType); // via @jeswr/fetch-rdf
 const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory);
 ```
+
+Multi-subject scans should use a parse scope from `@jeswr/model-runtime`:
+
+```ts
+import { createParseScope } from "@jeswr/model-runtime";
+
+const scope = createParseScope(dataset, { maxClassReads: 100_000 });
+for (const url of resourceUrls) bookmark.parse(url, dataset, { scope });
+if (scope.exhausted) throw new Error("Class scan budget exhausted");
+```
+
+The scope memoises membership by (class term, required-class set) and shares one raw
+type/subclass read budget across all root and nested `sh:class` checks. The default is
+100,000 reads; `maxClassReads` accepts integers 0–1,000,000 and rejects other values with
+`RangeError`. Once another read would exceed the budget, `scope.exhausted` stays true and
+all later class checks fail closed, including cached successes. Nested checks retain normal
+required/optional grading. Reuse with another dataset throws `TypeError`.
+Discard scopes after ANY dataset mutation; the memo is valid only for an unchanged dataset.
+Build, setters, live sets and `mark` never consult scopes. Without `parse(..., { scope })`,
+the existing per-check 10,000-read behavior is unchanged. `parseDocument` owns a new dataset
+and does not accept a scope; scopes are for `parse` on existing datasets.
 
 ## Rules
 
@@ -102,9 +124,15 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   on any change, including an invalid-record repair or a newly exposed default. Bound all
   candidate scans, class walks and re-parse reads/visits with a shared 10,000 budget; exhaustion
   throws the same typed error.
-- Every write path (build, singleton setters, live-set add/delete/clear, `mark()`,
-  `storeToTurtle`, `serialize`) runs the SAME checked migration on a copy BEFORE the explicit
-  change; on `MigrationError` the live dataset is unchanged. There is no unchecked fast path.
+- Every write that can migrate aliases (build, singleton setters, live-set add/delete/clear,
+  `mark()`, `storeToTurtle`, `serialize`) runs the SAME checked migration on a copy BEFORE the explicit
+  change; on `MigrationError` the live dataset is unchanged. Setters/build/mark may skip
+  the migration copy and audit only when the written field has no predicate aliases (or
+  mark has no type aliases) AND no other owner in any migration-context manifest has aliases.
+  This makes alias-free writes independent of unrelated dataset size without bypassing
+  field guards or sanitization. Treat other owners conservatively: data-graph subclasses
+  and co-typing prevent assuming disjoint focus nodes. Alias-bearing writes keep the
+  existing audit, preservation checks and shared 10,000-read budget.
   Generated per-node views pass the owning manifest as `defineModel(views, { migrationManifest })`
   so their checks see the full model. The primary manifest's own preservation checks always
   still run alongside, so the option can only add context, never drop a check.
@@ -125,7 +153,7 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   the record and an optional link drops its subtree.
 - Retain a composite link's `sh:class` as `hasClass`. Check the linked subject's actual
   `rdf:type` values and `rdfs:subClassOf*` chains in the data graph, never the build-time
-  ontology. Bound traversal to 10,000 raw reads per link and track visited class terms;
+  ontology. Without a parse scope, bound traversal to 10,000 raw reads per link and track visited class terms;
   absence, cycles without membership, and budget exhaustion fail the link closed with its
   required/optional grading. Node-type recognition (flat entities, composite roots,
   and per-node wrappers) uses the same bounded walk to any canonical or alias target class,
@@ -153,7 +181,8 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
 
 ## Exports
 
-`defineModel`, `validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
+`defineModel`, `createParseScope`, `ParseScope`, `ParseScopeOptions`, `ParseOptions`,
+`validateManifest`, `ManifestError`, `MigrationError`, `MANIFEST_VERSION`, `RUNTIME_MAJOR`,
 manifest types, and the shared guards `httpIriOrUndefined`, `isHttpIri`, `sanitizeText`,
 `tryRead`, `isSafeAbsoluteIri`, `isTurtlePrefixName`, `subjectIri`, the strict RDF/JS `readLiteral` reader, plus the XSD datatype
 mappers. Packages migrating off hand-written models may reuse the guards so their filter

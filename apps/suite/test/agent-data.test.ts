@@ -671,6 +671,18 @@ describe("typed readers", () => {
       else await expect(result).rejects.toThrow("heartbeat");
     }
   });
+  it("reads optional heartbeat execution state and ignores unknown state values", async () => {
+    for (const state of ["running", "paused", "stopped", "unknown"]) {
+      const heartbeat = await meta("agent/control/heartbeat.ttl", (node) => {
+        node.setIri(`${RDF}type`, `${AGENT}Heartbeat`);
+        node.setText(`${PROV}generatedAtTime`, new Date(NOW).toISOString());
+        node.setText(`${AGENT}state`, state);
+      });
+      const pod = createDemoPod({ root: DEMO_ROOT, seed: [heartbeat] });
+      const loaded = readers.loadedRecords(await readers.readHeartbeat(clientFor(pod.fetch)));
+      expect(loaded[0]?.state).toBe(state === "unknown" ? undefined : state);
+    }
+  });
   it("orders all supported timestamp families newest first, preserving unreadable rows", () => {
     const timestamps = [
       "createdAt",

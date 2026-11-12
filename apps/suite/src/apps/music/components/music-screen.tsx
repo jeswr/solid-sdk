@@ -21,14 +21,17 @@ import { useEffect, useRef, useState } from "react";
 import { decodeRef } from "@/lib/refs";
 import { computeTopArtists, mostPlayedTracks, recentlyPlayed } from "../lib/data/history";
 import { type MusicTrack, search } from "../lib/data/library";
+import { SOLID_SUITE_AGENT } from "../lib/data/playback";
 import type { MusicPlaylist } from "../lib/data/playlists";
 import { SCROBBLE_AGENTS } from "../lib/data/scrobbles";
 import { formatDuration } from "../lib/library";
 import type { ArtistPeriod } from "../lib/model";
 import { albumHref, artistHref, playlistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
+import { AddFromDrive, AddMusicFiles } from "./add-files";
 import { Artwork } from "./artwork";
 import { MusicSurface } from "./music-app";
+import { PlayCollection } from "./player";
 import { AddSongs, CreatePlaylist, EditPlaylistDetails } from "./playlist-dialogs";
 import { Like, PlaylistTracks, TrackList, TrackName } from "./track-list";
 
@@ -281,6 +284,7 @@ function DeletePlaylist({ playlist }: { playlist: MusicPlaylist }) {
   );
 }
 const SOURCES: Record<string, string> = {
+  [SOLID_SUITE_AGENT]: "Solid Suite",
   "https://open.spotify.com/": "Spotify",
   [SCROBBLE_AGENTS.lastfm]: "Last.fm",
   [SCROBBLE_AGENTS.listenbrainz]: "ListenBrainz",
@@ -402,6 +406,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
   const music = useMusic();
   const snapshot = music.snapshot;
   const [importing, setImporting] = useState(false);
+  const [yourFiles, setYourFiles] = useState(false);
   if (!snapshot) return null;
   const { library } = snapshot;
   if (view === "home") return <Home />;
@@ -424,11 +429,39 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
             {importing ? "Importing…" : "Import Spotify sample"}
           </Button>
         </div>
-        <TrackList tracks={library.tracks} />
+        <div className="mus-file-actions">
+          <AddMusicFiles />
+          <AddFromDrive />
+        </div>
+        <FilterChips
+          resultCount={
+            yourFiles
+              ? library.tracks.filter((track) => track.contentUrl).length
+              : library.tracks.length
+          }
+          label="Library files"
+          options={[
+            { id: "all", label: "All tracks" },
+            { id: "files", label: "Your files" },
+          ]}
+          value={[yourFiles ? "files" : "all"]}
+          onChange={(values) => setYourFiles(values.at(-1) === "files")}
+        />
+        <PlayCollection
+          tracks={yourFiles ? library.tracks.filter((track) => track.contentUrl) : library.tracks}
+        />
+        <TrackList
+          tracks={yourFiles ? library.tracks.filter((track) => track.contentUrl) : library.tracks}
+        />
       </>
     );
   if (view === "liked")
-    return <TrackList tracks={library.tracks.filter((track) => track.loved)} label="Liked songs" />;
+    return (
+      <>
+        <PlayCollection tracks={library.tracks.filter((track) => track.loved)} />
+        <TrackList tracks={library.tracks.filter((track) => track.loved)} label="Liked songs" />
+      </>
+    );
   if (view === "search") {
     const results = search(library, query);
     return (
@@ -518,6 +551,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
               </p>
             </div>
           </div>
+          <PlayCollection tracks={album.tracks as MusicTrack[]} />
           <TrackList
             tracks={album.tracks as MusicTrack[]}
             sortable={false}
@@ -545,6 +579,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
               <p className="mus-muted">{artist.tracks.length} songs in your library</p>
             </div>
           </div>
+          <PlayCollection tracks={artist.tracks} />
           <section className="mus-section">
             <h2>Albums</h2>
             <AlbumCards ids={artist.albumIds} />
@@ -583,6 +618,13 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
             <EditPlaylistDetails playlist={playlist} />
             <DeletePlaylist playlist={playlist} />
           </div>
+          <PlayCollection
+            total={playlist.tracks.length}
+            tracks={playlist.tracks.flatMap((id) => {
+              const track = library.tracks.find((t) => t.id === id);
+              return track ? [track] : [];
+            })}
+          />
           <PlaylistTracks playlist={playlist} emptyFocus={addSongs} />
           {!playlist.tracks.length && (
             <EmptyState

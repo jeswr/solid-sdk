@@ -57,6 +57,9 @@ export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
   const controls: ControlStore = {
     listVerified: async () => structuredClone(statements),
     haltFileExists: async () => state.haltFile,
+    assertNotHalted: () => {
+      if (state.haltFile) throw new Error("Local stop active");
+    },
   };
   const audit: AuditSink = {
     append: async (record) => {

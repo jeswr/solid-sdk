@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   notifications: vi.fn(),
 }));
 vi.mock("@jeswr/pod-auth/node", () => ({ forClientCredentials: mocks.authenticate }));
-vi.mock("@jeswr/storage-client", () => ({ createPodClient: mocks.storage }));
+vi.mock("@jeswr/storage-client", async (original) => ({
+  ...(await original<typeof import("@jeswr/storage-client")>()),
+  createPodClient: mocks.storage,
+}));
 vi.mock("@jeswr/pod-notifications", () => ({ createNotifications: mocks.notifications }));
 
 it("uses only pod-auth client-credentials DPoP fetch for storage and notifications, and logs out on prepare failure", async () => {
@@ -18,7 +21,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
   const logout = vi.fn(async () => undefined);
   const auth = { fetch: io, logout };
   mocks.authenticate.mockResolvedValue(auth);
-  mocks.storage.mockResolvedValue({ storage: { root: "https://pod.example/" } });
+  mocks.storage.mockResolvedValue({ storage: { protocol: "solid", root: "https://pod.example/" } });
   mocks.notifications.mockReturnValue({});
   const credentials = {
     issuer: "https://issuer.example/",
@@ -42,12 +45,14 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
   const state = createMemoryState();
   const composition = await composeDaemon({
     ...options,
-    prepare: async () =>
-      ({
+    prepare: async (workspace) => {
+      expect(workspace.storage).toBe((await mocks.storage.mock.results.at(-1)?.value)?.storage);
+      return {
         accounts: [],
         ...state,
         agentWebId: "https://pod.example/agent#me",
         executor: {
+          status: vi.fn(async () => "running" as const),
           drain: vi.fn(),
           runOutboxOnce: vi.fn(),
           onApprovalChange: vi.fn(),
@@ -70,11 +75,12 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
         isFlagged: async () => false,
         proposalWritten: vi.fn(),
         audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
-      }) satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">,
+      } satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">;
+    },
   });
   expect(mocks.notifications).toHaveBeenCalledWith({
     fetch: io,
-    storage: { root: options.storageRoot },
+    storage: { protocol: "solid", root: options.storageRoot },
   });
   await composition.close();
   expect(logout).toHaveBeenCalledTimes(2);

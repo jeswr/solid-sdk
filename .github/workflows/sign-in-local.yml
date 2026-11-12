@@ -1,0 +1,65 @@
+# AUTHORED-BY Claude Opus 5.5
+# Real sign-in against a LOCAL Community Solid Server (in-memory, pinned major 7), on every change
+# to the shared sign-in path. Drive is the reference app for the pod-auth + sign-in card path that
+# the other apps were ported onto: its e2e signs in through the real OIDC popup (email and password,
+# consent) and lists a private container. Live providers are covered by sign-in-live.yml.
+name: sign-in-local
+
+on:
+  pull_request:
+    paths:
+      - "packages/pod-auth/**"
+      - "packages/reactive-authentication/**"
+      - "packages/app-session/**"
+      - "packages/suite-ui/src/sign-in/**"
+      - "apps/pod-drive/**"
+      - ".github/workflows/sign-in-local.yml"
+      - "pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "packages/pod-auth/**"
+      - "packages/reactive-authentication/**"
+      - "packages/app-session/**"
+      - "packages/suite-ui/src/sign-in/**"
+      - "apps/pod-drive/**"
+      - ".github/workflows/sign-in-local.yml"
+      - "pnpm-lock.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sign-in-local-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  css:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build Drive's workspace dependencies
+        run: pnpm exec turbo run build --filter='@jeswr/pod-drive-web^...'
+      - name: Install Playwright Chromium
+        working-directory: apps/pod-drive/web
+        run: |
+          timeout 600 pnpm exec playwright install --with-deps chromium \
+            || { echo "::warning::playwright --with-deps failed; installing Chromium without system deps"; pnpm exec playwright install chromium; }
+      - name: Sign in to a local CSS through Drive
+        env:
+          CI: "true"
+        run: pnpm --filter @jeswr/pod-drive-web run test:e2e --trace off
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: sign-in-local-css
+          path: apps/pod-drive/web/test-results/
+          retention-days: 7

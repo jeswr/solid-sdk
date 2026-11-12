@@ -510,6 +510,11 @@ createServer(handler).listen(3000, "127.0.0.1");
 `verifyMcpResourceToken` and `podConfigFor` above are application callbacks: verify the MCP
 resource token (including audience), return a principal, and resolve that principal's pod
 session on the server. Return `null`, `undefined`, or `false` (or throw) to reject authentication.
+When a required authentication dependency is temporarily unreachable, throw
+`TemporarilyUnavailable` from `@jeswr/solid-mcp/http`. The handler returns HTTP 503 with a
+fixed JSON-RPC error and `Retry-After: 5`, without `WWW-Authenticate`. Allowed origins receive
+the usual CORS headers. Other thrown errors still produce a 401 challenge; callback error
+details are never returned.
 MCP bearer tokens must never be used as pod credentials. The `server` factory must return a
 fresh MCP SDK `McpServer` for every request; singleton reuse is rejected.
 

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { PodSession } from "@/lib/session/pod-session";
 import { createDocument, musicRoot, provision } from "../lib/data/library";
+import { createMusicBinary } from "../lib/data/owned";
 import {
   Album,
   Artist,
@@ -16,6 +17,7 @@ import {
   Track,
 } from "../lib/model";
 import { S } from "../lib/model/vocab";
+import { sampleWav } from "./wav";
 
 const pending = new WeakMap<typeof globalThis.fetch, Promise<void>>();
 export function ensureSample(
@@ -63,6 +65,8 @@ async function seed(session: Pick<PodSession, "mode" | "fetch" | "storageUrl">, 
   const marker = await loadMusic(fetch, started);
   now = new Date(new MusicNode(started, marker.dataset).strings(`${S}dateCreated`)[0] as string);
   await provision(fetch, storageUrl);
+  const audioUrl = `${base}files/sample-chime.wav`;
+  await createMusicBinary(fetch, storageUrl, audioUrl, sampleWav(), "audio/wav");
   const artists = [
     "Mira & the Tides",
     "The Paper Satellites",
@@ -144,7 +148,8 @@ async function seed(session: Pick<PodSession, "mode" | "fetch" | "storageUrl">, 
     track.title = title;
     track.setArtist(artistIds[Math.floor(i / 5) % 6] as string);
     track.setAlbum(albumIds[Math.floor(i / 5)] as string);
-    track.durationSeconds = 165 + ((i * 17) % 120);
+    track.durationSeconds = i === 0 ? 4 : 165 + ((i * 17) % 120);
+    if (i === 0) track.contentUrl = audioUrl;
     track.loved = i % 5 === 0;
     track.writeString(`${S}trackNumber`, String((i % 5) + 1));
     track.writeString(`${S}discNumber`, "1");

@@ -866,7 +866,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       let target: string;
       if (!lws && name !== undefined) {
         target = `${url}${name}${kind === "container" ? "/" : ""}`;
-        if (nodes.has(target) || nodes.has(target.replace(/\/$/, "")) || nodes.has(`${target}/`)) {
+        if (nodes.has(target)) {
+          throw fail("conflict", "PUT", target, 412, { message: "name taken" });
+        }
+        if (nodes.has(target.replace(/\/$/, "")) || nodes.has(`${target}/`)) {
           throw fail("conflict", "PUT", target, 409, { message: `${target} already exists` });
         }
       } else {

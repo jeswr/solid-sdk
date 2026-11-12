@@ -19,6 +19,9 @@ it("seeds a realistic idempotent sample with different period leaders", async ()
   await Promise.all([ensureSample(session, now), ensureSample(session, now)]);
   const library = await loadLibrary(pod.fetch, root);
   expect(library.tracks).toHaveLength(40);
+  expect(library.tracks.find((track) => track.title === "Morning Glass")?.contentUrl).toBe(
+    `${musicRoot(root)}files/sample-chime.wav`,
+  );
   expect(library.albums).toHaveLength(8);
   expect(library.artists).toHaveLength(6);
   expect(library.tracks.filter((track) => track.loved)).toHaveLength(8);

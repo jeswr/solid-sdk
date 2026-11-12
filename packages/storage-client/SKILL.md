@@ -79,6 +79,21 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
   a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
   identifier. Without a name, both use POST. Always use the returned `url`, including after
   moves; never construct a resource URL from a hint. LWS move ignores `name`.
+- Fixed Solid URLs use `createAt(client, url, body, options?)` from `./helpers`, returning
+  the backend's `WriteResult`. Options omit `name`; set `kind: 'container'` for a trailing-slash
+  container. Before calling `create`, it verifies parent + `encodeURIComponent(decodedName)`
+  (+ `/` for containers) is byte-equal to the requested URL. Literal colons, lowercase percent
+  escapes changed by re-encoding, malformed escapes, noncanonical URLs, query/fragment and
+  kind/slash mismatches give non-retryable `StorageError('bad-request')` before any request.
+  `isExactChildUrl(parent, url)` from the same entry point is the pure, nonthrowing predicate
+  for canonical direct children (resources or trailing-slash containers). It checks URL
+  spelling and containment, not service semantics or permission. `createAt` separately
+  refuses a parent matching the advertised trash endpoint with `bad-request` before `create`,
+  so the body cannot execute as a trash command.
+  Scope validation remains in force. Non-Solid clients give `StorageError('unsupported')`:
+  LWS cannot promise exact-name creation. A taken HTTP Solid name propagates as `conflict` with
+  status 412; Solid memory matches exact target collisions with 412 and message `name taken`.
+  Resource/container path collisions retain 409; do not treat a real HTTP 409 as an identical-create replay.
 
 **LWS RDF patch is read-modify-write by default:** read the RDF and check the caller's initial
 ETag, apply inserts/deletes locally, then PUT with that read's ETag. On 412 the backend re-reads
@@ -134,7 +149,8 @@ and generated names to the recording; use deterministic name hints in reproducib
 T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types from the root), the
 §2 error model (`StorageError`, pure `toStorageError(method, url, response, bodyText?, now?)`,
 `storageErrorFrom` that reads at most 64 KiB of a JSON/problem body), `./helpers`
-(`retryOnConflict`, which re-reads before every retry, plus the in-house RFC 6902 `applyJsonPatch`),
+(`createAt` for fixed Solid destinations, `retryOnConflict`, which re-reads before every retry,
+plus the in-house RFC 6902 `applyJsonPatch`),
 and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, strictConditional, clock })`).
 T-021 adds the Solid backend's read side; T-022 adds its mutations. `./solid` exports
 `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and the pure async

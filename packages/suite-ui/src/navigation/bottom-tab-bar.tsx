@@ -3,17 +3,18 @@
 "use client";
 
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, mobileApps, suiteApps } from "./apps.js";
+import { AppGlyph, mobileApps, suiteApps, visibleNavigationApps } from "./apps.js";
 
-export function BottomTabBar({ currentApp, apps = suiteApps }: Omit<AppLauncherProps, "trigger">) {
+export function BottomTabBar({
+  currentApp,
+  apps = suiteApps,
+  showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
+}: Omit<AppLauncherProps, "trigger">) {
+  const visible = visibleNavigationApps(apps, showBacklog);
   return (
     <nav className="suite-bottom-tabs" aria-label="Apps">
       {mobileApps.map((slug) => {
-        const app = apps.find(
-          (item) =>
-            item.slug === slug &&
-            (item.status !== "backlog" || process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1"),
-        );
+        const app = visible.find((item) => item.slug === slug);
         return app ? (
           <a
             className="suite-tab"
@@ -28,7 +29,7 @@ export function BottomTabBar({ currentApp, apps = suiteApps }: Omit<AppLauncherP
           <span key={slug} />
         );
       })}
-      <AppLauncher currentApp={currentApp} apps={apps} trigger="tab" />
+      <AppLauncher currentApp={currentApp} apps={visible} showBacklog={showBacklog} trigger="tab" />
     </nav>
   );
 }

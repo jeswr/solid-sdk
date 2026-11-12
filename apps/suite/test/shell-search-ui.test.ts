@@ -17,6 +17,7 @@ const axe = requireUi(
 const push = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
+import { ShellSearchFixture } from "../src/app/dev/components/global-search/fixture";
 import type { SearchResponse, SearchResult, SearchSource } from "../src/shell/lib/search-results";
 import { CommandPalette } from "../src/shell/search/command-palette";
 import { GlobalSearch } from "../src/shell/search/global-search";
@@ -167,6 +168,25 @@ it("opens the mobile sheet and returns focus to its Search trigger on Escape", a
   key("Escape");
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(document.activeElement).toBe(trigger);
+});
+
+it("shows Calendar by default and gates an explicit backlog fixture", async () => {
+  render(h(ShellSearchFixture, { component: "command-palette" }));
+  const state = screen.getByLabelText("Fixture state");
+  const trigger = screen.getByRole("button", { name: "Open command palette" });
+  fireEvent.click(trigger);
+  expect(screen.getByRole("option", { name: /^Calendar/ }).getAttribute("href")).toBe("/calendar");
+  key("Escape");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.change(state, { target: { value: "backlog" } });
+  fireEvent.click(trigger);
+  expect(screen.queryByRole("option", { name: /^Calendar/ })).toBeNull();
+  expect(screen.getByRole("option", { name: /^Drive/ })).toBeTruthy();
+  key("Escape");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  fireEvent.change(state, { target: { value: "backlog-visible" } });
+  fireEvent.click(trigger);
+  expect(screen.getByRole("option", { name: /^Calendar/ })).toBeTruthy();
 });
 
 it("filters palette actions, navigates on Enter and returns focus", async () => {
