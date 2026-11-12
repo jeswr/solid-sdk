@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { suiteApps } from "@jeswr/suite-ui";
 import { describe, expect, it } from "vitest";
+import { plannedApps } from "../src/apps/planned/planned";
 import { appRegistry } from "../src/shell/registry";
 import { companionApps, welcomeApps } from "../src/welcome/apps";
 
@@ -17,10 +18,20 @@ describe("welcome app directory", () => {
         name: app.name,
         basePath: app.basePath,
         hue: app.hue,
-        statusLabel: app.status === "backlog" ? "Early" : "Ready to try",
+        statusLabel: plannedApps.has(app.slug)
+          ? "Coming soon"
+          : app.status === "backlog"
+            ? "Early"
+            : "Ready to try",
       });
       expect(card?.description.length).toBeGreaterThan(15);
     }
+  });
+  it("marks only registered backlog apps as planned", () => {
+    for (const slug of plannedApps) {
+      expect(appRegistry.find((app) => app.slug === slug)?.status).toBe("backlog");
+    }
+    expect(welcomeApps.find((app) => app.slug === "health")?.statusLabel).toBe("Early");
   });
   it("uses the actual Pages slugs and GitHub READMEs for developer tools", () => {
     const deployments = JSON.parse(

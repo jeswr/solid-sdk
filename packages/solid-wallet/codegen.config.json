@@ -1,0 +1,30 @@
+{
+  "shapesBase": "https://jeswr.org/ns/wallet/shapes#",
+  "prefixes": {
+    "wallet": "https://jeswr.org/ns/wallet#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://schema.org/DigitalDocument",
+      "name": "WalletItem",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "tags": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        },
+        "favourite": {
+          "default": false,
+          "materializeDefault": true
+        }
+      }
+    }
+  ]
+}

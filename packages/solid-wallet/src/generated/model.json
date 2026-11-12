@@ -1,0 +1,175 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "wallet": "https://jeswr.org/ns/wallet#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#"
+  },
+  "entities": [
+    {
+      "name": "WalletItem",
+      "typeIris": [
+        "https://schema.org/DigitalDocument"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "credential",
+          "predicate": "https://jeswr.org/ns/wallet#credential",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "favourite",
+          "predicate": "https://jeswr.org/ns/wallet#favourite",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "maxCount": 1,
+          "default": false,
+          "materializeDefault": true,
+          "guards": {}
+        },
+        {
+          "name": "holderName",
+          "predicate": "https://jeswr.org/ns/wallet#holderName",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "issuerName",
+          "predicate": "https://jeswr.org/ns/wallet#issuerName",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "kind",
+          "predicate": "https://jeswr.org/ns/wallet#itemKind",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "passport",
+            "identity-card",
+            "driving-licence",
+            "residence-permit",
+            "insurance",
+            "membership",
+            "ticket",
+            "vaccination",
+            "certificate",
+            "verifiable-credential",
+            "other"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "file",
+          "predicate": "https://schema.org/associatedMedia",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {
+            "iriScheme": "http-https",
+            "iriPattern": "http-https"
+          }
+        },
+        {
+          "name": "notes",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "expires",
+          "predicate": "https://schema.org/expires",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "identifier",
+          "predicate": "https://schema.org/identifier",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "tags",
+          "predicate": "https://schema.org/keywords",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {
+            "trim": true,
+            "dropBlank": true,
+            "sortOnRead": true
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "validFrom",
+          "predicate": "https://schema.org/validFrom",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#date",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    }
+  ]
+}

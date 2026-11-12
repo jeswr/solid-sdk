@@ -99,8 +99,9 @@
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
-    "@jeswr/solid-sheets",
-    "@jeswr/solid-environment"
+    "@jeswr/solid-environment",
+    "@jeswr/solid-wallet",
+    "@jeswr/solid-sheets"
   ],
   "applications": [
     {
