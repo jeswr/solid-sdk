@@ -52,7 +52,8 @@ import {
   demoMandateFiles,
   withDemoAgentKey,
 } from "../src/apps/agent/lib/demo-mandate";
-import { ApprovalKeyStore, setupApprovalKey } from "../src/apps/agent/lib/keys";
+import { revocationImpact, revokeApprovalKey } from "../src/apps/agent/lib/key-admin";
+import { ApprovalKeyStore, removeApprovalKey, setupApprovalKey } from "../src/apps/agent/lib/keys";
 import {
   allowSimilar,
   buildEditorMandate,
@@ -73,6 +74,7 @@ import {
   activateMandate,
   loadVerifiedMandate,
   mandateHistory,
+  migrateStatusList,
   nextStatusIndex,
   PendingRevocation,
   previewMandate,
@@ -603,6 +605,183 @@ describe("signed mandate activation and revocation", () => {
     expect(await mandateHistory(client, session, NOW)).toMatchObject([
       { id: m.id, status: "active", key: key.verificationMethod.split("#").at(-1) },
     ]);
+  });
+  it("warns before revoking the key that signed the current permissions", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    const m = mandate(at("mandates/first.trig"));
+    await activateMandate(client, session, m, NOW);
+    await setupApprovalKey(session);
+    expect(await revocationImpact(client, session, signing, NOW)).toMatchObject({
+      permissions: true,
+    });
+    // A pointer that no longer matches its credential grants nothing, so there's no warning.
+    const pointer = (await readMandateCurrent(client))[0];
+    if (!pointer) throw new Error("Missing pointer");
+    const doc = await client.graph(pointer.url);
+    await replace(
+      client,
+      pointer.url,
+      doc.text.replace(pointer.record.digest, "0".repeat(pointer.record.digest.length)),
+      doc.contentType,
+    );
+    expect(await revocationImpact(client, session, signing, NOW)).toMatchObject({
+      permissions: false,
+    });
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("re-signs the status list when its key is revoked, so the other device can grant permissions", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    const first = mandate(at("mandates/first.trig"));
+    const second = {
+      ...mandate(at("mandates/second.trig")),
+      validFrom: new Date(NOW.getTime() + 1000).toISOString(),
+    };
+    await activateMandate(client, session, first, NOW);
+    const next = new Date(NOW.getTime() + 1000);
+    await activateMandate(client, session, second, next);
+    expect(await migrateStatusList(client, session, `${OWNER}-other-key`, next)).toBeUndefined();
+    await setupApprovalKey(session);
+    const device = (await getKey()).verificationMethod;
+    expect(await revokeApprovalKey(client, session, signing, () => next)).toEqual({ resigned: 0 });
+    const status = await parseStatusListCredential(
+      (await client.graph(client.paths.mandatesStatus)).text,
+    );
+    if (!status) throw new Error("Missing signed status");
+    expect([status.proof].flat().map((proof) => proof?.verificationMethod)).toEqual([device]);
+    // The replaced mandate stays revoked; the current one doesn't verify any more (old key).
+    expect(await readStatusBit(status, 0)).toBe(true);
+    expect(await readStatusBit(status, 1)).toBe(false);
+    expect(await loadVerifiedMandate(client, session, next)).toBeUndefined();
+    const third = {
+      ...mandate(at("mandates/third.trig")),
+      validFrom: new Date(next.getTime() + 1000).toISOString(),
+    };
+    const later = new Date(next.getTime() + 1000);
+    expect(statusIndex(await activateMandate(client, session, third, later))).toBe(2);
+    await expectSameMandate(await loadVerifiedMandate(client, session, later), third);
+  });
+  it("keeps the key when the re-signed status list doesn't verify", async () => {
+    const { client, session } = await fixture();
+    const signing = (await getKey()).verificationMethod;
+    await activateMandate(client, session, mandate(at("mandates/first.trig")), NOW);
+    await setupApprovalKey(session);
+    const original = await client.graph(client.paths.mandatesStatus);
+    // The store keeps the old body, so the readback still shows the revoked key's proof.
+    vi.spyOn(client, "replace").mockResolvedValueOnce(undefined as never);
+    await expect(revokeApprovalKey(client, session, signing, () => NOW)).rejects.toThrow(
+      /re-sign your permission status/,
+    );
+    expect((await client.graph(client.paths.mandatesStatus)).text).toBe(original.text);
+    expect(
+      await createWebIdKeyResolver({ fetch: session.fetch }).isControlledBy(signing, OWNER),
+    ).toBe(true);
+  });
+  // This device's key is removed between writing the re-signed list and checking it.
+  it.each([
+    ["puts back the previous list", false],
+    ["still refuses when the previous list can't be put back", true],
+  ])("a re-signed list whose key goes before the check %s", async (_name, offline) => {
+    const { client, session } = await fixture();
+    const a = (await getKey()).verificationMethod;
+    await activateMandate(client, session, mandate(at("mandates/first.trig")), NOW);
+    await setupApprovalKey(session);
+    const b = (await getKey()).verificationMethod;
+    const replace = client.replace.bind(client);
+    vi.spyOn(client, "replace").mockImplementationOnce(async (...args) => {
+      const etag = await replace(...args);
+      await removeApprovalKey(session, b, a);
+      if (offline) vi.spyOn(client, "statusDocument").mockRejectedValue(new Error("offline"));
+      return etag;
+    });
+    await expect(revokeApprovalKey(client, session, a, () => NOW)).rejects.toThrow(
+      /re-sign your permission status/,
+    );
+    const status = await parseStatusListCredential(
+      (await client.graph(client.paths.mandatesStatus)).text,
+    );
+    expect([status?.proof].flat().map((proof) => proof?.verificationMethod)).toEqual([
+      offline ? b : a,
+    ]);
+  });
+  // Two devices revoke each other at once. A checks the status list (signed by A's key, so no
+  // migration) and pauses before its profile edit; B re-signs the list with B's key; A's edit then
+  // removes B's key; B's edit refuses. B must put back the list A's key signed.
+  it.each([
+    ["puts back the list signed by the key that stays", "none"],
+    ["leaves a list someone else changed meanwhile", "changed"],
+    ["reports the profile failure even when the list can't be read back", "offline"],
+  ] as const)("mutual revocation %s", async (_name, interfere) => {
+    const { client, session, pod } = await fixture();
+    const a = (await getKey()).verificationMethod;
+    await activateMandate(client, session, mandate(at("mandates/first.trig")), NOW);
+    await setupApprovalKey(session);
+    const b = (await getKey()).verificationMethod;
+    const profileUrl = OWNER.split("#")[0] as string;
+    const urlOf = (input: Parameters<typeof fetch>[0]) =>
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let reached!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const fetchA: typeof fetch = async (input, init) => {
+      if (init?.method === "PUT" && urlOf(input) === profileUrl) {
+        reached();
+        await gate;
+      }
+      return pod.fetch(input, init);
+    };
+    localStorage.setItem("agent.approvalKey", a);
+    const revokeB = revokeApprovalKey(client, { ...session, fetch: fetchA }, b, () => NOW);
+    await paused;
+    localStorage.setItem("agent.approvalKey", b);
+    let raced = false;
+    const fetchB: typeof fetch = async (input, init) => {
+      if (init?.method === "PUT" && urlOf(input) === profileUrl && !raced) {
+        raced = true;
+        release();
+        await revokeB;
+        if (interfere === "offline")
+          vi.spyOn(client, "statusDocument").mockRejectedValue(new Error("offline"));
+        if (interfere === "changed") {
+          const doc = await client.statusDocument(client.paths.mandatesStatus);
+          await client.replace(
+            client.paths.mandatesStatus,
+            `${doc.text}\n`,
+            doc.etag as string,
+            "application/trig",
+          );
+        }
+      }
+      return pod.fetch(input, init);
+    };
+    await expect(
+      revokeApprovalKey(client, { ...session, fetch: fetchB }, a, () => NOW),
+    ).rejects.toThrow(/no longer in your profile/);
+    const keys = createWebIdKeyResolver({ fetch: pod.fetch });
+    expect(await keys.isControlledBy(a, OWNER)).toBe(true);
+    expect(await keys.isControlledBy(b, OWNER)).toBe(false);
+    const status = await parseStatusListCredential(
+      (await client.graph(client.paths.mandatesStatus)).text,
+    );
+    expect([status?.proof].flat().map((proof) => proof?.verificationMethod)).toEqual([
+      interfere === "none" ? a : b,
+    ]);
+    if (interfere !== "none") return;
+    // The device that kept its key can grant permissions again.
+    localStorage.setItem("agent.approvalKey", a);
+    const second = {
+      ...mandate(at("mandates/second.trig")),
+      validFrom: new Date(NOW.getTime() + 1000).toISOString(),
+    };
+    expect(
+      statusIndex(await activateMandate(client, session, second, new Date(NOW.getTime() + 1000))),
+    ).toBe(1);
   });
   it("replaces without reusing status indices, preserves revocation bits and emits a verified revoke control", async () => {
     const { client, session } = await fixture();

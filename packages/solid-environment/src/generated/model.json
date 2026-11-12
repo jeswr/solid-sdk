@@ -1,0 +1,229 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "envr": "https://jeswr.org/ns/sectors/environment#",
+    "sosa": "http://www.w3.org/ns/sosa/",
+    "qudt": "http://qudt.org/schema/qudt/",
+    "unit": "http://qudt.org/vocab/unit/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "schema": "https://schema.org/"
+  },
+  "entities": [
+    {
+      "name": "Room",
+      "typeIris": [
+        "http://www.w3.org/ns/sosa/FeatureOfInterest"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "label",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "minLength": 1,
+            "nonBlank": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Observation",
+      "kind": "composite",
+      "root": "observation",
+      "nodes": [
+        {
+          "name": "observation",
+          "typeIris": [
+            "http://www.w3.org/ns/sosa/Observation"
+          ],
+          "fragment": "it",
+          "fields": [
+            {
+              "name": "hasFeatureOfInterest",
+              "predicate": "http://www.w3.org/ns/sosa/hasFeatureOfInterest",
+              "kind": "iri",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https",
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "hasResult",
+              "predicate": "http://www.w3.org/ns/sosa/hasResult",
+              "kind": "nested",
+              "node": "result",
+              "minCount": 1,
+              "hasClass": "http://qudt.org/schema/qudt/QuantityValue",
+              "guards": {
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "madeBySensor",
+              "predicate": "http://www.w3.org/ns/sosa/madeBySensor",
+              "kind": "iri",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "iriScheme": "http-https",
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "observedProperty",
+              "predicate": "http://www.w3.org/ns/sosa/observedProperty",
+              "kind": "iri",
+              "minCount": 1,
+              "maxCount": 1,
+              "in": [
+                "https://jeswr.org/ns/sectors/environment#CO2Concentration",
+                "https://jeswr.org/ns/sectors/environment#PM2_5MassConcentration",
+                "https://jeswr.org/ns/sectors/environment#PM10MassConcentration",
+                "https://jeswr.org/ns/sectors/environment#VOCIndex",
+                "https://jeswr.org/ns/sectors/environment#AirQualityIndex",
+                "https://jeswr.org/ns/sectors/environment#AirTemperature",
+                "https://jeswr.org/ns/sectors/environment#RelativeHumidity",
+                "https://jeswr.org/ns/sectors/environment#FanSpeedLevel",
+                "https://jeswr.org/ns/sectors/environment#FilterLifeRemaining"
+              ],
+              "guards": {
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "resultTime",
+              "predicate": "http://www.w3.org/ns/sosa/resultTime",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "requiredFailClosed": true
+              }
+            }
+          ]
+        },
+        {
+          "name": "result",
+          "typeIris": [
+            "http://qudt.org/schema/qudt/QuantityValue"
+          ],
+          "fragment": "result",
+          "fields": [
+            {
+              "name": "numericValue",
+              "predicate": "http://qudt.org/schema/qudt/numericValue",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "requiredFailClosed": true
+              }
+            },
+            {
+              "name": "unit",
+              "predicate": "http://qudt.org/schema/qudt/unit",
+              "kind": "iri",
+              "minCount": 1,
+              "maxCount": 1,
+              "in": [
+                "http://qudt.org/vocab/unit/PPM",
+                "http://qudt.org/vocab/unit/MicroGM-PER-M3",
+                "http://qudt.org/vocab/unit/DEG_C",
+                "http://qudt.org/vocab/unit/PERCENT",
+                "http://qudt.org/vocab/unit/UNITLESS"
+              ],
+              "guards": {
+                "requiredFailClosed": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sensor",
+      "kind": "composite",
+      "root": "sensor",
+      "nodes": [
+        {
+          "name": "sensor",
+          "typeIris": [
+            "http://www.w3.org/ns/sosa/Sensor"
+          ],
+          "fragment": "sensor",
+          "fields": [
+            {
+              "name": "label",
+              "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "minCount": 1,
+              "maxCount": 1,
+              "guards": {
+                "requiredFailClosed": true,
+                "minLength": 1,
+                "nonBlank": true
+              }
+            },
+            {
+              "name": "isHostedBy",
+              "predicate": "http://www.w3.org/ns/sosa/isHostedBy",
+              "kind": "nested",
+              "node": "platform",
+              "hasClass": "http://www.w3.org/ns/sosa/Platform"
+            },
+            {
+              "name": "manufacturer",
+              "predicate": "https://schema.org/manufacturer",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            },
+            {
+              "name": "model",
+              "predicate": "https://schema.org/model",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            }
+          ]
+        },
+        {
+          "name": "platform",
+          "typeIris": [
+            "http://www.w3.org/ns/sosa/Platform"
+          ],
+          "fragment": "platform",
+          "fields": [
+            {
+              "name": "platformLabel",
+              "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+              "kind": "literal",
+              "datatype": "http://www.w3.org/2001/XMLSchema#string",
+              "maxCount": 1,
+              "guards": {}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -15,7 +15,6 @@ import {
   createBitstringStatusResolver,
   createWebIdKeyResolver,
 } from "@jeswr/solid-vc";
-import { CHAIN_SCOPE, type LedgerCheck, verifyLedger } from "./ledger.js";
 import {
   AGENT,
   assertSameGraph,
@@ -25,14 +24,7 @@ import {
   parseTurtle,
   verifiedApprovalCreatedAt,
 } from "./rdf.js";
-import {
-  type AuditRecord,
-  digestSchema,
-  entrySchema,
-  instantSchema,
-  type LedgerEntry,
-  MAX_AUDIT_SEQ,
-} from "./records.js";
+import { type AuditRecord, instantSchema, type LedgerEntry } from "./records.js";
 import {
   type AuditFetch,
   auditBase,
@@ -41,6 +33,14 @@ import {
   request,
   storageRoot,
 } from "./transport.js";
+import {
+  CHAIN_SCOPE,
+  type LedgerCheck,
+  parseAuditEntry,
+  parseAuditHead,
+  verifyLatestRange,
+  verifyLedger,
+} from "./verify.js";
 
 export interface AuditHead {
   readonly seq: number;
@@ -54,10 +54,7 @@ export async function readHead(io: AuditFetch, base: string): Promise<AuditHead 
   const graph = await parseTurtle(res.body, url);
   const n = node(graph, url);
   const seqText = n.text(`${AGENT}seq`);
-  const seq = Number(seqText);
-  if (!/^[1-9]\d*$/.test(seqText) || !Number.isSafeInteger(seq) || seq > MAX_AUDIT_SEQ)
-    throw new Error("Audit range exceeds bound");
-  const hash = digestSchema.parse(n.text(`${AGENT}ledgerHash`));
+  const { seq, hash } = parseAuditHead(seqText, n.text(`${AGENT}ledgerHash`));
   assertSameGraph(graph, headGraph(url, seq, hash));
   return { seq, hash, etag: res.etag };
 }
@@ -77,7 +74,7 @@ export async function loadTrace(io: AuditFetch, root: string): Promise<LoadedTra
     if (!res) throw new Error("missing-prov: audit entry absent");
     const graph = await parseTurtle(res.body, url);
     const n = node(graph, url);
-    const entry = entrySchema.parse({
+    const entry = parseAuditEntry({
       seq,
       at: n.text("http://www.w3.org/ns/prov#startedAtTime"),
       prev: n.text(`${AGENT}prevHash`),
@@ -88,7 +85,7 @@ export async function loadTrace(io: AuditFetch, root: string): Promise<LoadedTra
     entries.push(entry);
   }
   const chain = verifyLedger(entries);
-  if (!chain.ok || entries.at(-1)?.hash !== head.hash)
+  if (!chain.ok || !verifyLatestRange(entries, head).ok)
     throw new Error("chain-integrity: hash chain or head mismatch");
   return { entries, chain };
 }
