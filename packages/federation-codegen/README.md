@@ -77,7 +77,17 @@ reads retain severity-graded drops. Ordinary `sh:in` writes still drop invalid v
 This also applies to a Warning-graded `sh:class` on a concept class: the runtime enum
 is strict, so supplied nonmember writes throw and reads drop nonmembers. The emitted
 `sh:in` retains `sh:Warning`; runtime membership enforcement is stricter than that
-advisory SHACL severity.
+advisory SHACL severity. Strictness cannot weaken silently: an advisory `sh:class` on a
+projected class that has named individuals fails generation, and `gen` compares against
+the committed `model.json` so a field that was a concept enum and would become
+unenforced fails (delete the committed `model.json` to accept that deliberately).
+Concept members excluded by the property's http(s) `sh:pattern` fail generation.
+
+**Validate against the emitted `shapes.ttl`, not the sector profile.** Lowering
+`sh:class C` to `sh:in` diverges from the sector SHACL in both directions: a
+runtime-written member with no `rdf:type C` fails the sector shape, while an IRI typed
+`C` in the pod that is not a named ontology individual (or a subclass instance) passes
+the sector shape but is dropped by the runtime.
 
 ## The bookmarks pilot + the parity bar
 
@@ -109,7 +119,8 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
   targets become sorted `aliasTypeIris` (at most four). Zero or several declared OWL
   classes and non-IRI targets fail admission. Shapes sharing a canonical target and the
   same target alias set merge in shape-IRI order; conflicting property constraints fail
-  admission with both shapes named. A single target
+  admission with both shapes named, including a source `sh:in` decoded with a value kind
+  or datatype that differs from the conjoined field. A single target
   retains the existing OWL/RDFS behavior.
 - `sh:path [ sh:alternativePath ( p1 … pn ) ]` accepts 2–4 distinct IRI members when exactly
   one is declared as a property by the ontology adapter. That member becomes `predicate`;

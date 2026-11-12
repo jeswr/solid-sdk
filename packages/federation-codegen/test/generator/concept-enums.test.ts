@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { defineModel } from "@jeswr/model-runtime";
@@ -173,6 +174,94 @@ describe("ontology concept IRI enumeration admission", () => {
       .replace("ex:manual a ex:Source . ex:clinical a ex:Source .", "")
       .replace("[] a ex:Source .", members);
     expect(() => generate(shapesTtl, vocab)).toThrow(AdmissionError);
+  });
+
+  describe("a Warning-graded concept sh:class never silently loses enforcement", () => {
+    const warning = shapesTtl.replace(
+      "sh:class ex:Source",
+      "sh:class ex:Source; sh:severity sh:Warning",
+    );
+    const withSourceEntity: CodegenConfig = {
+      ...config,
+      entities: [
+        ...config.entities,
+        { name: "Source", targetClass: `${EX}Source`, subject: { convention: "self" } },
+      ],
+    };
+    const sourceShape = "\nex:SourceShape a sh:NodeShape; sh:targetClass ex:Source .";
+    const noNamed = ontologyTtl.replace("ex:manual a ex:Source . ex:clinical a ex:Source .", "");
+
+    it("rejects projecting a class that still has named individuals", () => {
+      expect(() => generate(`${warning}${sourceShape}`, ontologyTtl, withSourceEntity)).toThrow(
+        /unstable-concept-enum.*projected class that has named ontology individuals/,
+      );
+      // A config entry alone also projects the class.
+      expect(() => generate(warning, ontologyTtl, withSourceEntity)).toThrow(
+        /unstable-concept-enum/,
+      );
+    });
+
+    it("rejects removing the last named individual against the committed manifest", () => {
+      // In the admission namespace, the now-unlowered concept class already fails
+      // NodeShape coverage. An external concept class (outside the admission namespace)
+      // has no such backstop, so the committed manifest pins its strictness.
+      expect(() => generate(warning, noNamed)).toThrow(/missing-shape/);
+      const external = (vocab: string, previousManifest?: string) =>
+        generateModel({
+          ontologyTtl: vocab,
+          shapesTtl: warning,
+          config,
+          admissionNamespace: "https://example.org/elsewhere#",
+          ...(previousManifest === undefined ? {} : { previousManifest }),
+        });
+      const committed = external(ontologyTtl).artifacts["model.json"] as string;
+      expect(() => external(noNamed, committed)).toThrow(
+        /unstable-concept-enum\] Summary https:\/\/example.org\/concepts#source: field was a closed concept enumeration/,
+      );
+      expect(() => external(noNamed, "{")).toThrow(/not a readable manifest/);
+      // Unchanged strictness passes; removing the committed manifest is the explicit
+      // opt-in to the loosening (a first generation has nothing to compare against).
+      expect(external(ontologyTtl, committed).artifacts["model.json"]).toBe(committed);
+      const fresh = external(noNamed);
+      expect(fresh.admission.ok).toBe(true);
+      expect(flat(fresh.manifest.entities[0]).fields[0]?.in).toBeUndefined();
+    });
+
+    it("keeps the documented advisory omission for a projected class without individuals", () => {
+      const result = generate(`${warning}${sourceShape}`, noNamed, withSourceEntity);
+      expect(result.admission.ok).toBe(true);
+      expect(result.admission.violations.some((v) => v.message.includes("advisory"))).toBe(true);
+      const summary = result.manifest.entities.find((e) => e.name === "Summary");
+      expect(flat(summary).fields.find((f) => f.name === "source")?.in).toBeUndefined();
+    });
+  });
+
+  describe("concept members excluded by the property's http(s) pattern", () => {
+    it.each([
+      ['"^https?://"', "<urn:x:a> a ex:Source ."],
+      ['"^https://"', "<http://example.org/plain> a ex:Source ."],
+    ])("rejects %s with %s at generation time", (pattern, member) => {
+      expect(() =>
+        generate(
+          shapesTtl.replace("sh:class ex:Source", `sh:class ex:Source; sh:pattern ${pattern}`),
+          `${ontologyTtl} ${member}`,
+        ),
+      ).toThrow(/concept-enum-scheme-conflict/);
+    });
+
+    it("admits the enum when an explicit sh:in removes the excluded member", () => {
+      const result = generate(
+        shapesTtl.replace(
+          "sh:class ex:Source",
+          'sh:class ex:Source; sh:pattern "^https?://"; sh:in ( ex:manual )',
+        ),
+        `${ontologyTtl} <urn:x:a> a ex:Source .`,
+      );
+      expect(flat(result.manifest.entities[0]).fields[0]).toMatchObject({
+        in: [`${EX}manual`],
+        guards: { iriEnum: true, iriScheme: "http-https" },
+      });
+    });
   });
 
   it("keeps projected entity classes as links even if the ontology contains individuals", () => {

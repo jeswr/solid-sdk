@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -281,10 +282,41 @@ describe("closed iriEnum manifest admission", () => {
         f.default = `${EX}outside`;
       },
     ],
+    [
+      "non-http member under an http(s) scheme guard",
+      (f: ManifestField) => {
+        f.in = [A, "urn:x:a"];
+        f.guards = { iriEnum: true, iriScheme: "http-https" };
+      },
+    ],
+    [
+      "http member under an https-only scheme guard",
+      (f: ManifestField) => {
+        f.in = [A, "http://example.org/enum#plain"];
+        f.guards = { iriEnum: true, iriScheme: "https" };
+      },
+    ],
   ] as const)("rejects %s", (_name, mutate) => {
     const m = manifest();
     mutate(field(m));
     expect(() => validateManifest(m)).toThrow(ManifestError);
+  });
+
+  it("never lets a scheme-guarded enum member silently clear the field", () => {
+    // Every admitted member survives the scheme guard, so a member write persists and a
+    // non-member (including a non-http IRI) throws instead of clearing the stored value.
+    const m = manifest();
+    field(m).guards = { iriEnum: true, iriScheme: "http-https" };
+    const e = defineModel(m).entities.Summary;
+    if (!e) throw new Error("missing Summary");
+    const store = e.build(DOC, { source: A });
+    const w = new e.Wrapper(DOC, store, DataFactory) as unknown as { source: unknown };
+    expect(() => {
+      w.source = "urn:x:a";
+    }).toThrow(TypeError);
+    expect(w.source).toBe(A);
+    w.source = B;
+    expect(e.parse(DOC, store)).toEqual({ source: B });
   });
 
   it("accepts the member cap and a valid default", () => {

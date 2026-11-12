@@ -77,7 +77,10 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   Set builds require arrays; duplicate valid members deduplicate. `undefined` clears
   a singleton or omits a build field, but is invalid as a supplied set member.
   Reads drop nonmember IRIs, literals and blank nodes; required failures reject the
-  record. Concepts need no `rdf:type` triples in pod data. Ordinary `in` enums keep
+  record. Concepts need no `rdf:type` triples in pod data. With `iriScheme`, every
+  member must survive the scheme guard (manifest validation), so a member write never
+  clears the field silently. The generated `shapes.ttl` lowers `sh:class` to `sh:in`;
+  validate pod data for such fields against that file, never the sector SHACL. Ordinary `in` enums keep
   their historical drop-invalid writes.
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).

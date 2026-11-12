@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * L2 (shapes) — parse a SHACL profile into a normalized shape model and produce the
  * normalized shape graph (design §5): every anonymous NodeShape / property shape
@@ -16,7 +17,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { isSafeAbsoluteIri, literalMapper, readLiteral } from "@jeswr/model-runtime";
+import {
+  httpIriOrUndefined,
+  isSafeAbsoluteIri,
+  literalMapper,
+  readLiteral,
+} from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { type NormalizedOntology, owlRdfsAdapter } from "./adapter.js";
@@ -631,8 +637,42 @@ export function parseShapes(
       c.conceptIris = [...new Set(members.map((t) => t.value))].sort();
       for (const source of sources)
         if (source.hasClass !== undefined) source.conceptIris = c.conceptIris;
+      rejectSchemeExcludedConcepts(c);
     }
   }
+  // An advisory (Warning/Info) sh:class that is not lowered compiles to NO runtime
+  // check. If C has named ontology individuals, lowering was suppressed only because C
+  // is projected, so adding a config/NodeShape for C would silently turn a strict enum
+  // into nothing: reject. (Losing C's last individual is caught against the committed
+  // manifest by generateModel's previousManifest check; an unprojected class with no
+  // individuals is indistinguishable here from an unmodelled entity-class hint.)
+  if (config !== undefined)
+    for (const shape of nodeShapes) {
+      for (const c of shape.properties) {
+        const hasClass = c.hasClass;
+        const sources = propertySources(c);
+        if (
+          hasClass === undefined ||
+          c.conceptIris !== undefined ||
+          sources.some((source) => linkProperties.has(source.shapeIri)) ||
+          sources.some(
+            (source) =>
+              source.hasClass !== undefined &&
+              (source.severity === undefined || source.severity === `${SH}Violation`),
+          ) ||
+          !ontologyGraph.instancesOf(hasClass).some((t) => t.termType === "NamedNode")
+        )
+          continue;
+        throw new AdmissionError([
+          {
+            code: "unstable-concept-enum",
+            severity: "error",
+            subject: c.shapeIri,
+            message: `advisory sh:class ${hasClass} names a projected class that has named ontology individuals; it would silently stop being a closed concept enumeration`,
+          },
+        ]);
+      }
+    }
 
   const canonicalTypes = new Set(nodeShapes.map((shape) => shape.targetClass));
   const typeAliases = new Set<string>();
@@ -717,6 +757,35 @@ export function parseShapes(
     }
   }
   return { quads: rewritten, nodeShapes, superClasses };
+}
+
+/**
+ * A concept enum carrying an http(s) sh:pattern must not contain a member that the
+ * pattern (or the runtime's scheme guard derived from it) rejects: such a member
+ * would pass the enum write check and then be filtered away, clearing the field
+ * instead of throwing. Fail generation rather than emit an inconsistent field.
+ */
+function rejectSchemeExcludedConcepts(c: ShapeConstraint): void {
+  if (c.pattern !== "^https?://" && c.pattern !== "^https://") return;
+  const pattern = new RegExp(c.pattern);
+  const excluded = (enumValues(c) ?? []).filter((member) => {
+    const iri = typeof member === "string" ? httpIriOrUndefined(member) : undefined;
+    return (
+      typeof member !== "string" ||
+      !pattern.test(member) ||
+      iri === undefined ||
+      (c.pattern === "^https://" && !iri.startsWith("https:"))
+    );
+  });
+  if (excluded.length)
+    throw new AdmissionError([
+      {
+        code: "concept-enum-scheme-conflict",
+        severity: "error",
+        subject: c.shapeIri,
+        message: `concept individuals ${excluded.map((m) => String(m)).join(", ")} of sh:class ${c.hasClass} violate the property's sh:pattern ${JSON.stringify(c.pattern)}`,
+      },
+    ]);
 }
 
 function stablePathLabel(iri: string): string {
