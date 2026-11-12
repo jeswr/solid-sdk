@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { defineModel } from "@jeswr/model-runtime";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
@@ -182,6 +183,60 @@ describe("multiple NodeShapes per class admission", () => {
     );
     const valid = generate(source("sh:minInclusive 2", "sh:datatype xsd:integer; sh:maxCount 1"));
     expect(flat(valid.manifest.entities[0]).fields[0]?.guards?.minInclusive).toBe(2);
+  });
+
+  describe.each([
+    ["IRI enum first", false],
+    ["datatype first", true],
+  ])("rejects a source sh:in decoded with a different value kind (%s)", (_order, swap) => {
+    const iriEnum = "sh:in ( <https://x.test/a> ); sh:maxCount 1";
+    const pair = (other: string) => (swap ? source(other, iriEnum) : source(iriEnum, other));
+    it.each([
+      "sh:datatype xsd:string; sh:maxCount 1",
+      'sh:datatype xsd:string; sh:in ( "https://x.test/a" ); sh:maxCount 1',
+      "sh:nodeKind sh:Literal; sh:maxCount 1",
+    ])("with %s", (other) => {
+      expect(() => generate(pair(other))).toThrow(
+        /conflicting-node-shapes.*sh:in of .* was decoded as iri values but the conjoined field is literal/,
+      );
+      expect(() => normalized(pair(other))).toThrow(AdmissionError);
+    });
+
+    it("still conjoins a same-kind source enum", () => {
+      const result = generate(pair("sh:nodeKind sh:IRI; sh:maxCount 1"));
+      expect(flat(result.manifest.entities[0]).fields[0]).toMatchObject({
+        kind: "iri",
+        in: ["https://x.test/a"],
+      });
+    });
+  });
+
+  it("fidelity re-checks the conjunction against every source shape", () => {
+    // A merge bug that loosens a bound passes the merged-only projection by construction.
+    const loosened = normalized(
+      source("sh:datatype xsd:string; sh:maxCount 1", "sh:datatype xsd:string; sh:maxCount 2"),
+    );
+    const merged = loosened.nodeShapes[0]?.properties[0];
+    if (!merged) throw new Error("missing merged property");
+    merged.maxCount = 2;
+    expect(() => assertFidelity(loosened, compileManifest(loosened, config))).toThrow(
+      /does not cover source .*: maxCount/,
+    );
+    // A merge that re-kinds an IRI-decoded sh:in as literals (the finding-1 shape).
+    const rekinded = normalized(
+      source("sh:in ( <https://x.test/a> ); sh:maxCount 1", "sh:maxCount 1"),
+    );
+    const c = rekinded.nodeShapes[0]?.properties[0];
+    const b = c?.sources?.[1];
+    if (!c || !b) throw new Error("missing merged property");
+    for (const target of [c, b])
+      Object.assign(target, {
+        kind: "literal",
+        datatype: "http://www.w3.org/2001/XMLSchema#string",
+      });
+    expect(() => assertFidelity(rekinded, compileManifest(rekinded, config))).toThrow(
+      /sh:in decoded with a different value kind/,
+    );
   });
 
   it("keeps duplicate paths within one NodeShape rejected", () => {

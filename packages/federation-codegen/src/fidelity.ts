@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 /**
@@ -41,7 +42,7 @@ import {
 } from "./compile.js";
 import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
-import { compareStrings } from "./rdf.js";
+import { compareStrings, SH } from "./rdf.js";
 import {
   enumValues,
   implicitClassTargets,
@@ -582,6 +583,58 @@ function assertCompositeFidelity(
   }
 }
 
+const IRI_NODE_KINDS = new Set([`${SH}IRI`, `${SH}BlankNodeOrIRI`]);
+
+/**
+ * The structural projection is derived from the MERGED constraint, so a merge mistake
+ * would pass it by construction. Re-check the conjunction against every original
+ * source property shape: it must keep each explicitly stated kind, datatype, class,
+ * node and pattern, be at least as tight on every bound, and enumerate only members
+ * of each source enum decoded with the same RDF term kind (an IRI is never the
+ * same-spelled string literal).
+ */
+function assertConjunctionCoversSources(c: ShapeConstraint): void {
+  const sources = propertySources(c);
+  if (sources.length < 2) return;
+  const fail = (source: ShapeConstraint, what: string): never => {
+    throw new FidelityError(
+      `merged property ${c.pathIri} does not cover source ${source.shapeIri}: ${what}`,
+    );
+  };
+  const values = enumValues(c);
+  for (const source of sources) {
+    if (source.datatype !== undefined && norm(source.datatype) !== norm(c.datatype))
+      fail(source, "datatype");
+    if (source.datatype !== undefined && c.kind !== "literal") fail(source, "value kind");
+    if (source.nodeKind !== undefined) {
+      const expected = IRI_NODE_KINDS.has(source.nodeKind)
+        ? "iri"
+        : source.nodeKind === `${SH}Literal`
+          ? "literal"
+          : undefined;
+      if (expected !== undefined && expected !== c.kind) fail(source, "node kind");
+    }
+    for (const key of ["hasClass", "node", "pattern"] as const)
+      if (source[key] !== undefined && source[key] !== c[key]) fail(source, key);
+    for (const key of ["minCount", "minInclusive", "minLength"] as const) {
+      const bound = source[key];
+      if (bound !== undefined && !((c[key] ?? Number.NEGATIVE_INFINITY) >= bound))
+        fail(source, key);
+    }
+    for (const key of ["maxCount", "maxInclusive"] as const) {
+      const bound = source[key];
+      if (bound !== undefined && !((c[key] ?? Number.POSITIVE_INFINITY) <= bound))
+        fail(source, key);
+    }
+    if (source.in !== undefined) {
+      if (source.kind !== c.kind || norm(source.datatype) !== norm(c.datatype))
+        fail(source, "sh:in decoded with a different value kind");
+      if (values === undefined || values.some((v) => !source.in?.includes(v)))
+        fail(source, "sh:in");
+    }
+  }
+}
+
 /**
  * Assert model.json is a faithful, fully-traceable projection of shapes.ttl.
  * Throws {@link FidelityError} on any mismatch (fails the build). This is the P0
@@ -672,6 +725,7 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   // Independently mirror the compiler's pre-projection satisfiability checks.
   for (const shape of shapes.nodeShapes) {
     for (const c of shape.properties) {
+      assertConjunctionCoversSources(c);
       if (c.conceptIris !== undefined && (c.kind !== "iri" || enumValues(c)?.length === 0))
         throw new FidelityError(`property ${c.shapeIri} has an invalid concept IRI enumeration`);
       if (c.kind === "iri" && c.datatype !== undefined) {

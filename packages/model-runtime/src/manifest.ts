@@ -17,7 +17,7 @@
  */
 
 import { literalMapper } from "./datatypes.js";
-import { isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import { httpIriOrUndefined, isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
 import {
   type EntityInvariant,
   type HasValueConstraint,
@@ -595,6 +595,14 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
       fail("iriEnum cannot trim or drop supplied values");
     if (field.default !== undefined && !field.in.includes(field.default))
       fail("iriEnum default must be an enum member");
+    // A member the scheme guard filters would pass the enum write check and then be
+    // dropped, clearing the field instead of throwing. Every member must survive it.
+    if (g.iriScheme !== undefined)
+      for (const member of field.in) {
+        const iri = httpIriOrUndefined(member);
+        if (iri === undefined || (g.iriScheme === "https" && !iri.startsWith("https:")))
+          fail("iriEnum members must satisfy the iriScheme guard");
+      }
   }
   const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";

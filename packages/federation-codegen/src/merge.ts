@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { AdmissionError } from "./admission.js";
 import { compareStrings, SH } from "./rdf.js";
@@ -129,6 +130,25 @@ export function mergeNodeShapes(shapes: NodeShapeModel[]): NodeShapeModel[] {
         if (enumValues(merged)?.length === 0) fail("empty enumeration intersection");
         properties.set(c.pathIri, merged);
         owners.set(c.pathIri, `${owner}, ${shape.iri}`);
+      }
+    }
+    // Each source decoded its own sh:in with ITS resolved value kind and datatype
+    // (an implicit-IRI source reads IRIs; a datatype source reads literals). The
+    // conjunction may resolve a different kind, and JS-value intersection cannot tell
+    // an IRI from a same-spelled string literal, so a source enum is admitted only
+    // when it was decoded exactly as the merged field will read and write values.
+    for (const c of properties.values()) {
+      for (const source of c.sources ?? []) {
+        if (source.in === undefined) continue;
+        if (source.kind === c.kind && source.datatype === c.datatype) continue;
+        throw new AdmissionError([
+          {
+            code: "conflicting-node-shapes",
+            severity: "error",
+            subject: first.targetClass,
+            message: `NodeShapes ${owners.get(c.pathIri)} conflict: ${c.pathIri}: sh:in of ${source.shapeIri} was decoded as ${source.kind}${source.datatype === undefined ? "" : ` ${source.datatype}`} values but the conjoined field is ${c.kind}${c.datatype === undefined ? "" : ` ${c.datatype}`}`,
+          },
+        ]);
       }
     }
     return {

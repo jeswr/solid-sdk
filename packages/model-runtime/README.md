@@ -53,6 +53,9 @@ the spelling they will store. The guard inventory is:
   Even a Warning-graded concept `sh:class` becomes a strict runtime enum: supplied
   nonmember writes throw and reads drop nonmembers, while emitted `sh:in` retains
   `sh:Warning`. Runtime membership enforcement is stricter than that advisory SHACL severity.
+  With `iriScheme`, every concept member must satisfy the scheme guard (manifest validation).
+  The generated `shapes.ttl` lowers `sh:class` to `sh:in`: validate pod data for these fields
+  against it, not against the sector SHACL profile.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
 - **One serialization boundary**, after alias migration: `serializeTurtle` checks every
