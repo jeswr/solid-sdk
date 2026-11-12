@@ -11,7 +11,10 @@ test("demo findings, pair exploration, trends, sources and offline browsing", as
   await page.goto("/welcome?next=%2Finsights");
   await page.getByRole("button", { name: "Try it with a demo pod" }).click();
   await expect(page).toHaveURL(/\/insights\/?$/);
-  await expect(page.getByRole("heading", { name: "Connections worth exploring" })).toBeVisible();
+  // The first visit seeds 120 fictional days into the demo pod, which can take a while.
+  await expect(page.getByRole("heading", { name: "Connections worth exploring" })).toBeVisible({
+    timeout: 30_000,
+  });
   const findings = page.getByRole("region", { name: "Top findings" });
   await expect(findings.locator("article").first()).toBeVisible();
   await expect(findings.getByRole("figure").first()).toBeVisible();
