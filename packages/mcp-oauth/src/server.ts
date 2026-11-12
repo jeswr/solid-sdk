@@ -309,10 +309,11 @@ export class AuthorizationServer {
     } catch {
       // Best-effort, independent steps: a failing tombstone must not leave the grant live or
       // the new upstream pod session in the vault. Never issue a code or expose failures.
+      // Defer each call so a synchronous throw in one step cannot skip the others.
       await Promise.allSettled([
-        this.stores.grants.revokeSession(grant.session.id),
-        this.stores.grants.revoke(grant.id),
-        this.options.podSessions.revoke(grant.session.id),
+        Promise.resolve().then(() => this.stores.grants.revokeSession(grant.session.id)),
+        Promise.resolve().then(() => this.stores.grants.revoke(grant.id)),
+        Promise.resolve().then(() => this.options.podSessions.revoke(grant.session.id)),
       ]);
       throw new OAuthError("server_error", 500);
     }

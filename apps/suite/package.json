@@ -28,6 +28,7 @@
     "@dnd-kit/sortable": "10.0.0",
     "@dnd-kit/utilities": "3.2.2",
     "@hookform/resolvers": "5.4.0",
+    "@jeswr/agent-audit": "workspace:*",
     "@jeswr/agent-mandate": "workspace:*",
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",

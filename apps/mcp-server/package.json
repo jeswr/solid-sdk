@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "vitest run",
-    "test:e2e": "vitest run test/css.e2e.test.ts",
+    "test:e2e": "vitest run test/css.e2e.test.ts test/connectors.e2e.test.ts",
+    "test:e2e:connectors": "vitest run test/connectors.e2e.test.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

@@ -20,8 +20,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { appFromEnvironment } from "../src/config.js";
 import { createApp } from "../src/handler.js";
 import { nodeHandler } from "../src/node-handler.js";
-import { CookieJar, CSS, completeCssLogin, cssAccount, MCP, startCss } from "./css.js";
-import { navigation } from "./navigation.js";
+import { CSS, completeMcpAuthorization, cssAccount, MCP, startCss } from "./css.js";
 
 let stopCss: (() => Promise<void>) | undefined;
 let server: Server | undefined;
@@ -101,46 +100,7 @@ async function login(account: Awaited<ReturnType<typeof cssAccount>>) {
   const authUrl = authorization as URL;
   expect(authUrl.searchParams.get("code_challenge_method")).toBe("S256");
   expect(authUrl.searchParams.get("resource")).toBe(`${MCP}/mcp`);
-  const jar = new CookieJar();
-  const response = await fetch(authUrl, { redirect: "manual" });
-  jar.absorb(response);
-  const csrf = (html: string) => {
-    const token = html.match(/name="csrf" value="([^"]+)"/)?.[1];
-    if (!token) throw new Error("Missing form CSRF field");
-    return token;
-  };
-  const post = async (path: string, fields: Record<string, string>) => {
-    const result = await fetch(`${MCP}${path}`, {
-      method: "POST",
-      redirect: "manual",
-      headers: {
-        origin: MCP,
-        cookie: jar.header,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams(fields),
-    });
-    jar.absorb(result);
-    return result;
-  };
-  const upstream = await post("/auth/login", {
-    csrf: csrf(await response.text()),
-    webid: account.webId,
-  });
-  expect(upstream.status).toBe(200);
-  const upstreamUrl = await navigation(upstream);
-  expect(upstreamUrl.origin).toBe(new URL(CSS).origin);
-  const callback = await completeCssLogin(upstreamUrl.href, account);
-  const consent = await fetch(callback, { headers: { cookie: jar.header }, redirect: "manual" });
-  jar.absorb(consent);
-  expect(consent.status).toBe(200);
-  expect(consent.headers.get("content-security-policy")).toContain("default-src 'none'");
-  const approval = await post("/auth/consent", {
-    csrf: csrf(await consent.text()),
-    decision: "allow",
-  });
-  expect(approval.status).toBe(200);
-  const redirect = await navigation(approval);
+  const redirect = await completeMcpAuthorization(authUrl, account);
   expect(redirect.origin + redirect.pathname).toBe(String(provider.redirectUrl));
   expect(redirect.searchParams.get("state")).toBe(state);
   expect(
@@ -206,7 +166,11 @@ it("performs SDK DCR + PKCE + Solid login + consent and calls every tool on priv
   expect(await call("memory_recall", { purpose: "ServiceProvision" })).toContain(
     "owner@example.org",
   );
-  expect(await call("profile_get", { purpose: "ServiceProvision" })).toContain("MCP test owner");
+  expect(await json("profile_get", { purpose: "ServiceProvision" })).toEqual({
+    name: "MCP test owner",
+    emails: [],
+    phones: [],
+  });
   await call("address_get", { purpose: "ServiceProvision" });
   await call("health_query", { kind: "conditions", purpose: "ServiceProvision" }, true);
   await call("memory_forget", { id: memory.id, mode: "retract" });

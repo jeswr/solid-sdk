@@ -92,6 +92,16 @@ const chrome = new Set(["app-rail", "shell", "top-bar", "sidebar-nav", "details-
 
 const interactions: Shot[] = [
   {
+    name: "details-pane-embedded",
+    path: "details-pane?state=embedded",
+    act: async (page) => {
+      const toggle = page.getByRole("button", { name: "Toggle details pane" });
+      if ((await toggle.getAttribute("aria-expanded")) === "false") await toggle.click();
+      await expect(page.getByRole("complementary")).toBeVisible();
+      return page.getByRole("complementary");
+    },
+  },
+  {
     name: "primitives-state-reference",
     path: "primitives",
     act: async (page) => page.getByRole("region", { name: "Async state examples" }),

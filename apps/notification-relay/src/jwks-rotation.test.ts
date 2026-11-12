@@ -1,8 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { createHash, randomUUID } from "node:crypto";
 import { calculateJwkThumbprint, exportJWK, generateKeyPair, type JWK, SignJWT } from "jose";
 import { expect, test, vi } from "vitest";
 import { epoch } from "../test/fixtures.js";
+import { resourceFixture } from "../test/resource-fixtures.js";
 import { createResourceTokenVerifier } from "./resource-auth.js";
 import { InMemoryRelayStore } from "./store.js";
 
@@ -103,4 +105,71 @@ test("refetches the JWKS once a minute at most when a token names an unknown key
   forged.headers.set("authorization", `${forged.headers.get("authorization")}x`);
   await expect(verify(forged)).rejects.toThrow();
   expect(jwksFetches()).toBe(3);
+});
+
+async function concurrentRefreshFixture() {
+  const f = await resourceFixture();
+  const rotated = await issuerKey("rotated");
+  const token = await new SignJWT(f.claims)
+    .setProtectedHeader({ alg: "ES256", kid: rotated.jwk.kid as string })
+    .sign(rotated.pair.privateKey);
+  await f.verify(await f.request());
+  f.time(epoch + 60_000);
+  f.outboundFetch.mockClear();
+  const rotatedRequest = async () =>
+    new Request(target, {
+      method: "POST",
+      headers: { authorization: `DPoP ${token}`, dpop: await f.proof(token) },
+    });
+  return { ...f, rotated, rotatedRequest };
+}
+
+test.each([
+  false,
+  true,
+])("shares one JWKS refresh across 20 concurrent unknown-kid verifications (published=%s)", async (published) => {
+  const f = await concurrentRefreshFixture();
+  f.outboundFetch.mockImplementation(async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return Response.json({ keys: [published ? f.rotated.jwk : f.jwk] });
+  });
+  const requests = await Promise.all(Array.from({ length: 20 }, () => f.rotatedRequest()));
+  const results = await Promise.allSettled(requests.map(f.verify));
+  for (const result of results)
+    expect(result).toMatchObject(
+      published
+        ? { status: "fulfilled", value: { webid } }
+        : { status: "rejected", reason: { code: "ERR_JWKS_NO_MATCHING_KEY" } },
+    );
+  expect(f.outboundFetch).toHaveBeenCalledTimes(1);
+  expect(f.outboundFetch).toHaveBeenCalledWith(`${issuer}/jwks`, expect.anything());
+});
+
+test("shares a failed JWKS refresh and retries after the throttle window", async () => {
+  const f = await concurrentRefreshFixture();
+  f.outboundFetch.mockImplementation(async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    return new Response(null, { status: 503 });
+  });
+  const requests = await Promise.all(Array.from({ length: 20 }, () => f.rotatedRequest()));
+  const results = await Promise.allSettled(requests.map(f.verify));
+  for (const result of results)
+    expect(result).toMatchObject({
+      status: "rejected",
+      reason: { message: "Discovery unavailable" },
+    });
+  expect(f.outboundFetch).toHaveBeenCalledTimes(1);
+  // A failed refresh retains the last working JWKS.
+  await expect(f.verify(await f.request())).resolves.toMatchObject({ webid });
+  expect(f.outboundFetch).toHaveBeenCalledTimes(1);
+  // A failed refresh still starts the throttle window: no refetch per later request.
+  for (let i = 0; i < 3; i++)
+    await expect(f.verify(await f.rotatedRequest())).rejects.toMatchObject({
+      code: "ERR_JWKS_NO_MATCHING_KEY",
+    });
+  expect(f.outboundFetch).toHaveBeenCalledTimes(1);
+  f.time(epoch + 120_000);
+  f.outboundFetch.mockImplementation(async () => Response.json({ keys: [f.rotated.jwk] }));
+  await expect(f.verify(await f.rotatedRequest())).resolves.toMatchObject({ webid });
+  expect(f.outboundFetch).toHaveBeenCalledTimes(2);
 });
