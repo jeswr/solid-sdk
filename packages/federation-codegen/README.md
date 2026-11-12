@@ -136,17 +136,22 @@ Runtime reads sort safe integer positions numerically, retain duplicate values, 
 gaps. Duplicate positions or any malformed item reject the entity at Violation severity;
 Warning/Info drop the entire field. A merged outer property rejects if any source is
 Violation. Strict composite-child validation still rejects every present violation.
-Named items must be safe http(s) IRIs in the same lexical document; blank nodes reject,
+Named items must be safe http(s) IRIs in the same lexical document, distinct from the
+document and owner subjects; blank nodes reject,
 matching composite NamedNode traversal. Item class membership uses the existing bounded
 data-graph subclass walk. Fields cap at 256 items and 10,000 raw link/item/class reads.
 
 Writes mint `<document>#<resolvedFieldName>-<1-based index>`, assert the item class,
 and write positions 1..n. Invalid scalar values follow the existing datatype drop/sanitize
 policy; surviving values keep their relative order and receive consecutive positions.
-Oversized/nonarray inputs throw before mutation. Replacement clears links and only removes
-the item class, position and value triples of exclusively linked, same-document items.
-Shared/foreign items and unrelated predicates/types survive. Deterministic subject
-collisions with unrelated or shared nodes throw atomically.
+Oversized/nonarray inputs and surviving item counts outside outer `sh:minCount`/`sh:maxCount`
+throw before mutation, including omitted fields below their minimum, at every severity.
+Replacement clears links and only removes the item class, position and value triples from
+safe same-document nodes explicitly typed with the item class, whose fragments match exactly
+`<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner
+subjects, and exclusively referenced by that owner/field. Other nodes and unrelated predicates/types
+survive. Minting skips occupied unrelated/shared IRIs. Composite node fragments matching any
+ordered field's resolved item-fragment pattern on that entity are rejected during generation.
 
 Two deliberate refinements keep the encoding interoperable: normalized SHACL adds explicit
 `sh:class <itemClass>` and `sh:nodeKind sh:IRI` on the owning property, because

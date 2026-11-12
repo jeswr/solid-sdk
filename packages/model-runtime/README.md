@@ -90,6 +90,8 @@ result before publishing when MUST validation is needed. `serialize` uses the sa
 Supplied invalid concept-enum values are the strict exception: `guards.iriEnum: true`
 throws `TypeError` before writing that value. Omitted fields retain the absence contract except for fixed-value fields and Violation
 entity invariants, which also enforce staged writes (see below).
+Ordered fields also throw when the surviving item count violates their outer `sh:minCount`
+or `sh:maxCount`, including omitted fields below their minimum.
 
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
@@ -142,14 +144,14 @@ wrapper.instructions = ["New first step", "New second step"];
 
 | Contract | Behavior |
 |---|---|
-| Item admission | Same lexical document, safe absolute http(s) NamedNode; blank/literal/foreign/unsafe links fail. Require the item class through actual data-graph types/subclasses. |
+| Item admission | Same lexical document, safe absolute http(s) NamedNode, distinct from the document and owner subjects; blank/literal/foreign/unsafe links fail. Require the item class through actual data-graph types/subclasses. |
 | Position | Exactly one `xsd:integer` term, validated by the existing integer mapper (safe-integer precision cap); apply optional `minPosition`. Numeric ascending order, gaps allowed, duplicate positions invalid even for equal values. Negative integers are allowed without a restricting lower bound. |
 | Value | Exactly one term, read/written with the same datatype, enum, IRI scheme, pattern, length, range and text sanitization rules as scalar fields. Duplicate values survive. No new string-size or lexical policy is invented. |
 | Failure grading | Any invalid item, duplicate position or outer cardinality failure rejects at Violation severity (even on a present optional field); Warning/Info omit the whole field. `requiredFailClosed` still enforces absence. Strict `sh:node` children retain their all-constraints policy. |
-| Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray supplied writes throw `TypeError` before mutation. |
-| Write identity | `<document>#<resolvedFieldName>-<n>` with n = 1..n, item class asserted. Invalid scalar writes drop members just as other collection writes do; survivors are renumbered consecutively. |
-| Replacement | Clear owner links; remove only matching item class, position and value triples on safe same-document items exclusively referenced by that owner/field. Preserve unrelated predicates/types, shared items and foreign nodes. Subject collisions with unrelated/shared data throw before any mutation. |
-| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear. Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
+| Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray writes and surviving item counts outside outer `sh:minCount`/`sh:maxCount` throw `TypeError` before mutation, at every severity. |
+| Write identity | `<document>#<resolvedFieldName>-<n>`, where n is a positive decimal integer without leading zeros; occupied unrelated/shared IRIs are skipped and the item class is asserted. Invalid scalar writes drop members just as other collection writes do; surviving positions are consecutive. |
+| Replacement | Clear owner links; remove only matching item class, position and value triples from safe same-document nodes explicitly typed with the item class, matching exactly `#<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner subjects, and exclusively referenced by that owner/field. Preserve every other node's triples, unrelated predicates/types, and shared/foreign data. |
+| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear when the minimum permits. Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
 
 Manifest validation rejects missing/unknown descriptor keys, unsafe or overlapping predicate
 IRIs, invalid severity or unwritable position bounds, item classes owned as migration aliases,
