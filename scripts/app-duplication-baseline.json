@@ -2907,23 +2907,6 @@
         }
       ]
     },
-    "50e0d410470a0cf96a1a531c5b38a31f5de4d8f19ea70778d191ef35067dd2c5": {
-      "tokens": 164,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/agent/lib/audit.ts",
-          "startLine": 232,
-          "endLine": 245,
-          "tokens": 164
-        },
-        {
-          "file": "packages/agent-audit/src/decision-record.ts",
-          "startLine": 9,
-          "endLine": 23,
-          "tokens": 164
-        }
-      ]
-    },
     "51033c302b6e027532cf3751a3793a338375ed90b58e4433f91a5cb22a40ccf9": {
       "tokens": 1063,
       "locations": [
@@ -4108,8 +4091,8 @@
       "locations": [
         {
           "file": "apps/pod-music/src/lib/model.ts",
-          "startLine": 155,
-          "endLine": 178,
+          "startLine": 150,
+          "endLine": 173,
           "tokens": 124
         },
         {
@@ -5710,23 +5693,6 @@
           "startLine": 174,
           "endLine": 193,
           "tokens": 138
-        }
-      ]
-    },
-    "8d798f28b4414d1a4f98151e3cbfacf48701aecb0d6ec7f8cdc56b866b92900b": {
-      "tokens": 172,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/agent/lib/audit.ts",
-          "startLine": 49,
-          "endLine": 70,
-          "tokens": 172
-        },
-        {
-          "file": "packages/agent-audit/src/records.ts",
-          "startLine": 56,
-          "endLine": 77,
-          "tokens": 172
         }
       ]
     },
@@ -9426,8 +9392,8 @@
       "locations": [
         {
           "file": "apps/pod-music/src/lib/model.ts",
-          "startLine": 151,
-          "endLine": 178,
+          "startLine": 146,
+          "endLine": 173,
           "tokens": 126
         },
         {

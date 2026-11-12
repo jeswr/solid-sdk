@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { ChatConversation, ChatMessage } from "@jeswr/solid-chat-interop";
+import {
+  type ChatConversation,
+  type ChatMessage,
+  normalizeChatAccount,
+} from "@jeswr/solid-chat-interop";
 import { MAX_BYTES } from "./io.js";
-import { digest, record } from "./parsers.js";
+import { type AccountOptions, conversationAccount, digest, record } from "./parsers.js";
 import { redactSecrets } from "./redact.js";
 
 const MAX_CONVERSATIONS = 10000;
@@ -42,7 +46,13 @@ function parts(values: unknown): string {
     .trim();
 }
 
-function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[] {
+function parse(
+  text: string,
+  provider: "chatgpt" | "claude",
+  options: AccountOptions,
+): ChatConversation[] {
+  // Validate even empty exports before any upload or credential acquisition.
+  const account = normalizeChatAccount(options.account);
   if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("Export exceeds limit");
   const data: unknown = JSON.parse(text);
   const list = Array.isArray(data) ? data : record(data).conversations;
@@ -57,7 +67,8 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
     const sourceId =
       string(raw.id) ?? string(raw.conversation_id) ?? string(raw.uuid) ?? digest(raw);
     // Separate Claude.ai exports from Claude Code hooks, even if a source ID is reused.
-    const conversationId = digest([`${provider}-export`, sourceId]);
+    const scoped = conversationAccount(digest([`${provider}-export`, sourceId]), account);
+    const { conversationId } = scoped;
     const messages: ChatMessage[] = [];
     const seen = new Set<string>();
     const entries =
@@ -108,7 +119,13 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
     }
     messages.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
     if (messages.length > 0)
-      result.push({ provider, conversationId, title: redactSecrets(title.trim()), messages });
+      result.push({
+        provider,
+        ...scoped,
+        channel: "export",
+        title: redactSecrets(title.trim()),
+        messages,
+      });
   }
   return result;
 }
@@ -117,13 +134,13 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
  * All mapping branches are retained chronologically, as in the Pod Manager importer.
  * Missing timestamps use the conversation timestamp, then the Unix epoch. IDs are opaque and stable.
  */
-export function parseChatgptExport(text: string): ChatConversation[] {
-  return parse(text, "chatgpt");
+export function parseChatgptExport(text: string, options: AccountOptions = {}): ChatConversation[] {
+  return parse(text, "chatgpt", options);
 }
 
 /** Parse bounded Claude.ai conversations.json exports, dropping attachments, tools and thinking.
  * Text and titles are redacted before returning; missing timestamps use the same deterministic fallback.
  */
-export function parseClaudeExport(text: string): ChatConversation[] {
-  return parse(text, "claude");
+export function parseClaudeExport(text: string, options: AccountOptions = {}): ChatConversation[] {
+  return parse(text, "claude", options);
 }
