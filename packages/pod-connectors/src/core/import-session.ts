@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
@@ -131,12 +132,16 @@ export function createImportSession(
       if (used.size < maxRunSources) used.add(origin);
     }
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
-    let registered = result;
+    // Take extra classes from the document, not the host writer's result: custom PodWriter
+    // ports need not echo them.
+    let registered: WrittenDoc = doc.additionalClasses?.length
+      ? { ...result, additionalClasses: [...doc.additionalClasses] }
+      : result;
     if (doc.registrationContainer !== undefined) {
       const container = writer.resolve(doc.registrationContainer);
       if (!container.endsWith("/") || !result.url.startsWith(container))
         throw new IntegrationSyncError(id, "Registration container must contain the document.");
-      registered = { ...result, registrationContainer: container };
+      registered = { ...registered, registrationContainer: container };
     }
     for (const request of registrationsFor([registered])) {
       registrations.set(JSON.stringify([request.forClass, request.container]), request);

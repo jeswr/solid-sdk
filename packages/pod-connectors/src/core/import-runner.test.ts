@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntegrationSyncError } from "./errors.js";
 import { createSourceAuth, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
@@ -214,6 +214,89 @@ it("runs over explicit storage and source ports without using global fetch", asy
   } finally {
     globalFetch.mockRestore();
   }
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("registers a document's additional classes for its container even when the port omits them", async () => {
+  const registerType = vi.fn().mockResolvedValue({ indexUrl: "https://memory.test/index" });
+  const podWriter: import("./types.js").PodWriter = {
+    resolve: (slug) => `https://memory.test/${slug}`,
+    read: async () => undefined,
+    // A host port that echoes only the primary class.
+    write: async (doc) => ({
+      url: `https://memory.test/${doc.slug}`,
+      category: doc.category,
+      forClass: doc.forClass,
+    }),
+    registerType,
+  };
+  const adapter: IntegrationAdapter = {
+    ...toyAdapter,
+    async import(ctx) {
+      await ctx.write({
+        slug: "health/workouts/2026-06.ttl",
+        category: "health",
+        forClass: CLASSES.ExerciseAction,
+        additionalClasses: [CLASSES.MusicRecording],
+        dataset: new Store(),
+      });
+      return {};
+    },
+  };
+  const report = await runImport({
+    adapter,
+    mode: "live",
+    podWriter,
+    sourceAuth: { fetch: async () => Response.json({}) },
+  });
+  const container = "https://memory.test/health/workouts/";
+  expect(registerType).toHaveBeenCalledWith([
+    { forClass: CLASSES.ExerciseAction, container },
+    { forClass: CLASSES.MusicRecording, container },
+  ]);
+  expect(report.written[0]?.additionalClasses).toEqual([CLASSES.MusicRecording]);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps additional classes when a document also names its registration container", async () => {
+  const registerType = vi.fn().mockResolvedValue({ indexUrl: "https://memory.test/index" });
+  const podWriter: import("./types.js").PodWriter = {
+    resolve: (slug) => `https://memory.test/${slug}`,
+    read: async () => undefined,
+    write: async (doc) => ({
+      url: `https://memory.test/${doc.slug}`,
+      category: doc.category,
+      forClass: doc.forClass,
+    }),
+    registerType,
+  };
+  const adapter: IntegrationAdapter = {
+    ...toyAdapter,
+    async import(ctx) {
+      await ctx.write({
+        slug: "health/workouts/2026-06.ttl",
+        category: "health",
+        forClass: CLASSES.ExerciseAction,
+        additionalClasses: [CLASSES.MusicRecording],
+        registrationContainer: "health/",
+        dataset: new Store(),
+      });
+      return {};
+    },
+  };
+  const report = await runImport({
+    adapter,
+    mode: "live",
+    podWriter,
+    sourceAuth: { fetch: async () => Response.json({}) },
+  });
+  const container = "https://memory.test/health/";
+  expect(registerType).toHaveBeenCalledWith([
+    { forClass: CLASSES.ExerciseAction, container },
+    { forClass: CLASSES.MusicRecording, container },
+  ]);
+  expect(report.written[0]?.additionalClasses).toEqual([CLASSES.MusicRecording]);
+  expect(report.written[0]?.registrationContainer).toBe(container);
 });
 
 // AUTHORED-BY Codex GPT-6.1-Sol

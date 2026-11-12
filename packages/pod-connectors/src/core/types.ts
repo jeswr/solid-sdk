@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -92,6 +93,11 @@ export interface NormalisedDoc {
   readonly category: string;
   /** RDF class to register in the Type Index for the document's container. */
   readonly forClass: string;
+  /**
+   * Further RDF classes the document holds, registered for the same container (for example
+   * health observations kept beside the workouts they describe).
+   */
+  readonly additionalClasses?: readonly string[];
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
   /**
@@ -145,6 +151,8 @@ export interface WrittenDoc {
   readonly url: string;
   readonly category: string;
   readonly forClass: string;
+  /** Further classes registered for the same container as `forClass`. */
+  readonly additionalClasses?: readonly string[];
   readonly skipRegistration?: boolean;
   /** Absolute container registered instead of the document's own container. */
   readonly registrationContainer?: string;
@@ -209,6 +217,9 @@ export interface ImportContext {
 
 /** What `import()` returns (documents are reported by the runner). */
 export interface ImportOutcome {
+  /** Actionable notices, including a successfully saved partial batch. Fixed adapter
+   * strings only: never provider-supplied text (hosts print them). */
+  readonly warnings?: readonly string[];
   /** Opaque incremental cursor for the next import, where the API supports it. */
   readonly cursor?: string;
   /**
@@ -219,6 +230,8 @@ export interface ImportOutcome {
    * the UI. Omitted (undefined) when nothing was skipped.
    */
   readonly skipped?: number;
+  /** Source fields or products without a supported vocabulary mapping. */
+  readonly unsupported?: readonly string[];
 }
 
 /** One recorded fixture route for the typed fake fetch.
