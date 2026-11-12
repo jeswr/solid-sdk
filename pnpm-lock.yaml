@@ -4010,12 +4010,15 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../pod-auth
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
-      '@jeswr/solid-dpop':
+      '@jeswr/storage-client':
         specifier: workspace:*
-        version: link:../solid-dpop
+        version: link:../storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../suite-vocab
@@ -5193,9 +5196,18 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
+      ajv:
+        specifier: ^8.18.0
+        version: 8.18.0
+      ajv-formats:
+        specifier: 3.0.1
+        version: 3.0.1(ajv@8.18.0)
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
