@@ -4,11 +4,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { InstallApp } from "../src/shell/settings/install-app";
 import { act, click, h, mount } from "./drive-ui-dom";
 
+const native = vi.hoisted(() => ({ value: false }));
+vi.mock("@jeswr/suite-native", () => ({ isNativeApp: () => native.value }));
+
 let stop: () => void;
 beforeEach(() => {
   stop = installPrompt.start(window);
 });
 afterEach(async () => {
+  native.value = false;
   await act(() => window.dispatchEvent(new Event("appinstalled")));
   stop();
   vi.restoreAllMocks();
@@ -36,6 +40,15 @@ it("captures before Settings mounts and installs only after clicking", async () 
   expect(prompt).not.toHaveBeenCalled();
   await click(button as HTMLButtonElement);
   expect(prompt).toHaveBeenCalledOnce();
+  // The live region stays mounted to announce the outcome.
+  expect(view.host.querySelector('[role="status"]')?.textContent).toBe("Solid Suite is installed.");
+  expect(view.host.querySelector("button")).toBeNull();
+});
+
+it("never offers installation inside the native app", async () => {
+  native.value = true;
+  await capture("accepted");
+  const view = await mount(h(InstallApp));
   expect(view.host.textContent).toBe("");
 });
 

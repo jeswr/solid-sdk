@@ -51,8 +51,9 @@ export function createInstallPromptStore() {
         const ios =
           (/iPad|iPhone|iPod/.test(nav.userAgent) ||
             (nav.platform === "MacIntel" && nav.maxTouchPoints > 1)) &&
-          /Safari/.test(nav.userAgent) &&
-          !/CriOS|FxiOS|EdgiOS|OPiOS/.test(nav.userAgent);
+          // Safari, and Chrome/Edge (iOS 16.4+), can Add to Home Screen; in-app browsers cannot.
+          /Safari|CriOS|EdgiOS/.test(nav.userAgent) &&
+          !/FxiOS|OPiOS|GSA\/|FBAN|FBAV|Instagram/.test(nav.userAgent);
         const modeChanged = () => {
           if (isStandalone()) installed();
           else update(deferred ? "available" : ios ? "ios" : "unavailable");
@@ -94,9 +95,10 @@ export function createInstallPromptStore() {
         await event.prompt();
         const { outcome } = await event.userChoice;
         if (snapshot.status !== "installed")
-          update(outcome === "accepted" ? "installed" : "unavailable");
+          update(outcome === "accepted" ? "installed" : deferred ? "available" : "unavailable");
         return outcome;
       } finally {
+        // A fresh prompt arriving meanwhile already set "available" through capture.
         if (snapshot.status === "prompting") update("unavailable");
       }
     },

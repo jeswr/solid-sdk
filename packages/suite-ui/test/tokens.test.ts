@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
-import { expect, test } from "vitest";
+import { describe, expect, it, test } from "vitest";
 // @ts-expect-error Root script is intentionally a dependency-free ESM module.
 import { declarations, normalizeCssValue, parseTokens } from "../../../scripts/token-css.mjs";
-import { PROJECT_COLOURS, tokens } from "../src/tokens.js";
+import { oklchToHex, PROJECT_COLOURS, tokens } from "../src/tokens.js";
 
 test("exported inventory equals the frozen spec tables (§2.1–2.7)", async () => {
   await expect(`${JSON.stringify(tokens, null, 2)}\n`).toMatchFileSnapshot(
@@ -70,4 +70,28 @@ test("Tailwind theme exposes all colour tokens and the normative shadcn aliases"
     expect(theme).toContain(`--${name}: var(--${target});`);
     expect(theme).toContain(`--color-${name}: var(--${name});`);
   }
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("oklchToHex", () => {
+  it.each([
+    ["oklch(1 0 0)", "#ffffff"],
+    ["oklch(0 0 0)", "#000000"],
+    ["oklch(62.8% 0.2577 29.23)", "#ff0000"],
+    ["oklch(0.8664 0.2948 142.5)", "#00ff00"],
+    ["oklch(0.452 0.313 264.05 / 50%)", "#0000ff"],
+  ])("converts %s", (value, hex) => {
+    expect(oklchToHex(value)).toBe(hex);
+  });
+
+  it("converts every oklch token to a valid hex colour", () => {
+    for (const token of tokens)
+      for (const value of [token.light, token.dark])
+        if (typeof value === "string" && value.startsWith("oklch("))
+          expect(oklchToHex(value)).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("rejects values that are not oklch()", () => {
+    expect(() => oklchToHex("#ffffff")).toThrow();
+  });
 });

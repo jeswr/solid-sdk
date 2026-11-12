@@ -16,7 +16,6 @@ export function AdvancedSettings() {
   const pathname = usePathname();
   return (
     <>
-      <InstallApp />
       <label className="settings-toggle">
         <input
           type="checkbox"
@@ -33,6 +32,7 @@ export function AdvancedSettings() {
         />
         Show Account IDs in lists
       </label>
+      <InstallApp />
       <section aria-labelledby="developer-settings">
         <h2 id="developer-settings">Developer</h2>
         <h3 id="current-capabilities">Current capabilities</h3>

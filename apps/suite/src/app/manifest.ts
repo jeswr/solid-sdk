@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { tokens } from "@jeswr/suite-ui/tokens";
+import { oklchToHex, tokens } from "@jeswr/suite-ui/tokens";
 import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
-  const background = tokens.find((token) => token.name === "--background")?.light;
+  // Manifests and PWA tooling do not all accept CSS Color 4 values.
+  const light = tokens.find((token) => token.name === "--background")?.light;
+  const background = light ? oklchToHex(light) : undefined;
   return {
     id: "/",
     name: "Solid Suite",

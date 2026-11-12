@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { onest, sourceCode, sourceSerif } from "@jeswr/suite-ui/fonts";
-import { tokens } from "@jeswr/suite-ui/tokens";
+import { oklchToHex, tokens } from "@jeswr/suite-ui/tokens";
 import type { Metadata, Viewport } from "next";
 import { NativeStartupGate } from "@/components/native-startup-gate";
 import { suiteEnv } from "@/shell/lib/env";
@@ -12,8 +12,15 @@ const background = tokens.find((token) => token.name === "--background");
 export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: background?.light ?? "" },
-    { media: "(prefers-color-scheme: dark)", color: background?.dark ?? "" },
+    // Hex: older browsers drop an oklch() theme-color.
+    {
+      media: "(prefers-color-scheme: light)",
+      color: oklchToHex(background?.light ?? "oklch(1 0 0)"),
+    },
+    {
+      media: "(prefers-color-scheme: dark)",
+      color: oklchToHex(background?.dark ?? "oklch(0 0 0)"),
+    },
   ],
 };
 export const metadata: Metadata = {

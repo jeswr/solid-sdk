@@ -61,6 +61,25 @@ describe("install prompt store", () => {
     expect(changed).toHaveBeenCalledTimes(3);
   });
 
+  it("keeps a prompt that arrives while another is showing", async () => {
+    const first = promptEvent("dismissed");
+    let release = () => {};
+    first.prompt.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = store.install();
+    expect(store.getSnapshot().status).toBe("prompting");
+    const second = promptEvent("accepted");
+    release();
+    expect(await pending).toBe("dismissed");
+    expect(store.getSnapshot().status).toBe("available");
+    expect(await store.install()).toBe("accepted");
+    expect(second.prompt).toHaveBeenCalledOnce();
+  });
+
   it("consumes a prompt before awaiting it and accepts a later prompt after dismissal", async () => {
     const { prompt } = promptEvent("dismissed");
     const pending = store.install();
@@ -79,6 +98,22 @@ describe("install prompt store", () => {
     expect(store.getSnapshot().status).toBe("unavailable");
     promptEvent();
     expect(await store.install()).toBe("accepted");
+  });
+
+  it("keeps a fresh prompt when the showing one is rejected", async () => {
+    const first = promptEvent();
+    let reject = (_error: Error) => {};
+    first.prompt.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const pending = store.install();
+    promptEvent();
+    reject(new Error("blocked"));
+    await expect(pending).rejects.toThrow("blocked");
+    expect(store.getSnapshot().status).toBe("available");
   });
 
   it("handles installation through the browser menu", () => {
@@ -113,7 +148,9 @@ describe("install prompt store", () => {
     ["iPhone Safari", "iPhone AppleWebKit Safari", "iPhone", 0, "ios"],
     ["iPad Safari desktop mode", "Macintosh AppleWebKit Safari", "MacIntel", 5, "ios"],
     ["Mac Safari", "Macintosh AppleWebKit Safari", "MacIntel", 0, "unavailable"],
-    ["iOS Chrome", "iPhone AppleWebKit CriOS Safari", "iPhone", 0, "unavailable"],
+    ["iOS Chrome", "iPhone AppleWebKit CriOS Safari", "iPhone", 0, "ios"],
+    ["iOS Edge", "iPhone AppleWebKit EdgiOS Safari", "iPhone", 0, "ios"],
+    ["iOS Google app", "iPhone AppleWebKit GSA/300.0 Safari", "iPhone", 0, "unavailable"],
     ["iOS Firefox", "iPhone AppleWebKit FxiOS Safari", "iPhone", 0, "unavailable"],
     ["other iOS browser", "iPhone AppleWebKit", "iPhone", 0, "unavailable"],
   ])("detects %s", (_name, userAgent, platform, maxTouchPoints, expected) => {

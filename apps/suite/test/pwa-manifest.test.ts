@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { tokens } from "@jeswr/suite-ui/tokens";
+import { oklchToHex, tokens } from "@jeswr/suite-ui/tokens";
 import { describe, expect, it } from "vitest";
 import manifest from "../src/app/manifest";
 
@@ -17,8 +17,9 @@ describe("PWA manifest", () => {
       scope: "/",
       display: "standalone",
       display_override: ["window-controls-overlay", "standalone"],
-      theme_color: background,
-      background_color: background,
+      // Hex, not oklch(): manifests and PWA tooling do not all accept CSS Color 4.
+      theme_color: oklchToHex(background as string),
+      background_color: oklchToHex(background as string),
       categories: ["productivity"],
     });
     expect(manifest().description).toBeTruthy();
