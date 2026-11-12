@@ -8,6 +8,7 @@ import {
   accessTokenUsable,
   DPoPTokenProvider,
   OidcSession,
+  oidcSessionKey,
   SessionFence,
   SessionSupersededError,
 } from "../src/mod.js";
@@ -94,8 +95,65 @@ async function fixture() {
     client: entry.client,
     authorizationServer: as,
   });
-  return { session, other, provider, fence, peer, cache, sessionStore, generations, key, entry };
+  return {
+    session,
+    other,
+    provider,
+    fence,
+    peer,
+    cache,
+    sessionStore,
+    generations,
+    key,
+    entry,
+    code,
+    client,
+    options,
+  };
 }
+
+test("oidcSessionKey is the key a session stores and reads under, defaults included", async () => {
+  const f = await fixture();
+  try {
+    // The fixture's records sit under the documented formula; the helper must name them.
+    assert.equal(await oidcSessionKey(callback, f.options, as.issuer, context), f.key);
+    assert.deepEqual(await f.session.identity(as.issuer, context), identity);
+    // An explicit account and scopes change the key, and a session built with them reads that key only.
+    const custom = { ...f.options, account: "work", scopes: ["openid", "webid", "profile"] };
+    const key = await oidcSessionKey(callback, custom, as.issuer, context);
+    assert.equal(
+      key,
+      await contextKey("oidc", [
+        f.options.namespace,
+        "work",
+        as.issuer,
+        callback,
+        "openid webid profile",
+        context,
+      ]),
+    );
+    const session = new OidcSession(callback, f.code, f.client, custom);
+    assert.equal(await session.identity(as.issuer, context), undefined);
+    await f.sessionStore.setItem(key, await f.sessionStore.getItem(f.key));
+    await f.cache.removeItem(f.key);
+    assert.deepEqual(await session.identity(as.issuer, context), identity);
+    // Without a namespace or options the key falls back to the default namespace, account and scopes.
+    assert.equal(
+      await oidcSessionKey(callback, {}, as.issuer, context),
+      await contextKey("oidc", [
+        "default",
+        "default",
+        as.issuer,
+        callback,
+        "openid webid",
+        context,
+      ]),
+    );
+  } finally {
+    f.fence.close();
+    f.peer.close();
+  }
+});
 
 for (const source of ["cache", "durable", "empty", "stale records"]) {
   test(`identity reports the current session without starting a flow: ${source}`, async () => {

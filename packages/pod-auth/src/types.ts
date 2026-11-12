@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Structural key-value seam; values must support structured cloning, including CryptoKeys. */
 export interface KvStore<T extends {} = {}> {
   getItem(key: string): Promise<T | null>;
@@ -61,6 +62,8 @@ export interface CidSubject {
 }
 
 export interface Identity {
+  /** Public ownership tag, not a secret/capability. Stable across refresh; new sign-ins change it. */
+  grantId?: string;
   webId: string | null;
   issuer: string;
   subject: string;
@@ -68,6 +71,17 @@ export interface Identity {
   protocol: "solid-oidc" | "lws";
   storages: readonly string[];
 }
+
+/** Credential-free ownership snapshot from a pod-auth Identity. Missing identifiers fail closed. */
+export type GrantOwner = Pick<Identity, "webId" | "issuer" | "grantId">;
+
+/** A skipped retirement never revokes, clears credentials, advances the fence or emits logout. */
+export type GrantRetirementResult =
+  | { retired: true }
+  | {
+      retired: false;
+      reason: "missing-grant" | "no-grant" | "owner-changed" | "grant-changed";
+    };
 
 export interface LoginHint {
   webId?: string;
@@ -86,6 +100,23 @@ export interface AuthEvent {
 export interface LoginOptions {
   /** Abandons the attempt; see {@link PodAuth.login}. */
   signal?: AbortSignal;
+  /**
+   * The `remembered()` result the caller saw when it decided to sign in. Login rejects with
+   * `OwnershipChangedError` before authorization if the remembered pointer differs. Under the
+   * namespace mutation lock, immediately before publishing this attempt's grant owner and the pointer,
+   * pod-auth checks again that the pointer and the stored grant owner are unchanged since the attempt
+   * began; on a mismatch it discards only this attempt's new grant and rejects the same way.
+   * Ownership-guarded attempts are never shared with concurrent logins.
+   */
+  expectRemembered?: readonly { webId: string; issuer: string }[];
+  /**
+   * Requires a WebID hint. Authorizes interactively without redeeming any stored refresh credential,
+   * for a grant of that account that persistently fails refresh (for example `invalid_client`). The
+   * new grant replaces it for that context; the old one stays catalogued for logout. Rejects with
+   * `OwnershipChangedError` if the pointer or stored owner names another account, and guards
+   * publication like `expectRemembered`.
+   */
+  reauthorize?: boolean;
 }
 
 /** Suite authentication and credential-free session lifecycle. */
@@ -104,6 +135,13 @@ export interface PodAuth {
   restore(): Promise<Identity | null>;
   /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
   logout(): Promise<void>;
+  /**
+   * Retire only the namespace grant matching this identity snapshot, including its grantId.
+   * Ownership comparison and logout cleanup share a namespace lock with credential commits.
+   * Web Locks coordinate tabs/workers sharing storage; Node's fallback covers only this realm.
+   * Browsers without Web Locks fail closed. Cleanup failures reject after attempted cleanup.
+   */
+  retireIfOwnedBy(expected: GrantOwner): Promise<GrantRetirementResult>;
   /** Read only the credential-free remembered pointer, without discovery or credential access. */
   remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */

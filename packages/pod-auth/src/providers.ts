@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
@@ -17,6 +18,7 @@ import {
   type HttpOptions,
   nonReactiveFetch,
   OidcIdTokenSource,
+  oidcSessionKey,
   ReactiveFetchManager,
   type RefreshSessionRecord,
   SelfIssuedJwtSource,
@@ -27,12 +29,26 @@ import {
   WebIdIssuerProvider,
   XASProvider,
 } from "@jeswr/reactive-authentication";
+import { boundProxy } from "./bound-proxy.js";
 import { createBoundary } from "./boundary.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
+import { namespaceFence } from "./namespace.js";
 import { secureUrl } from "./options.js";
-import { memoryStore, sessionStorage } from "./sessions.js";
-import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
+import {
+  type LoginOwnership,
+  memoryStore,
+  OwnershipChangedError,
+  sessionStorage,
+} from "./sessions.js";
+import type {
+  CidSubject,
+  GrantOwner,
+  Identity,
+  KvStore,
+  LoginHint,
+  PodAuthOptions,
+} from "./types.js";
 
 export type AgentPolicy = Pick<
   PodAuthOptions,
@@ -302,7 +318,7 @@ export function createProviders(
     namespace,
     options,
   );
-  const fence =
+  const baseFence =
     options.storage === undefined
       ? (browser?.fence ?? new SessionFence(namespace, { broadcast: false }))
       : new SessionFence(namespace, {
@@ -310,6 +326,7 @@ export function createProviders(
             scopedStore<number>(options.storage.sessions, "pod-auth:fence:" + namespace),
           ),
         });
+  const fence = namespaceFence(baseFence, persistence.exclusive);
   const metadata = <T extends {}>(name: string, fallback?: KvStore<T>) => {
     const store =
       options.storage === undefined
@@ -425,6 +442,8 @@ export function createProviders(
       ? new ClientIdClientProvider(new URL(options.clientId), http)
       : new DynamicRegistrationClientProvider(http),
   );
+  /** The running login's synthetic request, whose pointer write is that attempt's publication. */
+  let loginRequest: Request | undefined;
   /** Told when a running login hands an authorization code on to the token exchange. */
   let codeRedeemed: (() => void) | undefined;
   /** The running login's cancellation; UI hooks without a signal of their own are raced against it. */
@@ -479,36 +498,26 @@ export function createProviders(
     codeProvider,
     asProvider,
     clientProvider,
-    undefined,
+    persistence.credentials,
     sessionOptions,
   );
   // Interpose on the shared session read, so the exact ID token selected by UMA is checked before exchange.
-  const umaSession = new Proxy(solidProvider.session, {
-    get(target, property) {
-      if (property === "get")
-        return async (...args: Parameters<typeof target.get>) => {
-          const entry = await target.get(...args);
-          if (entry?.identity === undefined)
-            throw new Error("Authentication did not establish an identity");
-          const [url, webId, issuer] = JSON.parse(args[1]) as [
-            string,
-            string | null,
-            string | null,
-          ];
-          await hooks.session(
-            new Request(url, { signal: fence.signalFor(entry.generation!) }),
-            entry.identity,
-            "solid-oidc",
-            {
-              ...(webId === null ? {} : { webId }),
-              ...(issuer === null ? {} : { issuer }),
-            },
-          );
-          return entry;
-        };
-      // OidcSession's accessors and methods need the original receiver for their private fields.
-      const value: unknown = Reflect.get(target, property, target);
-      return typeof value === "function" ? value.bind(target) : value;
+  const umaSession = boundProxy(solidProvider.session, {
+    get: async (...args: Parameters<typeof solidProvider.session.get>) => {
+      const entry = await solidProvider.session.get(...args);
+      if (entry?.identity === undefined)
+        throw new Error("Authentication did not establish an identity");
+      const [url, webId, issuer] = JSON.parse(args[1]) as [string, string | null, string | null];
+      await hooks.session(
+        new Request(url, { signal: fence.signalFor(entry.generation!) }),
+        entry.identity,
+        "solid-oidc",
+        {
+          ...(webId === null ? {} : { webId }),
+          ...(issuer === null ? {} : { issuer }),
+        },
+      );
+      return entry;
     },
   });
   const umaProvider = new SolidUmaTokenProvider(
@@ -662,6 +671,15 @@ export function createProviders(
     persistence,
     contextFor,
     fence,
+    retireIfOwnedBy: async (expected: GrantOwner, retiring: () => void) =>
+      await persistence.exclusive(async () => {
+        const result = await persistence.retirement(expected);
+        if (result.retired) {
+          retiring();
+          await logout();
+        }
+        return result;
+      }),
     restore: async (account: import("./sessions.js").ActiveAccount) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
@@ -674,45 +692,39 @@ export function createProviders(
       const claims = await solidProvider.restore(request);
       if (claims === undefined) return undefined;
       if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
-        await solidProvider.forget();
+        // The stored grant contradicts the pointer: sign out, revoking every catalogued grant.
+        await persistence.exclusive(logout);
         throw new Error("Restored identity does not match the remembered account");
       }
       await hooks.session(request, claims, "solid-oidc", selected);
       sessionRequest = request;
       return claims;
     },
-    logout: async () => {
+    logout: async () => await persistence.exclusive(logout),
+    /** Whether a pointer write is the running login's own publication (or no login is running). */
+    publishing: (request: Request) => loginRequest === undefined || loginRequest === request,
+    /**
+     * Rejects an authenticated identity. During a login attempt only that attempt's new grants are
+     * removed, restoring what they displaced; other contexts' grants, the owner and the pointer stay.
+     * Outside an attempt (a later upgrade authenticated someone else) it signs out as `logout` does,
+     * revoking every catalogued grant before clearing them, the owner and the pointer.
+     */
+    reject: async () => {
+      if (!persistence.attempting()) return await persistence.exclusive(logout);
       boundary.clear();
-      const failures: unknown[] = [];
-      // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
-      try {
-        await solidProvider.session.forget(persistence.keys);
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await manager.logout();
-      } catch (error) {
-        failures.push(error);
-      }
-      try {
-        await fence.supersede(persistence.clear);
-      } catch (error) {
-        failures.push(error);
-      }
-      hint = {};
-      restoredContext = undefined;
-      loginContext = undefined;
-      sessionRequest = undefined;
-      selections.clear();
-      authorizationServers.clear();
-      if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
+      await persistence.discard();
     },
     /**
      * `granted` runs once a grant may exist (an authorization code went to the token exchange, or the
-     * upgrade completed), so an abandoned login knows it must discard one.
+     * upgrade completed), so an abandoned login knows it must discard one. `ownership` is checked under
+     * the namespace mutation lock before authorization and again before each publication.
      */
-    login: async (value: LoginHint, signal: AbortSignal, granted: () => void = () => {}) => {
+    login: async (
+      value: LoginHint,
+      signal: AbortSignal,
+      granted: () => void = () => {},
+      ownership: LoginOwnership = {},
+    ) => {
       let obtained = false;
       const grant = () => {
         obtained = true;
@@ -721,22 +733,62 @@ export function createProviders(
       codeRedeemed = grant;
       loginSignal = signal;
       try {
-        await loginAttempt(value, signal, grant);
+        await persistence.exclusive(async () => await persistence.begin(ownership));
+        await loginAttempt(value, signal, grant, ownership.reauthorize !== undefined);
       } catch (error) {
-        // Nothing was granted: forget the abandoned attempt's account choice (memory only).
-        if (signal.aborted && !obtained) {
+        // Nothing was granted, or the rejected grant was discarded: forget the attempt's account choice.
+        if ((signal.aborted && !obtained) || error instanceof OwnershipChangedError) {
           hint = {};
           selections.clear();
+          boundary.clear();
         }
         throw error;
       } finally {
         // Logins are serialized by the caller, so this attempt owns both hooks until it ends.
+        persistence.end();
+        loginRequest = undefined;
         codeRedeemed = undefined;
         loginSignal = undefined;
       }
     },
   };
-  async function loginAttempt(value: LoginHint, signal: AbortSignal, granted: () => void) {
+  /** Revocation and cleanup read every stored credential, including one a reauthorization bypasses. */
+  async function logout() {
+    await persistence.raw(purge);
+  }
+  async function purge() {
+    boundary.clear();
+    const failures: unknown[] = [];
+    // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
+    try {
+      await solidProvider.session.forget(persistence.keys);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await manager.logout();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await fence.supersede(persistence.clear);
+    } catch (error) {
+      failures.push(error);
+    }
+    hint = {};
+    restoredContext = undefined;
+    loginContext = undefined;
+    sessionRequest = undefined;
+    selections.clear();
+    authorizationServers.clear();
+    if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
+  }
+  async function loginAttempt(
+    value: LoginHint,
+    signal: AbortSignal,
+    granted: () => void,
+    reauthorizing: boolean,
+  ) {
     restoredContext = undefined;
     loginContext = undefined;
     hint = value;
@@ -749,8 +801,15 @@ export function createProviders(
       signal: AbortSignal.any([signal, fence.signalFor(generation)]),
     });
     request.signal.throwIfAborted();
+    loginRequest = request;
     const selected = await selectionFor(request);
     const context = await contextFor(request, selected);
+    if (reauthorizing) {
+      // Bypass only this context's stored credential, keyed exactly as the engine's OidcSession keys it.
+      // Other contexts still refresh normally.
+      const as = await asProvider.getAuthorizationServer(request);
+      persistence.bypass(await oidcSessionKey(redirectUri, sessionOptions, as.issuer, context));
+    }
     await solidProvider.upgrade(request);
     granted();
     const claims = await solidProvider.identity(request);

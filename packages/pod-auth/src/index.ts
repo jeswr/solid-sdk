@@ -1,16 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
+import { type LoginOwnership, OwnershipChangedError } from "./sessions.js";
 import type {
   AuthEvent,
   AuthEventType,
+  GrantOwner,
+  GrantRetirementResult,
   Identity,
   LoginHint,
+  LoginOptions,
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
@@ -20,6 +25,8 @@ export type {
   AuthEvent,
   AuthEventType,
   CidSubject,
+  GrantOwner,
+  GrantRetirementResult,
   Identity,
   KvStore,
   LoginHint,
@@ -27,7 +34,34 @@ export type {
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
-export { AmbiguousIssuerError };
+export { AmbiguousIssuerError, OwnershipChangedError };
+
+/** Snapshots and validates a login's observed ownership before any await. */
+function loginOwnership(options: LoginOptions | undefined, selected: LoginHint): LoginOwnership {
+  const expected = options?.expectRemembered;
+  if (
+    expected !== undefined &&
+    (!Array.isArray(expected) ||
+      expected.length > 1 ||
+      expected.some(
+        (account) => typeof account?.webId !== "string" || typeof account.issuer !== "string",
+      ))
+  )
+    throw new TypeError("expectRemembered must be a remembered() result");
+  if (options?.reauthorize === true && selected.webId === undefined)
+    throw new TypeError("Reauthorization requires a WebID hint");
+  return {
+    ...(expected === undefined
+      ? {}
+      : {
+          expectRemembered: expected.map((account) => ({
+            webId: account.webId,
+            issuer: account.issuer,
+          })),
+        }),
+    ...(options?.reauthorize === true ? { reauthorize: selected.webId! } : {}),
+  };
+}
 
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
@@ -36,6 +70,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   let current: Identity | null = null;
   let restoring: Promise<Identity | null> | undefined;
   let loggingOut: Promise<void> | undefined;
+  let retiring = false;
   let epoch = 0;
   let mode: "login" | "restore" = "login";
   let pending: { key: string; promise: Promise<Identity>; cancellable: boolean } | undefined;
@@ -62,7 +97,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     protocol: Identity["protocol"],
     expected: LoginHint,
   ) => {
-    if (loggingOut !== undefined) throw new Error("Logout is in progress");
+    if (loggingOut !== undefined || retiring) throw new Error("Logout is in progress");
     const started = epoch;
     if (
       (expected.webId !== undefined && expected.webId !== claims.webId) ||
@@ -73,7 +108,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           (claims.webId ?? null) !== current.webId))
     ) {
       current = null;
-      await providers.solidProvider.forget();
+      await providers.reject();
       throw new Error("Authenticated identity does not match the selected account");
     }
     const generation = await providers.fence.generation();
@@ -85,19 +120,23 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       await providers.fence.commit(
         generation,
         async () =>
-          await providers.persistence.remember({
-            webId,
-            issuer: claims.issuer,
-            selected: expected,
-            requestUrl: request.url,
-            context,
-          }),
+          await providers.persistence.remember(
+            {
+              webId,
+              issuer: claims.issuer,
+              selected: expected,
+              requestUrl: request.url,
+              context,
+            },
+            providers.publishing(request),
+          ),
         request.signal,
       );
     if (started !== epoch) throw new Error("Session changed during authentication");
     const first = current === null;
     observedFence = providers.fence.signal;
     current = {
+      grantId: providers.persistence.grantFor(claims),
       webId: claims.webId ?? null,
       issuer: claims.issuer,
       subject: claims.subject,
@@ -138,7 +177,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       return account === null ? [] : [{ webId: account.webId, issuer: account.issuer }];
     },
     restore: () => {
-      if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
+      if (loggingOut || retiring || pending)
+        return Promise.reject(new Error("Authentication is in progress"));
       if (restoring) return restoring;
       const started = epoch;
       let failure: unknown;
@@ -195,12 +235,34 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       loggingOut = promise;
       return promise;
     },
+    retireIfOwnedBy: (expected: GrantOwner): Promise<GrantRetirementResult> => {
+      // Snapshot before waiting for any lock: callers may mutate their own metadata objects.
+      const owner = { ...expected };
+      let accepted = false;
+      return providers
+        .retireIfOwnedBy(owner, () => {
+          accepted = true;
+          retiring = true;
+          ++epoch;
+          current = null;
+          providers.boundary.clear();
+        })
+        .finally(() => {
+          if (accepted) {
+            observedFence = providers.fence.signal;
+            current = null;
+            retiring = false;
+            emit("logout");
+          }
+        });
+    },
     login: (hint, loginOptions) => {
       const abort = loginOptions?.signal;
       if (abort?.aborted) return Promise.reject(abort.reason);
-      if (loggingOut || restoring)
+      if (loggingOut || retiring || restoring)
         return Promise.reject(new Error("Authentication is in progress"));
       let selected: LoginHint;
+      let ownership: LoginOwnership;
       try {
         const normalize = (value: string, name: string) =>
           secureUrl(value, options.allowInsecureLoopback === true, name).href;
@@ -208,13 +270,19 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           ...(hint?.webId === undefined ? {} : { webId: normalize(hint.webId, "WebID") }),
           ...(hint?.issuer === undefined ? {} : { issuer: normalize(hint.issuer, "issuer") }),
         };
+        ownership = loginOwnership(loginOptions, selected);
       } catch (error) {
         return Promise.reject(error);
       }
       const key = JSON.stringify(selected);
-      // A cancellable attempt is never shared: one caller's abort must not cancel another's login.
+      // A cancellable or ownership-guarded attempt is never shared: one caller's abort or observed
+      // ownership must not decide another caller's login.
+      const exclusive =
+        abort !== undefined ||
+        ownership.expectRemembered !== undefined ||
+        ownership.reauthorize !== undefined;
       if (pending)
-        return pending.key === key && abort === undefined && !pending.cancellable
+        return pending.key === key && !exclusive && !pending.cancellable
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
       const started = epoch;
@@ -236,9 +304,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
             : AbortSignal.any([providers.fence.signal, abort]);
         let granted = false;
         try {
-          await providers.login(selected, signal, () => {
-            granted = true;
-          });
+          await providers.login(
+            selected,
+            signal,
+            () => {
+              granted = true;
+            },
+            ownership,
+          );
         } catch (error) {
           // A grant obtained before the abort was observed must not outlive the abandoned attempt.
           if (abort?.aborted && granted) await discard(started);
@@ -252,7 +325,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       })().finally(() => {
         pending = undefined;
       });
-      pending = { key, promise, cancellable: abort !== undefined };
+      pending = { key, promise, cancellable: exclusive };
       return promise;
     },
     on: (event, handler) => {

@@ -40,6 +40,7 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
     fetch: providers.manager.fetch as typeof fetch,
     identity: async () => snapshot(),
     remembered: async () => [],
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     restore: async () => snapshot(),
     login: (hint, loginOptions) => {
       if (loginOptions?.signal?.aborted) return Promise.reject(loginOptions.signal.reason);

@@ -357,7 +357,11 @@ test.each([
   expect(await p.keys()).toEqual([]);
   expect(await p.active()).toBeNull();
   expect(await state.getItem("accounts")).toBeNull();
-  expect(write).not.toHaveBeenCalled();
+  expect(write).toHaveBeenCalledExactlyOnceWith(expect.any(String), {
+    webId: null,
+    issuer,
+    grantId: expect.any(String),
+  });
   const reloaded = sessionStorage(raw, namespace, options);
   expect(await reloaded.sessions.getItem("issuer-only")).toBeNull();
 
@@ -371,7 +375,7 @@ test.each([
   expect(await p.sessions.getItem("other-context")).toEqual(transient);
   await p.clear();
   expect(await p.sessions.getItem("other-context")).toBeNull();
-  expect(write).not.toHaveBeenCalled();
+  expect(write).toHaveBeenCalledOnce();
 });
 
 test("a WebID-scoped credential supersedes an in-memory record at the same context", async () => {
@@ -379,6 +383,24 @@ test("a WebID-scoped credential supersedes an in-memory record at the same conte
   await p.sessions.setItem("account", { ...record, identity: undefined });
   await p.sessions.setItem("account", record);
   expect(await p.sessions.getItem("account")).toEqual(record);
+});
+
+test("a cache entry without identity records only public ownership metadata", async () => {
+  const { persistence: p, state } = setup();
+  const entry = {
+    ...record,
+    identity: undefined,
+    expiresAt: Date.now() + 300_000,
+    tokenResult: { access_token: "in-memory-only", token_type: "DPoP" },
+  };
+  await p.credentials.setItem("context", entry);
+  expect(await p.credentials.getItem("context")).toEqual(entry);
+  expect(await state.getItem("owner")).toEqual({
+    webId: null,
+    issuer,
+    grantId: expect.any(String),
+  });
+  expect(await p.keys()).toEqual([]);
 });
 
 test("malformed remembered pointers are not exposed", async () => {
