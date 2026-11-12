@@ -246,11 +246,18 @@ export function createActivityFilesAdapter(
         }
         const format = activities[0]?.format ?? (fit ? "fit" : "xml");
         const origin = await originIri(name, hash);
-        // The original is stored once per file, never once per activity.
-        const original = activities.some((a) => !a.invalid && a.start !== undefined)
-          ? await writeOriginal(bytes, hash, format, ctx, budget)
-          : undefined;
-        const source = { hash, filename: name, format, origin, original };
+        // Stored at most once per file, and only when an activity links it.
+        let stored: Promise<string | undefined> | undefined;
+        const source = {
+          hash,
+          filename: name,
+          format,
+          origin,
+          original: () => {
+            stored ??= writeOriginal(bytes, hash, format, ports.ctx, budget);
+            return stored;
+          },
+        };
         for (const activity of activities) {
           if (activity.invalid) {
             ctx.skip();

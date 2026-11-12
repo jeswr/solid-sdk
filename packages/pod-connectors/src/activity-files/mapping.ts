@@ -31,16 +31,20 @@ const displayName = (name: string) => Array.from(name).slice(0, 256).join("");
 export async function originIri(filename: string, hash: string): Promise<string> {
   return `urn:sha256:${await keyHash(`${hash}:${filename}`)}`;
 }
-/** One file's shared source facts; the original is written once per file. */
+/** One file's shared source facts. */
 export interface ActivitySource {
   readonly hash: string;
   readonly filename: string;
   readonly format: string;
   readonly origin: string;
-  /** URL of the stored original bytes, absent when over the binary cap. */
-  readonly original?: string;
+  /** Stores the original bytes on first call and memoises that once-promise for the file;
+   * resolves to the binary's URL, or undefined when the bytes exceed the binary cap.
+   */
+  readonly original: () => Promise<string | undefined>;
 }
-/** Store a file's original bytes once (create-only), before its activities are saved. */
+/** Store a file's original bytes (create-only). saveActivity calls it lazily, only for an
+ * activity that will link it, so skipped or capped activities never leave orphans.
+ */
 export async function writeOriginal(
   bytes: Uint8Array,
   hash: string,
@@ -161,12 +165,6 @@ export async function saveActivity(
     return;
   }
   provenance.derivedFrom.add(origin);
-  if (source.original) {
-    resource.originals.add(source.original);
-    const original = new PodThing(source.original, dataset, DataFactory);
-    original.name = displayName(source.filename);
-    original.identifier = hash;
-  }
   const metrics: [string, number | undefined, string][] = [
     ["Elevation gain", a.elevation, "m"],
     ["Average heart rate", a.avgHr, "bpm"],
@@ -213,6 +211,14 @@ export async function saveActivity(
     track.encodingFormat = "application/json";
     track.count = a.track.length;
   }
+  // Store the original last, after every check that can skip or fail this activity.
+  const stored = await source.original();
+  if (stored) resource.originals.add(stored);
+  // Describe the original even when its bytes exceed the binary cap: the hash-only origin
+  // otherwise loses the file name and content hash.
+  const original = new PodThing(stored ?? origin, dataset, DataFactory);
+  original.name = displayName(source.filename);
+  original.identifier = hash;
   await ctx.write({
     slug,
     category: travel ? "mobility" : "health",

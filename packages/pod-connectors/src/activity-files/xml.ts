@@ -158,13 +158,18 @@ export async function* xmlActivities(
             (name === "trk" && format === "gpx") ||
             (name === "Activity" && format === "TrainingCenterDatabase")
           ) {
-            if (format === "TrainingCenterDatabase") {
-              // Elapsed time: the trackpoint span, else last lap start + its timer time - first lap start.
+            const times = activity.pointTimes;
+            if (format === "TrainingCenterDatabase" && times) {
+              // Elapsed time from trackpoints, in any order: start at the earliest point
+              // (or <Id> when earlier), end exactly at the latest point.
+              activity.start = Math.min(activity.start ?? times.first, times.first);
+              activity.duration = (times.last - activity.start) / 1000;
+            } else if (format === "TrainingCenterDatabase") {
+              // Without trackpoint times: last lap start + its timer time - first lap start.
               activity.duration =
-                activity.pointSpan ??
-                (lastLap?.duration !== undefined && firstLapStart !== undefined
+                lastLap?.duration !== undefined && firstLapStart !== undefined
                   ? (lastLap.start - firstLapStart) / 1000 + lastLap.duration
-                  : undefined);
+                  : undefined;
             }
             if (hasDistance) activity.distance = lapDistance;
             if (hasCalories) activity.calories = lapCalories;

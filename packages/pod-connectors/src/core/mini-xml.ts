@@ -156,7 +156,7 @@ export type XmlEvent =
 /** `onScan` runs once per {@link XML_SCAN_CHARGE_CHARS} characters scanned, including
  * comment and attribute text, so callers can charge work that yields few events.
  */
-export const XML_SCAN_CHARGE_CHARS = 65536;
+export const XML_SCAN_CHARGE_CHARS = 512;
 export interface XmlEventOptions {
   readonly onScan?: () => void;
 }

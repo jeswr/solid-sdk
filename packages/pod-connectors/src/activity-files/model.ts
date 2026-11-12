@@ -160,10 +160,10 @@ export class Activity {
       this.track.splice(0, this.track.length, ...kept);
     }
   }
-  /** Elapsed seconds between the earliest and latest timed points (two or more). */
-  get pointSpan(): number | undefined {
+  /** Earliest and latest point times, when at least two points carry a time. */
+  get pointTimes(): { first: number; last: number } | undefined {
     return this.timedPoints >= 2 && this.firstTime !== undefined && this.lastTime !== undefined
-      ? (this.lastTime - this.firstTime) / 1000
+      ? { first: this.firstTime, last: this.lastTime }
       : undefined;
   }
   /** Normalises summary values. Durations outside [1 s, 7 days] are dropped with

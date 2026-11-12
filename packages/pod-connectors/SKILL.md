@@ -293,13 +293,16 @@ compressed headers alike; never require field 253. A compressed header's offset
 (against the previous timestamp) wins over any decoded field 253, which is not a base. File bytes, archive inflation, activities, parser messages,
 records and total points all have hard caps; factory options can only lower them.
 Return fixed diagnostic codes through FileImportOutcome/ImportReport `warnings`.
-XML scanning charges one message per 64 Ki characters; at most 200,000 track samples stay
+XML scanning charges one message per 512 characters; at most 200,000 track samples stay
 retained per file. finish() drops durations outside 1 s to 7 days with the end time and
 marks out-of-range (1970 to 2100) start/end invalid; durations use at most 3 fixed decimals.
 TCX elapsed time is the trackpoint span, else lap start times; never the timer sum.
 One activity's mapping failure is a skip; Pod port failures and cancellation fail the run.
-Write each file's original once, before its activities. Origin IRIs are hash-only;
-the file name is only the original's `schema:name` (256 characters).
+Store each file's original lazily (memoised once per file) after an activity's skip and
+cap checks, so nothing is stored unlinked. Origin IRIs are hash-only; the file name is
+only the original's `schema:name` (256 characters) plus hash `schema:identifier`, on the
+origin IRI when the bytes exceed the binary cap. TCX trackpoint times may be unordered:
+start is the earliest point (or `<Id>` if earlier) and end is exactly the latest point.
 Keep tracks at most 2,000 samples, preserve the capped original, and never match a
 truncated activity against a complete one. Use elapsed duration and normalized sport
 for the two-second cross-export dedup check; retain the original anchor to avoid drift.

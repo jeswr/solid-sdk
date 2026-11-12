@@ -800,10 +800,12 @@ A document-local GeoShape track stores a sampled `schema:line` and compact JSON 
 heartRateBpm, cadence, temperatureCelsius, distanceMetres, speedMetresPerSecond, powerWatts,
 segment]`, with null for absent values. Sampling retains endpoints and at most 2,000
 points. Segment boundaries prevent distance/elevation calculations across GPX gaps.
-Original bytes are stored once per file as create-only `activities/<file-sha256>.<format>`
-resources (25 MiB binary cap). Each file's PROV origin is the hash-only
-`urn:sha256:<sha256(content hash, file name)>`; the file name appears only as the
-original's `schema:name`, truncated to 256 characters.
+Original bytes are stored at most once per file, and only when an activity links them,
+as create-only `activities/<file-sha256>.<format>` resources (25 MiB binary cap). Each
+file's PROV origin is the hash-only `urn:sha256:<sha256(content hash, file name)>`; the
+file name appears only as the original's `schema:name` (truncated to 256 characters) beside
+its content-hash `schema:identifier`. When the bytes exceed the cap, the origin IRI itself
+carries that name and identifier.
 
 IDs hash start time, normalized sport and device serial (file hash when unavailable).
 A bounded per-second index deduplicates later exports of the same sport when both
@@ -822,7 +824,7 @@ file imports have no incremental cursor. The shared runner retains state on fail
 
 Hard caps: 64 MiB per file, 512 MiB compressed archive size and total inflation, 1,000 activities, 100,000
 records per activity, 1,000,000 points and 2,000,000 parser events/FIT messages per run.
-XML scanning also charges one parser event per 64 Ki characters, including comments and
+XML scanning also charges one parser event per 512 characters, including comments and
 attribute text. At most 200,000 track samples stay retained per file; beyond that the
 current activity is truncated and the rest of the file is not parsed.
 XML tokens cap at 64 Ki characters and nesting at 64; DTDs and CDATA are refused.

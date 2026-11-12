@@ -25,7 +25,7 @@ async function drain(budget: ActivityBudget, chunks: AsyncIterable<string>) {
 }
 
 describe("XML scan work is charged to the message budget", () => {
-  it("calls onScan once per 64 Ki characters, inside comments too", async () => {
+  it("calls onScan once per 512 characters, inside comments too", async () => {
     let charges = 0;
     const xml = `<gpx><!--${"x".repeat(3 * XML_SCAN_CHARGE_CHARS)}--></gpx>`;
     async function* one() {
@@ -36,13 +36,16 @@ describe("XML scan work is charged to the message budget", () => {
     }
     expect(charges).toBe(Math.floor(Array.from(xml).length / XML_SCAN_CHARGE_CHARS));
   });
-  it("stops a 16 MiB comment bomb at the message cap", async () => {
-    const budget = new ActivityBudget({ messages: 8 });
+  it("stops a 16 MiB comment bomb early at the message cap", async () => {
+    const budget = new ActivityBudget({ messages: 1000 });
     const { chunks, pulled } = source("<gpx><!--", () => "x".repeat(PIECE), 1024, "--></gpx>");
     expect(await drain(budget, chunks)).toEqual([]);
     expect(budget.warnings).toContain("message-cap-exceeded");
-    // Eight messages cover at most 8 * 64 Ki characters (plus the root's events).
-    expect(pulled.pieces * PIECE).toBeLessThanOrEqual(9 * XML_SCAN_CHARGE_CHARS);
+    // 1,000 messages cover at most 1,000 * 512 characters: 32 of the 1,024 pieces.
+    expect(pulled.pieces).toBeLessThanOrEqual(
+      Math.ceil((1000 * XML_SCAN_CHARGE_CHARS) / PIECE) + 1,
+    );
+    expect(budget.messages).toBe(1001);
   });
   it("stops an attribute-heavy file at the message cap", async () => {
     const budget = new ActivityBudget({ messages: 40 });
@@ -50,6 +53,31 @@ describe("XML scan work is charged to the message budget", () => {
     const { chunks, pulled } = source("<gpx>", () => element, 1024, "</gpx>");
     expect(await drain(budget, chunks)).toEqual([]);
     expect(budget.warnings).toContain("message-cap-exceeded");
-    expect(pulled.pieces).toBeLessThan(40);
+    // Each ~16 KiB element costs 32 scan charges plus its two events.
+    expect(pulled.pieces).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("TCX trackpoint times", () => {
+  it("starts at the earliest point and ends at the latest, in any order", async () => {
+    const point = (time: string) => `<Trackpoint><Time>${time}</Time></Trackpoint>`;
+    const xml = `<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>2026-06-01T06:30:00Z</Id><Lap StartTime="2026-06-01T06:30:00Z"><Track>${point("2026-06-01T06:31:00Z")}${point("2026-06-01T06:00:00Z")}${point("2026-06-01T06:30:30Z")}</Track></Lap></Activity></Activities></TrainingCenterDatabase>`;
+    async function* one() {
+      yield xml;
+    }
+    const [activity] = await drain(new ActivityBudget(), one());
+    expect(activity?.start).toBe(Date.parse("2026-06-01T06:00:00Z"));
+    expect(activity?.end).toBe(Date.parse("2026-06-01T06:31:00Z"));
+    expect(activity?.duration).toBe(1860);
+  });
+  it("keeps an earlier <Id> as the start and still ends at the latest point", async () => {
+    const point = (time: string) => `<Trackpoint><Time>${time}</Time></Trackpoint>`;
+    const xml = `<TrainingCenterDatabase><Activities><Activity Sport="Running"><Id>2026-06-01T06:29:00Z</Id><Lap><Track>${point("2026-06-01T06:31:00Z")}${point("2026-06-01T06:30:00Z")}</Track></Lap></Activity></Activities></TrainingCenterDatabase>`;
+    async function* one() {
+      yield xml;
+    }
+    const [activity] = await drain(new ActivityBudget(), one());
+    expect(activity?.start).toBe(Date.parse("2026-06-01T06:29:00Z"));
+    expect(activity?.end).toBe(Date.parse("2026-06-01T06:31:00Z"));
   });
 });

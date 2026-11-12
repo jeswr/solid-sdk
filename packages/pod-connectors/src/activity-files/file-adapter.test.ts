@@ -343,9 +343,8 @@ describe("activity-files file contract", () => {
         podWriter: writer,
       }),
     ).rejects.toThrow("cancelled");
-    // Only the create-only original (stored once, before the activity loop) precedes the read.
-    expect(pod.putCount).toBe(1);
-    expect(pod.urls().filter((u) => u.endsWith(".ttl") && u !== TEST_PROFILE_DOC)).toEqual([]);
+    // The original is stored lazily, after the reads, so nothing was written.
+    expect(pod.putCount).toBe(0);
   });
 });
 
@@ -537,6 +536,51 @@ describe("original bytes are written once per file", () => {
     expect(docs(pod)).toHaveLength(2);
     expect(counter.puts).toBe(1);
   });
+});
+
+describe("originals are stored only when linked", () => {
+  const stored = (pod: ReturnType<typeof createMemoryPod>) =>
+    pod.urls().filter((u) => /\/activities\/[a-f0-9]{64}\.(tcx|gpx|fit)$/.test(u));
+  it("stores at most 32 binaries for 40 distinct exports, every one linked", async () => {
+    const pod = createMemoryPod();
+    for (let i = 0; i < 40; i++)
+      await fileImport(
+        activityFilesAdapter,
+        memoryFile(`run-${i}.tcx`, GARMIN_TCX.replace("<Activities>", `<!-- ${i} --><Activities>`)),
+        { pod },
+      );
+    expect(docs(pod)).toHaveLength(1);
+    expect(stored(pod)).toHaveLength(32);
+    expect([...action(pod).originals].sort()).toEqual(stored(pod));
+  }, 30000);
+  it("stores no original for a truncated re-import over a complete activity", async () => {
+    // The device serial keeps one identity across the two differing exports.
+    const { pod } = await fileImport(activityFilesAdapter, memoryFile("a.tcx", GARMIN_TCX));
+    const before = stored(pod);
+    const { report } = await fileImport(
+      createActivityFilesAdapter({ records: 1 }),
+      memoryFile("b.tcx", GARMIN_TCX.replace("<Activities>", "<!-- b --><Activities>")),
+      { pod },
+    );
+    expect(report.warnings).toContain("retained-previous-activity");
+    expect(stored(pod)).toEqual(before);
+  });
+  it("describes an over-cap original on its hash-only origin IRI", async () => {
+    const big = STRAVA_GPX.replace("<trk>", `<!--${" ".repeat(26 * 1024 * 1024)}--><trk>`);
+    const name = `${"n".repeat(300)}.gpx`;
+    const { pod, report } = await fileImport(activityFilesAdapter, memoryFile(name, big));
+    expect(report.warnings).toContain("original-binary-cap-exceeded");
+    expect(stored(pod)).toEqual([]);
+    expect(action(pod).originals.size).toBe(0);
+    const hash = await digest(encoder.encode(big));
+    const origin = await originIri(name, hash);
+    const about = (predicate: string) =>
+      [...pod.dataset(docs(pod)[0] as string)]
+        .filter((q) => q.subject.value === origin && q.predicate.value === `${SCHEMA}${predicate}`)
+        .map((q) => q.object.value);
+    expect(about("name")).toEqual(["n".repeat(256)]);
+    expect(about("identifier")).toEqual([hash]);
+  }, 60000);
 });
 
 describe("bounded activity durations and times", () => {
