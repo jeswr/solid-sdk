@@ -1,7 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { createOutbox } from "@jeswr/suite-sdk/offline";
-import { describe, expect, it, vi } from "vitest";
+import { createOutbox, type Outbox } from "@jeswr/suite-sdk/offline";
+import { describe, expect, it, type MockInstance, vi } from "vitest";
 import { ChatModelError } from "../src/apps/chat/lib/model";
 import { ChatLocalState } from "../src/apps/chat/state/local-state";
 import { ChatOutbox } from "../src/apps/chat/state/outbox";
@@ -256,7 +258,7 @@ describe("queue isolation and guard scope (M1)", () => {
   });
 });
 
-describe("legacy import (L2, L3) and body reads (L4)", () => {
+describe("legacy import (L2, L3, M1) and body reads (L4)", () => {
   const key = (target: string) => `solid-suite:chat:v1:outbox:${JSON.stringify([webId, target])}`;
   const entry = {
     localId: "old",
@@ -265,19 +267,76 @@ describe("legacy import (L2, L3) and body reads (L4)", () => {
     status: "sending",
   };
 
-  it("imports the rest when one legacy entry is rejected, and removes the processed key", async () => {
+  const rejectFirstEnqueue = (error: unknown) => ({
+    onOpen: (sdk: Outbox) => {
+      vi.spyOn(sdk, "enqueue").mockRejectedValueOnce(error);
+    },
+  });
+
+  it("keeps and shows a legacy entry whose import fails on storage, and drops it once sent (M1)", async () => {
     const data = stubLocalStorage();
     new ChatLocalState(webId).write("outbox", room, [entry, { ...entry, localId: "second" }]);
-    const { queue, sdk } = box(sender(), () => false, webId, {
-      onOpen: (sdk) => {
-        vi.spyOn(sdk, "enqueue").mockRejectedValueOnce(
-          new DOMException("full", "QuotaExceededError"),
-        );
-      },
-    });
+    let online = false;
+    const send = sender();
+    const { queue, sdk } = box(
+      send,
+      () => online,
+      webId,
+      rejectFirstEnqueue(new DOMException("full", "QuotaExceededError")),
+    );
     await expect(queue.ready).resolves.toBeUndefined();
     expect(sdk.pending()).toHaveLength(1);
+    expect(queue.snapshot().map((item) => [item.localId, item.status])).toEqual([
+      ["old", "sending"],
+      ["second", "sending"],
+    ]);
+    // Only the entry that could not be queued stays in localStorage, so a reload retries it.
+    expect(new ChatLocalState(webId).read("outbox", room)).toEqual([entry]);
+    online = true;
+    await queue.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(queue.snapshot().map((item) => item.status)).toEqual([undefined, undefined]);
+    expect(sdk.pending()).toEqual([]);
+    expect(data.size).toBe(0);
+  });
+
+  it.each([
+    ["a TypeError", new TypeError("[solid-offline] invalid destination URL")],
+    ["a scope error", new StorageError("scope", { url: "x", method: "OUTBOX" })],
+    ["a bad-request error", new StorageError("bad-request", { url: "x", method: "OUTBOX" })],
+  ])("removes a legacy entry the outbox rejects with %s for its destination (M1)", async (_, error) => {
+    const data = stubLocalStorage();
+    new ChatLocalState(webId).write("outbox", room, [entry, { ...entry, localId: "second" }]);
+    const { queue, sdk } = box(sender(), () => false, webId, rejectFirstEnqueue(error));
+    await queue.ready;
+    expect(sdk.pending()).toHaveLength(1);
     expect(queue.snapshot().map((item) => item.localId)).toEqual(["second"]);
+    expect(data.size).toBe(0);
+  });
+
+  it("keeps legacy entries for a room on another pod out of the queue until sent or discarded (H1)", async () => {
+    const data = stubLocalStorage();
+    const foreign = "https://bob.example/chat/rooms/b/";
+    new ChatLocalState(webId).write("outbox", foreign, [entry, { ...entry, localId: "second" }]);
+    let online = false;
+    const send = sender();
+    const { queue, sdk } = box(send, () => online, webId);
+    await queue.ready;
+    expect(sdk.pending()).toEqual([]);
+    expect(queue.snapshot().map((item) => [item.localId, item.status])).toEqual([
+      ["old", "sending"],
+      ["second", "sending"],
+    ]);
+    await queue.discard(queue.snapshot()[0]!.id);
+    expect(new ChatLocalState(webId).read("outbox", foreign)).toEqual([
+      { ...entry, localId: "second" },
+    ]);
+    online = true;
+    await queue.flush();
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[0]).toBe(foreign);
+    expect(queue.snapshot().map((item) => item.status)).toEqual([undefined]);
+    expect(sdk.pending()).toEqual([]);
     expect(data.size).toBe(0);
   });
 
@@ -483,5 +542,150 @@ describe("edge cases", () => {
     expect(data.size).toBe(request ? 1 : 0);
     await queue.send(room, "still queued");
     expect(sdk.pending()).toHaveLength(request ? 1 : 2);
+  });
+});
+
+describe("rooms outside the user's storage (H1, round 2)", () => {
+  const foreign = "https://bob.example/chat/rooms/b/";
+
+  it("delivers an online send directly, with no queue entry", async () => {
+    const send = sender();
+    const { queue, sdk } = box(send, () => true);
+    await queue.ready;
+    await queue.send(foreign, "hello bob");
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[0]).toBe(foreign);
+    expect(queue.snapshot()).toMatchObject([{ status: undefined, unsaved: true }]);
+    expect(sdk.pending()).toEqual([]);
+    expect((await reopen()).pending()).toEqual([]);
+  });
+
+  it("fails an offline send as not saved, and Retry delivers it", async () => {
+    let online = false;
+    const send = sender();
+    send.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { queue, sdk } = box(send, () => online);
+    await queue.ready;
+    await queue.send(room, "own pod");
+    await queue.send(foreign, "later");
+    expect(queue.snapshot().map((entry) => [entry.draft, entry.status, entry.unsaved])).toEqual([
+      ["own pod", "sending", undefined],
+      ["later", "failed", true],
+    ]);
+    expect(sdk.pending().map((item) => item.url)).toEqual([queue.snapshot()[0]!.id.split("#")[0]]);
+    online = true;
+    await queue.flush();
+    // The own-pod entry replays from the queue; the failed row waits for Retry.
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual([undefined, "failed"]);
+    await queue.retry(queue.snapshot()[1]!.id);
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send.mock.calls[2]).toEqual(send.mock.calls[0]);
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual([undefined, undefined]);
+    expect(sdk.pending()).toEqual([]);
+  });
+
+  it.each([
+    ["a sibling origin", "https://alice.example.evil/chat/rooms/b/"],
+    ["another scheme", "http://alice.example/chat/rooms/b/"],
+  ])("treats %s as outside the storage", async (_, target) => {
+    const send = sender();
+    const { queue, sdk } = box(send, () => true);
+    await queue.ready;
+    await queue.send(target, "elsewhere");
+    expect(send).toHaveBeenCalledOnce();
+    expect(sdk.pending()).toEqual([]);
+  });
+});
+
+describe("direct sends without IndexedDB (L1)", () => {
+  const noIndexedDb = () => {
+    vi.stubGlobal("indexedDB", undefined);
+    return {
+      open: () => ({ outbox: createOutbox({ webId }), storage: async () => undefined as never }),
+    };
+  };
+
+  it("sends to one room one at a time, so quick sends arrive in order without a 412", async () => {
+    let busy = false;
+    const arrived: string[] = [];
+    const send = vi.fn(async (...args: Parameters<typeof result>) => {
+      // Two sends in flight read the same ETag: the later write is rejected.
+      if (busy) throw Object.assign(new Error("Chat request failed (412)"), { status: 412 });
+      busy = true;
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        arrived.push(args[1]);
+        return result(...args);
+      } finally {
+        busy = false;
+      }
+    });
+    const { queue } = box(send, () => true, webId, noIndexedDb());
+    await Promise.all(["one", "two", "three"].map((draft) => queue.send(room, draft)));
+    expect(arrived).toEqual(["one", "two", "three"]);
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("never posts a send discarded while it waited for its turn", async () => {
+    let finish!: () => void;
+    const send = vi.fn(async (...args: Parameters<typeof result>) => {
+      if (args[1] === "first")
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return result(...args);
+    });
+    const { queue } = box(send, () => true, webId, noIndexedDb());
+    const first = queue.send(room, "first");
+    const second = queue.send(room, "second");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    await queue.discard(queue.snapshot()[1]!.id);
+    finish();
+    await Promise.all([first, second]);
+    expect(send).toHaveBeenCalledOnce();
+    expect(queue.snapshot().map((entry) => entry.draft)).toEqual(["first"]);
+  });
+});
+
+describe("replay that keeps failing after IndexedDB opened (L5)", () => {
+  it("fails queued rows while online so Retry and Discard show, and Retry recovers", async () => {
+    let online = false;
+    const send = sender();
+    let replay!: MockInstance;
+    const { queue } = box(send, () => online, webId, {
+      onOpen: (sdk) => {
+        replay = vi
+          .spyOn(sdk, "replay")
+          .mockRejectedValue(new DOMException("write failed", "UnknownError"));
+      },
+    });
+    await queue.ready;
+    await queue.send(room, "stuck");
+    await queue.send(room, "discard me");
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual(["sending", "sending"]);
+    online = true;
+    await queue.flush();
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual(["failed", "failed"]);
+    await queue.discard(queue.snapshot()[1]!.id);
+    await queue.retry(queue.snapshot()[0]!.id);
+    expect(queue.snapshot().map((entry) => entry.status)).toEqual(["failed"]);
+    // Offline, the row waits for reconnection again rather than showing Retry.
+    online = false;
+    await queue.retry(queue.snapshot()[0]!.id);
+    expect(queue.snapshot()[0]?.status).toBe("sending");
+    expect(send).not.toHaveBeenCalled();
+    online = true;
+    replay.mockRestore();
+    await queue.retry(queue.snapshot()[0]!.id);
+    expect(send).toHaveBeenCalledOnce();
+    expect(queue.snapshot().map((entry) => [entry.draft, entry.status])).toEqual([
+      ["stuck", undefined],
+    ]);
   });
 });
