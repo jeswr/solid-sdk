@@ -15,6 +15,7 @@ import {
 } from "../lib/accounts-store";
 import { suiteEnv } from "../lib/env";
 import { clearRecentItems } from "../lib/recent-items";
+import { forgetMovePodDestination } from "../settings/move-pod-session";
 import { AccountsContext } from "./accounts-context";
 import { DemoBackend, demoAccount } from "./demo-backend";
 import { SolidBackend } from "./solid-backend";
@@ -51,6 +52,7 @@ export interface AccountsContextValue {
   signOutAll(): Promise<void>;
   reauth(): Promise<SuiteAccount>;
   fetch: typeof fetch;
+  fetchFor(account: SuiteAccount): typeof fetch;
 }
 
 export function AccountsProvider({
@@ -208,6 +210,7 @@ export function AccountsProvider({
     const results = await Promise.allSettled([
       purgeNativePodCache(account.webId),
       backend?.signOut(account),
+      forgetMovePodDestination(id),
     ]);
     const failure = results.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
@@ -225,12 +228,13 @@ export function AccountsProvider({
       /* Browser storage may be blocked. */
     }
     dispatch({ type: "clear" });
-    const results = await Promise.allSettled(
-      previous.flatMap(({ account, backend }) => [
+    const results = await Promise.allSettled([
+      ...previous.flatMap(({ account, backend }) => [
         purgeNativePodCache(account.webId),
         backend?.signOut(account),
       ]),
-    );
+      forgetMovePodDestination(),
+    ]);
     const failure = results.find((result) => result.status === "rejected");
     if (failure?.status === "rejected") throw failure.reason;
   };
@@ -243,6 +247,21 @@ export function AccountsProvider({
       account.issuer ? { issuer: account.issuer } : { webId: account.webId },
     );
   };
+  const fetchFor = useCallback(
+    (account: SuiteAccount): typeof fetch => {
+      const revision = generation.current;
+      const backend = sessions.current.get(account.id);
+      const transport = backend?.fetchFor(account);
+      const usable = () => revision === generation.current && isActiveAccount(account.id);
+      return async (input, init) => {
+        if (!usable() || !transport) throw new Error("Sign in to continue");
+        const response = await transport(input, init);
+        if (!usable()) throw new Error("The active account changed");
+        return response;
+      };
+    },
+    [isActiveAccount],
+  );
   const authenticatedFetch: typeof fetch = async (input, init) => {
     const account = current.current.accounts.find((a) => a.id === current.current.activeId);
     const backend = account && sessions.current.get(account.id);
@@ -271,6 +290,7 @@ export function AccountsProvider({
         signOutAll,
         reauth,
         fetch: authenticatedFetch,
+        fetchFor,
       }}
     >
       {children}

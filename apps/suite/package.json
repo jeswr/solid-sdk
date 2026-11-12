@@ -37,6 +37,7 @@
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
+    "@jeswr/pod-migrator": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",

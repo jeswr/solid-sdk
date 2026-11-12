@@ -1,0 +1,139 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.migration-settings {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.migration-settings .workspace,
+.migration-settings .result-view,
+.migration-settings .report-groups,
+.migration-settings .options-panel,
+.migration-settings .login-form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.migration-settings .stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.migration-settings .stepper li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.migration-settings .stepper .active {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.migration-settings .step-number {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+}
+.migration-settings .connections-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+.migration-settings .connections-grid section,
+.migration-settings .report-item {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.migration-settings .card-top,
+.migration-settings .group-heading,
+.migration-settings .actions,
+.migration-settings .quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.migration-settings .card-top,
+.migration-settings .group-heading {
+  justify-content: space-between;
+}
+.migration-settings .actions [data-slot="button"],
+.migration-settings .quick-picks [data-slot="button"] {
+  height: auto;
+  min-height: var(--control-h);
+  white-space: normal;
+  text-align: center;
+  padding-block: var(--space-2);
+}
+.migration-settings .muted,
+.migration-settings small,
+.migration-settings .connection-footnote,
+.migration-settings .eyebrow {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.migration-settings small,
+.migration-settings .progress-current {
+  display: block;
+}
+.migration-settings .notice {
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.migration-settings .notice.error {
+  color: var(--destructive);
+}
+.migration-settings .stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.migration-settings .stats dt {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.migration-settings .stats dd {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+.migration-settings .radio-option,
+.migration-settings .toggle-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding-block: var(--space-2);
+}
+.migration-settings input:is([type="radio"], [type="checkbox"]) {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+}
+.migration-settings .recommended {
+  margin-inline-start: var(--space-2);
+  font-size: var(--text-xs);
+}
+.migration-settings progress {
+  width: 100%;
+  accent-color: var(--primary);
+}
+@media (min-width: 640px) {
+  .migration-settings .connections-grid {
+    grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr);
+  }
+  .migration-settings .stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

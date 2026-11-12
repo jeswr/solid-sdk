@@ -1,11 +1,7 @@
-// AUTHORED-BY Codex GPT-6
-import { createRoot } from "react-dom/client";
-import { App } from "./App.js";
-import { createConnections } from "./auth/connections.js";
-import "./styles.css";
+// AUTHORED-BY Codex GPT-6.1-Sol
+const target = `${import.meta.env.VITE_SUITE_URL.replace(/\/+$/, "")}/settings/move-pod`;
+const link = document.querySelector<HTMLAnchorElement>("#root a");
+if (link) link.href = target;
+location.replace(target);
 
-const element = document.getElementById("root");
-if (!element) throw new Error("Missing root element");
-createRoot(element).render(
-  <App connections={createConnections(location.origin, import.meta.env.BASE_URL)} />,
-);
+export {};

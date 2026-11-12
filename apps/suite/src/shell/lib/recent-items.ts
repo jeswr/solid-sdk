@@ -54,7 +54,16 @@ export async function savedRecentItems(
 }
 
 /** Pages that are not "something you've viewed": sign-in, the fallback itself, fixtures. */
-const EXCLUDED = ["/offline", "/signin", "/signup", "/welcome", "/onboarding", "/auth", "/dev"];
+const EXCLUDED = [
+  "/offline",
+  "/signin",
+  "/signup",
+  "/welcome",
+  "/onboarding",
+  "/auth",
+  "/dev",
+  "/settings/move-pod/callback",
+];
 
 /** A same-origin path with no query, fragment, backslash, control character or `//`. */
 export function isRecordablePath(href: string): boolean {

@@ -7,7 +7,7 @@ export function buildClientId(requestUrl: string, configuredOrigin?: string) {
     client_id: origin + request.pathname,
     client_name: "Solid Suite",
     logo_uri: `${origin}/icon.svg`,
-    redirect_uris: [`${origin}/auth/callback.html`],
+    redirect_uris: [`${origin}/auth/callback.html`, `${origin}/settings/move-pod/callback/target`],
     post_logout_redirect_uris: [`${origin}/welcome`],
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],

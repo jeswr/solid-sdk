@@ -11,7 +11,10 @@ describe("client identifier document", () => {
       client_id: "http://127.0.0.1:3311/.well-known/solid-client-id.jsonld",
       client_name: "Solid Suite",
       logo_uri: "http://127.0.0.1:3311/icon.svg",
-      redirect_uris: ["http://127.0.0.1:3311/auth/callback.html"],
+      redirect_uris: [
+        "http://127.0.0.1:3311/auth/callback.html",
+        "http://127.0.0.1:3311/settings/move-pod/callback/target",
+      ],
       post_logout_redirect_uris: ["http://127.0.0.1:3311/welcome"],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -27,7 +30,10 @@ describe("client identifier document", () => {
       "https://suite.example.org/",
     );
     expect(document.client_id).toBe("https://suite.example.org/.well-known/solid-client-id.jsonld");
-    expect(document.redirect_uris).toEqual(["https://suite.example.org/auth/callback.html"]);
+    expect(document.redirect_uris).toEqual([
+      "https://suite.example.org/auth/callback.html",
+      "https://suite.example.org/settings/move-pod/callback/target",
+    ]);
     expect(document.logo_uri).toBe("https://suite.example.org/icon.svg");
   });
   it("takes the origin from configuration, never from the request host", () => {

@@ -149,3 +149,32 @@ it.each(
   expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
   await view.unmount();
 });
+
+it("pins migration fetch to an account and rejects calls and delayed responses after switching", async () => {
+  let resolve!: (response: Response) => void;
+  const delayedFetch = vi.fn<typeof globalThis.fetch>(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  await mount(
+    h(AccountsProvider, {
+      backends: [{ ...backend(one), fetchFor: () => delayedFetch }, backend(two)],
+      children: h(Probe),
+    }),
+  );
+  const pinned = accounts.fetchFor(one);
+  const pending = pinned(one.storageUrl);
+  await act(async () => {
+    accounts.switchTo("two");
+  });
+  resolve(new Response("private source"));
+  await expect(pending).rejects.toThrow("active account changed");
+  await expect(pinned(one.storageUrl)).rejects.toThrow("Sign in to continue");
+  expect(delayedFetch).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    accounts.switchTo("one");
+  });
+  await expect(pinned(one.storageUrl)).rejects.toThrow("Sign in to continue");
+});

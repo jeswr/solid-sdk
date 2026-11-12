@@ -1,0 +1,870 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+"use client";
+import "./migration.css";
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import {
+  createPodHttp,
+  downloadReport,
+  executeMigration,
+  finalizePlan,
+  journalKey,
+  type MigrationPlan,
+  type PodSide,
+  type Progress,
+  planMigration,
+  type Resolutions,
+  type RunReport,
+  readPreviousRun,
+  saveReport,
+} from "@jeswr/pod-migrator";
+import {
+  createHostBoundConnection,
+  inspectPod,
+  type PodConnection,
+} from "@jeswr/pod-migrator/connections";
+import { Button, Input } from "@jeswr/suite-ui";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useAccounts } from "../session/accounts-provider";
+import type { SuiteAccount } from "../session/types";
+import { ConnectionCard } from "./migration-connection";
+import { PlanReport } from "./migration-report";
+import { MOVE_POD_BASE, movePodUnavailable } from "./move-pod-session";
+
+const leaveWhileRunning =
+  "A migration is running. Leaving this page stops it after the current request. Leave anyway?";
+const steps = ["Connect source", "Connect target", "Options", "Plan", "Run", "Result"];
+const phaseLabels: Record<Progress["phase"], string> = {
+  crawl: "Finding your files",
+  "read-access": "Reading permissions",
+  plan: "Preparing your plan",
+  lock: "Protecting destination folders",
+  copy: "Copying your files",
+  grant: "Applying reviewed permissions",
+  verify: "Checking copied files and permissions",
+};
+
+function ProgressView({
+  progress,
+  cancelling,
+}: {
+  progress: Progress | null;
+  cancelling: boolean;
+}) {
+  return (
+    <div className="progress-block" aria-live="polite" aria-atomic="true">
+      <p className="progress-heading">
+        {cancelling
+          ? "Stopping after the current request…"
+          : progress
+            ? phaseLabels[progress.phase]
+            : "Getting ready…"}
+      </p>
+      <progress
+        aria-label={progress ? phaseLabels[progress.phase] : "Migration progress"}
+        max={progress?.total || 1}
+        value={progress && progress.total > 0 ? Math.min(progress.done, progress.total) : undefined}
+      />
+      {progress && (
+        <p className="muted">
+          {progress.done} of {progress.total}
+          {progress.current && <span className="progress-current">{progress.current}</span>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ResultView({ report }: { report: RunReport }) {
+  const result = report.result;
+  return (
+    <div className="result-view">
+      <span className="eyebrow">Migration report</span>
+      <h2>
+        {!result
+          ? "Migration interrupted"
+          : result.cancelled
+            ? "Migration cancelled"
+            : result.failed.length
+              ? "Migration finished with failures"
+              : "Migration finished"}
+      </h2>
+      <p>
+        {!result
+          ? "The last request may have completed. Files may already exist at the destination. Review the log and create a fresh plan before trying again."
+          : result.cancelled
+            ? "The run has stopped. Files already copied remain at the destination. Review the report before starting again."
+            : "Your source files remain in place. Here is what happened at the destination."}
+      </p>
+      {result && (
+        <>
+          <dl className="stats">
+            <div>
+              <dt>Copied</dt>
+              <dd>{result.copied.length}</dd>
+            </div>
+            <div>
+              <dt>Skipped</dt>
+              <dd>{result.skipped.length}</dd>
+            </div>
+            <div>
+              <dt>Failed</dt>
+              <dd>{result.failed.length}</dd>
+            </div>
+            <div>
+              <dt>Permission documents written</dt>
+              <dd>{result.aclWritten.length}</dd>
+            </div>
+          </dl>
+          <p className={`notice ${result.verified ? "success" : "error"}`}>
+            <strong>
+              {result.verified ? "Verification passed" : "Verification has not passed"}
+            </strong>
+            <br />
+            {result.verified
+              ? "The copied data and permission rules were checked."
+              : "Do not assume all files and permissions have been verified. Review the failures and run log."}
+          </p>
+          {result.failed.length > 0 && (
+            <section aria-label="Failures">
+              <h3>Failures</h3>
+              <ul>
+                {result.failed.map((failure) => (
+                  <li key={failure.url}>
+                    <strong className="resource-url">{failure.url}</strong>
+                    <p>{failure.error}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {result.skipped.length > 0 && (
+            <details>
+              <summary>Skipped files ({result.skipped.length})</summary>
+              <ul>
+                {result.skipped.map((item) => (
+                  <li key={item.url}>
+                    {item.url}: {item.reason}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </>
+      )}
+      <details>
+        <summary>Run log</summary>
+        <ul className="run-log">
+          {report.log.map((entry) => (
+            <li key={`${entry.at}-${entry.message}`}>
+              <time>{entry.at}</time> {entry.message}
+            </li>
+          ))}
+          {result?.log.map((entry) => (
+            <li key={`engine-${entry.at}-${entry.level}-${entry.message}`}>
+              <time>{entry.at}</time> [{entry.level}] {entry.message}
+            </li>
+          ))}
+        </ul>
+      </details>
+      <Button type="button" className="primary" onClick={() => downloadReport(report)}>
+        Download report JSON
+      </Button>
+    </div>
+  );
+}
+
+export function MovePodSettings() {
+  const accounts = useAccounts();
+  const account = accounts.active;
+  if (!account) return null;
+  if (account.kind === "demo")
+    return (
+      <p>Moving to another pod needs a real pod. Sign in with your Solid account to continue.</p>
+    );
+  const unavailable = movePodUnavailable();
+  if (unavailable)
+    return (
+      <p>
+        {unavailable === "native"
+          ? "Moving to another pod is available in Solid Suite on the web. Open Settings there to continue."
+          : "Moving to another pod needs the suite to be served over HTTPS, so the destination sign-in can complete."}
+      </p>
+    );
+  return (
+    <LiveMigration
+      key={`${account.id}:${account.webId}:${account.storageUrl}:${accounts.status}`}
+      account={account}
+      fetchFor={accounts.fetchFor}
+    />
+  );
+}
+
+function LiveMigration({
+  account,
+  fetchFor,
+}: {
+  account: SuiteAccount;
+  fetchFor: (account: SuiteAccount) => typeof fetch;
+}) {
+  const [targetConnection, setConnection] = useState<PodConnection | null>(null);
+  const [source, setSource] = useState<PodSide | null>(null);
+  const [sourceError, setSourceError] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    // The destination session belongs to this suite account: another account never restores it.
+    const connection = createHostBoundConnection({
+      id: "target",
+      origin: location.origin,
+      base: MOVE_POD_BASE,
+      owner: account.id,
+      clientId: new URL("/.well-known/solid-client-id.jsonld", location.origin).href,
+    });
+    setConnection(connection);
+    let http: PodSide["http"];
+    let publicHttp: PodSide["http"];
+    try {
+      http = createPodHttp({ root: account.storageUrl, fetch: fetchFor(account) });
+      // This transport is intentionally anonymous; group expansion never falls back to owner credentials.
+      publicHttp = createPodHttp({ root: account.storageUrl, fetch: connection.auth.publicFetch });
+    } catch {
+      // A storage URL the path fence refuses (not HTTPS, or with a query or fragment).
+      setSourceError(true);
+      return () => controller.abort();
+    }
+    void inspectPod(
+      { root: account.storageUrl, ownerWebId: account.webId, http, publicHttp },
+      AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+    )
+      .then((side) => {
+        if (!controller.signal.aborted) setSource(side);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSourceError(true);
+      });
+    return () => controller.abort();
+  }, [account.storageUrl, account.webId, fetchFor, account]);
+  if (sourceError)
+    return (
+      <p role="alert">
+        Could not connect to your source pod. Check your sign-in and reopen this section.
+      </p>
+    );
+  if (!source || !targetConnection) return <p role="status">Connecting to your active pod…</p>;
+  return <MigrationFlow source={source} targetConnection={targetConnection} />;
+}
+
+export function MigrationFlow({
+  source,
+  targetConnection,
+}: {
+  source: PodSide;
+  targetConnection: PodConnection;
+}) {
+  const targetState = useSyncExternalStore(
+    targetConnection.subscribe,
+    targetConnection.snapshot,
+    targetConnection.snapshot,
+  );
+  const [step, setStep] = useState(0);
+  const [targetContainer, setTargetContainer] = useState("");
+  const [rewriteIris, setRewriteIris] = useState(false);
+  const [plan, setPlan] = useState<MigrationPlan | null>(null);
+  const [resolutions, setResolutions] = useState<Resolutions>({});
+  const [busy, setBusy] = useState<"planning" | "running" | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [report, setReport] = useState<RunReport | null>(null);
+  const [previous, setPrevious] = useState(() => {
+    const run = readPreviousRun();
+    return run?.source.root === source.root && run.source.webId === source.ownerWebId ? run : null;
+  });
+  const [accepted, setAccepted] = useState(false);
+  const [storageWarning, setStorageWarning] = useState(false);
+  const operation = useRef<AbortController | null>(null);
+  const generation = useRef(0);
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    void targetConnection.initialize(location.href).then(() => {
+      if (location.pathname.includes("/callback/target"))
+        history.replaceState(null, "", MOVE_POD_BASE.slice(0, -1));
+    });
+  }, [targetConnection]);
+  useEffect(() => {
+    if (steps[step]) heading.current?.focus();
+  }, [step]);
+  useEffect(
+    () => () => {
+      generation.current++;
+      operation.current?.abort();
+    },
+    [],
+  );
+  // Leaving the section stops a run, so confirm before an in-app link or a page unload does it.
+  useEffect(() => {
+    if (busy !== "running") return;
+    const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
+    const click = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target as Partial<Element> | null;
+      const anchor = target?.closest?.("a[href]") as HTMLAnchorElement | null | undefined;
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      const url = new URL(anchor.href, location.href);
+      if (url.origin === location.origin && url.pathname === location.pathname) return;
+      if (!window.confirm(leaveWhileRunning)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", click, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", click, true);
+    };
+  }, [busy]);
+
+  const target = useMemo<PodSide | null>(
+    () =>
+      targetState.root && targetState.webId
+        ? {
+            root: targetState.root,
+            ownerWebId: targetState.webId,
+            ...(targetState.implementation ? { implementation: targetState.implementation } : {}),
+            http: createPodHttp({
+              root: targetState.root,
+              fetch: targetConnection.auth.authenticatedFetch,
+            }),
+          }
+        : null,
+    [targetState.root, targetState.webId, targetState.implementation, targetConnection],
+  );
+
+  // Invalidate reviewed decisions whenever credentials, storage, or direction change.
+  useEffect(() => {
+    generation.current++;
+    operation.current?.abort();
+    operation.current = null;
+    setPlan(null);
+    setResolutions({});
+    setAccepted(false);
+    setError(null);
+    setBusy(null);
+    setCancelling(false);
+    setTargetContainer(target?.root ?? "");
+    setStep((current) =>
+      current === 5 ? current : source ? (target ? Math.min(current, 2) : Math.min(current, 1)) : 0,
+    );
+  }, [source, target]);
+
+  let destination: string | null = null;
+  let destinationError: string | null = null;
+  if (target && targetContainer.trim()) {
+    try {
+      destination = assertWithinPodScope(target.root, targetContainer.trim());
+      const url = new URL(destination);
+      if (!url.pathname.endsWith("/") || url.hash || url.search) throw new Error("Not a container");
+      if (source) {
+        // Overlapping trees can cause recursive copies or modify the source.
+        const overlaps = (a: string, b: string) => {
+          try {
+            assertWithinPodScope(a, b);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        if (overlaps(source.root, destination) || overlaps(destination, source.root))
+          throw new Error("Overlapping pods");
+      }
+    } catch {
+      destination = null;
+      destinationError =
+        "Choose a folder URL ending in / inside the target pod, outside the source tree, with no query or fragment.";
+    }
+  }
+  const unresolved =
+    plan?.report.filter(
+      (item) =>
+        item.severity === "needs-decision" &&
+        !item.options.some((option) => option.id === resolutions[item.id]),
+    ).length ?? 0;
+  const aborted = plan?.report.some((item) => resolutions[item.id] === "abort") ?? false;
+  const ready = Boolean(
+    plan && source && target && destination && !unresolved && !aborted && !busy && accepted,
+  );
+
+  function invalidateOptions(): void {
+    setPlan(null);
+    setResolutions({});
+    setAccepted(false);
+    setError(null);
+  }
+
+  async function prepare(): Promise<void> {
+    if (!source || !target || !destination || operation.current) return;
+    const controller = new AbortController();
+    const current = ++generation.current;
+    operation.current = controller;
+    setBusy("planning");
+    setAccepted(false);
+    setStep(3);
+    setPlan(null);
+    setProgress(null);
+    setError(null);
+    setCancelling(false);
+    try {
+      const next = await planMigration({
+        source,
+        target,
+        targetContainer: destination,
+        rewriteIris,
+        signal: controller.signal,
+        onProgress: (value) => {
+          if (generation.current === current) setProgress(value);
+        },
+      });
+      if (generation.current !== current) return;
+      if (controller.signal.aborted) {
+        setStep(2);
+        return;
+      }
+      setPlan(next);
+      setResolutions(
+        Object.fromEntries(
+          next.report
+            .filter(
+              (item) =>
+                item.severity === "info" &&
+                item.options.some((option) => option.id === item.recommended),
+            )
+            .map((item) => [item.id, item.recommended]),
+        ),
+      );
+    } catch {
+      if (generation.current === current) {
+        if (controller.signal.aborted) setStep(2);
+        else
+          setError(
+            "The plan could not be prepared. Check both sign-ins and pod access, then try again.",
+          );
+      }
+    } finally {
+      if (generation.current === current) {
+        operation.current = null;
+        setBusy(null);
+        setCancelling(false);
+      }
+    }
+  }
+
+  async function start(): Promise<void> {
+    if (!ready || !plan || !source || !target || operation.current) return;
+    let executable: ReturnType<typeof finalizePlan>;
+    try {
+      executable = finalizePlan(plan, resolutions);
+    } catch {
+      setError(
+        "This plan cannot run safely with the current choices. Review the decisions or create a new plan.",
+      );
+      return;
+    }
+    const controller = new AbortController();
+    const current = ++generation.current;
+    operation.current = controller;
+    setBusy("running");
+    setStep(4);
+    setProgress(null);
+    setError(null);
+    setCancelling(false);
+    setPrevious(null);
+    let journal: RunReport = {
+      version: 1,
+      status: "running",
+      source: { root: source.root, webId: source.ownerWebId },
+      target: { root: target.root, webId: target.ownerWebId },
+      startedAt: new Date().toISOString(),
+      plan,
+      resolutions,
+      progress: null,
+      result: null,
+      log: [{ at: new Date().toISOString(), message: "Migration started." }],
+    };
+    const persist = () => {
+      if (!saveReport(journal)) setStorageWarning(true);
+    };
+    persist();
+    try {
+      const result = await executeMigration(executable, {
+        source,
+        target,
+        signal: controller.signal,
+        onProgress: (value) => {
+          if (generation.current !== current) return;
+          if (journal.progress?.phase !== value.phase)
+            journal.log.push({ at: new Date().toISOString(), message: phaseLabels[value.phase] });
+          journal = { ...journal, progress: value };
+          persist();
+          setProgress(value);
+        },
+      });
+      journal = { ...journal, status: "finished", result };
+    } catch {
+      journal = {
+        ...journal,
+        status: "interrupted",
+        log: [
+          ...journal.log,
+          {
+            at: new Date().toISOString(),
+            message: controller.signal.aborted
+              ? "Cancellation requested. A complete report was not available."
+              : "The migration stopped unexpectedly. Partial writes may have completed.",
+          },
+        ],
+      };
+    } finally {
+      // Keep the record even when the section closed mid-run: it lists what was already written.
+      persist();
+      if (generation.current === current) {
+        setReport(journal);
+        setStep(5);
+        setBusy(null);
+        setCancelling(false);
+        operation.current = null;
+      }
+    }
+  }
+
+  function cancel(): void {
+    setCancelling(true);
+    operation.current?.abort();
+  }
+
+  return (
+    <div className="migration-settings">
+      <section aria-label="Move to another pod">
+        <h2>Move to another pod</h2>
+        <p>Copy your files between Solid pods, with a clear plan for who can access them.</p>
+        <p>Review first. Keep control. Your source stays in place.</p>
+      </section>
+      <nav aria-label="Migration steps">
+        <ol className="stepper">
+          {steps.map((label, index) => (
+            <li
+              key={label}
+              aria-current={step === index ? "step" : undefined}
+              className={step === index ? "active" : step > index ? "complete" : ""}
+            >
+              <span className="step-number" aria-hidden="true">
+                {step > index ? "✓" : index + 1}
+              </span>
+              <span>{label}</span>
+            </li>
+          ))}
+        </ol>
+      </nav>
+      <div className="workspace">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">Step {step + 1} of 6</span>
+            <h3 ref={heading} tabIndex={-1}>
+              {steps[step]}
+            </h3>
+          </div>
+        </div>
+        {error && (
+          <p role="alert" className="notice error">
+            {error}
+          </p>
+        )}
+        {step < 3 && (
+          <>
+            <p className="section-description">
+              {step === 0
+                ? "Start with the account that holds the files you want to copy."
+                : step === 1
+                  ? "Sign in to the account that will receive your files. You can use a different provider."
+                  : "Choose where your files will go and how links should be handled."}
+            </p>
+            <div className="connections-grid">
+              <section aria-label="source connection">
+                <h3>Source pod</h3>
+                <p>Your active Solid Suite account</p>
+                <p>{source.ownerWebId}</p>
+                <p>{source.root}</p>
+                <p>Your source files stay in place.</p>
+              </section>
+              <div className="direction" aria-hidden="true">
+                →
+              </div>
+              <ConnectionCard
+                connection={targetConnection}
+                state={targetState}
+                side="target"
+                disabled={Boolean(busy)}
+              />
+            </div>
+          </>
+        )}
+        {step === 0 && (
+          <div className="actions">
+            <Button type="button" className="primary" disabled={!source} onClick={() => setStep(1)}>
+              Continue to target <span aria-hidden="true">→</span>
+            </Button>
+          </div>
+        )}
+        {step === 1 && (
+          <div className="actions">
+            <Button type="button" onClick={() => setStep(0)}>
+              Back
+            </Button>
+            <Button
+              type="button"
+              className="primary"
+              disabled={!source || !target}
+              onClick={() => setStep(2)}
+            >
+              Continue to options <span aria-hidden="true">→</span>
+            </Button>
+          </div>
+        )}
+        {step === 2 && (
+          <>
+            <section className="options-panel" aria-label="Migration options">
+              <label className="field" htmlFor="migration-destination">
+                Target folder URL{" "}
+                <Input
+                  id="migration-destination"
+                  type="url"
+                  value={targetContainer}
+                  aria-describedby="destination-help"
+                  onChange={(event) => {
+                    invalidateOptions();
+                    setTargetContainer(event.target.value);
+                  }}
+                />
+              </label>
+              <p className="muted" id="destination-help">
+                Defaults to your target storage root. A folder URL must end in /.
+              </p>
+              {destinationError && (
+                <p className="notice error" role="alert">
+                  {destinationError}
+                </p>
+              )}
+              <label className="toggle-option">
+                <input
+                  type="checkbox"
+                  checked={rewriteIris}
+                  onChange={(event) => {
+                    invalidateOptions();
+                    setRewriteIris(event.target.checked);
+                  }}
+                />
+                <span>
+                  <strong>Update links inside linked-data files</strong>
+                  <small>
+                    Rewrite IRIs{" "}
+                    <abbr title="An IRI is an identifier such as a web address in a linked-data document.">
+                      ⓘ
+                    </abbr>{" "}
+                    that point into the source pod so they point into the target pod. Off by
+                    default; otherwise file contents are copied unchanged.
+                  </small>
+                </span>
+              </label>
+            </section>
+            <div className="notice">
+              <strong>Planning only reads your pods.</strong> Nothing is written until you review
+              the plan and select Start migration.
+            </div>
+            <div className="actions">
+              <Button type="button" onClick={() => setStep(1)}>
+                Back
+              </Button>
+              <Button
+                type="button"
+                className="primary"
+                disabled={!source || !target || !destination}
+                onClick={() => {
+                  void prepare();
+                }}
+              >
+                Create migration plan <span aria-hidden="true">→</span>
+              </Button>
+            </div>
+          </>
+        )}
+        {step === 3 && (
+          <>
+            {busy === "planning" && (
+              <>
+                <ProgressView progress={progress} cancelling={cancelling} />
+                <Button type="button" disabled={cancelling} onClick={cancel}>
+                  Cancel planning
+                </Button>
+              </>
+            )}
+            {plan && !busy && (
+              <>
+                <p className="section-description">
+                  Review the destination and every permission choice. Nothing has been written yet.
+                </p>
+                <div className="route-summary">
+                  <div>
+                    <span className="muted">From</span>
+                    <p>{source?.root}</p>
+                  </div>
+                  <span aria-hidden="true">→</span>
+                  <div>
+                    <span className="muted">To</span>
+                    <p>{destination}</p>
+                  </div>
+                </div>
+                <dl className="stats">
+                  <div>
+                    <dt>Files</dt>
+                    <dd>{plan.stats.resources}</dd>
+                  </div>
+                  <div>
+                    <dt>Folders</dt>
+                    <dd>{plan.stats.containers}</dd>
+                  </div>
+                  <div>
+                    <dt>Bytes</dt>
+                    <dd>{plan.stats.bytes.toLocaleString()}</dd>
+                  </div>
+                  <div>
+                    <dt>Permission documents</dt>
+                    <dd>{plan.stats.aclDocuments}</dd>
+                  </div>
+                </dl>
+                <p className="muted">
+                  Permission systems:{" "}
+                  <abbr title="Web Access Control (WAC) and Access Control Policies (ACP) describe who can access pod data.">
+                    {plan.sourceSystem.toUpperCase()} → {plan.targetSystem.toUpperCase()}
+                  </abbr>
+                </p>
+                <PlanReport
+                  plan={plan}
+                  resolutions={resolutions}
+                  onChange={(next) => {
+                    setAccepted(false);
+                    setResolutions(next);
+                  }}
+                />
+                <label className="settings-toggle">
+                  <input
+                    type="checkbox"
+                    checked={accepted}
+                    onChange={(event) => setAccepted(event.target.checked)}
+                  />
+                  I have reviewed the destination and every permission choice.
+                </label>
+                <div aria-live="polite" className={`notice ${aborted ? "error" : ""}`}>
+                  {aborted ? (
+                    <>
+                      <strong>Migration will not run.</strong> An abort choice is selected. Change
+                      it to a safe option or go back.
+                    </>
+                  ) : unresolved ? (
+                    `${unresolved} permission ${unresolved === 1 ? "decision still needs" : "decisions still need"} your choice.`
+                  ) : (
+                    "All required decisions are resolved. You can start when you are ready."
+                  )}
+                </div>
+                <div className="actions">
+                  <Button type="button" onClick={() => setStep(2)}>
+                    Back to options
+                  </Button>
+                  <Button
+                    type="button"
+                    className="primary"
+                    disabled={!ready}
+                    onClick={() => {
+                      void start();
+                    }}
+                  >
+                    Start migration
+                  </Button>
+                </div>
+              </>
+            )}
+            {!busy && !plan && (
+              <Button type="button" onClick={() => setStep(2)}>
+                Back to options
+              </Button>
+            )}
+          </>
+        )}
+        {step === 4 && (
+          <>
+            <p>Keep this tab open while the migration runs.</p>
+            <ProgressView progress={progress} cancelling={cancelling} />
+            <ol className="run-phases">
+              {(["lock", "copy", "grant", "verify"] as const).map((phase) => (
+                <li key={phase} aria-current={progress?.phase === phase ? "step" : undefined}>
+                  {phaseLabels[phase]}
+                </li>
+              ))}
+            </ol>
+            <p className="muted">
+              Cancel stops after the current request. Files already copied remain at the
+              destination.
+            </p>
+            <Button type="button" className="danger" disabled={cancelling} onClick={cancel}>
+              Cancel migration
+            </Button>
+          </>
+        )}
+        {step === 5 && report && (
+          <>
+            <ResultView report={report} />
+            <div className="actions">
+              <Button
+                type="button"
+                onClick={() => {
+                  setPlan(null);
+                  setReport(null);
+                  setStep(0);
+                }}
+              >
+                Plan another migration
+              </Button>
+            </div>
+          </>
+        )}
+        {storageWarning && (
+          <p role="status" className="notice">
+            This browser could not save the run log for reload. Download the report before leaving.
+          </p>
+        )}
+      </div>
+      {previous && (
+        <details className="previous-run">
+          <summary>
+            Report from your previous run {previous.status === "interrupted" ? "(interrupted)" : ""}
+          </summary>
+          <ResultView report={previous} />
+          <Button
+            type="button"
+            onClick={() => {
+              try {
+                sessionStorage.removeItem(journalKey);
+              } catch {
+                /* Storage may be blocked. */
+              }
+              setPrevious(null);
+            }}
+          >
+            Dismiss previous report
+          </Button>
+        </details>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,478 @@
+// AUTHORED-BY Codex GPT-6
+import { normalizePodBase } from "@jeswr/guarded-fetch";
+import { createSolidAuth, type SolidAuth, type SolidAuthConfig } from "@jeswr/solid-auth-core";
+import { Agent } from "@solid/object";
+import { DataFactory } from "n3";
+import { detectAccessSystem } from "./access.js";
+import { createPodHttp } from "./pod-http.js";
+import { parse } from "./rdf.js";
+import type { AccessSystem, PodHttp, PodSide } from "./types.js";
+
+export type ConnectionId = "source" | "target";
+export interface ConnectionState {
+  status: "restoring" | "signed-out" | "loading" | "choose-storage" | "connected" | "error";
+  webId: string | null;
+  roots: string[];
+  root: string | null;
+  implementation: PodSide["implementation"];
+  accessSystem: AccessSystem;
+  error: string | null;
+}
+
+/** Only call with the selected authenticated storage and its response header.
+ * An issuer identifies the login provider, not the storage implementation.
+ * Profile RDF and login/page input are not evidence.
+ */
+export function detectImplementation(
+  root: string,
+  poweredBy: string | null,
+): PodSide["implementation"] {
+  const storage = new URL(root);
+  if (storage.protocol !== "https:" || storage.username || storage.password) return undefined;
+  if (storage.hostname.endsWith(".inrupt.com") && storage.port === "") return "ess";
+  if (/^Community Solid Server(?:\/[^\s,]+)?$/i.test(poweredBy?.trim() ?? "")) return "css";
+  if (/^solid-server\/[^\s,]+$/i.test(poweredBy?.trim() ?? "")) return "nss";
+  return undefined;
+}
+
+// Literal keys: every app shares the jeswr.github.io origin, and the workspace
+// storage-isolation test audits these strings for uniqueness.
+const storageKeys = {
+  source: {
+    dbName: "pod-migrator:source:sessions",
+    rememberedAccountsKey: "pod-migrator:source:remembered-account",
+    recentAccountsKey: "pod-migrator:source:recent-accounts",
+    redirectFlowKey: "pod-migrator:source:redirect-flow",
+    redirectSentinelKey: "pod-migrator:source:redirect-sentinel",
+  },
+  target: {
+    dbName: "pod-migrator:target:sessions",
+    rememberedAccountsKey: "pod-migrator:target:remembered-account",
+    recentAccountsKey: "pod-migrator:target:recent-accounts",
+    redirectFlowKey: "pod-migrator:target:redirect-flow",
+    redirectSentinelKey: "pod-migrator:target:redirect-sentinel",
+  },
+} as const satisfies Record<ConnectionId, Partial<SolidAuthConfig>>;
+
+export function authConfig(id: ConnectionId, origin: string, base = "/"): SolidAuthConfig {
+  const redirectUri = new URL(`${base}callback/${id}`, origin).href;
+  return {
+    callbackUri: redirectUri,
+    redirectUri,
+    clientId: new URL(`${base}clientid.jsonld`, origin).href,
+    ...storageKeys[id],
+    patchGlobalFetch: false,
+    includeIssuerOrigin: false,
+    // Only the authenticated WebID's own origin can serve a private profile.
+    includeWebIdOrigin: true,
+    allowedOrigins: [],
+  };
+}
+
+const emptyState = (): ConnectionState => ({
+  status: "restoring",
+  webId: null,
+  roots: [],
+  root: null,
+  implementation: undefined,
+  accessSystem: "unknown",
+  error: null,
+});
+
+/** One physical session; swapping UI roles never swaps its storage namespace. */
+export class PodConnection {
+  readonly id: ConnectionId;
+  readonly auth: SolidAuth;
+  private state = emptyState();
+  private listeners = new Set<() => void>();
+  private generation = 0;
+  private initialization: Promise<void> | undefined;
+
+  constructor(
+    id: ConnectionId,
+    auth: SolidAuth,
+    private readonly base = "/",
+  ) {
+    this.id = id;
+    this.auth = auth;
+  }
+
+  snapshot = (): ConnectionState => this.state;
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  private publish(state: ConnectionState): void {
+    this.state = state;
+    for (const listener of this.listeners) listener();
+  }
+
+  initialize(url: string): Promise<void> {
+    this.initialization ??= this.initializeOnce(url);
+    return this.initialization;
+  }
+
+  private async initializeOnce(url: string): Promise<void> {
+    const generation = ++this.generation;
+    try {
+      if (
+        [`${this.base}callback/${this.id}`, `${this.base}callback/${this.id}/`].includes(
+          new URL(url).pathname,
+        )
+      ) {
+        const redirect = await this.auth.handleRedirect(url);
+        if (generation !== this.generation) return;
+        if (redirect.outcome === "error") throw new Error("Sign-in was not completed. Try again.");
+        if (redirect.outcome === "redirecting") return;
+        if (redirect.outcome === "completed") {
+          await this.readProfile();
+          return;
+        }
+      }
+      await this.auth.restore();
+      if (generation !== this.generation) return;
+      if (this.auth.webId) await this.readProfile();
+      else this.publish({ ...emptyState(), status: "signed-out" });
+    } catch {
+      if (generation === this.generation) {
+        this.publish({
+          ...emptyState(),
+          status: "error",
+          error: "Could not restore this sign-in. Please sign in again.",
+        });
+      }
+    }
+  }
+
+  async login(value: string, kind: "webid" | "issuer"): Promise<void> {
+    const generation = ++this.generation;
+    this.publish({ ...emptyState(), status: "loading" });
+    try {
+      const url = new URL(value.trim());
+      if (url.protocol !== "https:" || url.username || url.password) {
+        throw new Error(
+          "Use an HTTPS WebID or identity provider URL without a username or password.",
+        );
+      }
+      await this.auth.beginRedirectLogin({
+        ...(kind === "webid" ? { webId: url.href } : { oidcIssuer: url.href }),
+        prompt: "consent",
+      });
+    } catch {
+      if (generation === this.generation) {
+        this.publish({
+          ...emptyState(),
+          status: "error",
+          error:
+            "Could not start sign-in. Check the URL and try again. If your WebID has several providers, enter your chosen provider URL.",
+        });
+      }
+    }
+  }
+
+  async readProfile(): Promise<void> {
+    const generation = ++this.generation;
+    const webId = this.auth.webId;
+    if (!webId) return;
+    this.publish({ ...emptyState(), status: "loading", webId });
+    try {
+      const documentUrl = new URL(webId);
+      documentUrl.hash = "";
+      if (documentUrl.protocol !== "https:" || documentUrl.username || documentUrl.password) {
+        throw new Error("Unsafe WebID");
+      }
+      // Exact document, string input, no redirects. A public read cannot send cookies.
+      const profileFetch =
+        (authenticated: boolean): typeof fetch =>
+        async (input, init) => {
+          // A delayed first response must not start a conversion under a different sign-in.
+          if (generation !== this.generation || this.auth.webId !== webId)
+            throw new Error("Profile sign-in changed");
+          if (typeof input !== "string" || new URL(input).href !== documentUrl.href) {
+            throw new Error("Profile request outside the authenticated WebID document");
+          }
+          return (authenticated ? this.auth.authenticatedFetch : this.auth.publicFetch)(input, {
+            ...init,
+            credentials: "omit",
+            redirect: "manual",
+          });
+        };
+      const profileHttp = (authenticated: boolean): Pick<PodHttp, "get"> => ({
+        get: (url, init) =>
+          profileFetch(authenticated)(url, {
+            headers: { accept: init?.accept ?? "text/turtle, application/ld+json;q=0.9" },
+            signal: init?.signal,
+          }),
+      });
+      let http = profileHttp(false);
+      let response = await http.get(documentUrl.href);
+      if (response.status === 401 || response.status === 403) {
+        if (generation !== this.generation || this.auth.webId !== webId) return;
+        http = profileHttp(true);
+        response = await http.get(documentUrl.href);
+      }
+      const profile = await parse(response, documentUrl.href, http, undefined, true);
+      if (generation !== this.generation || this.auth.webId !== webId) return;
+      // Bind to the signed-in subject, never an arbitrary profile mainSubject.
+      const agent = new Agent(webId, profile, DataFactory);
+      const roots = [...agent.pimStorage].map((root) => {
+        const url = new URL(root);
+        if (url.protocol !== "https:" || url.search || url.hash)
+          throw new Error("Unsafe storage URL");
+        return normalizePodBase(root);
+      });
+      const unique = [...new Set(roots)];
+      if (unique.length === 0) throw new Error("No storage roots");
+      this.publish({ ...emptyState(), status: "choose-storage", webId, roots: unique });
+      if (unique.length === 1 && unique[0]) await this.selectStorage(unique[0]);
+    } catch {
+      if (generation === this.generation && this.auth.webId === webId) {
+        this.publish({
+          ...emptyState(),
+          status: "error",
+          webId,
+          error:
+            "Could not read a safe storage location from your WebID profile. Check its storage links and access, then retry.",
+        });
+      }
+    }
+  }
+
+  async selectStorage(root: string): Promise<void> {
+    if (
+      !this.state.webId ||
+      this.auth.webId !== this.state.webId ||
+      !this.state.roots.includes(root)
+    )
+      return;
+    const generation = ++this.generation;
+    const webId = this.state.webId;
+    if (!this.auth.reArmAllowedOrigins([new URL(root).origin])) {
+      this.publish({
+        ...this.state,
+        status: "error",
+        root: null,
+        error: "This sign-in cannot access that storage. Sign in again.",
+      });
+      return;
+    }
+    this.publish({
+      ...this.state,
+      status: "loading",
+      root: null,
+      implementation: undefined,
+      accessSystem: "unknown",
+      error: null,
+    });
+    const authenticatedFetch = this.auth.authenticatedFetch;
+    const http = createPodHttp({
+      root,
+      fetch: (input, init) => authenticatedFetch(input, { ...init, credentials: "omit" }),
+    });
+    const signal = AbortSignal.timeout(10_000);
+    let implementation = detectImplementation(root, null);
+    let accessSystem: AccessSystem = "unknown";
+    try {
+      const head = await http.head(root, { signal });
+      if (generation !== this.generation || this.auth.webId !== webId) return;
+      if (head.ok) implementation ??= detectImplementation(root, head.headers.get("x-powered-by"));
+      if (!implementation && (head.ok || head.status === 405 || head.status === 501)) {
+        const response = await http.get(root, { signal });
+        if (response.ok)
+          implementation = detectImplementation(root, response.headers.get("x-powered-by"));
+        await response.body?.cancel();
+      }
+      if (generation !== this.generation || this.auth.webId !== webId) return;
+      accessSystem = await detectAccessSystem(
+        { root, ownerWebId: webId, implementation, http },
+        signal,
+      );
+    } catch {
+      // Missing CORS exposure, errors and redirects supply no header evidence.
+      // Storage host evidence is retained; the engine still checks permissions.
+    }
+    if (generation !== this.generation || this.auth.webId !== webId) return;
+    this.publish({ ...this.state, status: "connected", root, implementation, accessSystem });
+  }
+
+  async logout(): Promise<void> {
+    const generation = ++this.generation;
+    const previousWebId = this.state.webId;
+    this.publish({ ...emptyState(), status: "loading" });
+    try {
+      await this.auth.logout();
+      if (generation === this.generation) this.publish({ ...emptyState(), status: "signed-out" });
+    } catch {
+      if (generation === this.generation)
+        this.publish({
+          ...emptyState(),
+          status: "error",
+          webId: this.auth.webId ?? previousWebId,
+          error: "Sign-out could not finish. Try signing out again before switching accounts.",
+        });
+    }
+  }
+}
+
+export function createConnections(origin: string, base = "/"): [PodConnection, PodConnection] {
+  return ["source", "target"].map((id) => {
+    const side = id as ConnectionId;
+    return new PodConnection(side, createSolidAuth(authConfig(side, origin, base)), base);
+  }) as [PodConnection, PodConnection];
+}
+
+/** Create just the independent destination session, with an optional host client document. */
+export function createConnection(
+  id: ConnectionId,
+  origin: string,
+  base = "/",
+  clientId?: string,
+): PodConnection {
+  const config = authConfig(id, origin, base);
+  if (clientId) config.clientId = clientId;
+  return new PodConnection(id, createSolidAuth(config), base);
+}
+
+/** Inspect an already authenticated account without creating another sign-in. */
+export async function inspectPod(
+  side: Omit<PodSide, "implementation">,
+  signal: AbortSignal,
+): Promise<PodSide> {
+  let implementation = detectImplementation(side.root, null);
+  try {
+    const head = await side.http.head(side.root, { signal });
+    if (head.ok)
+      implementation ??= detectImplementation(side.root, head.headers.get("x-powered-by"));
+    if (!implementation && (head.ok || head.status === 405 || head.status === 501)) {
+      const response = await side.http.get(side.root, { signal });
+      if (response.ok)
+        implementation = detectImplementation(side.root, response.headers.get("x-powered-by"));
+      await response.body?.cancel();
+    }
+  } catch {
+    // Unavailable headers supply no implementation evidence; source readings stay conservative.
+  }
+  // A slow pod only loses implementation evidence; a caller's cancellation still rejects.
+  if (
+    signal.aborted &&
+    !(signal.reason instanceof DOMException && signal.reason.name === "TimeoutError")
+  )
+    throw signal.reason;
+  return { ...side, implementation };
+}
+
+// AUTHORED-BY Claude Opus 5.5
+/** Literal key (audited by the storage-isolation test) recording which host account owns a session. */
+const hostOwnerKeys = {
+  source: "pod-migrator:source:host-owner",
+  target: "pod-migrator:target:host-owner",
+} as const satisfies Record<ConnectionId, string>;
+
+function readOwner(id: ConnectionId): string | null {
+  try {
+    return globalThis.localStorage?.getItem(hostOwnerKeys[id]) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOwner(id: ConnectionId, owner: string | null): void {
+  try {
+    if (owner === null) globalThis.localStorage?.removeItem(hostOwnerKeys[id]);
+    else globalThis.localStorage?.setItem(hostOwnerKeys[id], owner);
+  } catch {
+    // Blocked storage: an unrecorded owner never matches, so the session is discarded next time.
+  }
+}
+
+function clearRecentAccounts(id: ConnectionId): void {
+  try {
+    globalThis.localStorage?.removeItem(storageKeys[id].recentAccountsKey);
+  } catch {
+    // Blocked storage holds no recent accounts.
+  }
+}
+
+/**
+ * A session embedded in a host app that has its own accounts. The stored session belongs to
+ * the host account that started it: when a different host account (or none recorded) opens
+ * the flow, the stored session is logged out before anything is restored, and a sign-in
+ * callback started by another host account is not completed.
+ */
+class HostBoundConnection extends PodConnection {
+  private bound: Promise<void> | undefined;
+
+  constructor(
+    id: ConnectionId,
+    auth: SolidAuth,
+    base: string,
+    private readonly home: string,
+    private readonly owner: string,
+  ) {
+    super(id, auth, base);
+  }
+
+  override initialize(url: string): Promise<void> {
+    this.bound ??= this.initializeBound(url);
+    return this.bound;
+  }
+
+  private async initializeBound(url: string): Promise<void> {
+    if (readOwner(this.id) === this.owner) return super.initialize(url);
+    writeOwner(this.id, null);
+    clearRecentAccounts(this.id);
+    // logout() clears the restore pointer before its durable delete, so a failed delete
+    // still leaves nothing to restore.
+    await this.auth.logout().catch(() => {});
+    // Never complete a callback another host account started: initialise as a plain visit.
+    return super.initialize(this.home);
+  }
+
+  override async login(value: string, kind: "webid" | "issuer"): Promise<void> {
+    writeOwner(this.id, this.owner);
+    return super.login(value, kind);
+  }
+
+  override async logout(): Promise<void> {
+    await super.logout();
+    writeOwner(this.id, null);
+  }
+}
+
+/** Create a session owned by one host account (see {@link HostBoundConnection}). */
+export function createHostBoundConnection(options: {
+  id: ConnectionId;
+  origin: string;
+  base: string;
+  owner: string;
+  clientId?: string;
+}): PodConnection {
+  const config = authConfig(options.id, options.origin, options.base);
+  if (options.clientId) config.clientId = options.clientId;
+  return new HostBoundConnection(
+    options.id,
+    createSolidAuth(config),
+    options.base,
+    new URL(options.base, options.origin).href,
+    options.owner,
+  );
+}
+
+/**
+ * Log out a stored session when the host signs out. With `owner`, only a session that host
+ * account started is forgotten; without it (sign out of everything) any owned session is.
+ */
+export async function forgetHostBoundConnection(options: {
+  id: ConnectionId;
+  origin: string;
+  base: string;
+  owner?: string;
+}): Promise<void> {
+  const stored = readOwner(options.id);
+  // A session with no recorded owner is never restored by a host-bound connection.
+  if (stored === null || (options.owner !== undefined && stored !== options.owner)) return;
+  writeOwner(options.id, null);
+  clearRecentAccounts(options.id);
+  await createSolidAuth(authConfig(options.id, options.origin, options.base)).logout();
+}

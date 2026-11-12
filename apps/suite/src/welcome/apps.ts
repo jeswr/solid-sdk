@@ -47,7 +47,7 @@ function companion(id: string, name: string, description: string, pages = false)
   };
 }
 
-// Pages slugs match scripts/build-pages.mjs, including the standalone pod migrator.
+// Pages slugs match scripts/build-pages.mjs.
 export const companionApps: readonly CompanionApp[] = [
   companion("app-store", "App Store", "Discover apps that work with your pod.", true),
   companion("pod-drive", "Pod Drive", "A standalone file browser for your pod.", true),
@@ -60,7 +60,14 @@ export const companionApps: readonly CompanionApp[] = [
   companion("pod-health", "Pod Health", "A standalone health record viewer.", true),
   companion("extension", "Browser extension", "Connect your browser to your pod."),
   companion("mobile", "Mobile apps", "Use the suite on a phone or tablet."),
-  companion("pod-migrator", "Pod migrator", "Move data between pods.", true),
+  {
+    // Moved into Settings; the old Pages slug only redirects to the default deployment.
+    id: "pod-migrator",
+    name: "Pod migrator",
+    description: "Move data between pods, from Settings.",
+    href: "/settings/move-pod",
+    statusLabel: "Ready to try",
+  },
   companion("mcp-server", "MCP server", "Connect an assistant to your pod."),
   companion("access-manager", "Access manager", "Manage access to your pod.", true),
   companion("pod-manager", "Pod manager", "Manage pod storage and accounts."),

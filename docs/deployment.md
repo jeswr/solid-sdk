@@ -25,8 +25,9 @@ manual runs; only `main` can publish. Each app has its own base path and client 
 | Coeliac | `apps/coeliac` | Next.js; Vercel git deployments disabled |
 
 Pod Manager, Issues and Coeliac retain any existing deployment until separately replaced;
-they are not included in the static Pages artifact. The future `solid-pod-migrator`
-project (`apps/pod-migrator`, not yet on `main`) must also disable git deployments.
+they are not included in the static Pages artifact. Pod Migrator now lives in Solid Suite
+Settings; `apps/pod-migrator` publishes only a redirect page to Pages and keeps git
+deployments disabled.
 The Vercel guard discovers app directories with a build script or Next/Vite dependency
 and requires a disabling config independently of the deployment inventory.
 
