@@ -34,12 +34,13 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
     const pod = asPodPort(source);
     // Unlike the lower-level pod helpers, tool ids must be absolute resource URLs.
     const target = requirePodScopedUrl({ podRoot: pod.root }, new URL(id).toString());
-    const accept = "text/turtle, text/plain;q=0.9, */*;q=0.1";
+    // Keep the backend's default representation: a Turtle preference makes servers such as
+    // CSS convert non-RDF documents (Markdown) into empty Turtle.
     const readMethod = pod.read;
     const output = new PodOutput(pod);
     const read = await withPodReadMode(
       isFetchPodRead(readMethod) ? "fetch" : "fetch-complete",
-      () => output.read(target, { accept }),
+      () => output.read(target, {}),
     );
     const finalUrl = requirePodScopedUrl({ podRoot: pod.root }, read.url ?? target);
     const response = new Response(
