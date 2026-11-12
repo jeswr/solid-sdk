@@ -183,6 +183,11 @@ describe("Publish React session context", () => {
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("still saving"));
     document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(confirm).toHaveBeenCalledTimes(1);
+    // A click whose target is not an Element (the document itself) is never a link.
+    expect(
+      document.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true })),
+    ).toBe(true);
+    expect(confirm).toHaveBeenCalledTimes(1);
     for (const init of [
       { ctrlKey: true },
       { metaKey: true },
@@ -198,6 +203,19 @@ describe("Publish React session context", () => {
     anchor.href = `${window.location.href.split("#")[0]}#preview`;
     anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     expect(confirm).toHaveBeenCalledTimes(1);
+    // Confirming the prompt lets the link navigate: the guard leaves the click alone.
+    anchor.href = "/elsewhere";
+    confirm.mockReturnValueOnce(true);
+    let leftAlone: boolean | undefined;
+    const observe = (event: Event) => {
+      leftAlone = !event.defaultPrevented;
+      event.preventDefault(); // jsdom cannot navigate; stop the default action here.
+    };
+    anchor.addEventListener("click", observe);
+    anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    anchor.removeEventListener("click", observe);
+    expect(leftAlone).toBe(true);
+    expect(confirm).toHaveBeenCalledTimes(2);
 
     anchor.remove();
     confirm.mockRestore();

@@ -119,15 +119,17 @@ export function createPublishWorkspace(
       (anchor.target && anchor.target.toLowerCase() !== "_self")
     )
       return;
+    // This listener is only registered on a real window (see guardNavigation), so
+    // `window` is always defined here.
     const target = new URL(anchor.href);
-    const current = new URL(navigation?.location.href ?? anchor.href);
+    const current = new URL(window.location.href);
     if (
       target.origin === current.origin &&
       target.pathname === current.pathname &&
       target.search === current.search
     )
       return;
-    if (!navigation?.confirm("Changes are still saving to your pod. Leave this page?")) {
+    if (!window.confirm("Changes are still saving to your pod. Leave this page?")) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
