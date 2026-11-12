@@ -197,6 +197,8 @@
   z-index: 2;
   left: 2px;
   width: calc(var(--cal-bar-span) * (100% + 1px) - 4px);
+  /* A shared button reset caps buttons at 100%; a bar must reach across its later days. */
+  max-width: none;
   top: calc(34px + var(--cal-event-lane) * 28px);
   height: 24px;
   min-width: 0;

@@ -16,7 +16,7 @@ import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } f
 import { layoutAllDayEvents, layoutTimeGrid } from "../lib/layout";
 import { useCalendarState, useCalendars, useEventsInRange } from "../state/calendar-context";
 import { columnAt, dayDistance, PX_PER_MINUTE, pointerMinutes } from "../state/drag";
-import { layoutMonth, monthBarLabel } from "../state/month-layout";
+import { layoutMonth, monthBarLabel, monthRangeLabel } from "../state/month-layout";
 import {
   addDays,
   addMonths,
@@ -85,6 +85,8 @@ export function EventButton({
         {event.data.name}
         {compact && `, ${eventTime(event.data).split("–")[0]}`}
       </span>
+      {/* Separates the title from the time in the button's text, as its aria-label does. */}
+      {!compact && " "}
       {!compact && (
         <span className="cal-event-time">
           {eventTime(event.data)} · {event.calendar.title}
@@ -288,7 +290,6 @@ function MonthView({ events }: { events: Occurrence[] }) {
                     aria-selected={phone ? cell.date === agendaDay : undefined}
                     data-drop-target={target || undefined}
                     tabIndex={cell.date === focused ? 0 : -1}
-                    aria-label={label}
                     onFocus={(event) => {
                       const bar = week.bars.find(
                         (bar) => bar.id === (event.target as HTMLElement).dataset.occurrence,
@@ -312,20 +313,31 @@ function MonthView({ events }: { events: Occurrence[] }) {
                       }
                     }}
                   >
+                    <span className="sr-only">{label}</span>
                     {phone ? (
                       <button
                         type="button"
                         className="cal-month-open"
                         tabIndex={-1}
-                        aria-label={`Show events on ${label}${cell.hidden ? `, ${cell.hidden} more events` : ""}`}
                         aria-controls="cal-month-agenda"
                         onClick={() => {
                           setAgendaDay(cell.date);
                           setFocused(cell.date);
                         }}
                       >
-                        <span className="cal-day-number">{cell.dayOfMonth}</span>
-                        {cell.hidden > 0 && <span className="cal-phone-more">+{cell.hidden}</span>}
+                        {/* Named by its content so the visible day number stays part of the accessible name. */}
+                        <span className="sr-only">Show events on {label}</span>
+                        <span className="cal-day-number" aria-hidden="true">
+                          {cell.dayOfMonth}
+                        </span>
+                        {cell.hidden > 0 && (
+                          <>
+                            <span className="cal-phone-more" aria-hidden="true">
+                              +{cell.hidden}
+                            </span>
+                            <span className="sr-only">, {cell.hidden} more events</span>
+                          </>
+                        )}
                       </button>
                     ) : (
                       <Link
@@ -463,7 +475,8 @@ function MonthView({ events }: { events: Occurrence[] }) {
               <EventButton
                 key={event.id}
                 event={event}
-                accessibleName={`${monthBarLabel(event.data)}, ${eventTime(event.data)}, ${event.calendar.title}`}
+                // Mirrors the visible "time · calendar" text so the name contains it; the range follows.
+                accessibleName={`${event.data.name}, ${eventTime(event.data)} · ${event.calendar.title}, ${monthRangeLabel(event.data)}`}
                 day={() =>
                   root.current?.querySelector<HTMLElement>(`[data-day="${agendaDay}"]`) ?? undefined
                 }

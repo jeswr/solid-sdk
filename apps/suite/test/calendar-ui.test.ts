@@ -110,7 +110,7 @@ async function settle() {
 }
 function buttons(host: HTMLElement, title: string) {
   return [...host.querySelectorAll<HTMLButtonElement>("button.cal-event")].filter((button) =>
-    button.getAttribute("aria-label")?.startsWith(title),
+    (button.getAttribute("aria-label") ?? button.textContent ?? "").startsWith(title),
   );
 }
 
@@ -214,7 +214,8 @@ it("shows two phone indicators, opens the tapped day's agenda and preserves grid
   expect(sunday.querySelectorAll(".cal-month-mark")).toHaveLength(2);
   const open = sunday.querySelector<HTMLElement>(".cal-month-open") as HTMLElement;
   expect(open.textContent).toContain("+9");
-  expect(open.getAttribute("aria-label")).toContain("9 more events");
+  expect(open.textContent).toContain("9 more events");
+  expect(open.getAttribute("aria-label")).toBeNull();
   await click(open);
   const agenda = mounted.host.querySelector<HTMLElement>("#cal-month-agenda") as HTMLElement;
   expect(agenda.getAttribute("aria-label")).toBe("Events on Sunday, 1 November 2026");

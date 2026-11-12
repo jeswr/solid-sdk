@@ -17,6 +17,11 @@ export function monthEventRange(event: CalendarEvent) {
 }
 
 export function monthBarLabel(event: CalendarEvent): string {
+  return `${event.name}, ${monthRangeLabel(event)}`;
+}
+
+/** The inclusive day range of an all-day or multi-day event, e.g. "Sun 1 Nov 2026 – Tue 3 Nov 2026". */
+export function monthRangeLabel(event: CalendarEvent): string {
   const { startDate, endDate } = monthEventRange(event);
   const format = new Intl.DateTimeFormat("en-GB", {
     weekday: "short",
@@ -27,7 +32,7 @@ export function monthBarLabel(event: CalendarEvent): string {
   const formatDay = (day: string) => format.format(localDate(day)).replace(",", "");
   const first = formatDay(startDate);
   const last = addDays(endDate, -1);
-  return `${event.name}, ${first}${last === startDate ? "" : ` – ${formatDay(last)}`}`;
+  return `${first}${last === startDate ? "" : ` – ${formatDay(last)}`}`;
 }
 
 /** Pack all-day and multi-day occurrences above single-day timed events. No input is mutated. */

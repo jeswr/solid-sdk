@@ -270,6 +270,10 @@ test("keeps offline saves across reload and syncs after reconnecting", async ({
   await context.setOffline(false);
   await expect(page.locator(".cal-sync-status")).toHaveText("Saved");
   await page.reload();
+  // A phone month shows events as marks; the day's agenda lists them as buttons.
+  if ((page.viewportSize()?.width ?? 0) < 640) {
+    await page.locator('.cal-month [data-day="2027-01-04"] .cal-month-open').click();
+  }
   await expect(page.getByRole("button", { name: /^Offline event,/ })).toHaveCount(1);
   const queued = await page.evaluate(
     () =>

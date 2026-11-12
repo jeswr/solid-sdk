@@ -132,6 +132,8 @@ test("moves through month days with the keyboard and opens quick-create", async 
   await expect(page.locator('.cal-month [data-day="2026-12-09"]')).toBeFocused();
   await page.keyboard.press("PageUp");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("November 2026");
+  // The month re-renders before focus returns to the day; Enter must reach the focused cell.
+  await expect(page.locator('.cal-month [data-day="2026-11-09"]')).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Create event", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
