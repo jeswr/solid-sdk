@@ -254,6 +254,15 @@ the user's own host pod roots at the user's storage depth (path-based multi-pod 
 display the resource origin first and label announcement senders and roles as unverified. No
 grants or resource reads occur here.
 
+`isShareNotification(n)` is the share Announce test `sharedItemsFromInbox` applies (summary
+`Shared with you as …` and an http(s) object without credentials), regardless of storage.
+`shareNotificationUrls(candidates, { fetch, webId, inbox?, pinningFetch?, signal?, maxItems? })`
+returns the candidate inbox members that are share Announces, read through the pod-access inbox
+reader. It requests only the profile (skipped when `inbox` is given), the inbox container and
+the candidates; every other URL is answered locally with 404, which the reader skips. Home's
+Requests page uses it so share notifications, which `listRequests` reports as unreadable, are
+not counted as unreadable requests. An abort rejects, even one during discovery.
+
 `resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly?, hints? })`
 is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
 `@jeswr/suite-vocab` IRIs (including known legacy aliases), never arbitrary local names.
@@ -284,4 +293,4 @@ cannot outrank the hide. Persist hidden
 entries per WebID, validate with `isHiddenSharedItem`, and clear them when the user reopens a
 resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
 stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic
-URL-list helpers. No helper performs I/O.
+URL-list helpers. Only `shareNotificationUrls` performs I/O.

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+import { shareNotification } from "@jeswr/pod-access/notify";
 import { describe, expect, it } from "vitest";
 import {
   classifySharedItem,
@@ -7,6 +8,7 @@ import {
   isHiddenSharedItem,
   isSharedItemUrl,
   isSharedUrlEntry,
+  isShareNotification,
   isSuiteDocsDocument,
   latestSharedEntries,
   mergeSharedItems,
@@ -19,6 +21,7 @@ import {
   sharedItemName,
   sharedItemsForAccount,
   sharedItemsFromInbox,
+  shareNotificationUrls,
   visibleSharedItems,
 } from "./shared.js";
 
@@ -407,5 +410,127 @@ describe("inbox trust boundaries", () => {
       false,
     );
     expect(from("not a url", "https://pod.example/bob/a.ttl")).toBe(true);
+  });
+});
+
+describe("share notifications in an inbox", () => {
+  const share = shareNotification("https://bob.example/docs/plan.ttl", "Editor");
+  const n = { url: "https://alice.example/inbox/a.ttl" };
+
+  it("classifies only the share Announce shape with a usable resource link", () => {
+    expect(isShareNotification({ ...n, ...share })).toBe(true);
+    // Inside the owner's storage it is still a share notification, just never "shared with me".
+    expect(isShareNotification({ ...n, ...share, object: "https://alice.example/a.ttl" })).toBe(
+      true,
+    );
+    expect(isShareNotification({ ...n, ...share, object: "mailto:bob@example.org" })).toBe(false);
+    expect(isShareNotification({ ...n, type: "Announce", summary: share.summary })).toBe(false);
+    expect(isShareNotification({ ...n, type: "Announce", object: share.object })).toBe(false);
+    expect(isShareNotification({ ...n, type: "Offer", object: share.object })).toBe(false);
+  });
+
+  /** A minimal pod: one profile naming an inbox, its listing and the members' Turtle. */
+  function inboxPod(root: string) {
+    const as = "https://www.w3.org/ns/activitystreams#";
+    const webId = `${root}profile/card#me`;
+    const inbox = `${root}inbox/`;
+    const announce = (summary: string) =>
+      `<#it> a <${as}Announce>; <${as}object> <${share.object}>; <${as}summary> "${summary}".`;
+    const docs: Record<string, string> = {
+      [`${root}profile/card`]: `<#me> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`,
+      [inbox]: `<> <http://www.w3.org/ns/ldp#contains> <share.ttl>, <assign.ttl>, <bad.ttl>, <request.ttl>.`,
+      [`${inbox}share.ttl`]: announce(share.summary as string),
+      [`${inbox}assign.ttl`]: announce("Bob assigned you 'Plan'"),
+      [`${inbox}bad.ttl`]: "this is not turtle",
+      [`${inbox}request.ttl`]: announce(share.summary as string),
+    };
+    const requested: string[] = [];
+    const fetch = async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      requested.push(url);
+      const body = docs[url];
+      return body === undefined
+        ? new Response(null, { status: 404 })
+        : new Response(body, { headers: { "content-type": "text/turtle" } });
+    };
+    return { webId, inbox, requested, fetch: fetch as typeof globalThis.fetch };
+  }
+
+  it("reads only the profile, the inbox and the candidates, and keeps the shares", async () => {
+    const pod = inboxPod("https://8.8.8.8/");
+    const candidates = ["share.ttl", "assign.ttl", "bad.ttl"].map((name) => pod.inbox + name);
+    const found = await shareNotificationUrls([...candidates, "not a url"], {
+      fetch: pod.fetch,
+      webId: pod.webId,
+    });
+    expect([...found]).toEqual([`${pod.inbox}share.ttl`]);
+    // request.ttl was already placed by the caller: it is answered locally, never fetched.
+    expect(pod.requested.sort()).toEqual(
+      ["https://8.8.8.8/profile/card", pod.inbox, ...candidates].sort(),
+    );
+  });
+
+  it("filters the DNS-pinning transport too", async () => {
+    // Node and jsdom refuse unpinned hostnames, so the inbox sits at an IP literal throughout.
+    const pod = inboxPod("https://8.8.4.4/");
+    const found = await shareNotificationUrls([`${pod.inbox}share.ttl`], {
+      fetch: pod.fetch,
+      pinningFetch: pod.fetch,
+      webId: pod.webId,
+      signal: new AbortController().signal,
+      maxItems: 10,
+    });
+    expect([...found]).toEqual([`${pod.inbox}share.ttl`]);
+    expect(pod.requested).not.toContain(`${pod.inbox}request.ttl`);
+  });
+
+  it("skips discovery when the caller names the inbox", async () => {
+    const pod = inboxPod("https://8.8.8.8/");
+    const found = await shareNotificationUrls([`${pod.inbox}share.ttl`, `${pod.inbox}bad.ttl`], {
+      fetch: pod.fetch,
+      webId: pod.webId,
+      inbox: pod.inbox,
+    });
+    expect([...found]).toEqual([`${pod.inbox}share.ttl`]);
+    expect(pod.requested.sort()).toEqual([
+      pod.inbox,
+      `${pod.inbox}bad.ttl`,
+      `${pod.inbox}share.ttl`,
+    ]);
+  });
+
+  it("finds nothing without candidates, an inbox, or before an abort", async () => {
+    const pod = inboxPod("https://8.8.8.8/");
+    expect(await shareNotificationUrls([], { fetch: pod.fetch, webId: pod.webId })).toEqual(
+      new Set(),
+    );
+    expect(pod.requested).toEqual([]);
+    const noInbox = await shareNotificationUrls([`${pod.inbox}share.ttl`], {
+      fetch: pod.fetch,
+      webId: "https://8.8.8.8/nobody#me",
+    });
+    expect(noInbox).toEqual(new Set());
+    // Aborted while the profile is read: discovery swallows it, the helper still rejects.
+    const during = new AbortController();
+    const aborting: typeof fetch = async (input, init) => {
+      during.abort();
+      return pod.fetch(input, init);
+    };
+    await expect(
+      shareNotificationUrls([`${pod.inbox}share.ttl`], {
+        fetch: aborting,
+        webId: pod.webId,
+        signal: during.signal,
+      }),
+    ).rejects.toThrow();
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      shareNotificationUrls([`${pod.inbox}share.ttl`], {
+        fetch: pod.fetch,
+        webId: pod.webId,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow();
   });
 });

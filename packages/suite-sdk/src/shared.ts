@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
-import { type InboxNotification, notificationKind } from "@jeswr/pod-access/notify";
+import {
+  createInboxReader,
+  type InboxNotification,
+  type InboxReaderOptions,
+  notificationKind,
+} from "@jeswr/pod-access/notify";
 
 import { isDirectChild, resolveSuiteResource, type SharedApp } from "./resource.js";
 
@@ -86,6 +91,74 @@ function sameApparentPod(actor: string, object: string, storageUrl?: string): bo
 }
 
 /**
+ * The suite share Announce shape (`shareNotification`) naming a usable resource link. Whether the
+ * resource is inside the user's own storage is not considered: such a notification is still a
+ * share, just never "shared with me".
+ */
+export function isShareNotification(
+  notification: InboxNotification,
+): notification is InboxNotification & { object: string } {
+  return (
+    notificationKind(notification) === "share" &&
+    notification.object !== undefined &&
+    isSharedItemUrl(notification.object)
+  );
+}
+
+export interface ShareNotificationUrlsOptions
+  extends Pick<InboxReaderOptions, "fetch" | "pinningFetch"> {
+  /** The inbox owner; the inbox is discovered from this WebID as Shared with me discovers it. */
+  webId: string;
+  /** The inbox, when the caller already knows it: discovery (and its profile read) is skipped. */
+  inbox?: string;
+  signal?: AbortSignal;
+  /** Direct inbox children considered, in listing order (default 100, `listRequests`' bound). */
+  maxItems?: number;
+}
+
+/**
+ * Which `candidates` (members of the WebID's inbox) are suite share Announces, parsed by the same
+ * pod-access inbox reader as Shared with me. Only the profile (unless `inbox` is given), the inbox
+ * container and the candidates are requested: once the inbox is known, every other URL is
+ * answered locally with 404, which the reader skips. A caller that has already read the inbox for
+ * another purpose therefore re-reads only the members it could not place.
+ */
+export async function shareNotificationUrls(
+  candidates: readonly string[],
+  options: ShareNotificationUrlsOptions,
+): Promise<Set<string>> {
+  const wanted = new Set(
+    candidates.flatMap((candidate) => (URL.canParse(candidate) ? [new URL(candidate).href] : [])),
+  );
+  if (!wanted.size) return new Set();
+  let inbox: string | undefined;
+  const only =
+    (transport: typeof fetch): typeof fetch =>
+    async (input, init) => {
+      options.signal?.throwIfAborted();
+      const { url } = new Request(input);
+      if (inbox !== undefined && url !== inbox && !wanted.has(url))
+        return new Response(null, { status: 404 });
+      return transport(input, init);
+    };
+  const reader = createInboxReader({
+    fetch: only(options.fetch),
+    ...(options.pinningFetch ? { pinningFetch: only(options.pinningFetch) } : {}),
+    maxItems: options.maxItems ?? 100,
+  });
+  options.signal?.throwIfAborted();
+  const discovered = options.inbox ?? (await reader.inbox(options.webId));
+  // Discovery reports failures, aborts included, as "no inbox": an abort still rejects here.
+  options.signal?.throwIfAborted();
+  if (!discovered) return new Set();
+  inbox = new URL(discovered).href;
+  const items = await reader.list(discovered, options.signal ? { signal: options.signal } : {});
+  return new Set(
+    items.filter((item) => wanted.has(item.url) && isShareNotification(item)).map((n) => n.url),
+  );
+}
+
+/**
  * Only the suite share Announce shape; assignments, mentions and invitations stay separate.
  * Resources inside `storageUrl` (the user's own pod) are never "shared with me". A `published`
  * claim later than `now` plus {@link SHARED_CLOCK_SKEW_MS} is dropped, so it can neither pin an
@@ -99,9 +172,7 @@ export function sharedItemsFromInbox(
   return mergeSharedItems(
     notifications.flatMap((notification): SharedItem[] => {
       if (
-        notificationKind(notification) !== "share" ||
-        !notification.object ||
-        !isSharedItemUrl(notification.object) ||
+        !isShareNotification(notification) ||
         (options.storageUrl !== undefined &&
           isWithinPodScope(options.storageUrl, notification.object))
       )

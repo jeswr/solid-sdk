@@ -9,12 +9,17 @@ const mocks = vi.hoisted(() => ({
   session: undefined as unknown as PodSession,
   list: vi.fn(),
   decide: vi.fn(),
+  shares: vi.fn(),
 }));
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
 vi.mock("@jeswr/pod-access/requests-solid", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   listRequests: mocks.list,
   decide: mocks.decide,
+}));
+vi.mock("@jeswr/suite-sdk/shared", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  shareNotificationUrls: mocks.shares,
 }));
 
 import type { AccessRequestEntry } from "@jeswr/pod-access/requests-solid";
@@ -72,6 +77,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.session = session();
   mocks.list.mockResolvedValue([pending, decided, { id: `${ROOT}inbox/x`, status: "unreadable" }]);
+  mocks.shares.mockResolvedValue(new Set());
 });
 
 it("lists with the session's fetch and splits pending, decided and unreadable", async () => {
@@ -84,6 +90,24 @@ it("lists with the session's fetch and splits pending, decided and unreadable", 
     fetch: mocks.session.fetch,
     webId: `${ROOT}profile#me`,
     storage: ROOT,
+  });
+});
+
+it("counts a malformed inbox item as unreadable, never a share notification", async () => {
+  const share = `${ROOT}inbox/shared-doc.ttl`;
+  mocks.list.mockResolvedValue([
+    pending,
+    { id: share, status: "unreadable" },
+    { id: `${ROOT}inbox/x`, status: "unreadable" },
+  ]);
+  mocks.shares.mockResolvedValue(new Set([share]));
+  await mount(h(Probe));
+  expect(binding.pending).toEqual([pending]);
+  expect(binding.unreadable).toEqual([{ id: `${ROOT}inbox/x`, status: "unreadable" }]);
+  // Only the members listRequests couldn't place are offered to the share reader.
+  expect(mocks.shares).toHaveBeenCalledWith([share, `${ROOT}inbox/x`], {
+    fetch: mocks.session.fetch,
+    webId: `${ROOT}profile#me`,
   });
 });
 
