@@ -150,6 +150,9 @@ describe("Issues store boundaries", () => {
         task.title = "No";
       }),
     ).rejects.toMatchObject({ status: 403 });
+    const before = pod.requests.length;
+    await expect(store.deleteTask(item)).rejects.toMatchObject({ status: 403 });
+    expect(pod.requests.slice(before).some((request) => request.method === "DELETE")).toBe(false);
     await store.readProject(trackerUrl);
     await expect(
       store.updateProject(project, (tracker) => {

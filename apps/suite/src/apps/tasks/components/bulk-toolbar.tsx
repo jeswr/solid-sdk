@@ -24,6 +24,7 @@ import type { PriorityLevel } from "../lib/views/types";
 import {
   completeTasks,
   deleteTasks,
+  editableViews,
   labelTasks,
   moveTasksToProject,
   prioritizeTasks,
@@ -49,10 +50,14 @@ export function BulkToolbar() {
   if (!focus?.selection.size) return null;
   const urls = focus.selectedUrls();
   // Unsaved rows have no validator yet; they join once their first write lands.
-  const selected = tasks.views.filter(
-    (view) =>
-      urls.has(view.url) &&
-      tasks.tasks[view.projectUrl]?.items.some((item) => item.url === view.url && item.etag),
+  // Read-only issues are left out, like unsaved rows.
+  const selected = editableViews(
+    tasks.views.filter(
+      (view) =>
+        urls.has(view.url) &&
+        tasks.tasks[view.projectUrl]?.items.some((item) => item.url === view.url && item.etag),
+    ),
+    tasks,
   );
   if (!selected.length) return null;
   const count = selected.length;

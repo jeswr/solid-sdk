@@ -195,6 +195,13 @@ export class IssuesTaskStore extends TaskStore {
     const resource = await this.issuesIO.write(url, dataset, { create: true });
     return { ...resource, task: new IssueItem(task.id, resource.dataset, DataFactory) };
   }
+  override async deleteTask(item: StoredTask): Promise<void> {
+    const project = [...this.trackers.values()].find((project) =>
+      inside(item.url, project.tracker.stateStore as string),
+    );
+    if (project && !this.canEdit(project, item)) throw new ModelError(403, item.url);
+    return super.deleteTask(item);
+  }
   override async updateTask(
     item: StoredTask,
     change: (task: TaskItem) => void,

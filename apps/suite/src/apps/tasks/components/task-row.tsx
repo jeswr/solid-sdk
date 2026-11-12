@@ -45,7 +45,7 @@ import type { Row } from "../lib/views/project-groups";
 import { planTreeMove, taskLevel, taskProgress } from "../lib/views/tree";
 import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
-import { completeTasks } from "../state/bulk-actions";
+import { completeTasks, editableViews } from "../state/bulk-actions";
 import { useNow } from "../state/clock";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
@@ -194,9 +194,9 @@ export function TaskRow({
     if (command.type === "menu") return setMenuOpen(true);
     if (pending) return;
     if (command.type === "complete") {
-      const selected = selectedTasks();
+      const selected = editableViews(selectedTasks(), tasks);
       focus?.clearSelection();
-      void completeTasks(selected, tasks);
+      if (selected.length) void completeTasks(selected, tasks);
     }
     if (command.type === "edit") setEditing(true);
     if (command.type === "delete") void deleteTask(task, tasks);
