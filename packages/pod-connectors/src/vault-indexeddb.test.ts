@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
-import { ConnectorTokenVault, IndexedDbVaultStore, MAX_VAULT_RECORDS, vaultId } from "./vault.js";
+import {
+  ConnectorTokenVault,
+  IndexedDbVaultStore,
+  MAX_VAULT_RECORDS,
+  VAULT_KEY_PBKDF2_ITERATIONS,
+  vaultId,
+} from "./vault.js";
 
 /** Minimal structured-cloning IDB fake: queued transactions, commit/abort and cursors.
  * No provider/network or browser globals are used. Writes roll back on abort.
@@ -252,6 +258,71 @@ describe("IndexedDB encrypted vault", () => {
     await restored.delete(key);
     await restored.delete(key);
     expect(await restored.list()).toEqual([]);
+  });
+  it("stores only a PBKDF2-wrapped key with a passphrase and refuses a wrong one", async () => {
+    const fake = fakeIndexedDb();
+    const passphrase = "synthetic correct horse";
+    const store = new IndexedDbVaultStore("owner", fake.factory);
+    const cryptoKey = await store.getOrCreateKey({ passphrase });
+    expect(cryptoKey.extractable).toBe(false);
+    await new ConnectorTokenVault(cryptoKey, store).put(key, {
+      refreshToken: "synthetic-sensitive-refresh",
+      obtainedAt: 1,
+    });
+    const keys = fake.databases.get("owner")?.get("keys");
+    expect([...(keys?.keys() ?? [])]).toEqual(["aes256gcm-pbkdf2"]);
+    const entry = keys?.get("aes256gcm-pbkdf2") as Record<string, unknown>;
+    expect(Object.keys(entry).sort()).toEqual(["iv", "salt", "version", "wrapped"]);
+    expect(entry.salt).toBeInstanceOf(Uint8Array);
+    expect((entry.salt as Uint8Array).length).toBe(16);
+    expect(Object.values(entry).some((value) => value instanceof CryptoKey)).toBe(false);
+    expect(VAULT_KEY_PBKDF2_ITERATIONS).toBe(600_000);
+    await store.close();
+    const reopened = new IndexedDbVaultStore("owner", fake.factory);
+    const restored = new ConnectorTokenVault(
+      await reopened.getOrCreateKey({ passphrase }),
+      reopened,
+    );
+    expect((await restored.get(key))?.refreshToken).toBe("synthetic-sensitive-refresh");
+    for (const options of [{ passphrase: "synthetic wrong horse" }, {}]) {
+      const error = await reopened.getOrCreateKey(options).catch((error) => error);
+      expect(error).toMatchObject({
+        name: "ConnectorVaultError",
+        message: "Connector vault operation failed.",
+      });
+      expect(error.cause).toBeUndefined();
+    }
+    // A wrapped entry that was tampered with fails the same way.
+    (entry.wrapped as Uint8Array)[0] ^= 1;
+    keys?.set("aes256gcm-pbkdf2", entry);
+    await expect(reopened.getOrCreateKey({ passphrase })).rejects.toThrow(
+      "Connector vault operation failed.",
+    );
+  });
+  it("never mixes passphrase and unprotected key modes and bounds the passphrase", async () => {
+    const fake = fakeIndexedDb();
+    const store = new IndexedDbVaultStore("owner", fake.factory);
+    for (const passphrase of ["short", "x".repeat(1025), "synthetic \uD800 lone"])
+      await expect(store.getOrCreateKey({ passphrase })).rejects.toThrow(
+        "Connector vault operation failed.",
+      );
+    await store.getOrCreateKey();
+    await expect(store.getOrCreateKey({ passphrase: "synthetic passphrase" })).rejects.toThrow(
+      "Connector vault operation failed.",
+    );
+    expect([...(fake.databases.get("owner")?.get("keys")?.keys() ?? [])]).toEqual(["aes256gcm"]);
+  });
+  it("concurrent passphrase opens elect one wrapped key", async () => {
+    const fake = fakeIndexedDb();
+    const passphrase = "synthetic shared secret";
+    const first = new IndexedDbVaultStore("owner", fake.factory);
+    const second = new IndexedDbVaultStore("owner", fake.factory);
+    const [one, two] = await Promise.all([
+      first.getOrCreateKey({ passphrase }),
+      second.getOrCreateKey({ passphrase }),
+    ]);
+    await new ConnectorTokenVault(one, first).put(key, { refreshToken: "same-key", obtainedAt: 1 });
+    expect((await new ConnectorTokenVault(two, second).get(key))?.refreshToken).toBe("same-key");
   });
   it("concurrent opens elect one key transactionally", async () => {
     const fake = fakeIndexedDb();

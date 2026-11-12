@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi } from "vitest";
+import { createGoogleOAuthConfig } from "../adapters/google/oauth.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
 import { createSpotifySourceAuth } from "../spotify/source-auth.js";
 import { ConnectorTokenVault, generateBrowserVaultKey, MemoryVaultStore } from "../vault.js";
@@ -9,6 +12,7 @@ import {
   exchangeCodeForToken,
   getOAuthToken,
   refreshAccessToken,
+  TOKEN_REQUEST_TIMEOUT_MS,
 } from "./oauth.js";
 
 const key = { connectorId: "spotify", account: "synthetic" };
@@ -33,30 +37,102 @@ describe("adversarial refresh regressions", () => {
   it.each([
     "refresh",
     "login",
-  ])("persists rotation after abort during the %s response body read", async (grant) => {
+  ])("persists rotation when the caller aborts mid-body of a real streamed %s response", async (grant) => {
     const { vault, options } = await fixture();
-    const abort = new AbortController();
-    const send: typeof fetch = async () =>
-      new Response(
-        new ReadableStream({
-          pull(controller) {
-            controller.enqueue(
-              new TextEncoder().encode(
-                JSON.stringify({ access_token: "AT2", refresh_token: "RT2" }),
-              ),
-            );
-            abort.abort(new Error("synthetic-sensitive"));
-            controller.close();
-          },
-        }),
-      );
-    const opts = { ...options, signal: abort.signal };
-    await expect(
-      grant === "refresh"
-        ? refreshAccessToken("spotify", config, "RT1", send, opts)
-        : exchangeCodeForToken("spotify", config, params, send, opts),
-    ).rejects.toMatchObject({ reason: "exchange-failed" });
+    const released = Promise.withResolvers<void>();
+    const server = createServer((request, response) => {
+      request.resume();
+      const body = JSON.stringify({ access_token: "AT2", refresh_token: "RT2" });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write(body.slice(0, 12));
+      void released.promise.then(() => response.end(body.slice(12)));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const local = { ...config, tokenEndpoint: `http://127.0.0.1:${port}/token` };
+      const abort = new AbortController();
+      const responded = Promise.withResolvers<void>();
+      const send: typeof fetch = async (input, init) => {
+        const response = await fetch(input, init);
+        responded.resolve();
+        return response;
+      };
+      const opts = { ...options, signal: abort.signal };
+      const outcome = (
+        grant === "refresh"
+          ? refreshAccessToken("spotify", local, "RT1", send, opts)
+          : exchangeCodeForToken("spotify", local, params, send, opts)
+      ).catch((error: unknown) => error);
+      await responded.promise;
+      // The body is still streaming when the caller cancels.
+      abort.abort(new Error("synthetic-sensitive"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      released.resolve();
+      const error = (await outcome) as Error;
+      expect(error).toMatchObject({ name: "AbortError" });
+      expect(error.message).not.toContain("synthetic-sensitive");
+      expect((await vault.get(key))?.refreshToken).toBe("RT2");
+    } finally {
+      released.resolve();
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+  it("never sends a token request after the caller aborted and runs it on its own controller", async () => {
+    const { vault, options } = await fixture();
+    const aborted = new AbortController();
+    aborted.abort();
+    const unsent = vi.fn<typeof fetch>();
+    for (const operation of [
+      refreshAccessToken("spotify", config, "RT1", unsent, { ...options, signal: aborted.signal }),
+      exchangeCodeForToken("spotify", config, params, unsent, {
+        ...options,
+        signal: aborted.signal,
+      }),
+    ])
+      await expect(operation).rejects.toMatchObject({ name: "AbortError" });
+    expect(unsent).not.toHaveBeenCalled();
+    const caller = new AbortController();
+    let signal: AbortSignal | undefined;
+    await refreshAccessToken(
+      "spotify",
+      config,
+      "RT1",
+      async (_input, init) => {
+        signal = init?.signal ?? undefined;
+        return Response.json({ access_token: "AT2", refresh_token: "RT2" });
+      },
+      { ...options, signal: caller.signal },
+    );
+    expect(signal).toBeDefined();
+    expect(signal).not.toBe(caller.signal);
     expect((await vault.get(key))?.refreshToken).toBe("RT2");
+  });
+  it("times out a stalled token request after 30 seconds without honoring the caller signal", async () => {
+    const { vault, options } = await fixture();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let signal: AbortSignal | undefined;
+      const sent = Promise.withResolvers<void>();
+      const stalled: typeof fetch = (_input, init) =>
+        new Promise((_resolve, reject) => {
+          signal = init?.signal ?? undefined;
+          sent.resolve();
+          signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+        });
+      const outcome = refreshAccessToken("spotify", config, "RT1", stalled, options).catch(
+        (error: unknown) => error,
+      );
+      await sent.promise;
+      await vi.advanceTimersByTimeAsync(TOKEN_REQUEST_TIMEOUT_MS - 1);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await outcome).toMatchObject({ reason: "exchange-failed" });
+      expect((await vault.get(key))?.refreshToken).toBe("RT1");
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it("two independent engines serialize refresh and reread RT2 before sending", async () => {
     const { store, cryptoKey, vault, options } = await fixture();
@@ -192,6 +268,90 @@ describe("adversarial refresh regressions", () => {
       accessToken: "AT2",
       refreshToken: "RT2",
     });
+  });
+  it("a login without a refresh credential deletes the account's previous record", async () => {
+    const { vault, options } = await fixture();
+    await exchangeCodeForToken(
+      "spotify",
+      config,
+      params,
+      async () => Response.json({ access_token: "AT-other-account" }),
+      options,
+    );
+    expect(await vault.get(key)).toBeUndefined();
+    // A refresh without rotation keeps the stored credential.
+    await vault.put(key, { refreshToken: "RT1", obtainedAt: 1 });
+    await refreshAccessToken(
+      "spotify",
+      config,
+      "RT1",
+      async () => Response.json({ access_token: "AT2" }),
+      options,
+    );
+    expect((await vault.get(key))?.refreshToken).toBe("RT1");
+  });
+  it("disconnect revokes at a configured RFC 7009 endpoint, best-effort, before local deletion", async () => {
+    const revocationEndpoint = "https://oauth2.googleapis.com/revoke";
+    const revoking = { ...config, revocationEndpoint };
+    const live = { accessToken: "AT1", refreshToken: "RT-live", tokenType: "Bearer" };
+    const { vault, options } = await fixture();
+    const order: string[] = [];
+    const caller = new AbortController();
+    const send = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe(revocationEndpoint);
+      expect(init).toMatchObject({ method: "POST", redirect: "error", credentials: "omit" });
+      expect(init?.signal).not.toBe(caller.signal);
+      expect(new Headers(init?.headers).get("content-type")).toBe(
+        "application/x-www-form-urlencoded",
+      );
+      const body = Object.fromEntries(new URLSearchParams(String(init?.body)));
+      order.push(`${body.token}:${(await vault.get(key))?.refreshToken ?? "deleted"}`);
+      expect(body).toMatchObject({
+        token_type_hint: "refresh_token",
+        client_id: "synthetic-client",
+      });
+      return new Response(null, { status: 200 });
+    });
+    await createOAuthSourceAuth(spotifyAdapter, revoking, send, {
+      ...options,
+      signal: caller.signal,
+      token: live,
+    }).disconnect();
+    // Both the stored and the session's credential are revoked while the record still exists.
+    expect(order).toEqual(["RT1:RT1", "RT-live:RT1"]);
+    expect(await vault.get(key)).toBeUndefined();
+
+    // Endpoint failures are ignored and deletion still happens.
+    for (const failing of [
+      async () => {
+        throw new Error("synthetic-network");
+      },
+      async () => new Response("synthetic", { status: 503 }),
+    ] as (typeof fetch)[]) {
+      await vault.put(key, { refreshToken: "RT1", obtainedAt: 1 });
+      await expect(
+        createOAuthSourceAuth(spotifyAdapter, revoking, failing, options).disconnect(),
+      ).resolves.toBeUndefined();
+      expect(await vault.get(key)).toBeUndefined();
+    }
+    // A cancelled caller or an unconfigured endpoint never sends; deletion still happens.
+    const aborted = new AbortController();
+    aborted.abort();
+    const unsent = vi.fn<typeof fetch>();
+    for (const [cfg, signal] of [
+      [revoking, aborted.signal],
+      [config, undefined],
+    ] as const) {
+      await vault.put(key, { refreshToken: "RT1", obtainedAt: 1 });
+      await createOAuthSourceAuth(spotifyAdapter, cfg, unsent, {
+        ...options,
+        signal,
+        token: live,
+      }).disconnect();
+      expect(await vault.get(key)).toBeUndefined();
+    }
+    expect(unsent).not.toHaveBeenCalled();
+    expect(createGoogleOAuthConfig("calendar").revocationEndpoint).toBe(revocationEndpoint);
   });
   it("refuses the Spotify-specific factory when given a vault", async () => {
     const { vault } = await fixture();

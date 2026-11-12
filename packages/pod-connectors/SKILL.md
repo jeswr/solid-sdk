@@ -11,7 +11,8 @@ Read README.md and src/core/types.ts before changing the public contract. The pa
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
 app's compatibility shims. Hosts create an isolated createRegistry(config); never read
 process environment or install host-specific global configuration here, except the Node CLI
-host may read CONNECTOR_VAULT_KEY for explicit --vault opt-in (CON-A1).
+host may read CONNECTOR_VAULT_KEY for explicit --vault opt-in (CON-A1) and deletes it from
+process.env right after reading.
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed and storage-backed writes
@@ -294,13 +295,21 @@ stringifying untrusted input; project plain data without invoking custom getters
 Unknown record fields and credential-shaped metadata are refused. Files require private
 owner-held directories/files, no symlinks/hardlinks, bounded descriptor reads, exclusive
 temp + fsync + rename + directory fsync. IndexedDB elects/stores its non-extractable key
-transactionally alongside ciphertexts; wait for commit. Tests use a minimal structured-cloning
+transactionally alongside ciphertexts; wait for commit. That key is usable by a copied profile or
+same-origin script (non-extractable only blocks export); getOrCreateKey({ passphrase }) stores
+only a PBKDF2-SHA-256 (600,000 iterations, 16-byte salt) AES-GCM-wrapped key, never mixes modes,
+and fails generically on a wrong passphrase. The vault constructor refuses extractable keys. Tests use a minimal structured-cloning
 IDB fake without dependencies.
 
 OAuth exchange/refresh accepts `{ vault, account, signal? }`; persist rotation before returning
 access tokens. `getOAuthToken` restores on later runs; `createOAuthSourceAuth` shares refresh
-and retries a GET once. Persist a validated refresh rotation before honoring abort, even
-when cancellation happens during response reading. Accept string scope or string-array
+and retries a GET once. Token requests never use the caller's signal: run them on a private
+controller with TOKEN_REQUEST_TIMEOUT_MS (30 s); a pre-send abort prevents sending, a later one
+is honored with a generic AbortError only after the response is validated and persisted (the
+CLI exempts token/revocation URLs from its signal merge). A code exchange without a refresh
+token deletes the account's record. Disconnect best-effort revokes stored and session refresh
+tokens at an RFC 7009 `revocationEndpoint` (Google declares one; others are manual), ignoring
+failures, before deleting locally. Accept string scope or string-array
 scope normalized with join(" "); drop other scope types. Token endpoints/proxies require
 HTTPS except HTTP on localhost, 127.0.0.1 or [::1] for development. Request JSON (including
 GitHub); form token responses are unsupported. Spotify's legacy factory refuses a vault;
@@ -320,6 +329,8 @@ IDB handle on versionchange. Custom stores without locks require host serializat
 
 File stores canonicalize ancestor aliases once at construction, check the real path and
 refuse final-directory/record symlinks. Windows construction throws the POSIX requirement.
+get/put refuse unsafe records; list skips them; delete unlinks any current-uid regular record
+file regardless of mode, never a symlink or foreign-owned file.
 Per-record O_EXCL 0600 locks break after 60 seconds by mtime, renew while active, wait at
 most 65 seconds and always release in finally. Stale takeover renames to `<lock>.<uuid>.stale`,
 unlinks only on a dev+ino match, otherwise restores via link() (EEXIST: leave it to age out)

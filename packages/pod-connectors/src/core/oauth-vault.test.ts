@@ -218,12 +218,14 @@ describe("OAuth refresh vault wiring", () => {
       await safeError(exchangeCodeForToken("spotify", config, params, fetch, options));
     const cancelled = new AbortController();
     cancelled.abort(new Error(sensitive));
-    await safeError(
-      refreshAccessToken("spotify", config, sensitive, vi.fn(), {
-        ...options,
-        signal: cancelled.signal,
-      }),
-    );
+    const unsent = vi.fn();
+    const cancellation = await refreshAccessToken("spotify", config, sensitive, unsent, {
+      ...options,
+      signal: cancelled.signal,
+    }).catch((error) => error);
+    expect(cancellation).toMatchObject({ name: "AbortError" });
+    expect(cancellation.message).not.toContain(sensitive);
+    expect(unsent).not.toHaveBeenCalled();
     await safeError(
       exchangeCodeForToken(
         "spotify",

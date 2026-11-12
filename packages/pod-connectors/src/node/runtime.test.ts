@@ -12,6 +12,7 @@ import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as importRunner from "../core/import-runner.js";
+import { TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
@@ -1013,7 +1014,7 @@ describe("CLI import", () => {
   it.each([
     "deadline",
     "host",
-  ])("cancels a pending source exchange on %s and closes the listener", async (kind) => {
+  ])("ends a pending source exchange only at its own timeout after a %s and closes the listener", async (kind) => {
     const { transport } = fixturePod();
     const path = await configPath();
     await writeFile(
@@ -1069,7 +1070,13 @@ describe("CLI import", () => {
       if (!exchangeSignal || !redirect) throw new Error("Source exchange never started");
       expect(exchangeSignal.aborted).toBe(false);
       if (kind === "deadline") await vi.advanceTimersByTimeAsync(120_000);
-      else controller.abort();
+      else {
+        // A host abort never cuts off an exchange already sent; its own timeout ends it.
+        controller.abort();
+        await vi.advanceTimersByTimeAsync(TOKEN_REQUEST_TIMEOUT_MS - 1);
+        expect(exchangeSignal.aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+      }
       expect(exchangeSignal.aborted).toBe(true);
       expect(controller.signal.aborted).toBe(kind === "host");
       expect(await result).toBe(kind === "deadline" ? 3 : 130);
@@ -1408,10 +1415,12 @@ describe("CLI import", () => {
           grant_type: "refresh_token",
           refresh_token: "synthetic-source-refresh",
         });
-        expect(init?.signal).toBe(controller.signal);
+        // The refresh runs on its own controller: a host abort cannot cut off its response.
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        expect(init?.signal).not.toBe(controller.signal);
         if (cancelRefresh) {
           controller.abort();
-          init?.signal?.throwIfAborted();
+          expect(init?.signal?.aborted).toBe(false);
         }
         return Response.json({ access_token: "synthetic-source-new", expires_in: 3600 });
       }
@@ -1873,6 +1882,35 @@ describe("CLI encrypted refresh vault", () => {
     );
     await expect(fsPromises.stat(path + ".vault")).rejects.toMatchObject({ code: "ENOENT" });
     vi.unstubAllEnvs();
+  });
+  it("removes CONNECTOR_VAULT_KEY from the process environment right after reading it", async () => {
+    const { path, directory, vault, key } = await vaultFixture();
+    const { transport } = fixturePod();
+    vi.stubEnv("CONNECTOR_VAULT_KEY", encodedKey);
+    let during: string | undefined = "unread";
+    const source: typeof fetch = async (input, init) => {
+      during = process.env.CONNECTOR_VAULT_KEY;
+      if (String(input) === spotifyAdapter.oauth?.tokenEndpoint)
+        return Response.json({ access_token: "synthetic-access", refresh_token: "next" });
+      return fixtureFetch("spotify", spotifyAdapter.fixtures())(input, init);
+    };
+    try {
+      expect(
+        await runCli(["import", "spotify", "--vault", directory], {
+          configPath: path,
+          podTransport: transport,
+          sourceTransport: source,
+          stdout: vi.fn(),
+          stderr: vi.fn(),
+        }),
+      ).toBe(0);
+      expect(during).toBeUndefined();
+      expect("CONNECTOR_VAULT_KEY" in process.env).toBe(false);
+      // The key read from the environment was still used for the vault.
+      expect((await vault.get(key))?.refreshToken).toBe("next");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
   it("rejects an invalid supplied key without exposing it in CLI diagnostics", async () => {
     const path = await configPath();

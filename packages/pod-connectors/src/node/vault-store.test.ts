@@ -101,13 +101,30 @@ describe("private file vault store", () => {
   });
   it.each([
     0o644, 0o640, 0o604, 0o660,
-  ])("refuses exposed files on read/write/delete/list: %s", async (mode) => {
+  ])("refuses exposed files on read/write, skips them in list and lets delete remove them: %s", async (mode) => {
     const { store, path } = await fixture();
     await store.put(id, "sealed");
     await fs.chmod(path, mode);
-    await Promise.all(
-      [store.get(id), store.put(id, "replacement"), store.delete(id), store.list()].map(fails),
-    );
+    await Promise.all([store.get(id), store.put(id, "replacement")].map(fails));
+    expect(await store.list()).toEqual([]);
+    await store.delete(id);
+    await expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await store.get(id)).toBeUndefined();
+    await store.delete(id);
+  });
+  it("never deletes another user's record and skips it in list", async () => {
+    const { store, path } = await fixture();
+    await store.put(id, "sealed");
+    const original = fs.lstat;
+    vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
+      const stat = await original(...args);
+      if (String(args[0]) === path) stat.uid += 1;
+      return stat;
+    });
+    expect(await store.list()).toEqual([]);
+    await fails(store.delete(id));
+    vi.restoreAllMocks();
+    expect(await fs.readFile(path, "utf8")).toContain("sealed");
   });
   it.each([
     0o755, 0o750, 0o707, 0o770,
@@ -126,16 +143,21 @@ describe("private file vault store", () => {
     await fs.writeFile(target, sensitive, { mode: 0o600 });
     await fs.unlink(path);
     await fs.symlink(target, path);
-    await Promise.all(
-      [store.get(id), store.put(id, "other"), store.delete(id), store.list()].map(fails),
-    );
+    await Promise.all([store.get(id), store.put(id, "other"), store.delete(id)].map(fails));
+    expect(await store.list()).toEqual([]);
     expect(await fs.readFile(target, "utf8")).toBe(sensitive);
+    expect((await fs.lstat(path)).isSymbolicLink()).toBe(true);
     await fs.unlink(path);
     await fs.symlink(join(root, "missing"), path);
     await fails(store.get(id));
     await fs.unlink(path);
     await fs.link(target, path);
     await fails(store.get(id));
+    expect(await store.list()).toEqual([]);
+    // Removing a hardlinked name never touches the other link's content.
+    await store.delete(id);
+    await expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await fs.readFile(target, "utf8")).toBe(sensitive);
     const link = join(root, "alias");
     await fs.symlink(directory, link);
     expect(() => new FileVaultStore(link)).toThrow("Connector vault operation failed.");

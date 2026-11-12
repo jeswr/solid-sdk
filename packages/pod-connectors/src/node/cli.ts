@@ -14,7 +14,7 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
-import { createOAuthSourceAuth, getOAuthToken } from "../core/oauth.js";
+import { createOAuthSourceAuth, getOAuthToken, TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import { adapterContainer } from "../core/pod-writer-policy.js";
 import { createStoragePodWriter } from "../core/storage-pod-writer.js";
 import type { ConnectorState, SourceAuth, TokenSet } from "../core/types.js";
@@ -164,7 +164,12 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
   try {
     options.signal?.throwIfAborted();
     const command = parseImportArgs(args);
-    const encodedKey = options.vaultKey ?? nodeEnv.CONNECTOR_VAULT_KEY;
+    let encodedKey = options.vaultKey;
+    if (encodedKey === undefined) {
+      encodedKey = nodeEnv.CONNECTOR_VAULT_KEY;
+      // Child processes and later diagnostics never inherit the key.
+      delete nodeEnv.CONNECTOR_VAULT_KEY;
+    }
     if (command.vault && !encodedKey)
       throw new NodeRuntimeError("config", "--vault requires CONNECTOR_VAULT_KEY.");
     if (encodedKey && !command.vault)
@@ -184,11 +189,19 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
     // Every Pod and source request, including checkpoint reads/writes and the import's own
-    // Pod writes, refuses to send once the command is cancelled.
+    // Pod writes, refuses to send once the command is cancelled. Token and revocation
+    // requests keep their own controller once sent, so a rotated credential is never lost.
     const withSignal =
-      (transport: typeof fetch): typeof fetch =>
+      (transport: typeof fetch, ownController?: ReadonlySet<string>): typeof fetch =>
       async (input, init) => {
         options.signal?.throwIfAborted();
+        if (ownController?.has(String(input instanceof Request ? input.url : input)))
+          return transport(
+            input,
+            init?.signal
+              ? init
+              : { ...init, signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS) },
+          );
         return transport(input, {
           ...init,
           signal:
@@ -219,9 +232,16 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     if (!file && !sourceAuth) {
       if (!adapter?.oauth)
         throw new NodeRuntimeError("auth", "This connector has no source OAuth configuration.");
-      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch);
       const sourceConfig = { ...adapter.oauth, ...config.connectors[command.id] };
       if (sourceConfig.clientSecret) sourceConfig.tokenExchange = "public";
+      const tokenUrls = new Set(
+        [
+          sourceConfig.tokenEndpoint,
+          sourceConfig.tokenProxyUrl,
+          sourceConfig.revocationEndpoint,
+        ].filter((url): url is string => typeof url === "string"),
+      );
+      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch, tokenUrls);
       let vault: ConnectorTokenVault | undefined;
       if (command.vault && encodedKey) {
         try {

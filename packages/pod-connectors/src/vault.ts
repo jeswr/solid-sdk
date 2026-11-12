@@ -255,6 +255,8 @@ export class ConnectorTokenVault {
   ) {
     try {
       validateVaultCryptoKey(key);
+      // An extractable key could be exported by any code holding the vault.
+      if (key.extractable) throw new ConnectorVaultError();
       const withLock = store.withLock?.bind(store);
       if (withLock)
         this.withLock = async (key, fn) => {
@@ -386,4 +388,8 @@ export class MemoryVaultStore implements VaultStore {
   }
 }
 
-export { IndexedDbVaultStore } from "./vault-indexeddb.js";
+export {
+  IndexedDbVaultStore,
+  VAULT_KEY_PBKDF2_ITERATIONS,
+  type VaultKeyOptions,
+} from "./vault-indexeddb.js";

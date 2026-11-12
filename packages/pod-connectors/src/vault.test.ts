@@ -370,6 +370,11 @@ describe("vault key helpers", () => {
         "decrypt",
       ]),
       await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, false, ["encrypt"]),
+      // An extractable key could be exported by any code holding the vault.
+      await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, [
+        "encrypt",
+        "decrypt",
+      ]),
     ]) {
       expect(() => new ConnectorTokenVault(key as CryptoKey, new MemoryVaultStore())).toThrow(
         "Connector vault operation failed.",

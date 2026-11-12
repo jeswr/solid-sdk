@@ -276,7 +276,8 @@ Add `--vault <private-directory>` and set `CONNECTOR_VAULT_KEY` to canonical pad
 standard base64 encoding of exactly 32 random bytes to retain encrypted refresh credentials.
 `--vault` without `CONNECTOR_VAULT_KEY` exits 2 and names the missing variable on stderr.
 A key without `--vault` prints one stderr warning and continues with memory-only credentials.
-An invalid key with both settings fails closed. The CLI tries refresh before interactive login and persists
+An invalid key with both settings fails closed. The CLI deletes `CONNECTOR_VAULT_KEY` from
+`process.env` immediately after reading it, so child processes never inherit it. The CLI tries refresh before interactive login and persists
 rotation before using the access token. Revocation deletes the record and reports exit 3
 with a reconnect message; re-run explicitly to log in again. An unreadable record (for example
 after a key rotation) starts loopback login, whose code exchange replaces it. Library hosts may
@@ -828,10 +829,25 @@ import { ConnectorTokenVault, IndexedDbVaultStore } from '@jeswr/pod-connectors/
 // An owner-specific DB holds ciphertexts and its non-extractable CryptoKey.
 const store = new IndexedDbVaultStore('connector-vault-owner-label');
 const browserVault = new ConnectorTokenVault(await store.getOrCreateKey(), store);
+// Or keep only a passphrase-wrapped key at rest (prompt the user; never store the passphrase).
+const protectedStore = new IndexedDbVaultStore('connector-vault-protected-owner-label');
+const protectedKey = await protectedStore.getOrCreateKey({ passphrase: userPassphrase });
 ```
 
+**IndexedDB key boundary.** Without a passphrase the non-extractable key is stored in the same
+database as the ciphertexts. Anyone with a copy of the browser profile, and any script running on
+the same origin, can use that key and decrypt the refresh tokens; non-extractable only stops the
+raw key bytes being exported. With `getOrCreateKey({ passphrase })` the database holds only the
+key wrapped by AES-256-GCM under a PBKDF2-SHA-256 key (600,000 iterations, random 16-byte salt
+stored beside it), so a copied profile is unusable without the passphrase. Same-origin script
+running while the vault is unlocked can still use the returned key. Passphrases are 8 to 1,024
+UTF-16 code units; strength is the host's responsibility. A wrong passphrase, a tampered wrapped
+key, or mixing passphrase and unprotected modes in one database raises the generic
+`ConnectorVaultError`. A forgotten passphrase requires reauthorisation.
+
 `ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
-`delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only).
+`delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only). The
+constructor refuses an extractable CryptoKey with the generic error.
 `put` replaces ciphertext without decrypting the old record, so a fresh login with a rotated
 key can recover it. Refreshing an unreadable record raises `UnreadableCredentialError`, an
 `IntegrationAuthError` subclass with `reason: 'reauthorise'`, so hosts may start login. Records
@@ -859,6 +875,9 @@ canonical base64 contents to `importVaultKey`, without whitespace/newline trimmi
 `FileVaultStore` is exported only from `./node`: SHA-256 filenames, 0700 directories, 0600 files, owner checks, symlink and
 hardlink refusal, bounded descriptor reads, exclusive temporary files, file fsync, atomic
 rename and directory fsync. Existing group/world-accessible stores are refused, not repaired.
+A record file whose mode was loosened is refused by `get` and `put` and skipped by `list`, but
+`delete` still unlinks any regular record file owned by the current user (never a symlink or
+another user's file), so disconnect keeps working.
 Ancestor directories must be controlled by the host user or root; shared writable ancestors
 require the sticky bit. Construction resolves ancestor aliases with `realpath` once and
 checks the canonical path; a symlinked final directory or record is still refused.
@@ -882,8 +901,8 @@ it via structured clone in the same database as records; writes resolve only aft
 Version changes close and clear the cached handle; the next call reopens.
 Account locks use `navigator.locks.request` where available, otherwise a shared in-process
 mutex (cross-tab ownership then requires host coordination). Clearing that database removes
-both records and key. Same-origin scripts can use a non-extractable key; hosts retain their
-origin/script security responsibilities.
+both records and key. Hosts retain their origin/script security responsibilities (see the key
+boundary above).
 
 Pass `{ vault, account, signal? }` as the final argument to code exchange, `authorize`, or
 refresh helpers. `authorizeLoopback` accepts these in its options. `getOAuthToken` returns a
@@ -895,10 +914,21 @@ Refresh holds the optional store lock across reread, token exchange and put/dele
 any newer saved refresh token before sending. On `invalid_grant`, compare with the sent
 token before deleting; if a newer token exists, retry once with it and never loop. A rejected
 current credential raises `IntegrationAuthError` with `reason: 'reauthorise'`; other failures
-retain it. Validated rotation is persisted even if abort occurs during body reading, then
-cancellation is honored. `createOAuthSourceAuth` restores lazily,
+retain it. Token requests (code exchange and refresh) never use the caller's signal: once sent
+they run on a private controller with a 30-second timeout (`TOKEN_REQUEST_TIMEOUT_MS`), so a
+cancellation cannot cut off a response carrying a rotated credential. A caller abort before
+sending prevents the request; one during the exchange is honored after the response is
+validated and persisted, with a generic `AbortError`. A code exchange that returns no refresh
+token deletes any stored record for that `{ connectorId, account }`, so another provider account
+cannot silently reuse the previous login's credential. `createOAuthSourceAuth` restores lazily,
 refreshes expired tokens, shares concurrent refreshes and retries a GET once after 401.
 `disconnect()` waits for pending refresh before deleting so it cannot repopulate the vault.
+When the OAuth config has a `revocationEndpoint` (RFC 7009), disconnect first POSTs the stored
+and session refresh tokens there (`token_type_hint=refresh_token`, same client authentication
+and private-controller timeout rule, not sent once cancelled), ignoring every failure, then
+deletes locally. The Google configurations declare `https://oauth2.googleapis.com/revoke`.
+Other providers have no RFC 7009 endpoint configured: revoke the app's access in the provider's
+account settings.
 The built-in stores provide account locks for the shared engine, including CLI cron runs
 using the file store. Custom stores without `withLock` require hosts to serialize mutations.
 `createSpotifySourceAuth` throws when given a vault: vault hosts must use

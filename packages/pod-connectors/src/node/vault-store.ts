@@ -27,6 +27,7 @@ const TEMP_NAME =
   /^[a-f0-9]{64}\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.tmp$/;
 const STALE_NAME =
   /^[a-f0-9]{64}\.lock\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.stale$/;
+const RECORD_NAME = /^[a-f0-9]{64}$/;
 const MAX_SCAN_ENTRIES = 10000;
 function leftover(name: string): boolean {
   return TEMP_NAME.test(name) || STALE_NAME.test(name);
@@ -343,11 +344,13 @@ export class FileVaultStore implements VaultStore {
     let scanned = 0;
     const directory = await opendir(this.directory);
     for await (const entry of directory) {
-      if (entry.isSymbolicLink() || !entry.isFile()) throw new ConnectorVaultError();
+      // Unsafe record entries are returned for list() to skip and still count toward budgets.
+      if (!RECORD_NAME.test(entry.name) && (entry.isSymbolicLink() || !entry.isFile()))
+        throw new ConnectorVaultError();
       if (++scanned > MAX_SCAN_ENTRIES) throw new ConnectorVaultError();
       if (leftover(entry.name)) continue;
       if (++count > MAX_VAULT_RECORDS * 2 + 1) throw new ConnectorVaultError();
-      if (/^[a-f0-9]{64}$/.test(entry.name)) {
+      if (RECORD_NAME.test(entry.name)) {
         if (names.length >= MAX_VAULT_RECORDS) throw new ConnectorVaultError();
         names.push(entry.name);
       } else if (!/^[a-f0-9]{64}\.lock$/.test(entry.name)) throw new ConnectorVaultError();
@@ -409,7 +412,17 @@ export class FileVaultStore implements VaultStore {
       const name = await this.filename(id);
       const dir = await this.dir();
       try {
-        if (await this.read(name)) {
+        // Disconnect must work even after a record's mode was loosened: unlink any regular
+        // file this user owns, but never a symlink or another user's file.
+        let stat: import("node:fs").Stats | undefined;
+        try {
+          stat = await lstat(join(this.directory, name));
+        } catch (error) {
+          if (!missing(error)) throw error;
+        }
+        if (stat) {
+          if (stat.isSymbolicLink() || !stat.isFile() || stat.uid !== getuid?.())
+            throw new ConnectorVaultError();
           await unlink(join(this.directory, name));
           await dir.sync();
         }
@@ -426,9 +439,17 @@ export class FileVaultStore implements VaultStore {
       try {
         const ids: string[] = [];
         for (const name of await this.names()) {
+          // Unsafe entries (loosened mode, links, foreign owner) are skipped; get() refuses them.
+          let stat: import("node:fs").Stats;
+          try {
+            stat = await lstat(join(this.directory, name));
+          } catch (error) {
+            if (missing(error)) continue;
+            throw error;
+          }
+          if (stat.isSymbolicLink() || !safeFile(stat)) continue;
           const data = await this.read(name);
-          if (!data) throw new ConnectorVaultError();
-          ids.push(data.id);
+          if (data) ids.push(data.id);
         }
         return ids;
       } finally {

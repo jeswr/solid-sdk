@@ -140,14 +140,9 @@ export async function authorizeLoopback(
           .then(() => options.openAuthorizationUrl(authorizationUrl))
           .catch(finish);
     });
-    const safeFetch = refuseRedirects(sourceFetch);
-    const exchange: typeof fetch = async (input, init) => {
-      const response = await safeFetch(input, {
-        ...init,
-        signal: controller.signal,
-      });
-      return response;
-    };
+    // The exchange keeps its own controller once sent; the login controller still prevents a
+    // late send and is honored after the credential is persisted.
+    const exchange = refuseRedirects(sourceFetch);
     return await exchangeCodeForToken(
       adapterId,
       exchangeConfig,

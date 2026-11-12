@@ -123,6 +123,76 @@ export interface OAuthVaultOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Token and revocation requests run on their own controller, never the caller's signal. */
+export const TOKEN_REQUEST_TIMEOUT_MS = 30_000;
+
+function cancelledError(): DOMException {
+  return new DOMException("Source authorization cancelled.", "AbortError");
+}
+
+/** HTTPS, or HTTP on a loopback host for development; never embedded credentials. */
+function checkEndpoint(endpoint: string): void {
+  const url = new URL(endpoint);
+  if (
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
+    url.username ||
+    url.password
+  )
+    throw new Error();
+}
+
+/** Client authentication shared by token and revocation requests. */
+function clientRequest(
+  cfg: OAuthAppConfig,
+  clientId: string,
+  body: URLSearchParams,
+): { headers: Headers; body: string } {
+  body.set("client_id", clientId);
+  const headers = new Headers({
+    "content-type": "application/x-www-form-urlencoded",
+    accept: "application/json",
+  });
+  if (cfg.tokenExchange === "public" && cfg.clientSecret) {
+    if (cfg.tokenRequest === "basic-form" || cfg.tokenRequest === "basic-json") {
+      headers.set("authorization", `Basic ${btoa(`${clientId}:${cfg.clientSecret}`)}`);
+      if (cfg.tokenRequest === "basic-json") {
+        body.delete("client_id");
+        headers.set("content-type", "application/json");
+        return { headers, body: JSON.stringify(Object.fromEntries(body)) };
+      }
+    } else body.set("client_secret", cfg.clientSecret);
+  } else if (cfg.basicAuthForToken) headers.set("authorization", `Basic ${btoa(`${clientId}:`)}`);
+  return { headers, body: body.toString() };
+}
+
+/**
+ * Send and fully read one request on a private controller with a fixed timeout. A caller
+ * abort cannot cut off a response that may carry a rotated credential.
+ */
+async function ownRequest<T>(
+  fetchImpl: typeof fetch,
+  endpoint: string,
+  request: { headers: Headers; body: string },
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      redirect: "error",
+      credentials: "omit",
+      signal: controller.signal,
+    });
+    return await read(response);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function tokenRequest(
   adapterId: string,
   cfg: OAuthAppConfig,
@@ -132,57 +202,36 @@ async function tokenRequest(
 ): Promise<TokenSet> {
   const endpoint = cfg.tokenExchange === "proxy" ? cfg.tokenProxyUrl : cfg.tokenEndpoint;
   if (!endpoint || !cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
+  // Never start a request after the caller cancelled.
+  if (options?.signal?.aborted) throw cancelledError();
+  const refresh = body.get("grant_type") === "refresh_token";
   let failureStatus: number | undefined;
+  let token: TokenSet;
   try {
-    options?.signal?.throwIfAborted();
-    const url = new URL(endpoint);
-    if (
-      (url.protocol !== "https:" &&
-        !(
-          url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-        )) ||
-      url.username ||
-      url.password
-    )
-      throw new Error();
-    body.set("client_id", cfg.clientId);
-    const headers = new Headers({
-      "content-type": "application/x-www-form-urlencoded",
-      accept: "application/json",
-    });
-    let requestBody: BodyInit = body;
-    if (cfg.tokenExchange === "public" && cfg.clientSecret) {
-      if (cfg.tokenRequest === "basic-form" || cfg.tokenRequest === "basic-json") {
-        headers.set("authorization", `Basic ${btoa(`${cfg.clientId}:${cfg.clientSecret}`)}`);
-        if (cfg.tokenRequest === "basic-json") {
-          body.delete("client_id");
-          headers.set("content-type", "application/json");
-          requestBody = JSON.stringify(Object.fromEntries(body));
+    checkEndpoint(endpoint);
+    const { ok, json } = await ownRequest(
+      fetchImpl,
+      endpoint,
+      clientRequest(cfg, cfg.clientId, body),
+      async (response) => {
+        if (!response.ok) {
+          failureStatus = response.status;
+          if (!refresh) {
+            await response.body?.cancel();
+            throw new Error();
+          }
         }
-      } else body.set("client_secret", cfg.clientSecret);
-    } else if (cfg.basicAuthForToken)
-      headers.set("authorization", `Basic ${btoa(`${cfg.clientId}:`)}`);
-    const response = await fetchImpl(endpoint, {
-      method: "POST",
-      headers,
-      body: typeof requestBody === "string" ? requestBody : body.toString(),
-      redirect: "error",
-      credentials: "omit",
-      signal: options?.signal,
-    });
-    if (!response.ok) {
-      failureStatus = response.status;
-      if (body.get("grant_type") !== "refresh_token") {
-        await response.body?.cancel();
-        throw new Error();
-      }
-    }
-    const json = (await readJson(response, adapterId, endpoint, 64 * 1024)) as Record<
-      string,
-      unknown
-    >;
-    if (!response.ok) {
-      if (body.get("grant_type") === "refresh_token" && json?.error === "invalid_grant") {
+        return {
+          ok: response.ok,
+          json: (await readJson(response, adapterId, endpoint, 64 * 1024)) as Record<
+            string,
+            unknown
+          >,
+        };
+      },
+    );
+    if (!ok) {
+      if (refresh && json?.error === "invalid_grant") {
         throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
       }
       throw new Error();
@@ -210,7 +259,7 @@ async function tokenRequest(
     else if (Array.isArray(json.scope) && json.scope.every((item) => typeof item === "string"))
       scope = json.scope.join(" ");
     if (scope !== undefined && scope.length > 4096) throw new Error();
-    const token: TokenSet = {
+    token = {
       accessToken: json.access_token,
       tokenType: (json.token_type as string | undefined) ?? "Bearer",
       refreshToken:
@@ -219,20 +268,23 @@ async function tokenRequest(
       expiresAt:
         typeof json.expires_in === "number" ? Date.now() + json.expires_in * 1000 : undefined,
     };
-    if (json.refresh_token && options?.vault) {
+    if (options?.vault) {
       const key = { connectorId: adapterId, account: options.account };
-      const previous =
-        body.get("grant_type") === "refresh_token" ? await options.vault.get(key) : undefined;
-      await options.vault.put(key, {
-        refreshToken: json.refresh_token as string,
-        scope: token.scope ?? previous?.scope,
-        tokenType: token.tokenType,
-        obtainedAt: Date.now(),
-        providerMeta: previous?.providerMeta,
-      });
+      if (json.refresh_token) {
+        const previous = refresh ? await options.vault.get(key) : undefined;
+        await options.vault.put(key, {
+          refreshToken: json.refresh_token as string,
+          scope: token.scope ?? previous?.scope,
+          tokenType: token.tokenType,
+          obtainedAt: Date.now(),
+          providerMeta: previous?.providerMeta,
+        });
+      } else if (!refresh) {
+        // A login without a refresh credential (possibly another provider account) must not
+        // leave this account label restoring the previous login's credential.
+        await options.vault.delete(key);
+      }
     }
-    options?.signal?.throwIfAborted();
-    return token;
   } catch (error) {
     if (error instanceof IntegrationAuthError && error.reason === "reauthorise") throw error;
     throw new IntegrationAuthError(
@@ -242,6 +294,40 @@ async function tokenRequest(
         ? "Source token exchange failed."
         : `Token exchange failed (${failureStatus}).`,
     );
+  }
+  // Rotation is durable; only now honor a cancellation that arrived during the exchange.
+  if (options?.signal?.aborted) throw cancelledError();
+  return token;
+}
+
+/**
+ * Best-effort RFC 7009 revocation of a refresh credential. Failures are ignored: local
+ * deletion always follows. Never sent once the caller has cancelled.
+ */
+async function revokeRefreshToken(
+  cfg: OAuthAppConfig,
+  refreshToken: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<void> {
+  const endpoint = cfg.revocationEndpoint;
+  if (!endpoint || !cfg.clientId || signal?.aborted) return;
+  try {
+    checkEndpoint(endpoint);
+    await ownRequest(
+      fetchImpl,
+      endpoint,
+      clientRequest(
+        cfg,
+        cfg.clientId,
+        new URLSearchParams({ token: refreshToken, token_type_hint: "refresh_token" }),
+      ),
+      async (response) => {
+        await response.body?.cancel();
+      },
+    );
+  } catch {
+    /* Revocation is advisory; the local record is deleted regardless. */
   }
 }
 
@@ -456,6 +542,7 @@ export function createOAuthSourceAuth(
       return transport().fetch(input, init);
     },
     async disconnect() {
+      const live = token?.refreshToken;
       disconnected = true;
       token = undefined;
       clearToken(id);
@@ -465,6 +552,18 @@ export function createOAuthSourceAuth(
         /* Deletion must still follow a failed refresh. */
       }
       await withVaultLock(id, options, async () => {
+        const credentials = new Set<string>();
+        if (cfg.revocationEndpoint) {
+          try {
+            const saved = await readSaved(id, options);
+            if (saved) credentials.add(saved.refreshToken);
+          } catch {
+            /* An unreadable record cannot be revoked remotely; it is still deleted. */
+          }
+          if (live) credentials.add(live);
+        }
+        for (const credential of credentials)
+          await revokeRefreshToken(cfg, credential, sourceFetch, options.signal);
         await options.vault?.delete({ connectorId: id, account: options.account });
       });
     },

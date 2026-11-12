@@ -70,6 +70,11 @@ export interface OAuthAppConfig {
    * (Reddit's installed-app convention for secretless clients).
    */
   readonly basicAuthForToken?: boolean;
+  /**
+   * RFC 7009 revocation endpoint. When present, disconnect makes a best-effort revocation of
+   * the refresh credential before deleting it locally; otherwise revocation is manual.
+   */
+  readonly revocationEndpoint?: string;
 }
 
 /** Access tokens stay in memory; only refresh credentials may enter an injected vault. */
