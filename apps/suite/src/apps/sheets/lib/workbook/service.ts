@@ -19,6 +19,7 @@ import {
   WorkbookPartialSaveError,
 } from "../contract";
 import { createSheetStorage, type Snapshot, type WorkbookMetadata, workbookLayout } from "../model";
+import { createVersionHistory } from "../versions";
 import { assertSharedWorkbook, assertWorkbook, directChild, slug } from "./layout";
 import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
@@ -32,6 +33,26 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   const now = options.now ?? (() => new Date());
   const register = registration(options, root);
   const checked = (container: string) => assertWorkbook(root, container);
+
+  const histories = new Map<string, ReturnType<typeof createVersionHistory>>();
+  function versions(container: string) {
+    const own = container.startsWith(root);
+    container = own ? checked(container) : assertSharedWorkbook(root, container);
+    let history = histories.get(container);
+    if (!history) {
+      history = createVersionHistory({
+        container,
+        fetch: own
+          ? options.fetch
+          : (input, init) => publicFetch(input, { ...init, credentials: "omit" }),
+        author: options.webId,
+        now,
+        readOnly: !own,
+      });
+      histories.set(container, history);
+    }
+    return history;
+  }
 
   async function writeSheets(
     container: string,
@@ -178,7 +199,9 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
   }
 
   async function open(container: string): Promise<OpenedWorkbook> {
-    return read(checked(container));
+    container = checked(container);
+    histories.delete(container);
+    return read(container);
   }
 
   async function openShared(container: string): Promise<OpenedWorkbook> {
@@ -206,7 +229,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     container: string,
     snapshot: Snapshot,
     base: WorkbookVersion,
-    saveOptions: { force?: boolean; title?: string } = {},
+    saveOptions: { force?: boolean; title?: string; snapshotCurrent?: boolean } = {},
   ): Promise<SaveResult> {
     container = checked(container);
     snapshot = validateCommentSnapshot(snapshot);
@@ -223,9 +246,12 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     const snapshotMatch = saveOptions.force
       ? await io.etag(layout.snapshot, null)
       : base.snapshotEtag;
+    const history = versions(container);
+    const acknowledgeVersion = await history.beforeSave(snapshotMatch, saveOptions.snapshotCurrent);
     const publishedSnapshot = await io.authoritative(container, () =>
       storage.saveSnapshot(container, snapshot, { ifMatch: snapshotMatch }),
     );
+    if (acknowledgeVersion()) await history.prune().catch(() => {});
     let snapshotEtag = base.snapshotEtag;
     let pendingVerification: WorkbookVersion["pendingVerification"] = { snapshot };
     const derived: Record<string, string> = {};
@@ -389,6 +415,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   return {
     root,
+    versions,
     list,
     create,
     async createFromCsv({ title, csv, sheetName = "Sheet1" }) {
