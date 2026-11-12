@@ -263,16 +263,114 @@ describe("Google receiver position", () => {
       'dmarc=pass header.from=example.test; dkim=pass header.i="unterminated',
       "dmarc=pass header.from=example.test (unclosed",
       "dmarc = pass header . from = example.test",
+      // A separator inside a quoted string is ambiguous, so it fails closed even when harmless.
+      'dmarc=pass reason="quoted; reason" header.from=example.test',
+      'dkim=pass header.i="@x;dmarc=fail"; dmarc=pass header.from=example.test',
     ])
       expect(googleAuthentication(anchored(google(result)), from), result).toBeUndefined();
     for (const result of [
-      'dmarc=pass reason="quoted; reason" header.from=example.test',
-      'dkim=pass header.i="@x;dmarc=fail"; dmarc=pass (p=NONE; dis=NONE) header.from=example.test',
+      'dmarc=pass reason="quoted reason" header.from=example.test',
+      'dkim=pass header.i="@x"; dmarc=pass (p=NONE; dis=NONE) header.from=example.test',
       "DMARC = PASS policy.dmarc=reject header.from = example.test",
     ])
       expect(googleAuthentication(anchored(google(result)), from), result).toEqual({
         dmarc: "pass",
         alignedDomain: "example.test",
       });
+  });
+  it("fails closed when a comment holds a quote or a quoted string holds a comment or separator", () => {
+    // The p8 probe: a quoted MAIL FROM local part echoed inside Google's spf comment.
+    const spf = (mailfrom: string) =>
+      `spf=pass (google.com: domain of ${mailfrom} designates 192.0.2.10 as permitted sender) smtp.mailfrom=${mailfrom}`;
+    for (const localPart of [
+      '"a);dmarc=pass header.from=example.test;("@attacker.test',
+      '"a);dmarc=pass header.from=example.test;b=("@attacker.test',
+    ]) {
+      expect(
+        googleAuthentication(anchored(google(spf(localPart))), from),
+        localPart,
+      ).toBeUndefined();
+      expect(
+        googleAuthentication(
+          anchored(google(`${spf(localPart)}; dmarc=fail (p=REJECT) header.from=example.test`)),
+          from,
+        ),
+      ).toBeUndefined();
+    }
+    for (const result of [
+      // Quote inside a comment, even when the clause itself would pass.
+      'dmarc=pass (p="NONE") header.from=example.test',
+      'spf=pass (domain of "x"@example.test) smtp.mailfrom=x@example.test; dmarc=pass header.from=example.test',
+      // Comment delimiters or a separator inside a quoted string.
+      'spf=pass smtp.mailfrom="a(b"@example.test; dmarc=pass header.from=example.test',
+      'spf=pass smtp.mailfrom="a)b"@example.test; dmarc=pass header.from=example.test',
+      'dmarc=pass reason="x;y" header.from=example.test',
+    ])
+      expect(googleAuthentication(anchored(google(result)), from), result).toBeUndefined();
+    // Quoted values without those characters remain acceptable.
+    expect(
+      googleAuthentication(
+        anchored(
+          google(
+            'spf=pass smtp.mailfrom="a+caf_=b=example.test@example.test"; dmarc=pass header.from=example.test',
+          ),
+        ),
+        from,
+      ),
+    ).toEqual({ dmarc: "pass", alignedDomain: "example.test" });
+  });
+  it("accepts UTF8SMTP receipts for internationalized mail", () => {
+    for (const protocol of ["UTF8SMTP", "UTF8SMTPS"]) {
+      // An internationalized-address genuine layout: SMTPUTF8 recipient and Unicode local part.
+      const headers = [
+        `Received: by 2002:a05:6a10:1234:b0:5ab:cdef:1234 with SMTP id a1; Thu, 01 Jan 2026 08:00:00 +0000`,
+        "Received: from mta.example.test (mta.example.test. [192.0.2.10])",
+        `        by mx.google.com with ${protocol} id s1si1.2026.01.01.08.00.00`,
+        "        for <\u00e4lex@example.test>",
+        "        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);",
+        "        Thu, 01 Jan 2026 08:00:00 +0000",
+        ...googleAuthenticationResults(pass),
+      ];
+      expect(googleAuthentication(raw(...headers), "b\u00fccher@example.test"), protocol).toEqual({
+        dmarc: "pass",
+        alignedDomain: "example.test",
+      });
+      expect(googleReceivedTime(raw(...headers))).toEqual(new Date("2026-01-01T08:00:00Z"));
+      // A Google relay hop may also carry an internationalized message.
+      expect(
+        googleAuthentication(
+          raw(
+            `Received: from mail-sor-f41.google.com by relay.google.com with ${protocol} id q1; Thu, 01 Jan 2026 08:00:00 +0000`,
+            ...googleMxReceived(),
+            ...googleAuthenticationResults(pass),
+          ),
+          from,
+        ),
+      ).toEqual({ dmarc: "pass", alignedDomain: "example.test" });
+    }
+    // Authenticated UTF8 submission is never an inbound MX receipt.
+    expect(
+      googleAuthentication(
+        raw(...googleMxReceived(undefined, "UTF8SMTPA"), ...googleAuthenticationResults(pass)),
+        from,
+      ),
+    ).toBeUndefined();
+  });
+  it.each([
+    "ESMTPA",
+    "ESMTPSA",
+    "UTF8SMTPA",
+    "LMTP",
+  ])("refuses a %s hop above the receipt, where client-written headers enter", (protocol) => {
+    expect(
+      googleAuthentication(
+        raw(
+          `Received: from client.example.test by smtp.google.com with ${protocol} id q1; Thu, 01 Jan 2026 08:00:00 +0000`,
+          ...googleMxReceived(),
+          ...googleAuthenticationResults(pass),
+        ),
+        from,
+      ),
+    ).toBeUndefined();
   });
 });

@@ -102,9 +102,11 @@ describe("markup run budget", () => {
         html: junk.replaceAll('"orderNumber":"', `"orderNumber":"${i}-`),
         sender: "mailto:x%40spam.example.test",
       });
-    // 500 unverified items per run, counted only as they are accepted for writing.
-    expect(itemWrites(writes)).toHaveLength(500);
-    expect(writer.errors).toContain("markup-item-budget-exceeded");
+    // Unverified inventory and item PUTs share a 500-PUT allowance; items are counted only as
+    // they are accepted for writing, and never exceed the 500-item allowance.
+    expect(writes).toHaveLength(500);
+    expect(itemWrites(writes).length).toBeLessThan(500);
+    expect(writer.errors).toContain("markup-write-budget-exceeded");
     expect(writer.exhausted).toBe(false);
     const legit = await writer.add({
       messageIri: message("legit"),
@@ -118,7 +120,7 @@ describe("markup run budget", () => {
     });
     expect(legit).toHaveLength(1);
     expect(legit[0]?.trust).toBe("verified");
-    expect(itemWrites(writes)).toHaveLength(501);
+    expect(writes).toHaveLength(502);
   });
   it("keeps the full verified per-message cap and counts only accepted items", async () => {
     const { ctx, writes } = memoryPorts();
@@ -164,6 +166,144 @@ describe("markup run budget", () => {
     expect(writer.errors).toEqual(["markup-item-budget-exceeded"]);
     // The unverified allowance is separate, so the writer is not yet exhausted.
     expect(writer.exhausted).toBe(false);
+  });
+});
+
+describe("markup write budget", () => {
+  const flight = jsonLdFixture({
+    "@type": "FlightReservation",
+    reservationNumber: "ABC",
+    provider: "Example Air",
+  });
+  const verified = {
+    sender: "mailto:a%40air.example.test",
+    authentication: { dmarc: "pass" as const, alignedDomain: "air.example.test" },
+  };
+  it("spends no PUT on rejected items, so 2,000 oversized unverified Orders cannot starve verified mail", async () => {
+    // The p6 scenario: each unverified Order has 301 nested nodes, over the 256-node cap.
+    const { ctx, writes } = memoryPorts();
+    const writer = createMailMarkupWriter(ctx, account);
+    const html = jsonLdFixture({
+      "@type": "Order",
+      orderNumber: "1",
+      seller: "S",
+      acceptedOffer: Array.from({ length: 20 }, () => ({
+        "@type": "Offer",
+        itemOffered: Array.from({ length: 15 }, () => ({ "@type": "Product" })),
+      })),
+    });
+    for (let i = 0; i < 2000; i++)
+      expect(
+        await writer.add({
+          messageIri: message(`junk-${i}`),
+          html,
+          sender: "mailto:x%40spam.example.test",
+        }),
+      ).toEqual([]);
+    expect(writes).toEqual([]);
+    expect(writer.errors).toEqual(["markup-item-too-large"]);
+    expect(writer.exhausted).toBe(false);
+    const legit = await writer.add({ messageIri: message("legit"), html: flight, ...verified });
+    expect(legit).toHaveLength(1);
+    expect(writes.map((doc) => doc.slug)).toEqual([messageSlug(account, "legit"), legit[0]?.slug]);
+  });
+  it("charges unverified inventory and item PUTs to their own allowance within the total", async () => {
+    const { ctx, writes } = memoryPorts();
+    const writer = createMailMarkupWriter(ctx, account, {
+      maxTotalWrites: 10,
+      maxUnverifiedWrites: 5,
+    });
+    const orders = (prefix: string) =>
+      jsonLdFixture(
+        Array.from({ length: 3 }, (_, i) => ({
+          "@type": "Order",
+          orderNumber: `${prefix}-${i}`,
+          seller: "Example Retail",
+        })),
+      );
+    // One inventory PUT plus three items, then only one PUT is left: not enough for a new
+    // inventory and an item, so nothing is written and no inventory lists an unwritten slug.
+    expect(
+      await writer.add({ messageIri: message("u1"), html: orders("a"), sender: "r@x.test" }),
+    ).toHaveLength(3);
+    expect(
+      await writer.add({ messageIri: message("u2"), html: orders("b"), sender: "r@x.test" }),
+    ).toEqual([]);
+    expect(writes).toHaveLength(4);
+    expect(writer.errors).toEqual(["markup-write-budget-exceeded"]);
+    // Verified mail keeps the rest of the total: six PUTs remain, one inventory and five items.
+    const many = jsonLdFixture(
+      Array.from({ length: 8 }, (_, i) => ({
+        "@type": "FlightReservation",
+        reservationNumber: String(i),
+        provider: "Example Air",
+      })),
+    );
+    expect(await writer.add({ messageIri: message("v"), html: many, ...verified })).toHaveLength(5);
+    expect(writes).toHaveLength(10);
+    const inventory = new MailMarkupResource(
+      message("v"),
+      writes.find((doc) => doc.slug === messageSlug(account, "v"))?.dataset as DatasetCore,
+      DataFactory,
+    );
+    expect(inventory.markupSlugs.size).toBe(5);
+    expect(writer.exhausted).toBe(true);
+    // The unverified allowance never exceeds the total.
+    expect(
+      createMailMarkupWriter(ctx, account, { maxTotalWrites: 0, maxUnverifiedWrites: 500 })
+        .exhausted,
+    ).toBe(true);
+    expect(() => createMailMarkupWriter(ctx, account, { maxUnverifiedWrites: -1 })).toThrow(
+      TypeError,
+    );
+  });
+  it("lists only accepted slugs in the inventory and skips its PUT when nothing is accepted", async () => {
+    const { ctx, writes } = memoryPorts();
+    const writer = createMailMarkupWriter(ctx, account);
+    const verifiedOrder = { ...verified, sender: "mailto:r%40example.test" };
+    const auth = { dmarc: "pass" as const, alignedDomain: "example.test" };
+    const order = (number: string) => ({
+      "@type": "Order",
+      orderNumber: number,
+      seller: "Example Retail",
+    });
+    await writer.add({
+      messageIri: message("first"),
+      html: jsonLdFixture(order("kept")),
+      sender: "mailto:r%40example.test",
+      authentication: auth,
+    });
+    writes.length = 0;
+    const mixed = await writer.add({
+      messageIri: message("mixed"),
+      html: jsonLdFixture([
+        order("kept"),
+        { ...order("huge"), description: Array.from({ length: 16 }, () => "x".repeat(8000)) },
+        order("new"),
+      ]),
+      sender: "mailto:r%40example.test",
+      // Unverified: may not replace the verified "kept" Order.
+    });
+    expect(mixed).toHaveLength(1);
+    expect(writer.errors).toEqual(["markup-item-too-large"]);
+    const inventory = new MailMarkupResource(
+      message("mixed"),
+      writes[0]?.dataset as DatasetCore,
+      DataFactory,
+    );
+    expect(writes[0]?.slug).toBe(messageSlug(account, "mixed"));
+    expect([...inventory.markupSlugs]).toEqual([mixed[0]?.slug]);
+    expect(writes).toHaveLength(2);
+    writes.length = 0;
+    // Only rejected items: no inventory PUT at all.
+    expect(
+      await writer.add({
+        messageIri: message("rejected"),
+        html: jsonLdFixture(order("kept")),
+        sender: verifiedOrder.sender,
+      }),
+    ).toEqual([]);
+    expect(writes).toEqual([]);
   });
 });
 

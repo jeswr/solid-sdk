@@ -294,12 +294,14 @@ can opt out or lower limits. Store source RDF and bytes first. Hash booking iden
 [type, senderKey, provider, number], otherwise message/index. Sender keys use the verified
 aligned domain or unverified From domain; malformed/missing From remains message-local.
 Google evidence is positional: walking headers top-down, every Received above the first
-mx.google.com Authentication-Results must be a Google hop (by <host>.google.com over an SMTP
-family protocol, or by <IP literal> with SMTP id), the last being the inbound MX receipt
-`from ... by mx.google.com with ESMTP|ESMTPS|SMTPS`, directly above the assertion. Any other
+mx.google.com Authentication-Results must be a Google hop (by <host>.google.com with SMTP,
+ESMTP, ESMTPS, SMTPS, UTF8SMTP or UTF8SMTPS, or by <IP literal> with SMTP id; never
+authenticated submission or LMTP), the last being the inbound MX receipt `from ... by
+mx.google.com with ESMTP|ESMTPS|SMTPS|UTF8SMTP|UTF8SMTPS`, directly above the assertion. Any other
 hop, a Google POP3/IMAP/HTTP receipt, an unparseable trace or an assertion above the receipt
 is unverified. Tokenize per RFC 8601 (quoted strings and CFWS comments) before splitting
-result clauses; require a single DMARC pass with one unquoted matching header.from, ignoring
+result clauses, failing closed on a `"` inside a comment or `(`, `)` or `;` inside a quoted
+string; require a single DMARC pass with one unquoted matching header.from, ignoring
 later headers and other authserv-ids. Unsupported syntax in the first Google header fails
 closed; never fall through to a lower duplicate. Preserve trusted host evidence. Persist sender key/trust and
 receiver modification time on message RDF for re-scan. Unverified assertions never overwrite
@@ -319,7 +321,11 @@ still skip items over 64 KiB UTF-8 Turtle, enforcing the cap after session prove
 budgets across all messages in createMailWriter/re-scan. Count only items accepted for writing.
 Verified mail keeps maxTotalItems (default 2,000) and the per-message maxItems; unverified mail
 is capped at 10 items per message and a separate maxUnverifiedItems (default 500, at most
-maxTotalItems). PUT attempts (default 2,000) count failures and source inventory PUTs. Catch extraction/markup write failures per message and report stable
+maxTotalItems). PUT attempts (default 2,000) count failures and source inventory PUTs;
+unverified PUTs also draw on maxUnverifiedWrites (default 500, at most maxTotalWrites). Decide
+and size-check every item before the inventory PUT, list only accepted slugs, skip the
+inventory PUT when nothing is accepted, and trim accepted items to the PUTs left.
+Verified means DMARC aligned for the From domain, not a trustworthy sender. Catch extraction/markup write failures per message and report stable
 codes through writer.errors and ImportReport.errors; keep importing emails and advancing the
 cursor. Cancellation still propagates. Depth overflow must keep scanning later JSON scripts.
 

@@ -220,7 +220,7 @@ input and skips comments and raw script/style/textarea bodies without parsing th
 the default is on after the message RDF and bytes have been stored. The source factories
 `createGmailAdapter(options)` and `createGoogleTakeoutFileAdapter(options)` accept the same
 `MailWriterOptions` (`extractMarkup`, and `markup: { maxBytes, maxItems, maxTotalItems,
-maxUnverifiedItems, maxTotalWrites }`). Scalar extraction across an email is capped at 256 Ki UTF-16 characters;
+maxUnverifiedItems, maxTotalWrites, maxUnverifiedWrites }`). Scalar extraction across an email is capped at 256 Ki UTF-16 characters;
 completed microdata values also have an independent intermediate budget of that size, before
 normalization can duplicate nested aliases. Extraction stops at exhaustion, retains values
 that fit, and flags `truncated`. Source message IRIs are capped at 8,192 characters before repeated provenance allocation.
@@ -237,8 +237,14 @@ mail has its own allowance (`maxTotalItems`, 2,000 by default) and keeps the per
 (`MAX_UNVERIFIED_MARKUP_ITEMS_PER_MESSAGE`) and a separate `maxUnverifiedItems` allowance
 (500 by default, never above `maxTotalItems`), so unverified senders cannot starve later
 verified mail. PUT attempts (`maxTotalWrites`, 2,000 by default) include source
-cleanup-inventory updates and failed attempts. Hard ceilings are 100,000.
-`MailMarkupWriter.exhausted` reports when both item allowances or the PUT budget are spent.
+cleanup-inventory updates and failed attempts. Unverified mail's inventory and item PUTs also
+draw on `maxUnverifiedWrites` (500 by default, never above `maxTotalWrites`), so verified mail
+always keeps the rest of the PUT budget. Hard ceilings are 100,000. Every item of a message is
+decided and size-checked before any PUT, so rejected, stale, blocked and oversized items cost
+no PUT. Accepted items are trimmed to the remaining item allowance and to the PUTs left for
+their trust level (counting the inventory PUT when it is needed); trimmed items are reported
+with the budget error codes. `MailMarkupWriter.exhausted` is true once neither verified nor
+unverified mail can write another item, because each has spent its item or PUT allowance.
 Re-scan uses the same budgets. Failures skip that message's remaining markup and leave its
 email and mailbox import running; cancellation still aborts. `MailWriter.errors`,
 `MailMarkupWriter.errors`, re-scan results and `ImportReport.errors` expose distinct stable
@@ -261,9 +267,12 @@ are rejected; verified evidence may promote an unverified assertion regardless o
 
 Gmail raw and Takeout mbox imports accept Google's `Authentication-Results` only by position.
 The receiver walks the header block top-down. Every `Received` header above the assertion must
-be a Google hop: `by <host>.google.com` over SMTP/ESMTP/LMTP, or Google's internal
-`by <IP literal> with SMTP id` form. The last of them must be the inbound MX receipt,
-`Received: from ... by mx.google.com with ESMTP|ESMTPS|SMTPS`, and the first assertion with
+be a Google hop: `by <host>.google.com` with `SMTP`, `ESMTP`, `ESMTPS`, `SMTPS`, `UTF8SMTP` or
+`UTF8SMTPS`, or Google's internal `by <IP literal> with SMTP id` form. Authenticated
+submission (`ESMTPA`, `ESMTPSA`, `UTF8SMTPA`) marks where client-written headers enter, and
+`LMTP` appears in no genuine Google layout, so neither is accepted. The last hop must be the
+inbound MX receipt, `Received: from ... by mx.google.com with ESMTP|ESMTPS|SMTPS|UTF8SMTP|UTF8SMTPS`
+(UTF8 forms carry internationalized mail), and the first assertion with
 authserv-id `mx.google.com` must follow it with no other `Received` in between. A non-Google
 hop, a Google POP3/IMAP/HTTP receipt (mail fetch, IMAP append, API insertion), an unparseable
 trace, or an assertion above the receipt leaves the message unverified. This covers
@@ -271,7 +280,10 @@ migrated or appended mail that carries a sender-forged `mx.google.com` assertion
 Google's own. Later duplicate headers and all other authserv-ids are ignored. A message
 appended with no Google trace at all whose sender wrote a complete Google-shaped block on top
 is indistinguishable from received mail. Result clauses are split per RFC 8601 after CFWS
-tokenization, so semicolons inside quoted strings or comments cannot start a clause. A single
+tokenization, so semicolons inside quoted strings or comments cannot start a clause. An
+ambiguous header fails closed: a `"` inside a comment, or `(`, `)` or `;` inside a quoted
+string (for example a quoted MAIL FROM local part echoed in Google's spf comment). The same
+tokenization applies to `Received` headers. A single
 `dmarc=pass` clause, with an optional `reason` and `ptype.property=value` properties only,
 must include one unquoted aligned `header.from` domain matching the From domain exactly or
 containing it as a subdomain. Missing, mismatched, ambiguous or
@@ -279,7 +291,10 @@ failed evidence stays unverified. Unsupported syntax in that first Google header
 unverified and never authorizes a later duplicate. The host can still supply trusted receiver evidence through
 `MailItem.authentication`, `MailMarkupSource.authentication` or the re-scan lookup, including
 `alignedDomain`; the existing explicitly aligned SPF+DKIM host evidence is also accepted.
-This verifies sender authentication, not the truth of a booking. Message RDF retains the
+Verified means only that Google reported DMARC alignment for the From domain: any sender
+whose own domain passes DMARC counts as verified for that domain, including a domain an
+attacker registered. It verifies sender authentication, not the truth of a booking; the
+sender key keeps each domain's assertions apart. Message RDF retains the
 sender key, trust and receiver modification time for later HTML-only re-scans.
 
 `schema:dateModified` uses only receiver time: Gmail `internalDate`; Takeout's mbox `From `
@@ -290,8 +305,9 @@ import time. Missing time is omitted and compares as epoch; neither MIME `Date` 
 modification times can pin a record. Re-scan uses only the dedicated receiver modification
 time persisted by the writer; legacy sent/received fields are not treated as trusted evidence.
 
-The source message's `fedcon:emailMarkupSlug` literals index attempted markup resources.
-The inventory is committed once before item PUTs and preserved on replay. Removal checks each
+The source message's `fedcon:emailMarkupSlug` literals index accepted markup resources only.
+The inventory is committed once before item PUTs, is skipped entirely when no item is
+accepted, and is preserved on replay. Removal checks each
 indexed resource's current derivation before deleting it, so removing an earlier email keeps
 a newer booking update. Gmail 404, SPAM and full-sync sweep deletions use this cleanup;
 moving a message to Trash retires its markup while retaining the message in the Trash folder.

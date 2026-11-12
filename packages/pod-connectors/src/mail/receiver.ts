@@ -68,7 +68,9 @@ interface HeaderToken {
 
 /** RFC 5322 CFWS-aware tokenization for structured header values. Comments (nested, with
  * quoted-pairs) are dropped, quoted strings become one token and `specials` stand alone.
- * Unbalanced comments or unterminated quoted strings fail closed. Linear in the input. */
+ * Unbalanced comments or unterminated quoted strings fail closed. So does ambiguity a sender
+ * can plant through an echoed value (such as a quoted MAIL FROM local part inside Google's spf
+ * comment): a `"` inside a comment, or `(`, `)` or `;` inside a quoted string. Linear. */
 function headerTokens(value: string, specials: string): HeaderToken[] | undefined {
   const tokens: HeaderToken[] = [];
   let i = 0;
@@ -80,6 +82,7 @@ function headerTokens(value: string, specials: string): HeaderToken[] | undefine
       let depth = 1;
       while (++i < value.length && depth) {
         if (value[i] === "\\") i++;
+        else if (value[i] === '"') return undefined;
         else if (value[i] === "(") depth++;
         else if (value[i] === ")") depth--;
       }
@@ -98,7 +101,8 @@ function headerTokens(value: string, specials: string): HeaderToken[] | undefine
           closed = true;
           i++;
           break;
-        } else text += q;
+        } else if (q === "(" || q === ")" || q === ";") return undefined;
+        else text += q;
       }
       if (!closed) return undefined;
       tokens.push({ kind: "quoted", text });
@@ -171,15 +175,16 @@ function ipLiteral(value: string): boolean {
   return halves.length === 2 ? count < 8 : count === 8;
 }
 
-const GOOGLE_MX_PROTOCOLS = new Set(["ESMTP", "ESMTPS", "SMTPS"]);
+const GOOGLE_MX_PROTOCOLS = new Set(["ESMTP", "ESMTPS", "SMTPS", "UTF8SMTP", "UTF8SMTPS"]);
+// Relays between Google hosts. Authenticated submission (ESMTPA, ESMTPSA, UTF8SMTPA) marks
+// where client-written headers enter, so it never sits above the inbound receipt.
 const GOOGLE_RELAY_PROTOCOLS = new Set([
   "SMTP",
   "ESMTP",
   "ESMTPS",
-  "ESMTPA",
-  "ESMTPSA",
   "SMTPS",
-  "LMTP",
+  "UTF8SMTP",
+  "UTF8SMTPS",
 ]);
 const GOOGLE_HOST = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+google\.com$/;
 

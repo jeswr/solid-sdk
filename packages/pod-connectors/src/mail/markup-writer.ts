@@ -65,10 +65,14 @@ export interface MailMarkupWriterOptions extends EmailMarkupOptions {
   readonly maxUnverifiedItems?: number;
   /** Markup and source-inventory PUT attempts (including failures). Default 2,000; hard cap 100,000. */
   readonly maxTotalWrites?: number;
+  /** PUT attempts for unverified mail, within `maxTotalWrites`. Default 500, never above it, so
+   * verified mail always keeps the rest of the PUT budget. */
+  readonly maxUnverifiedWrites?: number;
 }
 export interface MailMarkupWriter {
   readonly errors: readonly MailMarkupErrorCode[];
-  /** True once no further item can be written: both item allowances or the PUT budget are spent. */
+  /** True once neither verified nor unverified mail can write another item: for each, its item
+   * allowance or its PUT allowance is spent. */
   readonly exhausted: boolean;
   add(source: MailMarkupSource): Promise<readonly StoredEmailMarkup[]>;
 }
@@ -129,6 +133,62 @@ async function hash(value: string): Promise<string> {
 function validDate(value: Date | undefined): Date | undefined {
   return value && Number.isFinite(value.getTime()) ? value : undefined;
 }
+interface MarkupProvenance {
+  readonly trust: MailMarkupTrust;
+  readonly senderKey: string;
+  readonly source: string;
+  readonly date?: Date;
+}
+/** Deterministically build one item's RDF, or return undefined as soon as it exceeds the node
+ * cap or the running size estimate, before any serialization. */
+function buildMarkupItem(
+  item: EmailMarkupItem,
+  document: string,
+  provenance: MarkupProvenance,
+): Store | undefined {
+  const { trust, senderKey, source } = provenance;
+  const iri = `${document}#it`;
+  const dataset = new Store();
+  let child = 0;
+  let nodes = 0;
+  // Running UTF-16 estimate of the item's N-Triples-like size; Turtle escaping and multi-byte
+  // text are covered by the exact serialized check.
+  let estimate = 0;
+  const fits = (...terms: string[]) => {
+    for (const term of terms) estimate += term.length + 4;
+    return estimate <= MAX_MARKUP_ITEM_BYTES;
+  };
+  function writeNode(node: MarkupNode, subject: string): boolean {
+    if (++nodes > MAX_MARKUP_ITEM_NODES) return false;
+    // Type, trust, sender-key and derivation triples repeat on every node.
+    if (!fits(subject, node.type ?? "", subject, trust, subject, senderKey, subject, source))
+      return false;
+    const resource = new MailMarkupResource(subject, dataset, DataFactory);
+    if (node.type) resource.types.add(MARKUP_CLASSES[node.type]);
+    resource.trust = trust;
+    resource.senderKey = senderKey;
+    resource.derivedFrom.add(source);
+    for (const [key, values] of Object.entries(node.properties)) {
+      const prop = key as MarkupProperty;
+      if (subject === iri && prop === "dateModified") continue;
+      for (const value of values ?? []) {
+        if (typeof value !== "object") {
+          if (!fits(subject, prop, String(value))) return false;
+          resource.addLiteral(prop, value);
+        } else {
+          const linked = `${document}#node-${child++}`;
+          if (!fits(subject, prop, linked)) return false;
+          resource.links(prop).add(linked);
+          if (!writeNode(value, linked)) return false;
+        }
+      }
+    }
+    return true;
+  }
+  if (!writeNode(item, iri)) return undefined;
+  new MailMarkupResource(iri, dataset, DataFactory).dateModified = provenance.date;
+  return dataset;
+}
 /** Uses import-session ports, so reads retain ETags and writes participate in run provenance. */
 export function createMailMarkupWriter(
   ctx: MailMarkupPorts,
@@ -146,17 +206,32 @@ export function createMailMarkupWriter(
     unverified: Math.min(markupLimit(options.maxUnverifiedItems, 500, 100_000), maxVerified),
   };
   const maxWrites = markupLimit(options.maxTotalWrites, 2000, 100_000);
+  const maxUnverifiedWrites = Math.min(
+    markupLimit(options.maxUnverifiedWrites, 500, 100_000),
+    maxWrites,
+  );
   const perMessage = markupLimit(options.maxItems, 100, MAX_MARKUP_ITEMS);
   // Only items accepted for writing count, so skipped or rejected items never spend budget.
   const accepted: Record<MailMarkupTrust, number> = { verified: 0, unverified: 0 };
   const remaining = (trust: MailMarkupTrust) => allowance[trust] - accepted[trust];
   let writes = 0;
+  let unverifiedWrites = 0;
+  // Unverified PUTs (inventory and items) draw on their own allowance inside the total.
+  const writesLeft = (trust: MailMarkupTrust) =>
+    trust === "verified"
+      ? maxWrites - writes
+      : Math.min(maxWrites - writes, maxUnverifiedWrites - unverifiedWrites);
+  const charge = (trust: MailMarkupTrust) => {
+    writes++;
+    if (trust === "unverified") unverifiedWrites++;
+  };
+  const canWrite = (trust: MailMarkupTrust) => remaining(trust) > 0 && writesLeft(trust) > 0;
   return {
     get errors() {
       return [...errors];
     },
     get exhausted() {
-      return writes >= maxWrites || (remaining("verified") <= 0 && remaining("unverified") <= 0);
+      return !canWrite("verified") && !canWrite("unverified");
     },
     async add(source) {
       abort();
@@ -169,19 +244,51 @@ export function createMailMarkupWriter(
       const rest = source.messageIri.slice(messages.length);
       if (!source.messageIri.startsWith(messages) || !/^[^/?#]+\.ttl#it$/.test(rest))
         throw new TypeError("Email markup source is outside the mail account");
-      const results: StoredEmailMarkup[] = [];
-      let pendingRead: string | undefined;
+      const retained = new Set<string>();
+      const release = (slug: string) => {
+        retained.delete(slug);
+        ctx.releaseRead?.(slug);
+      };
+      const read = async (slug: string) => {
+        retained.add(slug);
+        const dataset = await ctx.read(slug);
+        abort();
+        return dataset;
+      };
+      interface Plan {
+        readonly item: EmailMarkupItem;
+        readonly slug: string;
+        readonly family: string;
+        updated?: boolean;
+      }
+      const plans: Plan[] = [];
+      const results = () =>
+        plans.flatMap(({ item, slug, updated }) =>
+          updated === undefined
+            ? []
+            : [
+                {
+                  iri: `${ctx.resolve(slug)}#it`,
+                  slug,
+                  type: item.type,
+                  sourceMessage: source.messageIri,
+                  trust,
+                  updated,
+                },
+              ],
+        );
+      let trust: MailMarkupTrust = "unverified";
       let phase: MailMarkupErrorCode = "markup-extraction-failed";
       try {
         const sender = markupSender(source.sender, source.authentication);
-        const { trust } = sender;
+        trust = sender.trust;
         if (remaining(trust) <= 0) {
           errors.add("markup-item-budget-exceeded");
-          return results;
+          return [];
         }
-        if (writes >= maxWrites) {
+        if (writesLeft(trust) <= 0) {
           errors.add("markup-write-budget-exceeded");
-          return results;
+          return [];
         }
         const extraction = extractEmailMarkupResult(source.html, {
           ...options,
@@ -192,12 +299,10 @@ export function createMailMarkupWriter(
           ),
         });
         if (extraction.truncated) errors.add("markup-truncated");
-        const items = extraction.items;
         // Missing/malformed From never shares a booking identity across messages.
         const senderKey = sender.senderKey ?? source.messageIri;
         phase = "markup-write-failed";
-        const plans: { item: EmailMarkupItem; slug: string; family: string }[] = [];
-        for (const [index, item] of items.entries()) {
+        for (const [index, item] of extraction.items.entries()) {
           const number =
             first(item, "reservationNumber") ??
             first(item, "reservationId") ??
@@ -212,190 +317,132 @@ export function createMailMarkupWriter(
           abort();
           plans.push({ item, slug, family });
         }
-        // One inventory commit per email, before any item PUT, so failed writes are removable
-        // without repeatedly serializing the (potentially large) source message.
-        if (plans.length) {
-          const messageSlug = `${root}messages/${rest.slice(0, -3)}`;
-          pendingRead = messageSlug;
-          const storedMessage = await ctx.read(messageSlug);
-          abort();
-          // Without the source's cleanup inventory, written items could never be retired.
-          if (!storedMessage) {
-            ctx.releaseRead?.(messageSlug);
-            errors.add("markup-source-missing");
-            return results;
-          }
-          const messageDataset = new Store([...storedMessage]);
-          const inventory = new MailMarkupResource(source.messageIri, messageDataset, DataFactory);
-          let changed = false;
-          for (const plan of plans) {
-            if (inventory.markupSlugs.has(plan.slug)) continue;
-            if (inventory.markupSlugs.size >= MAX_MARKUP_ITEMS) {
-              errors.add("markup-item-budget-exceeded");
-              ctx.releaseRead?.(messageSlug);
-              return results;
-            }
-            inventory.markupSlugs.add(plan.slug);
-            changed = true;
-          }
-          if (changed) {
-            writes++;
-            await ctx.write({
-              slug: messageSlug,
-              category: "mail",
-              forClass: MAIL_CLASSES.EmailMessage,
-              dataset: messageDataset,
-              skipRegistration: true,
-              // Retain counts from a source imported in this run, without counting
-              // older source/attachment subjects as newly imported during re-scan.
-              writeMode: "merge",
-              carriedForward: [
-                ...new Set(
-                  [...storedMessage]
-                    .filter((quad) => quad.subject.termType === "NamedNode")
-                    .map((quad) => quad.subject.value),
-                ),
-              ],
-            });
-          } else ctx.releaseRead?.(messageSlug);
+        if (!plans.length) return [];
+        const messageSlug = `${root}messages/${rest.slice(0, -3)}`;
+        const storedMessage = await read(messageSlug);
+        // Without the source's cleanup inventory, written items could never be retired.
+        if (!storedMessage) {
+          release(messageSlug);
+          errors.add("markup-source-missing");
+          return [];
         }
-        pendingRead = undefined;
-        for (const { item, slug, family } of plans) {
+        const provenance = {
+          trust,
+          senderKey,
+          source: source.messageIri,
+          date: receiverTime(source.dateModified, importedAt),
+        };
+        // Decide and size-check every item before any PUT, so rejected items cost no write.
+        // Only slugs are kept; accepted items are rebuilt deterministically when written.
+        const ready: Plan[] = [];
+        for (const plan of plans) {
           abort();
-          pendingRead = slug;
-          const previous = await ctx.read(slug);
-          abort();
-          const iri = `${ctx.resolve(slug)}#it`;
-          const old = previous && new MailMarkupResource(iri, previous, DataFactory);
+          const previous = await read(plan.slug);
+          const old =
+            previous &&
+            new MailMarkupResource(`${ctx.resolve(plan.slug)}#it`, previous, DataFactory);
           // Unverified mail cannot replace a verified assertion with a guessed booking number.
           if (old?.trust === "verified" && trust === "unverified") {
-            ctx.releaseRead?.(slug);
+            release(plan.slug);
             continue;
           }
-          const date = receiverTime(source.dateModified, importedAt);
           const oldDate = validDate(old?.dateModified);
           // A sender's unverified future timestamp cannot prevent a later verified assertion.
           const update =
             !oldDate ||
-            (date?.getTime() ?? 0) >= oldDate.getTime() ||
+            (provenance.date?.getTime() ?? 0) >= oldDate.getTime() ||
             (trust === "verified" && old?.trust !== "verified");
-          if (update) {
-            const dataset = new Store();
-            const document = ctx.resolve(slug);
-            let child = 0;
-            let nodes = 0;
-            // Running UTF-16 estimate of the item's N-Triples-like size; Turtle escaping and
-            // multi-byte text are covered by the exact serialized check below.
-            let estimate = 0;
-            const fits = (...terms: string[]) => {
-              for (const term of terms) estimate += term.length + 4;
-              return estimate <= MAX_MARKUP_ITEM_BYTES;
-            };
-            // Returns false as soon as the node or byte cap is exceeded, before serialization.
-            function writeNode(node: MarkupNode, subject: string): boolean {
-              if (++nodes > MAX_MARKUP_ITEM_NODES) return false;
-              // Type, trust, sender-key and derivation triples repeat on every node.
-              const typeIri = node.type ?? "";
-              if (
-                !fits(
-                  subject,
-                  typeIri,
-                  subject,
-                  trust,
-                  subject,
-                  senderKey,
-                  subject,
-                  source.messageIri,
-                )
-              )
-                return false;
-              const resource = new MailMarkupResource(subject, dataset, DataFactory);
-              if (node.type) resource.types.add(MARKUP_CLASSES[node.type]);
-              resource.trust = trust;
-              resource.senderKey = senderKey;
-              resource.derivedFrom.add(source.messageIri);
-              for (const [key, values] of Object.entries(node.properties)) {
-                const prop = key as MarkupProperty;
-                if (subject === iri && prop === "dateModified") continue;
-                for (const value of values ?? []) {
-                  if (typeof value !== "object") {
-                    if (!fits(subject, prop, String(value))) return false;
-                    resource.addLiteral(prop, value);
-                  } else {
-                    const linked = `${document}#node-${child++}`;
-                    if (!fits(subject, prop, linked)) return false;
-                    resource.links(prop).add(linked);
-                    if (!writeNode(value, linked)) return false;
-                  }
-                }
-              }
-              return true;
-            }
-            if (!writeNode(item, iri)) {
-              errors.add("markup-item-too-large");
-              ctx.releaseRead?.(slug);
-              continue;
-            }
-            const resource = new MailMarkupResource(iri, dataset, DataFactory);
-            resource.dateModified = date;
-            if (
-              new TextEncoder().encode(await serialize([...dataset])).length > MAX_MARKUP_ITEM_BYTES
-            ) {
-              errors.add("markup-item-too-large");
-              ctx.releaseRead?.(slug);
-              continue;
-            }
-            if (writes >= maxWrites) {
-              errors.add("markup-write-budget-exceeded");
-              ctx.releaseRead?.(slug);
-              break;
-            }
-            if (remaining(trust) <= 0) {
-              errors.add("markup-item-budget-exceeded");
-              ctx.releaseRead?.(slug);
-              break;
-            }
-            accepted[trust]++;
-            writes++;
-            abort();
-            try {
-              await ctx.write({
-                slug,
-                maxSerializedBytes: MAX_MARKUP_ITEM_BYTES,
-                category: "mail",
-                forClass: MARKUP_CLASSES[item.type],
-                dataset,
-                sourceUrl: source.messageIri,
-                registrationContainer: `${root}${family}/`,
-              });
-              pendingRead = undefined;
-              abort();
-            } catch (error) {
-              abort();
-              if (error instanceof Error && error.name === "DocumentTooLargeError") {
-                errors.add("markup-item-too-large");
-                ctx.releaseRead?.(slug);
-                continue;
-              }
-              throw error;
-            }
+          if (!update) {
+            release(plan.slug);
+            plan.updated = false;
+            continue;
           }
-          if (!update) ctx.releaseRead?.(slug);
-          results.push({
-            iri,
-            slug,
-            type: item.type,
-            sourceMessage: source.messageIri,
-            trust,
-            updated: update,
+          const dataset = buildMarkupItem(plan.item, ctx.resolve(plan.slug), provenance);
+          if (
+            !dataset ||
+            new TextEncoder().encode(await serialize([...dataset])).length > MAX_MARKUP_ITEM_BYTES
+          ) {
+            errors.add("markup-item-too-large");
+            release(plan.slug);
+            continue;
+          }
+          ready.push(plan);
+        }
+        // Trim to the item allowance, then to the PUTs left for this trust level, counting the
+        // inventory PUT only when an accepted slug is new to it.
+        const messageDataset = new Store([...storedMessage]);
+        const inventory = new MailMarkupResource(source.messageIri, messageDataset, DataFactory);
+        const newSlugs = (count: number) =>
+          ready.slice(0, count).filter((plan) => !inventory.markupSlugs.has(plan.slug)).length;
+        let count = Math.min(ready.length, remaining(trust));
+        if (count < ready.length) errors.add("markup-item-budget-exceeded");
+        const items = count;
+        while (count > 0 && count + (newSlugs(count) ? 1 : 0) > writesLeft(trust)) count--;
+        if (count < items) errors.add("markup-write-budget-exceeded");
+        if (inventory.markupSlugs.size + newSlugs(count) > MAX_MARKUP_ITEMS) {
+          errors.add("markup-item-budget-exceeded");
+          count = 0;
+        }
+        const accepting = ready.slice(0, count);
+        for (const plan of ready.slice(count)) release(plan.slug);
+        // One inventory commit per email, listing only accepted slugs, before any item PUT, so
+        // failed writes are removable without re-serializing the (potentially large) source.
+        if (newSlugs(count)) {
+          for (const plan of accepting) inventory.markupSlugs.add(plan.slug);
+          charge(trust);
+          await ctx.write({
+            slug: messageSlug,
+            category: "mail",
+            forClass: MAIL_CLASSES.EmailMessage,
+            dataset: messageDataset,
+            skipRegistration: true,
+            // Retain counts from a source imported in this run, without counting
+            // older source/attachment subjects as newly imported during re-scan.
+            writeMode: "merge",
+            carriedForward: [
+              ...new Set(
+                [...storedMessage]
+                  .filter((quad) => quad.subject.termType === "NamedNode")
+                  .map((quad) => quad.subject.value),
+              ),
+            ],
           });
+          retained.delete(messageSlug);
+        } else release(messageSlug);
+        for (const plan of accepting) {
+          abort();
+          const dataset = buildMarkupItem(plan.item, ctx.resolve(plan.slug), provenance) as Store;
+          accepted[trust]++;
+          charge(trust);
+          try {
+            await ctx.write({
+              slug: plan.slug,
+              maxSerializedBytes: MAX_MARKUP_ITEM_BYTES,
+              category: "mail",
+              forClass: MARKUP_CLASSES[plan.item.type],
+              dataset,
+              sourceUrl: source.messageIri,
+              registrationContainer: `${root}${plan.family}/`,
+            });
+            retained.delete(plan.slug);
+            plan.updated = true;
+            abort();
+          } catch (error) {
+            abort();
+            if (error instanceof Error && error.name === "DocumentTooLargeError") {
+              errors.add("markup-item-too-large");
+              release(plan.slug);
+              continue;
+            }
+            throw error;
+          }
         }
       } catch {
-        if (pendingRead) ctx.releaseRead?.(pendingRead);
+        for (const slug of [...retained]) release(slug);
         abort();
         errors.add(phase);
       }
-      return results;
+      return results();
     },
   };
 }

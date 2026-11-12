@@ -852,7 +852,7 @@ it("bounds repeated provenance before allocating RDF for an oversized source IRI
   expect(ctx.write).not.toHaveBeenCalled();
 });
 
-it("preserves imported email counts when only the markup cleanup inventory is rewritten", async () => {
+it("preserves imported email counts when the markup cleanup inventory is rewritten", async () => {
   const { run } = setup();
   const { createMailWriter } = await import("./writer.js");
   const raw = new TextEncoder().encode(
@@ -863,14 +863,22 @@ it("preserves imported email counts when only the markup cleanup inventory is re
       jsonLdFixture({ "@type": "Order", name: "Counted order" }),
     ].join("\r\n"),
   );
-  const report = await run(async (ctx) => {
-    // Only the inventory PUT fits; the source message must still count as imported.
+  const starved = await run(async (ctx) => {
+    // The inventory PUT alone is never made: it needs a PUT left for at least one item.
     const writer = createMailWriter(ctx, account, { markup: { maxTotalWrites: 1 } });
     await writer.add({ raw, folders: [], read: false, fallbackId: "one" });
-    expect(writer.errors).toContain("markup-write-budget-exceeded");
+    expect(writer.errors).toEqual(["markup-write-budget-exceeded"]);
   });
-  expect(report.state?.counts.items).toBe(1);
+  expect(starved.state?.counts.items).toBe(1);
+  const report = await run(async (ctx) => {
+    // The source message, rewritten with its inventory, still counts once; the item counts once.
+    const writer = createMailWriter(ctx, account, { markup: { maxTotalWrites: 2 } });
+    await writer.add({ raw, folders: [], read: false, fallbackId: "one" });
+    expect(writer.errors).toEqual([]);
+  });
+  expect(report.state?.counts.items).toBe(2);
   const rescan = await run(async (ctx) => {
+    // The inventory already lists the slug, so a single PUT suffices for the item.
     await rescanMailMarkup(ctx, account, { maxTotalWrites: 1 });
   });
   // Re-scanning an existing source counts only the newly written assertion and its nodes.
