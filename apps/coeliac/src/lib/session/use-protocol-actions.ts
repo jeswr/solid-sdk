@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
+import {
+  advanceProtocol,
+  deriveConfirmedConclusion,
+  type ProtocolEvent,
+  type ProtocolOptions,
+  type ProtocolSafetyContext,
+  type StartProtocolInput,
+  startProtocol,
+} from "@jeswr/health-insights";
 /**
  * The elimination-protocol actions the UI calls — optimistic + non-blocking (UX
  * invariant #2), exactly like `useDiaryActions`. Starting or advancing a protocol
@@ -18,19 +27,15 @@ import { useCallback } from "react";
 import type { PodStorage } from "../pod/client";
 import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
 import { syncConclusion, syncProtocol } from "../diary/sync";
-import { deriveConfirmedConclusion } from "../inference/conclude";
 import {
-  advanceProtocol,
-  type ProtocolEvent,
-  type ProtocolOptions,
-  type ProtocolSafetyContext,
-  startProtocol,
-  type StartProtocolInput,
-} from "../protocol/fsm";
-import { newConclusionRecord, newProtocolRecord, storedProtocolToData, updateProtocolRecord } from "../protocol/persist";
-import { NotSignedInError } from "./use-diary-actions";
+  newConclusionRecord,
+  newProtocolRecord,
+  storedProtocolToData,
+  updateProtocolRecord,
+} from "../protocol/persist";
 import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
+import { NotSignedInError } from "./use-diary-actions";
 
 /** The result of a protocol mutation: the updated record + a settle-when-synced promise. */
 export interface ProtocolActionResult {
@@ -127,7 +132,12 @@ export function useProtocolActions() {
           patient: ctx.webId,
         });
         if (conclusionData) {
-          conclusionRecord = newConclusionRecord(conclusionData, ctx.storageRoot, updated.ulid, now);
+          conclusionRecord = newConclusionRecord(
+            conclusionData,
+            ctx.storageRoot,
+            updated.ulid,
+            now,
+          );
           await ctx.store.putConclusion(conclusionRecord);
         }
       }

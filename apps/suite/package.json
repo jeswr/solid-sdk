@@ -33,6 +33,7 @@
     "@jeswr/agent-model": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/health-insights": "workspace:*",
     "@jeswr/ldp-container": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",

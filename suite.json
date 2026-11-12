@@ -51,6 +51,7 @@
     "@jeswr/solid-federation-vocab",
     "@jeswr/solid-granary",
     "@jeswr/solid-health-diary",
+    "@jeswr/health-insights",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",
     "@jeswr/solid-odrl",

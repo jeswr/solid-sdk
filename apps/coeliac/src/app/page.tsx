@@ -1,6 +1,8 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { HomeScreen } from "@/components/home-screen";
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { redirect } from "next/navigation";
+import { suiteDiaryUrl } from "@/lib/suite-url";
 
 export default function Home() {
-  return <HomeScreen />;
+  redirect(suiteDiaryUrl());
 }

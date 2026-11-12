@@ -1,0 +1,37 @@
+{
+  "name": "@jeswr/health-insights",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/health-insights/tsconfig.build.json",
+    "lint": "pnpm -w exec biome check packages/health-insights/src",
+    "lint:fix": "pnpm -w exec biome check --write packages/health-insights/src",
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/health-insights/tsconfig.json",
+    "test": "pnpm -w exec vitest run --root packages/health-insights",
+    "test:watch": "pnpm -w exec vitest --root packages/health-insights",
+    "api:report": "npm run build && npx --yes @microsoft/api-extractor@7 run --local",
+    "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Pure food intolerance trigger inference and elimination protocol state machine.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@jeswr/solid-health-diary": "workspace:*"
+  }
+}

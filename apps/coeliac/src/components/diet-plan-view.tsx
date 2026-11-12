@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5
 "use client";
+import type { PlanExclusion } from "@jeswr/health-insights";
 /**
  * The DietPlan view (DESIGN §2.2 entity 9) — "what am I currently avoiding, and
  * why". Every entry is GROUNDED: a confirmed reaction from a completed test, or a
@@ -9,7 +10,6 @@
  * SHRINK as the gut heals. Gluten (coeliac) is lifelong and is never review-flagged.
  */
 import Link from "next/link";
-import type { PlanExclusion } from "@/lib/inference/diet-plan";
 import { triggerLabel } from "@/lib/off/exposure-display";
 import { useDietPlan } from "@/lib/session/use-diet-plan";
 import { MedicalDisclaimer } from "./medical-disclaimer";

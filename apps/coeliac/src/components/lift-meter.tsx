@@ -7,7 +7,7 @@
  * applies to how a surface renders it too). `lift` is explicitly NOT a
  * probability; the caption always says so.
  */
-import type { SuspicionScore } from "@/lib/inference/types";
+import type { SuspicionScore } from "@jeswr/health-insights";
 
 /** Visual fill cap: a lift far past this (e.g. 20×) still reads as a "full" meter. */
 const LIFT_VISUAL_CAP = 5;
@@ -24,6 +24,7 @@ export function LiftMeter({ suspicion }: { suspicion: SuspicionScore }) {
           {lift === undefined ? "Not enough data yet" : `${lift.toFixed(1)}×`}
         </span>
       </div>
+      {/* biome-ignore lint/a11y/useSemanticElements: Keep the existing CSS scale and accessible meter role. */}
       <div
         className="lift-meter__track"
         role="meter"
@@ -43,9 +44,9 @@ export function LiftMeter({ suspicion }: { suspicion: SuspicionScore }) {
         />
       </div>
       <p className="lift-meter__note">
-        Not a probability — how much more often symptoms followed this exposure than
-        coincidence alone would predict, shown with the underlying count (
-        {Math.round(followedRate * 100)}% of exposures followed).
+        Not a probability — how much more often symptoms followed this exposure than coincidence
+        alone would predict, shown with the underlying count ({Math.round(followedRate * 100)}% of
+        exposures followed).
       </p>
     </div>
   );
