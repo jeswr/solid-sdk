@@ -486,5 +486,6 @@ it("returns focus to Chat's sole details toggle after closing the narrow sheet",
   expect(document.querySelector('[role="dialog"] .chat-details')).not.toBeNull();
   await click(document.querySelector('[aria-label="Close details"]') as Element);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  expect(document.activeElement).toBe(toggle);
+  // Radix restores focus on a later macrotask, which act() does not wait for.
+  await vi.waitFor(() => expect(document.activeElement).toBe(toggle));
 });

@@ -50,7 +50,7 @@ async function closeWithEscape(page: Page, drawer: Locator) {
   await expect(async () => {
     await page.keyboard.press("Escape");
     await expect(drawer).toBeHidden({ timeout: 500 });
-  }).toPass();
+  }).toPass({ timeout: 5_000 });
 }
 async function nav(page: Page, folder: string) {
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
