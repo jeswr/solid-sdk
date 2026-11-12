@@ -7,7 +7,7 @@
   "adapter": "owl-rdfs-v1",
   "inputs": {
     "ontology.ttl": "918f6905c6629edc986ca05b18a1413119e4141c994210f3f1ceaee5c77da735",
-    "shapes.shacl.ttl": "7458d002969d32e892fe5bc613e95ba794188fce00cc87f53d858b5135e4f93c",
+    "shapes.shacl.ttl": "34be93c28ea229d2d5b91128058ac3965ecc37c3737fc703ea2ac8eb435d4a34",
     "codegen.config.json": "2447b45069f266cc08ab9252387051c11999c6d5ee8aa8f95b7028c92175c90e"
   }
 }

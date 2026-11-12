@@ -50,9 +50,15 @@
 #     carry the byArtist / performedByArtist / url / image fields because every app
 #     entity accepts them.
 #   - Sector sh:class hints on IRI links (performedByArtist → Artist, inAlbum → Album,
-#     playedWork → CreativeWork) are omitted: flat fields cannot carry class hints,
-#     and the app links to resources in other documents whose types it cannot see.
-#   - The ISRC sh:pattern is omitted (as for the scrobble composite above).
+#     playedWork → media:Track, hadParticipant → core:Agent, atTime → time:Instant)
+#     are omitted: flat fields cannot carry class hints, and the app links to
+#     resources in other documents whose types it cannot see.
+#   - The ISRC sh:pattern is omitted (as for the scrobble composite above), and the
+#     isrc property is graded sh:Info rather than the sector's sh:Warning.
+#   - Listen omits the sector's onAccount, completionFraction and loved properties
+#     (the app does not write them on a play).
+#   - codegen.config.json sets sanitizeText false on the library text fields, so
+#     titles are written exactly as given (the app's historic behaviour).
 #   - core:hadParticipant is narrowed to sh:maxCount 1 (the app writes one listener).
 #   - No IRI field carries an ^https?:// pattern: the runtime scheme guard normalizes
 #     IRIs, and the app keeps exact lexical identities (it validates http(s) itself).

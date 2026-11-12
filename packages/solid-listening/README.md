@@ -238,6 +238,11 @@ Pinned in `apps/suite/test/music/compatibility.test.ts`:
 - A date after year 9999 (or before year 0) is written as a valid `xsd:dateTime`
   (`20000-01-01T00:00:00.000Z`) instead of JavaScript's expanded-year form
   (`+020000-…`). The app's reader parses dates with `Date`, so it skips such a play.
+- Negative zero durations are written as `"0"` (previously `"-0"`); the value read back
+  is the same.
+- An IRI containing U+0085 (NEXT LINE), as a value or a subject, is rejected where the
+  old writer accepted it, and a blank-node subject is rejected by the generated wrapper.
+  No app path produces either.
 
 ## License
 
