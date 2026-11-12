@@ -72,6 +72,25 @@ interop; hosts discover containers through the connector's Type Index registrati
 The suite Health charts still read their own native shards and do not automatically
 discover connector metric directories.
 
+## Generator gaps
+
+- `xsd:dateTimeStamp` has no runtime mapping; see the timestamp paragraph above.
+- Node-level composition. The sector composes the step, sleep and heart-rate shapes with
+  `sh:node hsh:ObservationShape`, because SHACL targets do not inherit. Codegen admission
+  rejects that `sh:node` ("no runtime projection"), and rejects repeating the Observation
+  constraints on the subtype shapes ("runtime structural predicate"). The generated parser
+  already enforces the Observation composite for subtypes. The generated `shapes.ttl`
+  does not, so it alone accepts a subtype node carrying only a unit. The exported
+  `@jeswr/solid-health/health.shacl.ttl` is therefore `dist/health.shacl.ttl`, which
+  `scripts/build-shacl.mjs` builds at `pnpm run build` by merging `src/generated/shapes.ttl`
+  with the three triples in `codegen/health.composition.ttl` (n3 parse, `n3.Writer`
+  serialise). The script fails unless every composition triple is an `sh:node` link
+  between generated NodeShapes. `test/shacl.test.ts` pins the export: it is the generated
+  shapes plus exactly those triples, it rejects bare subtype nodes with code, patient,
+  time, value and UCUM-unit violations, and it accepts `buildObservation` output. The
+  gap is filed as tracker inbox note `personal-connectors-codegen-node-composition`
+  under the codegen epic sst-ild; drop the composition file once the generator admits it.
+
 Run `pnpm run codegen` after reviewed input changes (`--update-lock` when needed).
 `test/codegen.test.ts` regenerates every artifact and compares bytes, including the
 lockfile. Generated files are never edited by hand. Build copies the generated JS and

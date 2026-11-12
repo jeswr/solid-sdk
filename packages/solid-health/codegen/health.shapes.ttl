@@ -23,6 +23,9 @@
 # - Heart rate's advisory hasValue becomes a required singleton sh:in constraint.
 #   Steps/sleep likewise require NUM/SEC. The facade supplies these unit defaults;
 #   generated subtype parsing enforces them alongside the Observation composite.
+# - The sector's `sh:node hsh:ObservationShape` on the subtype shapes is omitted
+#   here (generator gap: admission has no runtime projection for sh:node). The
+#   exported ./health.shacl.ttl restores it from codegen/health.composition.ttl.
 # - Codes require nonblank core:value; display label and real scheme are optional.
 #   core:inScheme is restricted to LOINC (http://loinc.org), never source field keys.
 # - Optional schema:name, schema:description and dct:source retain import metadata.

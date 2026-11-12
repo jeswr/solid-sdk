@@ -18,17 +18,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./health.shacl.ttl": "./src/generated/shapes.ttl"
+    "./health.shacl.ttl": "./dist/health.shacl.ttl"
   },
   "files": [
     "dist",
-    "src/generated/shapes.ttl",
     "README.md",
     "SKILL.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs && node scripts/build-shacl.mjs",
     "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/health.ontology.ttl --shapes codegen/health.shapes.ttl --config codegen/codegen.config.json --out src/generated",
     "lint": "biome check src/*.ts scripts test codegen/codegen.config.json package.json",
     "typecheck": "tsc --noEmit",
@@ -45,7 +44,9 @@
     "@types/n3": "^1.26.1",
     "@biomejs/biome": "^2.0.0",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@zazuko/env-node": "^3.1.0",
+    "rdf-validate-shacl": "^0.6.5"
   },
   "engines": {
     "node": ">=24"
