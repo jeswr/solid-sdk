@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 /**
@@ -6,15 +7,15 @@
  *
  * A Sheet attached to any resource that shows, in plain language, WHO has WHICH
  * access — people (by WebID), groups, "Anyone on the web" (public) and "Anyone
- * signed in" (authenticated) — grouped, with levels (Can view / Can edit /
- * Owner), never raw WAC modes. It lets the user add/remove subjects and change
- * levels, surfaces whether access is inherited from a parent or set directly,
- * and protects the user from ever removing their own Owner (self-lockout guard).
+ * signed in" (authenticated) — grouped, with roles (Can view / Can edit /
+ * Owner), never raw access modes. It lets the user add/remove subjects and
+ * change levels, surfaces whether access is inherited from a parent or set
+ * directly, and protects the user from ever removing their own Owner.
  *
- * All RDF/`.acl` work happens in {@link @/lib/resource-acl}; this file is pure
- * UI + orchestration. Mutations go through the typed backend (never hand-built
- * triples); errors surface as honest, plain-language toasts and the model is
- * re-read so the panel always reflects the server (fail-closed).
+ * All access-control work happens in `@jeswr/pod-access/roles` via
+ * {@link @/lib/resource-acl}; this file is pure UI + orchestration. Refusals
+ * (lockout, conflicts, inherited or unsupported rules) surface as plain-language
+ * toasts and the model is re-read so the panel always reflects the server.
  */
 import { useState } from "react";
 import Link from "next/link";
@@ -50,10 +51,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ErrorState } from "@/components/states";
-import { AclWriteError } from "@/lib/errors";
+import { SharingError } from "@/lib/errors";
 import { nameFromUrl } from "@/lib/pod-data";
 import {
-  describeEntryAccess,
   LEVEL_DESCRIPTION,
   LEVEL_LABEL,
   subjectKey,
@@ -66,7 +66,7 @@ import {
 } from "@/lib/resource-acl";
 import { useResourceSharing } from "@/components/use-resource-sharing";
 
-const LEVELS: AccessLevel[] = ["view", "edit", "owner", "add"];
+const LEVELS: AccessLevel[] = ["viewer", "editor", "manager"];
 
 /** The Share button + the Sheet it opens, attachable to any resource row. */
 export function SharingPanel({
@@ -170,22 +170,11 @@ function SharingEditor({
   }
 
   function setLevel(subject: AccessSubject, level: AccessLevel) {
-    // No-op when the subject already sits at exactly this displayed level:
-    // re-selecting "Can view" must NOT rewrite a read+append entry down to
-    // read-only (the collapsed level is lossy; only an actual CHANGE should
-    // canonicalise the modes) (roborev). A change to a different level is the
-    // user's explicit intent and writes that level's canonical modes.
+    // Re-selecting the subject's current level is a no-op (no write).
     const current = access.entries.find(
       (e) => subjectKey(e.subject) === subjectKey(subject),
     );
-    if (current && current.level === level) {
-      // Re-selecting the SAME displayed level is a no-op regardless of source.
-      // The collapsed level is lossy (e.g. read+append shows as "Can view"), so
-      // re-writing it would drop append; and for an inherited entry it would
-      // needlessly materialise. Promotion to a resource-specific ACL is offered
-      // explicitly elsewhere (the "Set specific access" control) (roborev).
-      return;
-    }
+    if (current && current.level === level) return;
     // Client-side self-lockout guard (the backend also refuses, fail-closed).
     if (wouldLockOutOwner(access, ownerWebId, { subject, level })) {
       toast.error("You can't remove your own access.", {
@@ -193,10 +182,7 @@ function SharingEditor({
       });
       return;
     }
-    void run(
-      () => backend.setAccess(access.resourceUrl, subject, level),
-      "Access updated.",
-    );
+    void run(() => backend.setAccess(access, subject, level), "Access updated.");
   }
 
   function remove(subject: AccessSubject) {
@@ -206,10 +192,7 @@ function SharingEditor({
       });
       return;
     }
-    void run(
-      () => backend.removeAccess(access.resourceUrl, subject),
-      "Access removed.",
-    );
+    void run(() => backend.removeAccess(access, subject), "Access removed.");
   }
 
   const publicEntry = access.entries.find((e) => e.subject.kind === "public");
@@ -217,35 +200,12 @@ function SharingEditor({
   const named = access.entries.filter(
     (e) => e.subject.kind === "agent" || e.subject.kind === "group",
   );
-  // Browser-app origins and any unmodelled agent-classes are shown READ-ONLY
-  // here (origins are managed in Connected apps; unmodelled classes aren't
-  // editable inline) so access is never under-reported, while keeping the
-  // editable surface simple.
-  const readOnly = access.entries.filter(
-    (e) => e.subject.kind === "origin" || e.subject.kind === "class",
-  );
+  // App (ACP client) rows are shown read-only so access is never hidden.
+  const readOnly = access.entries.filter((e) => e.subject.kind === "app");
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {access.inherited ? (
-        <InheritanceNotice
-          busy={busy}
-          onSetSpecific={() =>
-            // Promoting to a specific ACL: re-affirm the owner at Owner level,
-            // which materialises the inherited rules into this resource's own
-            // document (the backend copies them so no one loses access).
-            run(
-              () =>
-                backend.setAccess(
-                  access.resourceUrl,
-                  { kind: "agent", id: ownerWebId },
-                  "owner",
-                ),
-              "This now has its own access settings.",
-            )
-          }
-        />
-      ) : null}
+      {access.inherited ? <InheritanceNotice /> : null}
 
       <section className="flex flex-col gap-2 p-4" aria-label="People and groups">
         <h3 className="px-1 text-sm font-medium text-muted-foreground">People and groups</h3>
@@ -285,12 +245,10 @@ function SharingEditor({
                 <Globe className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium" title={entry.subject.id}>
-                    {entry.subject.kind === "origin"
-                      ? originHost(entry.subject.id)
-                      : subjectLabel(entry.subject)}
+                    {subjectLabel(entry.subject)}
                   </p>
                   <p className="truncate text-xs text-muted-foreground" title={entry.subject.id}>
-                    {describeEntryAccess(entry)}
+                    {entry.subject.id}
                   </p>
                 </div>
                 <Badge variant="secondary" className="font-normal">
@@ -300,7 +258,8 @@ function SharingEditor({
             ))}
           </ul>
           <p className="px-1 text-xs text-muted-foreground">
-            Browser-app access is managed in{" "}
+            App access is shown here but can&apos;t be changed from this panel. Review
+            apps in{" "}
             <Link href="/connected-apps" className="font-medium text-primary underline-offset-4 hover:underline">
               Connected apps
             </Link>
@@ -334,6 +293,10 @@ function SharingEditor({
       <p className="flex items-center gap-1.5 border-t border-border p-4 text-sm text-muted-foreground">
         <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
         You always keep full control of your own data.
+      </p>
+      <p className="px-4 pb-4 text-xs text-muted-foreground">
+        Only access that matches these levels is listed. Unusual permissions set
+        by other apps (for example add-only access) aren&apos;t shown here.
       </p>
     </div>
   );
@@ -376,27 +339,24 @@ function EntryRow({
               Inherited
             </Badge>
           ) : null}
-          {describeEntryAccess(entry)}
+          {LEVEL_DESCRIPTION[entry.level]}
         </p>
       </div>
       <LevelPicker
         level={entry.level}
         // The owner's own Owner row has no valid level change: a downgrade is a
-        // self-lockout (blocked) and re-selecting Owner is a no-op. Disable the
-        // picker rather than leave a dead control — promoting an INHERITED
-        // self-owner grant to resource-specific is done via "Set specific
-        // access" (the inheritance notice) (roborev).
-        disabled={busy || (isSelf && entry.level === "owner")}
+        // self-lockout (blocked) and re-selecting Owner is a no-op.
+        disabled={busy || (isSelf && entry.level === "manager")}
         onChange={onSetLevel}
       />
-      {/* The owner can't remove their own access (self-lockout). Others can be
-          removed whether set here or inherited — removing an inherited entry
-          materialises a resource-specific ACL that omits them. */}
+      {/* The owner can't remove their own access (self-lockout). Inherited
+          access is removed on the folder that grants it, not per item. */}
       {!isSelf ? (
         <Button
           variant="ghost"
           size="icon"
-          disabled={busy}
+          disabled={busy || entry.source === "inherited"}
+          title={entry.source === "inherited" ? INHERITED_REMOVAL_HINT : undefined}
           aria-label={`Remove access for ${entry.subject.id || subjectLabel(entry.subject)}`}
           onClick={onRemove}
         >
@@ -437,10 +397,7 @@ function PublicToggle({
               Inherited
             </Badge>
           ) : null}
-          {/* When on, show the mode-aware description (so a read+append public
-              grant is reported honestly as "…and add", not just "Can view")
-              (roborev); when off, the static hint explains what turning on does. */}
-          {on && entry ? describeEntryAccess(entry) : subtitle}
+          {on && entry ? LEVEL_DESCRIPTION[entry.level] : subtitle}
         </p>
       </div>
       {on ? (
@@ -450,12 +407,13 @@ function PublicToggle({
             disabled={busy}
             onChange={onSetLevel}
             // Public/authenticated should never be Owner — drop that option.
-            allowed={["view", "edit", "add"]}
+            allowed={["viewer", "editor"]}
           />
           <Button
             variant="ghost"
             size="icon"
-            disabled={busy}
+            disabled={busy || entry.source === "inherited"}
+            title={entry.source === "inherited" ? INHERITED_REMOVAL_HINT : undefined}
             aria-label={`Turn off ${title}`}
             onClick={onRemove}
           >
@@ -463,7 +421,7 @@ function PublicToggle({
           </Button>
         </>
       ) : (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => onSetLevel("view")}>
+        <Button variant="outline" size="sm" disabled={busy} onClick={() => onSetLevel("viewer")}>
           Turn on
         </Button>
       )}
@@ -520,7 +478,7 @@ function AddPersonForm({
 }) {
   const [value, setValue] = useState("");
   const [kind, setKind] = useState<"agent" | "group">("agent");
-  const [level, setLevel] = useState<AccessLevel>("view");
+  const [level, setLevel] = useState<AccessLevel>("viewer");
 
   const trimmed = value.trim();
   const valid = isHttpUrl(trimmed);
@@ -589,48 +547,23 @@ function AddPersonForm({
   );
 }
 
-/** Inherited-access banner with a "set specific access" promotion. */
-function InheritanceNotice({
-  busy,
-  onSetSpecific,
-}: {
-  busy: boolean;
-  onSetSpecific: () => void;
-}) {
+const INHERITED_REMOVAL_HINT = "Inherited from the folder — remove it on that folder.";
+
+/** Inherited-access banner: what a change here does, and what it can't do. */
+function InheritanceNotice() {
   return (
     <div className="flex items-start gap-3 border-b border-border bg-accent/30 p-4 text-sm">
       <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
       <div className="flex-1">
         <p className="font-medium">Access is inherited from the folder it lives in.</p>
         <p className="mt-0.5 text-muted-foreground">
-          Changes here will create access settings specific to this item, copying
-          the current ones so no one loses access.
+          Your first change here creates access settings specific to this item,
+          keeping everyone&apos;s current access. To remove inherited access, change
+          it on the folder.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          disabled={busy}
-          onClick={onSetSpecific}
-        >
-          Set specific access
-        </Button>
       </div>
     </div>
   );
-}
-
-/**
- * A browser-app origin for display — the FULL origin (scheme + host) so
- * `http://app.example` and `https://app.example` are never shown identically
- * in an access-control UI (roborev). The exact IRI stays in the title/key.
- */
-function originHost(origin: string): string {
-  try {
-    return new URL(origin).origin || origin;
-  } catch {
-    return origin;
-  }
 }
 
 function isHttpUrl(value: string): boolean {
@@ -644,23 +577,18 @@ function isHttpUrl(value: string): boolean {
 
 /** Turn a mutation error into honest, plain-language toast copy. */
 function mutationMessage(e: unknown): { title: string; description: string } {
-  if (e instanceof AclWriteError) {
-    const cause = String((e as { cause?: unknown }).cause ?? "");
-    if (cause.includes("forbidden") || cause.includes("403") || cause.includes("401")) {
-      return {
-        title: "You don't have permission to change sharing here.",
-        description: "You need to be an Owner of this item. Nothing was changed.",
-      };
-    }
+  if (e instanceof SharingError) {
     return {
-      title: "Couldn't update access.",
-      // The backend's own message is already plain-language (e.g. the
-      // conflict/self-lockout copy); surface it.
+      title:
+        e.code === "owner-lockout"
+          ? "You can't remove your own access."
+          : "Couldn't update access.",
+      // SharingError messages are already plain-language (lib/resource-acl).
       description: e.message,
     };
   }
   return {
     title: "Couldn't update access.",
-    description: "Nothing was changed. Check your connection and try again.",
+    description: "Check your connection and try again. The current settings are shown.",
   };
 }
