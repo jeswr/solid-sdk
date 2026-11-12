@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
@@ -7,10 +8,24 @@ import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
 import type { ConnectorState } from "../core/types.js";
 import { writeResource } from "../pod/resource.js";
-import { httpsUrl, NodeRuntimeError, object, textValue } from "./errors.js";
+import {
+  httpsUrl,
+  isTransientCause,
+  NodeRuntimeError,
+  object,
+  PermanentCauseError,
+  StateStoreError,
+  textValue,
+} from "./errors.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const MAX_CHECKPOINT_BYTES = 1024 * 1024;
+/** A non-success Pod answer; the status (never the body) classifies retries. */
+class StateHttpError extends Error {
+  constructor(readonly status: number) {
+    super("State request failed.");
+  }
+}
 
 class OwnerAuthorization extends Authorization {
   get agents(): Set<string> {
@@ -69,19 +84,19 @@ export function createStateStore(options: {
       loaded = false;
       try {
         const head = await fetchSafe(url, { method: "HEAD" });
-        if (!head.ok && head.status !== 404) throw new Error("State discovery failed");
+        if (!head.ok && head.status !== 404) throw new StateHttpError(head.status);
         const links = [...(head.headers.get("link") ?? "").matchAll(/<([^<>]+)>([^,]*)/g)].filter(
           (link) => {
             const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]*))/.exec(link[2] as string);
             return (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("acl");
           },
         );
-        if (links.length !== 1) throw new Error("No unambiguous WAC ACL link");
+        if (links.length !== 1) throw new PermanentCauseError(); // No unambiguous WAC ACL link.
         const aclUrl = assertWithinPodScope(root, new URL(links[0]?.[1] as string, url).href, {
           allowRoot: false,
         });
         if (aclUrl === url || new URL(aclUrl).hash || new URL(aclUrl).search)
-          throw new Error("Invalid ACL target");
+          throw new PermanentCauseError(); // Invalid ACL target.
         const dataset = new Store();
         const rule = new OwnerAuthorization(
           DataFactory.namedNode(`${aclUrl}#owner`),
@@ -103,22 +118,29 @@ export function createStateStore(options: {
           loaded = true;
           return undefined;
         }
-        if (!response.ok || !response.headers.get("etag"))
-          throw new Error("Cannot read checkpoint safely");
-        const state = connectorState(
-          await readJson(response, options.adapterId, url, MAX_CHECKPOINT_BYTES),
-        );
+        if (!response.ok) throw new StateHttpError(response.status);
+        if (!response.headers.get("etag")) throw new PermanentCauseError(); // Unsafe to update.
+        const body = await readJson(response, options.adapterId, url, MAX_CHECKPOINT_BYTES);
+        let state: ConnectorState;
+        try {
+          state = connectorState(body);
+        } catch {
+          throw new PermanentCauseError(); // A corrupt checkpoint never repairs itself.
+        }
         etag = response.headers.get("etag") as string;
         exists = true;
         loaded = true;
         return state;
-      } catch {
-        throw new NodeRuntimeError("import", "Cannot read or protect connector state.");
+      } catch (error) {
+        throw new StateStoreError(
+          "Cannot read or protect connector state.",
+          isTransientCause(error),
+        );
       }
     },
     async write(state: ConnectorState): Promise<void> {
       try {
-        if (!loaded) throw new Error("Read state before writing");
+        if (!loaded) throw new PermanentCauseError(); // Read state before writing.
         const headers = new Headers({ "content-type": "application/json" });
         if (exists) headers.set("if-match", etag as string);
         else headers.set("if-none-match", "*");
@@ -127,11 +149,11 @@ export function createStateStore(options: {
           headers,
           body: JSON.stringify(connectorState(state)),
         });
-        if (!response.ok) throw new Error("State write failed");
+        if (!response.ok) throw new StateHttpError(response.status);
         // Force a fresh read (and ETag) before another write.
         loaded = false;
-      } catch {
-        throw new NodeRuntimeError("import", "Cannot save connector state.");
+      } catch (error) {
+        throw new StateStoreError("Cannot save connector state.", isTransientCause(error));
       }
     },
   };

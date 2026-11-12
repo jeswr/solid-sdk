@@ -266,7 +266,8 @@ redirects, arbitrary methods, source URLs or caller headers with credentials.
 Read status keys per pyvesync family (Core snake_case with `level`, Vital camelCase,
 LV-PUR131S top-level and uuid-addressed; no Core 200S air readings) and treat only an
 explicit login rejection as an authentication failure; transport faults stay retryable.
-Use solid-environment builders and path helpers. Hash cid/uuid into sensor slugs;
+Use solid-environment builders and path helpers. Derive sensor slugs as an HMAC-SHA-256 of cid/uuid keyed by the connector's
+`environment/` container URL (stable per pod, unlinkable across pods);
 never persist raw identifiers in IRIs. Preserve per-sensor UTC day appends, minute
 identities, room/purifier feature distinctions, bounded numeric readings, and default
 model limits including malformed roots. VeSync documents set `requirePrecondition`:
@@ -274,7 +275,12 @@ the shared session must reject existing resources without strong ETags. Do not a
 checkpoints after source/Pod failures. Log and count capped-day skips. The adapter
 opts into a 32-activity provenance history cap; other adapters retain their existing
 history semantics. Watch mode rereads protected state each cycle, serializes imports,
-backs off with jitter, and stops on cancellation/authentication/checkpoint failures.
+backs off with jitter, and classifies failures by cause with `classifyVeSyncFailure`
+(`src/node/vesync-failure.ts`): transient source/network/Pod 5xx-408-412 and transient
+`StateStoreError`s retry; VeSync login rejection, Pod 401/403 and other 4xx,
+`PreconditionUnsupportedError` (weak ETags), structural state problems and config stop.
+Hidden prompts enter raw mode before the label and always pause stdin afterwards. Any
+unexpected non-zero data code clears the VeSync session so the next cycle logs in again.
 Keep catalogue `cliOnly` / `cli-only` visible without approval flags and show terminal
 instructions instead of an OAuth flow. Test synthetic shapes only, with no provider
 traffic, including password safety, re-login bounds, source budgets and aborts.

@@ -37,10 +37,10 @@ export async function hiddenPrompt(label: string, signal?: AbortSignal): Promise
       "auth",
       "VeSync needs a terminal prompt or VESYNC_EMAIL / VESYNC_PASSWORD.",
     );
-  stderr.write(label);
   const raw = stdin.isRaw;
-  const paused = stdin.isPaused();
+  // Raw mode first, so input typed or pasted as the label appears is never echoed.
   stdin.setRawMode(true);
+  stderr.write(label);
   stdin.resume();
   return new Promise<string>((resolve, reject) => {
     let input = "";
@@ -52,7 +52,9 @@ export async function hiddenPrompt(label: string, signal?: AbortSignal): Promise
       stdin.removeListener("close", onError);
       signal?.removeEventListener("abort", cancel);
       stdin.setRawMode(raw);
-      if (paused) stdin.pause();
+      // Always pause: a fresh process.stdin reports isPaused() === false before its first
+      // resume, and a flowing TTY stream would keep a finished one-shot import alive.
+      stdin.pause();
       stderr.write("\n");
     };
     const cancel = () => {
@@ -241,8 +243,10 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
       caller,
     );
     const result = record(answer.result);
-    if (answer.code !== 0 || !text(result.token, 4096) || !text(result.accountID))
-      throw new VeSyncAuthError();
+    if (answer.code !== 0) throw new VeSyncAuthError();
+    // A success code without a usable session is a malformed answer, retried like a fault.
+    if (!text(result.token, 4096) || !text(result.accountID))
+      throw new NodeRuntimeError("import", "VeSync returned a malformed login answer.");
     token = result.token as string;
     accountID = result.accountID as string;
   }
@@ -348,8 +352,14 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
                 await login(signal);
                 continue;
               }
-              if (answer.code !== 0)
+              if (answer.code !== 0) {
+                // VeSync may end a session with another code (e.g. a logout elsewhere): drop
+                // the token so the next request (the next watch cycle) logs in afresh. This
+                // fails the current request, so it adds at most one login per cycle.
+                token = undefined;
+                accountID = undefined;
                 throw new NodeRuntimeError("import", "VeSync could not read the purifier.");
+              }
               return Response.json(answer);
             }
             throw new VeSyncAuthError();

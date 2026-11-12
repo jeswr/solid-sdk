@@ -6,3 +6,11 @@ export class VeSyncAuthError extends IntegrationSyncError {
     super("vesync", "VeSync login failed; check your account credentials.");
   }
 }
+// AUTHORED-BY Claude Opus 5.5
+/** A VeSync transport, timeout or answer failure; fixed text, retried by watch mode. */
+export class VeSyncSourceError extends IntegrationSyncError {
+  constructor(message = "VeSync reading failed.") {
+    super("vesync", message);
+    this.name = "VeSyncSourceError";
+  }
+}

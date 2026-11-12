@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
@@ -29,13 +30,8 @@ import {
   readVeSyncCredentials,
   type VeSyncCredentials,
 } from "./vesync-auth.js";
-import { watchImports } from "./watch.js";
-
-class VeSyncReadingFailure extends NodeRuntimeError {
-  constructor() {
-    super("import", "VeSync reading failed; the last successful checkpoint was retained.");
-  }
-}
+import { classifyVeSyncFailure, VeSyncRunFailure } from "./vesync-failure.js";
+import { type delay, watchImports } from "./watch.js";
 
 const USAGE =
   "Usage: pod-connectors import <id> [--file <path>] [--since] [--watch [minutes]] [--room <label> | --room <sensor-slug>=<label>]\n";
@@ -55,6 +51,9 @@ export interface CliOptions {
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
   readonly signal?: AbortSignal;
+  /** Fixture seams for `--watch` and VeSync retry delays (abortable sleep, jitter source). */
+  readonly sleep?: typeof delay;
+  readonly random?: () => number;
 }
 
 /** Parse the deliberately small D7 command surface without accepting unknown flags. */
@@ -266,6 +265,8 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         credentials,
         transport: withSignal(options.sourceTransport ?? globalThis.fetch),
         signal: options.signal,
+        ...(options.sleep && { sleep: options.sleep }),
+        ...(options.random && { random: options.random }),
       });
     }
     if (!file && !sourceAuth) {
@@ -308,12 +309,22 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
             sourceAuth,
           });
       } catch (error) {
+        if (command.id === "vesync" && !options.signal?.aborted) {
+          // Classify by cause; a failed checkpoint write only matters if the run was retryable.
+          let failure = classifyVeSyncFailure(error);
+          if (next)
+            try {
+              await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
+            } catch (stateError) {
+              if (failure.retry) failure = classifyVeSyncFailure(stateError);
+            }
+          throw failure;
+        }
         if (next) {
           // A full import still preserves the last successful checkpoint on failure.
           await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
         }
         if (error instanceof VeSyncAuthError) throw new NodeRuntimeError("auth", error.message);
-        if (command.id === "vesync" && !options.signal?.aborted) throw new VeSyncReadingFailure();
         throw new NodeRuntimeError(
           "import",
           "Import failed; the last successful checkpoint was retained.",
@@ -331,12 +342,22 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         minutes: command.watch,
         signal: options.signal,
         run: async () => {
-          if (!first) previous = await stateStore.read();
-          first = false;
-          await execute();
+          try {
+            if (!first) previous = await stateStore.read();
+            first = false;
+            await execute();
+          } catch (error) {
+            // State rereads and checkpoint writes are classified like import failures.
+            throw options.signal?.aborted ? error : classifyVeSyncFailure(error);
+          }
         },
-        retry: (error) => error instanceof VeSyncReadingFailure,
-        onError: () => stderr("VeSync reading failed; retrying with backoff.\n"),
+        retry: (error) => error instanceof VeSyncRunFailure && error.retry,
+        onError: (error) =>
+          stderr(
+            `${error instanceof NodeRuntimeError ? error.message : "Import failed."} Retrying with backoff.\n`,
+          ),
+        ...(options.sleep && { sleep: options.sleep }),
+        ...(options.random && { random: options.random }),
       });
     } else await execute();
     return EXIT_CODES.success;

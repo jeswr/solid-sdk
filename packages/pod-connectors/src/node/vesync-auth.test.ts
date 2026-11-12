@@ -18,9 +18,15 @@ vi.mock("node:process", async (original) => {
   const input = Object.assign(new EventEmitter(), {
     isTTY: true,
     isRaw: false,
-    isPaused: () => true,
-    resume: vi.fn(),
-    pause: vi.fn(),
+    // Like a fresh process.stdin: neither paused nor flowing until first resumed.
+    readableFlowing: null as boolean | null,
+    isPaused: () => input.readableFlowing === false,
+    resume: vi.fn(() => {
+      input.readableFlowing = true;
+    }),
+    pause: vi.fn(() => {
+      input.readableFlowing = false;
+    }),
     setRawMode: vi.fn((value: boolean) => {
       input.isRaw = value;
     }),
@@ -219,13 +225,15 @@ describe("VeSync memory-only account transport", () => {
         expect(strings).not.toContain(value);
     }
   });
-  it("rejects hostile login envelopes with a safe authentication error", async () => {
+  it("treats malformed success login envelopes as retryable, never as bad credentials", async () => {
     for (const result of [null, [], {}, { token: 7, accountID }, { token, accountID: [] }]) {
       const auth = createVeSyncSourceAuth({
         credentials,
         transport: async () => Response.json({ code: 0, result }),
       });
-      await expect(call(auth)).rejects.toThrow("VeSync login failed");
+      const error = await call(auth).catch((error: unknown) => error);
+      expect(error).not.toBeInstanceOf(VeSyncAuthError);
+      expect(error).toMatchObject({ kind: "import" });
     }
   });
   it("honours cancellation during login, response streaming and retry waits", async () => {
@@ -382,4 +390,40 @@ it("fails a hidden prompt when the terminal input ends", async () => {
     expect(stdin.listenerCount("end")).toBe(0);
     expect(stdin.listenerCount("close")).toBe(0);
   }
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("leaves a fresh stdin paused after the prompt and enters raw mode before the label", async () => {
+  Object.assign(stdin, { readableFlowing: null });
+  vi.mocked(stdin.setRawMode).mockClear();
+  vi.mocked(stdin.pause).mockClear();
+  const prompt = hiddenPrompt("VeSync email (hidden): ");
+  const rawOn = vi.mocked(stdin.setRawMode).mock.invocationCallOrder[0] ?? Infinity;
+  const label = vi
+    .mocked(stderr.write)
+    .mock.calls.findIndex(([text]) => text === "VeSync email (hidden): ");
+  const labelOrder = vi.mocked(stderr.write).mock.invocationCallOrder[label] ?? -Infinity;
+  expect(vi.mocked(stdin.setRawMode).mock.calls[0]).toEqual([true]);
+  expect(rawOn).toBeLessThan(labelOrder);
+  stdin.emit("data", Buffer.from("abc\r"));
+  await expect(prompt).resolves.toBe("abc");
+  // A flowing TTY stream keeps Node's event loop alive after a one-shot import.
+  expect(stdin.pause).toHaveBeenCalled();
+  expect(stdin.isPaused()).toBe(true);
+  expect(stdin.isRaw).toBe(false);
+  for (const event of ["data", "error", "end", "close"]) expect(stdin.listenerCount(event)).toBe(0);
+});
+
+it("drops the session after an unexpected non-zero code so the next request logs in again", async () => {
+  const t = transport([{ code: -11012022 }, coreStatus]);
+  const auth = createVeSyncSourceAuth({ credentials, transport: t.fetcher });
+  await expect(call(auth)).rejects.toMatchObject({ kind: "import" });
+  await expect(call(auth)).resolves.toBeInstanceOf(Response);
+  // One login per failing request at most: no renewal loop inside the failed request.
+  expect(t.requests.map(({ url }) => url.slice(VESYNC_API.length))).toEqual([
+    LOGIN,
+    BYPASS,
+    LOGIN,
+    BYPASS,
+  ]);
 });

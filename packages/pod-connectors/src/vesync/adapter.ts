@@ -26,12 +26,12 @@ import {
   MAX_DEVICES,
   MAX_RESPONSE_BYTES,
   MAX_RUN_OBSERVATIONS,
-  REQUEST_TIMEOUT_MS,
   record,
+  SOURCE_CALL_TIMEOUT_MS,
   text,
   VESYNC_API,
 } from "./api.js";
-import { VeSyncAuthError } from "./errors.js";
+import { VeSyncAuthError, VeSyncSourceError } from "./errors.js";
 import { VESYNC_FIXTURES } from "./fixtures.js";
 import { ENVIRONMENT_CLASSES, vocabMap } from "./vocab-map.js";
 
@@ -40,10 +40,23 @@ export interface VeSyncOptions {
   readonly room?: string | Readonly<Record<string, string>>;
   readonly now?: () => Date;
 }
-/** Hash opaque device identifiers; never use cid, uuid or MAC in a pod IRI. */
-export async function sensorSlug(id: string): Promise<string> {
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(id));
-  return `vesync-${Array.from(new Uint8Array(hash), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+/**
+ * Derive a sensor slug from an opaque device identifier with HMAC-SHA-256 keyed by `scope`
+ * (the connector's environment container URL): stable within one pod, so re-imports and
+ * `--room <slug>=` stay idempotent, but unlinkable across pods. Never put cid, uuid or MAC
+ * in a pod IRI.
+ */
+export async function sensorSlug(id: string, scope: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(scope),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(id));
+  return `vesync-${Array.from(new Uint8Array(mac), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 function supported(model: string): boolean {
   return /^(?:Core(?:200|300|400|600)S|LAP-(?:C|V)[A-Z0-9-]{1,64}|Vital ?(?:100|200)S|LV-PUR131S)$/i.test(
@@ -128,14 +141,13 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
       const post = async (path: string, body: object) => {
         budget.request();
         const signal = AbortSignal.any([
-          AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          AbortSignal.timeout(SOURCE_CALL_TIMEOUT_MS),
           ...(ctx.signal ? [ctx.signal] : []),
         ]);
         // Timeout spans both headers and body, including injected transports.
         let abort!: () => void;
         const aborted = new Promise<never>((_, reject) => {
-          abort = () =>
-            reject(new IntegrationSyncError("vesync", "VeSync request cancelled or timed out."));
+          abort = () => reject(new VeSyncSourceError("VeSync request cancelled or timed out."));
           signal.addEventListener("abort", abort, { once: true });
           if (signal.aborted) abort();
         });
@@ -172,7 +184,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
         } catch (error) {
           if (error instanceof VeSyncAuthError) throw error;
           // Source transport errors may contain credentials or provider-controlled strings.
-          throw new IntegrationSyncError("vesync", "VeSync reading failed.");
+          throw new VeSyncSourceError();
         } finally {
           signal.removeEventListener("abort", abort);
         }
@@ -238,7 +250,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
         const resultTime = new Date(Math.floor(now.getTime() / 60000) * 60000).toISOString();
         const day = resultTime.slice(0, 10),
           minute = resultTime.slice(11, 16).replace(":", "");
-        const slug = await sensorSlug(id);
+        const slug = await sensorSlug(id, ctx.resolve("environment/"));
         const sensorPath = sensorDocPath(slug),
           sensor = `${ctx.resolve(sensorPath)}#sensor`;
         const roomPath = `environment/${slug}/room.ttl`,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /** Abortable timer; no listeners or live timers survive cancellation. */
 export function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted();
@@ -20,7 +21,7 @@ export async function watchImports(options: {
   run: () => Promise<void>;
   minutes: number;
   signal?: AbortSignal;
-  onError: () => void;
+  onError: (error: unknown) => void;
   retry: (error: unknown) => boolean;
   sleep?: typeof delay;
   random?: () => number;
@@ -36,7 +37,7 @@ export async function watchImports(options: {
     } catch (error) {
       if (options.signal?.aborted || !options.retry(error)) throw error;
       failures = Math.min(failures + 1, 8);
-      options.onError();
+      options.onError(error);
     }
     const minutes = failures
       ? Math.min(60, options.minutes * 2 ** (failures - 1)) *

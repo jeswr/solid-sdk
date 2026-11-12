@@ -37,6 +37,7 @@ import {
 import { coreStatus, devices, legacyStatus, vitalStatus } from "./fixtures.js";
 
 const time = "2026-11-11T23:59:59Z";
+const SCOPE = new URL("integrations/vesync/environment/", TEST_POD_ROOT).href;
 function setup(list: unknown[] = [...devices], status: unknown = coreStatus) {
   const pod = createMemoryPod();
   const conditions: { url: string; headers: Headers }[] = [];
@@ -88,7 +89,7 @@ it("maps Core 300S/400S/600S, Vital 200S and v1 LV-PUR131S without disclosing id
   const report = await run(time, { room: "Office" });
   expect(report.written).toHaveLength(15);
   for (const [i, device] of devices.entries()) {
-    const slug = await sensorSlug(device.cid);
+    const slug = await sensorSlug(device.cid, SCOPE);
     const sensorUrl = new URL(`integrations/vesync/${sensorDocPath(slug)}`, TEST_POD_ROOT).href;
     const sensor = parseSensor(`${sensorUrl}#sensor`, pod.dataset(sensorUrl));
     expect(sensor).toMatchObject({
@@ -134,7 +135,7 @@ it("maps Core 300S/400S/600S, Vital 200S and v1 LV-PUR131S without disclosing id
 
 it("is idempotent within a minute, appends later minutes and rolls over at UTC midnight", async () => {
   const { run, pod, conditions } = setup([devices[0]]);
-  const slug = await sensorSlug(devices[0]?.cid ?? "");
+  const slug = await sensorSlug(devices[0]?.cid ?? "", SCOPE);
   const day = new URL(`integrations/vesync/${observationDocPath(slug, time)}`, TEST_POD_ROOT).href;
   await run();
   await run("2026-11-11T23:59:01Z");
@@ -158,7 +159,7 @@ it("is idempotent within a minute, appends later minutes and rolls over at UTC m
 
 it("supports per-sensor rooms and defaults to the device name", async () => {
   const { run, pod } = setup([devices[0]]);
-  const slug = await sensorSlug(devices[0]?.cid ?? "");
+  const slug = await sensorSlug(devices[0]?.cid ?? "", SCOPE);
   await run(time, { room: { [slug]: "Bedroom" } });
   const room = pod.urls().find((url) => url.endsWith("/room.ttl")) ?? "";
   expect(pod.get(room)).toContain("Bedroom");
@@ -230,7 +231,7 @@ it("rejects oversized device lists and malformed/huge envelopes before writes", 
 
 it("skips a capped day without growing it and logs a fixed safe message", async () => {
   const s = setup([devices[0]]);
-  const slug = await sensorSlug(devices[0]?.cid ?? "");
+  const slug = await sensorSlug(devices[0]?.cid ?? "", SCOPE);
   const path = observationDocPath(slug, time),
     url = s.writer.resolve(path);
   // Malformed typed roots still consume the model's observation allowance.
@@ -343,7 +344,7 @@ it("bounds watch history without pruning unrelated provenance or failing on malf
 
 it("keeps a hostile large literal from growing a day past its byte cap", async () => {
   const s = setup([devices[0]]);
-  const slug = await sensorSlug(devices[0]?.cid ?? "");
+  const slug = await sensorSlug(devices[0]?.cid ?? "", SCOPE);
   const path = observationDocPath(slug, time),
     url = s.writer.resolve(path);
   const large = new Store();
@@ -438,4 +439,17 @@ it("skips an LV-PUR131S without a uuid before any status request", async () => {
   const report = await run();
   expect(report.skipped).toBe(1);
   expect(api.mock.calls.map(([url]) => String(url))).toEqual([VESYNC_API + DEVICES]);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("keys sensor slugs by pod so one device is unlinkable across pods but stable within one", async () => {
+  const id = devices[0]?.cid ?? "";
+  const here = await sensorSlug(id, SCOPE);
+  expect(here).toMatch(/^vesync-[0-9a-f]{64}$/);
+  expect(await sensorSlug(id, SCOPE)).toBe(here);
+  expect(await sensorSlug(id, "https://other.example/integrations/vesync/environment/")).not.toBe(
+    here,
+  );
+  const { createHash } = await import("node:crypto");
+  expect(here).not.toBe(`vesync-${createHash("sha256").update(id).digest("hex")}`);
 });

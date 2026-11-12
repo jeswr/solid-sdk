@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PreconditionUnsupportedError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
 import { PROV, Provenance } from "./provenance.js";
@@ -92,7 +93,7 @@ export function createImportSession(
     if (!reads.has(url)) await read(input.slug);
     const previous = reads.get(url);
     if (input.requirePrecondition && previous && !strongEtag(previous.etag))
-      throw new IntegrationSyncError(id, "Conditional write requires a strong ETag.");
+      throw new PreconditionUnsupportedError(id, "Conditional write requires a strong ETag.");
     const sourceSubjects = new Set(
       [...input.dataset]
         .filter((q) => q.subject.termType === "NamedNode")
@@ -201,7 +202,7 @@ export function createImportSession(
   async function recordRun() {
     const previous = await writer.read(RUNS);
     if (options.maxRunActivities !== undefined && previous && !strongEtag(previous.etag))
-      throw new IntegrationSyncError(id, "Conditional run history requires a strong ETag.");
+      throw new PreconditionUnsupportedError(id, "Conditional run history requires a strong ETag.");
     const dataset = canonicalizeJeswrDataset(previous?.dataset);
     const activity = new Provenance(activityUrl, dataset, DataFactory);
     activity.types.add(`${PROV}Activity`);
