@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AppSlug } from "@jeswr/suite-ui";
+import { plannedApps } from "../apps/planned/planned";
 import { appRegistry } from "../shell/registry";
 
-const descriptions: Record<AppSlug, string> = {
+export const descriptions: Record<AppSlug, string> = {
   home: "See your pod, recent activity and connected apps.",
   drive: "Browse, upload and organise your files.",
   docs: "Write and edit documents in your pod.",
@@ -18,12 +19,35 @@ const descriptions: Record<AppSlug, string> = {
   money: "Review accounts, transactions and budgets.",
   health: "Explore your health records and trends.",
   permissions: "Decide who can see and use your things.",
+  bookmarks: "Save links to read later and organise them with tags.",
+  insights: "Spot patterns across your health, money, music and tasks.",
+  forms: "Build forms and collect answers that stay in each person's pod.",
+  recipes: "Collect recipes from the web and plan what to cook.",
+  media: "Track what you watch, read and play.",
+  journal: "Write a private daily journal and look back on it.",
+  events: "Plan events, send invitations and collect replies.",
+  whiteboard: "Sketch ideas on an open canvas with others.",
+  wallet: "Keep credentials, tickets and documents you can share.",
+  places: "See where you have been on a private timeline.",
+  slides: "Make presentations stored in your pod.",
+  publish: "Publish pages and simple sites from your pod.",
+  trips: "Gather bookings into trip plans automatically.",
+  ask: "Ask questions about your pod and get answers with sources.",
 };
+
+/** Placeholder apps are listed so people see what is coming, but never as something to try yet. */
+export function welcomeStatus(
+  slug: AppSlug,
+  status: "first-cut" | "parity" | "backlog",
+): "Coming soon" | "Early" | "Ready to try" {
+  if (plannedApps.has(slug)) return "Coming soon";
+  return status === "backlog" ? "Early" : "Ready to try";
+}
 
 export const welcomeApps = appRegistry.map((app) => ({
   ...app,
   description: descriptions[app.slug],
-  statusLabel: app.status === "backlog" ? "Early" : "Ready to try",
+  statusLabel: welcomeStatus(app.slug, app.status),
 }));
 
 export interface CompanionApp {
