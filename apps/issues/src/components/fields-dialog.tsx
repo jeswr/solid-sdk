@@ -17,24 +17,22 @@ import {
 import { WorkflowEditorSection } from "@/components/workflow-editor-section";
 import type { IssueStatusRef } from "@/lib/workflow-editor";
 import {
+  Badge,
+  Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+} from "@jeswr/suite-ui";
 import { Boxes, GaugeCircle, Loader2, Milestone, Plus, SlidersHorizontal, X } from "lucide-react";
 
 /**
@@ -285,7 +283,7 @@ export function FieldsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg sm:w-lg!">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <SlidersHorizontal className="size-4" aria-hidden /> Fields, components &amp; versions

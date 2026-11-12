@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { groupByEpic } from "@/lib/epics";
 import type { IssueRecord } from "@/lib/use-issues";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  Progress,
+} from "@jeswr/suite-ui";
 import { TypeBadge } from "@/components/type-badge";
 import { PersonAvatar } from "@/components/person";
 import { CheckCircle2, ChevronDown, ChevronRight, CircleDot, Plus, Zap } from "lucide-react";

@@ -14,13 +14,19 @@ import { useStore, useItems } from "@/components/use-productivity";
 import { groupsStore, type Group } from "@/lib/social";
 import { usePeople } from "@/components/use-people";
 import { EmptyState, ErrorState } from "@/components/states";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import {
+  Avatar,
+  AvatarFallback,
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import type { StoredItem } from "@/lib/productivity-store";
 
 export default function PeoplePage() {

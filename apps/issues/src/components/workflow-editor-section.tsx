@@ -21,26 +21,24 @@ import {
   buildIntermediateWorkflow,
   type IssueStatusRef,
 } from "@/lib/workflow-editor";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
+  Badge,
+  Button,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@jeswr/suite-ui";
 import { AlertTriangle, ArrowDown, ArrowUp, Check, GitBranch, Loader2, Plus, X } from "lucide-react";
 
 /**
@@ -524,7 +522,7 @@ export function WorkflowEditorSection({
 
       {/* In-use-state removal guard: migrate affected issues, then remove. */}
       <Dialog open={!!pendingRemoval} onOpenChange={(o) => !o && setPendingRemoval(undefined)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>“{pendingRemoval?.label}” is in use</DialogTitle>
             <DialogDescription>

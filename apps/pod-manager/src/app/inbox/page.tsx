@@ -19,11 +19,13 @@ import { useResourceNotifications } from "@/components/use-resource-notification
 import { PeoplePicker } from "@/components/people-picker";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Textarea,
+} from "@jeswr/suite-ui";
 import { safeLinkHref } from "@/lib/pod-scope";
 import { sendNotification } from "@/lib/notify-send";
 import { NoInboxError, InvalidTargetError, NotificationSendError } from "@/lib/errors";

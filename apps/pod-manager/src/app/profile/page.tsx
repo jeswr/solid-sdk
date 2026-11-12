@@ -19,13 +19,20 @@ import { useEditableProfile, saveProfile } from "@/components/use-profile-edit";
 import { ErrorState } from "@/components/states";
 import { ResourceWriteError } from "@/lib/errors";
 import type { EditableProfile } from "@/lib/profile-edit";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);

@@ -17,23 +17,21 @@ import {
 } from "@/lib/issue";
 import { BUILTIN_RULE_SEEDS, CONDITION_OPERANDS } from "@/lib/automation-engine";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  Switch,
+} from "@jeswr/suite-ui";
 import { Loader2, Plus, X, Zap } from "lucide-react";
 
 /** Human labels for the trigger coded values. */
@@ -228,7 +226,7 @@ export function RulesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl sm:w-2xl!">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Zap className="size-4 text-primary" aria-hidden /> Automations

@@ -411,46 +411,6 @@
         }
       ]
     },
-    "09923cf1aad0228a069942b601a178e5081232a55db5f2a7304f4be206ad67db": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/dialog.tsx",
-          "startLine": 19,
-          "endLine": 53,
-          "tokens": 125
-        },
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 20,
-          "endLine": 54,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 17,
-          "endLine": 51,
-          "tokens": 125
-        }
-      ]
-    },
-    "09ff7108b1d3c1455850751f7daad0985537719af1fc25cdf511d9d5bf422e37": {
-      "tokens": 134,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/command.tsx",
-          "startLine": 96,
-          "endLine": 142,
-          "tokens": 134
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/alert-dialog.tsx",
-          "startLine": 84,
-          "endLine": 127,
-          "tokens": 134
-        }
-      ]
-    },
     "0a75906bc199a3324ac2af06cc25db07b93b5a0df254704ea5ad84ef6e69d31b": {
       "tokens": 121,
       "locations": [
@@ -1070,29 +1030,6 @@
         }
       ]
     },
-    "19fdbc5a0906f9df25ab6c9d3d8898b7e625528349e61e557037790527c8ac93": {
-      "tokens": 128,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 55,
-          "endLine": 99,
-          "tokens": 128
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/alert.tsx",
-          "startLine": 33,
-          "endLine": 76,
-          "tokens": 128
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 55,
-          "endLine": 99,
-          "tokens": 128
-        }
-      ]
-    },
     "1a59b22b038e41016089bc7ca78229c710e5ff50d7d868797486071f51963080": {
       "tokens": 131,
       "locations": [
@@ -1303,8 +1240,8 @@
         },
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 102,
-          "endLine": 127,
+          "startLine": 104,
+          "endLine": 129,
           "tokens": 132
         }
       ]
@@ -1617,23 +1554,6 @@
           "startLine": 21,
           "endLine": 42,
           "tokens": 161
-        }
-      ]
-    },
-    "2b5f77151ec1fa49c9a28f5efb68677a809c19b21c60a253dbed0ab3c899ab9f": {
-      "tokens": 241,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 14,
-          "endLine": 88,
-          "tokens": 241
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 14,
-          "endLine": 88,
-          "tokens": 241
         }
       ]
     },
@@ -2229,23 +2149,6 @@
         }
       ]
     },
-    "3723a8ea22ef2659102a2cc6fd5fe8b2202ecdaaf5e03787215b4c672a80c6e3": {
-      "tokens": 138,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 101,
-          "endLine": 149,
-          "tokens": 138
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 99,
-          "endLine": 147,
-          "tokens": 138
-        }
-      ]
-    },
     "37e51a963197cb9c2f076cb3cc35f1220d48a388517bd4301475cd878a398847": {
       "tokens": 138,
       "locations": [
@@ -2354,26 +2257,9 @@
         },
         {
           "file": "packages/solid-chat-interop/src/chat-writer.ts",
-          "startLine": 73,
-          "endLine": 89,
+          "startLine": 87,
+          "endLine": 103,
           "tokens": 125
-        }
-      ]
-    },
-    "3ba9569e43bf62e055e3f7b558bb971815763240f8a4fa8e06be592c3e378acc": {
-      "tokens": 127,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 59,
-          "endLine": 103,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 59,
-          "endLine": 103,
-          "tokens": 127
         }
       ]
     },
@@ -2620,8 +2506,8 @@
       "locations": [
         {
           "file": "apps/coeliac/src/lib/pod/type-index.ts",
-          "startLine": 40,
-          "endLine": 54,
+          "startLine": 42,
+          "endLine": 56,
           "tokens": 122
         },
         {
@@ -3025,29 +2911,6 @@
           "startLine": 307,
           "endLine": 358,
           "tokens": 121
-        }
-      ]
-    },
-    "5447fdad09aa02922e4657022c6f3cb8b52fd64043eca3b7f82210795a83f89c": {
-      "tokens": 123,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/dialog.tsx",
-          "startLine": 63,
-          "endLine": 99,
-          "tokens": 123
-        },
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 67,
-          "endLine": 101,
-          "tokens": 123
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 64,
-          "endLine": 99,
-          "tokens": 123
         }
       ]
     },
@@ -3557,29 +3420,6 @@
           "startLine": 75,
           "endLine": 100,
           "tokens": 191
-        }
-      ]
-    },
-    "5fd9e8d99c0a55f813e2d795c60db7184141121d09b603c7eb72574a7715358c": {
-      "tokens": 244,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 15,
-          "endLine": 93,
-          "tokens": 244
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/alert.tsx",
-          "startLine": 31,
-          "endLine": 74,
-          "tokens": 127
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 15,
-          "endLine": 93,
-          "tokens": 244
         }
       ]
     },
@@ -4299,23 +4139,6 @@
         }
       ]
     },
-    "729abdda2d96973c07894820b7dc19f7af30365689903ddfc01e354a8e3ec9e3": {
-      "tokens": 167,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/button.tsx",
-          "startLine": 16,
-          "endLine": 67,
-          "tokens": 167
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/button.tsx",
-          "startLine": 16,
-          "endLine": 67,
-          "tokens": 167
-        }
-      ]
-    },
     "72ace020051564c061ed2d93551aba321a648cfee3491347b4ed521eb0ac2eee": {
       "tokens": 120,
       "locations": [
@@ -4585,23 +4408,6 @@
         }
       ]
     },
-    "7707810e3b6fc13b76f1686ad542e18afbf699bf44083bf402bd28130b07c5e5": {
-      "tokens": 188,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 68,
-          "endLine": 119,
-          "tokens": 188
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 65,
-          "endLine": 117,
-          "tokens": 188
-        }
-      ]
-    },
     "77611b6672d70982720c1587626319c36be24c8cc48fb28fbb8634ed01a60914": {
       "tokens": 120,
       "locations": [
@@ -4796,23 +4602,6 @@
           "startLine": 64,
           "endLine": 104,
           "tokens": 123
-        }
-      ]
-    },
-    "79a373a053e680e3503ea14e60e2690b492a0c06d37bc1b73bc47c554ee559a7": {
-      "tokens": 858,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/dropdown-menu.tsx",
-          "startLine": 9,
-          "endLine": 269,
-          "tokens": 858
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/dropdown-menu.tsx",
-          "startLine": 9,
-          "endLine": 269,
-          "tokens": 858
         }
       ]
     },
@@ -5282,23 +5071,6 @@
           "startLine": 63,
           "endLine": 105,
           "tokens": 259
-        }
-      ]
-    },
-    "84277a1955d882becb1dff30cc59124df27fdc686ff77987ebffae1ac79524ad": {
-      "tokens": 139,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/sonner.tsx",
-          "startLine": 7,
-          "endLine": 47,
-          "tokens": 139
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sonner.tsx",
-          "startLine": 7,
-          "endLine": 47,
-          "tokens": 139
         }
       ]
     },
@@ -6128,23 +5900,6 @@
         }
       ]
     },
-    "953ec7a4fc4637296b00881489f0c15517db98aff70b6d7ab5396889c4f0288c": {
-      "tokens": 292,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/avatar.tsx",
-          "startLine": 8,
-          "endLine": 112,
-          "tokens": 292
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/avatar.tsx",
-          "startLine": 8,
-          "endLine": 112,
-          "tokens": 292
-        }
-      ]
-    },
     "9546724e25c25aedeaa70916e46d0a54f5fe9149186376cdfaf7c38014d6cfb9": {
       "tokens": 126,
       "locations": [
@@ -6205,23 +5960,6 @@
           "startLine": 65,
           "endLine": 104,
           "tokens": 161
-        }
-      ]
-    },
-    "95f334d0865917d3c72c1f5c943c2e84909714828928b08f26eb8863bdca6b73": {
-      "tokens": 137,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/badge.tsx",
-          "startLine": 7,
-          "endLine": 49,
-          "tokens": 137
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/badge.tsx",
-          "startLine": 7,
-          "endLine": 49,
-          "tokens": 137
         }
       ]
     },
@@ -6545,29 +6283,6 @@
           "startLine": 23,
           "endLine": 59,
           "tokens": 176
-        }
-      ]
-    },
-    "9e04b4f944039ebc1495b6e79033062576840e47b91ea7eed3f166cbd8217f61": {
-      "tokens": 153,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/dialog.tsx",
-          "startLine": 10,
-          "endLine": 37,
-          "tokens": 153
-        },
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 13,
-          "endLine": 38,
-          "tokens": 153
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 10,
-          "endLine": 35,
-          "tokens": 153
         }
       ]
     },
@@ -7133,23 +6848,6 @@
         }
       ]
     },
-    "adcf0de53ada26c275537fcb13c7cdec98c0dbd3fb9300d50cb222cb880da0a0": {
-      "tokens": 163,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 5,
-          "endLine": 53,
-          "tokens": 163
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 5,
-          "endLine": 53,
-          "tokens": 163
-        }
-      ]
-    },
     "afc8e14cd2f10bb62f9a2c539607dd5340622f640f7caa984d47547e7a730ec6": {
       "tokens": 166,
       "locations": [
@@ -7589,35 +7287,6 @@
         }
       ]
     },
-    "b9c019e27d840e5fddd8c268cacb3d079add0401d02bea2ad0c2c0e852ae03f2": {
-      "tokens": 151,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/dialog.tsx",
-          "startLine": 16,
-          "endLine": 51,
-          "tokens": 151
-        },
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 17,
-          "endLine": 52,
-          "tokens": 151
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/alert-dialog.tsx",
-          "startLine": 9,
-          "endLine": 48,
-          "tokens": 151
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 14,
-          "endLine": 49,
-          "tokens": 151
-        }
-      ]
-    },
     "ba7e9779ea9190a7522eb5b65ae7cee6ec0650e4d218b12320f785ae1ab91abc": {
       "tokens": 123,
       "locations": [
@@ -7934,29 +7603,6 @@
           "startLine": 16,
           "endLine": 100,
           "tokens": 488
-        }
-      ]
-    },
-    "c083e3422fba5f85668724e8ddb4837279a512214cea8e811e033a1e8a4fc634": {
-      "tokens": 172,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 86,
-          "endLine": 138,
-          "tokens": 172
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/alert-dialog.tsx",
-          "startLine": 61,
-          "endLine": 119,
-          "tokens": 172
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 84,
-          "endLine": 136,
-          "tokens": 172
         }
       ]
     },
@@ -8379,23 +8025,6 @@
         }
       ]
     },
-    "cd461b2e728e743525093be413c743991d8786d7fe6db91df3fb3be31d204bfb": {
-      "tokens": 223,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/card.tsx",
-          "startLine": 19,
-          "endLine": 86,
-          "tokens": 223
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/card.tsx",
-          "startLine": 19,
-          "endLine": 86,
-          "tokens": 223
-        }
-      ]
-    },
     "cdb59a8f3f00604d537995bd1a133f4c3314c7b09ae8542c9e91ae12fb7813e1": {
       "tokens": 122,
       "locations": [
@@ -8477,8 +8106,8 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 112,
-          "endLine": 146,
+          "startLine": 114,
+          "endLine": 148,
           "tokens": 176
         },
         {
@@ -8731,23 +8360,6 @@
           "startLine": 1316,
           "endLine": 1393,
           "tokens": 241
-        }
-      ]
-    },
-    "d3d4339b97e562586aa1f83e1136ec90c09373b250dbce4c75f8c0b64b8c8a27": {
-      "tokens": 297,
-      "locations": [
-        {
-          "file": "apps/issues/src/components/ui/sheet.tsx",
-          "startLine": 24,
-          "endLine": 101,
-          "tokens": 297
-        },
-        {
-          "file": "apps/pod-manager/src/components/ui/sheet.tsx",
-          "startLine": 21,
-          "endLine": 99,
-          "tokens": 297
         }
       ]
     },

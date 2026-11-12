@@ -32,9 +32,11 @@ import {
   type AccessMode,
   type AppIdentity,
 } from "@/lib/permissions";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Checkbox,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 const VALID_MODES: readonly AccessMode[] = ["read", "append", "write", "control"];
 

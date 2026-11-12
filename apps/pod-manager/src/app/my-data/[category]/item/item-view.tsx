@@ -21,10 +21,13 @@ import { useResource } from "@/components/use-resource";
 import { ResourceViewer } from "@/components/resource-viewer";
 import { SharingPanel } from "@/components/sharing-panel";
 import { ErrorState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export function ItemView({ categoryId }: { categoryId: string }) {
   // useSearchParams requires a Suspense boundary in a prerendered page.

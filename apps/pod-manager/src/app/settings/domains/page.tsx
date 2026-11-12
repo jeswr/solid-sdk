@@ -13,8 +13,10 @@ import { ChevronRight, Globe, Plus, ShieldCheck, ShoppingCart } from "lucide-rea
 import { DomainBindingBadge, DomainsErrorState } from "@/components/domains-ui";
 import { EmptyState } from "@/components/states";
 import { useDomains, usePurchaseFeature } from "@/components/use-domains";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import { bindingBadge, DomainsUnavailableError } from "@/lib/domains";
 
 export default function DomainsPage() {

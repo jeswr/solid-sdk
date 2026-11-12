@@ -6,16 +6,17 @@
 
 import { LogOut, UserRound } from "lucide-react";
 import { useSolidSession } from "@/lib/session-context";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import {
+  Avatar,
+  AvatarFallback,
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@jeswr/suite-ui";
 import { toast } from "sonner";
 
 /** Initials from a display name, for the avatar fallback. */

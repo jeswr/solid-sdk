@@ -24,8 +24,10 @@ import {
 } from "@/components/use-permissions";
 import { describeModes } from "@/lib/permissions";
 import { TrustedAppsSection } from "@/components/trusted-apps-section";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 /** Stable empty fallback so the section's `apps` identity never churns. */
 const EMPTY_APPS: ConnectedApp[] = [];

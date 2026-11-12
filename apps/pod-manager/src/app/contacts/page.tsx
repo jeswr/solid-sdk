@@ -13,7 +13,9 @@ import { contactsStore, type Contact } from "@/lib/contacts";
 import { useStore, useItems } from "@/components/use-productivity";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 import { exportVCard, importVCard } from "@/lib/vcard-io";
 import { downloadText, readFileText } from "@/lib/download";
 import type { StoredItem } from "@/lib/productivity-store";

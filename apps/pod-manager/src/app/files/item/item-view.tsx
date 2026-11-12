@@ -40,9 +40,11 @@ import { useResource } from "@/components/use-resource";
 import { ResourceViewer } from "@/components/resource-viewer";
 import { SourceEditor } from "@/components/source-editor";
 import { ErrorState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Badge,
+  Button,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export function FileItemView() {
   return (

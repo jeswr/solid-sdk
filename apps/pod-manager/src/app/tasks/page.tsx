@@ -15,9 +15,11 @@ import { tasksStore, sortTasks, isOverdue, type Task } from "@/lib/tasks";
 import { useStore, useItems } from "@/components/use-productivity";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Badge,
+  Button,
+  Checkbox,
+} from "@jeswr/suite-ui";
 import { formatDate } from "@/lib/format";
 import { exportICal, importICal } from "@/lib/ical";
 import { downloadText, readFileText } from "@/lib/download";

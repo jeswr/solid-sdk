@@ -1,15 +1,17 @@
+/* AUTHORED-BY Claude Opus 5.5 */
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+/* Shared primitives come from @jeswr/suite-ui: its token, theme, density and
+   component styles, in the README order. This app's palette below overrides the
+   suite colours; the bridge after it maps the suite-only surface tokens onto it. */
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 
-/* AUTHORED-BY Codex GPT-6.1-Sol — compile the shared card's utility classes. */
+/* AUTHORED-BY Codex GPT-6.1-Sol — compile the shared components' utility classes. */
 @source "../../../../packages/suite-ui/dist";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
-  --color-surface: var(--card);
-  --color-surface-2: var(--muted);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
@@ -146,6 +148,18 @@
   --success-foreground: oklch(0.17 0.03 150);
   --warning: oklch(0.8 0.13 80);
   --warning-foreground: oklch(0.2 0.04 70);
+}
+
+/* suite-ui seam: suite components read these suite-only tokens. */
+:root,
+.dark {
+  --surface: var(--card);
+  --surface-2: var(--muted);
+  --surface-3: var(--secondary);
+  --foreground-muted: var(--muted-foreground);
+  --primary-soft: var(--accent);
+  --primary-soft-foreground: var(--accent-foreground);
+  --font-ui: var(--font-sans);
 }
 
 @layer base {

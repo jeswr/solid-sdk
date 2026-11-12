@@ -16,8 +16,10 @@ import { CheckCircle2, ExternalLink, FileUp, Loader2, ShieldCheck } from "lucide
 import { categoryIcon } from "@/components/category-icon";
 import { ErrorState } from "@/components/states";
 import { useFileImport } from "@/components/use-file-import";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Badge,
+  Button,
+} from "@jeswr/suite-ui";
 import { categoryById } from "@/lib/categories";
 import type { FileImportAdapter } from "@/lib/integrations/core/file-import";
 import type { ImportReport } from "@/lib/integrations/core/import-runner";

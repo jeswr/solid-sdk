@@ -22,10 +22,13 @@ import {
   resolveWebIdOption,
   type PersonOption,
 } from "@/lib/people-search";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Avatar,
+  AvatarFallback,
+  Badge,
+  Button,
+  Input,
+} from "@jeswr/suite-ui";
 
 function initials(label: string): string {
   const parts = label.trim().split(/\s+/).filter(Boolean);

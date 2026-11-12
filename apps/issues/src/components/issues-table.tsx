@@ -2,10 +2,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Badge,
+  Checkbox,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@jeswr/suite-ui";
 import { CheckCircle2, CircleDot, Pencil } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
 import type { FieldDef, Priority, StatusSlug, WorkflowStatus } from "@/lib/issue";
