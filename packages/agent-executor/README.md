@@ -30,7 +30,9 @@ Email previews contain `To: <To header>\nSubject: <Subject header>\n\n` followed
 the decoded text/plain body and footer (only CRLF becomes LF). Matrix uses content.body;
 Teams uses its card TextBlock; Mastodon uses request.status; Discord joins content and
 embed footer with LF. When the wire also delivers the signed envelope (email, Teams,
-native Matrix), the preview appends the complete signed message as canonical JSON.
+native Matrix), the preview starts with the complete signed message as one line of
+canonical JSON, then the human text. Entries queued under an older preview format refuse
+as preview-mismatch after deploy; drain or re-propose them first.
 Direct's native envelope carries no human text, so its preview is the signed message. Reserved scaffolds
 such as Slack have no send half yet. See agent-channels for parsing bounds.
 

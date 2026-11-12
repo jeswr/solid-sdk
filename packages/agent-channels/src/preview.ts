@@ -52,14 +52,16 @@ export function previewObject(value: unknown): Record<string, unknown> {
 
 /** Characters that render as nothing or as layout, so a preview could hide text with them. */
 const INVISIBLE =
-  /[\p{Cc}\p{Cf}\p{Co}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800\u115F\u1160\u3164\uFFA0]/u;
+  /[\p{Cc}\p{Cf}\p{Cn}\p{Co}\p{Zl}\p{Zp}\p{Default_Ignorable_Code_Point}\u2800\u115F\u1160\u3164\uFFA0\u{16FE4}\u{1D159}]/u;
 
 /**
  * Preserve text exactly; unsupported controls/line endings refuse instead of being hidden.
  * Emoji sequences survive: a variation selector only directly after a pictograph (or a keycap
  * base), and a zero-width joiner only between pictographs. Everything else that renders as
  * nothing (bidi and format controls, other variation selectors, Hangul fillers, the braille
- * blank, line/paragraph separators, private use) refuses.
+ * blank, line/paragraph separators, private use, unassigned code points and
+ * noncharacters) refuses. Some legitimate text refuses too (ZWNJ in Persian or Indic
+ * conjuncts, subdivision flags, CJK ideographic variation selectors): failing closed.
  */
 export function previewText(value: unknown): string {
   if (typeof value !== "string" || /[\uD800-\uDFFF]/u.test(value))
@@ -76,21 +78,35 @@ export function previewText(value: unknown): string {
   return value;
 }
 
-/** Fixed heading before the signed message, so its JSON can't pass for the human text. */
+/** Fixed headings. The signed message comes first, as one line of JSON, so the human text
+ * after it can't push it down or imitate it (text containing a heading also refuses). */
 export const SIGNED_MESSAGE_HEADING = "Signed message sent to the recipient's agent:";
+export const HUMAN_TEXT_HEADING = "What the recipient sees:";
+/** The proposal record's renderedPreview limit (agent-model `text`, 16384 characters). */
+export const MAX_PREVIEW_LENGTH = 16384;
+
+function bounded(preview: string): string {
+  if (preview.length > MAX_PREVIEW_LENGTH)
+    throw new ChannelParseError("preview exceeds the proposal record limit");
+  return preview;
+}
 
 /**
  * The signed message itself, as canonical JSON of the raw JWS payload. Envelope carriages
  * deliver all of it to the recipient's agent, so the owner approves all of it, not a summary.
  */
 export function signedMessage(compactJws: string, maxBytes: number): string {
-  let json: string;
+  return bounded(previewText(signedPayloadJson(compactJws, maxBytes)));
+}
+
+/** Canonical JSON of the raw JWS payload, without the preview text or length checks. */
+export function signedPayloadJson(compactJws: string, maxBytes: number): string {
   try {
     if (!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(compactJws)) throw new Error();
     const payload = new TextDecoder("utf-8", { fatal: true }).decode(
       Buffer.from(compactJws.split(".")[1] as string, "base64url"),
     );
-    json = canonicalJson(
+    return canonicalJson(
       parseBoundedJson(payload, {
         ...DEFAULT_LIMITS,
         maxEnvelopeBytes: maxBytes,
@@ -98,14 +114,17 @@ export function signedMessage(compactJws: string, maxBytes: number): string {
       }),
     );
   } catch {
-    throw new ChannelParseError("invalid signed message preview");
+    throw new ChannelParseError("invalid signed message payload");
   }
-  return previewText(json);
 }
 
-/** Human-visible text, then the complete signed message the envelope carries. */
+/** The complete signed message the envelope carries, then the human-visible text. */
 export function withSignedMessage(text: string, compactJws: string, maxBytes: number): string {
-  return `${text}\n\n${SIGNED_MESSAGE_HEADING}\n${signedMessage(compactJws, maxBytes)}`;
+  if (text.includes(SIGNED_MESSAGE_HEADING) || text.includes(HUMAN_TEXT_HEADING))
+    throw new ChannelParseError("preview text imitates a preview heading");
+  return bounded(
+    `${SIGNED_MESSAGE_HEADING}\n${signedMessage(compactJws, maxBytes)}\n\n${HUMAN_TEXT_HEADING}\n${text}`,
+  );
 }
 
 /** Closed-world objects: an unreviewed field could change what is sent. */

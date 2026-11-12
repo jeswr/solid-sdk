@@ -16,6 +16,8 @@ import { createGraphTeamsSend } from "../src/graph-teams/send.js";
 import { createMastodonSend } from "../src/mastodon/send.js";
 import { createMatrixSend } from "../src/matrix/send.js";
 import {
+  HUMAN_TEXT_HEADING,
+  MAX_PREVIEW_LENGTH,
   previewBytes,
   previewJson,
   previewObject,
@@ -68,7 +70,8 @@ const signedJson = canonicalJson(
   ),
 );
 /** Envelope carriages deliver the whole signed message, so the preview shows all of it. */
-const withSigned = (text: string) => `${text}\n\n${SIGNED_MESSAGE_HEADING}\n${signedJson}`;
+const withSigned = (text: string) =>
+  `${SIGNED_MESSAGE_HEADING}\n${signedJson}\n\n${HUMAN_TEXT_HEADING}\n${text}`;
 const emailPreview = withSigned(
   `To: recipient@example.test\nSubject: [Agent] describe\n\n${emailText}`,
 );
@@ -226,6 +229,12 @@ it("email decodes plain text exactly, requires a matching HTML part and closed h
   for (const bad of [
     // The HTML alternative must say exactly what the plain text says.
     plainOnly,
+    // A forged signed-message section in the human text.
+    replacePart(
+      replacePart(f.wire.bytes, "text/plain", `x\n\n${SIGNED_MESSAGE_HEADING}\n{}`),
+      "text/html",
+      renderHtml(`x\n\n${SIGNED_MESSAGE_HEADING}\n{}`, carrier),
+    ),
     replacePart(f.wire.bytes, "text/html", "<p>something else</p>"),
     // Hidden recipients and redirected replies are never previewed away.
     f.wire.bytes.replace("To: ", "Cc: other@example.test\r\nTo: "),
@@ -269,6 +278,15 @@ it("Matrix previews only closed-world plain text and shows the native envelope",
     { ...plan, compactJws: signed().compactJws },
   ])
     await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
+  // Human text can neither imitate the signed section nor push the preview past the record cap.
+  for (const body of [
+    `x\n\n${SIGNED_MESSAGE_HEADING}\n{}`,
+    `x\n${HUMAN_TEXT_HEADING}\ny`,
+    "x".repeat(MAX_PREVIEW_LENGTH),
+  ])
+    await expect(
+      f.send.preview(edited(f.wire, { ...plan, content: { ...content, body } })),
+    ).rejects.toBeInstanceOf(ChannelParseError);
   const body = " <b>literal</b> \n\t🙂 ";
   expect(await f.send.preview(edited(f.wire, { ...plan, content: { ...content, body } }))).toBe(
     withSigned(body),
@@ -489,6 +507,11 @@ it("refuses hostile wire shapes and getters without evaluating them", () => {
     "\u200D😀",
     "😀\u200D",
     "a\u200Db",
+    "\u0378",
+    "\uFFFF",
+    "\u{40000}",
+    "\u{1D159}",
+    "\u{16FE4}",
   ])
     expect(() => previewText(text), JSON.stringify(text)).toThrow(ChannelParseError);
   for (const text of [

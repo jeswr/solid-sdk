@@ -25,8 +25,8 @@ tamper-suspected and decision audit handling as wire-mismatch. Never substitute 
 free-text summary, HTML alternative or renderable-derived preview. Email includes
 To, Subject and decoded text/plain with footer (CRLF to LF only). Matrix uses body;
 Teams uses its card text block; Mastodon uses status; Discord includes content and
-embed footer. Envelope carriages (email, Teams, native Matrix) append the complete
-signed message; Direct previews as the signed message itself.
+embed footer. Envelope carriages (email, Teams, native Matrix) start with the complete
+signed message, then the human text; Direct previews as the signed message itself.
 Preserve uncertain obligations when refusing a resend. Preview parsers must be pure,
 bounded, hostile-input hardened and throw ChannelParseError on refusal.
 

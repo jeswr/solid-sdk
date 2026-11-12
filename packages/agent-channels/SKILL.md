@@ -40,7 +40,8 @@ equal `renderHtml(plain, carrier)` and refuse extra headers. Matrix uses content
 Teams uses its single card TextBlock and requires the matching HTML body; Mastodon uses
 request.status; Discord joins content and its embed footer with LF. Whenever the wire
 delivers the signed envelope (email, Teams, native Matrix), append it with
-`withSignedMessage`. Direct carries only a native signed envelope and previews as the
+`withSignedMessage`, which puts the one-line signed JSON first, refuses human text that
+contains a preview heading, and refuses previews over the 16384-character record limit. Direct carries only a native signed envelope and previews as the
 signed message's canonical JSON. Slack and
 other reserved send scaffolds must implement wire-derived visible previews when
 they acquire send capability. Executor refusal is preview-mismatch (including parse

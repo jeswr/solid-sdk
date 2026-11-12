@@ -5,7 +5,7 @@ import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
-import { signedMessage } from "../preview.js";
+import { signedPayloadJson } from "../preview.js";
 import { DIRECT } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { RenderableProposal, TokenProvider } from "../types.js";
@@ -61,7 +61,7 @@ export function createDirectSend(
     // The preview decodes the raw payload; it must be the proposal the verifier returned.
     if (
       canonicalJson(message) !== proposedJson ||
-      signedMessage(compactJws, DIRECT.maxBytes) !== proposedJson
+      signedPayloadJson(compactJws, DIRECT.maxBytes) !== proposedJson
     )
       throw new ChannelParseError("signed payload differs from proposal");
     return { wire, message };
