@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 import { mkdir } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { seedDemoSession } from "./demo-session";
 
 async function audit(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
@@ -41,6 +43,11 @@ async function format(page: Page, label: string) {
   }
 }
 
+// App routes sit behind the shell session guard; start signed in to the demo account.
+test.beforeEach(async ({ page }) => {
+  await seedDemoSession(page);
+});
+
 test("creates, saves, reloads and formats a document accessibly", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -48,7 +55,8 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   const suffix = testInfo.project.name;
   await page.goto("/docs");
   await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No documents yet" })).toBeVisible();
+  // The demo account already has documents, so the list rather than the empty state shows.
+  await expect(page.getByRole("heading", { name: "All documents", exact: true })).toBeVisible();
   await audit(page);
   await page
     .getByRole("link", { name: "New document", exact: true })
@@ -57,7 +65,8 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
     .click();
   await expect(page).toHaveURL(/\/docs\/new\?draft=[0-9a-f-]+$/);
   const title = page.getByRole("textbox", { name: "Document title", exact: true });
-  await title.fill("Launch plan");
+  // A title the demo account does not already use ("Launch plan" is seeded).
+  await title.fill("Editor test plan");
   await title.press("Enter");
   const menus = page.getByRole("menubar", { name: "Document menus" });
   for (const name of ["File", "Edit", "View", "Insert", "Format", "Tools", "Help"])
@@ -79,7 +88,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await page.reload();
   await expect(body).toContainText("A clear plan for the launch.", { timeout: 15_000 });
   await expect(body).toContainText("Keep every word in your own pod.");
-  await expect(title).toHaveValue("Launch plan");
+  await expect(title).toHaveValue("Editor test plan");
   // Click the paragraph itself: the editor reads a keyboard-moved caret from the
   // asynchronous selectionchange event, which can land after the toolbar acts.
   await body.getByText("A clear plan for the launch.", { exact: true }).click();
@@ -125,19 +134,19 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await audit(page);
   await page.screenshot({ path: `e2e/screenshots/docs-editor-${suffix}.png`, fullPage: true });
   await page.getByRole("link", { name: "Back to documents" }).click();
-  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Editor test plan", exact: true })).toBeVisible();
   await audit(page);
   await page.screenshot({ path: `e2e/screenshots/docs-list-${suffix}.png`, fullPage: true });
-  await page.getByRole("button", { name: "Actions for Launch plan", exact: true }).click();
+  await page.getByRole("button", { name: "Actions for Editor test plan", exact: true }).click();
   await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
   const deleting = page.getByRole("alertdialog", { name: "Move this document to trash?" });
   await deleting.getByRole("button", { name: "Move to trash", exact: true }).click();
   await expect(page.getByText("Moved to trash", { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toHaveCount(0, {
+  await expect(page.getByRole("link", { name: "Editor test plan", exact: true })).toHaveCount(0, {
     timeout: 15_000,
   });
   await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible({
+  await expect(page.getByRole("link", { name: "Editor test plan", exact: true })).toBeVisible({
     timeout: 15_000,
   });
   expect(errors).toEqual([]);

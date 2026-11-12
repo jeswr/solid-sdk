@@ -16,6 +16,10 @@ on:
       - 'tsconfig.base.json'
       - '.github/workflows/agent-daemon-container.yml'
   workflow_dispatch:
+# A new push to a PR supersedes its queued or running image check.
+concurrency:
+  group: agent-daemon-container-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
