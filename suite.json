@@ -100,7 +100,8 @@
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
     "@jeswr/solid-environment",
-    "@jeswr/solid-wallet"
+    "@jeswr/solid-wallet",
+    "@jeswr/solid-sheets"
   ],
   "applications": [
     {

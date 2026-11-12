@@ -396,7 +396,7 @@ describe("create", () => {
     await rejects(
       storage.create(ROOT, "x", { contentType: "text/plain", name: "a b" }),
       "conflict",
-      409,
+      412,
     );
     await rejects(storage.create(ROOT, null, { kind: "container", name: "a b" }), "conflict", 409);
     const slugged = await storage.create(ROOT, "x", { contentType: "text/plain" });
