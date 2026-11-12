@@ -23,6 +23,8 @@ import { normalizeLibrary } from "./normalize";
 const rdfMediaTypes = new Set<string>(SUPPORTED_RDF_MEDIA_TYPES);
 
 export interface MusicTrack extends LibraryTrack {
+  contentUrl?: string | undefined;
+  lyricsUrl?: string | undefined;
   artistId: string;
   artistIds: string[];
   loved: boolean;
@@ -58,6 +60,7 @@ export async function provision(fetch: typeof globalThis.fetch, storage: string)
     "music/artists/",
     "music/playlists/",
     "music/history/",
+    "music/files/",
   ]) {
     const response = await scoped(new URL(path, root).href, {
       method: "PUT",
