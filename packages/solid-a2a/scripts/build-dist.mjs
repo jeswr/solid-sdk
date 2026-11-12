@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * build-dist — produce the committed, self-contained `dist/` for GitHub-branch
@@ -56,11 +57,11 @@ const outdir = join(root, "dist");
  *     to an absolute path and classify by `path.relative(root, …)` rather than by a
  *     substring that a parent dir named `src`/`node_modules` could defeat.
  */
-function sanitizeDist(buildDir) {
-  const jsPath = join(buildDir, "index.js");
+function sanitizeDist(buildDir, entry) {
+  const jsPath = join(buildDir, `${entry}.js`);
   writeFileSync(jsPath, sanitizeJs(readFileSync(jsPath, "utf8"), root, root));
 
-  const mapPath = join(buildDir, "index.js.map");
+  const mapPath = join(buildDir, `${entry}.js.map`);
   if (existsSync(mapPath)) {
     const map = sanitizeMap(JSON.parse(readFileSync(mapPath, "utf8")), root, buildDir);
     writeFileSync(mapPath, JSON.stringify(map));
@@ -129,8 +130,8 @@ async function main(buildDir = outdir) {
     // against `root`) would resolve against the wrong base → nondeterministic labels
     // that could bypass the leak guard.
     absWorkingDir: root,
-    entryPoints: [join(root, "src", "index.ts")],
-    outfile: join(buildDir, "index.js"),
+    entryPoints: ["index", "validationWorker"].map((entry) => join(root, "src", `${entry}.ts`)),
+    outdir: buildDir,
     bundle: true,
     format: "esm",
     platform: "node",
@@ -158,7 +159,7 @@ async function main(buildDir = outdir) {
   // 4. Strip machine-absolute paths from the emitted JS + sourcemap, and fail closed
   //    if any host/home path prefix survives (keeps the committed dist deterministic +
   //    leak-free).
-  sanitizeDist(buildDir);
+  for (const entry of ["index", "validationWorker"]) sanitizeDist(buildDir, entry);
 }
 
 const argDir = process.argv[2];

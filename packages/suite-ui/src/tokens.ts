@@ -541,6 +541,28 @@ export const tokens = [
     category: "colour",
   },
   {
+    name: "--app-agent",
+    light: "oklch(0.50 0.11 205)",
+    dark: "oklch(0.74 0.10 205)",
+    use: "identifier tile; 3:1 glyph",
+    category: "colour",
+    tag: "graphic",
+  },
+  {
+    name: "--app-agent-soft",
+    light: "oklch(0.94 0.03 205)",
+    dark: "oklch(0.30 0.05 205)",
+    use: "file-type badges and hover tints",
+    category: "colour",
+  },
+  {
+    name: "--presence-agent",
+    light: "oklch(0.60 0.14 205)",
+    dark: "oklch(0.60 0.14 205)",
+    use: "collaborator cursor hue",
+    category: "colour",
+  },
+  {
     name: "--glyph",
     light: "oklch(1 0 0)",
     dark: "oklch(0.16 0.012 240)",

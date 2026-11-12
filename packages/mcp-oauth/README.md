@@ -64,6 +64,21 @@ CSRF-protected consent decision, then call the trusted `authorize(request, sessi
 API. This API is server-only: never accept a session identity supplied by an HTTP client.
 The consent callback receives independent snapshots, so mutation cannot change the issued grant.
 
+The optional `grantCreated({ grant, client, redirectUri, issuedAt }): Promise<void>` hook runs
+once per approved grant, after `grants.put` completes and before any authorization code is
+stored. `grant` and `client` are independent snapshots typed as `Readonly<Grant>` and
+`Readonly<Client>`; `issuedAt` is the grant creation time in seconds. Await required connection
+record persistence in this hook. Denial never calls it. A hook failure prevents code issuance,
+attempts session-wide grant revocation and broker retirement, and redirects to the validated
+client URI with `error=server_error`, the original `state`, and `iss`. Cleanup failures retain
+that same error response; any persisted session-revocation intent remains authoritative.
+
+`await oauth.revokeGrant(grantId)` is a trusted server-only API for session-wide revocation.
+Unknown IDs are no-ops. Repeated calls are safe, retry credential cleanup and never restore a
+grant. Existing access tokens fail verification with `invalid_token`, and code/refresh
+exchanges fail with `invalid_grant`, for every grant bound to the retired pod session.
+Store or broker failures reject the call; retry it to finish cleanup.
+
 Refresh families expire absolutely thirty days after consent. Each successful refresh replaces
 the presented refresh token. Replaying a code or refresh token revokes its entire family.
 `/revoke` also revokes the family for either kind of token and returns 200 for unknown tokens.
@@ -106,7 +121,12 @@ a new ES256 DPoP key for each login. It resolves an issuer directly, or falls ba
 WebID's profile only when discovery returns HTTP 404. Ambiguous/missing profile issuers fail;
 malformed discovery, transport failures and issuer mismatches never trigger fallback. After
 OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
-in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
+in its own profile. The broker passes `verifyWebId: false` to the protocol engine and owns this
+binding check once, using its SSRF-guarded fetch-rdf transport for content negotiation and storage
+root discovery in the same profile read. This avoids a second, Turtle-only engine fetch. Refresh
+keeps that session's established profile binding and checks refreshed subject, nonce and WebID;
+it does not repeat the profile read after the OP rotates the refresh token. Remote JSON-LD
+contexts are refused by the RDF parser.
 
 LWS storages are answered by exchanging the session's verified ID token, under pod-auth's
 exchange rule. The resource must be inside a stored root, and the authorization server must
