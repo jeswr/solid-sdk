@@ -21,10 +21,13 @@ export type ToolHints =
 /** Reads that never write, not even an audit entry. */
 export const READ_HINTS: ToolHints = { readOnlyHint: true, openWorldHint: true };
 
-/** Reads that may append a private audit entry for special-category data, so they are not read-only. */
+/**
+ * Reads that may append a private audit entry for special-category data. Creating the audit
+ * container replaces any existing ACL there with an owner-only one, so they are destructive.
+ */
 export const AUDITED_READ_HINTS: ToolHints = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 };

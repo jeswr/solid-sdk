@@ -154,9 +154,10 @@ export function registerChatTools(
           }),
         ),
       },
+      // Saving writes an owner-only ACL that replaces any existing one on the conversation.
       annotations: {
         readOnlyHint: false,
-        destructiveHint: false,
+        destructiveHint: true,
         idempotentHint: true,
         openWorldHint: true,
       },

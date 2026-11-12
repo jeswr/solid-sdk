@@ -18,7 +18,7 @@ afterEach(async () => {
 const READ = { readOnlyHint: true, openWorldHint: true };
 const AUDITED = {
   readOnlyHint: false,
-  destructiveHint: false,
+  destructiveHint: true,
   idempotentHint: false,
   openWorldHint: true,
 };
@@ -45,7 +45,7 @@ const EXPECTED: Record<string, object> = {
   },
   memory_remember: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: false,
     openWorldHint: true,
   },
@@ -62,7 +62,7 @@ const EXPECTED: Record<string, object> = {
   context_read: READ,
   chat_save: {
     readOnlyHint: false,
-    destructiveHint: false,
+    destructiveHint: true,
     idempotentHint: true,
     openWorldHint: true,
   },
