@@ -21,16 +21,27 @@ export const BANK_CSV_FORMATS = ["revolut", "hsbc-uk", "monzo", "starling"] as c
 export type BankCsvFormat = (typeof BANK_CSV_FORMATS)[number];
 /** Longest accepted `accountLabel`, in Unicode code points after `normaliseAccountLabel`. */
 export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
+// Joiners (ZWNJ, ZWJ) and tag characters are format characters that emoji sequences,
+// subdivision flags and Persian/Indic shaping need, so they are kept inside a label.
 const INVISIBLE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
+const KEPT_FORMAT_CHAR = /^[\u200C\u200D\u{E0020}-\u{E007F}]$/u;
+const LABEL_EDGE = /^[\s\u200C\u200D]+|[\s\u200C\u200D]+$/gu;
+const VISIBLE_LABEL_CHAR = /[^\s\u200C\u200D\u{E0020}-\u{E007F}]/u;
 /**
  * The one form of an `accountLabel` that is hashed into the account folder and stored as its
  * display label: control and format characters (Unicode Cc and Cf, including zero-width and
- * bidi controls) removed, then NFC, then trimmed. A plain label is unchanged, so its folder is
- * the same as before normalisation existed. Stripping precedes NFC so a removed character
- * cannot leave a decomposed sequence behind; the result is idempotent.
+ * bidi controls) removed, except the joiners and tag characters that emoji, flags and some
+ * scripts need; then NFC; then whitespace and joiners trimmed from both ends. A plain label is
+ * unchanged, so its folder is the same as before normalisation existed. Stripping precedes NFC
+ * so a removed character cannot leave a decomposed sequence behind; the result is idempotent.
+ * A label with no visible character normalises to "".
  */
 export function normaliseAccountLabel(label: string): string {
-  return label.replace(INVISIBLE_LABEL_CHARS, "").normalize("NFC").trim();
+  const normalised = label
+    .replace(INVISIBLE_LABEL_CHARS, (char) => (KEPT_FORMAT_CHAR.test(char) ? char : ""))
+    .normalize("NFC")
+    .replace(LABEL_EDGE, "");
+  return VISIBLE_LABEL_CHAR.test(normalised) ? normalised : "";
 }
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */

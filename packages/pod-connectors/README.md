@@ -281,9 +281,11 @@ label was not used (the entry never repeats the label).
 
 **Label normalisation.** The adapter normalises a label once, and that one string is both
 hashed into the account folder name and stored as the account's `skos:prefLabel`: Unicode
-control and format characters (`Cc`, `Cf`: C0/C1 controls, zero-width characters
-including the joiners inside emoji sequences, bidi controls) are removed, the rest is put
-in NFC, then trimmed. A label that is empty after this is rejected, and the 256 limit
+control and format characters (`Cc`, `Cf`: C0/C1 controls, zero-width spaces, bidi
+controls) are removed, except the joiners (ZWNJ, ZWJ) and tag characters that emoji
+sequences, subdivision flags and some scripts need. The rest is put in NFC, then
+whitespace and joiners are trimmed from both ends. A label with no visible character is
+rejected, and the 256 limit
 counts code points of the normalised form, so an emoji counts once. `"Joint\u0001"` and
 `"Joint"`, or the NFC and NFD spellings of `"Café"`, are the same account. A plain label
 is unchanged by normalisation, so its folder is the same as before. Revolut defaults to one account per Product/Currency. Monzo

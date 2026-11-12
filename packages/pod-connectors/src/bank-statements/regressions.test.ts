@@ -430,6 +430,16 @@ describe("account label normalisation", () => {
     expect(variant.labels).toEqual([normal]);
   });
 
+  it.each([
+    ["family emoji", "Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467}"],
+    ["subdivision flag", "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F} Savings"],
+    ["Persian ZWNJ", "\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645"],
+  ])("keeps the joiners and tag characters inside a %s label", (_name, label) => {
+    expect(normaliseAccountLabel(label)).toBe(label);
+    expect(normaliseAccountLabel(`\u200D ${label} \u200C`)).toBe(label);
+    expect(parseBankCsv(MONZO, 10, { accountLabel: label })[0]?.accountLabel).toBe(label);
+  });
+
   it("gives the NFC and NFD spellings of a label one folder", async () => {
     const nfc = "Caf\u00E9";
     const nfd = "Cafe\u0301";
@@ -448,6 +458,8 @@ describe("account label normalisation", () => {
     "\uFEFF",
     " \u0001 \u00AD ",
     "\u0085",
+    "\u{E0041}\u{E0042}",
+    "\u200D\u{E0067}\u200C",
   ])("rejects a label with nothing left after normalisation: %j", (accountLabel) => {
     expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
     expect(() => createBankStatementsFileAdapter({ accountLabel })).toThrow("Account label");
