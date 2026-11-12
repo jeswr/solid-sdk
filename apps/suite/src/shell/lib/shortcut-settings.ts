@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /**
  * WCAG 2.1.4 (character key shortcuts): one suite-wide switch for single-key
@@ -33,3 +34,14 @@ export function setCharacterShortcutsEnabled(
   }
   (target ?? globalThis).dispatchEvent?.(new Event(SHORTCUTS_SETTING_EVENT));
 }
+
+/** Shared history commands are listed in the shortcuts settings and help sheet. */
+export const UNDO_SHORTCUTS = {
+  undo: { id: "global.undo", keys: "Cmd/Ctrl+Z", label: "Undo latest change", group: "Global" },
+  redo: {
+    id: "global.redo",
+    keys: "Cmd/Ctrl+Shift+Z",
+    label: "Redo latest change",
+    group: "Global",
+  },
+} as const;

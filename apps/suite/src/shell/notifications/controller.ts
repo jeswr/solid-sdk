@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import type { UndoEntry } from "@jeswr/suite-sdk/undo";
 import {
   type AccessDecider,
   type AccessDecision,
@@ -28,6 +29,8 @@ export function createNotificationsController(
 ) {
   let snapshot: NotificationsSnapshot = { items: [], unread: 0, loading: true, error: null };
   let overlay: NotificationOverlay = { read: readState?.load() ?? new Set(), dismissed: new Set() };
+  const readOverrides = new Map<string, boolean>();
+  let lifetime = 0;
   const outcomes = new Map<string, string>();
   const results = new Map<string, SuiteNotification[]>();
   const listeners = new Set<() => void>();
@@ -36,9 +39,11 @@ export function createNotificationsController(
   let initialized = false;
   const seen = new Set<string>();
   const publish = (loading: boolean, error: string | null) => {
-    const items = mergeNotifications([...results.values()], overlay).map((item) =>
-      outcomes.has(item.id) ? { ...item, outcome: outcomes.get(item.id) ?? "" } : item,
-    );
+    const items = mergeNotifications([...results.values()], overlay).map((item) => ({
+      ...item,
+      read: readOverrides.get(item.id) ?? item.read,
+      ...(outcomes.has(item.id) ? { outcome: outcomes.get(item.id) ?? "" } : {}),
+    }));
     snapshot = { items, unread: unreadCount(items), loading, error };
     for (const listener of listeners) listener();
   };
@@ -70,6 +75,8 @@ export function createNotificationsController(
     return true;
   };
   const markRead = async (ids: string[]) => {
+    const currentLifetime = lifetime;
+    for (const id of ids) readOverrides.delete(id);
     overlay = markNotificationsRead(overlay, ids);
     // Save before publishing or awaiting a source: opening an item can navigate immediately.
     // Keep these receipts even after a source confirms the in-memory overlay.
@@ -81,7 +88,10 @@ export function createNotificationsController(
         return owned.length ? source.markRead?.(owned) : undefined;
       }),
     );
-    if (responses.some((response) => response.status === "rejected"))
+    if (
+      currentLifetime === lifetime &&
+      responses.some((response) => response.status === "rejected")
+    )
       publish(
         snapshot.loading,
         "Couldn't save the read status. Your read items are kept on this device. Retry to save them.",
@@ -103,10 +113,59 @@ export function createNotificationsController(
       if (overlay.read.size) await markRead([...overlay.read]);
     },
     markRead: (id: string) => markRead([id]),
-    markAllRead: () => markRead(snapshot.items.map((item) => item.id)),
-    dismiss(id: string) {
+    markAllRead(pushUndo?: (entry: Omit<UndoEntry, "scope">) => void) {
+      const ids = snapshot.items.filter((item) => !item.read).map((item) => item.id);
+      if (!ids.length) return Promise.resolve();
+      const previousRead = new Set(overlay.read);
+      const currentLifetime = lifetime;
+      const operation = markRead(ids);
+      pushUndo?.({
+        label: `Marked ${ids.length} notifications as read`,
+        async undo(signal) {
+          signal.throwIfAborted();
+          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+          // Sources only support markRead. Explicit local unread intent must survive refreshes.
+          for (const id of ids) readOverrides.set(id, false);
+          overlay = {
+            ...overlay,
+            read: new Set(
+              [...overlay.read].filter((id) => !ids.includes(id) || previousRead.has(id)),
+            ),
+          };
+          readState?.remove?.(new Set(ids.filter((id) => !previousRead.has(id))));
+          publish(snapshot.loading, snapshot.error);
+        },
+        async redo(signal) {
+          signal.throwIfAborted();
+          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+          await markRead(ids);
+        },
+      });
+      return operation;
+    },
+    dismiss(id: string): Omit<UndoEntry, "scope"> | undefined {
+      if (!snapshot.items.some((item) => item.id === id)) return;
+      const currentLifetime = lifetime;
+      const wasDismissed = overlay.dismissed.has(id);
       overlay = dismissNotification(overlay, id);
       publish(snapshot.loading, snapshot.error);
+      return {
+        label: "Notification dismissed",
+        async undo(signal) {
+          signal.throwIfAborted();
+          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+          const dismissed = new Set(overlay.dismissed);
+          if (!wasDismissed) dismissed.delete(id);
+          overlay = { ...overlay, dismissed };
+          publish(snapshot.loading, snapshot.error);
+        },
+        async redo(signal) {
+          signal.throwIfAborted();
+          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+          overlay = dismissNotification(overlay, id);
+          publish(snapshot.loading, snapshot.error);
+        },
+      };
     },
     async decide(id: string, decision: AccessDecision) {
       const item = snapshot.items.find((item) => item.id === id);
@@ -125,6 +184,7 @@ export function createNotificationsController(
       publish(snapshot.loading, snapshot.error);
     },
     stop() {
+      ++lifetime;
       ++revision;
       request?.abort();
     },

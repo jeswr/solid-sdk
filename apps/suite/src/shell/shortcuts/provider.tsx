@@ -23,6 +23,7 @@ export interface RegisteredShortcut {
 export interface Shortcut extends RegisteredShortcut {
   run: () => void;
   when?: () => boolean;
+  allowInEditable?: boolean;
 }
 type Entry = Shortcut & { token: string };
 const Context = createContext<{
@@ -75,7 +76,9 @@ export function ShortcutsProvider({
       const active = shortcuts.filter(
         (shortcut) =>
           (characterKeys || hasPrimaryModifier(shortcut.keys)) &&
-          (!shortcut.when || shortcut.when()),
+          (!shortcut.when || shortcut.when()) &&
+          (shortcut.allowInEditable !== false ||
+            (!isEditableTarget(event.target) && !isEditableTarget(document.activeElement))),
       );
       const nextSignature = active.map((shortcut) => shortcut.token).join(",");
       if (signature !== nextSignature) {
@@ -115,7 +118,7 @@ export function useShortcut(shortcut: Shortcut) {
   const latest = useRef(shortcut);
   latest.current = shortcut;
   const register = context?.register;
-  const { id, keys, label, group, scope } = shortcut;
+  const { id, keys, label, group, scope, allowInEditable } = shortcut;
   useEffect(
     () =>
       register?.({
@@ -124,10 +127,11 @@ export function useShortcut(shortcut: Shortcut) {
         label,
         group,
         ...(scope ? { scope } : {}),
+        ...(allowInEditable === undefined ? {} : { allowInEditable }),
         run: () => latest.current.run(),
         when: () => latest.current.when?.() ?? true,
       }),
-    [register, id, keys, label, group, scope],
+    [register, id, keys, label, group, scope, allowInEditable],
   );
 }
 export function useRegisteredShortcuts(): readonly RegisteredShortcut[] {
