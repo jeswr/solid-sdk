@@ -20,9 +20,9 @@
  * Both are interfaces so the UI can be exercised against fakes in unit tests.
  */
 
+import type { WorkbookMetadata } from "@jeswr/solid-sheets";
 import type { DraftAnchor } from "./comments/anchors";
 import type { CellAnchor } from "./comments/selector";
-import type { WorkbookMetadata } from "./model/rdf";
 import type { Snapshot } from "./model/snapshot";
 import type { StructuralEdit } from "./refs/model";
 
@@ -190,7 +190,19 @@ export type CsvImportResult =
   | { status: "imported" }
   | { status: "blocked"; reason: "comments-loading" | "read-only" };
 
+export type SortResult = { status: "sorted" } | { status: "blocked"; reason: string };
+
 export interface SheetEngine {
+  sortRange?(options: {
+    scope: "range" | "sheet";
+    column: number;
+    ascending: boolean;
+    header: boolean;
+  }): SortResult;
+  hasFilter?(): boolean;
+  toggleFilter?(): Promise<boolean>;
+  clearFilter?(): Promise<boolean>;
+  findReplace?(): Promise<void>;
   /** Hold editing independently of access permissions while missing anchors load. */
   setCommentsLoading?(loading: boolean): void;
   /** Listed selectors replay only history after their recorded workbook ETag. */

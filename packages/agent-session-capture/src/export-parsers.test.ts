@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { chatConversationId } from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { readFile } from "fs/promises";
 import { describe, expect, it } from "vitest";
@@ -19,6 +20,26 @@ const claude = (extra: object = {}) =>
   JSON.stringify([{ uuid: "chat", chat_messages: [{ sender: "human", text: "Hello" }], ...extra }]);
 
 describe("bounded export parsers", () => {
+  it.each([
+    parseChatgptExport,
+    parseClaudeExport,
+  ])("scopes normalized accounts before redaction and records export channel %#", async (parser) => {
+    const text = await fixture(parser === parseChatgptExport ? "chatgpt" : "claude");
+    const original = parser(text)[0];
+    const personal = parser(text, { account: " Cafe\u0301 " })[0];
+    expect(personal).toMatchObject({ account: "Café", channel: "export" });
+    expect(personal?.conversationId).toBe(
+      await chatConversationId(original?.conversationId as string, "Café"),
+    );
+    expect(parser(text, { account: "Café" })).toEqual([personal]);
+    const secret = parser(text, { account: "token=fixture-secret" })[0];
+    expect(secret?.account).toBe("token=[REDACTED]");
+    expect(secret?.conversationId).not.toBe(
+      parser(text, { account: "token=other-secret" })[0]?.conversationId,
+    );
+    expect(JSON.stringify(secret)).not.toContain("fixture-secret");
+    expect(() => parser("[]", { account: "" })).toThrow("Invalid chat account label");
+  });
   it("ports all ChatGPT mapping branches in timestamp order, with opaque IDs and text only", async () => {
     const text = await fixture("chatgpt");
     const parsed = parseChatgptExport(text);

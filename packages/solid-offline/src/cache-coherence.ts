@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Shared byte-cache ↔ metadata COHERENCE primitives (internal).
  *
@@ -66,11 +67,18 @@ export const CANONICAL_TURTLE_VARY_KEY = 'accept=text/turtle';
 export interface CoherenceByteCache {
   put(request: Request, response: Response): Promise<void>;
   delete(request: Request, options?: CacheQueryOptions): Promise<boolean>;
+  /** IndexedDB stores can commit both halves together after buffering. */
+  replace?(request: Request, response: Response, record: CacheMetadata): Promise<void>;
 }
 
 /** Project a `Response` onto the header-only shape the policy functions read. */
 export function resLike(response: Response): ResponseLike {
-  return { status: response.status, headers: response.headers, type: response.type };
+  return {
+    status: response.status,
+    headers: response.headers,
+    type: response.type,
+    redirected: response.redirected,
+  };
 }
 
 /**
@@ -115,9 +123,36 @@ export async function putCanonicalBytes(
   cache: CoherenceByteCache,
   rl: RequestLike,
   response: Response,
+  metadata?: { store: MetadataStore; record: CacheMetadata },
 ): Promise<void> {
   const varyKey = computeVaryKey(rl, resLike(response));
-  await cache.put(keyRequest(rl.url, varyKey), response.clone());
+  const copy = response.clone();
+  const headers = new Headers(copy.headers);
+  for (const name of [
+    'authorization',
+    'proxy-authorization',
+    'dpop',
+    'cookie',
+    'set-cookie',
+    'authentication-info',
+    'proxy-authentication-info',
+    'x-solid-offline-cache',
+    'x-offline',
+  ])
+    headers.delete(name);
+  const key = keyRequest(rl.url, varyKey);
+  const safe = new Response(copy.body, {
+    status: copy.status,
+    statusText: copy.statusText,
+    headers,
+  });
+  if (metadata && cache.replace) {
+    await cache.replace(key, safe, metadata.record);
+  } else {
+    // Retain the Cache API seam for consumers with a separate byte store.
+    await cache.put(key, safe);
+    if (metadata) await metadata.store.put(metadata.record);
+  }
 }
 
 /**
@@ -148,7 +183,7 @@ export async function deleteVariantBytes(
 export async function evictListingPages(
   container: string,
   records: CacheMetadata[],
-  deps: { cache: ByteCache; meta: MetadataStore },
+  deps: { cache: ByteCache; meta: MetadataStore; beforeChange?(url: string): void },
   // SWR has no StorageClient; keep its local eviction within the listing's origin.
   isWithinStorage: (url: string) => boolean = (url) =>
     URL.canParse(url) && new URL(url).origin === new URL(container).origin,
@@ -172,6 +207,7 @@ export async function evictListingPages(
       void cached?.body?.cancel().catch(() => undefined);
     }
     if (page.url === container) continue;
+    deps.beforeChange?.(page.url);
     await deleteVariantBytes(
       deps.cache,
       page.url,
