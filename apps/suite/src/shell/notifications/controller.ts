@@ -120,7 +120,7 @@ export function createNotificationsController(
       const currentLifetime = lifetime;
       const operation = markRead(ids);
       pushUndo?.({
-        label: `Marked ${ids.length} notifications as read`,
+        label: `Marked ${ids.length} ${ids.length === 1 ? "notification" : "notifications"} as read`,
         async undo(signal) {
           signal.throwIfAborted();
           if (currentLifetime !== lifetime) throw new Error("Notification session changed");
@@ -132,8 +132,20 @@ export function createNotificationsController(
               [...overlay.read].filter((id) => !ids.includes(id) || previousRead.has(id)),
             ),
           };
-          readState?.remove?.(new Set(ids.filter((id) => !previousRead.has(id))));
+          const restored = ids.filter((id) => !previousRead.has(id));
+          readState?.remove?.(new Set(restored));
           publish(snapshot.loading, snapshot.error);
+          // Persist the unread state in sources that store read flags (local notifications).
+          const responses = await Promise.allSettled(
+            sources.map((source) => {
+              const owned = restored.filter((id) =>
+                results.get(source.id)?.some((item) => item.id === id),
+              );
+              return owned.length ? source.markUnread?.(owned) : undefined;
+            }),
+          );
+          if (responses.some((response) => response.status === "rejected"))
+            throw new Error("Couldn't save the unread status");
         },
         async redo(signal) {
           signal.throwIfAborted();

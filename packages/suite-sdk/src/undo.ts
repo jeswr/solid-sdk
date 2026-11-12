@@ -58,7 +58,21 @@ export function createUndoStack({
   };
   const publish = () => {
     update();
-    for (const listener of listeners) listener();
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch (error) {
+        // A broken subscriber must not drop or fail an entry; surface it without unwinding.
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
+    }
+  };
+  /** History recorded after an entry that can no longer be redone is not replayable. */
+  const retireRedo = (scope: string) => {
+    branches.set(scope, (branches.get(scope) ?? 0) + 1);
+    records = records.filter((record) => record.entry.scope !== scope || record.phase !== "redo");
   };
   const prune = () => {
     const live = records.filter((record) => !expired(record));
@@ -102,15 +116,20 @@ export function createUndoStack({
         if (record.entry.redo && !expired(record) && branch === branches.get(record.entry.scope)) {
           records.push({ ...record, phase: phase === "undo" ? "redo" : "undo" });
           trim(record.entry.scope);
-        }
+        } else if (phase === "undo" && !record.entry.redo) retireRedo(record.entry.scope);
       }
       return { status: "done" };
     } catch (error) {
       if (controller.signal.aborted) return { status: "nothing" };
-      if (!isRetryable(error)) records = records.filter((candidate) => candidate !== record);
+      if (!isRetryable(error)) {
+        records = records.filter((candidate) => candidate !== record);
+        // Later redo entries were recorded on top of state this failure may have left behind.
+        retireRedo(record.entry.scope);
+      }
       return { status: "failed", error };
     } finally {
-      operation = undefined;
+      // clear() may already have released the lock and a newer operation may hold it.
+      if (operation === controller) operation = undefined;
       prune();
       publish();
     }
@@ -146,6 +165,8 @@ export function createUndoStack({
     clear() {
       records = [];
       operation?.abort();
+      // A callback that ignores its signal must not keep the stack busy; its late result is fenced.
+      operation = undefined;
       publish();
     },
   };

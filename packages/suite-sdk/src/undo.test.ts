@@ -256,3 +256,82 @@ it("never invokes callbacks expired or cleared by a start notification", async (
   expect(await stack.undo("tasks")).toEqual({ status: "nothing" });
   expect(cleared.undo).not.toHaveBeenCalled();
 });
+
+// AUTHORED-BY Claude Opus 5.5
+describe("history integrity", () => {
+  it("drops redo recorded on top of an undone entry that cannot be redone", async () => {
+    const stack = createUndoStack();
+    stack.push({ label: "rename A", scope: "drive", undo: async () => {} });
+    const move = entry("move B", "drive");
+    stack.push(move);
+    expect(await stack.undo("drive")).toEqual({ status: "done" });
+    expect(await stack.undo("drive")).toEqual({ status: "done" });
+    expect(await stack.redo("drive")).toEqual({ status: "nothing" });
+    expect(move.redo).not.toHaveBeenCalled();
+  });
+
+  it("drops later redo when a non-retryable undo fails", async () => {
+    const stack = createUndoStack();
+    stack.push({
+      label: "A",
+      scope: "drive",
+      undo: async () => {
+        throw new Error("gone");
+      },
+    });
+    const b = entry("B", "drive");
+    stack.push(b);
+    await stack.undo("drive");
+    expect((await stack.undo("drive")).status).toBe("failed");
+    expect(await stack.redo("drive")).toEqual({ status: "nothing" });
+    expect(b.redo).not.toHaveBeenCalled();
+  });
+
+  it("releases the busy lock on clear even when a callback ignores its signal", async () => {
+    const stack = createUndoStack();
+    stack.push({ label: "stuck", scope: "tasks", undo: () => new Promise<void>(() => {}) });
+    // Never settles: the stack must not wait for it.
+    void stack.undo("tasks");
+    stack.clear();
+    const next = entry("next");
+    stack.push(next);
+    expect(await stack.undo("tasks")).toEqual({ status: "done" });
+    expect(next.undo).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the lock of a newer operation when a cleared one settles late", async () => {
+    const stack = createUndoStack();
+    const late = deferred();
+    stack.push({ label: "late", scope: "tasks", undo: () => late.promise });
+    const first = stack.undo("tasks");
+    stack.clear();
+    const slow = deferred();
+    stack.push({ label: "slow", scope: "tasks", undo: () => slow.promise });
+    const second = stack.undo("tasks");
+    late.resolve();
+    expect(await first).toEqual({ status: "nothing" });
+    stack.push(entry("other", "drive"));
+    expect(await stack.undo("drive")).toEqual({ status: "busy" });
+    slow.resolve();
+    expect(await second).toEqual({ status: "done" });
+  });
+
+  it("runs the entry even when a subscriber throws", async () => {
+    const stack = createUndoStack();
+    const errors: unknown[] = [];
+    const onError = (event: unknown) => errors.push(event);
+    process.on("uncaughtException", onError);
+    try {
+      stack.subscribe(() => {
+        throw new Error("broken subscriber");
+      });
+      const a = entry("A");
+      stack.push(a);
+      expect(await stack.undo("tasks")).toEqual({ status: "done" });
+      expect(a.undo).toHaveBeenCalledOnce();
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      process.off("uncaughtException", onError);
+    }
+  });
+});
