@@ -4,6 +4,8 @@ import {
   DEFAULT_STYLE,
   emptyScene,
   rectangle,
+  type Scene,
+  type SceneElement,
   serializeScene,
   text,
 } from "@jeswr/excalidraw-scene";
@@ -13,7 +15,13 @@ import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sampleScenes, seedSamples } from "../src/apps/whiteboard/demo/sample";
-import { readDrafts, writeDrafts } from "../src/apps/whiteboard/lib/drafts";
+import {
+  activateDraftOwner,
+  draftOwners,
+  purgeDraftOwner,
+  readDrafts,
+  writeDrafts,
+} from "../src/apps/whiteboard/lib/drafts";
 import { downloadBoard, pngSize, scenePng } from "../src/apps/whiteboard/lib/export";
 import {
   type Board,
@@ -24,10 +32,20 @@ import {
 } from "../src/apps/whiteboard/lib/repository";
 import { canvasPoint, dragBox, INITIAL_VIEW, zoomAt } from "../src/apps/whiteboard/lib/viewport";
 import { BoardAutosave } from "../src/apps/whiteboard/state/autosave";
-import { applyStyle, commit, history, redo, undo } from "../src/apps/whiteboard/state/history";
+import {
+  applyStyle,
+  commit,
+  editText,
+  type History,
+  history,
+  redo,
+  undo,
+} from "../src/apps/whiteboard/state/history";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
+const saveNatively = vi.hoisted(() => vi.fn(async () => true));
+vi.mock("@/lib/native/save-file", () => ({ saveNatively }));
 const root = "https://fictional.example/pod/";
 const scene = () => addElement(emptyScene(), rectangle(10, 20, 100, 80, { id: "one" }));
 const index = () =>
@@ -39,6 +57,7 @@ async function fixture(protocol: "solid" | "lws" = "solid") {
 }
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -618,6 +637,8 @@ describe("review regressions", () => {
     expect(paletteColour("--foreground")).toBe(DEFAULT_STYLE.strokeColor);
     for (const c of PALETTE) expect(paletteColour(c.token)).toMatch(/^#[\da-f]{6}$/);
     expect(paletteColour("none")).toBe("transparent");
+    // A token outside the palette (a stale or tampered control value) paints with Ink.
+    expect(paletteColour("--not-a-palette-token")).toBe(paletteColour("--foreground"));
   });
   it("preserves other signed-in drafts and fences late writes", async () => {
     const { activateDraftOwner } = await import("../src/apps/whiteboard/lib/drafts");
@@ -931,7 +952,8 @@ it("reports a board whose canvas is missing as damaged, never as deleted", async
   expect((error as Error).message).toBe("This board's canvas is missing from your pod");
   const denied = await repository.create("Denied canvas");
   const read = storage.read.bind(storage);
-  vi.spyOn(storage, "read").mockImplementation((url, options) => {
+  // Storage reads reject asynchronously, so the canvas read's error mapping must rethrow.
+  vi.spyOn(storage, "read").mockImplementation(async (url, options) => {
     if (url === denied.blob) throw new StorageError("forbidden", { url, method: "GET" });
     return read(url, options);
   });
@@ -940,4 +962,218 @@ it("reports a board whose canvas is missing as damaged, never as deleted", async
     ifMatch: damaged.descriptorEtag as string,
   });
   await expect(repository.read(damaged.descriptor)).rejects.toMatchObject({ code: "not-found" });
+});
+
+describe("whiteboard edge cases", () => {
+  it("settles a flush that joins an in-flight save only after the edits queued behind it", async () => {
+    const { repository } = await fixture();
+    const b = await repository.create("Queued", scene());
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    const save = repository.save.bind(repository);
+    const saves = vi
+      .spyOn(repository, "save")
+      .mockImplementationOnce(async (...args) => {
+        await first.promise;
+        return save(...args);
+      })
+      .mockImplementationOnce(async (...args) => {
+        await second.promise;
+        return save(...args);
+      });
+    const changed = vi.fn();
+    const writer = new BoardAutosave(repository, b, changed, 60000);
+    writer.update(emptyScene());
+    const owner = writer.flush();
+    const latest = scene();
+    writer.update(latest);
+    let joined = false;
+    // A teardown flush joins the running save; releasing the writer early would let another
+    // writer start against an ETag this one is about to replace.
+    const joining = writer.flush().then(() => {
+      joined = true;
+    });
+    first.resolve();
+    await vi.waitFor(() => expect(saves).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(joined).toBe(false);
+    second.resolve();
+    await Promise.all([owner, joining]);
+    expect(changed.mock.calls.at(-1)?.[0]).toBe("saved");
+    expect((await repository.read(b.descriptor)).scene).toEqual(latest);
+  });
+
+  it("re-committing the present scene object is a no-op that never re-serialises", () => {
+    const present = emptyScene();
+    Object.defineProperty(present, "probe", {
+      enumerable: true,
+      get: () => {
+        throw new Error("serialised");
+      },
+    });
+    const state: History = { past: [], present, future: [] };
+    expect(commit(state, present)).toBe(state);
+  });
+
+  it("keeps redo available when the editor echoes the restored scene after undo", () => {
+    const undone = undo(commit(history(emptyScene()), scene()));
+    // Undo produces a new present without a cached serialisation.
+    expect(undone.serialised).toBeUndefined();
+    const echoed = commit(undone, structuredClone(undone.present));
+    expect(echoed).toBe(undone);
+    expect(redo(echoed).present.elements[0]?.isDeleted).toBe(false);
+  });
+
+  it("revives removed elements past their last revision and leaves future element types untouched", () => {
+    const one = rectangle(10, 20, 100, 80, { id: "one" });
+    const future = {
+      ...rectangle(0, 0, 10, 10, { id: "future" }),
+      type: "sticker",
+    } as SceneElement;
+    const before: Scene = { ...emptyScene(), elements: [one, future] };
+    const after: Scene = { ...before, elements: [future] };
+    const undone = undo(commit(history(before), after));
+    const revived = undone.present.elements.find((e) => e.id === "one");
+    expect(revived).toMatchObject({ isDeleted: false, version: one.version + 1 });
+    expect(undone.present.elements.find((e) => e.id === "future")).toBe(future);
+  });
+
+  it("re-measures edited text at its stored size, defaulting to 24 when none is stored", () => {
+    const { fontSize: _, ...unsized } = text(0, 0, "Hi", { fontSize: 40, id: "t" });
+    const legacy: Scene = { ...emptyScene(), elements: [unsized as SceneElement] };
+    const edited = editText(legacy, "t", "A much longer label").elements[0] as SceneElement;
+    const expected = text(0, 0, "A much longer label", { fontSize: 24 });
+    expect(edited).toMatchObject({
+      text: "A much longer label",
+      width: expected.width,
+      height: expected.height,
+    });
+    expect(editText(legacy, "missing", "x")).toBe(legacy);
+  });
+
+  it("fences a purged owner even when draft storage cannot enumerate its keys", async () => {
+    const map = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        map.set(k, v);
+      },
+      removeItem: (k: string) => {
+        map.delete(k);
+      },
+    };
+    const { repository } = await fixture();
+    const b = await repository.create("Unlisted", scene());
+    activateDraftOwner(storage, "alice");
+    expect(writeDrafts(storage, "alice", root, [b])).toBe(true);
+    expect(draftOwners(storage)).toEqual([]);
+    purgeDraftOwner(storage, "alice");
+    expect(writeDrafts(storage, "alice", root, [b])).toBe("fenced");
+  });
+
+  it("rejects stale renames and deletes of legacy drafts without touching the pod", async () => {
+    const { repository, storage } = await fixture();
+    const b = await repository.create("Legacy", scene());
+    const legacy: Board = { ...b, descriptorEtag: null, descriptorText: undefined };
+    const read = vi.spyOn(storage, "read");
+    const write = vi.spyOn(storage, "write");
+    const remove = vi.spyOn(storage, "delete");
+    await expect(repository.rename(legacy, "Renamed")).rejects.toMatchObject({
+      code: "precondition-failed",
+    });
+    await expect(repository.remove(legacy)).rejects.toMatchObject({
+      code: "precondition-failed",
+    });
+    expect(read).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect((await repository.read(b.descriptor)).title).toBe("Legacy");
+  });
+
+  it("refuses to initialise a new descriptor that another writer filled first", async () => {
+    const { repository, storage } = await fixture();
+    const create = storage.create.bind(storage);
+    let raced = "";
+    vi.spyOn(storage, "create").mockImplementation(async (parent, body, options) => {
+      const result = await create(parent, body, options);
+      if (options?.name?.endsWith(".ttl")) {
+        raced = result.url;
+        await storage.write(
+          result.url,
+          await descriptor(result.url, { sceneDocument: `${root}other`, title: "Concurrent" }),
+          { contentType: "text/turtle", ifMatch: result.etag as string },
+        );
+      }
+      return result;
+    });
+    await expect(repository.create("Mine")).rejects.toThrow(
+      "changed before it could be initialised",
+    );
+    expect(await (await storage.read(raced)).text()).toContain("Concurrent");
+  });
+
+  it("treats a bodiless read of a freshly allocated descriptor as empty", async () => {
+    const { repository, storage } = await fixture();
+    const read = storage.read.bind(storage);
+    let stripped = false;
+    vi.spyOn(storage, "read").mockImplementation(async (url, options) => {
+      const resource = await read(url, options);
+      if (stripped || !url.endsWith(".ttl")) return resource;
+      stripped = true;
+      return { ...resource, body: null };
+    });
+    const board = await repository.create("Bodiless");
+    expect(stripped).toBe(true);
+    expect((await repository.read(board.descriptor)).title).toBe("Bodiless");
+  });
+
+  it("surfaces undecodable descriptor bytes even when cancelling the stream fails", async () => {
+    const { repository, storage } = await fixture();
+    const cancel = vi.fn(() => {
+      throw new Error("cancel failed");
+    });
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([0xff, 0xfe, 0xfd]));
+      },
+      cancel,
+    });
+    vi.spyOn(storage, "read").mockResolvedValue({
+      body,
+      etag: '"x"',
+      contentType: "text/turtle",
+    } as unknown as Awaited<ReturnType<typeof storage.read>>);
+    await expect(repository.read(`${root}whiteboards/bad.ttl`)).rejects.toBeInstanceOf(TypeError);
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("opens a signed-in pod session directly, without the demo discovery shim", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+    const fetch = vi.fn(pod.fetch);
+    const repo = await openWhiteboards({
+      mode: "solid",
+      storageUrl: DEMO_ROOT,
+      webId: DEMO_WEBID,
+      displayName: "Fictional",
+      fetch,
+      publicFetch: pod.fetch,
+      subscribe: pod.subscribe,
+    });
+    expect(repo.container).toBe(`${DEMO_ROOT}whiteboards/`);
+    const urls = fetch.mock.calls.map(([input]) =>
+      input instanceof Request ? input.url : String(input),
+    );
+    expect(urls).not.toContain(`${DEMO_ROOT}.whiteboard-storage-description`);
+    expect(fetch.mock.calls.every(([, init]) => init?.cache === "no-store")).toBe(true);
+  });
+
+  it("saves exports through the native file dialog in the native shell", async () => {
+    vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
+    const objectUrl = vi.spyOn(URL, "createObjectURL");
+    const blob = new Blob(["png"], { type: "image/png" });
+    // A title with nothing to keep still gets a usable file name.
+    await downloadBoard(blob, "", "png");
+    expect(saveNatively).toHaveBeenCalledWith(blob, "whiteboard.png", "image/png");
+    expect(objectUrl).not.toHaveBeenCalled();
+  });
 });

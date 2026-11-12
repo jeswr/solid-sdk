@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   duplicateElements,
   ELEMENT_TYPES,
@@ -36,7 +37,7 @@ function restored(current: Scene, target: Scene): Scene {
       ? e
       : {
           ...e,
-          version: Math.max(e.version ?? 0, existing.get(e.id)?.version ?? 0) + 1,
+          version: Math.max(e.version, existing.get(e.id)?.version ?? 0) + 1,
           versionNonce: Math.floor(Math.random() * 2147483647),
           updated: Date.now(),
         },
@@ -46,7 +47,7 @@ function restored(current: Scene, target: Scene): Scene {
       elements.push({
         ...e,
         isDeleted: true,
-        version: (e.version ?? 0) + 1,
+        version: e.version + 1,
         versionNonce: Math.floor(Math.random() * 2147483647),
         updated: Date.now(),
       });

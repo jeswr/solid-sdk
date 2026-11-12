@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { Scene } from "@jeswr/excalidraw-scene";
 import { type Board, type BoardAccess, isConflict } from "../lib/repository";
 export type SaveState = "saved" | "saving" | "pending" | "error" | "conflict";
@@ -32,8 +33,8 @@ export class BoardAutosave {
   async flush(keepalive = true): Promise<void> {
     clearTimeout(this.timer);
     if (this.flight) {
-      await this.flight;
-      if (this.pending && !this.blocked) return this.flush(keepalive);
+      // The flight's owner drains newer edits after it; settle with that whole chain.
+      while (this.flight) await this.flight;
       return;
     }
     if (!this.pending || this.blocked) return;
