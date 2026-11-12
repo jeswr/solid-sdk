@@ -1,0 +1,13 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix journal: <https://jeswr.org/ns/journal#> .
+@prefix schema: <http://schema.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://jeswr.org/ns/journal> a owl:Ontology ; rdfs:label "Journal ontology"@en ; rdfs:comment "Private personal writing with standard CreativeWork metadata."@en .
+journal:Entry a owl:Class ; rdfs:subClassOf schema:CreativeWork ; rdfs:label "Journal entry"@en ; rdfs:comment "A person's private dated journal entry."@en .
+journal:mood a owl:DatatypeProperty ; rdfs:label "mood"@en ; rdfs:comment "Journal entry mood."@en ; rdfs:domain journal:Entry ; rdfs:range xsd:string .
+journal:weather a owl:DatatypeProperty ; rdfs:label "weather"@en ; rdfs:comment "Journal entry weather."@en ; rdfs:domain journal:Entry ; rdfs:range xsd:string .
+
+# Reused schema.org properties are constrained by the SHACL profile only.
+# Do not impose journal-specific global domains/ranges on external vocabulary terms.

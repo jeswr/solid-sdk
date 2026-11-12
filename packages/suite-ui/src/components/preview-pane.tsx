@@ -2,7 +2,7 @@
 "use client";
 import { Download, Move, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import Markdown from "react-markdown";
+import { SafeMarkdown } from "./safe-markdown.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";
 
 export interface PreviewSource {
@@ -206,18 +206,7 @@ function TextPreview({
       {raw ? (
         <pre className="su-text-raw">{text}</pre>
       ) : markdown ? (
-        <div className="su-markdown">
-          <Markdown
-            skipHtml
-            components={{
-              h1: ({ children }) => <h3>{children}</h3>,
-              h2: ({ children }) => <h3>{children}</h3>,
-              img: ({ alt }) => <span>{alt || "Image"}</span>,
-            }}
-          >
-            {text}
-          </Markdown>
-        </div>
+        <SafeMarkdown className="su-markdown">{text}</SafeMarkdown>
       ) : (
         <div className="su-text-rendered">{text}</div>
       )}
