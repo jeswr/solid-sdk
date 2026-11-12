@@ -55,7 +55,11 @@
       "types": "./dist/sign-in/index.d.ts",
       "import": "./dist/sign-in/index.js"
     },
-    "./styles/sign-in.css": "./dist/styles/sign-in.css"
+    "./styles/sign-in.css": "./dist/styles/sign-in.css",
+    "./chips": {
+      "types": "./dist/chips.d.ts",
+      "import": "./dist/chips.js"
+    }
   },
   "files": [
     "dist",
@@ -110,6 +114,7 @@
     "@hookform/resolvers": "5.4.0",
     "@tanstack/react-table": "8.21.3",
     "@tanstack/react-virtual": "3.13.12",
-    "react-markdown": "10.1.0"
+    "react-markdown": "10.1.0",
+    "@jeswr/suite-sdk": "workspace:*"
   }
 }

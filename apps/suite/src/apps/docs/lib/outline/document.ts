@@ -42,6 +42,7 @@ function project(root: DocumentNode): {
     nodes.push(range);
     const firstPart = parts.length;
     if (node.type === "text") emit(node.text, path, "text");
+    else if (node.type === "chip") emit(node.text, path, "chip");
     else if (node.type === "hardBreak") emit("\n", path, "hardBreak");
     else {
       const separator = ["paragraph", "heading", "codeBlock"].includes(node.type)

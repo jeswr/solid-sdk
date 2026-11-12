@@ -27,6 +27,22 @@
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
+    },
+    "./chips": {
+      "types": "./dist/chips/index.d.ts",
+      "default": "./dist/chips/index.js"
+    },
+    "./chips/tiptap": {
+      "types": "./dist/chips/tiptap.d.ts",
+      "default": "./dist/chips/tiptap.js"
+    },
+    "./chips/core": {
+      "types": "./dist/chips/core.d.ts",
+      "default": "./dist/chips/core.js"
+    },
+    "./pod-scoped-fetch": {
+      "types": "./dist/pod-scoped-fetch.d.ts",
+      "default": "./dist/pod-scoped-fetch.js"
     }
   },
   "files": [
@@ -52,10 +68,15 @@
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
-    "@jeswr/storage-client": "workspace:*"
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@rdfjs/wrapper": "0.34.0",
+    "n3": "2.0.3"
   },
   "peerDependencies": {
-    "react": ">=18"
+    "react": ">=18",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/pm": "3.31.4"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
@@ -67,6 +88,17 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@types/n3": "1.26.1",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/pm": "3.31.4"
+  },
+  "peerDependenciesMeta": {
+    "@tiptap/core": {
+      "optional": true
+    },
+    "@tiptap/pm": {
+      "optional": true
+    }
   }
 }

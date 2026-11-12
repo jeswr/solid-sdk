@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { notifySavedHtml } from "@jeswr/suite-sdk/chips";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePodSessionState } from "@/lib/session/pod-session";
 import { NoteConflictError } from "../lib/model/errors";
 import type { NotesStore, StoredNote } from "../lib/model/store";
 import type { DraftRegistry } from "./draft-registry";
@@ -14,6 +16,8 @@ export function useNoteDraft(
   onSaved: () => Promise<unknown>,
   pending: PendingDrafts & Partial<Pick<DraftRegistry, "recover">>,
 ) {
+  const sessionState = usePodSessionState();
+  const session = sessionState.status === "ready" ? sessionState.session : undefined;
   const baseline = useRef(pending.get(note.url)?.note ?? note);
   const superseded = useRef(new Set<string | null>());
   const adopt = useCallback((saved: StoredNote) => {
@@ -50,7 +54,17 @@ export function useNoteDraft(
     setDraft(value);
     setModified(note.modified ?? note.created);
   }, [note, pending, adopt]);
-  const save = useCallback<NotesStore["save"]>((...args) => store.save(...args), [store]);
+  const save = useCallback<NotesStore["save"]>(
+    async (...args) => {
+      const saved = await store.save(...args);
+      if (session)
+        void notifySavedHtml(session, saved.url, args[0].body, saved.body, saved.title).catch(
+          () => {},
+        );
+      return saved;
+    },
+    [store, session],
+  );
   const flush = useCallback(() => pending.flush(baseline.current, save), [pending, save]);
   useLayoutEffect(() => {
     pending.bind(note, save);

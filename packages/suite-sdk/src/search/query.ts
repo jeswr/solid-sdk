@@ -66,7 +66,7 @@ SELECT ?s (MIN(STR(?label)) AS ?title) (MIN(STR(?type)) AS ?resultType)
   (MAX(?changed) AS ?modified) (MIN(STR(?description)) AS ?snippet)
   (MIN(STR(?format)) AS ?contentType)
 WHERE {
-  GRAPH ?g { ?s (dct:title|rdfs:label|schema:name|<http://schema.org/name>|wf:description|sioc:name) ?label }
+  GRAPH ?g { ?s (dct:title|rdfs:label|schema:name|<http://schema.org/name>|wf:description|sioc:name|<http://www.w3.org/2002/12/cal/ical#summary>|<http://www.w3.org/2006/vcard/ns#fn>|<http://xmlns.com/foaf/0.1/name>) ?label }
   FILTER(isIRI(?s) && isLiteral(?label))
   FILTER(STRSTARTS(LCASE(STR(?s)), "http://") || STRSTARTS(LCASE(STR(?s)), "https://"))${origin}
   FILTER(CONTAINS(LCASE(STR(?label)), LCASE(${text})))

@@ -43,7 +43,7 @@ describe("DOCX authenticated image loading", () => {
     });
   });
 
-  it("authenticates only pod-origin images, refuses redirects and strips credentials from external requests", async () => {
+  it("authenticates only pod-origin images, refuses credentialed redirects and strips credentials from external requests", async () => {
     const { close, drawImage, bitmap } = imageEnvironment();
     const response = () =>
       new Response(new Uint8Array([1]), { headers: { "content-type": "image/webp" } });
@@ -60,10 +60,14 @@ describe("DOCX authenticated image loading", () => {
     expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0);
     await readExportImage(session, "https://images.test/public.png");
     expect(authenticated).toHaveBeenCalledTimes(1);
+    // Anonymous reads may follow redirects: nothing secret travels with them.
     expect(anonymous).toHaveBeenCalledWith("https://images.test/public.png", {
-      redirect: "error",
+      redirect: "follow",
       credentials: "omit",
       referrerPolicy: "no-referrer",
+      referrer: "",
+      cache: "no-store",
+      headers: new Headers(),
     });
     expect(close).toHaveBeenCalledTimes(2);
   });

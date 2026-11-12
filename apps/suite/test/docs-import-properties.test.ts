@@ -2,6 +2,7 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { File as NodeFile } from "node:buffer";
+import { chipKinds } from "@jeswr/suite-sdk/chips/core";
 import { getSchema, type JSONContent } from "@tiptap/react";
 import { Document, Packer, Paragraph } from "docx";
 import fc from "fast-check";
@@ -121,7 +122,12 @@ it("DOCX round trips generated documents covering every editor node and mark typ
       fc.integer({ min: 1, max: 3 }),
       fc.integer({ min: 2, max: 25 }),
       fc.array(fc.constantFrom(...listKinds), { minLength: 2, maxLength: 2 }),
-      async (value, level, checked, indent, code, depth, start, nestedKinds) => {
+      fc.constantFrom(...chipKinds),
+      fc.constantFrom(
+        "https://alice.pod.example/profile/card#me",
+        "https://pod.example/docs/plan%20(draft).ttl?x=1&y=2",
+      ),
+      async (value, level, checked, indent, code, depth, start, nestedKinds, kind, iri) => {
         const list = (type: string, remaining: number): JSONContent => {
           visitedListLevels.add(`${type}:${depth - remaining + 1}`);
           return {
@@ -167,6 +173,7 @@ it("DOCX round trips generated documents covering every editor node and mark typ
                   },
                   { type: "hardBreak" },
                 ]),
+                { type: "chip", attrs: { iri, kind, label: value } },
               ],
             },
             { type: "paragraph" },
@@ -212,17 +219,28 @@ it("DOCX round trips generated documents covering every editor node and mark typ
           const imported = await roundTrip(original.toJSON(), embedded);
           // DOCX carries pending text as ordinary text. The embedded payload drops
           // suggestion marks too: an imported file can't vouch for their authors.
-          const exported = (node: JSONContent): JSONContent => ({
-            ...node,
-            ...(node.marks
+          const exported = (node: JSONContent): JSONContent =>
+            // Word has no chip: the visible DOCX body carries its label and IRI as a hyperlink,
+            // which re-imports as linked text without a kind. Both runs read that body, because
+            // this document's suggestion marks make the legacy payload fail validation (hence the
+            // formatting warning below). The payload's exact chips are pinned in the next test.
+            node.type === "chip"
               ? {
-                  marks: node.marks.filter(
-                    (mark) => !["suggestionInsert", "suggestionDelete"].includes(mark.type),
-                  ),
+                  type: "text",
+                  text: node.attrs?.label,
+                  marks: [{ type: "link", attrs: { href: node.attrs?.iri } }],
                 }
-              : {}),
-            ...(node.content ? { content: node.content.map(exported) } : {}),
-          });
+              : {
+                  ...node,
+                  ...(node.marks
+                    ? {
+                        marks: node.marks.filter(
+                          (mark) => !["suggestionInsert", "suggestionDelete"].includes(mark.type),
+                        ),
+                      }
+                    : {}),
+                  ...(node.content ? { content: node.content.map(exported) } : {}),
+                };
           const expected = schema.nodeFromJSON(exported(original.toJSON()));
           expect(imported.json).toEqual(expected.toJSON());
           // Dropping pending suggestions from an embedded payload is reported too.
@@ -241,6 +259,68 @@ it("DOCX round trips generated documents covering every editor node and mark typ
     listKinds.flatMap((type) => [1, 2, 3].map((level) => `${type}:${level}`)).sort(),
   );
 }, 120_000);
+
+it("DOCX exports a chip as a native hyperlink that re-imports as linked text, and an unsafe chip as its label", async () => {
+  const chip = (iri: string, label: string, kind = "person"): JSONContent => ({
+    type: "chip",
+    attrs: { iri, kind, label },
+  });
+  const original = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          text("Ask "),
+          chip("https://alice.pod.example/profile/card#me", "Alice <A&B>"),
+          text(" about "),
+          chip("https://pod.example/docs/plan.ttl", "", "doc"),
+          text(" and "),
+          chip("javascript:alert(1)", "Unsafe"),
+          chip("https://u:p@evil.example/", "Credentialed", "file"),
+        ],
+      },
+    ],
+  });
+  original.check();
+  const link = (value: string, href: string): JSONContent => ({
+    ...text(value),
+    marks: [{ type: "link", attrs: { href } }],
+  });
+  // Native DOCX: the label (or the IRI when the label is empty) and the IRI survive as a link,
+  // the kind does not; an unsafe IRI leaves only the label text.
+  const native = await roundTrip(original.toJSON(), false);
+  expect(native.json).toEqual(
+    schema
+      .nodeFromJSON({
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [
+              text("Ask "),
+              link("Alice <A&B>", "https://alice.pod.example/profile/card#me"),
+              text(" about "),
+              link("https://pod.example/docs/plan.ttl", "https://pod.example/docs/plan.ttl"),
+              text(" and UnsafeCredentialed"),
+            ],
+          },
+        ],
+      })
+      .toJSON(),
+  );
+  expect(JSON.stringify(native.json)).not.toContain('"chip"');
+  // The embedded payload keeps safe chips exactly, and the import boundary downgrades unsafe
+  // ones to their label.
+  const embedded = await roundTrip(original.toJSON(), true);
+  expect(embedded.json.content?.[0]?.content).toEqual([
+    text("Ask "),
+    chip("https://alice.pod.example/profile/card#me", "Alice <A&B>"),
+    text(" about "),
+    chip("https://pod.example/docs/plan.ttl", "", "doc"),
+    text(" and UnsafeCredentialed"),
+  ]);
+});
 
 it.each([
   "p",

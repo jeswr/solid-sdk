@@ -12,7 +12,7 @@ export interface NodeTextRange {
 
 export interface TextSpan extends NodeTextRange {
   /** Separators belong to the container, not to an editable text node. */
-  readonly kind: "text" | "hardBreak" | "separator";
+  readonly kind: "text" | "chip" | "hardBreak" | "separator";
 }
 
 export interface PlainTextProjection {

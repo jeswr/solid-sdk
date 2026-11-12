@@ -27,6 +27,50 @@ describe("demo search items", () => {
     );
     expect(items[1]?.href.startsWith("/drive/f/")).toBe(true);
   });
+  it("indexes seeded events through the same source and links to their real resource", async () => {
+    const source = createLocalSearchSource(
+      demoSearchItems([
+        {
+          path: "calendar/work/planning.ttl",
+          search: {
+            iri: `${DEMO_ROOT}calendar/work/planning.ttl#it`,
+            label: "Project planning",
+            kind: "event",
+          },
+        },
+      ]),
+    );
+    const page = await source.search("planning", { signal: new AbortController().signal });
+    expect(page.results[0]?.app).toBe("calendar");
+    expect(page.results[0]?.href).toContain("/calendar/e/");
+    expect(page.results[0]?.id).toBe(`${DEMO_ROOT}calendar/work/planning.ttl#it`);
+  });
+  it("honours each seed's kind and explicit app instead of treating every resource as an event", () => {
+    const seeds = [
+      ["doc", "docs", "/docs/d/", "document"],
+      ["note", "notes", "/notes/n/", "document"],
+      ["sheet", "sheets", "/sheets/s/", "document"],
+      ["task", "tasks", "/tasks/inbox?task=", "task"],
+      ["person", "contacts", "https://", "person"],
+      ["file", "drive", "/drive/p/", "file"],
+      ["place", "drive", "https://", "data"],
+    ] as const;
+    for (const [kind, app, route, type] of seeds) {
+      const [item] = demoSearchItems([
+        { path: "test", search: { iri: "https://pod.example/item#it", label: "Item", kind } },
+      ]);
+      expect(item).toMatchObject({ app, type });
+      expect(item?.href).toContain(route);
+    }
+    expect(
+      demoSearchItems([
+        {
+          path: "test",
+          search: { iri: "https://pod.example/item", label: "Item", kind: "link", app: "docs" },
+        },
+      ])[0],
+    ).toMatchObject({ app: "docs", href: expect.stringContaining("/docs/d/") });
+  });
   it("is searchable through the local source", async () => {
     const source = createLocalSearchSource(items);
     const { results, source: kind } = await source.search("budget", {

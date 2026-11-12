@@ -20,6 +20,7 @@ export class ChatOutbox {
     private client: Pick<ChatClient, "send" | "webId">,
     private online: () => boolean,
     private local = new ChatLocalState(client.webId),
+    private onSaved?: (message: Message) => void,
   ) {
     for (const room of local.pendingRooms()) {
       const stored = local.read("outbox", room);
@@ -109,6 +110,7 @@ export class ChatOutbox {
           id: item.localId,
           at: item.at,
         });
+        this.onSaved?.(message);
         this.update(
           this.entries.map((entry) =>
             entry.id === item.id

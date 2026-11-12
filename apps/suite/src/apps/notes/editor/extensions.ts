@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { createChipExtension } from "@jeswr/suite-sdk/chips/tiptap";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import type { Attribute } from "@tiptap/react";
@@ -30,6 +32,7 @@ const SafeStarterKit = StarterKit.extend({
 });
 export function notesExtensions(fetchImpl: typeof fetch = fetch, podRoot?: string) {
   return [
+    createChipExtension(),
     SafeStarterKit.configure({
       heading: { levels: [1, 2, 3] },
       codeBlock: false,

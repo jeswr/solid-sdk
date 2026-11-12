@@ -44,7 +44,7 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
     "img",
   ];
   const allowedAttributes: Record<string, string[]> = {
-    a: ["href", "title"],
+    a: ["href", "title", "data-chip", "data-chip-kind", "data-chip-label"],
     img: ["src", "alt", "width", "height"],
     th: ["colspan", "rowspan"],
     td: ["colspan", "rowspan"],

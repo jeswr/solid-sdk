@@ -16,15 +16,18 @@ import {
 } from "@jeswr/suite-ui";
 import { useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import { ArrowLeft, ImagePlus, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ChipEditorTools, suiteChipExtension } from "@/components/chips";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { editorActions } from "../editor/actions";
 import { copyDocument } from "../editor/copy";
+import { documentScopedFetch } from "../editor/document-fetch";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { focusDocument } from "../editor/focus";
@@ -32,7 +35,6 @@ import { imageTransfer, type RichImageTransfer } from "../editor/image-transfer"
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
-import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
 import { useDocumentComments } from "../hooks/use-document-comments";
@@ -171,8 +173,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       immediatelyRender: false,
       extensions: editorExtensions(
         runtime.doc,
-        podScopedFetch(runtime.session.fetch, runtime.session.storageUrl),
-      ),
+        documentScopedFetch(runtime.session, () => runtime.stored?.url),
+      ).map((extension) => (extension.name === "chip" ? suiteChipExtension() : extension)),
       editable: !runtime.readOnly,
       autofocus: runtime.stored ? false : "start",
       editorProps: {
@@ -220,7 +222,13 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       },
       onUpdate: ({ editor, transaction }) => {
         if (runtime.readOnly) return;
-        runtime.change(editor.getHTML(), editor.getJSON());
+        runtime.change(
+          editor.getHTML(),
+          editor.getJSON(),
+          !transaction.getMeta(ySyncPluginKey)?.isChangeOrigin &&
+            !transaction.getMeta("suiteChipImport") &&
+            transaction.getMeta("uiEvent") !== "paste",
+        );
         setRevision((n) => n + 1);
         if (!transaction.getMeta("docsSlashClosed")) {
           const { $from } = editor.state.selection;
@@ -444,6 +452,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     });
   return (
     <div className="docs-editor-shell" data-outline={outline ? "open" : "closed"}>
+      <ChipEditorTools editor={editor} session={runtime.session} />
       <SuiteFrame
         app="docs"
         sidebar={<DocsSidebar />}
@@ -538,6 +547,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                   title,
                   format,
                   runtime.session,
+                  runtime.stored?.url,
                 );
                 toast.success(`Downloaded ${name}`);
               })
@@ -604,7 +614,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
               // Tagged so suggesting mode neither blocks nor rewrites a whole-document import.
-              editor.chain().setMeta(suggestionAction, true).setContent(imported.json).run();
+              editor
+                .chain()
+                .setMeta(suggestionAction, true)
+                .setMeta("suiteChipImport", true)
+                .setContent(imported.json)
+                .run();
               return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />
