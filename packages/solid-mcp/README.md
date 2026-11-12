@@ -242,8 +242,8 @@ area (the pod root's, an ancestor's, or the area's own, in `/.acl` and slashless
 forms) are refused, because a protected area inherits its ancestors' access rules.
 Before each otherwise-allowed generic write/delete, the server also uses the current
 `PodPort.head` to discover `rel="acl"` and `rel="describedby"` associations for the pod
-root, every protected area (including the in-pod configured WebID profile document)
-and all their ancestor containers. Advertised auxiliary URLs are protected even at
+root, every protected area (including the in-pod configured WebID profile document and
+the separately governed `agent/memory/health/` container) and all their ancestor containers. Advertised auxiliary URLs are protected even at
 unconventional locations, including ACR query URLs. Shared ancestors are inspected
 once per mutation; associations are never cached across calls. Target and final URL
 aliases receive the same case, percent-decoding, path and slashless checks.

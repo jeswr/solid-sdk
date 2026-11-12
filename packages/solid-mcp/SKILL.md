@@ -47,7 +47,8 @@ Generic writes to an ACL, ACR or `.meta` resource of the root, of an ancestor of
 protected area or of the area itself are refused (they govern the area by inheritance).
 Keep that convention guard and also discover associations before every otherwise-allowed
 generic write/delete: HEAD the pod root, each protected area (including the in-pod
-WebID profile document) and all their ancestor containers through the current PodPort.
+WebID profile document and the separately governed `agent/memory/health/`) and all their
+ancestor containers through the current PodPort.
 Dedupe those HEADs within each mutation; never cache associations across calls.
 Refuse normalized aliases of every advertised `rel="acl"` and `rel="describedby"`
 target with the same fixed personal-data diagnostic. Missing HEAD capability or auxiliary metadata, failed

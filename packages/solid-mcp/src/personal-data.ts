@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NanopubStore } from "@jeswr/pkg-memory";
-import { PROTECTED_AGENT_CONTAINERS } from "./agent-layout.js";
+import {
+  INDEPENDENTLY_GOVERNED_AGENT_CONTAINERS,
+  PROTECTED_AGENT_CONTAINERS,
+} from "./agent-layout.js";
 import { podScopedUrlOrUndefined, requirePodScopedUrl } from "./auth.js";
 import type { PodPort } from "./pod-port.js";
 
@@ -96,7 +99,7 @@ export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<st
     const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
     const areas = [
       personalDataRoot(pod),
-      ...PROTECTED_AGENT_CONTAINERS.map((path) => new URL(path, root).href),
+      ...INDEPENDENTLY_GOVERNED_AGENT_CONTAINERS.map((path) => new URL(path, root).href),
       ...(profile ? [profile] : []),
     ];
     const targets = new Set([root.href]);
