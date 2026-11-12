@@ -1800,6 +1800,10 @@ describe("CLI bank statement options", () => {
       [["--account-label", `--${privateLabel}`], /Usage/],
       [["--account-label", "\u200B"], /visible text/],
       [["--account-label", "\u202E\u200D"], /visible text/],
+      [["--account-label", `${privateLabel}\u202E`], /visible text/],
+      [["--account-label", `${privateLabel}\uFDD0`], /visible text/],
+      [["--account-label", `${privateLabel}\uD800`], /visible text/],
+      [["--account-label", `${privateLabel} `.repeat(300)], /visible text/],
       [["--account-label", `${privateLabel}${"\u{1F600}".repeat(257)}`], /at most 256 characters/],
     ].map(([flags, message]) => ({ flags: flags as string[], message: message as RegExp })),
   )("rejects invalid bank values without Pod I/O: $flags", async ({ flags, message }) => {
@@ -1808,17 +1812,18 @@ describe("CLI bank statement options", () => {
     const file = await exportFile(path, "hsbc.csv", HSBC);
     const podTransport = vi.fn(transport);
     const stderr = vi.fn();
+    const stdout = vi.fn();
     const before = pod.urls();
     expect(
       await runCli(["import", "bank-statements", "--file", file, ...flags], {
         configPath: path,
         podTransport,
-        stdout: vi.fn(),
+        stdout,
         stderr,
       }),
     ).toBe(EXIT_CODES.config);
     expect(stderr).toHaveBeenCalledWith(expect.stringMatching(message));
-    expect(JSON.stringify(stderr.mock.calls)).not.toContain(privateLabel);
+    expect(JSON.stringify([stderr.mock.calls, stdout.mock.calls])).not.toContain(privateLabel);
     expect(podTransport).not.toHaveBeenCalled();
     expect(pod.urls()).toEqual(before);
   });

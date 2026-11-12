@@ -280,16 +280,25 @@ OFX/QFX and generic CSV files ignore it, still replace the one shared
 label was not used (the entry never repeats the label).
 
 **Label normalisation.** The adapter normalises a label once, and that one string is both
-hashed into the account folder name and stored as the account's `skos:prefLabel`: tabs
-and line breaks become spaces; other Unicode
-control and format characters (`Cc`, `Cf`: C0/C1 controls, zero-width spaces, bidi
-controls) are removed, except the joiners (ZWNJ, ZWJ) and tag characters that emoji
-sequences, subdivision flags and some scripts need. The rest is put in NFC, then
-whitespace and joiners are trimmed from both ends. A label with no visible character, a
-lone surrogate, or more than 4096 UTF-16 units before normalisation is rejected, and the 256 limit
-counts code points of the normalised form, so an emoji counts once. `"Joint\u0001"` and
-`"Joint"`, or the NFC and NFD spellings of `"Café"`, are the same account. A plain label
-is unchanged by normalisation, so its folder is the same as before. Revolut defaults to one account per Product/Currency. Monzo
+hashed into the account folder name and stored as the account's `skos:prefLabel`:
+
+- A label holding a bidi control, an Arabic prepended mark (U+0600–U+0605, U+06DD, …), a
+  noncharacter or a lone surrogate, or longer than 4096 UTF-16 units, is rejected rather than
+  cleaned, because what it shows would differ from what is stored.
+- Other control and format characters (`Cc`, `Cf`) are removed. A joiner or tag character is
+  kept only where it does visible work: ZWJ between emoji, ZWNJ between letters of a script
+  that shapes with it (Persian, Indic), and tags inside a well-formed subdivision flag. Stray
+  ones would split one account into look-alike folders or carry hidden text.
+- The rest is put in NFC, every whitespace run (tabs, line breaks, no-break spaces) becomes
+  one space, and the ends are trimmed.
+- A label with no visible character (only fillers, combining marks or variation selectors)
+  is rejected, and the 256 limit counts code points of the normalised form, so an emoji
+  counts once.
+
+`"Joint\u0001"`, `"Jo\u200Dint"` and `"Joint"`, or the NFC and NFD spellings of `"Café"`,
+are the same account. A plain single-spaced label is unchanged by normalisation. Folder hashes
+use the runtime's Unicode tables, so a character assigned in a newer Unicode version may
+normalise differently on an older runtime. Revolut defaults to one account per Product/Currency. Monzo
 and Starling default to one account per bank/currency; provide labels when importing
 multiple accounts.
 Changing or adding an `accountLabel` later creates a new per-account document;

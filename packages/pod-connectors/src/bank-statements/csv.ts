@@ -24,41 +24,99 @@ export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
 /** Raw labels longer than this are rejected before normalisation, which keeps it linear. */
 const MAX_RAW_ACCOUNT_LABEL_UNITS = 4096;
 const CONTROL_OR_FORMAT = /^[\p{Cc}\p{Cf}]$/u;
-const LABEL_SPACE = /^\s$/u;
-const LINE_BREAKS = /[\t\n\v\f\r\u0085]/g;
+const WHITESPACE_RUN = /\s+/gu;
+const WHITESPACE = /^\s$/u;
 const LONE_SURROGATE = /\p{Cs}/u;
+/**
+ * Labels holding these are rejected, not cleaned: bidi controls reorder what is shown against
+ * what is stored, Arabic prepended marks change the display, and noncharacters have none.
+ */
+const REJECTED_LABEL_CHARS =
+  /[؜‎‏‪-‮⁦-⁩؀-؅۝܏࢐࢑࣢\u{110BD}\u{110CD}﷐-﷯]|[￾￿]|[\u{1FFFE}\u{1FFFF}\u{2FFFE}\u{2FFFF}\u{3FFFE}\u{3FFFF}\u{EFFFE}\u{EFFFF}\u{FFFFE}\u{FFFFF}\u{10FFFE}\u{10FFFF}]/u;
+/** A character a person can see. Hangul fillers and the braille blank are letters/symbols that render empty. */
+const VISIBLE_LABEL_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
+const BLANK_LOOKING = new Set([0x115f, 0x1160, 0x3164, 0xffa0, 0x2800]);
+const EMOJI = /^\p{Extended_Pictographic}$/u;
+const EMOJI_TAIL = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|️|⃣)$/u;
+const NON_LATIN_LETTER = /^[\p{L}\p{M}]$/u;
+const LATIN_LIKE =
+  /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Common}\p{Script=Inherited}]$/u;
 const ZWNJ = 0x200c;
 const ZWJ = 0x200d;
-// Joiners (ZWNJ, ZWJ) and tag characters are format characters that emoji sequences,
-// subdivision flags and Persian/Indic shaping need, so they are kept inside a label.
-const isJoiner = (char: string) => char.codePointAt(0) === ZWNJ || char.codePointAt(0) === ZWJ;
-const isTag = (char: string) => {
-  const code = char.codePointAt(0) ?? 0;
-  return code >= 0xe0020 && code <= 0xe007f;
-};
-const isLabelEdge = (char: string) => LABEL_SPACE.test(char) || isJoiner(char);
+const BLACK_FLAG = 0x1f3f4;
+const CANCEL_TAG = 0xe007f;
+const code = (char: string | undefined) => char?.codePointAt(0) ?? -1;
+const isTag = (char: string | undefined) => code(char) >= 0xe0020 && code(char) <= CANCEL_TAG;
+const isShapingLetter = (char: string | undefined) =>
+  char !== undefined && NON_LATIN_LETTER.test(char) && !LATIN_LIKE.test(char);
+
+/**
+ * Keeps a joiner or tag character only where it does visible work: ZWJ between emoji
+ * (a family or profession sequence), ZWNJ between letters of a script that shapes with it
+ * (Persian, Indic), and tags inside a well-formed subdivision flag (U+1F3F4, tags, U+E007F).
+ * Elsewhere they are invisible and could split one account into look-alike folders or carry
+ * hidden text, so they are dropped. Their neighbours are never dropped, so one pass is stable.
+ */
+function dropStrayJoinersAndTags(chars: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i] ?? "";
+    if (code(char) === BLACK_FLAG && isTag(chars[i + 1])) {
+      let end = i + 1;
+      while (end < chars.length && isTag(chars[end]) && code(chars[end]) !== CANCEL_TAG) end++;
+      if (code(chars[end]) === CANCEL_TAG && end > i + 1) {
+        kept.push(...chars.slice(i, end + 1));
+        i = end;
+        continue;
+      }
+    }
+    if (isTag(char)) continue;
+    if (
+      code(char) === ZWJ &&
+      !(EMOJI_TAIL.test(chars[i - 1] ?? "") && EMOJI.test(chars[i + 1] ?? ""))
+    )
+      continue;
+    if (code(char) === ZWNJ && !(isShapingLetter(chars[i - 1]) && isShapingLetter(chars[i + 1])))
+      continue;
+    kept.push(char);
+  }
+  return kept;
+}
+
 /**
  * The one form of an `accountLabel` that is hashed into the account folder and stored as its
- * display label: tabs and line breaks become spaces; other control and format characters
- * (Unicode Cc and Cf, including zero-width and bidi controls) are removed, except the joiners
- * and tag characters that emoji, flags and some scripts need; then NFC; then whitespace and
- * joiners are trimmed from both ends. A plain label is unchanged, so its folder is the same as
- * before normalisation existed. Stripping precedes NFC so a removed character cannot leave a
- * decomposed sequence behind; the result is idempotent. A label with no visible character, a
- * lone surrogate, or more than 4096 UTF-16 units normalises to "". Linear in the input.
+ * display label:
+ * - labels with bidi controls, Arabic prepended marks, noncharacters or lone surrogates, or
+ *   more than 4096 UTF-16 units, are rejected (normalise to "");
+ * - other control and format characters (Unicode Cc and Cf) are removed, except joiners and
+ *   tag characters that do visible work in an emoji, flag or shaped script;
+ * - the result is put in NFC, every whitespace run becomes one space, and the ends are trimmed;
+ * - a label with no visible character normalises to "".
+ * A plain label is unchanged, so its folder is the same as before normalisation existed.
+ * Idempotent for every label it accepts, and linear in the input.
  */
 export function normaliseAccountLabel(label: string): string {
-  if (label.length > MAX_RAW_ACCOUNT_LABEL_UNITS || LONE_SURROGATE.test(label)) return "";
-  let kept = "";
-  for (const char of label.replace(LINE_BREAKS, " "))
-    if (!CONTROL_OR_FORMAT.test(char) || isJoiner(char) || isTag(char)) kept += char;
-  const chars = [...kept.normalize("NFC")];
-  let start = 0;
-  let end = chars.length;
-  while (start < end && isLabelEdge(chars[start] ?? "")) start++;
-  while (end > start && isLabelEdge(chars[end - 1] ?? "")) end--;
-  const trimmed = chars.slice(start, end);
-  return trimmed.some((char) => !isLabelEdge(char) && !isTag(char)) ? trimmed.join("") : "";
+  if (
+    label.length > MAX_RAW_ACCOUNT_LABEL_UNITS ||
+    LONE_SURROGATE.test(label) ||
+    REJECTED_LABEL_CHARS.test(label)
+  )
+    return "";
+  let stripped = "";
+  for (const char of label)
+    if (
+      !CONTROL_OR_FORMAT.test(char) ||
+      WHITESPACE.test(char) ||
+      code(char) === ZWJ ||
+      code(char) === ZWNJ ||
+      isTag(char)
+    )
+      stripped += char;
+  const kept = dropStrayJoinersAndTags([...stripped.normalize("NFC")]).join("");
+  const result = kept.normalize("NFC").replace(WHITESPACE_RUN, " ").trim();
+  for (const char of result)
+    if (VISIBLE_LABEL_CHAR.test(char) && !BLANK_LOOKING.has(code(char))) return result;
+  return "";
 }
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */

@@ -418,7 +418,13 @@ describe("account label normalisation", () => {
   it.each([
     ["Joint\u0001", "Joint"],
     ["\u200BJoint\u200D", "Joint"],
-    ["\u202EJoint\u202C", "Joint"],
+    ["Joint\u{E0041}", "Joint"],
+    ["Jo\u200Dint", "Joint"],
+    ["Jo\u200Cint", "Joint"],
+    ["\u{1F600}\u200DJoint", "\u{1F600}Joint"],
+    ["Joint\u{E0049}\u{E0047}\u{E004E}\u{E004F}\u{E0052}\u{E0045}", "Joint"],
+    ["Joint\u00A0Savings", "Joint Savings"],
+    ["Joint\u2028Savings", "Joint Savings"],
     ["\uFEFFJoint\u00AD", "Joint"],
     ["Cafe\u0301", "Café"],
     [" Cafe\u200B\u0301 ", "Café"],
@@ -440,9 +446,80 @@ describe("account label normalisation", () => {
     expect(parseBankCsv(MONZO, 10, { accountLabel: label })[0]?.accountLabel).toBe(label);
   });
 
-  it("turns interior tabs and line breaks into spaces", () => {
-    expect(normaliseAccountLabel("Joint\tSavings")).toBe("Joint Savings");
-    expect(normaliseAccountLabel(" Joint\r\nSavings\n")).toBe("Joint  Savings");
+  it("turns every interior whitespace run into one space", () => {
+    for (const raw of [
+      "Joint\tSavings",
+      " Joint\r\nSavings\n",
+      "Joint\nSavings",
+      "Joint \u00A0\u2029 Savings",
+      "Joint\u3000Savings",
+    ])
+      expect(normaliseAccountLabel(raw)).toBe("Joint Savings");
+  });
+
+  it.each([
+    ["a right-to-left override", "abc\u202Efed"],
+    ["a bidi isolate", "Joint\u2066x\u2069"],
+    ["a left-to-right mark", "Joint\u200E"],
+    ["an Arabic letter mark", "\u061CJoint"],
+    ["an Arabic number sign", "\u0600Joint"],
+    ["an end-of-ayah mark", "Joint\u06DD"],
+    ["a noncharacter", "Joint\uFDD0"],
+    ["a plane-end noncharacter", "Joint\u{10FFFF}"],
+  ])("rejects a label containing %s rather than cleaning it", (_name, accountLabel) => {
+    expect(normaliseAccountLabel(accountLabel)).toBe("");
+    expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+  });
+
+  it("is idempotent across random mixes of the characters it treats specially", () => {
+    const alphabet = [
+      "a",
+      "J",
+      " ",
+      "\t",
+      "\u00A0",
+      "\u0301",
+      "e",
+      "\u0645",
+      "\u06CC",
+      "\u0915",
+      "\u094D",
+      "\u200B",
+      "\u200C",
+      "\u200D",
+      "\u2060",
+      "\uFE0F",
+      "\u20E3",
+      "\u{1F468}",
+      "\u{1F469}",
+      "\u{1F3FB}",
+      "\u{1F3F4}",
+      "\u{E0067}",
+      "\u{E0062}",
+      "\u{E007F}",
+      "\u{E0041}",
+      "\u0001",
+      "\u00AD",
+      "\uFB2C",
+      "\u3164",
+      "\u2800",
+      "\u034F",
+      "\u212B",
+      "1",
+    ];
+    let seed = 0x9e3779b9;
+    const next = () => {
+      seed = (Math.imul(seed ^ (seed >>> 15), 0x85ebca6b) + 0x6d2b79f5) >>> 0;
+      return seed;
+    };
+    for (let run = 0; run < 5000; run++) {
+      let raw = "";
+      for (let n = next() % 12; n >= 0; n--) raw += alphabet[next() % alphabet.length];
+      const once = normaliseAccountLabel(raw);
+      if (once === "") continue;
+      expect(normaliseAccountLabel(once), JSON.stringify(raw)).toBe(once);
+      expect(once.normalize("NFC")).toBe(once);
+    }
   });
 
   it("rejects lone surrogates and over-long raw labels", () => {
@@ -451,11 +528,16 @@ describe("account label normalisation", () => {
   });
 
   it("normalises in linear time, whatever runs the label holds", () => {
-    for (const run of [" ", "\u200C", "\u200D", "\u200B"]) {
-      const label = `a${run.repeat(4000)}b`;
-      const started = performance.now();
-      for (let i = 0; i < 20; i++) normaliseAccountLabel(label);
-      expect(performance.now() - started).toBeLessThan(1000);
+    for (const run of [" ", "\u200C", "\u200D", "\u200B", "\u{E0041}", "\u0645\u200C"]) {
+      const label = `a${run.repeat(4094 / run.length)}`.slice(0, 4096);
+      let best = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 5; i++) {
+        const started = performance.now();
+        normaliseAccountLabel(label);
+        best = Math.min(best, performance.now() - started);
+      }
+      // A quadratic pass over a 4096-unit label takes well over 10 ms; a linear one well under.
+      expect(best).toBeLessThan(10);
       expect(() => validateBankOptions({ accountLabel: `a${run.repeat(200_000)}b` })).toThrow(
         "Account label",
       );
@@ -481,6 +563,14 @@ describe("account label normalisation", () => {
     " \u0001 \u00AD ",
     "\u0085",
     "\u{E0041}\u{E0042}",
+    "\u3164",
+    "\u115F\u1160",
+    "\uFFA0",
+    "\u2800",
+    "\u0301",
+    "\uFE0F",
+    "\u034F",
+    " \u200D\u0301\uFE0F ",
     "\u200D\u{E0067}\u200C",
   ])("rejects a label with nothing left after normalisation: %j", (accountLabel) => {
     expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
