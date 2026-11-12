@@ -105,7 +105,9 @@ interface BarChartProps extends ChartBase {
 Bars start at zero, with negatives extending below or to the left of the baseline.
 Nonnegative data never produces a negative axis; all-zero data uses [0, 1].
 Categories share the first colour slot. Labels remain available in full through
-point tooltips and the table when axis labels are shortened.
+point tooltips and the table when axis labels are shortened. X-axis labels never
+overlap: the last label always shows, then the first, and a middle label (placed at the
+value nearest the middle of the axis) shows only when it fits (`visibleTicks`).
 
 ### ScatterChart
 
