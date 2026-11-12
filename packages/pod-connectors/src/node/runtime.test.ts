@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import * as fsPromises from "node:fs/promises";
 import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
@@ -11,6 +12,7 @@ import { AclResource, Agent } from "@solid/object";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { HSBC, MONZO } from "../bank-statements/fixtures.js";
 import * as importRunner from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
@@ -1634,5 +1636,285 @@ describe("CLI cancellation at the Pod write boundary", () => {
     expect(pod.get(stateUrl)).toBe(checkpoint);
     expect(pod.get(`${container}_provenance.ttl`)).toBe(provenance);
     expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+describe("CLI bank statement options", () => {
+  const Bank = `${TEST_POD_ROOT}integrations/bank-statements/finance/bank/`;
+  /** Account folders under finance/bank/, e.g. `hsbc-uk-<sha256>`. */
+  function accountFolders(pod: ReturnType<typeof createMemoryPod>): string[] {
+    return [
+      ...new Set(
+        pod
+          .urls()
+          .filter((url) => url.startsWith(Bank))
+          .map((url) => url.slice(Bank.length).split("/")[0] as string),
+      ),
+    ].sort();
+  }
+  async function exportFile(dir: string, name: string, text: string): Promise<string> {
+    const file = join(dir, "..", name);
+    await writeFile(file, text);
+    return file;
+  }
+
+  it("imports a headerless HSBC UK export with --format hsbc-uk and --account-label", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    const stdout = vi.fn(),
+      stderr = vi.fn();
+    expect(
+      await runCli(
+        [
+          "import",
+          "bank-statements",
+          "--file",
+          file,
+          "--format",
+          "hsbc-uk",
+          "--account-label",
+          "Everyday HSBC",
+        ],
+        { configPath: path, podTransport: transport, stdout, stderr },
+      ),
+    ).toBe(0);
+    expect(stderr).not.toHaveBeenCalled();
+    const [folder] = accountFolders(pod);
+    expect(accountFolders(pod)).toEqual([expect.stringMatching(/^hsbc-uk-[0-9a-f]{64}$/)]);
+    expect(pod.get(`${Bank}${folder}/account.ttl`)).toContain("Everyday HSBC");
+    const month = pod.get(`${Bank}${folder}/2026-07.ttl`) ?? "";
+    expect(month).toContain("Synthetic shop, main branch");
+    expect(month).toContain("Synthetic credit");
+    const saved = JSON.parse(
+      pod.get(`${TEST_POD_ROOT}integrations/bank-statements/state.json`) ?? "{}",
+    );
+    expect(saved).toMatchObject({ lastOutcome: "success", counts: { skipped: 0 } });
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported bank-statements:"));
+  });
+
+  it("writes nothing for the same HSBC export without the bank flags", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    await runCli(["import", "bank-statements", "--file", file], {
+      configPath: path,
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+    });
+    expect(accountFolders(pod)).toEqual([]);
+  });
+
+  it("keeps two Monzo exports in separate account folders when their labels differ", async () => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const options = { configPath: path, podTransport: transport, stdout: vi.fn(), stderr: vi.fn() };
+    for (const [name, label] of [
+      ["joint.csv", "Joint account"],
+      ["personal.csv", "Personal account"],
+    ] as const) {
+      const file = await exportFile(path, name, MONZO);
+      expect(
+        await runCli(
+          [
+            "import",
+            "bank-statements",
+            "--file",
+            file,
+            "--format",
+            "auto",
+            "--account-label",
+            label,
+          ],
+          options,
+        ),
+      ).toBe(0);
+    }
+    const folders = accountFolders(pod);
+    expect(folders).toEqual([
+      expect.stringMatching(/^monzo-[0-9a-f]{64}$/),
+      expect.stringMatching(/^monzo-[0-9a-f]{64}$/),
+    ]);
+    const labels = folders.map((folder) => pod.get(`${Bank}${folder}/account.ttl`) ?? "");
+    expect(labels.filter((doc) => doc.includes("Joint account"))).toHaveLength(1);
+    expect(labels.filter((doc) => doc.includes("Personal account"))).toHaveLength(1);
+    for (const folder of folders)
+      expect(pod.get(`${Bank}${folder}/2026-07.ttl`)).toContain("Synthetic shop");
+    // Without labels the same two exports share one Monzo account folder.
+    const unlabelled = fixturePod();
+    for (const name of ["joint.csv", "personal.csv"])
+      expect(
+        await runCli(["import", "bank-statements", "--file", join(path, "..", name)], {
+          ...options,
+          podTransport: unlabelled.transport,
+        }),
+      ).toBe(0);
+    expect(accountFolders(unlabelled.pod)).toHaveLength(1);
+  });
+
+  it("parses --format auto as detection and an explicit format as the adapter's csvFormat", () => {
+    expect(
+      parseImportArgs(["import", "bank-statements", "--file", "a.csv", "--format", "auto"]),
+    ).toEqual({ id: "bank-statements", file: "a.csv", since: false, bank: {} });
+    expect(
+      parseImportArgs([
+        "import",
+        "bank-statements",
+        "--account-label",
+        "Credit card",
+        "--format",
+        "monzo",
+        "--file",
+        "a.csv",
+      ]),
+    ).toEqual({
+      id: "bank-statements",
+      file: "a.csv",
+      since: false,
+      bank: { csvFormat: "monzo", accountLabel: "Credit card" },
+    });
+    expect(parseImportArgs(["import", "bank-statements", "--file", "a.csv"])).toEqual({
+      id: "bank-statements",
+      file: "a.csv",
+      since: false,
+    });
+  });
+
+  const privateLabel = "synthetic-private-label";
+  it.each(
+    [
+      [["--format", "hsbc"], /--format must be one of: auto, revolut, hsbc-uk, monzo, starling/],
+      [["--format", "ofx"], /--format must be one of/],
+      [["--format", "HSBC-UK", "--account-label", privateLabel], /--format must be one of/],
+      [["--format", "hsbc-uk"], /requires --account-label/],
+      [["--account-label", " \t "], /visible text/],
+      [["--account-label", "\u0001\u0002"], /visible text/],
+      [["--account-label", `${privateLabel}${"x".repeat(257)}`], /at most 256 characters/],
+      [["--account-label"], /Usage/],
+      [["--account-label", "--format", "monzo"], /Usage/],
+      [["--format", "monzo", "--format", "starling"], /Usage/],
+      [["--account-label", "One", "--account-label", "Two"], /Usage/],
+      [[`--account-label=${privateLabel}`], /Usage/],
+      [["--format=monzo"], /Usage/],
+      [["--account-label", `--${privateLabel}`], /Usage/],
+      [["--account-label", "\u200B"], /visible text/],
+      [["--account-label", "\u202E\u200D"], /visible text/],
+      [["--account-label", `${privateLabel}\u202E`], /visible text/],
+      [["--account-label", `${privateLabel}\uFDD0`], /visible text/],
+      [["--account-label", `${privateLabel}\uD800`], /visible text/],
+      [["--account-label", `${privateLabel} `.repeat(300)], /visible text/],
+      [["--account-label", `${privateLabel}${"\u{1F600}".repeat(257)}`], /at most 256 characters/],
+    ].map(([flags, message]) => ({ flags: flags as string[], message: message as RegExp })),
+  )("rejects invalid bank values without Pod I/O: $flags", async ({ flags, message }) => {
+    const { pod, transport } = fixturePod();
+    const path = await configPath();
+    const file = await exportFile(path, "hsbc.csv", HSBC);
+    const podTransport = vi.fn(transport);
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    const before = pod.urls();
+    expect(
+      await runCli(["import", "bank-statements", "--file", file, ...flags], {
+        configPath: path,
+        podTransport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(stderr).toHaveBeenCalledWith(expect.stringMatching(message));
+    expect(JSON.stringify([stderr.mock.calls, stdout.mock.calls])).not.toContain(privateLabel);
+    expect(podTransport).not.toHaveBeenCalled();
+    expect(pod.urls()).toEqual(before);
+  });
+
+  it.each(
+    [
+      ["import", "netflix", "--file", "a.csv", "--format", "monzo"],
+      ["import", "netflix", "--file", "a.csv", "--account-label", "Mine"],
+      ["import", "spotify", "--account-label", "Mine"],
+      ["import", "bank-statements", "--format", "monzo"],
+      ["import", "bank-statements", "--account-label", "Mine"],
+    ].map((args) => ({ args })),
+  )("rejects bank flags for other connectors or without --file: $args", async ({ args }) => {
+    expect(() => parseImportArgs(args)).toThrow(
+      /only supported for bank-statements --file imports/,
+    );
+    const podTransport = vi.fn();
+    expect(
+      await runCli(args, {
+        configPath: await configPath(),
+        podTransport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(podTransport).not.toHaveBeenCalled();
+  });
+
+  it("accepts 256 emoji as a label (the limit counts code points)", () => {
+    const accountLabel = "\u{1F600}".repeat(256);
+    expect(
+      parseImportArgs([
+        "import",
+        "bank-statements",
+        "--file",
+        "a.csv",
+        "--account-label",
+        accountLabel,
+      ]).bank,
+    ).toEqual({ accountLabel });
+  });
+
+  it("rejects an invalid bank option before reading the config file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pod-connectors-missing-"));
+    const missing = join(dir, "no-such-config.json");
+    try {
+      for (const flags of [
+        ["--format", "hsbc"],
+        ["--format", "hsbc-uk"],
+        ["--account-label", "\u200B"],
+        ["--account-label=Joint"],
+      ]) {
+        const podTransport = vi.fn();
+        const stderr = vi.fn();
+        expect(
+          await runCli(["import", "bank-statements", "--file", join(dir, "a.csv"), ...flags], {
+            configPath: missing,
+            podTransport,
+            stdout: vi.fn(),
+            stderr,
+          }),
+        ).toBe(EXIT_CODES.config);
+        const message = String(stderr.mock.calls[0]?.[0]);
+        // The bank diagnostic, not the config reader's: parsing ran first.
+        expect(message).toMatch(/--format|--account-label|Usage/);
+        expect(message).not.toContain(missing);
+        expect(message).not.toMatch(/config/i);
+        expect(podTransport).not.toHaveBeenCalled();
+      }
+      // The same command with valid flags does reach the (missing) config file.
+      const stderr = vi.fn();
+      expect(
+        await runCli(
+          ["import", "bank-statements", "--file", join(dir, "a.csv"), "--format", "monzo"],
+          { configPath: missing, podTransport: vi.fn(), stdout: vi.fn(), stderr },
+        ),
+      ).toBe(EXIT_CODES.config);
+      expect(String(stderr.mock.calls[0]?.[0])).toMatch(/^Cannot load config/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("documents the bank options in --help", async () => {
+    const stdout = vi.fn();
+    expect(await runCli(["--help"], { stdout, stderr: vi.fn() })).toBe(0);
+    const help = String(stdout.mock.calls[0]?.[0]);
+    expect(help).toContain("--format <auto|revolut|hsbc-uk|monzo|starling>");
+    expect(help).toContain("--account-label <text>");
+    expect(help).toContain("Only Revolut, HSBC UK, Monzo and Starling CSV exports use it");
+    expect(help).toContain("OFX/QFX and generic CSV");
+    expect(help).toContain("--flag=value and values starting with -- are rejected");
   });
 });

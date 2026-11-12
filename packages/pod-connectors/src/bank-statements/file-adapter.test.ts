@@ -15,13 +15,16 @@ import {
 import { CLASSES, Invoice } from "../core/vocab.js";
 import { BankCsvParser, MAX_BANK_FIELD_CHARS } from "./csv.js";
 import {
+  BANK_CSV_FORMATS,
   bankStatementsFileAdapter,
   createBankStatementsFileAdapter,
+  MAX_BANK_ACCOUNT_LABEL_CHARS,
   normaliseAmount,
   parseBankCsv,
   parseFlexibleDate,
   parseOfx,
   parseOfxDate,
+  validateBankOptions,
 } from "./file-adapter.js";
 import { HSBC, MONZO, OFX, REVOLUT, REVOLUT_HEADER, REVOLUT_ROWS, STARLING } from "./fixtures.js";
 import { bankDate, subtractAmount } from "./values.js";
@@ -486,6 +489,20 @@ describe("fail-closed bank detection and bounds", () => {
     },
     20_000,
   );
+
+  it("exports the host-facing format allowlist and label validation", () => {
+    expect(BANK_CSV_FORMATS).toEqual(["revolut", "hsbc-uk", "monzo", "starling"]);
+    for (const csvFormat of BANK_CSV_FORMATS)
+      expect(() => validateBankOptions({ csvFormat, accountLabel: "Label" })).not.toThrow();
+    for (const csvFormat of ["auto", "ofx", "csv", "HSBC-UK", "hsbc", ""])
+      expect(() =>
+        validateBankOptions({ csvFormat: csvFormat as (typeof BANK_CSV_FORMATS)[number] }),
+      ).toThrow("Unsupported bank CSV format");
+    expect(MAX_BANK_ACCOUNT_LABEL_CHARS).toBe(256);
+    expect(() => validateBankOptions({ accountLabel: "x".repeat(256) })).not.toThrow();
+    for (const accountLabel of ["", " \t", "\u0001", "x".repeat(257), 7 as unknown as string])
+      expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+  });
 
   it("validates host options and snapshots them", async () => {
     expect(() => createBankStatementsFileAdapter({ csvFormat: "hsbc-uk" })).toThrow("accountLabel");

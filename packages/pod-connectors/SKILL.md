@@ -76,7 +76,12 @@ known optional columns, Local amount/currency and Money Out/In in pairs, no dupl
 unmatched headers retain the original generic aliases, values, dates, IDs and snapshot
 behavior in `generic-csv.ts`. Explicit csvFormat constrains detection and disables fallback.
 Headerless HSBC UK requires explicit `csvFormat: 'hsbc-uk'`
-and a stable user `accountLabel` via `createBankStatementsFileAdapter`. Keep all skipped
+and a stable user `accountLabel` via `createBankStatementsFileAdapter`; hosts (the CLI's
+`--format`/`--account-label`, Suite's connect flow) validate input with the exported
+`BANK_CSV_FORMATS` and `validateBankOptions`, never a copy of the rules. Labels are normalised
+once in `csv.ts` (`normaliseAccountLabel`: reject bidi controls, prepended marks, noncharacters; strip Cc/Cf except joiners/tags doing visible work; NFC; collapse whitespace; trim; 256 code points) and that
+string is both hashed and stored, so never hash or store a raw label. Only the four bank CSV
+layouts use a label; OFX/QFX and generic CSV report it unused. Keep all skipped
 bank-specific rows inside the source-row budget. Use exact decimal strings/BigInt for bank-specific values,
 including signed Revolut Amount minus Fee; append a nonzero fee to the description as
 ` (fee <fee> <currency>)`, omit zero fees. Descriptions need visible text after control

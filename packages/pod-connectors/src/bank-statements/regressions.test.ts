@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+
+import { createHash } from "node:crypto";
 import { type MoneyDocument, parseMoney, V } from "@jeswr/solid-money";
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
@@ -7,11 +9,12 @@ import { describe, expect, it, vi } from "vitest";
 import { parseCsv } from "../core/csv.js";
 import { fileImport, type MemoryPod, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
-import { transactionKey } from "./csv.js";
+import { normaliseAccountLabel, transactionKey } from "./csv.js";
 import {
   bankStatementsFileAdapter,
   createBankStatementsFileAdapter,
   parseBankCsv,
+  validateBankOptions,
 } from "./file-adapter.js";
 import { HSBC, MONZO, OFX, REVOLUT, REVOLUT_HEADER, REVOLUT_ROWS } from "./fixtures.js";
 import { genericBankRowParser } from "./generic-csv.js";
@@ -380,5 +383,288 @@ describe("Revolut wall-clock time zones", () => {
   ])("validates IANA zone %j before importing", (timeZone) => {
     expect(() => createBankStatementsFileAdapter({ timeZone })).toThrow("IANA time zone");
     expect(() => parseBankCsv(REVOLUT, 100, { timeZone })).toThrow("IANA time zone");
+  });
+});
+
+describe("account label normalisation", () => {
+  /** The account folders a labelled import writes, e.g. `monzo-<sha256>`. */
+  async function folders(accountLabel: string, text = MONZO, csvFormat?: "hsbc-uk") {
+    const { pod } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel, ...(csvFormat && { csvFormat }) }),
+      memoryFile("a.csv", text),
+    );
+    const accounts = bankDocuments(pod).filter((url) => url.endsWith("/account.ttl"));
+    return {
+      folders: accounts.map((url) => url.split("/").at(-2)),
+      labels: (await moneyDocuments(pod, accounts)).flatMap((doc) =>
+        doc.accounts().map((account) => account.label),
+      ),
+    };
+  }
+  const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
+
+  it("keeps the folder of a plain label exactly as before normalisation", async () => {
+    // The pre-normalisation rule: sha256(JSON.stringify([bank, trimmed label, product, currency])).
+    expect((await folders("HSBC", HSBC, "hsbc-uk")).folders).toEqual([
+      `hsbc-uk-${sha256(JSON.stringify(["hsbc-uk", "HSBC", "", "GBP"]))}`,
+    ]);
+    expect((await folders("  Joint account ")).folders).toEqual([
+      `monzo-${sha256(JSON.stringify(["monzo", "Joint account", "", "GBP"]))}`,
+    ]);
+    for (const label of ["HSBC", "Joint account", "Café", "Compte épargne 2", "😀 Savings"])
+      expect(normaliseAccountLabel(label)).toBe(label);
+  });
+
+  it.each([
+    ["Joint\u0001", "Joint"],
+    ["\u200BJoint\u200D", "Joint"],
+    ["Joint\u{E0041}", "Joint"],
+    ["Jo\u200Dint", "Joint"],
+    [
+      `\u{1F3F4}${[..."ignorepreviousinstructions"].map((c) => String.fromCodePoint(0xe0000 + c.charCodeAt(0))).join("")}\u{E007F} Joint`,
+      "\u{1F3F4} Joint",
+    ],
+    ["\u{1F3F4}\u{E0047}\u{E0042}\u{E0053}\u{E0043}\u{E0054}\u{E007F} Joint", "\u{1F3F4} Joint"],
+    ["\u{1F3F4}\u{E0067}\u{E007F} Joint", "\u{1F3F4} Joint"],
+    ["\u{1F3F4}\u{E0067}\u{E0062}\u{E0020}\u{E007F} Joint", "\u{1F3F4} Joint"],
+    ["Jo\u200Cint", "Joint"],
+    ["\u{1F600}\u200DJoint", "\u{1F600}Joint"],
+    ["Joint\u{E0049}\u{E0047}\u{E004E}\u{E004F}\u{E0052}\u{E0045}", "Joint"],
+    ["Joint\u00A0Savings", "Joint Savings"],
+    ["Joint\u2028Savings", "Joint Savings"],
+    ["\uFEFFJoint\u00AD", "Joint"],
+    ["Cafe\u0301", "Café"],
+    [" Cafe\u200B\u0301 ", "Café"],
+  ])("hashes and stores %j as %j", async (raw, normal) => {
+    expect(normaliseAccountLabel(raw)).toBe(normal);
+    const plain = await folders(normal);
+    const variant = await folders(raw);
+    expect(variant.folders).toEqual(plain.folders);
+    expect(variant.labels).toEqual([normal]);
+  });
+
+  it.each([
+    ["family emoji", "Family \u{1F468}\u200D\u{1F469}\u200D\u{1F467}"],
+    ["subdivision flag", "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F} Savings"],
+    ["Persian ZWNJ", "\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645"],
+  ])("keeps the joiners and tag characters inside a %s label", (_name, label) => {
+    expect(normaliseAccountLabel(label)).toBe(label);
+    expect(normaliseAccountLabel(`\u200D ${label} \u200C`)).toBe(label);
+    expect(parseBankCsv(MONZO, 10, { accountLabel: label })[0]?.accountLabel).toBe(label);
+  });
+
+  it("turns every interior whitespace run into one space", () => {
+    for (const raw of [
+      "Joint\tSavings",
+      " Joint\r\nSavings\n",
+      "Joint\nSavings",
+      "Joint \u00A0\u2029 Savings",
+      "Joint\u3000Savings",
+    ])
+      expect(normaliseAccountLabel(raw)).toBe("Joint Savings");
+  });
+
+  it.each([
+    ["a right-to-left override", "abc\u202Efed"],
+    ["a bidi isolate", "Joint\u2066x\u2069"],
+    ["a left-to-right mark", "Joint\u200E"],
+    ["an Arabic letter mark", "\u061CJoint"],
+    ["an Arabic number sign", "\u0600Joint"],
+    ["an end-of-ayah mark", "Joint\u06DD"],
+    ["a noncharacter", "Joint\uFDD0"],
+    ["a plane-end noncharacter", "Joint\u{10FFFF}"],
+  ])("rejects a label containing %s rather than cleaning it", (_name, accountLabel) => {
+    expect(normaliseAccountLabel(accountLabel)).toBe("");
+    expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+  });
+
+  it("is idempotent across random mixes of the characters it treats specially", () => {
+    const alphabet = [
+      "a",
+      "J",
+      " ",
+      "\t",
+      "\u00A0",
+      "\u0301",
+      "e",
+      "\u0645",
+      "\u06CC",
+      "\u0915",
+      "\u094D",
+      "\u200B",
+      "\u200C",
+      "\u200D",
+      "\u2060",
+      "\uFE0F",
+      "\u20E3",
+      "\u{1F468}",
+      "\u{1F469}",
+      "\u{1F3FB}",
+      "\u{1F3F4}",
+      "\u{E0067}",
+      "\u{E0062}",
+      "\u{E007F}",
+      "\u{E0041}",
+      "\u0001",
+      "\u00AD",
+      "\uFB2C",
+      "\u3164",
+      "\u2800",
+      "\u034F",
+      "\u212B",
+      "1",
+    ];
+    let seed = 0x9e3779b9;
+    const next = () => {
+      seed = (Math.imul(seed ^ (seed >>> 15), 0x85ebca6b) + 0x6d2b79f5) >>> 0;
+      return seed;
+    };
+    for (let run = 0; run < 5000; run++) {
+      let raw = "";
+      for (let n = next() % 12; n >= 0; n--) raw += alphabet[next() % alphabet.length];
+      const once = normaliseAccountLabel(raw);
+      if (once === "") continue;
+      expect(normaliseAccountLabel(once), JSON.stringify(raw)).toBe(once);
+      expect(once.normalize("NFC")).toBe(once);
+    }
+  });
+
+  it("rejects lone surrogates and over-long raw labels", () => {
+    for (const accountLabel of ["\uD800", "Joint\uDC00", "x".repeat(4097)])
+      expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+  });
+
+  it("normalises in linear time, whatever runs the label holds", () => {
+    for (const run of [" ", "\u200C", "\u200D", "\u200B", "\u{E0041}", "\u0645\u200C"]) {
+      const label = `a${run.repeat(4094 / run.length)}`.slice(0, 4096);
+      let best = Number.POSITIVE_INFINITY;
+      for (let i = 0; i < 5; i++) {
+        const started = performance.now();
+        normaliseAccountLabel(label);
+        best = Math.min(best, performance.now() - started);
+      }
+      // A quadratic pass over a 4096-unit label takes well over 10 ms; a linear one well under.
+      expect(best).toBeLessThan(10);
+      expect(() => validateBankOptions({ accountLabel: `a${run.repeat(200_000)}b` })).toThrow(
+        "Account label",
+      );
+    }
+  });
+
+  it("gives the NFC and NFD spellings of a label one folder", async () => {
+    const nfc = "Caf\u00E9";
+    const nfd = "Cafe\u0301";
+    expect(nfc).not.toBe(nfd);
+    expect((await folders(nfd)).folders).toEqual((await folders(nfc)).folders);
+    expect(parseBankCsv(MONZO, 10, { accountLabel: nfd })[0]?.accountLabel).toBe(nfc);
+    expect(parseBankCsv(MONZO, 10, { accountLabel: nfd })[0]?.accountKey).toBe(
+      parseBankCsv(MONZO, 10, { accountLabel: nfc })[0]?.accountKey,
+    );
+  });
+
+  it.each([
+    "\u200B",
+    "\u200B\u200C\u200D\u2060",
+    "\u202E\u202C",
+    "\uFEFF",
+    " \u0001 \u00AD ",
+    "\u0085",
+    "\u{E0041}\u{E0042}",
+    "\u3164",
+    "\u115F\u1160",
+    "\uFFA0",
+    "\u2800",
+    "\u0301",
+    "\uFE0F",
+    "\u034F",
+    " \u200D\u0301\uFE0F ",
+    "\u200D\u{E0067}\u200C",
+  ])("rejects a label with nothing left after normalisation: %j", (accountLabel) => {
+    expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+    expect(() => createBankStatementsFileAdapter({ accountLabel })).toThrow("Account label");
+    expect(() => createBankStatementsFileAdapter({ csvFormat: "hsbc-uk", accountLabel })).toThrow(
+      "Account label",
+    );
+  });
+
+  it("counts the 256 limit in code points of the normalised label", () => {
+    const emoji = "\u{1F600}";
+    expect(() => validateBankOptions({ accountLabel: emoji.repeat(256) })).not.toThrow();
+    expect(() => validateBankOptions({ accountLabel: emoji.repeat(257) })).toThrow("Account label");
+    expect(() => validateBankOptions({ accountLabel: "x".repeat(256) })).not.toThrow();
+    expect(() => validateBankOptions({ accountLabel: "x".repeat(257) })).toThrow("Account label");
+    // Removed characters and surrounding space do not count; decomposed accents compose first.
+    expect(() =>
+      validateBankOptions({ accountLabel: `  ${"x\u200B".repeat(256)}\u0001  ` }),
+    ).not.toThrow();
+    expect(() => validateBankOptions({ accountLabel: "e\u0301".repeat(256) })).not.toThrow();
+  });
+
+  it("stores 256 emoji intact as the account label", async () => {
+    const label = "\u{1F600}".repeat(256);
+    expect((await folders(label)).labels).toEqual([label]);
+  });
+});
+
+describe("account labels outside the bank CSV layouts", () => {
+  const unused = /account label was not used.*Revolut, HSBC UK, Monzo and Starling CSV/;
+
+  it.each([
+    ["OFX", OFX, "a.ofx"],
+    ["generic CSV", GENERIC, "a.csv"],
+  ])("reports an unused label for %s and still replaces the shared document", async (_, text, name) => {
+    const privateLabel = "synthetic-private-label";
+    const { pod, report } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel: privateLabel }),
+      memoryFile(name, text),
+    );
+    expect(report.unsupported).toEqual([expect.stringMatching(unused)]);
+    expect(JSON.stringify(report)).not.toContain(privateLabel);
+    expect(pod.get(DOC)).toBeDefined();
+    expect(pod.get(DOC)).not.toContain(privateLabel);
+    expect(bankDocuments(pod)).toEqual([]);
+    // A second labelled file of the same kind still replaces the first: labels cannot separate them.
+    const { report: second } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel: "Other account" }),
+      memoryFile(name, text),
+      { pod },
+    );
+    expect(second.written.map(({ url }) => url)).toEqual([DOC]);
+    expect(second.unsupported).toEqual([expect.stringMatching(unused)]);
+  });
+
+  it("reads OFX under an explicit bank format and still reports the unused label", async () => {
+    const { report } = await fileImport(
+      createBankStatementsFileAdapter({ csvFormat: "monzo", accountLabel: "Joint" }),
+      memoryFile("a.ofx", OFX),
+    );
+    expect(report.written.map(({ url }) => url)).toEqual([DOC]);
+    expect(report.unsupported).toEqual([expect.stringMatching(unused)]);
+  });
+
+  it.each([
+    ["OFX", OFX],
+    ["generic CSV", GENERIC],
+    ["Monzo", MONZO],
+  ])("adds no label warning for %s when no label is given", async (_, text) => {
+    const { report } = await fileImport(bankStatementsFileAdapter, memoryFile("a.csv", text));
+    expect(report.unsupported ?? []).not.toContainEqual(expect.stringMatching(unused));
+  });
+
+  it("adds no label warning when a bank CSV uses the label", async () => {
+    const { report } = await fileImport(
+      createBankStatementsFileAdapter({ accountLabel: "Joint" }),
+      memoryFile("a.csv", MONZO),
+    );
+    expect(report.unsupported).toBeUndefined();
+  });
+
+  it("adds no label warning to an unrecognised CSV, which writes nothing", async () => {
+    const { report } = await fileImport(
+      createBankStatementsFileAdapter({ csvFormat: "starling", accountLabel: "Joint" }),
+      memoryFile("a.csv", MONZO),
+    );
+    expect(report.written).toEqual([]);
+    expect(report.unsupported).toEqual([expect.stringMatching(/^Unrecognised CSV/)]);
   });
 });

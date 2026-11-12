@@ -16,7 +16,116 @@ import {
 } from "./values.js";
 
 export const MAX_BANK_FIELD_CHARS = 16 * 1024;
-export type BankCsvFormat = "revolut" | "hsbc-uk" | "monzo" | "starling";
+/** The explicit `csvFormat` values; omit `csvFormat` to detect the layout from the contents. */
+export const BANK_CSV_FORMATS = ["revolut", "hsbc-uk", "monzo", "starling"] as const;
+export type BankCsvFormat = (typeof BANK_CSV_FORMATS)[number];
+/** Longest accepted `accountLabel`, in Unicode code points after `normaliseAccountLabel`. */
+export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
+/** Raw labels longer than this are rejected before normalisation, which keeps it linear. */
+const MAX_RAW_ACCOUNT_LABEL_UNITS = 4096;
+const CONTROL_OR_FORMAT = /^[\p{Cc}\p{Cf}]$/u;
+const WHITESPACE_RUN = /\s+/gu;
+const WHITESPACE = /^\s$/u;
+const LONE_SURROGATE = /\p{Cs}/u;
+/**
+ * Labels holding these are rejected, not cleaned: bidi controls reorder what is shown against
+ * what is stored, Arabic prepended marks change the display, and noncharacters have none.
+ */
+const REJECTED_LABEL_CHARS =
+  /[؜‎‏‪-‮⁦-⁩؀-؅۝܏࢐࢑࣢\u{110BD}\u{110CD}﷐-﷯]|[￾￿]|[\u{1FFFE}\u{1FFFF}\u{2FFFE}\u{2FFFF}\u{3FFFE}\u{3FFFF}\u{EFFFE}\u{EFFFF}\u{FFFFE}\u{FFFFF}\u{10FFFE}\u{10FFFF}]/u;
+/** A character a person can see. Hangul fillers and the braille blank are letters/symbols that render empty. */
+const VISIBLE_LABEL_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u;
+const BLANK_LOOKING = new Set([0x115f, 0x1160, 0x3164, 0xffa0, 0x2800]);
+const EMOJI = /^\p{Extended_Pictographic}$/u;
+const EMOJI_TAIL = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|️|⃣)$/u;
+const NON_LATIN_LETTER = /^[\p{L}\p{M}]$/u;
+const LATIN_LIKE =
+  /^[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}\p{Script=Common}\p{Script=Inherited}]$/u;
+const ZWNJ = 0x200c;
+const ZWJ = 0x200d;
+const BLACK_FLAG = 0x1f3f4;
+const CANCEL_TAG = 0xe007f;
+const code = (char: string | undefined) => char?.codePointAt(0) ?? -1;
+const isTag = (char: string | undefined) => code(char) >= 0xe0020 && code(char) <= CANCEL_TAG;
+/** A subdivision flag spells its code in 2–6 tag digits or lowercase tag letters. */
+const MIN_FLAG_TAGS = 2;
+const MAX_FLAG_TAGS = 6;
+const isFlagTag = (char: string | undefined) =>
+  (code(char) >= 0xe0030 && code(char) <= 0xe0039) ||
+  (code(char) >= 0xe0061 && code(char) <= 0xe007a);
+const isShapingLetter = (char: string | undefined) =>
+  char !== undefined && NON_LATIN_LETTER.test(char) && !LATIN_LIKE.test(char);
+
+/**
+ * Keeps a joiner or tag character only where it does visible work: ZWJ between emoji
+ * (a family or profession sequence), ZWNJ between letters of a script that shapes with it
+ * (Persian, Indic), and tags inside a well-formed subdivision flag (U+1F3F4, 2–6 tag digits or lowercase
+ * tag letters, U+E007F).
+ * Elsewhere they are invisible and could split one account into look-alike folders or carry
+ * hidden text, so they are dropped. Their neighbours are never dropped, so one pass is stable.
+ */
+function dropStrayJoinersAndTags(chars: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i] ?? "";
+    if (code(char) === BLACK_FLAG && isFlagTag(chars[i + 1])) {
+      let end = i + 1;
+      while (end < chars.length && end - i <= MAX_FLAG_TAGS && isFlagTag(chars[end])) end++;
+      const tags = end - i - 1;
+      if (code(chars[end]) === CANCEL_TAG && tags >= MIN_FLAG_TAGS && tags <= MAX_FLAG_TAGS) {
+        kept.push(...chars.slice(i, end + 1));
+        i = end;
+        continue;
+      }
+    }
+    if (isTag(char)) continue;
+    if (
+      code(char) === ZWJ &&
+      !(EMOJI_TAIL.test(chars[i - 1] ?? "") && EMOJI.test(chars[i + 1] ?? ""))
+    )
+      continue;
+    if (code(char) === ZWNJ && !(isShapingLetter(chars[i - 1]) && isShapingLetter(chars[i + 1])))
+      continue;
+    kept.push(char);
+  }
+  return kept;
+}
+
+/**
+ * The one form of an `accountLabel` that is hashed into the account folder and stored as its
+ * display label:
+ * - labels with bidi controls, Arabic prepended marks, noncharacters or lone surrogates, or
+ *   more than 4096 UTF-16 units, are rejected (normalise to "");
+ * - other control and format characters (Unicode Cc and Cf) are removed, except joiners and
+ *   tag characters that do visible work in an emoji, flag or shaped script;
+ * - the result is put in NFC, every whitespace run becomes one space, and the ends are trimmed;
+ * - a label with no visible character normalises to "".
+ * A plain label is unchanged, so its folder is the same as before normalisation existed.
+ * Idempotent for every label it accepts, and linear in the input.
+ */
+export function normaliseAccountLabel(label: string): string {
+  if (
+    label.length > MAX_RAW_ACCOUNT_LABEL_UNITS ||
+    LONE_SURROGATE.test(label) ||
+    REJECTED_LABEL_CHARS.test(label)
+  )
+    return "";
+  let stripped = "";
+  for (const char of label)
+    if (
+      !CONTROL_OR_FORMAT.test(char) ||
+      WHITESPACE.test(char) ||
+      code(char) === ZWJ ||
+      code(char) === ZWNJ ||
+      isTag(char)
+    )
+      stripped += char;
+  const kept = dropStrayJoinersAndTags([...stripped.normalize("NFC")]).join("");
+  const result = kept.normalize("NFC").replace(WHITESPACE_RUN, " ").trim();
+  for (const char of result)
+    if (VISIBLE_LABEL_CHAR.test(char) && !BLANK_LOOKING.has(code(char))) return result;
+  return "";
+}
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */
   readonly csvFormat?: BankCsvFormat;
@@ -191,14 +300,16 @@ export function bankCsvCells(record: string): string[] {
 export function validateBankOptions(options: BankStatementOptions): void {
   if (
     options.csvFormat !== undefined &&
-    !["revolut", "hsbc-uk", "monzo", "starling"].includes(options.csvFormat)
+    !(BANK_CSV_FORMATS as readonly string[]).includes(options.csvFormat)
   )
     throw new TypeError("Unsupported bank CSV format");
-  if (
-    options.accountLabel !== undefined &&
-    (!hasText(options.accountLabel) || options.accountLabel.length > 256)
-  )
-    throw new TypeError("Account label must contain 1–256 characters");
+  if (options.accountLabel !== undefined) {
+    const label =
+      typeof options.accountLabel === "string" ? normaliseAccountLabel(options.accountLabel) : "";
+    // Code points, so an emoji counts once; the normalised form is what gets stored.
+    if (!label || [...label].length > MAX_BANK_ACCOUNT_LABEL_CHARS)
+      throw new TypeError("Account label must contain 1–256 characters");
+  }
   if (options.currency !== undefined && !currencyCode(options.currency))
     throw new TypeError("Currency must be an uppercase ISO 4217 code supported by the runtime");
   if (options.csvFormat === "hsbc-uk" && !options.accountLabel)
@@ -217,6 +328,8 @@ export class BankCsvParser {
   private legacyRow?: (cells: readonly string[]) => Transaction | undefined;
   private readonly occurrences = new Map<string, number>();
   private readonly formatter: Intl.DateTimeFormat;
+  /** The normalised label: one string for the account hash and the stored display label. */
+  private readonly accountLabel?: string;
   constructor(
     private readonly options: BankStatementOptions,
     private readonly maxRows: number,
@@ -225,6 +338,8 @@ export class BankCsvParser {
     private readonly onBankRow?: (txn: Transaction, legacy?: Transaction) => void,
   ) {
     validateBankOptions(options);
+    this.accountLabel =
+      options.accountLabel === undefined ? undefined : normaliseAccountLabel(options.accountLabel);
     this.formatter = bankDateFormatter(options.timeZone);
     if (maxRows !== Number.POSITIVE_INFINITY && (!Number.isSafeInteger(maxRows) || maxRows < 0))
       throw new RangeError("Bank row limit must be a nonnegative safe integer");
@@ -397,7 +512,7 @@ export class BankCsvParser {
       return undefined;
     }
     const label =
-      this.options.accountLabel?.trim() ??
+      this.accountLabel ??
       `${bank === "revolut" ? `Revolut ${product}` : bank === "monzo" ? "Monzo" : "Starling"} ${currency}`;
     const txn: Transaction = {
       bank,
@@ -409,12 +524,7 @@ export class BankCsvParser {
       fee,
       balance,
       sourceId,
-      accountKey: JSON.stringify([
-        bank,
-        this.options.accountLabel?.trim() ?? "",
-        product,
-        currency,
-      ]),
+      accountKey: JSON.stringify([bank, this.accountLabel ?? "", product, currency]),
       accountLabel: label,
     };
     this.onBankRow?.(txn, this.legacyRow?.(cells));
