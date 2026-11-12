@@ -13,6 +13,26 @@ Create the client with `auth.fetch` from [pod-auth](../pod-auth/SKILL.md) and th
 returned by [createPodClient](../storage-client/SKILL.md). It is scoped to one storage.
 Notifications invalidate cached data; re-read through the storage API for authoritative state.
 
+For view invalidation, prefer `watchInvalidations({ fetch, topics, scope, onInvalidate,
+pollIntervalMs, signal, allowInsecureLoopback })`. It returns an immediate `{ ready, close }`
+handle, discovers one storage and reuses that discovery for initial push. Pass a caller-owned
+scope predicate over HTTP(S) URLs; WS(S) destinations are mapped to HTTP(S) before this check.
+It bounds every fetch, notification service, stream/socket and cleanup URL, refuses redirects,
+and retains URL syntax/HTTPS/loopback validation. Invalid arguments reject `ready`.
+Own and close the handle even during pending discovery; callbacks are fenced after close.
+First live, changes and resync invalidate; callbacks receive `{ type, object }` hints.
+
+Out-of-scope or unusable push, unsupported POSTs (404/405/410/501), missing WebSocket
+(including legacy-ws) and missing LWS EventSource switch permanently to SDK polling.
+Factories can supply absent browser constructors. Transient failures still reconnect with
+fresh discovery. Multiple topics batch on LWS; Solid subscribes per topic. `push: false`
+forces polling; `pollIntervalMs: 0` disables all polling fallbacks. If discovery fails or
+claims a storage that cannot contain the scoped topics, periodic full-refresh hints keep
+already-readable resources current without repeating discovery. These hints pause offline
+and resume at the next interval online. A discovery/read/push 403 terminates the watch;
+cleanup DELETEs remain best effort. The optional `storage`
+hint does not widen scope. See the README for the complete watcher contract and example.
+
 ```ts
 import { createNotifications } from '@jeswr/pod-notifications';
 import type { StorageClient } from '@jeswr/storage-client';
@@ -179,7 +199,8 @@ and T-043 adds `./channels/webhook-relay` for registered LWS webhook delivery ov
 actual transport. Keep that distinction explicit in the README.
 
 Use only the storage-client public API (`features`, `head`, `listAll`, `isWithinStorage`,
-`createPodClient`). WebSocket discovery uses a fresh isolated cache per attempt, shared only
+`createPodClient`). WebSocket discovery uses a fresh isolated cache per attempt (the
+invalidation watcher reuses its initial discovered client once), shared only
 within that attempt's resolve/probe calls. Do not reach into backends or add a resolver dependency.
 All topics/hot resources must be scoped. Poll serially, establish a quiet baseline, and commit
 container snapshots only after all listing pages succeed. Missing ETags are not changes.
@@ -196,7 +217,9 @@ reset only once all sockets open. Emit `resync(sinceLastFrame)` after interrupti
 the earliest per-socket timestamp and retaining it through partial reconnects. Offline
 aborts and suspends; online immediately rediscovers. Any discovery/subscribe 403 closes with
 `forbidden`. Detach listeners before closing sockets; ignore stale callbacks/responses and
-delete late LWS subscriptions. `close()` awaits best-effort LWS DELETEs already in flight.
+delete late subscriptions. `close()` awaits best-effort DELETEs already in flight. Solid
+channel `id`/`@id` cleanup requires the subscription service's origin and caller scope;
+ignore missing or unsafe optional ids without disrupting delivery. Expiry is the fallback.
 Validate all HTTP destinations and returned URLs before I/O: HTTPS/WSS, credential/fragment/
 control-free, receive/delete hosts equal storage or subscription service (including port).
 `allowInsecureLoopback` defaults false; HTTP/WS requires literal loopback at both ends.
