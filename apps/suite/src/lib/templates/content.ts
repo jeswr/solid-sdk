@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import {
   copyTemplateImages,
@@ -23,6 +24,8 @@ export async function prepareTemplateContent(
   resource: string,
   content: TemplateBody,
   assets: Parameters<SaveTemplateInput["content"]>[1],
+  /** The source's own assets container; only its direct children are copied. */
+  imagesFrom?: string,
 ): Promise<TemplateBody> {
   if (app === "sheets") {
     const { deserializeSnapshot } = await import("../../apps/sheets/lib/model/snapshot");
@@ -44,7 +47,10 @@ export async function prepareTemplateContent(
   if (!document) throw new Error("Invalid template content");
   const extensions =
     app === "docs" ? baseExtensions(session.fetch) : notesExtensions(session.fetch);
-  const json = await assets.copyImages(generateJSON(document.body, baseExtensions(session.fetch)));
+  const json = await assets.copyImages(
+    generateJSON(document.body, baseExtensions(session.fetch)),
+    imagesFrom,
+  );
   const node = getSchema(extensions).nodeFromJSON(json);
   const body = generateHTML(json, extensions);
   return {
@@ -66,9 +72,16 @@ export async function importTemplateImages(
   return copyTemplateImages(json, {
     root: session.storageUrl,
     upload,
+    // Template images live in the owner-only templates collection; anything else is refused.
+    outside: "refuse",
+    copyable: (url) =>
+      store.assertContains(url).then(
+        () => true,
+        () => false,
+      ),
     read: async (url) => {
-      await store.assertContains(url);
       const response = await session.fetch(url, { redirect: "error" });
+      if (response.status === 404) return undefined;
       if (!response.ok) throw new Error("Couldn't read a template image");
       return {
         data: await response.arrayBuffer(),

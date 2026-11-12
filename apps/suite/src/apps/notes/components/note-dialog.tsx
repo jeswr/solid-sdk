@@ -46,6 +46,7 @@ import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
+import { notesMediaContainer } from "../lib/images";
 import { NoteMoveBlockedError } from "../lib/model/errors";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
@@ -703,6 +704,8 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           title={draft.title}
           open
           onOpenChange={setSavingTemplate}
+          // Only Notes' own media are copied into the template.
+          imagesFrom={notesMediaContainer(session.storageUrl)}
           content={async (resource) => {
             const { buildNote } = await import("../lib/model/note");
             const { serializeTurtle } = await import("../../docs/lib/model");

@@ -53,6 +53,7 @@ import {
 } from "../lib/editor/logic";
 import { suggestionAction, suggestionKey } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
+import { docContainerUrls } from "../lib/model/layout";
 import { DocsError, DocsSidebar, DocumentSkeleton } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { EditorMenubar } from "./editor-menubar";
@@ -461,6 +462,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           title={title}
           open
           onOpenChange={setSavingTemplate}
+          // Only this document's own assets are copied into the template.
+          imagesFrom={runtime.stored ? docContainerUrls(runtime.stored.url).assets : undefined}
           content={async (resource) => {
             const { buildDocument, serializeTurtle } = await import("../lib/model");
             return {

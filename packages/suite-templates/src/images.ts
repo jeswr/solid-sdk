@@ -17,12 +17,30 @@ export function relocateAttributes<T>(value: T, relocate: (iri: string) => strin
   return value;
 }
 
-/** Copy each in-pod image once, then relocate all references to it (including links). */
+/** A template image is stored outside the place it may be copied from; nothing was copied. */
+export class TemplateImageError extends Error {
+  constructor() {
+    super(
+      "This template has an image stored outside your templates folder, so it can't be used. Remove the image from the original and save the template again.",
+    );
+    this.name = "TemplateImageError";
+  }
+}
+
+/**
+ * Copy each permitted in-pod image once, then relocate all references to it (including links).
+ * Only `copyable` images are fetched: a collaborator's reference to another private resource
+ * is never read with the owner's credentials. Other in-pod images are kept as references
+ * (`outside: "keep"`) or refused before anything is copied (`outside: "refuse"`). Missing
+ * images (`read` returns undefined) and non-image media are skipped and keep their reference.
+ */
 export async function copyTemplateImages<T>(
   value: T,
   options: {
     root: string;
-    read: (url: string) => Promise<{ data: ArrayBuffer; contentType: string }>;
+    copyable: (url: string) => boolean | Promise<boolean>;
+    outside: "keep" | "refuse";
+    read: (url: string) => Promise<{ data: ArrayBuffer; contentType: string } | undefined>;
     upload: (data: ArrayBuffer, contentType: string) => Promise<string>;
   },
 ): Promise<T> {
@@ -43,10 +61,17 @@ export async function copyTemplateImages<T>(
     object.content?.forEach(visit);
   }
   visit(value);
-  const mapping = new Map<string, string>();
+  const permitted: string[] = [];
   for (const source of sources) {
+    if (await options.copyable(source)) permitted.push(source);
+    else if (options.outside === "refuse") throw new TemplateImageError();
+  }
+  const mapping = new Map<string, string>();
+  for (const source of permitted) {
     const image = await options.read(source);
-    mapping.set(source, await options.upload(image.data, image.contentType));
+    const type = image?.contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+    if (!image || !/^image\/[a-z0-9.+-]+$/.test(type)) continue;
+    mapping.set(source, await options.upload(image.data, type));
   }
   // Match references by their normalized form too, so an equivalent spelling is not left behind.
   return relocateAttributes(

@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { BUILTIN_TEMPLATES, type TemplateApp, type UserTemplate } from "@jeswr/suite-templates";
+import {
+  BUILTIN_TEMPLATES,
+  type TemplateApp,
+  TemplateImageError,
+  type UserTemplate,
+} from "@jeswr/suite-templates";
 import { Button, TemplateGallery, type TemplateGalleryItem, toast } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -62,9 +68,13 @@ export function TemplatePicker({
     setBusy(true);
     try {
       await work();
-    } catch {
+    } catch (error) {
       if (generation.current === token)
-        toast.error("Couldn't complete the template action. Please try again.");
+        toast.error(
+          error instanceof TemplateImageError
+            ? error.message
+            : "Couldn't complete the template action. Please try again.",
+        );
     } finally {
       setBusy(false);
     }

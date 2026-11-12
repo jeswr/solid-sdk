@@ -85,7 +85,7 @@ describe("template gallery", () => {
     expect(screen.getAllByRole("button", { name: /^Delete template/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
     expect(remove).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Confirm delete" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel deletion" }));
     await user.click(screen.getByRole("button", { name: "Confirm delete" }));
     expect(remove).toHaveBeenCalledWith(items[2]);
     await user.click(screen.getByRole("button", { name: "Retry" }));
@@ -167,4 +167,45 @@ it("focuses the filter when the last visible card is removed", async () => {
   await user.click(screen.getByRole("button", { name: "Confirm delete" }));
   rerender(<TemplateGallery open onOpenChange={() => {}} items={[]} onChoose={() => {}} />);
   await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Category")));
+});
+// AUTHORED-BY Claude Opus 5.5 (tests below)
+it("references only rendered descriptions, including on image previews", () => {
+  setup();
+  for (const name of ["Use Meeting notes", "Use Journal entry", "Use My checklist"]) {
+    const ids = screen.getByRole("button", { name }).getAttribute("aria-describedby")?.split(" ");
+    expect(ids?.length).toBeGreaterThan(0);
+    for (const id of ids ?? []) expect(document.getElementById(id)).not.toBeNull();
+  }
+  expect(
+    screen.getByRole("button", { name: "Use Journal entry" }).getAttribute("aria-describedby"),
+  ).not.toContain("preview");
+});
+it("returns focus to Delete after a failed deletion and still follows a later removal", async () => {
+  const user = userEvent.setup();
+  const props = { open: true, onOpenChange: () => {}, onChoose: () => {}, onDelete: vi.fn() };
+  const { rerender } = render(<TemplateGallery {...props} items={items} />);
+  const trigger = screen.getByRole("button", { name: "Delete template My checklist" });
+  await user.click(trigger);
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel deletion" }));
+  await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+  rerender(<TemplateGallery {...props} items={items} busy />);
+  rerender(<TemplateGallery {...props} items={items} />);
+  await waitFor(() =>
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Delete template My checklist" }),
+    ),
+  );
+  // The failed attempt is forgotten: an unrelated later re-render moves no focus.
+  rerender(<TemplateGallery {...props} items={items.slice(0, 2)} />);
+  expect(document.activeElement).not.toBe(
+    screen.getByRole("button", { name: "Use Journal entry" }),
+  );
+  rerender(<TemplateGallery {...props} items={items} />);
+  await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
+  await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+  rerender(<TemplateGallery {...props} items={items} busy />);
+  rerender(<TemplateGallery {...props} items={items.slice(0, 2)} />);
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use Journal entry" })),
+  );
 });

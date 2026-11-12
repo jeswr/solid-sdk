@@ -23,9 +23,24 @@ export interface SaveTemplateInput {
   content: (
     resource: string,
     assets: {
-      copyImages: <T>(value: T) => Promise<T>;
+      /**
+       * Copy images that are direct children of `from` (the source's own assets container)
+       * into the template. Other references are kept as they are and never fetched.
+       */
+      copyImages: <T>(value: T, from: string | undefined) => Promise<T>;
     },
   ) => TemplateBody | Promise<TemplateBody>;
+}
+/** Owner-only access to the templates collection could not be established; nothing was written. */
+export class TemplateAccessError extends Error {
+  constructor(created: boolean) {
+    super(
+      created
+        ? "Couldn't make your new templates folder private, so nothing was saved. Please try again."
+        : "Your templates folder can be opened by other people, so nothing was saved. Make it private, then try again.",
+    );
+    this.name = "TemplateAccessError";
+  }
 }
 function missing(error: unknown): boolean {
   return error instanceof StorageError && error.code === "not-found";
@@ -41,7 +56,8 @@ export function createTemplateStore(options: {
   profile?: string;
   fetch?: typeof fetch;
   now?: () => Date;
-  ensurePrivateAccess: (url: string) => Promise<boolean>;
+  /** Provision (only when `created`) or verify owner-only access before any content write. */
+  ensurePrivateAccess: (url: string, context: { created: boolean }) => Promise<boolean>;
   onEntryError?: (url: string, error: unknown) => void;
 }) {
   const { storage } = options;
@@ -55,6 +71,8 @@ export function createTemplateStore(options: {
     : undefined;
   let container: Promise<string> | undefined;
   let containerUrl: string | undefined;
+  // A collection this store created; kept until access is established so a retry provisions.
+  let createdUrl: string | undefined;
   function remember(url: string) {
     containerUrl = url;
     return url;
@@ -76,7 +94,19 @@ export function createTemplateStore(options: {
         throw error;
     }
     for (const url of registered) {
-      const found = await storage.head(url);
+      // A stale or foreign registration must not block the collection for good.
+      try {
+        assertWithinPodScope(storage.root, url);
+      } catch {
+        continue;
+      }
+      let found: Awaited<ReturnType<StorageClient["head"]>>;
+      try {
+        found = await storage.head(url);
+      } catch (error) {
+        if (missing(error)) continue;
+        throw error;
+      }
       if (found.kind === "container" && found.url !== storage.root) return remember(found.url);
     }
     try {
@@ -96,15 +126,14 @@ export function createTemplateStore(options: {
     }
     if (!create) return undefined;
     try {
-      return remember(
-        (
-          await storage.create(storage.root, null, {
-            kind: "container",
-            name: "templates",
-            links: [{ rel: "type", target: TEMPLATE_CLASS }],
-          })
-        ).url,
-      );
+      createdUrl = (
+        await storage.create(storage.root, null, {
+          kind: "container",
+          name: "templates",
+          links: [{ rel: "type", target: TEMPLATE_CLASS }],
+        })
+      ).url;
+      return remember(createdUrl);
     } catch (error) {
       if (error instanceof StorageError && error.code === "conflict") {
         const found = await storage.head(conventional);
@@ -125,8 +154,10 @@ export function createTemplateStore(options: {
         // Register first: Solid drops the type link, so the index is the only adoption path
         // back to a created collection. Access is still verified before every first write.
         await index?.register(TEMPLATE_CLASS, { container: url });
-        if (!(await options.ensurePrivateAccess(url)))
-          throw new Error("Couldn't verify private templates access");
+        const created = url === createdUrl;
+        if (!(await options.ensurePrivateAccess(url, { created })))
+          throw new TemplateAccessError(created);
+        createdUrl = undefined;
         return url;
       })
       .catch((error) => {
@@ -257,11 +288,26 @@ export function createTemplateStore(options: {
       if ((await fresh.bytes()).length !== 0)
         throw new Error("The template content is no longer empty");
       const body = await input.content(content.url, {
-        copyImages: (value) =>
-          copyTemplateImages(value, {
+        copyImages: async (value, from) => {
+          const source = from === undefined ? undefined : assertWithinPodScope(storage.root, from);
+          if (source !== undefined && !source.endsWith("/"))
+            throw new TypeError("Images are copied only from an assets container");
+          return copyTemplateImages(value, {
             root: storage.root,
+            outside: "keep",
+            copyable: async (url) =>
+              source !== undefined &&
+              !new URL(url).search &&
+              !new URL(url).hash &&
+              (await storage.parentOf(url)) === source,
             read: async (url) => {
-              const image = await storage.read(url);
+              let image: Awaited<ReturnType<StorageClient["read"]>>;
+              try {
+                image = await storage.read(url);
+              } catch (error) {
+                if (missing(error)) return undefined;
+                throw error;
+              }
               return {
                 data: (await image.bytes()).buffer as ArrayBuffer,
                 contentType: image.contentType ?? "application/octet-stream",
@@ -273,7 +319,8 @@ export function createTemplateStore(options: {
               await keepName(asset.url, name);
               return asset.url;
             },
-          }),
+          });
+        },
       });
       await storage.write(content.url, body.body, {
         contentType: body.contentType,

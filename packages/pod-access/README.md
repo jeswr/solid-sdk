@@ -807,8 +807,15 @@ accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n
 Access Manager imports shared vocabulary and
 canonicalisation; its UI-specific request/approval interfaces remain deprecated compatibility code.
 
-`ensurePrivateContainerAccess(session, target)` from `./roles` provisions and verifies
-owner-only access for an empty container before private contents are written.
-`verifyPrivateDemoAccess(session, target, owner)` checks the isolated demo backend;
-real storage cannot pass that demo check. Both accept an injected fetch and storageUrl,
-webId and mode; unsupported access models fail closed.
+`ensurePrivateContainerAccess(session, target, { created, storage, acpDialect? })` from
+`./roles` returns a `checkOwnerOnly` verdict for a private app container. `target` must be a
+container (ending in `/`) below the storage root. Only when `created` is true, meaning the
+caller just created the container and has written nothing into it, does it provision an
+owner-only manager grant for the container and its members. Any other container is only
+verified, never rewritten, so a folder someone shared on purpose keeps its collaborators
+and is refused. Verification reads the effective WAC or ACP policy through `checkOwnerOnly`:
+owner grants inherited from ACP member policies are accepted, any other inherited or untyped
+rule refuses. `acpDialect` is a trusted assertion and defaults to CSS; ESS pods fail closed
+without it. Members that already carry their own ACL/ACR keep it, so callers should only
+create new member names inside the container. `verifyPrivateDemoAccess(session, target,
+owner)` checks the isolated demo backend; real storage cannot pass that demo check.

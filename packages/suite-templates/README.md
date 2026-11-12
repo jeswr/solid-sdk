@@ -22,12 +22,19 @@ images (siblings named `<id>.asset.*`; LWS keeps those names in resource metadat
 `*.template.ttl` metadata (including LWS display names) counts toward the 1,000-record
 limit. Invalid entries are skipped and reported to `onEntryError` (default: console.warn).
 Discovery is cached per account store; LWS collection names alone are never adopted.
-A new collection is registered before access is verified, because Solid servers drop the
-creation type link and the index is then the only way back to it.
-`ensurePrivateAccess` must establish or verify owner-only access before any content write;
-the suite uses pod-access's shared private-container helper. `copyImages` copies in-pod
-images to collection siblings, deduplicating and relocating editor JSON URL attributes.
-`copyTemplateImages` also supports instantiation through a caller's image uploader;
+Registrations that are missing, outside the storage or not containers are skipped, so a
+deleted collection is recreated. A new collection is registered before access is verified,
+because Solid servers drop the creation type link and the index is then the only way back.
+`ensurePrivateAccess(url, { created })` must establish or verify owner-only access before
+any content write; `created` is true only for a collection this store just created, which
+alone may be provisioned. The suite uses pod-access's `ensurePrivateContainerAccess`, which
+verifies an adopted collection and never rewrites its access. A refusal throws
+`TemplateAccessError` with a user-facing message. `copyImages(json, from)` copies only images
+that are direct children of `from` (the source's own assets container) into collection
+siblings, deduplicating and relocating editor JSON URL attributes; other in-pod images are
+kept as references and never fetched, and missing or non-image resources are skipped.
+`copyTemplateImages` also supports instantiation through a caller's image uploader with
+`outside: "refuse"`, which throws `TemplateImageError` before copying anything.
 `relocateAttributes` is shared with Docs copy/import. `templatePreview` bounds plain text
 previews to 160 characters. `container` and `assertContains` expose the located collection
 and logical-parent scope validation for nested template data. Failed

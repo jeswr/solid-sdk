@@ -282,6 +282,7 @@ it.each([
           contentType: "text/turtle",
         },
         assets,
+        `${DEMO_ROOT}notes/media/`,
       ),
   });
   expect(saved.data.previewText).toBe("First paragraph Second & last");
@@ -493,4 +494,69 @@ it("keeps Notes formatting through a user template's save and instantiation", as
     );
   }
   expect(saved.data.previewText).toBe("Plan Bold and soft code link Bullet Done");
+});
+// AUTHORED-BY Claude Opus 5.5 (test below)
+it("copies only the source document's own assets and refuses a template image stored elsewhere", async () => {
+  const { prepareTemplateContent } = await import("../src/lib/templates/content");
+  const { docContainerUrls } = await import("../src/apps/docs/lib/model/layout");
+  const { TemplateImageError } = await import("@jeswr/suite-templates");
+  const docs = createDocsStore({
+    podRoot: session.storageUrl,
+    webId: session.webId,
+    fetchImpl: session.fetch,
+  });
+  const source = await docs.create({ title: "Source", body: "<p>Source</p>" });
+  const own = `${docContainerUrls(source.url).assets}own.png`;
+  const foreign = `${DEMO_ROOT}photos/private.jpg`;
+  const missing = `${docContainerUrls(source.url).assets}missing.png`;
+  for (const url of [own, foreign])
+    expect(
+      (
+        await session.fetch(url, {
+          method: "PUT",
+          headers: { "content-type": "image/png" },
+          body: new Uint8Array([137, 80, 78, 71]),
+        })
+      ).ok,
+    ).toBe(true);
+  const reads: string[] = [];
+  const watched = {
+    ...session,
+    fetch: (async (input, init) => {
+      if (!init?.method || init.method === "GET") reads.push(String(input));
+      return session.fetch(input, init);
+    }) as typeof fetch,
+  };
+  const store = await templatesForSession(watched);
+  const saved = await store.save({
+    metadata: { name: "Mixed images", app: "docs", category: "Work" },
+    content: async (resource, assets) =>
+      prepareTemplateContent(
+        watched,
+        "docs",
+        resource,
+        {
+          body: await serializeTurtle(
+            buildDocument(resource, {
+              title: "Mixed images",
+              body: `<p>Text</p><img src="${own}"><img src="${foreign}"><img src="${missing}">`,
+            }),
+          ),
+          contentType: "text/turtle",
+        },
+        assets,
+        docContainerUrls(source.url).assets,
+      ),
+  });
+  expect(reads).toContain(own);
+  expect(reads).not.toContain(foreign);
+  const body = await store.content(saved);
+  expect(body.body).not.toContain(own);
+  expect(body.body).toContain(foreign);
+  expect(body.body).toContain(missing);
+  const before = (await docs.list()).length;
+  reads.length = 0;
+  await expect(createFromTemplate(watched, saved, body)).rejects.toBeInstanceOf(TemplateImageError);
+  expect(reads).not.toContain(foreign);
+  expect((await docs.list()).length).toBe(before);
 });

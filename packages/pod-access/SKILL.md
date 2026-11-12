@@ -346,8 +346,11 @@ lockout, aborts and both WAC/ACP transports covered at 100%. README documents no
 and final-check races; never promise transactional visibility.
 
 `./roles` exports `verifyPrivateDemoAccess(session, target, owner)`, the shared fail-closed
-check for the isolated demo backend, and `ensurePrivateContainerAccess(session, target)`.
-Call the latter only for an empty private container before writing any contents. Real
-sessions provision owner manager grants for both resource and members using `setGrants`
-and read them back. Unsupported models, inherited grants and verification failures refuse
-private writes. The session supplies fetch, storageUrl, webId and mode.
+check for the isolated demo backend, and `ensurePrivateContainerAccess(session, target,
+{ created, storage, acpDialect? })`. The target must be a container below the storage root.
+Provisioning (owner manager grants for resource and members, `setGrants` with `ownOnly`) runs
+only when `created` is true for a container the caller just made; never pass `created` for an
+adopted container, because `ownOnly` replaces every existing grant. Every call then returns
+`checkOwnerOnly`'s verdict on the effective policy, so inherited owner-only ACP member policies
+pass and any other grant, untyped rule or unknown model refuses. Existing members keep their
+own ACL/ACR: write only new member names. The dialect defaults to CSS (ESS fails closed).

@@ -11,6 +11,7 @@ import {
   serializeTemplate,
   TEMPLATE_APPS,
   TEMPLATE_CLASS,
+  TemplateAccessError,
   templateModel,
 } from "../src/index.js";
 
@@ -42,7 +43,7 @@ function createMemoryStorage(options: Parameters<typeof actualMemoryStorage>[0])
 }
 function createTemplateStore(
   options: Omit<Parameters<typeof actualCreateTemplateStore>[0], "ensurePrivateAccess"> & {
-    ensurePrivateAccess?: (url: string) => Promise<boolean>;
+    ensurePrivateAccess?: (url: string, context: { created: boolean }) => Promise<boolean>;
   },
 ) {
   return actualCreateTemplateStore({
@@ -511,7 +512,7 @@ it("refuses to save private content if access provisioning fails, and retries ve
   const ensurePrivateAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
   const content = vi.fn(input.content);
   const store = createTemplateStore({ storage, ensurePrivateAccess });
-  await expect(store.save({ metadata, content })).rejects.toThrow("private templates access");
+  await expect(store.save({ metadata, content })).rejects.toThrow("nothing was saved");
   expect(content).not.toHaveBeenCalled();
   expect((await storage.list(`${root}templates/`)).items).toEqual([]);
   await store.save({ metadata, content });
@@ -616,7 +617,7 @@ it("copies images into sibling resources before publishing metadata and normaliz
   const saved = await store.save({
     ...input,
     content: async (_url, { copyImages }) => {
-      const json = await copyImages({ type: "image", attrs: { src: asset.url } });
+      const json = await copyImages({ type: "image", attrs: { src: asset.url } }, root);
       return {
         body: JSON.stringify(json),
         contentType: "application/json",
@@ -652,8 +653,11 @@ it.each([
   const store = createTemplateStore({ storage: backend });
   const withImages = (name: string) => ({
     metadata: { ...metadata, name },
-    content: async (_url: string, { copyImages }: { copyImages: <T>(value: T) => Promise<T> }) => ({
-      body: JSON.stringify(await copyImages({ type: "image", attrs: { src: source.url } })),
+    content: async (
+      _url: string,
+      { copyImages }: { copyImages: <T>(value: T, from: string | undefined) => Promise<T> },
+    ) => ({
+      body: JSON.stringify(await copyImages({ type: "image", attrs: { src: source.url } }, root)),
       contentType: "application/json",
     }),
   });
@@ -693,13 +697,16 @@ it("refuses to delete a changed copied image and tolerates one already removed",
       metadata,
       content: async (_url, { copyImages }) => ({
         body: JSON.stringify(
-          await copyImages({
-            type: "doc",
-            content: [
-              { type: "image", attrs: { src: source.url } },
-              { type: "image", attrs: { src: second.url } },
-            ],
-          }),
+          await copyImages(
+            {
+              type: "doc",
+              content: [
+                { type: "image", attrs: { src: source.url } },
+                { type: "image", attrs: { src: second.url } },
+              ],
+            },
+            root,
+          ),
         ),
         contentType: "application/json",
       }),
@@ -738,12 +745,143 @@ it("recovers a created Solid collection that loses its type link after access ve
   );
   const ensurePrivateAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
   const options = { storage, profile: `${profile.url}#me`, ensurePrivateAccess };
-  await expect(createTemplateStore(options).save(input)).rejects.toThrow(
-    "private templates access",
-  );
+  await expect(createTemplateStore(options).save(input)).rejects.toThrow("nothing was saved");
   const store = createTemplateStore(options);
   const saved = await store.save(input);
   expect(await store.container()).toBe(`${root}templates/`);
   expect(await createTemplateStore(options).list()).toEqual([saved]);
   expect(ensurePrivateAccess).toHaveBeenCalledTimes(2);
+});
+it("copies only the source's own assets on save, keeping other in-pod references unread", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const docs = await storage.create(root, null, { kind: "container", name: "docs" });
+  const assets = await storage.create(docs.url, null, { kind: "container", name: "assets" });
+  const own = await storage.create(assets.url, new Uint8Array([1]), {
+    name: "own.png",
+    contentType: "image/png",
+  });
+  const nested = await storage.create(assets.url, null, { kind: "container", name: "nested" });
+  const deep = await storage.create(nested.url, new Uint8Array([2]), {
+    name: "deep.png",
+    contentType: "image/png",
+  });
+  const photo = await storage.create(root, new Uint8Array([3]), {
+    name: "private.jpg",
+    contentType: "image/jpeg",
+  });
+  const missing = `${assets.url}missing.png`;
+  const read = vi.fn(storage.read);
+  const store = createTemplateStore({ storage: override(storage, { read }) });
+  const sources = [own.url, deep.url, photo.url, `${own.url}?x`, missing];
+  const save = (from: string | undefined) =>
+    store.save({
+      metadata,
+      content: async (_url, { copyImages }) => ({
+        body: JSON.stringify(
+          await copyImages(
+            { type: "doc", content: sources.map((src) => ({ type: "image", attrs: { src } })) },
+            from,
+          ),
+        ),
+        contentType: "application/json",
+      }),
+    });
+  const saved = await save(assets.url);
+  const srcs = JSON.parse((await store.content(saved)).body).content.map(
+    (node: { attrs: { src: string } }) => node.attrs.src,
+  );
+  expect(await storage.parentOf(srcs[0])).toBe(await store.container());
+  expect(srcs.slice(1)).toEqual(sources.slice(1));
+  const fetched = read.mock.calls.map(([url]) => url);
+  expect(fetched).toContain(own.url);
+  for (const url of [deep.url, photo.url, `${own.url}?x`]) expect(fetched).not.toContain(url);
+  read.mockClear();
+  const untouched = await save(undefined);
+  expect(JSON.parse((await store.content(untouched)).body).content).toHaveLength(5);
+  expect(read.mock.calls.map(([url]) => url)).not.toContain(own.url);
+  await expect(save(own.url)).rejects.toThrow("assets container");
+});
+it("provisions access only for a collection it created, and only verifies an adopted one", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const ensurePrivateAccess = vi
+    .fn<(url: string, context: { created: boolean }) => Promise<boolean>>()
+    .mockResolvedValueOnce(false)
+    .mockResolvedValue(true);
+  const store = createTemplateStore({ storage, ensurePrivateAccess });
+  await expect(store.save(input)).rejects.toThrow(
+    "Couldn't make your new templates folder private",
+  );
+  await store.save(input);
+  expect(ensurePrivateAccess.mock.calls).toEqual([
+    [`${root}templates/`, { created: true }],
+    [`${root}templates/`, { created: true }],
+  ]);
+  const refused = vi.fn(async () => false);
+  const adopted = createTemplateStore({ storage, ensurePrivateAccess: refused });
+  await expect(adopted.save(input)).rejects.toBeInstanceOf(TemplateAccessError);
+  await expect(adopted.save(input)).rejects.toThrow("can be opened by other people");
+  expect(refused).toHaveBeenCalledTimes(2);
+  expect(refused).toHaveBeenCalledWith(`${root}templates/`, { created: false });
+  expect(await adopted.list()).toHaveLength(1);
+});
+it("skips stale, foreign and non-container registrations and recreates a deleted collection", async () => {
+  const storage = actualMemoryStorage({ root, protocol: "solid" });
+  const profile = await storage.create(
+    root,
+    await serializeTemplate(`${root}profile`, { ...metadata, content: `${root}content` }),
+    { name: "profile", contentType: "text/turtle" },
+  );
+  const options = { storage, profile: `${profile.url}#me` };
+  const first = createTemplateStore(options);
+  const saved = await first.save(input);
+  const container = await first.container();
+  assert(container);
+  const { createTypeIndex } = await import("@jeswr/pod-type-index");
+  const index = createTypeIndex({ storage, features: storage.features, profile: options.profile });
+  // Registrations another app wrote for a foreign origin and for a plain resource: the index
+  // itself refuses to write them, so rewrite registered placeholders in the stored document.
+  await index.register(TEMPLATE_CLASS, { container: `${root}placeholder/` });
+  await index.register(TEMPLATE_CLASS, { container: `${root}resource/` });
+  const documents = async function* (url: string): AsyncGenerator<string> {
+    for (const entry of (await storage.list(url)).items) {
+      if (entry.kind === "container") yield* documents(entry.url);
+      else yield entry.url;
+    }
+  };
+  for await (const url of documents(root)) {
+    const response = await storage.read(url);
+    const text = await response.text();
+    if (text.includes(`${root}placeholder/`))
+      await storage.write(
+        url,
+        text
+          .replace(`${root}placeholder/`, "https://evil.example/t/")
+          .replace(`${root}resource/`, profile.url),
+        {
+          contentType: response.contentType ?? "text/turtle",
+          ifMatch: response.etag ?? "",
+        },
+      );
+  }
+  // The user deletes the whole templates folder.
+  for (const entry of (await storage.list(container)).items)
+    await storage.delete(entry.url, { ifMatch: (await storage.head(entry.url)).etag ?? "" });
+  await storage.delete(container, { ifMatch: (await storage.head(container)).etag ?? "" });
+  const ensurePrivateAccess = vi.fn(async () => true);
+  const later = createTemplateStore({ ...options, ensurePrivateAccess });
+  expect(await later.list()).toEqual([]);
+  const again = await later.save(input);
+  expect(again.id).not.toBe(saved.id);
+  expect(ensurePrivateAccess).toHaveBeenCalledExactlyOnceWith(container, { created: true });
+  expect(await createTemplateStore(options).list()).toEqual([again]);
+  const failing = createTemplateStore({
+    storage: override(storage, {
+      head: async (url) => {
+        if (url === container) throw failure("forbidden");
+        return storage.head(url);
+      },
+    }),
+    profile: options.profile,
+  });
+  await expect(failing.list()).rejects.toMatchObject({ code: "forbidden" });
 });

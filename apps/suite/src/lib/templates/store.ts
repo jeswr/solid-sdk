@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { ensurePrivateContainerAccess } from "@jeswr/pod-access/roles";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
@@ -19,7 +20,9 @@ export function templatesForSession(session: PodSession) {
           storage,
           profile: session.webId,
           fetch: session.fetch,
-          ensurePrivateAccess: (url) => ensurePrivateContainerAccess(session, url),
+          // Provisions only a collection the store just created; an adopted one is verified.
+          ensurePrivateAccess: async (url, { created }) =>
+            (await ensurePrivateContainerAccess(session, url, { created, storage })).private,
         }),
       )
       .catch((error) => {

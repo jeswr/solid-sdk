@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import type { TemplateApp, TemplateBody } from "@jeswr/suite-templates";
+import { TemplateAccessError, type TemplateApp, type TemplateBody } from "@jeswr/suite-templates";
 import {
   Button,
   Dialog,
@@ -20,6 +21,7 @@ export function SaveTemplateDialog({
   app,
   title,
   content,
+  imagesFrom,
   open,
   onOpenChange,
 }: {
@@ -27,6 +29,8 @@ export function SaveTemplateDialog({
   app: TemplateApp;
   title: string;
   content: (resource: string) => TemplateBody | Promise<TemplateBody>;
+  /** The source's own assets container: only its direct-child images are copied. */
+  imagesFrom?: string | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -65,14 +69,27 @@ export function SaveTemplateDialog({
                     author: session.webId,
                   },
                   content: async (resource, assets) =>
-                    prepareTemplateContent(session, app, resource, await content(resource), assets),
+                    prepareTemplateContent(
+                      session,
+                      app,
+                      resource,
+                      await content(resource),
+                      assets,
+                      imagesFrom,
+                    ),
                 }),
               )
               .then(() => {
                 toast.success("Saved as template");
                 onOpenChange(false);
               })
-              .catch(() => setError("Couldn't save this template. Please try again."))
+              .catch((reason: unknown) =>
+                setError(
+                  reason instanceof TemplateAccessError
+                    ? reason.message
+                    : "Couldn't save this template. Please try again.",
+                ),
+              )
               .finally(() => setBusy(false));
           }}
         >

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../components/ui/button.js";
@@ -39,17 +40,30 @@ export function TemplateGallery({
   const [source, setSource] = useState("all");
   const id = useId();
   const [pendingDelete, setPendingDelete] = useState<string>();
-  const confirmRef = useRef<HTMLButtonElement>(null);
+  // Initial focus goes to the safe choice, never to the destructive one.
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const categoryRef = useRef<HTMLSelectElement>(null);
   const gridRef = useRef<HTMLUListElement>(null);
   const deleteTrigger = useRef<HTMLButtonElement | null>(null);
-  const removed = useRef<{ id: string; index: number } | undefined>(undefined);
+  const removed = useRef<{ id: string; index: number; started?: boolean } | undefined>(undefined);
   useEffect(() => {
-    if (pendingDelete) confirmRef.current?.focus();
+    if (pendingDelete) cancelRef.current?.focus();
   }, [pendingDelete]);
   useEffect(() => {
     const previous = removed.current;
-    if (busy || !previous || items.some((item) => item.id === previous.id)) return;
+    if (!previous) return;
+    if (busy) {
+      previous.started = true;
+      return;
+    }
+    if (items.some((item) => item.id === previous.id)) {
+      // The delete finished without removing the card: it failed. Return to its Delete button.
+      if (previous.started) {
+        removed.current = undefined;
+        deleteTrigger.current?.focus();
+      }
+      return;
+    }
     const choices = gridRef.current?.querySelectorAll<HTMLButtonElement>("[data-template-choice]");
     (choices?.[Math.min(previous.index, choices.length - 1)] ?? categoryRef.current)?.focus();
     removed.current = undefined;
@@ -144,74 +158,82 @@ export function TemplateGallery({
             buttons[next]?.focus();
           }}
         >
-          {filtered.map((item, index) => (
-            <li key={item.id} className="su-template-card">
-              <button
-                type="button"
-                data-template-choice
-                disabled={busy}
-                onClick={() => onChoose(item)}
-                aria-labelledby={`${id}-use ${id}-title-${index}`}
-                aria-describedby={`${id}-preview-${index} ${id}-description-${index}`}
-              >
-                {item.previewImage && /^https?:\/\//.test(item.previewImage) ? (
-                  // biome-ignore lint/performance/noImgElement: pod-owned preview URLs cannot use a Next image proxy
-                  <img src={item.previewImage} alt="" loading="lazy" referrerPolicy="no-referrer" />
-                ) : (
-                  <span id={`${id}-preview-${index}`} className="su-template-preview">
-                    {item.previewText || item.description}
-                  </span>
-                )}
-                <strong id={`${id}-title-${index}`}>{item.name}</strong>
-                <span id={`${id}-description-${index}`}>
-                  <span>{item.description}</span>
-                  <small>
-                    {item.app} · {item.category} ·{" "}
-                    {item.source === "user" ? "My templates" : "Built-in"}
-                  </small>
-                </span>
-              </button>
-              {item.source === "user" && onDelete && (
-                <Button
-                  variant="ghost"
+          {filtered.map((item, index) => {
+            const image = !!item.previewImage && /^https?:\/\//.test(item.previewImage);
+            return (
+              <li key={item.id} className="su-template-card">
+                <button
+                  type="button"
+                  data-template-choice
                   disabled={busy}
-                  onClick={(event) => {
-                    deleteTrigger.current = event.currentTarget;
-                    setPendingDelete(item.id);
-                  }}
-                  aria-label={`Delete template ${item.name}`}
+                  onClick={() => onChoose(item)}
+                  aria-labelledby={`${id}-use ${id}-title-${index}`}
+                  aria-describedby={`${image ? "" : `${id}-preview-${index} `}${id}-description-${index}`}
                 >
-                  Delete
-                </Button>
-              )}
-              {pendingDelete === item.id && onDelete && (
-                <fieldset aria-label={`Confirm deletion of ${item.name}`}>
-                  <p>Delete this template? Documents already created from it will be kept.</p>
+                  {image ? (
+                    // biome-ignore lint/performance/noImgElement: pod-owned preview URLs cannot use a Next image proxy
+                    <img
+                      src={item.previewImage}
+                      alt=""
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span id={`${id}-preview-${index}`} className="su-template-preview">
+                      {item.previewText || item.description}
+                    </span>
+                  )}
+                  <strong id={`${id}-title-${index}`}>{item.name}</strong>
+                  <span id={`${id}-description-${index}`}>
+                    <span>{item.description}</span>
+                    <small>
+                      {item.app} · {item.category} ·{" "}
+                      {item.source === "user" ? "My templates" : "Built-in"}
+                    </small>
+                  </span>
+                </button>
+                {item.source === "user" && onDelete && (
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     disabled={busy}
-                    onClick={() => {
-                      setPendingDelete(undefined);
-                      deleteTrigger.current?.focus();
+                    onClick={(event) => {
+                      deleteTrigger.current = event.currentTarget;
+                      setPendingDelete(item.id);
                     }}
+                    aria-label={`Delete template ${item.name}`}
                   >
-                    Cancel deletion
+                    Delete
                   </Button>
-                  <Button
-                    ref={confirmRef}
-                    disabled={busy}
-                    onClick={() => {
-                      removed.current = { id: item.id, index };
-                      setPendingDelete(undefined);
-                      onDelete(item);
-                    }}
-                  >
-                    Confirm delete
-                  </Button>
-                </fieldset>
-              )}
-            </li>
-          ))}
+                )}
+                {pendingDelete === item.id && onDelete && (
+                  <fieldset aria-label={`Confirm deletion of ${item.name}`}>
+                    <p>Delete this template? Documents already created from it will be kept.</p>
+                    <Button
+                      ref={cancelRef}
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        setPendingDelete(undefined);
+                        deleteTrigger.current?.focus();
+                      }}
+                    >
+                      Cancel deletion
+                    </Button>
+                    <Button
+                      disabled={busy}
+                      onClick={() => {
+                        removed.current = { id: item.id, index };
+                        setPendingDelete(undefined);
+                        onDelete(item);
+                      }}
+                    >
+                      Confirm delete
+                    </Button>
+                  </fieldset>
+                )}
+              </li>
+            );
+          })}
         </ul>
         {!filtered.length && !loading && <p>No templates match these filters.</p>}
       </DialogContent>

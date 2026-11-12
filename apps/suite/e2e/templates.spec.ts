@@ -47,7 +47,7 @@ test("demo Docs creates Meeting notes, saves a pod template and reuses it", asyn
   await gallery
     .getByRole("button", { name: "Delete template My meeting starter", exact: true })
     .click();
-  await expect(gallery.getByRole("button", { name: "Confirm delete", exact: true })).toBeFocused();
+  await expect(gallery.getByRole("button", { name: "Cancel deletion", exact: true })).toBeFocused();
   await gallery.getByRole("button", { name: "Cancel deletion", exact: true }).click();
   await expect(
     gallery.getByRole("button", { name: "Delete template My meeting starter", exact: true }),
