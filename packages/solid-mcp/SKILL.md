@@ -57,6 +57,13 @@ Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for R
 reads; generic byte reads must retain the backend default representation.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
+Chat saves explicitly use channel `mcp` and scope source IDs with
+`chatConversationId(id, account)` before saving. Validate optional account inputs
+with `normalizeChatAccount`; use ChatWriter for label redaction and immutable
+first-write PROV/FOAF/DCMI metadata. Reads/exports use stored IDs and expose account
+and channel; escape account transcript headers like titles. Keep no-account ID
+derivation unchanged. Shared CLI config accepts `account` / `SOLID_MCP_ACCOUNT`
+for capture/import callers, independently of the tool's explicit account input.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.

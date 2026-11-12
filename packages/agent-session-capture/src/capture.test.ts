@@ -88,6 +88,62 @@ afterEach(async () => {
 });
 
 describe("capture with real ChatWriter and client credentials", () => {
+  it.each([
+    null,
+    7,
+    "",
+    "bad\u200baccount",
+  ])("refuses invalid account options before queueing or requests %#", async (account) => {
+    expect(
+      await runCapture(["claude", "--transcript", transcript], {
+        ...options,
+        account: account as string,
+      }),
+    ).toBe(0);
+    expect(transport.requests).toEqual([]);
+    await expect(readdir(queue())).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it.each([
+    "claude",
+    "codex",
+  ])("isolates %s account checkpoints and preserves hook provenance on replay", async (provider) => {
+    if (provider === "codex") await rollout(await fixture("codex"));
+    const args =
+      provider === "claude"
+        ? [provider, "--transcript", transcript]
+        : [
+            provider,
+            JSON.stringify({
+              type: "agent-turn-complete",
+              "thread-id": "codex-fixture-session",
+              cwd,
+            }),
+          ];
+    // Queue Work offline, then switch account on the same pod without relabelling its backlog.
+    await runCapture(args, {
+      ...options,
+      account: "Work",
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+    expect(await queued()).toHaveLength(1);
+    await runCapture(args, { ...options, env: { ...env, SOLID_MCP_ACCOUNT: "Personal" } });
+    expect(await queued()).toHaveLength(1);
+    expect([...transport.resources.values()].join("")).toContain('"Personal"');
+    expect([...transport.resources.values()].join("")).not.toContain('"Work"');
+    await runCapture(args, { ...options, account: "Work" });
+    expect(await queued()).toHaveLength(0);
+    expect([...transport.resources.values()].join("")).toContain('"Work"');
+    expect([...transport.resources.values()].join("")).toContain('"hook"');
+    const before = new Map(transport.resources);
+    await runCapture(args, { ...options, account: "Work" });
+    await runCapture(args, { ...options, account: "Personal" });
+    expect(transport.resources).toEqual(before);
+    expect(
+      [...transport.resources.keys()].filter((url) => url.endsWith("_conversation.ttl")),
+    ).toHaveLength(2);
+  });
   it("writes private redacted AS2 with DPoP and re-runs idempotently", async () => {
     const text = await readFile(transcript, "utf8");
     await writeFile(

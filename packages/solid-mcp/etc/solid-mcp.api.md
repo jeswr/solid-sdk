@@ -15,6 +15,7 @@ export const AUDITED_READ_HINTS: ToolHints;
 
 // @public
 export interface CliConfig {
+    account?: string;
     // (undocumented)
     clientId?: string;
     // (undocumented)
