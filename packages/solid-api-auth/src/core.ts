@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 /**
  * core.ts — server-side DPoP-bound access-token verification + owner authorization for an
@@ -48,23 +49,16 @@
  * challenge. No token → 401 + `WWW-Authenticate: DPoP`; a valid token for the wrong WebID → 403.
  *
  * ── SERVER-ONLY ───────────────────────────────────────────────────────────────
- * Imports `node:crypto` + (lazily) `@jeswr/guarded-fetch/node` (undici) + (lazily)
+ * Imports `node:crypto` + (lazily) `@jeswr/guarded-fetch/node` (undici) +
  * `@jeswr/fetch-rdf`. MUST be imported only from route handlers / server code, never a client
  * component.
  */
 import { createHash } from "node:crypto";
-import {
-  calculateJwkThumbprint,
-  createRemoteJWKSet,
-  EmbeddedJWK,
-  type JWK,
-  type JWTPayload,
-  jwtVerify,
-} from "jose";
-import * as oauth from "oauth4webapi";
-
-/** `solid:oidcIssuer` — the WebID-profile predicate the bidirectional check reads. */
-const SOLID_OIDC_ISSUER = "http://www.w3.org/ns/solid/terms#oidcIssuer";
+import { calculateJwkThumbprint, EmbeddedJWK, type JWK, type JWTPayload, jwtVerify } from "jose";
+import type * as oauth from "oauth4webapi";
+import { createDiscoveryCache } from "./discovery-cache.js";
+import { createIssuerKeyResolver } from "./issuer-keys.js";
+import { readWebIdIssuers } from "./webid-issuers.js";
 
 /**
  * Asymmetric signature algorithms accepted for BOTH the access token and the DPoP proof.
@@ -345,7 +339,7 @@ export class TokenBucketRateLimiter implements RateLimiter {
 
 /** The verification key set for an issuer, plus dev-only HTTP relaxation. */
 export interface IssuerKeys {
-  /** The `jose` key resolver (`createRemoteJWKSet` in prod; `createLocalJWKSet` in tests). */
+  /** The `jose` key resolver (shared guarded JWKS coordination by default). */
   readonly jwks: Parameters<typeof jwtVerify>[1];
   /** Allow OIDC discovery / JWKS over plain HTTP — loopback dev IdP only. */
   readonly allowInsecureRequests?: boolean;
@@ -394,13 +388,13 @@ export interface DpopApiVerifierOptions {
    * one and the forwarded headers carry the real external origin.
    */
   readonly trustForwardedHeaders?: boolean;
-  /** Issuer→keys resolver. Default: OIDC discovery + remote JWKS (issuer-agnostic). */
+  /** Issuer→keys resolver. Default: bounded, guarded discovery/JWKS via createIssuerKeyResolver. */
   readonly resolveIssuer?: ResolveIssuer;
   /** Replay store. Default: a fresh {@link InProcessReplayStore}. */
   readonly replayStore?: ReplayStore;
   /**
-   * SSRF-guarded fetch for the WebID profile (the bidirectional check). Default: a DNS-pinning
-   * `@jeswr/guarded-fetch/node` fetch (loaded lazily). Test seam.
+   * SSRF-guarded fetch for WebID profiles and the default discovery/JWKS resolver. Default:
+   * a DNS-pinning `@jeswr/guarded-fetch/node` fetch (loaded lazily). Test seam.
    */
   readonly webidFetch?: typeof fetch;
   /** Injected clock (`Date.now`) for deterministic tests. */
@@ -449,8 +443,6 @@ export class DpopApiVerifier {
   private readonly injectedWebidFetch: typeof fetch | undefined;
   private readonly now: () => number;
   private readonly log: Required<AuthLogger>;
-  /** Cached per-issuer keys (the promise, so concurrent first-requests share discovery). */
-  private readonly issuerKeys = new Map<string, Promise<IssuerKeys>>();
   /** Lazily-built guarded fetch (undici DNS-pinning) — created on first bidirectional check. */
   private lazyWebidFetch: typeof fetch | undefined;
 
@@ -465,7 +457,17 @@ export class DpopApiVerifier {
     this.clockToleranceSec = options.clockToleranceSec ?? DEFAULT_CLOCK_TOLERANCE_SEC;
     this.allowInsecureLoopback = options.allowInsecureLoopback ?? false;
     this.trustForwardedHeaders = options.trustForwardedHeaders ?? false;
-    this.resolveIssuer = options.resolveIssuer ?? ((issuer) => this.discoverIssuer(issuer));
+    if (options.resolveIssuer) {
+      const resolver = options.resolveIssuer;
+      const cache = createDiscoveryCache<IssuerKeys>(options.now ?? Date.now);
+      this.resolveIssuer = (issuer) => cache(issuer, async () => resolver(issuer));
+    } else {
+      this.resolveIssuer = createIssuerKeyResolver({
+        outboundFetch: async (input, init) => (await this.webidFetch())(input, init),
+        now: options.now,
+        allowInsecureLoopback: this.allowInsecureLoopback,
+      });
+    }
     this.replayStore = options.replayStore ?? new InProcessReplayStore({ now: options.now });
     this.injectedWebidFetch = options.webidFetch;
     this.now = options.now ?? Date.now;
@@ -581,7 +583,7 @@ export class DpopApiVerifier {
   ): Promise<oauth.JWTAccessTokenClaims> {
     let claims: oauth.JWTAccessTokenClaims;
     try {
-      const keys = await this.keysFor(claimedIssuer);
+      const keys = await this.resolveIssuer(claimedIssuer);
       const { payload } = await jwtVerify(token, keys.jwks, {
         typ: ACCESS_TOKEN_TYP,
         algorithms: SIGNING_ALGS,
@@ -782,26 +784,7 @@ export class DpopApiVerifier {
    */
   private async fetchWebIdIssuers(webId: string): Promise<Set<string>> {
     const fetchImpl = await this.webidFetch();
-    const { fetchRdf } = await import("@jeswr/fetch-rdf");
-    const { dataset } = await fetchRdf(webId, { fetch: fetchImpl });
-    const profileUrl = stripFragment(webId);
-    const issuers = new Set<string>();
-    for (const quad of dataset as Iterable<{
-      subject: { termType: string; value: string };
-      predicate: { value: string };
-      object: { termType: string; value: string };
-    }>) {
-      if (quad.predicate.value !== SOLID_OIDC_ISSUER) {
-        continue;
-      }
-      if (quad.subject.value !== webId && quad.subject.value !== profileUrl) {
-        continue;
-      }
-      if (quad.object.termType === "NamedNode") {
-        issuers.add(quad.object.value);
-      }
-    }
-    return issuers;
+    return new Set(await readWebIdIssuers(webId, fetchImpl, true));
   }
 
   /** The SSRF-guarded fetch for WebID profiles (injected in tests; built lazily otherwise). */
@@ -814,47 +797,6 @@ export class DpopApiVerifier {
       this.lazyWebidFetch = createNodeGuardedFetch({ allowLoopback: this.allowInsecureLoopback });
     }
     return this.lazyWebidFetch;
-  }
-
-  /** Get (or cache) an issuer's verification keys; a rejected discovery is evicted so it can retry. */
-  private async keysFor(issuer: string): Promise<IssuerKeys> {
-    let pending = this.issuerKeys.get(issuer);
-    if (!pending) {
-      pending = Promise.resolve(this.resolveIssuer(issuer));
-      this.issuerKeys.set(issuer, pending);
-    }
-    try {
-      return await pending;
-    } catch (error) {
-      this.issuerKeys.delete(issuer);
-      throw error;
-    }
-  }
-
-  /**
-   * The default issuer resolver: OIDC discovery (`${issuer}/.well-known/openid-configuration`,
-   * issuer cross-checked) via `oauth4webapi`, then a cached remote JWKS over the discovered
-   * `jwks_uri`. The issuer is operator-configured (a trusted-list entry), NOT user-influenced,
-   * so discovery does not need the SSRF guard (unlike the WebID fetch, which does).
-   */
-  private async discoverIssuer(issuer: string): Promise<IssuerKeys> {
-    const issuerUrl = new URL(issuer);
-    const allowInsecure = this.allowInsecureLoopback && isLoopbackHttp(issuer);
-    const res = await oauth.discoveryRequest(issuerUrl, {
-      algorithm: "oidc",
-      ...(allowInsecure ? { [oauth.allowInsecureRequests]: true } : {}),
-    });
-    const as = await oauth.processDiscoveryResponse(issuerUrl, res);
-    if (as.issuer !== issuer) {
-      throw new Error(`OIDC discovery issuer mismatch for ${issuer} (got ${as.issuer}).`);
-    }
-    if (typeof as.jwks_uri !== "string" || as.jwks_uri.length === 0) {
-      throw new Error(`OIDC discovery for ${issuer} has no jwks_uri.`);
-    }
-    return {
-      jwks: createRemoteJWKSet(new URL(as.jwks_uri)),
-      allowInsecureRequests: allowInsecure,
-    };
   }
 
   /** Build an {@link ApiAuthError} (401) with an RFC 6750 / 9449-style `WWW-Authenticate`. */
@@ -1101,17 +1043,6 @@ function normalizeHtu(htu: string): string | undefined {
   url.search = "";
   url.hash = "";
   return url.href;
-}
-
-/** Strip the fragment from a WebID → its profile-document URL. */
-function stripFragment(webId: string): string {
-  try {
-    const url = new URL(webId);
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return webId.split("#")[0] ?? webId;
-  }
 }
 
 /** Whether a value is a plain JSON object (not null, not an array). */
