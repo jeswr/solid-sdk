@@ -248,6 +248,12 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   to the instance are revoked (RFC 7009) when the server supports it, after local cleanup releases the fence
   lock. Each revocation has a five-second deadline and aborts on timeout; failures reject logout after local
   state is cleared. Logout does not end the session at the identity provider.
+  `OidcSessionOptions.revocationSignal` lets an owning instance cancel revocation requests, stalled
+  response bodies and their deadlines on disposal. Aborting it alone does not purge session stores;
+  an explicit logout still performs its local cleanup before revocation.
+- With `preserveRefreshOnFailure`, rotation replaces the durable record in one write under the existing
+  refresh lock and fence commit, before profile revalidation. Readers see the old or replacement record,
+  without a deletion gap. A failed replacement removes the consumed credential and propagates the error.
 - `OidcSession.identity()` returns `undefined` if logout supersedes its session while a cache or durable
   store read is pending. Store failures still reject the lookup; reading identity never starts a login.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security
@@ -328,15 +334,48 @@ MIT licensed; see [LICENSE](LICENSE).
 
 `createServerOidcClient` supplies a split authorization/callback/refresh flow to `pod-auth/node`.
 It uses oauth4webapi for discovery, S256, state/nonce, signed ID-token validation and DPoP.
+By default, callback and refresh ID tokens must identify an HTTPS WebID whose RDF profile lists
+the validated token's `iss` as `solid:oidcIssuer`. This applies to both the `webid` claim and the
+`sub` fallback, including configurations whose URL normalizes host case or the default port.
+Verification requires a separate `profileFetch` transport: construction fails before discovery
+when it is missing. It **must enforce SSRF protection**, rejecting private/loopback addresses,
+pinning validated DNS answers, checking every redirect target and honoring AbortSignal.
+The engine does not implement that network policy and never falls back to the caller's `fetch`.
+For example, a Node broker that already depends on `@jeswr/guarded-fetch` can supply
+`profileFetch: createNodeGuardedFetch({ maxBytes: 256 * 1024, timeoutMs: 8_000, maxRedirects: 0 })`
+from `@jeswr/guarded-fetch/node`.
+
+Profiles are fetched without credentials, with at most five HTTPS redirects, a 256 KiB streaming
+byte cap (also checked against Content-Length) and one eight-second deadline across fetching,
+redirects and body reading. The engine requests and parses **Turtle only**; JSON-LD-only profiles
+are unsupported. The package has no fetch-rdf dependency and this maintenance change adds none.
+Missing trust or retrieval failures reject the grant before installing credentials.
+`verifyWebId: false` skips this profile check only; use it only when the caller independently
+verifies the WebID-to-issuer binding, for example through guarded fetch-rdf with content negotiation.
+
+**Refresh rotation and profile failures:** the OP may already have consumed the supplied refresh
+token and issued its replacement before a profile fetch or trust check fails. In that case this
+API throws and does not return the rotated tokens; retrying the old refresh token is unsafe and
+may revoke the OP session. Brokers using engine verification must require a new login after that
+failure. Brokers that need to retry transient profile verification independently must use
+`verifyWebId: false`, persist returned refresh rotation before their own profile check, and keep
+resource access blocked until verification succeeds.
+
 The broker owns encrypted pending-state and private-JWK envelopes, single-use callback consumption,
-refresh CAS, durable retirement and URL scope. A server signing key is exported once for its encrypted
+refresh CAS, durable retirement and session liveness. A server signing key is exported once for its encrypted
 JSON vault, then imported non-extractably; browser sessions retain CryptoKey persistence.
 Resource bodies have an abortable 10 MiB replay cap and nonce challenges retry once.
+Pass `allows: (url: URL) => boolean` to bound resource requests, for example
+`allows: url => url.origin === "https://pod.example"`. A denied URL throws before buffering or
+sending the request; the predicate is checked again immediately before every resource send,
+including DPoP nonce retries and LWS Bearer retries. Without `allows`, **there is no resource
+boundary**: `fetch()` attaches credentials to any requested URL, and the caller must enforce scope.
+The predicate does not govern issuer discovery, WebID profiles or token exchanges; `fetch`
+governs discovery/exchanges and the required `profileFetch` governs profile network policy.
 With `lws: true`, resource challenges also route through `LwsTokenProvider`, exchanging the
 current verified OIDC ID token (URI `sub` and matching client `azp`) for a storage-audience
 Bearer token. Exchanged tokens stay in
-memory; a missing or expired ID token fails closed. The broker must enforce resource scope
-and session liveness on its injected transport, including discovery, exchange and Bearer retries.
-Pass `trustAuthorizationServer` to decide which authorization servers may receive the ID token;
-without it, any server listed in a resource's RFC 9728 metadata is trusted, so brokers should
-always set it.
+memory; a missing or expired ID token fails closed. `lws: true` requires a
+`trustAuthorizationServer` policy deciding which authorization servers may receive the ID token;
+construction throws before discovery when it is absent. The broker must enforce session liveness
+on its injected transport, including discovery, exchange and Bearer retries.

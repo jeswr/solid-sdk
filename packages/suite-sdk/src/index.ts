@@ -25,6 +25,8 @@ export {
   roomInvitation,
   shareNotification,
 } from "@jeswr/pod-access/notify";
+export type { AccountsSession } from "./accounts.js";
+export { AccountsProvider, useAccounts } from "./accounts.js";
 export type { UseInboxResult } from "./use-inbox.js";
 export { useInbox } from "./use-inbox.js";
 export type {
