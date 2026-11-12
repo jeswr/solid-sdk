@@ -1,29 +1,52 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, ErrorState, Skeleton } from "@jeswr/suite-ui";
-import { Search, StickyNote } from "lucide-react";
+import { Button, EmptyState, ErrorState, Skeleton } from "@jeswr/suite-ui";
+import { StickyNote } from "lucide-react";
 import { useEffect, useState } from "react";
-import { selectNotes } from "../lib/model/query";
+import { hasNoteReminder, selectNotes } from "../lib/model/query";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
+import {
+  matchesNoteSearch,
+  type NoteSearchFilters,
+  serializeNoteSearch,
+} from "../lib/search-filters";
 import { useNotesContext } from "../state/notes-context";
 import { CaptureBar } from "./capture-bar";
 import { ConfirmDialog } from "./controls";
 import { NoteCard } from "./note-card";
 import { NoteFailures } from "./note-failures";
+import { SearchFilters } from "./search-filters";
 
 export function NotesGrid({
   view = "active",
   label,
   query = "",
+  filters,
 }: {
   view?: "active" | "archived" | "trashed" | "label" | "search" | "reminders";
   label?: string;
   query?: string;
+  filters?: NoteSearchFilters;
 }) {
-  const { notes, prefs, active, archived, trashed, refresh, store } = useNotesContext();
+  const {
+    notes,
+    prefs,
+    active,
+    archived,
+    trashed,
+    refresh,
+    store,
+    session,
+    labels = [],
+    sharedNotes = {},
+    collaborators = {},
+  } = useNotesContext();
+  const search = filters ?? { q: query };
+  const searchContext = { prefs, podRoot: session.storageUrl, sharedNotes, collaborators };
+  const browsing = view === "search" && !serializeNoteSearch(search);
   const [now, setNow] = useState(Date.now);
-  const hasReminders = notes.some((note) => note.location !== "trashed" && !!note.reminder);
+  const hasReminders = notes.some((note) => note.location !== "trashed" && hasNoteReminder(note));
   useEffect(() => {
     if (!hasReminders) return;
     const update = () => setNow(Date.now());
@@ -45,14 +68,17 @@ export function NotesGrid({
     ? (active.loading && !active.data) || (archived.loading && !archived.data)
     : resource.loading && !resource.data;
   const error = combined ? active.error || archived.error : resource.error;
-  const selected = selectNotes(notes, prefs, {
+  const candidates = searching
+    ? notes.filter((note) => matchesNoteSearch(note, { ...search, q: "" }, searchContext))
+    : notes;
+  const selected = selectNotes(candidates, prefs, {
     location: view === "reminders" ? "reminders" : location,
     ...(label === undefined ? {} : { labels: [label] }),
-    query: searching ? query : "",
+    query: searching ? search.q : "",
     now,
   });
   if (searching) {
-    const archive = selectNotes(notes, prefs, { location: "archived", query });
+    const archive = selectNotes(candidates, prefs, { location: "archived", query: search.q });
     selected.others.push(...archive.others);
   }
   const sections = selected.sections ?? [
@@ -81,15 +107,21 @@ export function NotesGrid({
           ? "No notes in Trash"
           : view === "label"
             ? "No notes with this label"
-            : searching
-              ? "No matching notes"
-              : "Notes you add appear here";
+            : "Notes you add appear here";
   return (
     <div className="notes-workspace" data-view={prefs.view}>
       <header className="notes-page-heading">
         <h1>{title}</h1>
-        {searching && <p>Results for “{query}”</p>}
+        {searching && search.q && <p>Results for “{search.q}”</p>}
       </header>
+      {searching && !loading && !error && (
+        <SearchFilters filters={search} notes={notes} labels={labels} context={searchContext} />
+      )}
+      {searching && !browsing && !loading && !error && (
+        <p role="status" aria-live="polite" aria-atomic="true" className="notes-search-count">
+          {count} {count === 1 ? "note" : "notes"} found
+        </p>
+      )}
       {(view === "active" || view === "label") && (
         <CaptureBar key={label ?? "active"} {...(label === undefined ? {} : { label })} />
       )}
@@ -118,13 +150,15 @@ export function NotesGrid({
         </div>
       ) : error ? (
         <ErrorState error="unreachable" actions={{ retry: () => void refresh() }} />
+      ) : browsing ? null : count === 0 && searching ? (
+        <EmptyState
+          variant="filtered-empty"
+          title="No matching notes"
+          body="Try another search or remove a filter."
+        />
       ) : count === 0 ? (
         <div className="notes-empty">
-          {searching ? (
-            <Search size={52} aria-hidden="true" />
-          ) : (
-            <StickyNote size={52} aria-hidden="true" />
-          )}
+          <StickyNote size={52} aria-hidden="true" />
           <h2>{empty}</h2>
         </div>
       ) : (

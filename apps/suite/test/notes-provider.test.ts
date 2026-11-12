@@ -6,6 +6,7 @@ import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { privateAcl } from "../src/apps/drive/lib/client/access";
 import { NoteMoveBlockedError } from "../src/apps/notes/lib/model/errors";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
+import { NoteSharingAdapter } from "../src/apps/notes/lib/sharing";
 import { getPendingDrafts } from "../src/apps/notes/state/draft-registry";
 import { NotesProvider, useNotesContext } from "../src/apps/notes/state/notes-context";
 import { useNoteDraft } from "../src/apps/notes/state/use-note-draft";
@@ -98,6 +99,33 @@ it("keeps all three lists mounted across route and dialog navigation", async () 
   history.replaceState({ from: "https://untrusted.example/" }, "");
   await act(() => s.value.closeNote());
   expect(navigation.push).toHaveBeenLastCalledWith("/notes", { scroll: false });
+});
+
+it("exposes discovered collaborators for search and refreshes them after sharing changes", async () => {
+  const s = await fixture();
+  const bob = "https://notes.example/bob#me";
+  let adapter!: NoteSharingAdapter;
+  let url!: string;
+  await act(async () => {
+    const note = await s.value.create({ title: "Shared garden" }, false, "default");
+    url = note.url;
+    adapter = new NoteSharingAdapter(note, s.value.session);
+    await adapter.load(url, new AbortController().signal);
+    await adapter.setPerson(url, bob, "viewer");
+    s.value.refreshSharing();
+  });
+  await vi.waitFor(() => {
+    expect(s.value.sharedNotes[url]).toBe(true);
+    expect(s.value.collaborators[url]).toEqual([bob]);
+  });
+  await act(async () => {
+    await adapter.setPerson(url, bob, null);
+    s.value.refreshSharing();
+  });
+  await vi.waitFor(() => {
+    expect(s.value.sharedNotes[url]).toBe(false);
+    expect(s.value.collaborators[url]).toEqual([]);
+  });
 });
 
 it("keeps acknowledged text and ETags while the provider's list refresh is deferred", async () => {
