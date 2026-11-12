@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { VaultMutex } from "./vault-lock.js";
 /** Browser-safe encrypted refresh credentials. Hosts own the key and storage lifetime. */
 export interface VaultKey {
   readonly connectorId: string;
@@ -23,6 +24,8 @@ export interface VaultRecord {
 
 /** Ciphertext-only port. IDs are canonical JSON tuples; list must be bounded. */
 export interface VaultStore {
+  /** Serializes a complete credential operation. Callbacks must not reacquire the same key. */
+  withLock?<T>(id: string, fn: () => Promise<T>): Promise<T>;
   get(id: string): Promise<string | undefined>;
   put(id: string, sealed: string): Promise<void>;
   delete(id: string): Promise<void>;
@@ -245,12 +248,33 @@ export async function generateBrowserVaultKey(): Promise<CryptoKey> {
 }
 
 export class ConnectorTokenVault {
+  readonly withLock?: <T>(key: VaultKey, fn: () => Promise<T>) => Promise<T>;
   constructor(
     private readonly key: CryptoKey,
     private readonly store: VaultStore,
   ) {
     try {
       validateVaultCryptoKey(key);
+      const withLock = store.withLock?.bind(store);
+      if (withLock)
+        this.withLock = async (key, fn) => {
+          let callbackError: unknown;
+          let callbackFailed = false;
+          try {
+            return await withLock(vaultId(key), async () => {
+              try {
+                return await fn();
+              } catch (error) {
+                callbackFailed = true;
+                callbackError = error;
+                throw error;
+              }
+            });
+          } catch (error) {
+            if (callbackFailed && error === callbackError) throw error;
+            throw new ConnectorVaultError();
+          }
+        };
     } catch {
       throw new ConnectorVaultError();
     }
@@ -294,8 +318,6 @@ export class ConnectorTokenVault {
     try {
       const id = vaultId(key);
       plaintext = new TextEncoder().encode(JSON.stringify(record(value)));
-      const previous = await this.store.get(id);
-      if (previous !== undefined) await this.unseal(id, previous);
       const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
       const ciphertext = await globalThis.crypto.subtle.encrypt(
         {
@@ -339,6 +361,11 @@ export class ConnectorTokenVault {
 /** Bounded, single-process fixture storage. Contains ciphertext only. */
 export class MemoryVaultStore implements VaultStore {
   private readonly values = new Map<string, string>();
+  private readonly mutex = new VaultMutex();
+  withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    vaultKey(id);
+    return this.mutex.withLock(id, fn);
+  }
   async get(id: string): Promise<string | undefined> {
     vaultKey(id);
     return this.values.get(id);

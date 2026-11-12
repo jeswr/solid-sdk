@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { constants } from "node:fs";
+import { constants, lstatSync, mkdirSync, opendirSync, realpathSync, unlinkSync } from "node:fs";
 import { type FileHandle, lstat, mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { dirname, join, parse, resolve } from "node:path";
-import { getuid } from "node:process";
+import { getuid, platform } from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   ConnectorVaultError,
   MAX_SEALED_CHARS,
@@ -13,6 +14,26 @@ import {
 } from "../vault.js";
 
 const MAX_FILE_BYTES = MAX_SEALED_CHARS + 16 * 1024;
+const TEMP_NAME =
+  /^[a-f0-9]{64}\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.tmp$/;
+const MAX_SCAN_ENTRIES = 10000;
+function safeFile(stat: import("node:fs").Stats): boolean {
+  return (
+    stat.isFile() &&
+    stat.nlink === 1 &&
+    (stat.mode & 0o077) === 0 &&
+    stat.size <= MAX_FILE_BYTES &&
+    stat.uid === getuid?.()
+  );
+}
+function safeAncestor(stat: import("node:fs").Stats): boolean {
+  return (
+    stat.isDirectory() &&
+    !stat.isSymbolicLink() &&
+    (stat.uid === 0 || stat.uid === getuid?.()) &&
+    ((stat.mode & 0o022) === 0 || (stat.mode & 0o1000) !== 0)
+  );
+}
 function missing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException)?.code === "ENOENT";
 }
@@ -25,13 +46,151 @@ async function removeTemporary(path: string): Promise<void> {
   }
 }
 
-/** Private local ciphertext files. Hosts must serialize refreshes across processes. */
+/** Private POSIX ciphertext files with per-record refresh ownership across processes. */
 export class FileVaultStore implements VaultStore {
   private readonly directory: string;
   constructor(directory: string) {
+    if (platform === "win32") throw new Error("FileVaultStore requires a POSIX filesystem");
     try {
       if (typeof directory !== "string" || directory.length > 4096) throw new ConnectorVaultError();
-      this.directory = resolve(directory);
+      const requested = resolve(directory);
+      // The final directory must never be a link. Ancestor aliases (e.g. macOS /tmp)
+      // are resolved once, then all creation and safety checks use that canonical path.
+      try {
+        if (lstatSync(requested).isSymbolicLink()) throw new ConnectorVaultError();
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      let ancestor = requested;
+      const suffix: string[] = [];
+      for (;;) {
+        try {
+          ancestor = realpathSync(ancestor);
+          break;
+        } catch (error) {
+          if (!missing(error) || suffix.length >= 64) throw error;
+          suffix.unshift(parse(ancestor).base);
+          ancestor = dirname(ancestor);
+        }
+      }
+      this.directory = join(ancestor, ...suffix);
+      const parts: string[] = [];
+      for (let path = this.directory; path !== parse(path).root; path = dirname(path)) {
+        if (parts.length >= 64) throw new ConnectorVaultError();
+        parts.push(path);
+      }
+      for (const path of parts.reverse()) {
+        try {
+          mkdirSync(path, { mode: 0o700 });
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        }
+        if (!safeAncestor(lstatSync(path))) throw new ConnectorVaultError();
+      }
+      const stat = lstatSync(this.directory);
+      if ((stat.mode & 0o077) !== 0 || stat.uid !== getuid?.()) throw new ConnectorVaultError();
+      this.cleanupTemps();
+    } catch {
+      throw new ConnectorVaultError();
+    }
+  }
+  private cleanupTemps(): void {
+    const directory = opendirSync(this.directory);
+    try {
+      let count = 0;
+      for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
+        if (++count > MAX_SCAN_ENTRIES) throw new ConnectorVaultError();
+        if (!TEMP_NAME.test(entry.name)) continue;
+        const path = join(this.directory, entry.name);
+        try {
+          const stat = lstatSync(path);
+          if (
+            stat.isFile() &&
+            stat.nlink === 1 &&
+            stat.uid === getuid?.() &&
+            Date.now() - stat.mtimeMs > 10 * 60 * 1000
+          )
+            unlinkSync(path);
+        } catch (error) {
+          if (!missing(error)) throw error;
+        }
+      }
+    } finally {
+      directory.closeSync();
+    }
+  }
+  async withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    let dir: FileHandle | undefined;
+    let lock: FileHandle | undefined;
+    let path = "";
+    try {
+      path = join(this.directory, `${await this.filename(id)}.lock`);
+      dir = await this.dir();
+      const deadline = Date.now() + 65000;
+      while (!lock) {
+        if (Date.now() >= deadline) throw new ConnectorVaultError();
+        try {
+          lock = await open(
+            path,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+            0o600,
+          );
+          if (!safeFile(await lock.stat())) throw new ConnectorVaultError();
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+          try {
+            const stat = await lstat(path);
+            if (!safeFile(stat) || stat.isSymbolicLink()) throw new ConnectorVaultError();
+            if (Date.now() - stat.mtimeMs > 60000) {
+              const current = await lstat(path);
+              if (current.ino === stat.ino && current.mtimeMs === stat.mtimeMs) await unlink(path);
+              continue;
+            }
+          } catch (error) {
+            if (!missing(error)) throw error;
+          }
+          if (Date.now() >= deadline) throw new ConnectorVaultError();
+          await delay(25);
+        }
+      }
+    } catch {
+      await Promise.allSettled([lock?.close(), dir?.close()]);
+      throw new ConnectorVaultError();
+    }
+    // Long-running refreshes keep ownership alive; a crashed owner stops updating mtime.
+    const held = lock;
+    let heartbeat = Promise.resolve();
+    const timer = setInterval(() => {
+      heartbeat = heartbeat
+        .then(async () => {
+          const now = new Date();
+          await held.utimes(now, now);
+        })
+        .catch(() => {});
+    }, 15000);
+    try {
+      return await fn();
+    } finally {
+      clearInterval(timer);
+      await heartbeat;
+      await this.releaseLock(path, held, dir);
+    }
+  }
+  private async releaseLock(path: string, held: FileHandle, dir: FileHandle): Promise<void> {
+    try {
+      try {
+        const stat = await held.stat();
+        const current = await lstat(path);
+        if (!safeFile(current) || current.ino !== stat.ino || current.dev !== stat.dev)
+          throw new ConnectorVaultError();
+        await unlink(path);
+      } finally {
+        try {
+          await held.close();
+        } finally {
+          await dir.close();
+        }
+      }
     } catch {
       throw new ConnectorVaultError();
     }
@@ -58,13 +217,7 @@ export class FileVaultStore implements VaultStore {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       }
       const stat = await lstat(path);
-      if (
-        !stat.isDirectory() ||
-        stat.isSymbolicLink() ||
-        (getuid && stat.uid !== 0 && stat.uid !== getuid()) ||
-        ((stat.mode & 0o022) !== 0 && (stat.mode & 0o1000) === 0)
-      )
-        throw new ConnectorVaultError();
+      if (!safeAncestor(stat)) throw new ConnectorVaultError();
     }
     const handle = await open(
       this.directory,
@@ -72,7 +225,7 @@ export class FileVaultStore implements VaultStore {
     );
     try {
       const stat = await handle.stat();
-      if ((stat.mode & 0o077) !== 0 || (getuid && stat.uid !== getuid()))
+      if ((stat.mode & 0o077) !== 0 || (getuid && stat.uid !== getuid?.()))
         throw new ConnectorVaultError();
       return handle;
     } catch (error) {
@@ -95,14 +248,7 @@ export class FileVaultStore implements VaultStore {
     }
     try {
       const stat = await handle.stat();
-      if (
-        !stat.isFile() ||
-        stat.nlink !== 1 ||
-        (stat.mode & 0o077) !== 0 ||
-        stat.size > MAX_FILE_BYTES ||
-        (getuid && stat.uid !== getuid())
-      )
-        throw new ConnectorVaultError();
+      if (!safeFile(stat)) throw new ConnectorVaultError();
       const bytes = Buffer.alloc(MAX_FILE_BYTES + 1);
       let length = 0;
       while (length < bytes.length) {
@@ -123,17 +269,20 @@ export class FileVaultStore implements VaultStore {
     }
   }
   private async names(): Promise<string[]> {
+    this.cleanupTemps();
     const names: string[] = [];
     let count = 0;
+    let scanned = 0;
     const directory = await opendir(this.directory);
     for await (const entry of directory) {
       if (entry.isSymbolicLink() || !entry.isFile()) throw new ConnectorVaultError();
+      if (++scanned > MAX_SCAN_ENTRIES) throw new ConnectorVaultError();
+      if (TEMP_NAME.test(entry.name)) continue;
       if (++count > MAX_VAULT_RECORDS * 2 + 1) throw new ConnectorVaultError();
       if (/^[a-f0-9]{64}$/.test(entry.name)) {
         if (names.length >= MAX_VAULT_RECORDS) throw new ConnectorVaultError();
         names.push(entry.name);
-      } else if (!/^[a-f0-9]{64}\.[a-f0-9-]{36}\.tmp$/.test(entry.name))
-        throw new ConnectorVaultError();
+      } else if (!/^[a-f0-9]{64}\.lock$/.test(entry.name)) throw new ConnectorVaultError();
     }
     return names;
   }
@@ -157,6 +306,7 @@ export class FileVaultStore implements VaultStore {
       const temporary = join(this.directory, `${name}.${globalThis.crypto.randomUUID()}.tmp`);
       const dir = await this.dir();
       try {
+        this.cleanupTemps();
         const existing = await this.read(name);
         if (!existing && (await this.names()).length >= MAX_VAULT_RECORDS)
           throw new ConnectorVaultError();

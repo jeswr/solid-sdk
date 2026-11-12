@@ -15,7 +15,7 @@
  * The pure pieces (PKCE pair, URL building, callback parsing, code exchange)
  * are exported for vitest; only `authorize()` touches `window`.
  */
-import type { ConnectorTokenVault } from "../vault.js";
+import { type ConnectorTokenVault, ConnectorVaultError, type VaultRecord } from "../vault.js";
 import { readJson } from "./budget.js";
 import { IntegrationAuthError } from "./errors.js";
 import { createSourceAuth } from "./import-runner.js";
@@ -136,7 +136,15 @@ async function tokenRequest(
   try {
     options?.signal?.throwIfAborted();
     const url = new URL(endpoint);
-    if (url.protocol !== "https:" || url.username || url.password) throw new Error();
+    if (
+      (url.protocol !== "https:" &&
+        !(
+          url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+        )) ||
+      url.username ||
+      url.password
+    )
+      throw new Error();
     body.set("client_id", cfg.clientId);
     const headers = new Headers({
       "content-type": "application/x-www-form-urlencoded",
@@ -175,7 +183,6 @@ async function tokenRequest(
     >;
     if (!response.ok) {
       if (body.get("grant_type") === "refresh_token" && json?.error === "invalid_grant") {
-        await options?.vault?.delete({ connectorId: adapterId, account: options.account });
         throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
       }
       throw new Error();
@@ -191,7 +198,6 @@ async function tokenRequest(
         (typeof json.refresh_token !== "string" ||
           !json.refresh_token.trim() ||
           json.refresh_token.length > 16384)) ||
-      (json.scope !== undefined && (typeof json.scope !== "string" || json.scope.length > 4096)) ||
       (json.expires_in !== undefined &&
         (typeof json.expires_in !== "number" ||
           !Number.isFinite(json.expires_in) ||
@@ -199,16 +205,20 @@ async function tokenRequest(
           json.expires_in > 315360000))
     )
       throw new Error();
+    let scope: string | undefined;
+    if (typeof json.scope === "string") scope = json.scope;
+    else if (Array.isArray(json.scope) && json.scope.every((item) => typeof item === "string"))
+      scope = json.scope.join(" ");
+    if (scope !== undefined && scope.length > 4096) throw new Error();
     const token: TokenSet = {
       accessToken: json.access_token,
       tokenType: (json.token_type as string | undefined) ?? "Bearer",
       refreshToken:
         (json.refresh_token as string | undefined) ?? body.get("refresh_token") ?? undefined,
-      scope: json.scope as string | undefined,
+      scope: scope || undefined,
       expiresAt:
         typeof json.expires_in === "number" ? Date.now() + json.expires_in * 1000 : undefined,
     };
-    options?.signal?.throwIfAborted();
     if (json.refresh_token && options?.vault) {
       const key = { connectorId: adapterId, account: options.account };
       const previous =
@@ -221,6 +231,7 @@ async function tokenRequest(
         providerMeta: previous?.providerMeta,
       });
     }
+    options?.signal?.throwIfAborted();
     return token;
   } catch (error) {
     if (error instanceof IntegrationAuthError && error.reason === "reauthorise") throw error;
@@ -242,18 +253,30 @@ export async function exchangeCodeForToken(
   fetchImpl: typeof fetch,
   options?: OAuthVaultOptions,
 ): Promise<TokenSet> {
-  return tokenRequest(
-    adapterId,
-    cfg,
-    new URLSearchParams({
-      grant_type: "authorization_code",
-      code: params.code,
-      redirect_uri: params.redirectUri,
-      code_verifier: params.verifier,
-    }),
-    fetchImpl,
-    options,
+  return withVaultLock(adapterId, options, () =>
+    tokenRequest(
+      adapterId,
+      cfg,
+      new URLSearchParams({
+        grant_type: "authorization_code",
+        code: params.code,
+        redirect_uri: params.redirectUri,
+        code_verifier: params.verifier,
+      }),
+      fetchImpl,
+      options,
+    ),
   );
+}
+
+function withVaultLock<T>(
+  adapterId: string,
+  options: OAuthVaultOptions | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return options?.vault?.withLock
+    ? options.vault.withLock({ connectorId: adapterId, account: options.account }, fn)
+    : fn();
 }
 
 /** Refresh without sending an API bearer credential to the token endpoint. */
@@ -264,13 +287,67 @@ export async function refreshAccessToken(
   fetchImpl: typeof fetch,
   options?: OAuthVaultOptions,
 ): Promise<TokenSet> {
-  return tokenRequest(
-    adapterId,
-    cfg,
-    new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-    fetchImpl,
-    options,
-  );
+  return withVaultLock(adapterId, options, async () => {
+    const token = await refreshWithinLock(adapterId, cfg, refreshToken, fetchImpl, options);
+    if (!token)
+      throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+    return token;
+  });
+}
+
+async function readSaved(
+  adapterId: string,
+  options?: OAuthVaultOptions,
+): Promise<VaultRecord | undefined> {
+  try {
+    return await options?.vault?.get({ connectorId: adapterId, account: options.account });
+  } catch (error) {
+    if (error instanceof ConnectorVaultError)
+      throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+    throw error;
+  }
+}
+
+/** Caller holds the store's account lock across reads, network exchange and mutations. */
+async function refreshWithinLock(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  refreshToken: string | undefined,
+  fetchImpl: typeof fetch,
+  options?: OAuthVaultOptions,
+): Promise<TokenSet | undefined> {
+  const key = { connectorId: adapterId, account: options?.account ?? "default" };
+  const saved = await readSaved(adapterId, options);
+  if (saved?.expiresAt !== undefined && saved.expiresAt <= Date.now()) {
+    await options?.vault?.delete(key);
+    throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+  }
+  let sent = saved?.refreshToken ?? refreshToken;
+  if (!sent) return undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const token = await tokenRequest(
+        adapterId,
+        cfg,
+        new URLSearchParams({ grant_type: "refresh_token", refresh_token: sent }),
+        fetchImpl,
+        options,
+      );
+      return { ...token, scope: token.scope ?? saved?.scope };
+    } catch (error) {
+      if (!(error instanceof IntegrationAuthError) || error.reason !== "reauthorise") throw error;
+      const latest = await readSaved(adapterId, options);
+      // A writer without locking may have replaced the rejected credential. Never delete it.
+      if (latest && latest.refreshToken !== sent) {
+        if (attempt === 0) {
+          sent = latest.refreshToken;
+          continue;
+        }
+      } else if (latest?.refreshToken === sent) await options?.vault?.delete(key);
+      throw error;
+    }
+  }
+  return undefined;
 }
 
 /** Return a live token, restore from the vault, or let the host start interactive login. */
@@ -287,15 +364,16 @@ export async function getOAuthToken(
     (options.token.expiresAt === undefined || options.token.expiresAt > Date.now())
   )
     return options.token;
-  const saved = await options.vault?.get({ connectorId: adapterId, account: options.account });
-  if (saved?.expiresAt !== undefined && saved.expiresAt <= Date.now()) {
-    await options.vault?.delete({ connectorId: adapterId, account: options.account });
-    throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
-  }
-  const refreshToken = saved?.refreshToken ?? options.token?.refreshToken;
-  if (!refreshToken) return undefined;
-  const token = await refreshAccessToken(adapterId, cfg, refreshToken, fetchImpl, options);
-  return { ...token, scope: token.scope ?? saved?.scope ?? options.token?.scope };
+  return withVaultLock(adapterId, options, async () => {
+    const token = await refreshWithinLock(
+      adapterId,
+      cfg,
+      options.token?.refreshToken,
+      fetchImpl,
+      options,
+    );
+    return token ? { ...token, scope: token.scope ?? options.token?.scope } : undefined;
+  });
 }
 
 /** A per-account session: bounded retries, single-flight refresh, durable disconnect. */
@@ -382,7 +460,9 @@ export function createOAuthSourceAuth(
       } catch {
         /* Deletion must still follow a failed refresh. */
       }
-      await options.vault?.delete({ connectorId: id, account: options.account });
+      await withVaultLock(id, options, async () => {
+        await options.vault?.delete({ connectorId: id, account: options.account });
+      });
     },
   };
 }

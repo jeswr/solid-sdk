@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ConnectorTokenVault, IndexedDbVaultStore, MAX_VAULT_RECORDS, vaultId } from "./vault.js";
 
 /** Minimal structured-cloning IDB fake: queued transactions, commit/abort and cursors.
@@ -8,6 +8,7 @@ import { ConnectorTokenVault, IndexedDbVaultStore, MAX_VAULT_RECORDS, vaultId } 
 function fakeIndexedDb() {
   type Request = { result?: unknown; onsuccess?: () => void; onerror?: () => void };
   const databases = new Map<string, Map<string, Map<IDBValidKey, unknown>>>();
+  const connections: { onversionchange?: () => void }[] = [];
   let tail = Promise.resolve();
   let failOpen = false;
   let failCommit = false;
@@ -31,12 +32,21 @@ function fakeIndexedDb() {
           databases.set(name, data);
         }
         const storage = data;
-        const db = {
-          close() {},
+        let closed = false;
+        const db: {
+          onversionchange?: () => void;
+          close(): void;
+          createObjectStore(name: string): void;
+          transaction(name: string, mode: string): unknown;
+        } = {
+          close() {
+            closed = true;
+          },
           createObjectStore(name: string) {
             storage.set(name, new Map());
           },
           transaction(name: string, _mode: string) {
+            if (closed) throw new Error("closed database");
             let finish!: () => void;
             const ready = tail;
             tail = new Promise<void>((resolve) => {
@@ -140,6 +150,7 @@ function fakeIndexedDb() {
             return tx;
           },
         };
+        connections.push(db);
         request.result = db;
         if (fresh) request.onupgradeneeded?.();
         request.onsuccess?.();
@@ -150,6 +161,7 @@ function fakeIndexedDb() {
   return {
     factory,
     databases,
+    connections,
     failOpen: () => {
       failOpen = true;
     },
@@ -164,6 +176,63 @@ function fakeIndexedDb() {
 
 const key = { connectorId: "spotify", account: "fixture" };
 describe("IndexedDB encrypted vault", () => {
+  it("clears a version-changed handle and reopens on the next call", async () => {
+    const fake = fakeIndexedDb();
+    const store = new IndexedDbVaultStore("owner", fake.factory);
+    await store.put(vaultId(key), "sealed");
+    expect(fake.connections).toHaveLength(1);
+    fake.connections[0]!.onversionchange!();
+    expect(await store.get(vaultId(key))).toBe("sealed");
+    expect(fake.connections).toHaveLength(2);
+  });
+  it("uses Web Locks when present and releases the callback on throw", async () => {
+    const request = vi.fn(async (_name, fn) => fn());
+    vi.stubGlobal("navigator", { locks: { request } });
+    try {
+      const fake = fakeIndexedDb();
+      const store = new IndexedDbVaultStore("owner", fake.factory);
+      await expect(
+        store.withLock(vaultId(key), async () => {
+          throw new Error("callback");
+        }),
+      ).rejects.toThrow("callback");
+      expect(await store.withLock(vaultId(key), async () => 1)).toBe(1);
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request.mock.calls[0]![0]).toBe(request.mock.calls[1]![0]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+  it("fallback mutex serializes separate store instances sharing a database", async () => {
+    vi.stubGlobal("navigator", {});
+    try {
+      const fake = fakeIndexedDb();
+      const one = new IndexedDbVaultStore("owner", fake.factory);
+      const two = new IndexedDbVaultStore("owner", fake.factory);
+      const ready = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const events: number[] = [];
+      const first = one
+        .withLock(vaultId(key), async () => {
+          events.push(1);
+          ready.resolve();
+          await release.promise;
+          throw new Error("callback");
+        })
+        .catch(() => {});
+      await ready.promise;
+      const second = two.withLock(vaultId(key), async () => {
+        events.push(2);
+      });
+      await Promise.resolve();
+      expect(events).toEqual([1]);
+      release.resolve();
+      await Promise.all([first, second]);
+      expect(events).toEqual([1, 2]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
   it("persists a non-extractable CryptoKey in the same DB and restores after reopening", async () => {
     const fake = fakeIndexedDb();
     const store = new IndexedDbVaultStore("owner", fake.factory);

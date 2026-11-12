@@ -1,5 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
+import * as fsSync from "node:fs";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +19,13 @@ import { FileVaultStore } from "./vault-store.js";
 vi.mock("node:fs/promises", async (original) => ({
   ...(await original<typeof import("node:fs/promises")>()),
 }));
+vi.mock("node:fs", async (original) => ({ ...(await original<typeof import("node:fs")>()) }));
+vi.mock("node:process", async (original) => ({
+  ...(await original<typeof import("node:process")>()),
+  get platform() {
+    return process.platform;
+  },
+}));
 const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -25,7 +36,7 @@ const id = vaultId(key);
 const name = createHash("sha256").update(id).digest("hex");
 const sensitive = "sensitive-token-key-never-echo";
 async function fixture() {
-  const root = await fs.mkdtemp(join(tmpdir(), "connector-vault-"));
+  const root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "connector-vault-")));
   dirs.push(root);
   const directory = join(root, "nested", "vault");
   const store = new FileVaultStore(directory);
@@ -108,7 +119,7 @@ describe("private file vault store", () => {
       [store.get(id), store.put(id, "replacement"), store.delete(id), store.list()].map(fails),
     );
   });
-  it("refuses directory, ancestor, dangling and record symlinks plus hardlinks", async () => {
+  it("refuses final directory, dangling and record symlinks plus hardlinks", async () => {
     const { root, directory, path, store } = await fixture();
     await store.put(id, "sealed");
     const target = join(root, "target");
@@ -127,10 +138,9 @@ describe("private file vault store", () => {
     await fails(store.get(id));
     const link = join(root, "alias");
     await fs.symlink(directory, link);
-    await fails(new FileVaultStore(link).get(id));
-    await fails(new FileVaultStore(join(link, "child")).put(id, "sealed"));
-    const notDirectory = new FileVaultStore(target);
-    await fails(notDirectory.get(id));
+    expect(() => new FileVaultStore(link)).toThrow("Connector vault operation failed.");
+    await new FileVaultStore(join(link, "child")).put(id, "sealed");
+    expect(() => new FileVaultStore(target)).toThrow("Connector vault operation failed.");
   });
   it("bounds reads and rejects corrupt, misplaced, oversized and non-regular files", async () => {
     const { store, path, directory } = await fixture();
@@ -192,5 +202,144 @@ describe("private file vault store", () => {
       });
     await fails(store.list());
     await fails(store.put(vaultId({ ...key, account: "new" }), "sealed"));
+  });
+  it("pins the real directory through ancestor aliases and rejects win32 at construction", async () => {
+    const { root, directory, store } = await fixture();
+    await store.put(id, "real");
+    const alias = join(root, "alias");
+    await fs.symlink(join(root, "nested"), alias);
+    const canonical = new FileVaultStore(join(alias, "vault"));
+    await fs.unlink(alias);
+    expect(await canonical.get(id)).toBe("real");
+    expect(await fs.realpath(directory)).toBe(directory);
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    try {
+      Object.defineProperty(process, "platform", { value: "win32" });
+      expect(() => new FileVaultStore(directory)).toThrow(
+        "FileVaultStore requires a POSIX filesystem",
+      );
+    } finally {
+      Object.defineProperty(process, "platform", original);
+    }
+  });
+  it("breaks stale locks, releases on throw, and creates private locks", async () => {
+    const { directory, store } = await fixture();
+    const lock = join(directory, `${name}.lock`);
+    await fs.writeFile(lock, "", { mode: 0o600 });
+    const old = new Date(Date.now() - 61000);
+    await fs.utimes(lock, old, old);
+    await expect(
+      store.withLock(id, async () => {
+        expect((await fs.stat(lock)).mode & 0o777).toBe(0o600);
+        throw new Error("callback failed");
+      }),
+    ).rejects.toThrow("callback failed");
+    await expect(fs.stat(lock)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await store.withLock(id, async () => 42)).toBe(42);
+    await fs.writeFile(lock, "", { mode: 0o644 });
+    await fails(store.withLock(id, async () => {}));
+    await fs.unlink(lock);
+    await fs.symlink(join(directory, "missing"), lock);
+    await fails(store.withLock(id, async () => {}));
+  });
+  it("serializes contending child processes using the same file record lock", async () => {
+    const { directory, root } = await fixture();
+    const script = new URL("./__fixtures__/vault-lock-child.mjs", import.meta.url);
+    const one = fork(script, [directory, id, join(root, "exclusive")], {
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    });
+    const two = fork(script, [directory, id, join(root, "exclusive")], {
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+    });
+    const events: string[] = [];
+    two.on("message", (message) => events.push(String(message)));
+    try {
+      const readyOne = once(one, "message");
+      const readyTwo = once(two, "message");
+      expect((await readyOne)[0]).toBe("ready");
+      expect((await readyTwo)[0]).toBe("ready");
+      const entered = once(one, "message");
+      one.send("start");
+      expect((await entered)[0]).toBe("entered");
+      const contended = once(two, "message");
+      two.send("start");
+      expect((await contended)[0]).toBe("contended");
+      const secondEntered = once(two, "message");
+      // A second in-process contender also waits behind the process holding the lock.
+      const store = new FileVaultStore(directory);
+      const pending = store.withLock(id, async () => "parent");
+      expect(await fs.stat(join(directory, `${name}.lock`))).toMatchObject({ nlink: 1 });
+      expect(events).toEqual(["ready", "contended"]);
+      const released = once(one, "message");
+      one.send("release");
+      expect((await released)[0]).toBe("released");
+      expect((await secondEntered)[0]).toBe("entered");
+      const releasedTwo = once(two, "message");
+      two.send("release");
+      expect((await releasedTwo)[0]).toBe("released");
+      expect(await pending).toBe("parent");
+      expect(events).not.toContain("failed");
+    } finally {
+      one.kill();
+      two.kill();
+    }
+  });
+  it("cleans only owned regular stale temp files on construction and before list/put budgets", async () => {
+    const { directory } = await fixture();
+    const temp = () => join(directory, `${name}.${crypto.randomUUID()}.tmp`);
+    const stale = temp();
+    const fresh = temp();
+    const foreign = temp();
+    const foreignOwned = temp();
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    for (const path of [stale, foreign, foreignOwned]) {
+      await fs.writeFile(path, "", { mode: 0o600 });
+      await fs.utimes(path, old, old);
+    }
+    await fs.writeFile(fresh, "", { mode: 0o600 });
+    const other = join(directory, "unrelated.tmp");
+    await fs.writeFile(other, "", { mode: 0o600 });
+    // A hardlinked temp is never removed by crash recovery.
+    await fs.link(foreign, join(directory, "foreign-target"));
+    const originalStat = fsSync.lstatSync;
+    vi.spyOn(fsSync, "lstatSync").mockImplementation((...args) => {
+      const stat = originalStat(...args);
+      return String(args[0]) === foreignOwned ? Object.assign(stat, { uid: 12345 }) : stat;
+    });
+    const store = new FileVaultStore(directory);
+    await expect(fs.stat(stale)).rejects.toMatchObject({ code: "ENOENT" });
+    expect((await fs.stat(fresh)).isFile()).toBe(true);
+    expect((await fs.stat(foreign)).nlink).toBe(2);
+    expect((await fs.stat(foreignOwned)).isFile()).toBe(true);
+    expect((await fs.stat(other)).isFile()).toBe(true);
+    await fs.unlink(other);
+    await fs.unlink(join(directory, "foreign-target"));
+    await fs.unlink(foreign);
+    // Temp files never consume the record/name budget, even when there are over 2,001.
+    for (let index = 0; index < MAX_VAULT_RECORDS * 2 + 2; index++)
+      await fs.writeFile(temp(), "", { mode: 0o600 });
+    expect(await store.list()).toEqual([]);
+    await store.put(id, "sealed");
+    await fs.utimes(fresh, old, old);
+    await store.put(id, "replacement");
+    await expect(fs.stat(fresh)).rejects.toMatchObject({ code: "ENOENT" });
+    const later = temp();
+    await fs.writeFile(later, "", { mode: 0o600 });
+    await fs.utimes(later, old, old);
+    expect(await store.list()).toEqual([id]);
+    await expect(fs.stat(later)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+  it("never crash-cleans a temp symlink or its target", async () => {
+    const { root, directory } = await fixture();
+    const target = join(root, "private");
+    await fs.writeFile(target, sensitive, { mode: 0o600 });
+    const old = new Date(Date.now() - 11 * 60 * 1000);
+    await fs.utimes(target, old, old);
+    const temporary = join(directory, `${name}.${crypto.randomUUID()}.tmp`);
+    await fs.symlink(target, temporary);
+    const store = new FileVaultStore(directory);
+    expect((await fs.lstat(temporary)).isSymbolicLink()).toBe(true);
+    expect(await fs.readFile(target, "utf8")).toBe(sensitive);
+    await fails(store.list());
   });
 });

@@ -271,8 +271,28 @@ IDB fake without dependencies.
 
 OAuth exchange/refresh accepts `{ vault, account, signal? }`; persist rotation before returning
 access tokens. `getOAuthToken` restores on later runs; `createOAuthSourceAuth` shares refresh
-and retries a GET once. `invalid_grant` deletes and raises typed `reauthorise`; other failures
-retain the record. Disconnect waits for in-flight refresh before deletion. Hosts serialize
-account mutations across sessions/processes. CLI persistence requires both --vault and
-CONNECTOR_VAULT_KEY; connectors[id].account defaults to default. Without both retain
-memory-only behavior. Use fixtures for hostile/error paths and assert secret-free errors.
+and retries a GET once. Persist a validated refresh rotation before honoring abort, even
+when cancellation happens during response reading. Accept string scope or string-array
+scope normalized with join(" "); drop other scope types. Token endpoints/proxies require
+HTTPS except HTTP on localhost, 127.0.0.1 or [::1] for development. Request JSON (including
+GitHub); form token responses are unsupported. Spotify's legacy factory refuses a vault;
+vault hosts use createOAuthSourceAuth.
+
+Hold optional VaultStore/ConnectorTokenVault.withLock across reread + refresh + put/delete.
+Use the newest saved credential; on invalid_grant compare before deletion and retry once
+with a newer credential, never loop. Current invalid grants raise typed reauthorise;
+other failures retain records. Unreadable refresh records raise typed reauthorise, but fresh
+code exchange may replace them without decrypting the previous ciphertext. Disconnect
+waits for its in-flight refresh then deletes under the account lock. Memory uses a bounded
+per-key mutex; IndexedDB uses navigator.locks or a shared in-process fallback. Clear the
+IDB handle on versionchange. Custom stores without locks require host serialization.
+
+File stores canonicalize ancestor aliases once at construction, check the real path and
+refuse final-directory/record symlinks. Windows construction throws the POSIX requirement.
+Per-record O_EXCL 0600 locks break after 60 seconds by mtime, renew while active, wait at
+most 65 seconds and always release in finally. Clean only own-pattern regular current-uid
+temps older than ten minutes at construction and before list/put budgets; exclude temps
+from the name budget and retain a separate bounded scan. CLI --vault without
+CONNECTOR_VAULT_KEY exits 2 naming the variable; a key alone warns on stderr and continues
+in memory. connectors[id].account defaults to default. Use fixtures for hostile/error
+paths and assert secret-free errors.

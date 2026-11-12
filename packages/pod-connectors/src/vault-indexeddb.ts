@@ -8,12 +8,26 @@ import {
   validateVaultCryptoKey,
   vaultKey,
 } from "./vault.js";
+import { VaultMutex } from "./vault-lock.js";
+
+const mutexes = new WeakMap<IDBFactory, VaultMutex>();
 
 /** Ciphertexts and a structured-cloned, non-extractable CryptoKey share one database.
  * Use a distinct database name for each host/owner. Same-origin script can use this key.
  */
 export class IndexedDbVaultStore implements VaultStore {
   private database: Promise<IDBDatabase> | undefined;
+  async withLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
+    vaultKey(id);
+    const name = JSON.stringify(["pod-connectors-vault", this.name, id]);
+    if (globalThis.navigator?.locks) return globalThis.navigator.locks.request(name, fn);
+    let mutex = mutexes.get(this.factory);
+    if (!mutex) {
+      mutex = new VaultMutex();
+      mutexes.set(this.factory, mutex);
+    }
+    return mutex.withLock(name, fn);
+  }
   constructor(
     private readonly name = "pod-connectors-vault",
     private readonly factory: IDBFactory = globalThis.indexedDB,
@@ -48,12 +62,16 @@ export class IndexedDbVaultStore implements VaultStore {
               request.result.close();
               return;
             }
-            request.result.onversionchange = () => request.result.close();
+            request.result.onversionchange = () => {
+              request.result.close();
+              this.database = undefined;
+            };
             resolve(request.result);
           };
         });
       return await this.database;
     } catch {
+      this.database = undefined;
       throw new ConnectorVaultError();
     }
   }

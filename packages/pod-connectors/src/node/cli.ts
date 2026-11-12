@@ -157,6 +157,13 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
   try {
     options.signal?.throwIfAborted();
     const command = parseImportArgs(args);
+    const encodedKey = options.vaultKey ?? nodeEnv.CONNECTOR_VAULT_KEY;
+    if (command.vault && !encodedKey)
+      throw new NodeRuntimeError("config", "--vault requires CONNECTOR_VAULT_KEY.");
+    if (encodedKey && !command.vault)
+      stderr(
+        "CONNECTOR_VAULT_KEY supplied without --vault; refresh credentials remain in memory.\n",
+      );
     const config = await readNodeConfig(options.configPath);
     const registry = createRegistry(config.connectors);
     const adapter = registry.adapterById(command.id);
@@ -203,7 +210,6 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       const sourceConfig = { ...adapter.oauth, ...config.connectors[command.id] };
       if (sourceConfig.clientSecret) sourceConfig.tokenExchange = "public";
       let vault: ConnectorTokenVault | undefined;
-      const encodedKey = options.vaultKey ?? nodeEnv.CONNECTOR_VAULT_KEY;
       if (command.vault && encodedKey) {
         try {
           vault = new ConnectorTokenVault(

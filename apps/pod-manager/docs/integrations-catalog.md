@@ -34,6 +34,12 @@ re-import overwrites in place, never duplicates.
 - **Tier C** apps have no user-grade API → shown as "Import from export file"; each has
   a shipped parser for its official data export (`src/lib/integrations/file-adapters.ts`).
 
+Token-proxy env values require HTTPS, with HTTP allowed only on `localhost`, `127.0.0.1`
+or `[::1]` for development. Responses must be JSON (GitHub is requested with JSON Accept);
+`scope` may be a string or a string array (Twitch), normalized with spaces; other scope
+types are ignored. The Node CLI vault key is `CONNECTOR_VAULT_KEY`, never a public Next.js
+env value. `--vault` without it exits 2; a key alone warns and leaves credentials in memory.
+
 ## Live robustness (sparse-response contract)
 
 The recorded fixtures are tidy; the live APIs are not. Adapters must treat every

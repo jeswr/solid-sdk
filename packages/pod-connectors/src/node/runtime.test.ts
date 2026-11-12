@@ -1724,7 +1724,7 @@ describe("CLI encrypted refresh vault", () => {
   it.each([
     "directory",
     "key",
-  ])("keeps memory-only login when only %s is supplied", async (setting) => {
+  ])("requires a key for --vault and warns for a key alone: %s", async (setting) => {
     const path = await configPath();
     const { transport } = fixturePod();
     const interactive = vi.spyOn(loopback, "authorizeLoopback").mockResolvedValue({
@@ -1733,6 +1733,7 @@ describe("CLI encrypted refresh vault", () => {
       refreshToken: "must-not-save",
     });
     vi.stubEnv("CONNECTOR_VAULT_KEY", "");
+    const stderr = vi.fn();
     expect(
       await runCli(
         ["import", "spotify", ...(setting === "directory" ? ["--vault", path + ".vault"] : [])],
@@ -1742,11 +1743,16 @@ describe("CLI encrypted refresh vault", () => {
           podTransport: transport,
           sourceTransport: fixtureFetch("spotify", spotifyAdapter.fixtures()),
           stdout: vi.fn(),
-          stderr: vi.fn(),
+          stderr,
         },
       ),
-    ).toBe(0);
-    expect(interactive).toHaveBeenCalledOnce();
+    ).toBe(setting === "directory" ? 2 : 0);
+    expect(interactive).toHaveBeenCalledTimes(setting === "directory" ? 0 : 1);
+    expect(stderr).toHaveBeenCalledWith(
+      setting === "directory"
+        ? "--vault requires CONNECTOR_VAULT_KEY.\n"
+        : "CONNECTOR_VAULT_KEY supplied without --vault; refresh credentials remain in memory.\n",
+    );
     await expect(fsPromises.stat(path + ".vault")).rejects.toMatchObject({ code: "ENOENT" });
     vi.unstubAllEnvs();
   });

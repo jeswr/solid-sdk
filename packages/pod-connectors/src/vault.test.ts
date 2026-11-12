@@ -43,12 +43,50 @@ async function fails(operation: Promise<unknown>) {
 }
 
 describe("encrypted connector vault", () => {
+  it("provides bounded per-key locks, releases on throw, and masks acquisition failures", async () => {
+    const { store, vault } = await fixture();
+    const id = vaultId(key);
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const order: number[] = [];
+    const first = store
+      .withLock(id, async () => {
+        order.push(1);
+        started.resolve();
+        await release.promise;
+        throw new Error("callback");
+      })
+      .catch((error) => expect(error.message).toBe("callback"));
+    await started.promise;
+    const waiting = Array.from({ length: MAX_VAULT_RECORDS - 1 }, () =>
+      store.withLock(id, async () => {
+        order.push(2);
+      }),
+    );
+    await fails(store.withLock(id, async () => {}));
+    expect(order).toEqual([1]);
+    release.resolve();
+    await Promise.all([first, ...waiting]);
+    expect(order).toHaveLength(MAX_VAULT_RECORDS);
+    expect(await vault.withLock?.(key, async () => 42)).toBe(42);
+    const bad = new ConnectorTokenVault(await generateBrowserVaultKey(), {
+      get: store.get.bind(store),
+      put: store.put.bind(store),
+      delete: store.delete.bind(store),
+      list: store.list.bind(store),
+      withLock: async () => {
+        throw new Error(secret);
+      },
+    });
+    await fails(bad.withLock!(key, async () => {}));
+  });
   it("snapshots record and key before awaiting storage", async () => {
     const { vault, store } = await fixture();
     const blocked = Promise.withResolvers<void>();
-    vi.spyOn(store, "get").mockImplementationOnce(async () => {
+    const originalPut = store.put.bind(store);
+    vi.spyOn(store, "put").mockImplementationOnce(async (id, sealed) => {
       await blocked.promise;
-      return undefined;
+      return originalPut(id, sealed);
     });
     const inputKey = { connectorId: "spotify", account: "first" };
     const inputRecord = {
@@ -149,8 +187,9 @@ describe("encrypted connector vault", () => {
     }
     await fails(new ConnectorTokenVault(await generateBrowserVaultKey(), store).get(key));
     const wrong = new ConnectorTokenVault(await generateBrowserVaultKey(), store);
-    await fails(wrong.put(key, value));
-    expect(await vault.get(key)).toEqual(value);
+    await wrong.put(key, value);
+    expect(await wrong.get(key)).toEqual(value);
+    await fails(vault.get(key));
     await fails(vault.list());
   });
   it("authenticates every byte of the canonical AAD, including version and tuple separators", async () => {

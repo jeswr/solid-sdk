@@ -200,7 +200,6 @@ describe("OAuth refresh vault wiring", () => {
         { access_token: "x", refresh_token: "" },
         { access_token: "x", expires_in: Infinity },
         { access_token: "x", token_type: sensitive },
-        { access_token: "x", scope: 1 },
         { access_token: "x", expires_in: -1 },
         { access_token: "x", expires_in: 1e30 },
       ].map((json) => async () => Response.json(json)),
