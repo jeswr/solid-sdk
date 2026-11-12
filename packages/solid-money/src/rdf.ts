@@ -35,7 +35,8 @@ export function putAccount(document: MoneyDocument, value: Account): void {
   if (!hasText(value.label)) throw new TypeError("Account label is required");
   writeCore(document, value.id, "Account", entities.Account.build(value.id, value));
 }
-function putMoney(document: MoneyDocument, id: string, value: Money): Term {
+/** Writes `value` as the MonetaryAmount node owned by `id` and returns that node (reused by app-level budgets). */
+export function putMoney(document: MoneyDocument, id: string, value: Money): Term {
   const owner = DataFactory.namedNode(id);
   let amountId = document.node(id).amountNode;
   if (

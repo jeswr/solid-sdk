@@ -2,8 +2,10 @@
 
 import type { Category } from "@jeswr/solid-money";
 import type { PodSession } from "@/lib/session/pod-session";
+import { parseMoney } from "../lib/budget";
 import type { AccountSummary } from "../lib/data/accounts";
 import { createAccount } from "../lib/data/accounts";
+import { saveBudgetAssignments } from "../lib/data/budget";
 import { saveCategories } from "../lib/data/categories";
 import { provision, storeOf } from "../lib/data/container";
 import {
@@ -47,7 +49,8 @@ async function seed(session: PodSession, now: Date) {
     redirect: "error",
   });
   if (!progress.ok) throw new MoneyIoError(progress.status);
-  const start = new Date((await progress.json()).at);
+  const seedDate = new Date((await progress.json()).at);
+  const start = new Date(seedDate);
   start.setUTCDate(start.getUTCDate() - 90);
   const date = (value: Date) => value.toISOString().slice(0, 10);
   await alreadyDone(() =>
@@ -144,6 +147,20 @@ async function seed(session: PodSession, now: Date) {
         day % 21 === 0 ? undefined : "Fun",
       );
     }
+  }
+  for (const offset of [-1, 0]) {
+    const month = new Date(seedDate);
+    month.setUTCDate(1);
+    month.setUTCMonth(month.getUTCMonth() + offset);
+    await saveBudgetAssignments(
+      session,
+      month.toISOString().slice(0, 7),
+      [
+        { categoryId: category("Rent") as string, amount: parseMoney("GBP", "1100") },
+        { categoryId: category("Groceries") as string, amount: parseMoney("GBP", "250") },
+      ],
+      [],
+    );
   }
   await alreadyDone(() => store.put(".sample-complete", "", "text/plain", { create: true }));
 }
