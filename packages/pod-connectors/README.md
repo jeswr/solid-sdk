@@ -275,9 +275,11 @@ imports both preserve unrelated historical records; source deletions are not inf
 The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts/YYYY-MM.ttl`,
 inside the WHOOP connector container. The Type Index registers the observation and workout
 classes against `health/observations/` and `health/workouts/`, respectively, so readers can
-discover all monthly documents. Observation values, CodeableConcepts, OWL-Time instants,
-QUDT units, UCUM codes and local person subjects follow the Health app's Apple Health model.
-Resting HR and total asleep duration use its existing HeartRateObservation/SleepObservation
+discover all monthly documents. Observations are written and validated by the generated
+`@jeswr/solid-health` model (`buildObservation`), like Garmin; `src/whoop/model.ts` keeps
+only the WHOOP mapping policy (field → name, code, UCUM unit, optional QUDT unit, subtype).
+Observation values, CodeableConcepts, OWL-Time instants, UCUM codes and local person
+subjects follow the Health app's Apple Health model. Resting HR and total asleep duration use its existing HeartRateObservation/SleepObservation
 classes and LOINC codes (resting heart rate **40443-4**, asleep duration **93832-4**). HRV
 retains **RMSSD** (never relabelled as Apple's SDNN), skin
 temperature, SpO2, respiratory rate, energy and reported light/deep/REM durations use generic
@@ -286,9 +288,28 @@ remain separate reported totals, with no invented stage chronology and no SleepO
 subtype that would double-count the total. API kilojoules and CSV dietary calories normalize
 to kJ; workouts also carry schema:ExerciseAction energy/duration/name like Garmin.
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Output changes from the move to `@jeswr/solid-health` (each pinned in `whoop.test.ts`):
+
+- `health:value` is `xsd:decimal` instead of `xsd:double`.
+- Observations are also typed `health:ClinicalEntry`; instants also `time:TemporalEntity`.
+- Code and instant helpers are `<observation>-code` / `<observation>-time` instead of
+  `<observation>/code` / `<observation>/time`. Reimporting a record removes legacy helpers.
+- The profile's QUDT inventory is NUM, M, SEC and BEAT-PER-MIN. HRV (`ms`), skin
+  temperature (`Cel`), SpO2 (`%`), energy (`kJ`) and respiratory rate (`/min`) now carry
+  only their UCUM `health:unitCode`; the former `unit:MilliSEC`, `unit:DEG_C`,
+  `unit:PERCENT`, `unit:KiloJ` and `unit:PER-MIN` links are no longer written.
+- Observations no longer carry `schema:endTime`: the profile's effective time is a single
+  instant (the record start). The record's `schema:Dataset` marker keeps its end time.
+
+Observation and record IDs, document paths, codes, schemes, names, `dct:source`, the API
+`schema:url` used for provenance, CSV/API deduplication and the workout ExerciseAction
+are unchanged. Strict `parseObservations` reads reject observations stored by an earlier
+version (`xsd:double`) until their record is reimported.
+
 The connector's Apple Health adapter currently imports only workouts; the Health app's
-observation reader currently charts six metric kinds. Total sleep uses that reader's exact
-representation; resting HR retains its distinct
+observation reader currently charts six metric kinds. Total sleep uses that reader's class,
+code and unit; resting HR retains its distinct
 40443-4 concept, which the current heart-rate chart (8867-4) does not include. Other WHOOP
 values are retained as canonical observations for readers supporting those codes. Hosts must
 route/discover the WHOOP container;

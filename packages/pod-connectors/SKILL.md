@@ -256,8 +256,8 @@ manifest release never resets the counter. Excess rows skip before any Pod write
 
 `./adapters/whoop` exposes the Tier A OAuth adapter/factory and streaming file adapter
 under the single `whoop` catalogue id. Default token exchange uses a proxy; Node hosts
-may inject a secret for direct exchange. Do not assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`
-and the README's WHOOP section before changing it. Reuse the Takeout ZIP reader; keep
+may inject a secret for direct exchange. Do not assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`,
+the README's WHOOP section and `../solid-health/SKILL.md` before changing it. Reuse the Takeout ZIP reader; keep
 CSV normalized-header collision checks, explicit-offset timestamps, native-id/CSV-start
 reconciliation and API-over-file precedence. Source rows and normalized records are capped
 independently, including duplicate and malformed rows. Stage all source parsing before writes.
@@ -269,8 +269,11 @@ heap; preserve the byte caps while scanning sort keys and the row/record caps wh
 selected rows, including duplicates and malformed rows. Physiological rows remain atomic. Never invent a recovery time when its cycle is missing.
 
 Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments.
-Health observations use existing sector terms and the Health app's monthly model; HRV is
-RMSSD, not SDNN. Sleep stage totals are generic observations so total sleep is counted once.
+Health observations are built only through `@jeswr/solid-health`'s `buildObservation`;
+`METRICS` holds the WHOOP mapping policy and `vocab.ts` only the schema:Dataset record
+marker. Never add a health accessor class. A unit outside the profile's QUDT inventory
+carries UCUM only; a missing subtype or datatype is a profile gap to report, not to
+hand-write around. HRV is RMSSD, not SDNN. Sleep stage totals are generic observations so total sleep is counted once.
 Workouts retain ExerciseAction. Recovery score, strain and sleep performance have no sector
 term: omit them and surface them through ImportOutcome/ImportReport.unsupported (now supported
 for API adapters too). Keep journal entries unsupported. See the README for current Health UI,

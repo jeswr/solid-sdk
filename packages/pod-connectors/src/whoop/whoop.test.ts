@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import {
+  HEALTH,
+  HealthCode,
+  HealthInstant,
+  HealthObservation,
+  parseObservations,
+} from "@jeswr/solid-health";
 import { NS } from "@jeswr/suite-vocab";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
@@ -39,7 +46,7 @@ import {
   WORKOUT,
 } from "./fixtures.js";
 import { API, MAX_RECORDS, METRICS, sourceId, timestamp } from "./model.js";
-import { HEALTH, HealthNode } from "./vocab.js";
+import { RecordMarker } from "./vocab.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/whoop/`;
 const MONTH = `${ROOT}health/observations/2026-06.ttl`;
@@ -159,7 +166,7 @@ describe("WHOOP mappings and identity", () => {
     const data = pod.dataset(MONTH);
     expect(typed(pod, MONTH, HEALTH.Observation)).toHaveLength(12);
     const measurement = (root: string, metric: string) =>
-      new HealthNode(`${MONTH}#${root}/metric/${metric}`, data, DataFactory);
+      new HealthObservation(`${MONTH}#${root}/metric/${metric}`, data, DataFactory);
     expect(measurement("recovery-101", "restingHR").measuredValue).toBe(52);
     expect(measurement("recovery-101", "hrv").measuredValue).toBe(65);
     expect(measurement("recovery-101", "temperature").measuredValue).toBe(33.5);
@@ -169,7 +176,9 @@ describe("WHOOP mappings and identity", () => {
     expect(measurement("sleep-sleep-101", "deep").measuredValue).toBe(7200);
     expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
     expect(measurement("sleep-sleep-101", "light").types.has(HEALTH.Sleep)).toBe(false);
-    expect(measurement("recovery-101", "hrv").linked(HEALTH.hasUnit)).toBe(`${NS.UNIT}MilliSEC`);
+    // QUDT MilliSEC is outside the solid-health unit inventory: UCUM only.
+    expect(measurement("recovery-101", "hrv").unit).toBeUndefined();
+    expect(measurement("recovery-101", "hrv").unitCode).toBe("ms");
     expect(typed(pod, WORKOUTS, CLASSES.ExerciseAction)).toHaveLength(1);
     const action = new ExerciseAction(
       `${WORKOUTS}#workout-workout-101/action`,
@@ -251,7 +260,7 @@ describe("WHOOP mappings and identity", () => {
     );
     expect(observation).toBeDefined();
     expect(
-      new HealthNode(observation?.subject.value as string, data, DataFactory).measuredValue,
+      new HealthObservation(observation?.subject.value as string, data, DataFactory).measuredValue,
     ).toBeCloseTo(1255.2);
     const action = new ExerciseAction(
       typed(pod, WORKOUTS, CLASSES.ExerciseAction)[0] as string,
@@ -284,8 +293,11 @@ describe("WHOOP mappings and identity", () => {
       { pod },
     );
     expect(
-      new HealthNode(`${MONTH}#recovery-101/metric/restingHR`, pod.dataset(MONTH), DataFactory)
-        .measuredValue,
+      new HealthObservation(
+        `${MONTH}#recovery-101/metric/restingHR`,
+        pod.dataset(MONTH),
+        DataFactory,
+      ).measuredValue,
     ).toBe(55);
     expect(
       pod.dataset(MONTH).countQuads(`${MONTH}#recovery-101/metric/hrv`, null, null, null),
@@ -317,7 +329,9 @@ describe("WHOOP mappings and identity", () => {
   it("does not double-count or overwrite overnight summary/stage durations", async () => {
     const { pod } = await csv(SLEEPS_CSV.replace(",450,", ",,"));
     const total = typed(pod, MONTH, HEALTH.Sleep)[0] as string;
-    expect(new HealthNode(total, pod.dataset(MONTH), DataFactory).measuredValue).toBe(27_000);
+    expect(new HealthObservation(total, pod.dataset(MONTH), DataFactory).measuredValue).toBe(
+      27_000,
+    );
   });
 });
 
@@ -440,8 +454,11 @@ describe("WHOOP API traversal and failures", () => {
     );
     expect(report.skipped).toBe(5);
     expect(
-      new HealthNode(`${MONTH}#recovery-101/metric/restingHR`, pod.dataset(MONTH), DataFactory)
-        .measuredValue,
+      new HealthObservation(
+        `${MONTH}#recovery-101/metric/restingHR`,
+        pod.dataset(MONTH),
+        DataFactory,
+      ).measuredValue,
     ).toBe(52);
   });
   it("skips unscored and impossible sleep records", async () => {
@@ -756,7 +773,7 @@ describe("WHOOP review regressions", () => {
       expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(expected);
       const data = pod.dataset(MONTH);
       expect(
-        new HealthNode(`${MONTH}#sleep-${SLEEP.id}`, data, DataFactory).startTime?.toISOString(),
+        new RecordMarker(`${MONTH}#sleep-${SLEEP.id}`, data, DataFactory).startTime?.toISOString(),
       ).toBe(at);
       if (expected === 1)
         expect([...data].some((q) => q.subject.value.includes("#sleep-csv-"))).toBe(false);
@@ -765,21 +782,93 @@ describe("WHOOP review regressions", () => {
   it("uses resting HR LOINC 40443-4 and leaves source field codes without an invented scheme", async () => {
     const { pod } = await demoImport(whoopAdapter);
     const data = pod.dataset(MONTH);
-    const resting = new HealthNode(
-      `${MONTH}#recovery-101/metric/restingHR/code`,
+    const resting = new HealthCode(
+      `${MONTH}#recovery-101/metric/restingHR-code`,
       data,
       DataFactory,
     );
-    expect(data.getQuads(resting.value, HEALTH.codeValue, null, null)[0]?.object.value).toBe(
-      "40443-4",
-    );
-    expect(resting.linked(HEALTH.inScheme)).toBe("http://loinc.org");
+    expect(resting.codeValue).toBe("40443-4");
+    expect(resting.scheme).toBe("http://loinc.org");
     for (const metric of ["hrv", "temperature", "oxygen"]) {
-      const code = new HealthNode(`${MONTH}#recovery-101/metric/${metric}/code`, data, DataFactory);
-      expect(code.linked(HEALTH.inScheme)).toBeUndefined();
-      expect(data.countQuads(code.value, HEALTH.codeValue, null, null)).toBe(1);
+      const code = new HealthCode(`${MONTH}#recovery-101/metric/${metric}-code`, data, DataFactory);
+      expect(code.scheme).toBeUndefined();
+      expect(data.countQuads(code.value, `${NS.CORE}value`, null, null)).toBe(1);
     }
     expect([...data].some((q) => q.object.value === "https://developer.whoop.com")).toBe(false);
+  });
+  it("writes observations through the generated solid-health model (pinned output changes)", async () => {
+    const { pod } = await demoImport(whoopAdapter);
+    const data = pod.dataset(MONTH);
+    const ids = typed(pod, MONTH, HEALTH.Observation).sort();
+    // Every stored observation is a valid projection of the generated composite.
+    expect(
+      parseObservations(data)
+        .map((observation) => observation.id)
+        .sort(),
+    ).toEqual(ids);
+    for (const id of ids) {
+      const observation = new HealthObservation(id, data, DataFactory);
+      // Change: the generated model also types observations health:ClinicalEntry.
+      expect(observation.types.has(`${NS.HEALTH}ClinicalEntry`)).toBe(true);
+      // Change: helper nodes use solid-health's `-code` / `-time` IDs (was `/code`, `/time`).
+      expect(observation.code).toBe(`${id}-code`);
+      expect(observation.time).toBe(`${id}-time`);
+      expect(data.countQuads(`${id}/code`, null, null, null)).toBe(0);
+      expect(data.countQuads(`${id}/time`, null, null, null)).toBe(0);
+      // Change: instants are also typed time:TemporalEntity.
+      expect(
+        new HealthInstant(`${id}-time`, data, DataFactory).types.has(`${NS.TIME}TemporalEntity`),
+      ).toBe(true);
+      // Change: values are xsd:decimal (was xsd:double).
+      const values = data.getQuads(id, `${NS.HEALTH}value`, null, null);
+      expect(
+        values.map((quad) =>
+          quad.object.termType === "Literal" ? quad.object.datatype.value : "",
+        ),
+      ).toEqual([`${NS.XSD}decimal`]);
+      // Change: no schema:endTime on observations; the record marker keeps the window.
+      expect(data.countQuads(id, `${NS.SCHEMA}endTime`, null, null)).toBe(0);
+      // Unchanged: API observations keep their collection URL for provenance.
+      expect(observation.patient).toBe(`${MONTH}#subject`);
+      expect(data.countQuads(id, `${NS.SCHEMA}url`, null, null)).toBe(1);
+    }
+    expect(
+      new RecordMarker(`${MONTH}#sleep-sleep-101`, data, DataFactory).endTime?.toISOString(),
+    ).toBe("2026-06-08T06:00:00.000Z");
+    // Change: QUDT units outside the profile inventory are dropped; UCUM codes remain.
+    const unitOf = (root: string, metric: string) => {
+      const observation = new HealthObservation(
+        `${MONTH}#${root}/metric/${metric}`,
+        data,
+        DataFactory,
+      );
+      return [observation.unit, observation.unitCode];
+    };
+    expect(unitOf("recovery-101", "restingHR")).toEqual([`${NS.UNIT}BEAT-PER-MIN`, "/min"]);
+    expect(unitOf("recovery-101", "hrv")).toEqual([undefined, "ms"]);
+    expect(unitOf("recovery-101", "temperature")).toEqual([undefined, "Cel"]);
+    expect(unitOf("recovery-101", "oxygen")).toEqual([undefined, "%"]);
+    expect(unitOf("cycle-101", "energy")).toEqual([undefined, "kJ"]);
+    expect(unitOf("sleep-sleep-101", "sleep")).toEqual([`${NS.UNIT}SEC`, "s"]);
+    expect(unitOf("sleep-sleep-101", "respiratory")).toEqual([undefined, "/min"]);
+    expect(unitOf("sleep-sleep-101", "light")).toEqual([`${NS.UNIT}SEC`, "s"]);
+  });
+  it("removes legacy `/code` and `/time` helper nodes when a record is reimported", async () => {
+    const { pod } = await demoImport(whoopAdapter);
+    const legacy = pod.dataset(MONTH);
+    const iri = `${MONTH}#recovery-101/metric/restingHR`;
+    const code = new HealthCode(`${iri}/code`, legacy, DataFactory).mark();
+    code.codeValue = "40443-4";
+    new HealthInstant(`${iri}/time`, legacy, DataFactory).mark().dateTime = new Date(
+      "2026-06-08T06:00:00Z",
+    );
+    await writeResource(MONTH, legacy, { fetchImpl: pod.fetch });
+    expect(pod.dataset(MONTH).countQuads(`${iri}/code`, null, null, null)).toBeGreaterThan(0);
+    await sparseImport(whoopAdapter, WHOOP_FIXTURES, { pod });
+    const data = pod.dataset(MONTH);
+    expect(data.countQuads(`${iri}/code`, null, null, null)).toBe(0);
+    expect(data.countQuads(`${iri}/time`, null, null, null)).toBe(0);
+    expect(new HealthCode(`${iri}-code`, data, DataFactory).codeValue).toBe("40443-4");
   });
   it.each([
     1, 2, 3, 4,
@@ -896,8 +985,11 @@ describe("WHOOP review regressions", () => {
     }
     expect(cursor).toBe("2026-06-08T08:00:00.000Z");
     expect(
-      new HealthNode(`${MONTH}#recovery-101/metric/restingHR`, pod.dataset(MONTH), DataFactory)
-        .measuredValue,
+      new HealthObservation(
+        `${MONTH}#recovery-101/metric/restingHR`,
+        pod.dataset(MONTH),
+        DataFactory,
+      ).measuredValue,
     ).toBe(52);
     expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
     expect(typed(pod, WORKOUTS, CLASSES.ExerciseAction)).toHaveLength(1);
@@ -954,7 +1046,7 @@ describe("WHOOP review regressions", () => {
       expect(Boolean(report.warnings?.length)).toBe(i < 2);
       if (i === 0) {
         const times = typed(pod, MONTH, HEALTH.Sleep).map((id) =>
-          new HealthNode(`${id}/time`, pod.dataset(MONTH), DataFactory).dateTime?.toISOString(),
+          new HealthInstant(`${id}-time`, pod.dataset(MONTH), DataFactory).dateTime?.toISOString(),
         );
         expect(times).toEqual(
           expect.arrayContaining(["2026-06-05T22:00:00.000Z", "2026-06-04T22:00:00.000Z"]),
