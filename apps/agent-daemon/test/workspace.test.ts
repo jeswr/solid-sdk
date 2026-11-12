@@ -2,7 +2,11 @@
 import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { expect, it } from "vitest";
+import { serialize } from "@jeswr/rdf-serialize";
+import { StorageError } from "@jeswr/storage-client";
+import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
+import { expect, it, vi } from "vitest";
 import { createMemoryPod } from "../src/testing.js";
 import { PodWorkspace } from "../src/workspace.js";
 
@@ -10,13 +14,27 @@ const root = "https://pod.example/owner/";
 const ownerWebId = `${root}profile#me`;
 const privateTypeIndex = `${root}settings/privateTypeIndex.ttl`;
 it("registers a private AgentWorkspace, preserves unrelated RDF, uses ETags, and is idempotent", async () => {
-  const pod = createMemoryPod();
-  pod.resources.set(privateTypeIndex, {
-    body: '<urn:fixture:unrelated> <urn:predicate> "preserve" .',
-    type: "text/turtle",
-    etag: '"initial"',
+  const pod = createMemoryPod(root);
+  const dataset = new Store();
+  OptionalAs.object(
+    new TermWrapper("urn:fixture:unrelated", dataset, DataFactory),
+    "urn:predicate",
+    "preserve",
+    LiteralFrom.string,
+  );
+  const initial = await pod.storage.write(
+    privateTypeIndex,
+    await serialize([...dataset], { format: "text/turtle" }),
+    { contentType: "text/turtle", ifMatch: "*" },
+  );
+  pod.requests.length = 0;
+  const workspace = new PodWorkspace({
+    io: pod.io,
+    storage: pod.storage,
+    root,
+    ownerWebId,
+    privateTypeIndex,
   });
-  const workspace = new PodWorkspace({ io: pod.io, root, ownerWebId, privateTypeIndex });
   await workspace.initialize();
   const index = pod.resources.get(privateTypeIndex)?.body;
   expect(index).toContain("preserve");
@@ -26,7 +44,7 @@ it("registers a private AgentWorkspace, preserves unrelated RDF, uses ETags, and
     pod.requests
       .find((r) => r.url === privateTypeIndex && r.method === "PUT")
       ?.headers.get("if-match"),
-  ).toBe('"initial"');
+  ).toBe(initial.etag);
   await workspace.initialize();
   expect(pod.requests.filter((r) => r.url === privateTypeIndex && r.method === "PUT")).toHaveLength(
     1,
@@ -34,21 +52,33 @@ it("registers a private AgentWorkspace, preserves unrelated RDF, uses ETags, and
 });
 it("does not create or replace an unreadable or unvalidated index, and bounds conflicts", async () => {
   for (const status of [403, 200, 412]) {
-    const pod = createMemoryPod();
-    const io: PodWorkspace["io"] = async (input, init) => {
-      if (String(input) === privateTypeIndex) {
-        if (status === 412 && init?.method !== "PUT")
-          return new Response("", {
-            headers: { etag: '"fixture"', "content-type": "text/turtle" },
-          });
-        return new Response(status === 200 ? "" : null, {
-          status,
-          headers: { "content-type": "text/turtle" },
-        });
-      }
-      return pod.io(input, init);
-    };
-    const workspace = new PodWorkspace({ io, root, ownerWebId, privateTypeIndex });
+    const pod = createMemoryPod(root);
+    if (status !== 403) {
+      await pod.storage.write(privateTypeIndex, "", { contentType: "text/turtle", ifMatch: "*" });
+    }
+    const read = pod.storage.read;
+    vi.spyOn(pod.storage, "read").mockImplementation(async (url, opts) => {
+      if (url !== privateTypeIndex) return read(url, opts);
+      if (status === 403) throw new StorageError("forbidden", { method: "GET", url, status });
+      const result = await read(url, opts);
+      return status === 200 ? { ...result, etag: null } : result;
+    });
+    if (status === 412) {
+      const write = pod.storage.write;
+      vi.spyOn(pod.storage, "write").mockImplementation(async (url, body, opts) => {
+        if (url === privateTypeIndex)
+          throw new StorageError("precondition-failed", { method: "PUT", url, status });
+        return write(url, body, opts);
+      });
+    }
+    pod.requests.length = 0;
+    const workspace = new PodWorkspace({
+      io: pod.io,
+      storage: pod.storage,
+      root,
+      ownerWebId,
+      privateTypeIndex,
+    });
     await expect(workspace.initialize()).rejects.toThrow(
       status === 412 ? "conflict limit" : status === 200 ? "validator" : "read failed",
     );
@@ -58,7 +88,7 @@ it("does not create or replace an unreadable or unvalidated index, and bounds co
   }
 });
 it("refuses foreign, sibling-prefix, credentialed, query and redirect destinations before writing content", async () => {
-  const pod = createMemoryPod();
+  const pod = createMemoryPod(root);
   for (const index of [
     "https://foreign.example/index",
     "https://pod.example/owner-evil/index",
@@ -66,23 +96,37 @@ it("refuses foreign, sibling-prefix, credentialed, query and redirect destinatio
     "https://user:fixture@pod.example/owner/index",
   ]) {
     expect(
-      () => new PodWorkspace({ io: pod.io, root, ownerWebId, privateTypeIndex: index }),
+      () =>
+        new PodWorkspace({
+          io: pod.io,
+          storage: pod.storage,
+          root,
+          ownerWebId,
+          privateTypeIndex: index,
+        }),
     ).toThrow();
   }
   const workspace = new PodWorkspace({
+    storage: pod.storage,
     io: async () => new Response(null, { status: 302 }),
     root,
     ownerWebId,
     privateTypeIndex,
   });
-  await expect(workspace.initialize()).rejects.toThrow("redirect");
+  await expect(workspace.io(root)).rejects.toThrow("redirect");
   await expect(workspace.io("https://foreign.example/")).rejects.toThrow("outside");
   expect(pod.requests).toHaveLength(0);
   expect(workspace.within("https://pod.example/owner/agent-evil/approvals/1")).toBe(false);
 });
 it("stamps local proposal destinations, refuses conflicting rewrites and serializes heartbeat RDF", async () => {
-  const pod = createMemoryPod();
-  const workspace = new PodWorkspace({ io: pod.io, root, ownerWebId, privateTypeIndex });
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({
+    io: pod.io,
+    storage: pod.storage,
+    root,
+    ownerWebId,
+    privateTypeIndex,
+  });
   await workspace.initialize();
   const original = exampleRecords["action-proposal"];
   const id = workspace.proposalLocation(original.id);
@@ -102,8 +146,14 @@ it("stamps local proposal destinations, refuses conflicting rewrites and seriali
   await expect(workspace.inbox("../escape", "fixture")).rejects.toThrow();
 });
 it("publishes exactly the agent's introduction at descriptors/agent.ttl and keeps it current", async () => {
-  const pod = createMemoryPod();
-  const workspace = new PodWorkspace({ io: pod.io, root, ownerWebId, privateTypeIndex });
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({
+    io: pod.io,
+    storage: pod.storage,
+    root,
+    ownerWebId,
+    privateTypeIndex,
+  });
   await workspace.initialize();
   const url = `${root}agent/descriptors/agent.ttl`;
   const triples = async () =>
