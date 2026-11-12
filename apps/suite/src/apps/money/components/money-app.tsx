@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   ListChecks,
   ListTree,
+  PiggyBank,
   Plus,
   Repeat,
   Wallet,
@@ -28,6 +29,7 @@ function Chrome({ children }: { children: ReactNode }) {
   const [add, setAdd] = useState(false);
   const links = [
     { href: "/money", label: "Overview", Icon: LayoutDashboard },
+    { href: "/money/budget", label: "Budget", Icon: PiggyBank },
     { href: "/money/accounts", label: "Accounts", Icon: Wallet },
     { href: "/money/reports", label: "Reports", Icon: BarChart3 },
     { href: "/money/recurring", label: "Recurring", Icon: Repeat },
