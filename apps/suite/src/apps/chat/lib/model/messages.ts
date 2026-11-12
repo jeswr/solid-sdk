@@ -29,6 +29,21 @@ export interface SendInput {
   inReplyTo?: string;
 }
 
+const NOTE_TYPES = [`${NS.AS}Note`, `${NS.SIOC}Note`, `${NS.AS}Tombstone`];
+/**
+ * A Like/Undo event is never a message. Only this app's event subjects, or an event that is not
+ * also typed as a message, are skipped, so a member appending `<message> a as:Like` cannot hide
+ * someone else's message.
+ */
+function isReactionEvent(graph: DatasetCore, id: string, types: string[]): boolean {
+  if (!types.includes(`${NS.AS}Like`) && !types.includes(`${NS.AS}Undo`)) return false;
+  if (/#(?:reaction|undo)-[^#]*$/.test(id)) return true;
+  return (
+    readRefs(graph, id, `${NS.AS}object`).length > 0 &&
+    !types.some((type) => NOTE_TYPES.includes(type))
+  );
+}
+
 /** Multi-subject day resources and SolidOS LongChat are read through the interop hub. */
 export function readMessages(dataset: DatasetCore): ChatMessage[] {
   const result: ChatMessage[] = [];
@@ -45,6 +60,7 @@ export function readMessages(dataset: DatasetCore): ChatMessage[] {
   const graph = new Store([...dataset.match(null, null, null, DataFactory.defaultGraph())]);
   for (const id of subjects) {
     const types = readRefs(graph, id, RDF_TYPE);
+    if (isReactionEvent(graph, id, types)) continue;
     const tombstone = types.includes(`${NS.AS}Tombstone`);
     let message: CanonicalMessage | undefined;
     if (tombstone) {
