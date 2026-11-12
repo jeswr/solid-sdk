@@ -227,7 +227,7 @@ async function trustedRun(tlsDir) {
         pages[name] = await client.evaluate(`({
           path: location.pathname,
           headings: [...document.querySelectorAll('h1,h2')].map(h => h.textContent.trim().slice(0, 80)).slice(0, 6),
-          buttons: [...document.querySelectorAll('button')].filter(b => b.getClientRects().length).map(b => b.textContent.trim().slice(0, 40)).slice(0, 12),
+          buttons: [...document.querySelectorAll('button')].filter(b => b.getClientRects().length).map(b => b.textContent.trim().slice(0, 40) + (b.matches(':disabled') ? ' (disabled)' : '') + (b.getAttribute('aria-busy') === 'true' ? ' (busy)' : '')).slice(0, 12),
           alerts: [...document.querySelectorAll('[role="alert"],.error')].map(a => a.textContent.trim().slice(0, 160)).slice(0, 4),
         })`);
       } catch {
@@ -286,7 +286,7 @@ async function trustedRun(tlsDir) {
   async function clickText(client, text) {
     await poll(`enabled button ${text}`, () =>
       client.evaluate(`(() => {
-      const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.disabled && b.getClientRects().length);
+      const b = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(text)} && !b.matches(':disabled') && b.getClientRects().length);
       if (!b) return false; b.click(); return true;
     })()`),
     );
@@ -480,7 +480,8 @@ async function trustedRun(tlsDir) {
     await poll("WebID input", () =>
       app.evaluate(`(() => {
       const input = document.querySelector('form[aria-label="Sign in with your WebID"] input');
-      if (!input || input.disabled) return false;
+      // :disabled also covers a disabled ancestor fieldset (the shell disables it while loading).
+      if (!input || input.matches(':disabled')) return false;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, ${JSON.stringify(seed.account.webId)});
       input.dispatchEvent(new Event('input', { bubbles: true })); return true;
     })()`),
