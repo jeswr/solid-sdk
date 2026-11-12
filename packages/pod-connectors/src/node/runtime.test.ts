@@ -1698,6 +1698,13 @@ describe("VeSync CLI", () => {
           throw new Error(secrets.join(" "));
         },
       }),
+    ).toBe(1);
+    // Only an explicit login rejection is an authentication failure (exit 3).
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => Response.json({ code: -11201000, msg: secrets.join(" ") }),
+      }),
     ).toBe(3);
     const errors = JSON.stringify(stderr.mock.calls);
     for (const secret of [...secrets, passwordHash]) expect(errors).not.toContain(secret);
@@ -1725,5 +1732,57 @@ describe("VeSync CLI", () => {
     expect(await pending).toBe(130);
     expect(source).toHaveBeenCalledTimes(4);
     expect(stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("VeSync watch resilience", () => {
+  it("retries a login transport fault instead of stopping as an authentication failure", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    let logins = 0;
+    const sourceTransport: typeof fetch = async (input) => {
+      if (String(input) === VESYNC_API + LOGIN) {
+        if (++logins === 1) throw new Error("synthetic network fault");
+        return Response.json({ code: 0, result: { token: "t", accountID: "a" } });
+      }
+      if (String(input) === VESYNC_API + DEVICES)
+        return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { transport: podTransport } = fixturePod();
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    const pending = runCli(["import", "vesync", "--watch", "5"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceTransport,
+      vesyncCredentials: async () => ({
+        email: "synthetic@example.invalid",
+        passwordHash: hashVeSyncPassword("synthetic"),
+      }),
+      stdout,
+      stderr,
+      signal: controller.signal,
+    });
+    await vi.waitFor(() =>
+      expect(stderr).toHaveBeenCalledWith("VeSync reading failed; retrying with backoff.\n"),
+    );
+    // Step through the jittered backoff (at most 6.25 minutes), yielding real event-loop turns
+    // so Web Crypto work in Pod token exchanges completes before their fake deadlines.
+    for (let i = 0; i < 420 && !stdout.mock.calls.length; i++) {
+      await vi.advanceTimersByTimeAsync(1000);
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    await vi.waitFor(() =>
+      expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported vesync")),
+    );
+    expect(stderr).toHaveBeenCalledTimes(1);
+    controller.abort();
+    expect(await pending).toBe(130);
+    expect(logins).toBe(2);
   });
 });

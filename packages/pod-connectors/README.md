@@ -779,8 +779,10 @@ minutes; `--watch <minutes>` accepts 5–1440 minutes. Polling is sequential unt
 SIGINT/SIGTERM. HTTP 429/5xx get three attempts with jittered exponential delays;
 watch failures back off from the chosen interval toward one hour, with jitter and a
 five-minute floor. Success resets the interval. HTTP 401 and token-expiry codes
-`-11000022`/`-11000021` trigger at most one re-login per request. Authentication and
-checkpoint failures stop the command. Exit codes: 0 success, 1 import/checkpoint
+`-11000022`/`-11000021` trigger at most one re-login per request. Only an explicit
+login rejection (a non-zero login code, or HTTP 401) is an authentication failure;
+network faults, timeouts and malformed login answers are import failures that watch
+mode retries with backoff. Authentication and checkpoint failures stop the command. Exit codes: 0 success, 1 import/checkpoint
 failure, 2 configuration, 3 authentication, 130 cancellation.
 
 Each sensor has metadata (Levoit, device model and label), a room FeatureOfInterest,
@@ -791,6 +793,13 @@ name. A single `--room <label>` applies to every purifier. To assign separate ro
 use repeated `--room 'vesync-<64 hex hash>=Bedroom'` options, using the sensor slugs
 visible in the pod. The library also accepts a `room` map keyed by these slugs.
 
+Status keys follow pyvesync's device classes. Core models (bypassV2) read
+`air_quality_value` (PM2.5), `air_quality` (the device's air quality level), `level`
+(fan) and `filter_life`; Vital models read `PM25`, `AQLevel`, `fanSpeedLevel` and
+`filterLifePercent`; the LV-PUR131S detail route is addressed by uuid and reads its
+top-level `level` and `filterLife.percent` (its text air quality is omitted). Core
+200S models have no air sensor, so only fan and filter readings are recorded. A
+bypassV2 answer whose nested device code is non-zero records no readings.
 PM2.5 uses QUDT MicroGM-PER-M3, numeric air quality indices and fan levels use
 UNITLESS, and filter life uses PERCENT. Fan/filter observations concern the purifier;
 air measurements concern the room. Device-specific index scales are preserved;

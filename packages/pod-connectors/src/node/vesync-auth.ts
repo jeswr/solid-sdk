@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import { env, stderr, stdin } from "node:process";
 import { StringDecoder } from "node:string_decoder";
@@ -47,6 +48,8 @@ export async function hiddenPrompt(label: string, signal?: AbortSignal): Promise
     const cleanup = () => {
       stdin.removeListener("data", onData);
       stdin.removeListener("error", onError);
+      stdin.removeListener("end", onError);
+      stdin.removeListener("close", onError);
       signal?.removeEventListener("abort", cancel);
       stdin.setRawMode(raw);
       if (paused) stdin.pause();
@@ -87,6 +90,9 @@ export async function hiddenPrompt(label: string, signal?: AbortSignal): Promise
     };
     stdin.on("data", onData);
     stdin.once("error", onError);
+    // A closed terminal must fail the prompt rather than leave the CLI waiting forever.
+    stdin.once("end", onError);
+    stdin.once("close", onError);
     signal?.addEventListener("abort", cancel, { once: true });
     if (signal?.aborted) cancel();
   });
@@ -147,7 +153,7 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
     path: string,
     payload: object,
     caller: AbortSignal,
-    login = false,
+    headers: Record<string, string> = {},
   ): Promise<Record<string, unknown>> {
     for (let attempt = 0; attempt < 3; attempt++) {
       options.signal?.throwIfAborted();
@@ -174,7 +180,11 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
               method: "POST",
               redirect: "error",
               signal,
-              headers: { "content-type": "application/json", "user-agent": "okhttp/3.12.1" },
+              headers: {
+                ...headers,
+                "content-type": "application/json",
+                "user-agent": "okhttp/3.12.1",
+              },
               body: JSON.stringify({ ...base(), ...payload }),
             });
             if (response.status === 401) {
@@ -209,8 +219,9 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
       } catch {
         if (caller.aborted) caller.throwIfAborted();
         if (options.signal?.aborted) options.signal.throwIfAborted();
-        // Never retain the source exception, response body, credentials or a cause.
-        if (login) throw new VeSyncAuthError();
+        // Never retain the source exception, response body, credentials or a cause. Transport
+        // faults are transient even during login: only an explicit login rejection (a non-zero
+        // code, or HTTP 401 mapped to one) is an authentication failure, so watch mode retries.
         throw new NodeRuntimeError("import", "VeSync request failed.");
       } finally {
         signal.removeEventListener("abort", abort);
@@ -228,7 +239,6 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
       LOGIN,
       { email, password: passwordHash, method: "login", devToken: "", osType: "Android" },
       caller,
-      true,
     );
     const result = record(answer.result);
     if (answer.code !== 0 || !text(result.token, 4096) || !text(result.accountID))
@@ -276,12 +286,14 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
         );
         req.signal.throwIfAborted();
         options.signal?.throwIfAborted();
-        if (path !== DEVICES && !text(payload.cid)) throw new Error();
+        if (path === BYPASS && !text(payload.cid)) throw new Error();
+        if (path === DETAIL && !text(payload.uuid)) throw new Error();
         const body =
           path === DEVICES
             ? { pageNo: 1, pageSize: 50 }
             : path === DETAIL
-              ? { cid: payload.cid }
+              ? // pyvesync's VeSyncAir131: uuid-addressed devicedetail with a fixed mobileId.
+                { uuid: payload.uuid, mobileId: "1234567890123456" }
               : {
                   cid: payload.cid,
                   ...(text(payload.uuid) ? { uuid: payload.uuid } : {}),
@@ -324,6 +336,10 @@ export function createVeSyncSourceAuth(options: VeSyncAuthOptions): SourceAuth {
                     path === DEVICES ? "devices" : path === BYPASS ? "bypassV2" : "devicedetail",
                 },
                 signal,
+                // The v1 LV-PUR131S route also reads the session from pyvesync's req_headers.
+                path === DETAIL && token && accountID
+                  ? { tk: token, accountid: accountID, tz: "UTC", "accept-language": "en" }
+                  : {},
               );
               if (answer.code === -11000022 || answer.code === -11000021) {
                 token = undefined;

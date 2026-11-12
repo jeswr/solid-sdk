@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import {
   buildObservationDay,
   buildRoom,
@@ -49,23 +50,51 @@ function supported(model: string): boolean {
     model,
   );
 }
+/** Status payload families, following pyvesync's VeSyncAirBypass, VeSyncAirBaseV2 and VeSyncAir131. */
+export type VeSyncFamily = "core" | "vital" | "legacy";
+export function familyOf(model: string): VeSyncFamily {
+  if (model.toUpperCase() === "LV-PUR131S") return "legacy";
+  return /^(?:LAP-V|Vital)/i.test(model) ? "vital" : "core";
+}
+/** Core 200S (LAP-C20x) has no air quality sensor; never record its placeholder fields. */
+export function hasAirSensor(model: string): boolean {
+  return !/^(?:Core ?200S|LAP-C20\d)/i.test(model);
+}
 /** Only finite numeric readings are meaningful; never coerce labels, booleans or numeric strings. */
-export function measurements(status: Record<string, unknown>, legacy: boolean) {
+export function measurements(
+  status: Record<string, unknown>,
+  family: VeSyncFamily,
+  airSensor = true,
+) {
   const result: {
     key: string;
     property: (typeof PROPERTY)[keyof typeof PROPERTY];
     value: number;
   }[] = [];
+  // Core: snake_case with `level`; Vital: camelCase; LV-PUR131S: text airQuality, filterLife.percent.
+  const legacyFilter =
+    typeof status.filterLife === "number" ? status.filterLife : record(status.filterLife).percent;
+  const fields =
+    family === "legacy"
+      ? { pm25: undefined, aqi: undefined, fan: status.level, filter: legacyFilter }
+      : family === "vital"
+        ? {
+            pm25: status.PM25,
+            aqi: status.AQLevel,
+            fan: status.fanSpeedLevel,
+            filter: status.filterLifePercent,
+          }
+        : {
+            pm25: status.air_quality_value,
+            aqi: status.air_quality,
+            fan: status.level,
+            filter: status.filter_life,
+          };
   for (const [key, property, value, max] of [
-    ["pm25", PROPERTY.PM2_5MassConcentration, status.air_quality_value, 100000],
-    ["aqi", PROPERTY.AirQualityIndex, legacy ? status.airQuality : status.air_quality, 100000],
-    [
-      "fan",
-      PROPERTY.FanSpeedLevel,
-      legacy ? status.level : (status.fan_speed_level ?? status.fan_level),
-      100,
-    ],
-    ["filter", PROPERTY.FilterLifeRemaining, legacy ? status.filterLife : status.filter_life, 100],
+    ["pm25", PROPERTY.PM2_5MassConcentration, airSensor ? fields.pm25 : undefined, 100000],
+    ["aqi", PROPERTY.AirQualityIndex, airSensor ? fields.aqi : undefined, 100000],
+    ["fan", PROPERTY.FanSpeedLevel, fields.fan, 100],
+    ["filter", PROPERTY.FilterLifeRemaining, fields.filter, 100],
   ] as const) {
     if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max)
       result.push({ key, property, value });
@@ -136,7 +165,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
                 ),
               );
               if (value.code !== 0) throw new Error();
-              return record(value.result);
+              return value;
             })(),
             aborted,
           ]);
@@ -148,7 +177,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
           signal.removeEventListener("abort", abort);
         }
       };
-      const answer = await post(DEVICES, { pageNo: 1, pageSize: MAX_DEVICES });
+      const answer = record((await post(DEVICES, { pageNo: 1, pageSize: MAX_DEVICES })).result);
       if (
         !Array.isArray(answer.list) ||
         answer.list.length > MAX_DEVICES ||
@@ -176,21 +205,31 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
           skipped++;
           continue;
         }
+        const family = familyOf(model);
+        const uuid = text(device.uuid);
+        // pyvesync addresses LV-PUR131S detail requests by uuid, not cid.
+        if (family === "legacy" && !uuid) {
+          skipped++;
+          continue;
+        }
         seen.add(id);
-        const legacy = model.toUpperCase() === "LV-PUR131S";
-        const status = await post(
-          legacy ? DETAIL : BYPASS,
-          legacy
-            ? { cid: id }
+        const envelope = await post(
+          family === "legacy" ? DETAIL : BYPASS,
+          family === "legacy"
+            ? { cid: id, uuid }
             : {
                 cid: id,
-                ...(text(device.uuid) ? { uuid: device.uuid } : {}),
+                ...(uuid ? { uuid } : {}),
                 configModule: text(device.configModule) ?? "WiFi",
                 deviceRegion: text(device.deviceRegion) ?? "US",
                 payload: { method: "getPurifierStatus", source: "APP", data: {} },
               },
         );
-        const readings = measurements(legacy ? status : record(status.result), legacy);
+        // LV-PUR131S answers at the top level; bypassV2 nests the device's own code and result.
+        const outer = record(envelope.result);
+        const status =
+          family === "legacy" ? envelope : outer.code === 0 ? record(outer.result) : {};
+        const readings = measurements(status, family, hasAirSensor(model));
         if (observations + readings.length > MAX_RUN_OBSERVATIONS)
           throw new IntegrationSyncError("vesync", "VeSync observation budget exceeded.");
         observations += readings.length;

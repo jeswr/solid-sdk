@@ -90,8 +90,7 @@ export function parseImportArgs(args: readonly string[]): {
       )
         throw new NodeRuntimeError("config", "Invalid room label.");
       if (
-        match &&
-        match[2] &&
+        match?.[2] &&
         match[2].length <= 256 &&
         match[2].trim() &&
         !room &&

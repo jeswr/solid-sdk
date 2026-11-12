@@ -67,12 +67,6 @@ const AS = "https://www.w3.org/ns/activitystreams#";
  * forms because pods in the wild use either.
  */
 export const CATEGORIES: readonly DataCategory[] = [
-  {
-    id: "environment", label: "Environment", tier: "other", icon: "boxes",
-    assurance: "Only apps you approve can read your environment data.",
-    description: "Indoor air quality, sensors and purifier readings.",
-    classes: [`${SOSA}Observation`, `${SOSA}Sensor`, `${SOSA}FeatureOfInterest`],
-  },
   // ── Common tier ─────────────────────────────────────────────────────────
   {
     id: "identity",
@@ -233,6 +227,16 @@ export const CATEGORIES: readonly DataCategory[] = [
       `${SCHEMA}Conversation`,
       `${SCHEMA_HTTP}Conversation`,
     ],
+  },
+  {
+    // Connected sources: purifier and air monitor readings (VeSync).
+    id: "environment",
+    label: "Environment",
+    tier: "other",
+    icon: "boxes",
+    assurance: "Only apps you approve can read your environment data.",
+    description: "Indoor air quality, sensors and purifier readings.",
+    classes: [`${SOSA}Observation`, `${SOSA}Sensor`, `${SOSA}FeatureOfInterest`],
   },
 ] as const;
 

@@ -263,6 +263,9 @@ state. Keep Node auth out of browser entry points and keep all source exceptions
 sanitized. Only fixed HTTPS login/list/status routes are allowed; never forward
 redirects, arbitrary methods, source URLs or caller headers with credentials.
 
+Read status keys per pyvesync family (Core snake_case with `level`, Vital camelCase,
+LV-PUR131S top-level and uuid-addressed; no Core 200S air readings) and treat only an
+explicit login rejection as an authentication failure; transport faults stay retryable.
 Use solid-environment builders and path helpers. Hash cid/uuid into sensor slugs;
 never persist raw identifiers in IRIs. Preserve per-sensor UTC day appends, minute
 identities, room/purifier feature distinctions, bounded numeric readings, and default

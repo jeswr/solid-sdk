@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { env, stderr, stdin } from "node:process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BYPASS, DEVICES, LOGIN, MAX_RESPONSE_BYTES, VESYNC_API } from "../vesync/api.js";
+import { BYPASS, DETAIL, DEVICES, LOGIN, MAX_RESPONSE_BYTES, VESYNC_API } from "../vesync/api.js";
+import { VeSyncAuthError } from "../vesync/errors.js";
 import { coreStatus } from "../vesync/fixtures.js";
+import { NodeRuntimeError } from "./errors.js";
 import {
   createVeSyncSourceAuth,
   hashVeSyncPassword,
@@ -314,4 +316,70 @@ it("honours an already-aborted credential read before consuming environment secr
     message: "Import cancelled.",
   });
   expect(env.VESYNC_PASSWORD).toBe(password);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("addresses LV-PUR131S detail by uuid with pyvesync's session headers", async () => {
+  const t = transport([{ code: 0, level: 1 }]);
+  const auth = createVeSyncSourceAuth({ credentials, transport: t.fetcher });
+  await call(auth, DETAIL);
+  const detail = t.requests[1];
+  expect(detail?.url).toBe(VESYNC_API + DETAIL);
+  expect(detail?.body).toMatchObject({
+    method: "devicedetail",
+    uuid: "synthetic-uuid",
+    mobileId: "1234567890123456",
+    token,
+    accountID,
+  });
+  expect("cid" in (detail?.body ?? {})).toBe(false);
+  const headers = new Headers(detail?.init?.headers);
+  expect(headers.get("tk")).toBe(token);
+  expect(headers.get("accountid")).toBe(accountID);
+  // Session headers go only to the v1 detail route, never to login.
+  expect(new Headers(t.requests[0]?.init?.headers).get("tk")).toBeNull();
+  await expect(
+    auth.fetch(VESYNC_API + DETAIL, { method: "POST", body: JSON.stringify({ cid: "c" }) }),
+  ).rejects.toThrow("VeSync request");
+  expect(t.requests).toHaveLength(2);
+});
+
+it("treats login transport faults as transient, and only a login rejection as authentication", async () => {
+  for (const fault of [
+    () => {
+      throw new Error(password);
+    },
+    () => new Response(password, { status: 403 }),
+    () => new Response(`not json ${password}`),
+  ]) {
+    const auth = createVeSyncSourceAuth({
+      credentials,
+      transport: async () => fault(),
+      sleep: async () => {},
+    });
+    const error = await call(auth).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(NodeRuntimeError);
+    expect(error).not.toBeInstanceOf(VeSyncAuthError);
+    expect((error as NodeRuntimeError).kind).toBe("import");
+    expect(JSON.stringify(error, Object.getOwnPropertyNames(error))).not.toContain(password);
+  }
+  for (const answer of [
+    Response.json({ code: -11201000, msg: password }),
+    new Response(null, { status: 401 }),
+  ]) {
+    const auth = createVeSyncSourceAuth({ credentials, transport: async () => answer.clone() });
+    await expect(call(auth)).rejects.toBeInstanceOf(VeSyncAuthError);
+  }
+});
+
+it("fails a hidden prompt when the terminal input ends", async () => {
+  for (const event of ["end", "close"]) {
+    const prompt = hiddenPrompt("VeSync email (hidden): ");
+    const check = expect(prompt).rejects.toThrow("VeSync login failed");
+    stdin.emit(event);
+    await check;
+    expect(stdin.listenerCount("data")).toBe(0);
+    expect(stdin.listenerCount("end")).toBe(0);
+    expect(stdin.listenerCount("close")).toBe(0);
+  }
 });

@@ -17,7 +17,14 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
 import type { PodWriter } from "../core/types.js";
 import { PodThing } from "../core/vocab.js";
-import { createVeSyncAdapter, measurements, sensorSlug } from "./adapter.js";
+import {
+  createVeSyncAdapter,
+  familyOf,
+  hasAirSensor,
+  measurements,
+  sensorSlug,
+  type VeSyncFamily,
+} from "./adapter.js";
 import {
   BYPASS,
   DETAIL,
@@ -50,7 +57,10 @@ function setup(list: unknown[] = [...devices], status: unknown = coreStatus) {
     expect(init?.signal).toBeInstanceOf(AbortSignal);
     const url = String(input);
     if (url === VESYNC_API + DEVICES) return Response.json({ code: 0, result: { list } });
-    if (url === VESYNC_API + DETAIL) return Response.json(legacyStatus);
+    if (url === VESYNC_API + DETAIL) {
+      expect(JSON.parse(String(init?.body))).toMatchObject({ uuid: devices[4]?.uuid });
+      return Response.json(legacyStatus);
+    }
     expect(url).toBe(VESYNC_API + BYPASS);
     const body = JSON.parse(String(init?.body));
     expect(body.payload).toEqual({ method: "getPurifierStatus", source: "APP", data: {} });
@@ -89,7 +99,7 @@ it("maps Core 300S/400S/600S, Vital 200S and v1 LV-PUR131S without disclosing id
     const url = new URL(`integrations/vesync/${observationDocPath(slug, time)}`, TEST_POD_ROOT)
       .href;
     const readings = parseObservations(url, pod.dataset(url));
-    expect(readings.length).toBe(i === 4 ? 2 : i === 3 ? 3 : 4);
+    expect(readings.length).toBe(i === 4 ? 2 : 4);
     for (const reading of readings) {
       expect(reading.sensor).toBe(`${sensorUrl}#sensor`);
       expect(reading.resultTime).toBe("2026-11-11T23:59:00.000Z");
@@ -174,13 +184,13 @@ it("skips absent, wrong-type, NaN, infinite, negative and out-of-range measureme
         {
           air_quality: value,
           air_quality_value: value,
-          fan_speed_level: value,
+          level: value,
           filter_life: value,
         },
-        false,
+        "core",
       ),
     ).toEqual([]);
-  expect(measurements({ filter_life: 101, fan_speed_level: 101 }, false)).toEqual([]);
+  expect(measurements({ filter_life: 101, level: 101 }, "core")).toEqual([]);
   const { run, pod } = setup(
     [
       null,
@@ -382,4 +392,50 @@ it("refuses to prune run history without a strong ETag", async () => {
     ),
   ).rejects.toThrow("strong ETag");
   expect(s.pod.get(url)).toBe(before);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("reads pyvesync's per-family status keys and ignores Core 200S air placeholders", async () => {
+  const values = (status: Record<string, unknown>, ...args: [VeSyncFamily, boolean?]) =>
+    Object.fromEntries(measurements(status, ...args).map(({ key, value }) => [key, value]));
+  expect(values(coreStatus.result.result, "core")).toEqual({
+    pm25: 12,
+    aqi: 2,
+    fan: 2,
+    filter: 87,
+  });
+  // Snake-case fan aliases are not Core keys; camelCase keys are Vital-only.
+  expect(values({ fan_speed_level: 3, fan_level: 3, PM25: 9 }, "core")).toEqual({});
+  expect(values(vitalStatus.result.result, "vital")).toEqual({
+    pm25: 7,
+    aqi: 1,
+    fan: 1,
+    filter: 95,
+  });
+  expect(values({ air_quality_value: 9, level: 2, filter_life: 50 }, "vital")).toEqual({});
+  expect(values(legacyStatus, "legacy")).toEqual({ fan: 1, filter: 72 });
+  expect(values({ ...coreStatus.result.result }, "core", false)).toEqual({ fan: 2, filter: 87 });
+  expect(familyOf("LAP-V102S-WUS")).toBe("vital");
+  expect(familyOf("Core400S")).toBe("core");
+  expect(familyOf("lv-pur131s")).toBe("legacy");
+  expect(hasAirSensor("LAP-C201S-AUSR")).toBe(false);
+  expect(hasAirSensor("Core200S")).toBe(false);
+  expect(hasAirSensor("LAP-C401S-WUSR")).toBe(true);
+});
+
+it("records no readings when the device's nested bypass code reports a failure", async () => {
+  const { run, pod } = setup([devices[0]], {
+    code: 0,
+    result: { code: -11300030, result: coreStatus.result.result },
+  });
+  const report = await run();
+  expect(report.skipped).toBe(1);
+  expect(pod.urls().some((url) => url.endsWith("/11.ttl"))).toBe(false);
+});
+
+it("skips an LV-PUR131S without a uuid before any status request", async () => {
+  const { run, api } = setup([{ ...devices[4], uuid: undefined }]);
+  const report = await run();
+  expect(report.skipped).toBe(1);
+  expect(api.mock.calls.map(([url]) => String(url))).toEqual([VESYNC_API + DEVICES]);
 });
