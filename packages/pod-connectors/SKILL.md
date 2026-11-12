@@ -81,7 +81,8 @@ bank-specific rows inside the source-row budget. Use exact decimal strings/BigIn
 including signed Revolut Amount minus Fee; append a nonzero fee to the description as
 ` (fee <fee> <currency>)`, omit zero fees. Descriptions need visible text after control
 stripping (solid-money rejects others): fall back to the bank's own description/type
-columns, else skip and count the row. Validate the optional IANA timeZone; default
+columns (Starling joins only the visible Counter Party/Reference parts), else skip and
+count the row. Validate the optional IANA timeZone; default
 to Europe/London for zone-free Revolut timestamps and use compatible gap/repeat handling.
 Known-bank CSV dates reject invalid calendars; OFX retains its lenient date parser and xsd:dateTime at UTC midnight.
 Bank-specific SHA-256 IDs exclude filenames; HSBC uses a per-file identical-row occurrence
@@ -94,7 +95,11 @@ replace under its precondition; compact stored blank labels on read; pass the ac
 document as `sourceUrl` (Suite Money rejects a non-http `prov:wasDerivedFrom`). Plan and
 measure every document before the first write: `BANK_DOCUMENT_BUDGET` (2,000 transactions,
 4 MiB N-Triples + provenance allowance, 1,000 parts) splits into parts, and otherwise
-throws `BankDocumentBudgetError` with nothing written; never truncate. Account/month read
+throws `BankDocumentBudgetError` with nothing written; never truncate. Per import, at most
+50 accounts and 600 documents: `BankMoneyPlan.add` fails while parsing (before any read),
+and every planning read counts (reuse the absent probed part; never read it twice). Skip
+and count known-bank rows posted before 1970-01-01 or over a year ahead. Writes are
+sequential; a failed write leaves earlier documents and a re-run converges. Account/month read
 errors fail the import; only the legacy comparison read is advisory. No migration or
 legacy-subject cleanup.
 Generic CSV and OFX retain the origin/main IDs, numeric/date policies, datatypes and

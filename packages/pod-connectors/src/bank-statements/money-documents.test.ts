@@ -1,8 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
 import { parseMoney } from "@jeswr/solid-money";
-import { describe, expect, it } from "vitest";
-import type { FileImportAdapter } from "../core/file-import.js";
-import { createMemoryPod, fileImport, type MemoryPod, memoryFile } from "../core/testing.js";
+import { describe, expect, it, vi } from "vitest";
+import type { FileImportAdapter, FileImportContext } from "../core/file-import.js";
+import {
+  createMemoryPod,
+  fileImport,
+  type MemoryPod,
+  memoryFile,
+  TEST_POD_ROOT,
+} from "../core/testing.js";
 import { parseBankCsv } from "./csv.js";
 import {
   BANK_DOCUMENT_BUDGET,
@@ -132,6 +138,25 @@ describe("month routing", () => {
   });
 });
 
+describe("posting-date window", () => {
+  it("skips and counts known-bank rows before 1970 or more than a year ahead", async () => {
+    const future = ddmmyyyy(new Date(Date.now() + 2 * 366 * 24 * 60 * 60 * 1000));
+    const soon = ddmmyyyy(new Date(Date.now() + 300 * 24 * 60 * 60 * 1000));
+    const rows = [
+      ["early", "31/12/1969"],
+      ["epoch", "01/01/1970"],
+      ["soon", soon],
+      ["future", future],
+      ["far", "01/01/9999"],
+    ].map(([id, date]) => MONZO.split("\n")[1]?.replace("synthetic-1,01/07/2026", `${id},${date}`));
+    const text = `${MONZO.split("\n")[0]}\n${rows.join("\n")}`;
+    expect(parseBankCsv(text).map((txn) => txn.sourceId)).toEqual(["epoch", "soon"]);
+    const { pod, report } = await fileImport(bankStatementsFileAdapter, memoryFile("a.csv", text));
+    expect(report.skipped).toBe(3);
+    expect(await transactions(pod)).toHaveLength(2);
+  });
+});
+
 describe("descriptions without visible text", () => {
   it.each([
     ["Monzo Name", MONZO.replace("Synthetic shop", "\u0001\u0002"), "Card payment"],
@@ -144,6 +169,16 @@ describe("descriptions without visible text", () => {
       "Starling Counter Party and Reference",
       STARLING.replace('Synthetic shop,"=1+1, inert"', "\u0003,"),
       "CARD_PAYMENT",
+    ],
+    [
+      "Starling Counter Party and Reference (both control-only)",
+      STARLING.replace('Synthetic shop,"=1+1, inert"', '"\u0003","\u0004"'),
+      "CARD_PAYMENT",
+    ],
+    [
+      "Starling Counter Party (Reference kept alone)",
+      STARLING.replace('Synthetic shop,"=1+1, inert"', '"\u0003",Synthetic ref'),
+      "Synthetic ref",
     ],
   ])("falls back from a control-only %s to the row's type", async (_name, text, expected) => {
     const { pod, report } = await fileImport(bankStatementsFileAdapter, memoryFile("a.csv", text));
@@ -167,25 +202,48 @@ describe("descriptions without visible text", () => {
 });
 
 /** A host-like adapter over the shared plan, so tests can lower the budget. */
-function plannedAdapter(records: readonly BankMoneyRecord[], budget: BankDocumentBudget) {
+function plannedAdapter(
+  records: readonly BankMoneyRecord[],
+  limits: Partial<BankDocumentBudget>,
+  wrap: (ctx: FileImportContext) => FileImportContext = (ctx) => ctx,
+) {
   return {
     ...bankStatementsFileAdapter,
     async importFile(_file, ctx) {
-      const plan = new BankMoneyPlan(budget);
+      const plan = new BankMoneyPlan({ ...BANK_DOCUMENT_BUDGET, ...limits });
       for (const record of records) plan.add(record);
-      await plan.write(ctx);
+      await plan.write(wrap(ctx));
     },
   } satisfies FileImportAdapter;
 }
-const record = (i: number, description = `Synthetic purchase ${i}`): BankMoneyRecord => ({
+const record = (
+  i: number,
+  description = `Synthetic purchase ${i}`,
+  month = "2026-07",
+): BankMoneyRecord => ({
   accountSlug: `monzo-${"a".repeat(64)}`,
   accountLabel: "Synthetic Monzo GBP",
   identity: i.toString(16).padStart(64, "0"),
-  postingTime: `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
+  postingTime: `${month}-${String((i % 28) + 1).padStart(2, "0")}`,
   description,
   amount: `-${i}.25`,
   currency: "GBP",
 });
+/** A bare adapter context: only reads are observed; no write may happen. */
+function readOnlyContext() {
+  return {
+    maxRows: 100_000,
+    resolve: (slug: string) => `${TEST_POD_ROOT}${slug}`,
+    read: vi.fn(async (_slug: string) => undefined),
+    write: vi.fn(),
+    writeBinary: vi.fn(),
+    remove: vi.fn(),
+    progress: vi.fn(),
+    skip: vi.fn(),
+  } satisfies FileImportContext;
+}
+const ddmmyyyy = (date: Date) =>
+  `${String(date.getUTCDate()).padStart(2, "0")}/${String(date.getUTCMonth() + 1).padStart(2, "0")}/${date.getUTCFullYear()}`;
 const FILE = memoryFile("unused.csv", "");
 
 describe("per-document budget", () => {
@@ -194,6 +252,8 @@ describe("per-document budget", () => {
       transactions: 2_000,
       bytes: 4 * 1024 * 1024,
       parts: 1_000,
+      accounts: 50,
+      documents: 600,
     });
     expect(Object.isFrozen(BANK_DOCUMENT_BUDGET)).toBe(true);
   });
@@ -243,7 +303,7 @@ describe("per-document budget", () => {
     const records = Array.from({ length: count }, (_, i) => record(i + 1));
     const pod = createMemoryPod();
     await expect(fileImport(plannedAdapter(records, budget), FILE, { pod })).rejects.toThrow(
-      "per-document budget",
+      "document budget",
     );
     expect(bankDocuments(pod)).toEqual([]);
   });
@@ -257,5 +317,112 @@ describe("per-document budget", () => {
       fileImport(plannedAdapter([record(1, "x".repeat(8_000))], budget), FILE, { pod }),
     ).rejects.toBeInstanceOf(BankDocumentBudgetError);
     expect(bankDocuments(pod).map((url) => pod.get(url))).toEqual(before);
+  });
+});
+
+describe("per-import budget", () => {
+  it("fails while parsing, before any Pod read, above 50 accounts", async () => {
+    const rows = Array.from({ length: 51 }, (_, i) =>
+      REVOLUT_ROWS[3].replace("TRANSFER,Savings", `TRANSFER,Product ${i}`),
+    );
+    const ctx = readOnlyContext();
+    await expect(
+      bankStatementsFileAdapter.importFile(
+        memoryFile("many.csv", `${REVOLUT_HEADER}\n${rows.join("\n")}`),
+        ctx,
+      ),
+    ).rejects.toThrow(new BankDocumentBudgetError("more than 50 accounts in one import"));
+    expect(ctx.read).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    // 50 accounts are admitted.
+    await expect(
+      bankStatementsFileAdapter.importFile(
+        memoryFile("fifty.csv", `${REVOLUT_HEADER}\n${rows.slice(0, 50).join("\n")}`),
+        readOnlyContext(),
+      ),
+    ).resolves.toBeDefined();
+  });
+
+  it("fails while parsing, before any Pod read, above 600 account and month documents", async () => {
+    const [header, row] = MONZO.split("\n");
+    // One account plus 600 distinct months (1975-01 onwards, inside the date window).
+    const rows = Array.from({ length: 600 }, (_, i) =>
+      (row ?? "").replace(
+        "synthetic-1,01/07/2026",
+        `synthetic-${i},01/${String((i % 12) + 1).padStart(2, "0")}/${1975 + Math.floor(i / 12)}`,
+      ),
+    );
+    const ctx = readOnlyContext();
+    await expect(
+      bankStatementsFileAdapter.importFile(
+        memoryFile("months.csv", `${header}\n${rows.join("\n")}`),
+        ctx,
+      ),
+    ).rejects.toThrow("more than 600 account and month documents in one import");
+    expect(ctx.read).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+  });
+
+  it("bounds the documents read during planning, including probed parts", async () => {
+    const pod = createMemoryPod();
+    const months = [record(1), record(2, undefined, "2026-08")];
+    // Account + two absent month documents: 3 reads.
+    await fileImport(plannedAdapter(months, { documents: 4 }), FILE, { pod });
+    const before = bankDocuments(pod).map((url) => pod.get(url));
+    // Account + two stored months + one absent probe after each: 5 reads.
+    await expect(
+      fileImport(plannedAdapter(months, { documents: 4 }), FILE, { pod }),
+    ).rejects.toThrow("more than 4 documents to read in one import");
+    expect(bankDocuments(pod).map((url) => pod.get(url))).toEqual(before);
+    await fileImport(plannedAdapter(months, { documents: 5 }), FILE, { pod });
+  });
+
+  it("reads the absent overflow part once when a full month extends into it", async () => {
+    const pod = createMemoryPod();
+    await fileImport(plannedAdapter([record(1), record(2)], { transactions: 2 }), FILE, { pod });
+    const fetch = vi.spyOn(pod, "fetch");
+    await fileImport(plannedAdapter([record(3)], { transactions: 2 }), FILE, { pod });
+    const part2 = monthDocuments(pod).find((url) => url.endsWith("2026-07-part-2.ttl")) ?? "";
+    expect(part2).not.toBe("");
+    const reads = fetch.mock.calls.filter(
+      ([url, init]) => String(url) === part2 && (init?.method ?? "GET") === "GET",
+    );
+    expect(reads).toHaveLength(1);
+    expect(await transactions(pod)).toHaveLength(3);
+  });
+
+  it("converges on re-run after a 412 part-way through the writes", async () => {
+    const pod = createMemoryPod();
+    const records = [record(1), record(2, undefined, "2026-08"), record(3, undefined, "2026-09")];
+    let writes = 0;
+    // A concurrent writer creates the August document between planning and its write.
+    const racing = plannedAdapter(records, {}, (ctx) => ({
+      ...ctx,
+      async write(doc, conditions) {
+        if (++writes === 3) {
+          const response = await pod.fetch(ctx.resolve(doc.slug), {
+            method: "PUT",
+            headers: { "content-type": "text/turtle" },
+            body: '<#concurrent> <https://schema.org/name> "Concurrent edit".',
+          });
+          expect(response.ok).toBe(true);
+        }
+        return ctx.write(doc, conditions);
+      },
+    }));
+    await expect(fileImport(racing, FILE, { pod })).rejects.toThrow(/412|precondition/i);
+    // Account and July were written before the failure; September was not.
+    expect(monthDocuments(pod).map((url) => url.replace(/^.*\//, ""))).toEqual([
+      "2026-07.ttl",
+      "2026-08.ttl",
+    ]);
+    await fileImport(plannedAdapter(records, {}), FILE, { pod });
+    const rows = await transactions(pod);
+    expect(rows.map((row) => row.amount).sort()).toEqual(["-1.25", "-2.25", "-3.25"]);
+    const august = monthDocuments(pod).find((url) => url.endsWith("2026-08.ttl")) ?? "";
+    expect(pod.get(august)).toContain("Concurrent edit");
+    // Re-running again changes nothing but provenance.
+    await fileImport(plannedAdapter(records, {}), FILE, { pod });
+    expect(await transactions(pod)).toHaveLength(3);
   });
 });

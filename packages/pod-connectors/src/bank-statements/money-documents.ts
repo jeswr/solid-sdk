@@ -33,11 +33,17 @@ export interface BankDocumentBudget {
   readonly bytes: number;
   /** Month documents per account and month (the first plus overflow parts). */
   readonly parts: number;
+  /** Distinct accounts per import. */
+  readonly accounts: number;
+  /** Documents read per import: account documents, month documents and their parts. */
+  readonly documents: number;
 }
 export const BANK_DOCUMENT_BUDGET: BankDocumentBudget = Object.freeze({
   transactions: 2_000,
   bytes: READER_MAX_BYTES / 4,
   parts: 1_000,
+  accounts: 50,
+  documents: 600,
 });
 
 export interface BankMoneyRecord {
@@ -54,7 +60,7 @@ export interface BankMoneyRecord {
 
 export class BankDocumentBudgetError extends Error {
   constructor(detail: string) {
-    super(`Bank statement exceeds the per-document budget: ${detail}. Nothing was saved.`);
+    super(`Bank statement exceeds the document budget: ${detail}. Nothing was saved.`);
   }
 }
 
@@ -67,6 +73,11 @@ interface Part {
   readonly touched: Set<string>;
   count: number;
   bytes: number;
+}
+/** One account-month: its stored parts, plus the absent part probed after the last one. */
+interface Month {
+  readonly parts: Part[];
+  absent?: Part;
 }
 interface PlannedDocument {
   readonly slug: string;
@@ -107,18 +118,30 @@ export class BankMoneyPlan {
     string,
     { label: string; months: Map<string, Map<string, BankMoneyRecord>> }
   >();
+  /** Account plus account-month documents so far: a lower bound on the documents read. */
+  private documents = 0;
+  private loaded = 0;
   constructor(private readonly budget: BankDocumentBudget = BANK_DOCUMENT_BUDGET) {}
 
-  /** Later rows with the same identity replace earlier ones, as on re-import. */
+  /**
+   * Later rows with the same identity replace earlier ones, as on re-import. The per-import
+   * account and document budgets fail here, while parsing, before any Pod read.
+   */
   add(record: BankMoneyRecord): void {
     let account = this.accounts.get(record.accountSlug);
     if (!account) {
+      if (this.accounts.size >= this.budget.accounts)
+        throw new BankDocumentBudgetError(
+          `more than ${this.budget.accounts} accounts in one import`,
+        );
+      this.count();
       account = { label: record.accountLabel, months: new Map() };
       this.accounts.set(record.accountSlug, account);
     }
     const month = monthKey(record.postingTime);
     let rows = account.months.get(month);
     if (!rows) {
+      this.count();
       rows = new Map();
       account.months.set(month, rows);
     }
@@ -126,8 +149,20 @@ export class BankMoneyPlan {
     rows.set(record.identity, record);
   }
 
-  /** Read and plan every document, check every budget, then write. */
+  private count(): void {
+    if (++this.documents > this.budget.documents)
+      throw new BankDocumentBudgetError(
+        `more than ${this.budget.documents} account and month documents in one import`,
+      );
+  }
+
+  /**
+   * Read and plan every document, check every budget, then write. A budget error is raised
+   * before the first write; a write failure (e.g. 412) leaves earlier documents written, and
+   * re-running the import converges because every write is an idempotent upsert.
+   */
   async write(ctx: FileImportContext): Promise<void> {
+    this.loaded = 0;
     const planned: PlannedDocument[] = [];
     const runs = ctx.resolve(RUNS).length;
     // Session provenance adds wasDerivedFrom/wasGeneratedBy to each new subject.
@@ -142,7 +177,8 @@ export class BankMoneyPlan {
       accountPart.touched.add(account);
       planned.push({ ...accountPart, forClass: V.accountClass, sourceUrl });
       for (const [month, rows] of [...months].sort(([a], [b]) => a.localeCompare(b))) {
-        const parts = await this.parts(ctx, directory, month);
+        const state = await this.month(ctx, directory, month);
+        const { parts } = state;
         const index = new Map<string, Part>();
         for (const part of parts)
           for (const node of part.document.nodes(V.transactionClass))
@@ -153,7 +189,7 @@ export class BankMoneyPlan {
           const existing = index.get(record.identity);
           let part = existing ?? (parts.at(-1) as Part);
           if (!existing && part.count >= this.budget.transactions)
-            part = await this.extend(ctx, directory, month, parts, index);
+            part = await this.extend(ctx, directory, month, state, index);
           const value = (target: Part): MoneyTransaction => ({
             id: `${target.url}#txn-${record.identity}`,
             account,
@@ -191,7 +227,7 @@ export class BankMoneyPlan {
             for (const quad of quads) part.document.dataset.delete(quad);
             part.count--;
             part.touched.delete(id);
-            part = await this.extend(ctx, directory, month, parts, index);
+            part = await this.extend(ctx, directory, month, state, index);
             put(part, true);
           }
           if (part.bytes > this.budget.bytes)
@@ -241,6 +277,10 @@ export class BankMoneyPlan {
 
   private async load(ctx: FileImportContext, slug: string): Promise<Part> {
     ctx.signal?.throwIfAborted();
+    if (++this.loaded > this.budget.documents)
+      throw new BankDocumentBudgetError(
+        `more than ${this.budget.documents} documents to read in one import`,
+      );
     const stored = await ctx.read(slug);
     ctx.signal?.throwIfAborted();
     const document = new MoneyDocument(stored ? compactBlankNodes(stored) : undefined);
@@ -259,16 +299,17 @@ export class BankMoneyPlan {
   }
 
   /** Read the month's first document and each overflow part until one is absent. */
-  private async parts(ctx: FileImportContext, directory: string, month: string): Promise<Part[]> {
+  private async month(ctx: FileImportContext, directory: string, month: string): Promise<Month> {
     const parts = [await this.load(ctx, partSlug(directory, month, 1))];
     while ((parts.at(-1) as Part).existed) {
       if (parts.length >= this.budget.parts)
         throw new BankDocumentBudgetError(`${month} has more than ${this.budget.parts} parts`);
       const next = await this.load(ctx, partSlug(directory, month, parts.length + 1));
-      if (!next.existed) break;
+      // Keep the absent probe: extend() opens it without reading it again.
+      if (!next.existed) return { parts, absent: next };
       parts.push(next);
     }
-    return parts;
+    return { parts };
   }
 
   /** Open the next overflow part; an unexpected stored part keeps its records. */
@@ -276,13 +317,16 @@ export class BankMoneyPlan {
     ctx: FileImportContext,
     directory: string,
     month: string,
-    parts: Part[],
+    state: Month,
     index: Map<string, Part>,
   ): Promise<Part> {
+    const { parts } = state;
     for (;;) {
       if (parts.length >= this.budget.parts)
         throw new BankDocumentBudgetError(`${month} needs more than ${this.budget.parts} parts`);
-      const part = await this.load(ctx, partSlug(directory, month, parts.length + 1));
+      const part =
+        state.absent ?? (await this.load(ctx, partSlug(directory, month, parts.length + 1)));
+      state.absent = undefined;
       parts.push(part);
       for (const node of part.document.nodes(V.transactionClass))
         if (node.value.startsWith(`${part.url}#txn-`))

@@ -299,9 +299,12 @@ stored amount node) and replaced under the read's ETag precondition, so re-impor
 overlapping statements merges by transaction ID and never duplicates. Stored blank-node
 labels are compacted on read so repeated imports do not grow the documents. Transactions
 absent from a later export are kept. Both registrations (`fin:FinancialAccount`,
-`fin:Transaction`) point at the `finance/bank/` container. `prov:wasDerivedFrom` names the
-account document because Suite Money validates it as an http(s) IRI (the run's file-export
-URN would make its reader reject the record). Imports in either layout leave the other
+`fin:Transaction`) point at the `finance/bank/` container. **Provenance:** each transaction's
+(and each document's) `prov:wasDerivedFrom` names the account document, not the imported
+file. The import session would otherwise record the run's `urn:solid:connector:…:export`
+source, and Suite Money's validator rejects any non-http(s) `prov:wasDerivedFrom`, so its
+reader would refuse every imported transaction. `prov:wasGeneratedBy` still names the import
+run in `_provenance.ttl`. Imports in either layout leave the other
 layout untouched. Revolut's imported amount is `Amount - Fee` using exact decimal
 arithmetic, including negative fees (fee refunds). Only COMPLETED Revolut rows import;
 other states count in `report.skipped`.
@@ -315,8 +318,30 @@ exceed the budget continues in the next `-part-<n>` document (new transactions g
 last part; existing ones are updated where they are stored). Re-imports read the first
 month document and each following part until one is absent. More than 1,000 parts for one
 account-month, a single transaction above the byte budget, or an update that would push a
-stored document over budget fails the import with `BankDocumentBudgetError` before any
-account or month document is written; nothing is truncated.
+stored document over budget fails the import with `BankDocumentBudgetError`; nothing is
+truncated.
+
+**Per-import budget**: at most 50 accounts and 600 documents per import. A statement export
+covers one account; Revolut splits it into one account per Product and currency pocket, and
+50 covers every pocket an export can hold. 600 documents is 50 years of monthly documents for
+one account, or 12 accounts over 4 years, while bounding Pod reads and the documents held in
+memory (each at most 4 MiB). The parser fails as soon as a 51st account, or the 601st account
+plus account-month document, appears, before any Pod read. Planning then counts every
+document it reads (account documents, stored month documents and parts, and the one absent
+part probed after the last stored part, which is reused if the month needs a new part) and
+fails before the 601st read; a re-import over stored months costs about two reads per month.
+
+**Failure and retries.** Every budget error is raised while parsing or planning, so nothing
+is written. Writes then happen one document at a time (account document first, then months
+in order). A failed write, such as a 412 from a concurrent change or a network error, stops
+the import with the earlier documents already written; re-running the same import converges,
+because every write re-reads the document and upserts by transaction ID.
+
+**Posting-date window.** Known-bank rows must post between 1970-01-01 and one year after
+the import (date-only values at UTC midnight). Rows outside the window are skipped and
+counted in `report.skipped`, so a corrupt export cannot spread rows across thousands of
+months (dates may otherwise use any year 0001-9999). Generic CSV and OFX keep their original
+date handling.
 
 **Omitted bank fields.** solid-money's model has no fields for these, so they are not
 written (no hand-written accessors are added): Monzo Transaction ID (it still keys the
@@ -331,7 +356,8 @@ are omitted. Monzo and HSBC day-only dates stay `xsd:date`.
 **Descriptions.** solid-money rejects a description that is empty once control characters
 are stripped. When the primary description has no visible text the row falls back to the
 bank's own columns (Monzo: Name, then Description, then Type; Revolut: Description, then
-Type; Starling: Counter Party — Reference, then Type). A row with no visible text in any of
+Type; Starling: the visible parts of Counter Party and Reference, joined with ` — `, then
+Type). A row with no visible text in any of
 them is skipped and counted in `report.skipped`, as are HSBC rows with an empty description.
 An `accountLabel` must likewise contain visible text.
 
@@ -386,6 +412,10 @@ reads only `<storage>/money/accounts/` and `money/transactions/` and does not di
 connector's Type Index entries. Generic CSV and OFX keep the Invoice model. This adapter
 preserves the writer's confinement; imports do **not** automatically appear in Money. A host
 integration/migration is required to bridge the destinations. No Suite app files are changed.
+The bridge must also handle re-imports: `putTransaction` rewrites every Transaction field it
+owns (account, description, category, payee, derivedFrom, debit/credit account, posting
+time and amount), so once Money writes categories or payees into these documents, a
+re-import of the same transaction would erase them.
 
 ## Node CLI
 

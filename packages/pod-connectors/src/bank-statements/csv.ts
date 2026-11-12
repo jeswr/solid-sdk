@@ -126,6 +126,20 @@ function matchesLayout(bank: BankLayout, headers: readonly string[]): boolean {
   );
 }
 
+/**
+ * Known-bank posting dates must fall between 1970-01-01 and one year after the import, so a
+ * hostile or corrupt export cannot spread rows over thousands of month documents. Rows outside
+ * the window are skipped and counted.
+ */
+export const EARLIEST_BANK_POSTING = "1970-01-01";
+const MAX_FUTURE_MS = 366 * 24 * 60 * 60 * 1000;
+function plausiblePosting(postingTime: string, now: number): boolean {
+  const instant = Date.parse(postingTime.length === 10 ? `${postingTime}T00:00:00Z` : postingTime);
+  return (
+    instant >= Date.parse(`${EARLIEST_BANK_POSTING}T00:00:00Z`) && instant <= now + MAX_FUTURE_MS
+  );
+}
+
 /** First candidate with visible text once control characters are stripped (as on write). */
 function visibleText(...candidates: readonly string[]): string | undefined {
   return candidates.find((candidate) => candidate && hasText(candidate));
@@ -352,7 +366,9 @@ export class BankCsvParser {
           ? visibleText(get("name"), get("description"), get("type"))
           : bank === "starling"
             ? visibleText(
-                [get("counter party"), get("reference")].filter(Boolean).join(" — "),
+                [get("counter party"), get("reference")]
+                  .filter((part) => visibleText(part))
+                  .join(" — "),
                 get("type"),
               )
             : visibleText(get("description"), get("type"));
@@ -368,6 +384,7 @@ export class BankCsvParser {
     const sourceId = bank === "monzo" ? get("transaction id") : undefined;
     if (
       !postingTime ||
+      !plausiblePosting(postingTime, Date.now()) ||
       !description ||
       !currencyCode(currency) ||
       (this.options.currency !== undefined && this.options.currency !== currency) ||
