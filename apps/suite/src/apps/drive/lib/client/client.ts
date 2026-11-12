@@ -15,7 +15,6 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { isomorphic } from "rdf-isomorphic";
 import { resolveContentType } from "../files/resolve-content-type";
 import { DriveResource } from "../model/model";
 import {
@@ -57,7 +56,7 @@ import {
 import { containerVersions } from "./container-versions";
 import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
-import { containerData, containsGraph, relocate, sameGraph } from "./rdf";
+import { containerData, containsGraph, isomorphicGraph, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
 
 export type { ContainerPolicy } from "./ancestors";
@@ -991,7 +990,7 @@ export function createSolidDriveClient(options: {
         const options = { baseIRI: url, maxBytes: RDF_READ_BACK_LIMIT };
         const actual = await parseRdf(current.body ?? "", responseType, options);
         const expected = await parseRdf(await new Response(sent).text(), contentType, options);
-        return isomorphic([...expected], [...actual]) ? etag : undefined;
+        return isomorphicGraph(expected, actual) ? etag : undefined;
       }
       const expected = new Uint8Array(await new Response(sent).arrayBuffer());
       // Compare incrementally and stop at the first mismatch or excess byte.

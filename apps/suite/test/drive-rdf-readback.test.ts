@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { Store } from "n3";
+import { isomorphic } from "rdf-isomorphic";
 import { expect, it } from "vitest";
 import {
   createSolidDriveClient,
   DrivePartialFailureError,
   DriveUploadError,
 } from "../src/apps/drive/lib/client/client";
+import { isomorphicGraph } from "../src/apps/drive/lib/client/rdf";
 import { uploadFile } from "../src/apps/drive/lib/operations/operations";
 import { rdfPod } from "./drive-rdf-pod";
 import { OWNER, PRIVATE, ROOT } from "./drive-wac-pod";
@@ -231,7 +236,8 @@ it("certifies empty RDF with a bodyless response", async () => {
 });
 
 it("bounds expanded RDF responses as well as uploads", async () => {
-  const { client } = await cssRdfPod(`#${" ".repeat(5 * 1024 * 1024)}`);
+  // Isomorphic to what was sent, so only the response byte budget can reject it.
+  const { client } = await cssRdfPod(`${stored}\n#${" ".repeat(5 * 1024 * 1024)}`);
   await expect(
     uploadFile(client, PRIVATE, new Blob([sent], { type: "text/turtle" }), "report.ttl"),
   ).rejects.toMatchObject({ cause: { kind: "upload-not-certified", tooLarge: false } });
@@ -358,4 +364,25 @@ it("never compensates using an isomorphic concurrent writer's RDF read-back vali
   expect(identityChecked).toBe(true);
   expect(await (await f.pod.fetch(target)).text()).toBe(stored);
   expect(puts).toEqual([sent]);
+});
+
+it("rejects graphs whose blank-node hashes collide without an isomorphism", async () => {
+  // One six-node blank cycle versus two three-node cycles: every node has the same
+  // local signature, so hash-only matching pairs them up.
+  const six = await parseRdf(
+    "@prefix ex: <https://example.org/>. _:a ex:p _:b. _:b ex:p _:c. _:c ex:p _:d. _:d ex:p _:e. _:e ex:p _:f. _:f ex:p _:a.",
+    "text/turtle",
+  );
+  const threes = await parseRdf(
+    "@prefix ex: <https://example.org/>. _:a ex:p _:b. _:b ex:p _:c. _:c ex:p _:a. _:d ex:p _:e. _:e ex:p _:f. _:f ex:p _:d.",
+    "text/turtle",
+  );
+  expect(isomorphic([...six], [...threes])).toBe(true);
+  expect(isomorphicGraph(six, threes)).toBe(false);
+  const relabelled = await parseRdf(
+    "@prefix ex: <https://example.org/>. _:x ex:p _:y. _:y ex:p _:z. _:z ex:p _:u. _:u ex:p _:v. _:v ex:p _:w. _:w ex:p _:x.",
+    "text/turtle",
+  );
+  expect(isomorphicGraph(six, relabelled)).toBe(true);
+  expect(isomorphicGraph(six, new Store([...six].slice(1)))).toBe(false);
 });
