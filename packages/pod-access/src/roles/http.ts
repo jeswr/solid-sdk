@@ -115,7 +115,11 @@ export function requireOk(response: Response, url: string): void {
   if (!response.ok)
     throw roleError("invalid-response", url, `Access request failed (${response.status})`);
 }
-async function boundedBody(response: Response, url: string): Promise<string> {
+/** Decode a streamed access-document body, refusing more than 1 MiB of raw bytes or invalid UTF-8. */
+export async function boundedBody(
+  response: { body: ReadableStream<Uint8Array> | null },
+  url: string,
+): Promise<string> {
   if (!response.body) return "";
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
