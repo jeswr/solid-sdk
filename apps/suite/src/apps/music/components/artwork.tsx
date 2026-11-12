@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { useState } from "react";
+import { podScopedUrl } from "@jeswr/guarded-fetch";
+import { useEffect, useState } from "react";
+import { usePodSessionState } from "@/lib/session/pod-session";
+import { acquireCoverUrl } from "../lib/browser/object-url";
 import { artworkUrl } from "../lib/model";
 import { useMusic } from "../state/music-context";
 export function Artwork({
@@ -14,7 +17,32 @@ export function Artwork({
 }) {
   const music = useMusic();
   const [failed, setFailed] = useState<string>();
-  const url = music.snapshot ? artworkUrl(image, music.snapshot.preferences.value) : undefined;
+  const sessionState = usePodSessionState();
+  const session = sessionState.status === "ready" ? sessionState.session : undefined;
+  const local =
+    image && session ? podScopedUrl(session.storageUrl, image, { allowRoot: false }) : undefined;
+  const [localUrl, setLocalUrl] = useState<{ source: string; url: string }>();
+  useEffect(() => {
+    if (!local || !session) return;
+    const cover = acquireCoverUrl(session.fetch, session.storageUrl, local);
+    let live = true;
+    void cover.promise
+      .then((url) => {
+        if (live) setLocalUrl({ source: local, url });
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+      cover.release();
+    };
+  }, [local, session]);
+  const url = local
+    ? localUrl?.source === local
+      ? localUrl.url
+      : undefined
+    : music.snapshot
+      ? artworkUrl(image, music.snapshot.preferences.value)
+      : undefined;
   const hash = Array.from(identity).reduce(
     (value, char) => (Math.imul(value, 31) + (char.codePointAt(0) ?? 0)) >>> 0,
     0,
