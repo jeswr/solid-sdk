@@ -240,10 +240,11 @@ deprecated offline convention, and is never used to choose an online write URL.
 `writeOwnerOnlyAcl(resourceUrl, ownerWebId, fetch, options?)` takes an optional fourth
 argument with `root`, `implementation` and `replace`.
 Set `root` to the pod's storage root (for example `https://host/alice/`) when the pod
-lives at a sub-path; discovery stops there. Without it, discovery uses the origin root.
+lives at a sub-path; discovery stops there, so ancestors above `root` are not checked. Pass the
+real storage root, never a deeper folder. Without it, discovery uses the origin root.
 An already owner-only document with the required direct/member permissions sends no PUT,
-so repeated imports also work with weak or absent ETags. Containers inherit by default;
-removing existing owner member grants through the helper requires explicit `inherit: false`.
+so repeated calls also work with weak or absent ETags. This package always tells the helper
+whether members inherit, so the helper's container default does not apply here.
 If the user has since shared the container, re-sync refuses unless `replace: true` explicitly
 approves removing those own-document grants. A write that changes a policy still needs a
 strong ETag; foreign additive ACP ancestor grants remain a refusal.
