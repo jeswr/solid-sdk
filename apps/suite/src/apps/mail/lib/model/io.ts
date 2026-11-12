@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { extractMediaType, fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { extractMediaType, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import type { DatasetCore } from "@rdfjs/types";
 import { ContainerDataset } from "@solid/object";
@@ -7,6 +7,8 @@ import { DataFactory, Store } from "n3";
 import { MailboxDataset } from "./mailbox.js";
 import { serialiseToTurtle } from "./serialise.js";
 import { TypeIndexDataset } from "./typeIndex.js";
+
+export { parseMailbox } from "@jeswr/solid-mail";
 
 /**
  * Message documents carry whole decoded bodies as literals, which can exceed fetch-rdf's default
@@ -28,9 +30,6 @@ export interface LoadedMail {
   url: string;
   etag: string | null;
   exists: boolean;
-}
-export async function parseMailbox(text: string, url: string): Promise<MailboxDataset> {
-  return new MailboxDataset(await parseRdf(text, "text/turtle", { baseIRI: url }), DataFactory);
 }
 function failure(status: number): MailError {
   return new MailError(

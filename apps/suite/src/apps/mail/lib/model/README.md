@@ -1,14 +1,21 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Mail model (MAI-00)
 
-Typed RDF models ported from `apps/pod-mail/src/model`; no React or SDK facade imports.
+The RDF model comes from `@jeswr/solid-mail`. Local compatibility modules re-export its
+`Message`, `Thread`, `Folder`, `Attachment`, `MailboxDataset`, well-known folders,
+vocabulary constants and complete-document serializer; `io.ts` re-exports its `parseMailbox`.
+Existing app import paths keep working. The entity wrappers use the package's generated core.
+Reads are stricter on malformed or third-party RDF than the old hand-written model (for
+example a language-tagged subject or an `xsd:date` timestamp drops, and a blank-node message is
+skipped); see the package's [exact divergences](../../../../../../../packages/solid-mail/README.md#exact-divergences).
+Data this app writes is unaffected.
+
 `@jeswr/pod-connectors/mail` owns the shared framework-free MAI-01 path slugs, reserved
-system-folder titles, standard mail IRIs, linear HTML-to-text scanner and MIME address
-conversion. `paths.ts` resolves those relative slugs with `new URL` while preserving its
-existing URL/identifier validation; `vocab.ts` preserves the app's names as re-exports.
-Typed wrappers, MailStore I/O, operations, importer orchestration and Type Index handling
-remain local. The standalone app still uses its older layout without an account segment.
-`Message`, `Thread`, `Folder`, `Attachment` and `TypeIndexDataset` are live typed wrappers.
+system-folder titles, linear HTML-to-text scanner and MIME address conversion. `paths.ts`
+resolves those relative slugs with `new URL` while preserving its existing URL/identifier
+validation. MailStore I/O, operations, importer orchestration, drafts, helpers, paths,
+Type Index handling and HTML text helpers remain local. The standalone app still uses its
+older layout without an account segment. `TypeIndexDataset` remains a local live typed wrapper.
 Use `parseMailbox` and `serialiseToTurtle` for complete-document round trips.
 
 Construct `new MailStore(authenticatedFetch, storageRoot)`. All I/O takes this injected
