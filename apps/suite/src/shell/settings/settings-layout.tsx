@@ -13,6 +13,7 @@ import { AutosaveStatus } from "./preferences";
 const sections = [
   ["account", "Account"],
   ["appearance", "Appearance"],
+  ["groups", "Groups & family"],
   ["storage", "Storage"],
   ["notifications", "Notifications"],
   ["offline", "Offline"],

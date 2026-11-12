@@ -11,6 +11,7 @@ export function shareSubtitle(state: SharingState): string {
         ? "Anyone with the link can comment"
         : "Anyone with the link can view";
   if (state.general.mode === "signed-in") return "Anyone signed in has access";
+  if (state.groups?.length) return "Shared with groups";
   // One owner represents the current account; additional controllers still count as people.
   const count =
     state.people.length - Number(state.people.some((person) => person.role === "owner"));

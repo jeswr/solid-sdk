@@ -183,19 +183,22 @@ function key(grant: RoleGrant): string {
 export function toSharingState(grants: readonly RoleGrant[]): SharingState {
   const people = new Map<string, RoleGrant[]>();
   const anonymous: RoleGrant[] = [];
+  const groups: string[] = [];
   for (const grant of grants) {
     if (grant.agent.type === "webid")
       people.set(key(grant), [...(people.get(key(grant)) ?? []), grant]);
     else if (grant.agent.type === "public") anonymous.push(grant);
+    else if (grant.agent.type === "group") groups.push(grant.agent.id);
     else
       throw new SharingError(
-        "Sharing with groups, apps or all signed-in users can't be shown in this dialog",
+        "Sharing with apps or all signed-in users can't be shown in this dialog",
       );
   }
   const general = anonymous.length ? highest(anonymous) : undefined;
   if (general === "commenter" || general === "owner")
     throw new SharingError("Anonymous permissions exceed the sharing model");
   return {
+    ...(groups.length ? { groups: [...new Set(groups)].sort() } : {}),
     people: [...people.keys()].sort().map((webId) => {
       const rows = people.get(webId) as RoleGrant[];
       return { webId, role: highest(rows), ...origin(rows) };
@@ -313,7 +316,9 @@ export function toGrants(
   }
   const rows = (id: string) => snapshot.grants.grants.filter((grant) => key(grant) === id);
   const current = new Map(snapshot.state.people.map((person) => [person.webId, person]));
-  const grants: RoleGrant[] = [];
+  const grants: RoleGrant[] = snapshot.grants.grants.filter(
+    (grant) => grant.agent.type === "group",
+  );
   const removals: AgentRef[] = [];
   let changed = false;
   for (const webId of new Set([...current.keys(), ...selected.keys()])) {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
@@ -339,7 +340,11 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     if (isContainerUrl(url)) {
       links.push(`<${LDP}Container>; rel="type"`, `<${LDP}BasicContainer>; rel="type"`);
     }
-    if (url === root) links.push(`<${PIM_STORAGE}>; rel="type"`);
+    if (url === root)
+      links.push(
+        `<${PIM_STORAGE}>; rel="type"`,
+        `<${root}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+      );
     if (!url.endsWith(".acl")) links.push(`<${url}.acl>; rel="acl"`);
     return links.join(", ");
   };
@@ -567,7 +572,10 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
         if (preconditionFails(url, headers)) return respond(412);
         return remove(url);
       case "OPTIONS":
-        return respond(204, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
+        return respond(204, {
+          allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS",
+          link: linkHeader(url),
+        });
       default:
         return respond(405, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
     }

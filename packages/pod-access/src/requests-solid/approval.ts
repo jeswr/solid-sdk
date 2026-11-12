@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // Port of access-manager approval.ts invariants:
 // resolve ONCE → Pending/Approving CAS with deterministic grantId + snapshot →
@@ -8,6 +9,7 @@ import { policyToRdf } from "@jeswr/solid-odrl";
 import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { Store } from "n3";
+import { isGrantableTarget } from "../roles/targets.js";
 import {
   accessModel,
   applyGrant,
@@ -377,48 +379,14 @@ async function validateSnapshot(
 }
 
 /**
- * Targets an approval may never grant: anything outside storage, access-control and metadata
- * documents (`.acl`, `.acr`, `.meta`), queries, fragments, empty path segments, percent-encodings
- * a server may decode into another name (unreserved characters, `%`, `/`, `\`, control characters), the storage root (with or
- * without its trailing slash), and the owner's settings (type indexes, preferences, records),
- * compared case-insensitively, and path segments ending in a dot or space or containing `::`
- * (Windows aliases). Ordinary encoded names (spaces, non-ASCII) stay grantable. The
- * target is compared by its decoded path, never as a raw string.
+ * Targets an approval may never grant: see `isGrantableTarget` (outside storage, the storage
+ * root, the owner's settings, access-control and metadata documents and ambiguous encodings).
  */
 function assertGrantable(target: string, storage: string): void {
-  // scoped() already refused any other origin, so the path is where the target points.
-  const { pathname } = new URL(scoped(storage, target));
-  const root = new URL(storage).pathname;
-  const ambiguous = [...pathname.matchAll(/%([0-9a-f]{2})/gi)].some(([, hex]) => {
-    const code = Number.parseInt(hex as string, 16);
-    return code < 0x20 || code === 0x7f || /[A-Za-z0-9\-._~%/\\]/.test(String.fromCharCode(code));
-  });
-  if (target.includes("?") || target.includes("#") || pathname.includes("//") || ambiguous)
+  // scoped() refuses any other origin with its own error first.
+  scoped(storage, target);
+  if (!isGrantableTarget(target, storage))
     throw new Error(`${target} can't be shared through an access request`);
-  const path = decoded(pathname);
-  const base = decoded(root) as string;
-  if (
-    path === undefined ||
-    /\.(acl|acr|meta)$/.test(path) ||
-    // Windows backends drop a trailing dot or space and expose `name::$DATA` streams.
-    /[. ](?:\/|$)|::/.test(path) ||
-    path === base ||
-    path === base.slice(0, -1) ||
-    path === `${base}settings` ||
-    path.startsWith(`${base}settings/`)
-  )
-    throw new Error(`${target} can't be shared through an access request`);
-}
-
-/** The lower-cased decoded path, or undefined when its encoding is not valid UTF-8. */
-function decoded(path: string): string | undefined {
-  try {
-    // Upper then lower case folds letters such as the long s into ASCII, as case-insensitive
-    // filesystems do.
-    return decodeURIComponent(path).toUpperCase().toLowerCase();
-  } catch {
-    return undefined;
-  }
 }
 
 async function complete(

@@ -15,6 +15,7 @@ import {
   type SharingPerson as PickerPerson,
 } from "@jeswr/suite-ui";
 import { useEffect, useId, useRef, useState } from "react";
+import { GroupSharing } from "@/shell/groups/group-sharing";
 import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
@@ -327,6 +328,15 @@ export function ShareDialog({
                 ))}
               </ul>
             </section>
+            <GroupSharing
+              session={session}
+              url={item.url}
+              disabled={blocked}
+              onSaved={() => {
+                setRetry((value) => value + 1);
+                onSaved();
+              }}
+            />
             <section className="su-stack" aria-label="General access">
               <h3>General access</h3>
               <label className="su-label" htmlFor={generalId}>
