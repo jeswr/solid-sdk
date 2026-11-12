@@ -354,16 +354,27 @@ There is one grant mechanism with one set of rules, all enforced in the core:
   canonical HTTPS spelling (loopback HTTP only with `allowInsecureLoopback`). Queries, fragments,
   credentials, dot or encoded segments, `//` and non-canonical spellings are refused
   (`invalid-url`), as are whole origins (`origin-wide`), anything inside or containing the
-  account's own storages or storage endpoints (`own-storage`), and anything containing the issuer,
-  an issuer metadata endpoint or a dot-prefixed path on the issuer's origin (`protocol-endpoint`).
+  account's own storages or storage endpoints (`own-storage`), and anything inside a path-based
+  issuer or containing the issuer, its discovery documents, a metadata endpoint or a dot-prefixed
+  path segment on the issuer's origin (`protocol-endpoint`).
 - It needs a signed-in account (`signed-out`) and, where the browser reports user activation, a
-  user gesture (`no-user-activation`).
+  user gesture (`no-user-activation`). That check is transient (any recent click passes) and absent
+  outside browsers, so it is defence in depth only: the app's consent screen, naming the origin and
+  resource, is the control.
 - Reads and writes inside a grant get the account's Solid-OIDC credentials, reusing its session
-  (no second authorization). Redirects out of a grant get none. A grant never becomes a storage
-  (`Identity.storages`), an authorization-server trust anchor or a login context, so UMA and LWS
-  exchanges with the grant's server stay refused.
+  (no second authorization). A request that starts inside a grant never follows a redirect,
+  natively or after a 401: with the default `redirect: "follow"` it rejects with a `TypeError`, and
+  an explicit `manual` mode returns the redirect as it is. A grant never becomes a storage
+  (`Identity.storages`), an authorization-server trust anchor, a UMA/LWS resource or a login
+  context, so UMA and LWS exchanges for a granted URL are refused, and a grant server's 401s
+  cannot force the shared session to renew.
 - Grants live in memory on the account's core: each account in an account manager has its own,
-  and logout, expiry, session supersession and `dispose()` end them. A reload asks again.
+  and logout, expiry, session supersession and `dispose()` end them. Switching accounts neither
+  ends them nor emits a `grants` event. Queued work must record its WebID and grant root, then
+  re-check `manager.authFor(webId).isWithinGrantedScope(url)` and send with
+  `manager.fetchFor(webId)`. A reload asks again.
+- Granting a URL inside an existing grant returns that covering grant, so revoking it ends access
+  to everything beneath it.
 - `grants()` lists them, `revokeResource(grant | root)` ends one before the next request,
   `isWithinGrantedScope(url)` checks scope synchronously, and `on('grants', …)` reports every change
   with the new list in `event.grants`. `withinResourceGrants(grants, url)` is the pure matcher.

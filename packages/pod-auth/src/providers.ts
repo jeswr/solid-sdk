@@ -351,10 +351,6 @@ export function createProviders(
     established = request?.url ?? bootstrapUri;
   };
   const establishedUrl = () => established;
-  /** A consented grant's upgrade reuses the established session and never replaces it. */
-  const establish = async (request: Request) => {
-    if (!boundary.consented(await boundary.contextKey(request))) setSession(request);
-  };
   const selections = new Map<string, Promise<LoginHint>>();
   const requestSelections = new WeakMap<Request, Promise<LoginHint>>();
   const selectionFor = (request: Request, selected = hint) => {
@@ -665,11 +661,22 @@ export function createProviders(
         throw new Error("Login selection changed during authentication");
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
-      await hooks.session(request, claims, protocol, selected ?? (await selectionFor(request)));
-      await establish(request);
+      // A granted upgrade reports and remembers the established session, never the foreign URL.
+      const granted = boundary.consented(await boundary.contextKey(request));
+      await hooks.session(
+        granted ? new Request(establishedUrl(), { signal: request.signal }) : request,
+        claims,
+        protocol,
+        selected ?? (await selectionFor(request)),
+      );
+      if (!granted) setSession(request);
       return upgraded;
     },
-    invalidate: async (request, challenge) => await provider.invalidate!(request, challenge),
+    invalidate: async (request, challenge) => {
+      // A grant's server cannot force the account's shared session to renew by rejecting it.
+      if (boundary.consented(await boundary.contextKey(request))) return;
+      await provider.invalidate!(request, challenge);
+    },
     forget: async () => await provider.forget!(),
   });
   const manager = new ReactiveFetchManager({

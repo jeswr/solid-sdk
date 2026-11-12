@@ -9,7 +9,7 @@ import {
   ResourceGrantError,
   withinResourceGrants,
 } from "./index.js";
-import { createMockOp } from "./testing.js";
+import { createMemoryStore, createMockOp } from "./testing.js";
 
 const shared = "https://alice.example/shared/";
 const sibling = "https://alice.example/shared-evil/";
@@ -338,6 +338,8 @@ test("an issuer with a path refuses any grant containing it or its endpoints", a
     "https://idp.example/.well-known/oauth-authorization-server/realms/x",
     "https://idp.example/.well-known/",
     "https://idp.example/pods/.hidden/",
+    "https://idp.example/realms/x/account/",
+    "https://idp.example/realms/x/protocol/",
   ])
     expect(await refusal(f.auth.grantResource!(url))).toBe("protocol-endpoint");
   // A container beside the issuer path on the same server is allowed.
@@ -422,8 +424,121 @@ test("redirects out of a grant never carry credentials", async () => {
   );
   await f.auth.login();
   await f.auth.grantResource!(shared);
-  expect((await f.auth.fetch(`${shared}moved`)).status).toBe(401);
+  await expect(f.auth.fetch(`${shared}moved`)).rejects.toThrow(TypeError);
+  expect(f.requests.filter((r) => r.url === target)).toHaveLength(0);
+  // A Request input is confined too, and an unparsable URL still fails as before.
+  await expect(f.auth.fetch(new Request(`${shared}moved`))).rejects.toThrow(TypeError);
+  await expect(f.auth.fetch("relative/path")).rejects.toThrow(TypeError);
+  // A caller's manual mode is kept: the redirect comes back as it is.
+  const manual = await f.auth.fetch(`${shared}moved`, { redirect: "manual" });
+  expect(manual.status).toBe(302);
   expect(f.credentialed("https://attacker.example/")).toHaveLength(0);
+});
+
+test("a grant's native redirect into own storage is never re-targeted with credentials", async () => {
+  const own = "https://pod.example/alice/private/contacts.ttl";
+  const f = fixture({}, {}, (request) => {
+    if (request.url !== `${shared}room/index.ttl`) return undefined;
+    // A browser follows a plain GET's redirect itself unless the mode forbids it.
+    if (request.redirect === "error") return Promise.reject(new TypeError("redirect refused"));
+    if (request.redirect === "manual")
+      return Promise.resolve(new Response(null, { status: 302, headers: { location: own } }));
+    const response = new Response(null, { status: 401, headers: { "www-authenticate": "DPoP" } });
+    Object.defineProperties(response, { redirected: { value: true }, url: { value: own } });
+    return Promise.resolve(response);
+  });
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  await expect(f.auth.fetch(`${shared}room/index.ttl`)).rejects.toThrow(TypeError);
+  expect(f.requests.filter((r) => r.url === own)).toHaveLength(0);
+  // Own storage still follows its own redirects as before.
+  expect((await f.auth.fetch("https://pod.example/alice/private")).status).toBe(200);
+});
+
+test.each([
+  ["DELETE", 307],
+  ["PUT", 308],
+  ["GET", 302],
+])("a grant's %s redirect (%i) after a 401 never reaches own storage", async (method, status) => {
+  const own = "https://pod.example/alice/notes/important";
+  const f = fixture({}, {}, (request) =>
+    request.url === `${shared}room/x` && request.headers.has("authorization")
+      ? Promise.resolve(new Response(null, { status, headers: { location: own } }))
+      : undefined,
+  );
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  await expect(
+    f.auth.fetch(`${shared}room/x`, {
+      method,
+      ...(method === "PUT" ? { body: "data", headers: { "content-type": "text/plain" } } : {}),
+    }),
+  ).rejects.toThrow(TypeError);
+  expect(f.requests.filter((r) => r.url === own)).toHaveLength(0);
+});
+
+test.each([
+  `UMA as_uri="https://as.example/", ticket="ticket-for-alice-own-pod"`,
+  `Bearer as_uri="https://as.example/", realm="${shared}"`,
+])("a grant's server cannot borrow a trusted authorization server: %s", async (challenge) => {
+  const f = fixture({}, { boundary: { roots: ["https://as.example/configured/"] } }, (request) =>
+    request.url.startsWith(shared)
+      ? Promise.resolve(
+          new Response(null, { status: 401, headers: { "www-authenticate": challenge } }),
+        )
+      : request.url.startsWith("https://as.example/")
+        ? Promise.resolve(Response.json({ error: "unexpected" }, { status: 400 }))
+        : undefined,
+  );
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  const outcome = await f.auth.fetch(`${shared}x`).then(
+    (response) => response.status,
+    (error: Error) => error.message,
+  );
+  expect(String(outcome)).toMatch(/^401$|not trusted/);
+  expect(f.requests.filter((r) => r.url.startsWith("https://as.example/"))).toHaveLength(0);
+  expect(f.op.stats.exchanges).toBe(0);
+});
+
+test("a grant's server cannot force the shared session to renew", async () => {
+  const f = fixture({ refreshTokens: true }, {}, (request) =>
+    request.url.startsWith(shared)
+      ? Promise.resolve(
+          new Response(null, { status: 401, headers: { "www-authenticate": "DPoP" } }),
+        )
+      : undefined,
+  );
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  const before = { ...f.op.stats };
+  for (let index = 0; index < 3; index++)
+    expect((await f.auth.fetch(`${shared}x`)).status).toBe(401);
+  expect(f.op.stats.refreshes).toBe(before.refreshes);
+  expect(f.op.stats.tokens).toBe(before.tokens);
+  expect(f.op.stats.authorizations).toBe(before.authorizations);
+  expect(f.ui.getCode).toHaveBeenCalledTimes(1);
+  // Own storage still renews a rejected token as before.
+  expect((await f.auth.fetch("https://pod.example/alice/private")).status).toBe(200);
+});
+
+test("a granted sign-in remembers the established session, never the foreign URL", async () => {
+  const writes: string[] = [];
+  const sessions = createMemoryStore();
+  const recording = {
+    ...sessions,
+    setItem: async (key: string, value: {}) => {
+      writes.push(JSON.stringify(value));
+      await sessions.setItem(key, value);
+    },
+  };
+  const f = fixture({}, { storage: { sessions: recording, caches: createMemoryStore() } });
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  writes.length = 0;
+  expect((await f.auth.fetch(`${shared}a`)).status).toBe(200);
+  expect((await f.auth.fetch(f.op.root + "b")).status).toBe(200);
+  expect(writes.some((value) => value.includes("alice.example"))).toBe(false);
 });
 
 test.each([

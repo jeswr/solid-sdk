@@ -195,6 +195,19 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return false;
   };
+  /** Whether a request starts inside a grant and outside own storage, following redirects. */
+  const confined = (input: RequestInfo | URL, init?: RequestInit) => {
+    const mode = init?.redirect ?? (input instanceof Request ? input.redirect : "follow");
+    if (mode !== "follow") return false;
+    try {
+      // A body-free Request resolves the URL exactly as the engine will, without reading a body.
+      return providers.boundary.confined(
+        new Request(input instanceof Request ? input.url : input).url,
+      );
+    } catch {
+      return false;
+    }
+  };
   const api: PodAuth = {
     fetch: async (input, init) => {
       lifetime.signal.throwIfAborted();
@@ -206,6 +219,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       try {
         const response = await providers.manager.fetch(input, {
           ...init,
+          // A request into a grant never follows a redirect, natively or after a 401, so a grant's
+          // server cannot steer it (with the account's credentials) into the user's own storage.
+          ...(confined(input, init) ? { redirect: "error" as const } : {}),
           signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
         });
         if (response.status === 401) await checkExpiry(started);

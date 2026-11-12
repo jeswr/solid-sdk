@@ -78,8 +78,11 @@ await grant('https://alice.example/rooms/1/');
 
 `useResourceGrants()` mirrors the active account's pod-auth resource grants and refreshes on every
 change, so apps never touch the core. Switching accounts shows that account's grants; logout ends
-them. Use `isWithinGrantedScope` (or the pure `withinResourceGrants`) to drop queued work for a
-revoked grant. The rules are pod-auth's; see its README.
+them, but a switch is not a `grants` event and the previous account keeps its grants. Queued work
+(an outbox) must record its WebID and grant root, then at replay re-check
+`manager.authFor(webId).isWithinGrantedScope(url)` (or the pure `withinResourceGrants`) and send
+with `manager.fetchFor(webId)`, never the active account's fetch. The rules are pod-auth's; see
+its README.
 
 ## Offline (`SDK-APP-08`)
 

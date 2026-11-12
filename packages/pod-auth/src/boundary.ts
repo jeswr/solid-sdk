@@ -131,6 +131,9 @@ export function createBoundary(
   const roots = () => [...new Set([...fixed.entries, ...automatic.entries])];
   const owns = (url: string | URL) => fixed.allows(url) || automatic.allows(url);
   const allows = (url: string | URL) => eligible(url) && (owns(url) || consented.allows(url));
+  // Authorization-server trust and LWS audiences consider own storage only, never a grant: a
+  // grant's server must not relay a UMA ticket or LWS challenge for the user's own resources.
+  const allowsOwn = (url: string | URL) => eligible(url) && owns(url);
   const withinGrants = (url: string | URL) => {
     try {
       return eligible(url) && consented.allows(url);
@@ -197,7 +200,7 @@ export function createBoundary(
   }: {
     authorizationServer: URL;
     resource: URL;
-  }) => allows(resource) && trustsOrigin(authorizationServer);
+  }) => allowsOwn(resource) && trustsOrigin(authorizationServer);
   const trustLws = async (
     { authorizationServer, realm, resource }: ChallengeBinding,
     signal: AbortSignal,
@@ -206,7 +209,7 @@ export function createBoundary(
     if (!trustAuthorizationServer({ authorizationServer, resource })) return false;
     if (
       (realm.href.endsWith("/") || realm.href === resource.href) &&
-      allows(realm) &&
+      allowsOwn(realm) &&
       isWithin(resource, realm)
     )
       return true;
@@ -215,7 +218,7 @@ export function createBoundary(
     const descriptions = await descriptionRoots(realm.href, signal);
     signal.throwIfAborted();
     return descriptions.some(
-      (root) => root.endsWith("/") && allows(root) && isWithin(resource, root),
+      (root) => root.endsWith("/") && allowsOwn(root) && isWithin(resource, root),
     );
   };
   return {
@@ -354,9 +357,12 @@ export function createBoundary(
       if (started !== epoch || lifetime.aborted) throw new ResourceGrantError("signed-out");
       const root = grantRoot(value);
       const url = new URL(root);
+      const issuer = new URL(protocol.issuer);
       if (
         [protocol.issuer, ...protocol.endpoints].some((endpoint) => contains(root, endpoint)) ||
-        (url.origin === new URL(protocol.issuer).origin && url.pathname.includes("/."))
+        (url.origin === issuer.origin && url.pathname.includes("/.")) ||
+        // Below a path-based issuer (Keycloak /realms/x/account/) is the identity provider's own.
+        (issuer.pathname !== "/" && isWithin(root, issuer.href.replace(/\/?$/, "/")))
       )
         throw new ResourceGrantError("protocol-endpoint");
       const existing = grants.find(
@@ -380,6 +386,8 @@ export function createBoundary(
     },
     grants: () => grants,
     withinGrants,
+    /** Inside a grant and outside own storage: requests from here must not follow redirects. */
+    confined: (url: string | URL) => withinGrants(url) && !owns(url),
     /** Whether a context key names a consented grant rather than a storage root. */
     consented: (key: string) => grants.some((grant) => grant.root === key),
     /** Observes grant changes for the life of this boundary. */

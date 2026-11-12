@@ -139,7 +139,9 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 - Resource grants (`grantResource`, README "Open a resource shared from another pod") are the only
   consented foreign-credential mechanism; never add a second one. They live in a third
   `consented` CredentialBoundary inside `createBoundary`: included in `allows`/`contextKey`, never
-  in `roots()`, `storages()`, `trustsOrigin` or login contexts. Their Solid session context aliases
+  in `roots()`, `storages()`, `trustsOrigin`, AS/LWS trust (`allowsOwn`) or login contexts.
+  Requests starting in a grant use `redirect: "error"` (index.ts `confined`), and a granted
+  upgrade neither renews the shared session nor becomes `sessionRequest`. Their Solid session context aliases
   the account's primary root (`contextFor`); UMA/LWS contexts stay per grant and stay untrusted.
   Validate grants before network, re-validate synchronously at `consent` after awaits, fence on
   the boundary generation and account, and clear them in `clear()`. Apps call it only from the
