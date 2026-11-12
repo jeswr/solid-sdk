@@ -39,6 +39,7 @@ import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf
 import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
 import { folderGuard } from "../offline/guards";
+import { isNetworkFailure } from "../offline/network";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
   addTrashRecord,
@@ -221,8 +222,8 @@ export async function createFolder(
       await client.createFolder(url, { kind: "inherit-verified" });
       return url;
     } catch (error) {
-      // Only a fetch that never got an HTTP answer may be queued.
-      if (!outbox || !(error instanceof TypeError)) throw error;
+      // Only a request that never got an HTTP answer may be queued.
+      if (!outbox || !isNetworkFailure(error)) throw error;
     }
   }
   // A named container create is create-only (If-None-Match: * on Solid).

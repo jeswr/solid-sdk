@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { StorageError } from "@jeswr/storage-client";
 import { Button, toast } from "@jeswr/suite-ui";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { EndpointCapture } from "../lib/client/access";
@@ -9,6 +10,7 @@ import { DriveError, type DriveItem } from "../lib/client/client";
 import { discoveryOptions, type ResourceAssertion } from "../lib/client/commit";
 import { isOwnStorage } from "../lib/client/ownership";
 import { textGuard } from "../lib/offline/guards";
+import { isNetworkFailure } from "../lib/offline/network";
 import { useDrive } from "../state/drive-context";
 import { useDriveOutbox } from "../state/outbox";
 import { useDriveUi } from "../state/ui";
@@ -185,8 +187,8 @@ export function TextPreview({
             queued: false,
           };
         } catch (cause) {
-          // Only a fetch that never got an HTTP answer may be queued.
-          if (!(cause instanceof TypeError) || !queueable) throw cause;
+          // Only a request that never got an HTTP answer may be queued.
+          if (!isNetworkFailure(cause) || !queueable) throw cause;
           result = await queue();
         }
       }
@@ -204,7 +206,11 @@ export function TextPreview({
       if (!result.queued) invalidate(item.url);
     } catch (cause) {
       if (!live.current) return;
-      if (cause instanceof DriveError && cause.status === 412) {
+      // Delivered through the outbox, Drive's 412 arrives as the outbox's own classification.
+      if (
+        (cause instanceof DriveError && cause.status === 412) ||
+        (cause instanceof StorageError && cause.code === "precondition-failed")
+      ) {
         setConflict(true);
         setError("This file changed since you opened it");
       } else setError("Couldn't save this file. Your changes are still here.");

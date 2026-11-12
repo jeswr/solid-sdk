@@ -223,7 +223,7 @@ export function DriveProvider({
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
-  useDriveReplay(session, invalidate);
+  useDriveReplay(session, driveRoot, invalidate);
 
   useEffect(() => {
     if (!provision) return;
