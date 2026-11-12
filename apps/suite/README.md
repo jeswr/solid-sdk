@@ -106,7 +106,9 @@ on ACP, LWS and unknown access models.
 
 Drive/Docs and the shared Tasks/Sheets dialogs offer groups with member counts, preserve
 symbolic group grants when people are edited, and send each member one inbox Announce
-attempt per group/resource. Permissions displays groups and expandable membership.
+attempt per group/resource. Removing a group from a multi-resource item (a Tasks project)
+removes the data folder first, and the dialog keeps listing a group while any backing resource
+still holds it. Permissions displays groups and expandable membership.
 Removing a member ends group-derived access when the server next checks membership;
 other grants, server caches and downloaded copies are unaffected. Deletion first displays
 the owner's pod resources using the group, rescans, and removes those grants. An incomplete
@@ -114,8 +116,9 @@ or unsupported scan blocks deletion. Foreign-pod grants cannot be enumerated her
 
 Family setup marks one group, creates optional Calendar, Photos and Tasks spaces through
 the existing application models, grants Viewer or Editor access, and sends one invitation
-attempt per member. Progress/notification receipts are kept privately in
-`settings/group-sharing/`. Failed delivery does not undo permissions; claims are recorded
+attempt per member. The Family calendar is always a new, uniquely named calendar
+(`calendar/family-<uuid>.ttl`); an existing calendar folder is never adopted and shared.
+Progress/notification receipts are kept privately in `settings/group-sharing/`. Failed delivery does not undo permissions; claims are recorded
 before delivery to prevent duplicate notifications. Multi-resource setup/deletion is not
 atomic: partial failures are shown for review and explicit recovery.
 

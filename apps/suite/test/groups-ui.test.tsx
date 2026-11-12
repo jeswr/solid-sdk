@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 
-import { readGrants } from "@jeswr/pod-access/roles";
+import { readGrants, removeGrant } from "@jeswr/pod-access/roles";
 import type { GroupDirectory } from "@jeswr/suite-groups";
 import { afterEach, expect, it, vi } from "vitest";
 import {
@@ -198,4 +198,58 @@ it("refreshes group grants after a failed sharing write and reports the partial 
   expect(await screen.findByText(/Review Permissions before retrying/)).toBeTruthy();
   await waitFor(() => expect(readGrants).toHaveBeenCalledTimes(2));
   expect(onSaved).not.toHaveBeenCalled();
+});
+
+it("removes group access data-first and keeps listing a group any target still holds", async () => {
+  setup();
+  const tracker = `${root}tracker.ttl`;
+  const folder = `${root}tasks/`;
+  const family = `${root}groups/family.ttl#this`;
+  const held = new Set([folder]);
+  vi.mocked(readGrants).mockImplementation(async (url) => ({
+    url,
+    version: "test" as never,
+    grants: held.has(url)
+      ? [{ agent: { type: "group", id: family }, role: "editor", inherited: false, source: url }]
+      : [],
+  }));
+  const order: string[] = [];
+  vi.mocked(removeGrant).mockReset();
+  vi.mocked(removeGrant).mockImplementation(async ([url]) => {
+    order.push(url as string);
+    // The data folder removal fails: the grant stays on it.
+    return {
+      applied: [],
+      failed: url === folder ? [{ url, error: new Error("Denied") }] : [],
+      notification: { requested: false, delivered: false },
+    };
+  });
+  // Only the data folder holds the grant (an earlier partial removal); it is still listed.
+  render(<GroupSharing session={session} url={tracker} targets={[tracker, folder]} />);
+  const remove = await screen.findByRole("button", { name: "Remove group access" });
+  expect(screen.getByText(/Family · editor/)).toBeTruthy();
+  await waitFor(() => expect((remove as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(remove);
+  expect(await screen.findByText(/Review Permissions before retrying/)).toBeTruthy();
+  // Data first; the failure stops before the item itself, so the item keeps listing the group.
+  expect(order).toEqual([folder]);
+  await waitFor(() => expect(readGrants).toHaveBeenCalledWith(folder, expect.anything()));
+  expect(await screen.findByRole("button", { name: "Remove group access" })).toBeTruthy();
+  // Once every removal succeeds, the group disappears.
+  vi.mocked(removeGrant).mockImplementation(async ([url]) => {
+    order.push(url as string);
+    held.delete(url as string);
+    return {
+      applied: [url as string],
+      failed: [],
+      notification: { requested: false, delivered: false },
+    };
+  });
+  const again = await screen.findByRole("button", { name: "Remove group access" });
+  await waitFor(() => expect((again as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(again);
+  await waitFor(() => expect(order).toEqual([folder, folder, tracker]));
+  await waitFor(() =>
+    expect(screen.queryByRole("button", { name: "Remove group access" })).toBeNull(),
+  );
 });

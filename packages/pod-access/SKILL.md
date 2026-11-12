@@ -209,6 +209,12 @@ mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelErr
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+`readAccessModes` returns the raw per-principal modes (`resource`, and `members` for containers)
+with `readGrants`' version token; it keeps principals that map to no role and is the API for
+owner-only/no-other-writer checks. `isGrantableTarget(target, storage, reserved?)` is the one
+target check for approvals and other grant callers (root, `settings/`, reserved folders, access
+documents, ambiguous encodings); requests-solid approval uses it. Keep both documented in README.
+
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token
 verbatim: it binds own-document presence/absence, own and inherited ETags, discovery, comments,

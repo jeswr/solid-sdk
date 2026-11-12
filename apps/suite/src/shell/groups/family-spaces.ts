@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { createPodClient } from "@jeswr/storage-client";
@@ -23,8 +24,8 @@ export function familySpaces(
       role,
       create: async () => {
         if (key === "calendar") {
-          await createCalendar(session, "Family", "blue");
-          const url = new URL("calendar/family.ttl", session.storageUrl).href;
+          // A fresh calendar: never adopt (and so grant) an existing private calendar/family/.
+          const url = await createCalendar(session, "Family", "blue", { exclusive: true });
           return [url, eventContainer(url)];
         }
         if (key === "photos") {

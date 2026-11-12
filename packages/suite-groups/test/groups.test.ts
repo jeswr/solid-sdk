@@ -4,6 +4,7 @@ import { readWac } from "@jeswr/pod-access";
 import {
   addGrant,
   type RoleGrant,
+  readAccessModes,
   readGrants,
   removeGrant,
   setGrants,
@@ -16,12 +17,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GROUP_UNSUPPORTED, GroupDirectory, memberWebId } from "../src/index.js";
 
 vi.mock("@jeswr/pod-access", () => ({ readWac: vi.fn() }));
-vi.mock("@jeswr/pod-access/roles", () => ({
+vi.mock("@jeswr/pod-access/roles", async (original) => ({
   addGrant: vi.fn(),
+  isGrantableTarget: (await original<typeof import("@jeswr/pod-access/roles")>()).isGrantableTarget,
+  readAccessModes: vi.fn(),
   readGrants: vi.fn(),
   removeGrant: vi.fn(),
   setGrants: vi.fn(),
 }));
+// Role-level fixtures expand to the modes each role holds; raw-mode probes use real ACLs in
+// owner-access.test.ts.
+const MODES = {
+  viewer: ["read"],
+  commenter: ["read"],
+  editor: ["append", "read", "write"],
+  manager: ["append", "control", "read", "write"],
+} as const;
 const root = "https://pod.example/owner/";
 const owner = "https://pod.example/profile#me";
 const bob = "https://bob.example/#me";
@@ -98,6 +109,13 @@ beforeEach(() => {
         .map((grant) => ({ ...grant, inherited: true })) ??
       [],
   }));
+  vi.mocked(readAccessModes).mockImplementation(async (url, options) => {
+    const rows = (await readGrants(url, options)).grants.map((grant) => ({
+      agent: grant.agent,
+      modes: [...MODES[grant.role]],
+    }));
+    return { url, resource: rows, members: url.endsWith("/") ? rows : [], version: "v" as never };
+  });
   vi.mocked(addGrant).mockImplementation(async (urls, grant) => {
     for (const url of urls) roles.set(url, [...(roles.get(url) ?? []), grant]);
     return success;
@@ -299,9 +317,9 @@ describe("sharing, invitations and Family", () => {
     vi.mocked(addGrant)
       .mockResolvedValueOnce({ updated: [root], failed: [] } as never)
       .mockResolvedValueOnce({ updated: [], failed: [{ error: new Error("Denied") }] } as never);
-    await expect(directory.share(group.id, [root, `${root}file`], "viewer")).rejects.toThrow(
-      "Denied",
-    );
+    await expect(
+      directory.share(group.id, [`${root}drive/`, `${root}file`], "viewer"),
+    ).rejects.toThrow("Denied");
     expect(notify).not.toHaveBeenCalled();
   });
   it("writes a symbolic group grant and notifies each member only once across retries", async () => {
@@ -353,17 +371,21 @@ describe("sharing, invitations and Family", () => {
   it("refuses unknown groups and a failed share before notification", async () => {
     const { directory, notify } = make();
     const absent = `${root}groups/absent.ttl#this`;
-    await expect(directory.share(absent, root, "viewer")).rejects.toThrow("Group not found");
+    await expect(directory.share(absent, `${root}file`, "viewer")).rejects.toThrow(
+      "Group not found",
+    );
     await expect(directory.notifyOnce(absent, root, "Invite")).rejects.toThrow("Group not found");
     const group = await directory.create("X", [bob]);
     vi.mocked(addGrant).mockResolvedValue({
       ...success,
       failed: [{ url: root, error: new Error("No access") }],
     });
-    await expect(directory.share(group.id, root, "viewer")).rejects.toThrow("No access");
+    await expect(directory.share(group.id, `${root}file`, "viewer")).rejects.toThrow("No access");
     expect(notify).not.toHaveBeenCalled();
     await expect(
-      directory.setupFamily(group.id, [{ key: "x", role: "viewer", create: async () => [root] }]),
+      directory.setupFamily(group.id, [
+        { key: "x", role: "viewer", create: async () => [`${root}space/`] },
+      ]),
     ).rejects.toThrow("No access");
   });
   it("surfaces a space factory failure and retains Family marking", async () => {
@@ -755,7 +777,9 @@ it("refuses private, unmanaged and foreign-writable membership documents", async
     await expect(directory.list()).rejects.toThrow("owner-only changes");
     await expect(directory.rename(group.id, "Changed")).rejects.toThrow("owner-only changes");
     await expect(directory.setFamily(group.id)).rejects.toThrow("owner-only changes");
-    await expect(directory.share(group.id, root, "viewer")).rejects.toThrow("owner-only changes");
+    await expect(directory.share(group.id, `${root}file`, "viewer")).rejects.toThrow(
+      "owner-only changes",
+    );
   }
   expect(addGrant).not.toHaveBeenCalled();
 });
@@ -768,4 +792,124 @@ it("checks a newly created group's own access before returning it", async () => 
       : ((await original?.(url, options)) as Awaited<ReturnType<typeof readGrants>>),
   );
   await expect(directory.create("New group")).rejects.toThrow("owner-only changes");
+});
+
+describe("group grant limits and receipt pruning (review round 1)", () => {
+  const state = `${root}settings/group-sharing/state.json`;
+  async function notices(storage: ReturnType<typeof make>["storage"]) {
+    return JSON.parse(await (await storage.read(state)).text()).notices as string[];
+  }
+  it.each([
+    "manager",
+    "commenter",
+  ] as const)("refuses %s group access before any read or grant", async (role) => {
+    const { directory, notify } = make();
+    const group = await directory.create("Team", [bob]);
+    await expect(
+      directory.share(group.id, `${root}file`, role as unknown as "viewer"),
+    ).rejects.toThrow("Viewer or Editor access only");
+    await expect(
+      directory.setupFamily(group.id, [
+        { key: "x", role: role as unknown as "viewer", create: vi.fn() },
+      ]),
+    ).rejects.toThrow("Viewer or Editor access only");
+    expect((await directory.list())[0]?.family).toBe(false);
+    expect(addGrant).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+  it.each([
+    root,
+    root.slice(0, -1),
+    `${root}settings/`,
+    `${root}settings/group-sharing/state.json`,
+    `${root}SETTINGS/x`,
+    `${root}groups/`,
+    `${root}groups/a.ttl`,
+    `${root}Groups/a.ttl`,
+    `${root}file.acl`,
+    "https://outside.example/file",
+  ])("refuses the reserved or foreign target %s for shares and new Family spaces", async (target) => {
+    const { directory, notify, storage } = make();
+    const group = await directory.create("Team", [bob]);
+    await expect(directory.share(group.id, [`${root}file`, target], "viewer")).rejects.toThrow(
+      "Choose a specific item",
+    );
+    await expect(
+      directory.setupFamily(group.id, [
+        { key: "x", role: "editor", create: async () => [`${root}space/`, target] },
+      ]),
+    ).rejects.toThrow("Choose a specific item");
+    // The refused factory output is never stored for resumption.
+    expect(JSON.parse(await (await storage.read(state)).text()).spaces).toEqual({});
+    expect(addGrant).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+  });
+  it("prunes a removed member's receipts, keeps others, and re-invites them after re-adding", async () => {
+    const { directory, storage, notify } = make();
+    const group = await directory.create("Team", [bob, carol]);
+    const other = await directory.create("Other", [bob]);
+    await directory.notifyOnce(group.id, group.id, "Invite");
+    await directory.notifyOnce(other.id, other.id, "Invite");
+    expect(await notices(storage)).toHaveLength(3);
+    await directory.removeMember(group.id, bob);
+    expect((await notices(storage)).map((key) => JSON.parse(key).slice(0, 2))).toEqual([
+      [group.id, carol],
+      [other.id, bob],
+    ]);
+    // Nothing left to prune: no settings write.
+    const write = vi.spyOn(storage, "write");
+    await directory.removeMember(group.id, bob);
+    expect(write.mock.calls.filter(([url]) => url === state)).toEqual([]);
+    await directory.addMember(group.id, bob);
+    await directory.notifyOnce(group.id, group.id, "Invite");
+    expect(notify).toHaveBeenCalledTimes(4);
+  });
+  it("does not create settings just to prune receipts", async () => {
+    const { directory, storage } = make();
+    const group = await directory.create("Team", [bob]);
+    await directory.removeMember(group.id, bob);
+    await expect(storage.read(state)).rejects.toMatchObject({ code: "not-found" });
+  });
+  it("prunes a deleted group's receipts and keeps malformed entries unmatched", async () => {
+    const { directory, storage } = make();
+    const group = await directory.create("Team", [bob]);
+    const other = await directory.create("Other", [bob]);
+    await directory.notifyOnce(group.id, group.id, "Invite");
+    await directory.notifyOnce(other.id, other.id, "Invite");
+    const current = await storage.read(state);
+    const data = JSON.parse(await current.text());
+    data.notices.push("not json", "{}");
+    await storage.write(state, JSON.stringify(data), {
+      contentType: "application/json",
+      ifMatch: current.etag as string,
+    });
+    await directory.removeMember(group.id, carol);
+    await directory.delete(await directory.grants(group.id));
+    expect(await notices(storage)).toEqual([
+      JSON.stringify([other.id, bob, other.id]),
+      "not json",
+      "{}",
+    ]);
+  });
+  it("caps receipts at the newest NOTICE_LIMIT, dropping the oldest", async () => {
+    const { NOTICE_LIMIT } = await import("../src/index.js");
+    const { directory, storage, notify } = make();
+    const group = await directory.create("Team", [bob]);
+    await directory.setFamily(group.id);
+    const current = await storage.read(state);
+    const data = JSON.parse(await current.text());
+    data.notices = Array.from({ length: NOTICE_LIMIT }, (_, i) =>
+      JSON.stringify([group.id, bob, `${root}old-${i}`]),
+    );
+    await storage.write(state, JSON.stringify(data), {
+      contentType: "application/json",
+      ifMatch: current.etag as string,
+    });
+    await directory.notifyOnce(group.id, `${root}new`, "Shared");
+    const kept = await notices(storage);
+    expect(kept).toHaveLength(NOTICE_LIMIT);
+    expect(kept[0]).toBe(JSON.stringify([group.id, bob, `${root}old-1`]));
+    expect(kept.at(-1)).toBe(JSON.stringify([group.id, bob, `${root}new`]));
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
 });

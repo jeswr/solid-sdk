@@ -10,6 +10,9 @@ Use the existing solid-task-model ContactGroup; do not add hand-written RDF or f
 Shareable groups are publicly readable in groups/, separate from private Contacts labels.
 Never widen access to the whole pod or to private group settings. Show GROUP_PRIVACY in the UI.
 Refuse unsafe or private group documents, and never publish a nonempty private groups container.
+Check access on raw modes (pod-access readAccessModes), never the role projection, which hides
+Append-only and Write-only principals; check the groups folder's member scope too.
+Group grants are Viewer/Editor only; never target the root, settings/, groups/ (isGrantableTarget).
 Require owner-only access to existing settings before trusting space URLs or notification receipts.
 Share multi-resource items in one call so each member receives at most one notification attempt.
 Keep conditional writes, deletion reviews, complete scans and notification claims before delivery.

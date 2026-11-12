@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { writeWac } from "@jeswr/pod-access";
 import { readGrants } from "@jeswr/pod-access/roles";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
@@ -102,10 +103,18 @@ it("creates actual Family calendar, photo and task resources and grants the grou
   const group = await directory.create("Family Two", []);
   const spaces = familySpaces(session, ["calendar", "photos", "tasks"], "editor");
   await directory.setupFamily(group.id, spaces);
-  expect(pod.has(`${DEMO_ROOT}calendar/family.ttl`)).toBe(true);
+  const state = JSON.parse(
+    await (await storage.read(`${DEMO_ROOT}settings/group-sharing/state.json`)).text(),
+  );
+  const [calendar, events] = state.spaces[JSON.stringify([group.id, "calendar"])];
+  // A fresh, uniquely named calendar: never the fixed calendar/family.ttl.
+  expect(calendar).toMatch(/calendar\/family-[0-9a-f-]{36}\.ttl$/);
+  expect(events).toBe(calendar.replace(/\.ttl$/, "/"));
+  expect(pod.has(calendar)).toBe(true);
+  expect(pod.has(`${DEMO_ROOT}calendar/family.ttl`)).toBe(false);
   expect(pod.has(`${DEMO_ROOT}photos/albums/family.ttl`)).toBe(true);
   expect(pod.has(`${DEMO_ROOT}tasks/projects/family.ttl`)).toBe(true);
-  const calendarGrants = await readGrants(`${DEMO_ROOT}calendar/family/`, {
+  const calendarGrants = await readGrants(events, {
     fetch: pod.fetch,
     root: DEMO_ROOT,
     kind: "folder",
@@ -115,4 +124,80 @@ it("creates actual Family calendar, photo and task resources and grants the grou
       expect.objectContaining({ agent: { type: "group", id: group.id }, role: "editor" }),
     ]),
   );
+});
+
+async function familyFixture() {
+  const pod = createDemoPod({
+    root: DEMO_ROOT,
+    seed: await buildDemoSeed(Date.now(), { calendar: false }),
+  });
+  const session = { storageUrl: DEMO_ROOT, fetch: pod.fetch, webId: DEMO_WEBID };
+  const { storage } = await createPodClient({
+    storage: DEMO_ROOT,
+    fetch: pod.fetch,
+    capabilities: createMemoryCache(),
+  });
+  const directory = new GroupDirectory(
+    { storage, fetch: pod.fetch, webId: DEMO_WEBID },
+    vi.fn().mockResolvedValue({ delivered: true, inbox: null }),
+  );
+  return { pod, session, storage, directory };
+}
+
+it("never adopts or grants an existing private calendar/family/ events folder", async () => {
+  const { pod, session, storage, directory } = await familyFixture();
+  const existing = await storage.create(`${DEMO_ROOT}calendar/`, null, {
+    name: "family",
+    kind: "container",
+  });
+  const group = await directory.create("Family Three", []);
+  await directory.setupFamily(group.id, familySpaces(session, ["calendar"], "viewer"));
+  const grants = await readGrants(existing.url, {
+    fetch: pod.fetch,
+    root: DEMO_ROOT,
+    kind: "folder",
+  });
+  expect(grants.grants.some((grant) => grant.agent.type === "group")).toBe(false);
+  expect(pod.has(`${DEMO_ROOT}calendar/family.ttl`)).toBe(false);
+});
+
+it("refuses a Family Tasks space when the Tasks folder lets others append (raw ACL modes)", async () => {
+  const { pod, session, directory } = await familyFixture();
+  const tasks = `${DEMO_ROOT}tasks/`;
+  // Owner management plus Append (folder and defaults) for every signed-in agent: Append maps to
+  // no role, so a role projection hides it; the raw modes do not.
+  const body = await writeWac(
+    {
+      denials: [],
+      grants: [
+        {
+          who: [[{ kind: "agent", webId: DEMO_WEBID }]],
+          modes: new Set(["read", "write", "control"]),
+          except: [],
+          appliesTo: "both",
+          source: { url: `${tasks}.acl`, node: `${tasks}.acl#owner` },
+        },
+        {
+          who: [[{ kind: "authenticated" }]],
+          modes: new Set(["append"]),
+          except: [],
+          appliesTo: "both",
+          source: { url: `${tasks}.acl`, node: `${tasks}.acl#append` },
+        },
+      ],
+    },
+    tasks,
+    `${tasks}.acl`,
+  );
+  const put = await pod.fetch(`${tasks}.acl`, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body,
+  });
+  expect(put.ok).toBe(true);
+  const group = await directory.create("Family Four", []);
+  await expect(
+    directory.setupFamily(group.id, familySpaces(session, ["tasks"], "editor")),
+  ).rejects.toMatchObject({ status: 403 });
+  expect(pod.has(`${DEMO_ROOT}tasks/projects/family.ttl`)).toBe(false);
 });

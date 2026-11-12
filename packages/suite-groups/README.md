@@ -27,18 +27,24 @@ and review before retrying. A concurrent grant written after the final scan cann
 across HTTP resources; deleting membership still denies subsequent group resolution.
 
 `share` writes a symbolic group grant through pod-access/roles and attempts member notifications.
+It grants only Viewer or Editor, and refuses (`GROUP_TARGET`) the storage root, `settings/`,
+`groups/`, anything under them, and access documents, using pod-access `isGrantableTarget`.
 Pass the backing resource URLs together for a multi-resource item: all grants are written before
 one notification attempt per member, using the first URL as the shared item's identity.
 `setupFamily` marks the one Family group, calls injected application space factories, records
 returned URLs privately for resumption, grants the selected Viewer/Editor role, then invites members.
-Space factories must use their application's existing model and discovery path. Creation failures
+Space factories must use their application's existing model and discovery path, and create a
+fresh space rather than adopt an existing one. Factory and stored space URLs get the same target
+check as `share` before they are stored or granted. Creation failures
 are explicit and never imply all spaces were created. A crash between creating a space and storing
 its URLs may require the owner to review that space before retrying.
 
 Invitations and share notifications are inbox `Announce` activities. A per-member/per-target receipt
 is persisted **before** delivery: retries/reopening never send a duplicate. This is one delivery
 attempt, not guaranteed delivery; a crash after claiming, or a failed inbox, is reported/left unsent.
-The owner is excluded. Permissions survive delivery failures. Settings ETag conflicts prevent a
+The owner is excluded. Permissions survive delivery failures. Receipts are pruned when a member is
+removed (re-adding them invites them again) or the group is deleted, and capped at the newest
+`NOTICE_LIMIT` (2,000); a pruned receipt's retry can send again. Settings ETag conflicts prevent a
 second tab from posting the same claimed notification.
 
 Legacy people dialogs can use `peopleWac` for their people projection while a separate group
@@ -46,17 +52,21 @@ section displays group access. Their replacement writes use `preserveGroupWac` t
 the original group selectors, scopes and metadata, splitting co-agents out. Subject collisions
 refuse the replacement. These helpers do not grant access or change the original dataset.
 
-`ownerOnlyAccess` verifies the nearest existing ancestor's WAC roles before creating a Family
-space or registering its private index. It refuses foreign/public principals and requires owner
-management; unknown or unreadable policy is an error, with no permission changes.
+`ownerOnlyAccess` verifies the nearest existing ancestor's raw WAC modes (pod-access
+`readAccessModes`) before creating a Family space or registering its private index: for a
+container both its own scope and the scope its members inherit. Every principal holding any mode
+must be the owner, who must hold Read, Write and Control; Append-only or Write-only principals,
+which map to no role, are refused. Unknown or unreadable policy is an error, with no permission
+changes.
 
 `wacGroupIds` retains group identities in access summaries so resources shared through a group
 are never labelled "Only you". Person-only legacy ACLs keep their existing dialect handling.
 
 Before making the dedicated container public, provisioning refuses any nonempty container whose
 existing policy is private or permits other writers. It never publishes pre-existing private
-contact labels. Listing, membership edits, Family marking and sharing verify that each group
-document has public Read, owner management and no other writers; private or writable group
-membership fails closed before grants are issued.
+contact labels. Listing, membership edits, Family marking and sharing verify, on raw modes, that
+the groups folder (both scopes) and each group document have public Read, owner management and
+no principal other than the owner holding anything but Read (so no Append, Write or Control);
+private or writable group membership fails closed before grants are issued.
 Existing settings documents must also have owner-only access before their Family space URLs or
 notification receipts are trusted. An individual document ACL cannot bypass the private folder.

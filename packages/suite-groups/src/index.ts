@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import {
   createNotify,
@@ -8,9 +9,8 @@ import {
 } from "@jeswr/pod-access/notify";
 import {
   addGrant,
-  type Role,
-  type RoleGrant,
-  readGrants,
+  isGrantableTarget,
+  readAccessModes,
   removeGrant,
   type SetGrantsResult,
   setGrants,
@@ -23,7 +23,7 @@ import {
 } from "@jeswr/solid-task-model/contacts";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { DataFactory } from "n3";
-import { ownerOnlyAccess } from "./owner-access.js";
+import { ownerOnlyAccess, publicReadModes } from "./owner-access.js";
 import { wacGroupIds } from "./wac.js";
 
 export interface SharedGroup {
@@ -55,6 +55,10 @@ export const GROUP_PRIVACY =
   "Shareable group names and member WebIDs are publicly readable so your Solid server can check group access. Private contact labels stay private.";
 export const GROUP_UNSUPPORTED =
   "Group sharing is available on WAC pods only. ACP and other access systems do not support groups here yet.";
+export const GROUP_TARGET =
+  "Groups can't be given access to your whole pod, your settings or the groups folder. Choose a specific item.";
+/** Delivery receipts kept in the private settings: the newest, oldest dropped first. */
+export const NOTICE_LIMIT = 2000;
 export const GROUP_UNSAFE =
   "Shareable groups need public Read and owner-only changes. Private contact labels won't be published. Review this groups folder's access before continuing.";
 
@@ -80,6 +84,15 @@ function missing(error: unknown) {
 }
 function check(result: SetGrantsResult) {
   if (result.failed.length) throw result.failed[0]?.error;
+}
+/** A receipt key `[group, member, target]`; anything else matches no group or member. */
+function receipt(key: string): unknown[] {
+  try {
+    const value: unknown = JSON.parse(key);
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
 }
 function etag(value: string | null) {
   if (!value || !/^"[^"\r\n]*"$/.test(value))
@@ -158,8 +171,8 @@ export class GroupDirectory {
   }
   private async provision(url: string, publicRead: boolean) {
     await this.ensureContainer(url);
-    const snapshot = await readGrants(url, this.options(url));
-    if (publicRead && !this.safeGroupGrants(snapshot.grants)) {
+    const snapshot = await readAccessModes(url, this.options(url));
+    if (publicRead && !publicReadModes(snapshot, this.session.webId)) {
       for await (const _entry of this.session.storage.listAll(url)) throw new Error(GROUP_UNSAFE);
     }
     check(
@@ -183,30 +196,26 @@ export class GroupDirectory {
               ]
             : []),
         ],
-        { ...this.options(url), expected: snapshot, ownOnly: true },
+        { ...this.options(url), expected: { [url]: snapshot.version }, ownOnly: true },
       ),
     );
   }
-  private safeGroupGrants(grants: readonly RoleGrant[]): boolean {
-    return (
-      grants.some((grant) => grant.agent.type === "public" && grant.role === "viewer") &&
-      grants.some(
-        (grant) =>
-          grant.agent.type === "webid" &&
-          grant.agent.id === this.session.webId &&
-          grant.role === "manager",
-      ) &&
-      grants.every(
-        (grant) =>
-          grant.role === "viewer" ||
-          (grant.agent.type === "webid" && grant.agent.id === this.session.webId),
-      )
-    );
+  /** Raw modes, so principals that map to no role (e.g. Append only) are never hidden. */
+  private async assertPublicRead(url: string) {
+    if (!publicReadModes(await readAccessModes(url, this.options(url)), this.session.webId))
+      throw new Error(GROUP_UNSAFE);
   }
+  /** The groups folder (who may add documents, and what they inherit) and the document itself. */
   private async assertShareable(id: string) {
     const url = this.document(id);
-    if (!this.safeGroupGrants((await readGrants(url, this.options(url))).grants))
-      throw new Error(GROUP_UNSAFE);
+    await this.assertPublicRead(this.container);
+    await this.assertPublicRead(url);
+  }
+  /** Storage root, settings and the groups folder are never group targets. */
+  private target(url: string) {
+    if (!isGrantableTarget(url, this.session.storage.root, ["groups"]))
+      throw new Error(GROUP_TARGET);
+    return url;
   }
   private async settings(): Promise<{ data: Settings; etag: string | null }> {
     try {
@@ -265,8 +274,9 @@ export class GroupDirectory {
       if (entry.kind !== "resource" || !entry.url.endsWith(".ttl")) continue;
       if (groups.length >= 500) throw new Error("Too many groups to list safely");
       const id = `${entry.url}#this`;
-      this.document(id);
-      await this.assertShareable(id);
+      // An empty, not yet provisioned folder lists nothing; any group needs a safe folder.
+      if (!groups.length) await this.assertPublicRead(this.container);
+      await this.assertPublicRead(this.document(id));
       const read = await this.session.storage.readRdf(entry.url);
       const data = parseGroup(entry.url, read.dataset);
       if (!data) throw new Error("A shareable group is unreadable");
@@ -295,7 +305,7 @@ export class GroupDirectory {
       return { id: `${created.url}#this`, name: label, members: ids, family: false };
     });
   }
-  private edit(id: string, change: (group: ContactGroup) => void) {
+  private edit(id: string, change: (group: ContactGroup) => void, after?: () => Promise<void>) {
     const url = this.document(id);
     return this.serial(async () => {
       await this.assertShareable(id);
@@ -305,6 +315,15 @@ export class GroupDirectory {
       const group = new ContactGroup(id, current.dataset, DataFactory);
       change(group);
       await this.session.storage.writeRdf(url, current.dataset, { ifMatch: etag(current.etag) });
+      await after?.();
+    });
+  }
+  /** Drop matching receipts; settings that do not exist yet are not created for this. */
+  private async prune(match: (key: unknown[]) => boolean) {
+    const current = await this.settings();
+    if (!current.etag || !current.data.notices.some((key) => match(receipt(key)))) return;
+    await this.updateSettings((data) => {
+      data.notices = data.notices.filter((key) => !match(receipt(key)));
     });
   }
   rename(id: string, name: string) {
@@ -321,9 +340,14 @@ export class GroupDirectory {
   }
   removeMember(id: string, webId: string) {
     const member = memberWebId(webId);
-    return this.edit(id, (group) => {
-      group.members.delete(member);
-    });
+    // A removed member's receipts go too: re-adding them later invites them again.
+    return this.edit(
+      id,
+      (group) => {
+        group.members.delete(member);
+      },
+      () => this.prune(([group, person]) => group === id && person === member),
+    );
   }
   setFamily(id: string) {
     this.document(id);
@@ -389,6 +413,7 @@ export class GroupDirectory {
       await this.session.storage.delete(url, { ifMatch: validator });
       await this.updateSettings((data) => {
         if (data.family === id) delete data.family;
+        data.notices = data.notices.filter((key) => receipt(key)[0] !== id);
       });
     });
   }
@@ -405,6 +430,7 @@ export class GroupDirectory {
         await this.updateSettings((data) => {
           if (!data.notices.includes(key)) {
             data.notices.push(key);
+            data.notices.splice(0, Math.max(0, data.notices.length - NOTICE_LIMIT));
             send = true;
           }
         });
@@ -421,11 +447,14 @@ export class GroupDirectory {
       return results;
     });
   }
-  async share(id: string, resource: string | readonly string[], role: Role) {
+  async share(id: string, resource: string | readonly string[], role: "viewer" | "editor") {
     this.document(id);
+    if (role !== "viewer" && role !== "editor")
+      throw new Error("Groups can be given Viewer or Editor access only");
     const resources = typeof resource === "string" ? [resource] : [...new Set(resource)];
     const target = resources[0];
     if (!target) throw new Error("Choose a resource to share");
+    for (const url of resources) this.target(url);
     if (!(await this.list()).some((group) => group.id === id)) throw new Error("Group not found");
     for (const url of resources)
       check(
@@ -438,19 +467,24 @@ export class GroupDirectory {
     return this.notifyOnce(id, target, shareNotification(target, role).summary as string);
   }
   async setupFamily(id: string, spaces: readonly FamilySpace[]) {
+    if (spaces.some((space) => space.role !== "viewer" && space.role !== "editor"))
+      throw new Error("Groups can be given Viewer or Editor access only");
     await this.setFamily(id);
     for (const space of spaces) {
       const key = JSON.stringify([id, space.key]);
       let urls = (await this.settings()).data.spaces[key];
       if (!urls) {
         urls = await space.create();
-        const created = [...urls];
+        // Defence in depth: a factory never hands the group the pod, settings or groups.
+        const created = urls.map((url) => this.target(url));
         await this.serial(() =>
           this.updateSettings((data) => {
             data.spaces[key] = created;
           }),
         );
       }
+      // Stored URLs are re-checked: settings are owner-only, but never the only safeguard.
+      for (const url of urls) this.target(url);
       for (const url of urls)
         check(
           await addGrant(

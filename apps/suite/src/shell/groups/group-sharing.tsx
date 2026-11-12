@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { type RoleGrant, readGrants, removeGrant } from "@jeswr/pod-access/roles";
 import type { SharedGroup } from "@jeswr/suite-groups";
@@ -33,22 +34,36 @@ export function GroupSharing({
   const [saving, setSaving] = useState(false);
   const id = useId();
   const [revision, setRevision] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: revision reloads grants after a mutation.
+  const targetKey = targets.join("\n");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: revision reloads grants after a mutation; targetKey stands for the targets array.
   useEffect(() => {
     let live = true;
     setReady(false);
     void (async () => {
       const directory = await groupDirectory(session);
       const groups = await directory.list();
-      const snapshot = await readGrants(url, {
-        fetch: session.fetch,
-        root: session.storageUrl,
-        model: "wac",
-        kind: url.endsWith("/") ? "folder" : "resource",
-      });
+      // A group stays listed while ANY backing resource still holds it, so a partly failed
+      // removal never hides access that remains on another target.
+      const held = new Map<string, RoleGrant>();
+      for (const target of new Set([url, ...targets])) {
+        const snapshot = await readGrants(target, {
+          fetch: session.fetch,
+          root: session.storageUrl,
+          model: "wac",
+          kind: target.endsWith("/") ? "folder" : "resource",
+        });
+        for (const grant of snapshot.grants) {
+          if (grant.agent.type !== "group") continue;
+          const prior = held.get(grant.agent.id);
+          held.set(
+            grant.agent.id,
+            prior ? { ...prior, inherited: prior.inherited || grant.inherited } : grant,
+          );
+        }
+      }
       if (live) {
         setGroups(groups);
-        setGrants(snapshot.grants.filter((grant) => grant.agent.type === "group"));
+        setGrants([...held.values()]);
         setReady(true);
       }
     })().catch((error) => {
@@ -57,7 +72,7 @@ export function GroupSharing({
     return () => {
       live = false;
     };
-  }, [session, url, revision]);
+  }, [session, url, targetKey, revision]);
   async function save(remove?: string) {
     if (saving || !ready || disabled || connection.disabled) return;
     setSaving(true);
@@ -65,7 +80,8 @@ export function GroupSharing({
     try {
       const directory = await groupDirectory(session);
       if (remove) {
-        for (const target of targets) {
+        // Data first, the item last: if a later removal fails, the item still lists the group.
+        for (const target of [...targets].reverse()) {
           const result = await removeGrant(
             [target],
             { type: "group", id: remove },

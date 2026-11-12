@@ -342,10 +342,29 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
-(`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
-`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
-It does not change the offline root API.
+`readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
+`isRoleError`, `isGrantableTarget`, and their documented types (`Role`, `ResourceKind`, `AgentRef`,
+`RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
+`GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
+`AccessModesSnapshot`). It does not change the offline root API.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+`readAccessModes(url, options)` returns `{ url, resource, members, version }`: every principal's
+raw modes (`{ agent, modes }`, Write implying Append), including principals whose modes map to no
+role (Append only, Write without Read, Control without edit), which `readGrants` omits. Use it,
+not the role projection, for security checks such as "only the owner can change this".
+`resource` is the effective policy of the resource itself (its own document, else the nearest
+ancestor's inherited rules); for a container URL `members` is what its members inherit (its own
+member-scope `acl:default` rules, else the inherited ones), and it is empty otherwise. It never
+refuses a folder whose scopes differ (it reports both), but refuses conditional policies like
+`readGrants`. Its `version` equals `readGrants`' token for the same options, so it can guard a
+later `setGrants` (`expected: { [url]: version }`).
+
+`isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
+false for anything outside storage, the storage root (with or without its slash), `settings/` and
+any extra top-level folder named in `reserved`, with everything under them, `.acl`/`.acr`/`.meta`
+documents, queries, fragments, empty segments, ambiguous percent-encodings and Windows aliases,
+compared case-insensitively by decoded path.
 
 ```ts
 import { readGrants, setGrants } from "@jeswr/pod-access/roles";
