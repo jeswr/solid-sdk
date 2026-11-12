@@ -21,7 +21,14 @@ import {
   solidOdrlEngine,
   verifyApproval,
 } from "@jeswr/agent-mandate";
-import { canonicalJson, digestBytes, digestOf, newUrn, recordFromTurtle } from "@jeswr/agent-model";
+import {
+  canonicalJson,
+  digestBytes,
+  digestOf,
+  newUrn,
+  recordFromTurtle,
+  recordToTurtle,
+} from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
@@ -52,6 +59,7 @@ function harness() {
   const pod = createMemoryPod();
   const workspace = new PodWorkspace({
     io: pod.io,
+    storage: pod.storage,
     root: ROOT,
     ownerWebId: OWNER,
     privateTypeIndex: `${ROOT}settings/privateTypeIndex.ttl`,
@@ -360,6 +368,201 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(introduction).toBeGreaterThan(writes.indexOf(`${ROOT}agent/.acl`));
   expect(introduction).toBeLessThan(writes.findIndex((url) => url.includes("/inbox/direct/")));
   expect(h.pod.resources.get(`${ROOT}agent/descriptors/agent.ttl`)?.body).toContain(AGENT_ID);
+});
+it.each([
+  ["x:y.ttl", false],
+  ["x%3ay.ttl", false],
+  ["snow☃.ttl", false],
+  ["x:y.ttl", true],
+  ["x%3ay.ttl", true],
+  ["snow☃.ttl", true],
+] as const)("completes and replays proposal %s using its digest location (cached=%s)", async (name, cached) => {
+  const h = harness();
+  const id = `${h.workspace.url("proposals/")}${name}`;
+  const expectedId = h.workspace.url(`proposals/${digestOf(id).slice(8)}.ttl`);
+  const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
+  const key = digestOf({ account: "fixture", source, digest: h.message.rawSha256 });
+  const result = {
+    proposals: [{ ...exampleRecords["action-proposal"], id }],
+    calls: [measuredCall("proposer")],
+  };
+  if (cached) await h.state.proposalResults.put(key, result);
+  else vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue(result);
+  const project = vi.fn(h.options.proposalWritten);
+  const proposalWritten: DaemonOptions["proposalWritten"] = async (proposal) => {
+    expect(proposal.id).toBe(expectedId);
+    expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
+    return project(proposal);
+  };
+  const options = { ...h.options, proposalWritten };
+  await createDaemon(options).once();
+  await createDaemon(options).once();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(cached ? 0 : 1);
+  expect(h.state.cursors.get("fixture")).toBe("one");
+  expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
+  const resource = h.pod.resources.get(expectedId);
+  expect(resource).toBeDefined();
+  expect(await recordFromTurtle(resource?.body ?? "", expectedId)).toMatchObject({
+    id: expectedId,
+  });
+  // Probing for an earlier release's resource is a read; nothing is written at the legacy URL.
+  expect(h.pod.requests.some((r) => r.url === id && r.method !== "GET")).toBe(false);
+  expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toHaveLength(1);
+  const calls = h.ledger.entries().filter((entry) => entry.record.type === "model-call");
+  expect(calls).toHaveLength(1);
+  // Without earlier evidence the repaired location is used everywhere, including model calls.
+  expect(calls[0]?.record).toMatchObject({ proposal: expectedId });
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
+});
+/**
+ * Seed the state an earlier release left for proposals/x:y.ttl: it accepted any proposals/**.ttl
+ * ID and projected into the outbox before auditing model calls or publishing to the pod.
+ */
+async function legacyRun(
+  h: ReturnType<typeof harness>,
+  evidence: { calls: boolean; modelAudit: boolean; published: boolean; proposalAudit: boolean },
+) {
+  const legacyId = h.workspace.url("proposals/x:y.ttl");
+  const expectedId = h.workspace.url(`proposals/${digestOf(legacyId).slice(8)}.ttl`);
+  const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
+  const key = digestOf({ account: "fixture", source, digest: h.message.rawSha256 });
+  const task = {
+    taskId: `task-${key.slice(8)}`,
+    conversation: `urn:sha256:${digestOf({ account: "fixture", thread: "seed" }).slice(8)}`,
+    agent: AGENT_ID,
+    owner: OWNER,
+  };
+  // The trusted outbox is idempotent by proposal ID, as the executor's store is.
+  const outbox = new Map<string, OutboxEntry>();
+  const project = vi.fn<DaemonOptions["proposalWritten"]>(async (proposal) => {
+    const existing = outbox.get(proposal.id);
+    if (existing) return existing;
+    const entry = await h.options.proposalWritten(proposal);
+    outbox.set(proposal.id, entry);
+    return entry;
+  });
+  const entry = await project({ ...exampleRecords["action-proposal"], id: legacyId });
+  project.mockClear();
+  const call = measuredCall("proposer");
+  await h.state.proposalResults.put(key, {
+    proposals: [entry.proposal],
+    calls: evidence.calls ? [call] : [],
+  });
+  const at = new Date(AT).toISOString();
+  if (evidence.modelAudit)
+    h.ledger.append(
+      {
+        type: "model-call",
+        id: call.id,
+        context: call.context,
+        provider: call.provider,
+        model: call.model,
+        tokens: call.inputTokens + call.outputTokens,
+        inputTokens: call.inputTokens,
+        outputTokens: call.outputTokens,
+        toolCalls: call.toolCalls,
+        latencyMs: Math.round(call.latencyMs),
+        retries: call.retries,
+        proposal: legacyId,
+        ...task,
+      },
+      at,
+    );
+  if (evidence.published) {
+    await h.pod.storage.write(legacyId, await recordToTurtle(entry.proposal), {
+      contentType: "text/turtle",
+      ifMatch: "*",
+    });
+    h.pod.requests.splice(0);
+  }
+  if (evidence.proposalAudit) {
+    const terms = proposalApprovalTerms(entry);
+    h.ledger.append(
+      {
+        type: "proposal",
+        id: legacyId,
+        proposal: legacyId,
+        terms,
+        termsDigest: digestOf(terms),
+        ...task,
+      },
+      at,
+    );
+  }
+  return {
+    legacyId,
+    expectedId,
+    key,
+    outbox,
+    project,
+    options: { ...h.options, proposalWritten: project },
+  };
+}
+const proposalResources = (h: ReturnType<typeof harness>) =>
+  [...h.pod.resources.keys()].filter((url) => url.includes("/proposals/") && url.endsWith(".ttl"));
+const evidenceRecords = (h: ReturnType<typeof harness>) =>
+  h.ledger
+    .entries()
+    .map((entry) => entry.record)
+    .filter((record) => record.type === "model-call" || record.type === "proposal");
+
+it.each([
+  ["model-call evidence", { calls: true, modelAudit: true, published: true, proposalAudit: false }],
+  ["proposal evidence", { calls: true, modelAudit: true, published: true, proposalAudit: true }],
+  [
+    "a published resource",
+    { calls: false, modelAudit: false, published: true, proposalAudit: false },
+  ],
+] as const)("keeps an already-projected legacy proposal id end to end given %s", async (_, evidence) => {
+  const h = harness();
+  const { legacyId, expectedId, key, outbox, project, options } = await legacyRun(h, evidence);
+  await createDaemon(options).once();
+  expect(project).toHaveBeenCalledOnce();
+  expect(project.mock.calls[0]?.[0].id).toBe(legacyId);
+  expect([...outbox.keys()]).toEqual([legacyId]);
+  expect(proposalResources(h)).toEqual([legacyId]);
+  expect(h.pod.requests.some((r) => r.url === expectedId)).toBe(false);
+  expect(h.pod.requests.some((r) => r.method === "PUT" && r.url.includes("/proposals/"))).toBe(
+    false,
+  );
+  expect((await h.state.proposalResults.get(key))?.proposals.map((p) => p.id)).toEqual([legacyId]);
+  expect(h.state.cursors.get("fixture")).toBe("one");
+  const records = evidenceRecords(h);
+  expect(records.filter((r) => r.type === "proposal")).toEqual([
+    expect.objectContaining({ id: legacyId, proposal: legacyId }),
+  ]);
+  expect(records.filter((r) => r.type === "model-call")).toEqual(
+    evidence.calls ? [expect.objectContaining({ proposal: legacyId })] : [],
+  );
+  // A second pass replays without a new outbox entry, resource or evidence.
+  const resource = h.pod.resources.get(legacyId);
+  await createDaemon(options).once();
+  expect([...outbox.keys()]).toEqual([legacyId]);
+  expect(proposalResources(h)).toEqual([legacyId]);
+  expect(h.pod.resources.get(legacyId)).toEqual(resource);
+  expect(evidenceRecords(h)).toEqual(records);
+  expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(2);
+});
+it("fails closed when a projected legacy proposal id was never published", async () => {
+  const h = harness();
+  const { outbox, project, options } = await legacyRun(h, {
+    calls: true,
+    modelAudit: true,
+    published: false,
+    proposalAudit: false,
+  });
+  const before = evidenceRecords(h);
+  for (let attempt = 0; attempt < 2; attempt++)
+    await expect(createDaemon(options).once()).rejects.toThrow(
+      "Legacy proposal already projected; manual migration needed",
+    );
+  expect(project).not.toHaveBeenCalled();
+  expect(outbox.size).toBe(1);
+  expect(proposalResources(h)).toEqual([]);
+  expect(evidenceRecords(h)).toEqual(before);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });
 it.each([
   "proposal-write",
@@ -1064,9 +1267,27 @@ it("serializes accounts sharing a binding and respects email/chat/social interva
       category: category as "email" | "chat" | "social",
     })),
   };
+  let completed!: () => void;
+  let nextPass = new Promise<void>((resolve) => {
+    completed = resolve;
+  });
+  h.executor.runOutboxOnce.mockImplementation(async () => {
+    completed();
+    return {};
+  });
   const controller = new AbortController();
   const run = createDaemon(options).run(controller.signal);
-  await vi.advanceTimersByTimeAsync(300_000);
+  // Finish storage work before moving the simulated scheduler clock.
+  await nextPass;
+  await vi.advanceTimersByTimeAsync(0);
+  for (let tick = 0; tick < 10; tick++) {
+    nextPass = new Promise<void>((resolve) => {
+      completed = resolve;
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await nextPass;
+    await vi.advanceTimersByTimeAsync(0);
+  }
   controller.abort();
   await run;
   expect(pollInterval("email")).toBe(120_000);
