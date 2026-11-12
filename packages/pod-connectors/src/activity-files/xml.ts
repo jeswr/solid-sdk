@@ -23,18 +23,27 @@ export async function* xmlActivities(
   let segment = 0;
   let text = "";
   let lap:
-    | { duration?: number; distance?: number; calories?: number; avgHr?: number; maxHr?: number }
+    | {
+        start?: number;
+        duration?: number;
+        distance?: number;
+        calories?: number;
+        avgHr?: number;
+        maxHr?: number;
+      }
     | undefined;
-  let hasDuration = false,
-    hasDistance = false,
+  // TCX TotalTimeSeconds is timer (moving) time; elapsed time needs lap start times.
+  let firstLapStart: number | undefined;
+  let lastLap: { start: number; duration?: number } | undefined;
+  let hasDistance = false,
     hasCalories = false;
-  let lapDuration = 0,
-    lapDistance = 0,
+  let lapDistance = 0,
     lapCalories = 0,
     hrWeighted = 0,
     hrWeight = 0;
   try {
-    for await (const event of xmlEvents(chunks)) {
+    // Charge scanned characters too, so comments and attribute text cannot evade the message cap.
+    for await (const event of xmlEvents(chunks, { onScan: () => budget.message() })) {
       budget.message();
       if (event.kind === "start") {
         const parent = stack.at(-1);
@@ -62,17 +71,19 @@ export async function* xmlActivities(
           budget.activity();
           activity = new Activity(budget);
           activity.summary = format === "TrainingCenterDatabase";
+          activity.format = format === "gpx" ? "gpx" : "tcx";
           activity.creator = creator;
           activity.sport = sport(event.attrs.Sport ?? "");
-          lapDuration = lapDistance = lapCalories = hrWeighted = hrWeight = 0;
-          hasDuration = hasDistance = hasCalories = false;
+          lapDistance = lapCalories = hrWeighted = hrWeight = 0;
+          hasDistance = hasCalories = false;
+          firstLapStart = lastLap = undefined;
         }
         if (!activity) continue;
         if (event.name === "trkseg" && parent === "trk") segment++;
         if (event.name === "Lap" && parent === "Activity") {
           segment++;
-          lap = {};
-          activity.start ??= timestamp(event.attrs.StartTime);
+          lap = { start: timestamp(event.attrs.StartTime) };
+          activity.start ??= lap.start;
         }
         if (
           (event.name === "trkpt" && parent === "trkseg") ||
@@ -122,10 +133,11 @@ export async function* xmlActivities(
             if (parent === "MaximumHeartRateBpm") lap.maxHr = numeric(value, 1, 255);
           }
           if (name === "Lap" && lap) {
-            hasDuration ||= lap.duration !== undefined;
+            if (lap.start !== undefined) firstLapStart ??= lap.start;
+            lastLap =
+              lap.start === undefined ? undefined : { start: lap.start, duration: lap.duration };
             hasDistance ||= lap.distance !== undefined;
             hasCalories ||= lap.calories !== undefined;
-            lapDuration += lap.duration ?? 0;
             lapDistance += lap.distance ?? 0;
             lapCalories += lap.calories ?? 0;
             if (lap.avgHr !== undefined && lap.duration) {
@@ -146,7 +158,14 @@ export async function* xmlActivities(
             (name === "trk" && format === "gpx") ||
             (name === "Activity" && format === "TrainingCenterDatabase")
           ) {
-            if (hasDuration) activity.duration = lapDuration;
+            if (format === "TrainingCenterDatabase") {
+              // Elapsed time: the trackpoint span, else last lap start + its timer time - first lap start.
+              activity.duration =
+                activity.pointSpan ??
+                (lastLap?.duration !== undefined && firstLapStart !== undefined
+                  ? (lastLap.start - firstLapStart) / 1000 + lastLap.duration
+                  : undefined);
+            }
             if (hasDistance) activity.distance = lapDistance;
             if (hasCalories) activity.calories = lapCalories;
             if (hrWeight) activity.avgHr = hrWeighted / hrWeight;

@@ -760,13 +760,21 @@ A document-local GeoShape track stores a sampled `schema:line` and compact JSON 
 heartRateBpm, cadence, temperatureCelsius, distanceMetres, speedMetresPerSecond, powerWatts,
 segment]`, with null for absent values. Sampling retains endpoints and at most 2,000
 points. Segment boundaries prevent distance/elevation calculations across GPX gaps.
-Original bytes are create-only `activities/<file-sha256>.<format>` resources (25 MiB
-binary cap). The source name/hash and run activity appear in PROV derivations.
+Original bytes are stored once per file as create-only `activities/<file-sha256>.<format>`
+resources (25 MiB binary cap). Each file's PROV origin is the hash-only
+`urn:sha256:<sha256(content hash, file name)>`; the file name appears only as the
+original's `schema:name`, truncated to 256 characters.
 
 IDs hash start time, normalized sport and device serial (file hash when unavailable).
 A bounded per-second index deduplicates later exports of the same sport when both
 start time and elapsed duration differ by at most two seconds, including across second
-boundaries. Moving time is not substituted for elapsed time. Complete imports retain
+boundaries. Moving time is not substituted for elapsed time: TCX elapsed duration is the
+trackpoint time span, else the last lap's StartTime plus its TotalTimeSeconds minus the
+first lap's StartTime. TCX TotalTimeSeconds is timer time and is not stored. Durations
+outside 1 second to 7 days are dropped with the end time (the activity is kept); an
+activity starting or ending outside 1970-01-01 to 2100-01-01 is skipped as invalid. A
+failure while mapping one activity skips it (`activity-import-failed`); Pod I/O failures
+and cancellation still fail the run. Complete imports retain
 prior original links and optional metrics; truncated imports never become fuzzy-match
 candidates. Unknown/missing sport is kept conservative; no fuzzy match occurs without
 start and duration. Imports add/update activities, never delete absent workouts, and
@@ -774,6 +782,9 @@ file imports have no incremental cursor. The shared runner retains state on fail
 
 Hard caps: 64 MiB per file, 512 MiB compressed archive size and total inflation, 1,000 activities, 100,000
 records per activity, 1,000,000 points and 2,000,000 parser events/FIT messages per run.
+XML scanning also charges one parser event per 64 Ki characters, including comments and
+attribute text. At most 200,000 track samples stay retained per file; beyond that the
+current activity is truncated and the rest of the file is not parsed.
 XML tokens cap at 64 Ki characters and nesting at 64; DTDs and CDATA are refused.
 The Takeout ZIP reader also enforces its structural, CRC, entry-count and path bounds.
 Files are byte-capped and validated before their activities are written; FIT verifies

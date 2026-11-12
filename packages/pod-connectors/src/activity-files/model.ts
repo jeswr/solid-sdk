@@ -8,7 +8,15 @@ export const ACTIVITY_LIMITS = {
   points: 1_000_000,
   messages: 2_000_000,
   trackPoints: 2000,
+  /** Track samples retained across one file's activities; overflow truncates and stops. */
+  fileTrackPoints: 200_000,
 } as const;
+/** Elapsed durations outside [1 s, 7 days] are dropped; the activity is kept. */
+export const MIN_DURATION_SECONDS = 1;
+export const MAX_DURATION_SECONDS = 7 * 24 * 60 * 60;
+/** Activities starting or ending outside [1970-01-01, 2100-01-01] are invalid. */
+export const MIN_ACTIVITY_TIME = Date.UTC(1970, 0, 1);
+export const MAX_ACTIVITY_TIME = Date.UTC(2100, 0, 1);
 export type ActivityLimits = { readonly [K in keyof typeof ACTIVITY_LIMITS]: number };
 export class ActivityCap extends Error {}
 export class ActivityBudget {
@@ -17,6 +25,8 @@ export class ActivityBudget {
   points = 0;
   messages = 0;
   activities = 0;
+  /** Track samples currently retained by the file being parsed. */
+  retained = 0;
   constructor(
     limits: Partial<ActivityLimits> = {},
     readonly signal?: AbortSignal,
@@ -27,6 +37,10 @@ export class ActivityBudget {
       if (!Number.isSafeInteger(value) || value < 1 || value > ACTIVITY_LIMITS[key])
         throw new Error(`Invalid activity limit: ${key}.`);
     }
+  }
+  /** Per-file counters restart for each file, including archive entries. */
+  beginFile(): void {
+    this.retained = 0;
   }
   warn(reason: string): void {
     this.warnings.add(reason);
@@ -71,8 +85,15 @@ export class Activity {
   elevation?: number;
   avgHr?: number;
   maxHr?: number;
+  /** Original format slug (gpx, tcx or fit), set by the parser. */
+  format?: string;
   readonly track: Point[] = [];
   records = 0;
+  /** Set by finish() when the start/end lies outside the supported time range. */
+  invalid = false;
+  private firstTime?: number;
+  private lastTime?: number;
+  private timedPoints = 0;
   private stride = 1;
   private coordinates = 0;
   private previous?: Point;
@@ -98,6 +119,9 @@ export class Activity {
     if (point.time !== undefined) {
       this.start ??= point.time;
       this.end = Math.max(this.end ?? point.time, point.time);
+      this.firstTime = Math.min(this.firstTime ?? point.time, point.time);
+      this.lastTime = Math.max(this.lastTime ?? point.time, point.time);
+      this.timedPoints++;
     }
     if (point.hr !== undefined) {
       this.hrTotal += point.hr;
@@ -119,20 +143,53 @@ export class Activity {
     }
     this.previous = point;
     this.last = point;
-    if (this.coordinates++ % this.stride === 0) this.track.push(point);
+    if (this.coordinates++ % this.stride === 0) {
+      if (this.budget.retained >= this.budget.limits.fileTrackPoints) {
+        // Bound retained memory for many-track files: keep this prefix and stop the file.
+        this.truncated = true;
+        this.budget.warn("file-track-point-cap-exceeded");
+        throw new ActivityCap();
+      }
+      this.track.push(point);
+      this.budget.retained++;
+    }
     if (this.track.length >= this.budget.limits.trackPoints) {
       this.stride *= 2;
       const kept = this.track.filter((_, i) => i % 2 === 0);
+      this.budget.retained -= this.track.length - kept.length;
       this.track.splice(0, this.track.length, ...kept);
     }
   }
+  /** Elapsed seconds between the earliest and latest timed points (two or more). */
+  get pointSpan(): number | undefined {
+    return this.timedPoints >= 2 && this.firstTime !== undefined && this.lastTime !== undefined
+      ? (this.lastTime - this.firstTime) / 1000
+      : undefined;
+  }
+  /** Normalises summary values. Durations outside [1 s, 7 days] are dropped with
+   * their end time; out-of-range start/end marks the activity invalid. After finish,
+   * a defined end always equals start + duration, so it is never before start.
+   */
   finish(): this {
+    const inRange = (t: number | undefined) =>
+      t === undefined || (t >= MIN_ACTIVITY_TIME && t <= MAX_ACTIVITY_TIME);
+    if (!inRange(this.start) || !inRange(this.end)) return this.reject();
     this.duration ??=
       this.start !== undefined && this.end !== undefined
         ? (this.end - this.start) / 1000
         : undefined;
-    if (this.start !== undefined && this.duration !== undefined)
-      this.end = this.start + this.duration * 1000;
+    const d = this.duration;
+    if (d !== undefined && !(d >= MIN_DURATION_SECONDS && d <= MAX_DURATION_SECONDS)) {
+      // Sub-second spans (single-point tracks) are degenerate, not malformed.
+      if (!Number.isFinite(d) || d < 0 || d > MAX_DURATION_SECONDS)
+        this.budget.warn("activity-duration-dropped");
+      this.duration = undefined;
+    }
+    this.end =
+      this.start !== undefined && this.duration !== undefined
+        ? this.start + this.duration * 1000
+        : undefined;
+    if (!inRange(this.end)) return this.reject();
     this.distance ??= this.derivedDistance || undefined;
     this.elevation ??= this.derivedElevation || undefined;
     this.avgHr ??= this.hrCount ? this.hrTotal / this.hrCount : undefined;
@@ -140,6 +197,13 @@ export class Activity {
       if (this.track.length === this.budget.limits.trackPoints) this.track.pop();
       this.track.push(this.last);
     }
+    return this;
+  }
+  private reject(): this {
+    this.invalid = true;
+    this.budget.warn("activity-time-out-of-range");
+    this.budget.retained -= this.track.length;
+    this.track.length = 0;
     return this;
   }
 }

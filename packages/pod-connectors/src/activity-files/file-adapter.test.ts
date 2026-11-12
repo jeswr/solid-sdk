@@ -4,11 +4,15 @@ import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
   END,
+  FIT_START,
+  FitEncoder,
   GARMIN_GPX,
   GARMIN_TCX,
   START,
   STRAVA_GPX,
   syntheticFit,
+  U8,
+  U32,
 } from "../../test/activity-fixtures.js";
 import { type ImportFile, runFileImport } from "../core/file-import.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
@@ -25,6 +29,7 @@ import { CLASSES, SCHEMA } from "../core/vocab.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { allCatalogEntries, statusOf } from "../registry.js";
 import { activityFilesAdapter, createActivityFilesAdapter } from "./file-adapter.js";
+import { digest, formatDuration, originIri } from "./mapping.js";
 import { ACTIVITY_LIMITS } from "./model.js";
 import { ActivityResource } from "./vocab.js";
 
@@ -98,11 +103,10 @@ describe("activity-files file contract", () => {
       pod.dataset(docs(pod)[0] as string),
       DataFactory,
     );
-    expect(
-      [...prov.derivedFrom].some(
-        (s) => s.startsWith("urn:sha256:") && s.endsWith("misleading.fit"),
-      ),
-    ).toBe(true);
+    const hash = await digest(encoder.encode(xml));
+    expect([...prov.derivedFrom]).toEqual([await originIri("misleading.fit", hash)]);
+    expect([...prov.derivedFrom][0]).toMatch(/^urn:sha256:[a-f0-9]{64}$/);
+    expect(values(pod, "name")).toContain("misleading.fit");
     expect(prov.generatedBy.size).toBe(1);
     expect(pod.get(report.indexUrl)).toContain(CLASSES.ExerciseAction);
   });
@@ -166,10 +170,13 @@ describe("activity-files file contract", () => {
     [0, 2.001, 2],
   ])("dedup tolerates start %s s, duration %s s (%s docs)", async (startDelta, durationDelta, count) => {
     const { pod } = await fileImport(activityFilesAdapter, memoryFile("a.gpx", STRAVA_GPX));
-    const other = GARMIN_TCX.replaceAll(
-      START,
-      new Date(Date.parse(START) + startDelta * 1000).toISOString(),
-    ).replaceAll("<TotalTimeSeconds>30", `<TotalTimeSeconds>${30 + durationDelta / 2}`);
+    const shift = (iso: string, seconds: number) =>
+      new Date(Date.parse(iso) + seconds * 1000).toISOString();
+    // TCX elapsed duration is the trackpoint span, not the laps' timer time.
+    const other = GARMIN_TCX.replaceAll(START, shift(START, startDelta)).replaceAll(
+      END,
+      shift(END, startDelta + durationDelta),
+    );
     await fileImport(activityFilesAdapter, memoryFile("b.tcx", other), { pod });
     expect(docs(pod)).toHaveLength(count);
   });
@@ -336,7 +343,9 @@ describe("activity-files file contract", () => {
         podWriter: writer,
       }),
     ).rejects.toThrow("cancelled");
-    expect(pod.putCount).toBe(0);
+    // Only the create-only original (stored once, before the activity loop) precedes the read.
+    expect(pod.putCount).toBe(1);
+    expect(pod.urls().filter((u) => u.endsWith(".ttl") && u !== TEST_PROFILE_DOC)).toEqual([]);
   });
 });
 
@@ -455,7 +464,7 @@ it("caps deduplication buckets without dropping the activities themselves", asyn
   const tracks = Array.from(
     { length: 33 },
     (_, i) =>
-      `<trk><type>sport-${i}</type><trkseg><trkpt lat="0" lon="0"><time>${START}</time></trkpt></trkseg></trk>`,
+      `<trk><type>sport-${i}</type><trkseg><trkpt lat="0" lon="0"><time>${START}</time></trkpt><trkpt lat="0" lon="0"><time>${END}</time></trkpt></trkseg></trk>`,
   ).join("");
   const { pod, report } = await fileImport(
     activityFilesAdapter,
@@ -468,7 +477,9 @@ it("caps deduplication buckets without dropping the activities themselves", asyn
 it("does not lose explicit zero values in TCX lap summaries", async () => {
   const xml = `<TrainingCenterDatabase><Activities><Activity Sport="Other"><Id>${START}</Id><Lap><TotalTimeSeconds>0</TotalTimeSeconds><DistanceMeters>0</DistanceMeters><Calories>0</Calories></Lap></Activity></Activities></TrainingCenterDatabase>`;
   const { pod } = await fileImport(activityFilesAdapter, memoryFile("zero", xml));
-  expect(action(pod).duration).toBe("PT0S");
+  // A sub-second elapsed duration is degenerate and is dropped with its end time.
+  expect(action(pod).duration).toBeUndefined();
+  expect(action(pod).end).toBeUndefined();
   expect(action(pod).distance).toBe("0 m");
   expect(action(pod).calories).toBe("0 kcal");
 });
@@ -476,7 +487,202 @@ it("does not lose explicit zero values in TCX lap summaries", async () => {
 it("uses the file hash when a TCX creator has an empty device serial", async () => {
   const first = GARMIN_TCX.replace("<UnitId>42</UnitId>", "<UnitId></UnitId>");
   const { pod } = await fileImport(activityFilesAdapter, memoryFile("first.tcx", first));
-  const second = first.replaceAll("<TotalTimeSeconds>30", "<TotalTimeSeconds>60");
+  const second = first.replaceAll(END, "2026-06-01T06:32:00Z");
   await fileImport(activityFilesAdapter, memoryFile("second.tcx", second), { pod });
   expect(docs(pod)).toHaveLength(2);
+});
+
+// Regressions for the CON-A6 adversarial review findings.
+function countBinaryPuts(pod: ReturnType<typeof createMemoryPod>, extension: string) {
+  const counter = { puts: 0 };
+  const inner = pod.fetch;
+  pod.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "PUT" && String(input).endsWith(extension)) counter.puts++;
+    return inner(input, init);
+  }) as typeof fetch;
+  return counter;
+}
+const at = (seconds: number) => new Date(Date.parse(START) + seconds * 1000).toISOString();
+const gpxTrack = (from: number, to: number, type = "running") =>
+  `<trk><type>${type}</type><trkseg><trkpt lat="0" lon="0"><time>${at(from)}</time></trkpt><trkpt lat="0.001" lon="0"><time>${at(to)}</time></trkpt></trkseg></trk>`;
+const tcx = (activities: string) =>
+  `<TrainingCenterDatabase><Activities>${activities}</Activities></TrainingCenterDatabase>`;
+
+describe("original bytes are written once per file", () => {
+  it("stores a five-track GPX original with one binary PUT", async () => {
+    const pod = createMemoryPod();
+    const counter = countBinaryPuts(pod, ".gpx");
+    const tracks = [0, 1, 2, 3, 4].map((i) => gpxTrack(i * 3600, i * 3600 + 60)).join("");
+    await fileImport(activityFilesAdapter, memoryFile("five.gpx", `<gpx>${tracks}</gpx>`), { pod });
+    expect(docs(pod)).toHaveLength(5);
+    expect(counter.puts).toBe(1);
+    const originals = new Set(
+      docs(pod).flatMap((doc) => [
+        ...new ActivityResource(`${doc}#activity`, pod.dataset(doc), DataFactory).originals,
+      ]),
+    );
+    expect(originals.size).toBe(1);
+  });
+  it("stores a multisport FIT original with one binary PUT", async () => {
+    const bytes = new FitEncoder()
+      .definition(0, 0, [U8(0), U32(3)])
+      .data(0, { 0: 4, 3: 42 })
+      .definition(1, 18, [U32(253), U32(2), U8(5), U32(7)])
+      .data(1, { 253: FIT_START + 60, 2: FIT_START, 5: 1, 7: 60000 })
+      .data(1, { 253: FIT_START + 180, 2: FIT_START + 120, 5: 2, 7: 60000 })
+      .file();
+    const pod = createMemoryPod();
+    const counter = countBinaryPuts(pod, ".fit");
+    await fileImport(activityFilesAdapter, file(bytes, "multisport.fit"), { pod });
+    expect(docs(pod)).toHaveLength(2);
+    expect(counter.puts).toBe(1);
+  });
+});
+
+describe("bounded activity durations and times", () => {
+  it("formats xsd:duration with at most three fixed decimals", () => {
+    expect(formatDuration(60)).toBe("PT60S");
+    expect(formatDuration(60.5)).toBe("PT60.5S");
+    expect(formatDuration(1.23456)).toBe("PT1.235S");
+    expect(formatDuration(604800)).toBe("PT604800S");
+  });
+  it("drops 1e12-second laps without aborting the run or other activities", async () => {
+    const laps = Array.from(
+      { length: 10 },
+      () => `<Lap StartTime="${at(1800)}"><TotalTimeSeconds>1000000000000</TotalTimeSeconds></Lap>`,
+    ).join("");
+    const xml = tcx(
+      `<Activity Sport="Running"><Id>${START}</Id><Lap StartTime="${START}"><TotalTimeSeconds>60</TotalTimeSeconds></Lap></Activity>` +
+        `<Activity Sport="Running"><Id>${at(1800)}</Id>${laps}</Activity>`,
+    );
+    const { pod, report } = await fileImport(activityFilesAdapter, memoryFile("big.tcx", xml));
+    expect(docs(pod)).toHaveLength(2);
+    expect(report.warnings).toContain("activity-duration-dropped");
+    const actions = docs(pod).map(
+      (doc) => new ActivityResource(`${doc}#activity`, pod.dataset(doc), DataFactory),
+    );
+    expect(actions.map((a) => a.duration).sort()).toEqual(["PT60S", undefined]);
+    const huge = actions.find((a) => a.duration === undefined);
+    expect(huge?.end).toBeUndefined();
+    expect(huge?.startTime?.toISOString()).toBe(new Date(at(1800)).toISOString());
+  });
+  it("drops a 1e-7-second duration rather than writing exponent notation", async () => {
+    const xml = tcx(
+      `<Activity Sport="Running"><Id>${START}</Id><Lap StartTime="${START}"><TotalTimeSeconds>0.0000001</TotalTimeSeconds></Lap></Activity>`,
+    );
+    const { pod } = await fileImport(activityFilesAdapter, memoryFile("tiny.tcx", xml));
+    expect(action(pod).duration).toBeUndefined();
+    expect(action(pod).end).toBeUndefined();
+    expect(pod.get(docs(pod)[0] as string)).not.toMatch(/PT[^S]*e/);
+  });
+  it("drops a negative span so the end is never before the start", async () => {
+    const xml = tcx(
+      `<Activity Sport="Running"><Id>${at(1800)}</Id><Lap StartTime="${at(1800)}"><Track><Trackpoint><Time>${START}</Time></Trackpoint></Track></Lap></Activity>`,
+    );
+    const { pod, report } = await fileImport(activityFilesAdapter, memoryFile("neg.tcx", xml));
+    expect(action(pod).duration).toBeUndefined();
+    expect(action(pod).end).toBeUndefined();
+    expect(report.warnings).toContain("activity-duration-dropped");
+  });
+  it.each([
+    "2200-01-01T00:00:00Z",
+    "1969-12-31T23:59:59Z",
+  ])("skips an activity at %s as invalid and keeps the others", async (time) => {
+    const gpx = `<gpx>${gpxTrack(0, 60)}<trk><trkseg><trkpt lat="0" lon="0"><time>${time}</time></trkpt></trkseg></trk></gpx>`;
+    const { pod, report } = await fileImport(activityFilesAdapter, memoryFile("far.gpx", gpx));
+    expect(docs(pod)).toHaveLength(1);
+    expect(report.skipped).toBe(1);
+    expect(report.warnings).toContain("activity-time-out-of-range");
+  });
+  it("skips an activity whose end lies outside the supported range", async () => {
+    const gpx = `<gpx><trk><trkseg><trkpt lat="0" lon="0"><time>${START}</time></trkpt><trkpt lat="0" lon="0"><time>9999-12-31T23:59:59Z</time></trkpt></trkseg></trk></gpx>`;
+    const { pod, report } = await fileImport(activityFilesAdapter, memoryFile("end.gpx", gpx));
+    expect(docs(pod)).toEqual([]);
+    expect(report.warnings).toContain("activity-time-out-of-range");
+    expect(pod.urls().some((u) => u.endsWith(".gpx"))).toBe(false);
+  });
+  it("records a skip when one activity's mapping fails and imports the rest", async () => {
+    const { pod } = await fileImport(activityFilesAdapter, memoryFile("a.gpx", STRAVA_GPX));
+    const bucket = pod
+      .urls()
+      .find((u) => u.endsWith(`/indexes/${Math.floor(Date.parse(START) / 1000)}.ttl`));
+    expect(bucket).toBeDefined();
+    // A tampered dedup bucket over its 32-entry limit makes this activity's mapping throw.
+    const poisoned = Array.from({ length: 33 }, (_, i) => `<#e${i}> <${SCHEMA}name> "x" .`).join(
+      "\n",
+    );
+    await pod.fetch(bucket as string, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: poisoned,
+    });
+    const gpx = `<gpx>${gpxTrack(0, 60, "cycling")}${gpxTrack(7200, 7260)}</gpx>`;
+    const { report } = await fileImport(activityFilesAdapter, memoryFile("b.gpx", gpx), { pod });
+    expect(report.skipped).toBe(1);
+    expect(report.warnings).toContain("activity-import-failed");
+    expect(docs(pod)).toHaveLength(2);
+  });
+});
+
+it("keeps activity documents bounded across 40 long-named archive entries", async () => {
+  const xml = tcx(
+    `<Activity Sport="Running"><Id>${START}</Id><Lap StartTime="${START}"><TotalTimeSeconds>60</TotalTimeSeconds><Track><Trackpoint><Time>${START}</Time><Position><LatitudeDegrees>51.5</LatitudeDegrees><LongitudeDegrees>-0.12</LongitudeDegrees></Position></Trackpoint></Track></Lap><Creator><Name>X</Name><UnitId>42</UnitId></Creator></Activity>`,
+  );
+  const entries: Record<string, Uint8Array> = {};
+  for (let i = 0; i < 40; i++) entries[`${i}-${"\u4e00".repeat(1020)}.tcx`] = encoder.encode(xml);
+  const { pod, report } = await fileImport(activityFilesAdapter, file(zipSync(entries), "a.zip"));
+  expect(docs(pod)).toHaveLength(1);
+  expect(report.warnings).toContain("activity-source-cap-exceeded");
+  const doc = docs(pod)[0] as string;
+  // Before the fix each origin carried the ~9 KB percent-encoded name onto every subject.
+  expect((pod.get(doc) as string).length).toBeLessThan(24_000);
+  const origins = [...new Provenance(`${doc}#activity`, pod.dataset(doc), DataFactory).derivedFrom];
+  expect(origins).toHaveLength(32);
+  for (const origin of origins) expect(origin).toMatch(/^urn:sha256:[a-f0-9]{64}$/);
+  const names = values(pod, "name").filter((n) => n.includes("\u4e00"));
+  expect(names).toHaveLength(1);
+  expect(Array.from(names[0] as string)).toHaveLength(256);
+}, 30000);
+
+it("bounds retained track points per file and truncates the activity at the cap", async () => {
+  const tracks = Array.from({ length: 6 }, (_, t) => {
+    const points = Array.from(
+      { length: 10 },
+      (_, i) => `<trkpt lat="${i / 1000}" lon="${t}"><time>${at(t * 3600 + i)}</time></trkpt>`,
+    ).join("");
+    return `<trk><trkseg>${points}</trkseg></trk>`;
+  }).join("");
+  const { pod, report } = await fileImport(
+    createActivityFilesAdapter({ fileTrackPoints: 25 }),
+    memoryFile("many.gpx", `<gpx>${tracks}</gpx>`),
+  );
+  expect(report.warnings).toContain("file-track-point-cap-exceeded");
+  // Two complete tracks, then the third is truncated and parsing stops.
+  expect(docs(pod)).toHaveLength(3);
+  const descriptions = docs(pod).map(
+    (doc) => new ActivityResource(`${doc}#activity`, pod.dataset(doc), DataFactory).description,
+  );
+  expect(descriptions.filter(Boolean)).toHaveLength(1);
+});
+
+describe("TCX elapsed duration", () => {
+  it("deduplicates a paused TCX against the matching FIT by elapsed time", async () => {
+    const paused = GARMIN_TCX.replaceAll(
+      "<TotalTimeSeconds>30</TotalTimeSeconds>",
+      "<TotalTimeSeconds>15</TotalTimeSeconds>",
+    );
+    const { pod } = await fileImport(activityFilesAdapter, file(syntheticFit()));
+    await fileImport(activityFilesAdapter, memoryFile("paused.tcx", paused), { pod });
+    expect(docs(pod)).toHaveLength(1);
+    expect(action(pod).duration).toBe("PT60S");
+    expect(action(pod).originals.size).toBe(2);
+  });
+  it("uses lap start times plus the last lap's timer time without trackpoints", async () => {
+    const xml = tcx(
+      `<Activity Sport="Running"><Id>${START}</Id><Lap StartTime="${START}"><TotalTimeSeconds>20</TotalTimeSeconds></Lap><Lap StartTime="${at(40)}"><TotalTimeSeconds>20</TotalTimeSeconds></Lap></Activity>`,
+    );
+    const { pod } = await fileImport(activityFilesAdapter, memoryFile("laps.tcx", xml));
+    expect(action(pod).duration).toBe("PT60S");
+    expect(action(pod).end?.getTime()).toBe(Date.parse(END));
+  });
 });

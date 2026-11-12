@@ -153,7 +153,19 @@ export type XmlEvent =
   | { kind: "end"; name: string }
   | { kind: "text"; text: string };
 
-export async function* xmlEvents(chunks: AsyncIterable<string>): AsyncGenerator<XmlEvent> {
+/** `onScan` runs once per {@link XML_SCAN_CHARGE_CHARS} characters scanned, including
+ * comment and attribute text, so callers can charge work that yields few events.
+ */
+export const XML_SCAN_CHARGE_CHARS = 65536;
+export interface XmlEventOptions {
+  readonly onScan?: () => void;
+}
+export async function* xmlEvents(
+  chunks: AsyncIterable<string>,
+  options: XmlEventOptions = {},
+): AsyncGenerator<XmlEvent> {
+  const { onScan } = options;
+  let scanned = 0;
   const stack: string[] = [];
   let token: string[] = [];
   let markup = false;
@@ -170,6 +182,10 @@ export async function* xmlEvents(chunks: AsyncIterable<string>): AsyncGenerator<
   };
   for await (const chunk of chunks) {
     for (const char of chunk) {
+      if (onScan && ++scanned === XML_SCAN_CHARGE_CHARS) {
+        scanned = 0;
+        onScan();
+      }
       if (!markup) {
         if (char !== "<") {
           token.push(char);

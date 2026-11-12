@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { FileImportAdapter, ImportFile } from "../core/file-import.js";
+import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import {
   cappedSink,
   InflationBudget,
@@ -9,8 +9,8 @@ import {
   zipDirectory,
 } from "../google-takeout/zip-reader.js";
 import { fitActivities } from "./fit.js";
-import { digest, saveActivity } from "./mapping.js";
-import { ActivityBudget, type ActivityLimits } from "./model.js";
+import { digest, originIri, saveActivity, writeOriginal } from "./mapping.js";
+import { type Activity, ActivityBudget, type ActivityLimits } from "./model.js";
 import { vocabMap } from "./vocab-map.js";
 import { xmlActivities } from "./xml.js";
 
@@ -153,6 +153,36 @@ async function isZip(file: ImportFile, signal?: AbortSignal): Promise<boolean> {
   }
   return signature.join(",") === "80,75,3,4" || signature.join(",") === "80,75,5,6";
 }
+/** Tags failures raised by Pod ports so they still fail the run (the shared runner
+ * then retains prior state), while one activity's mapping failure is only skipped.
+ */
+function portTracking(ctx: FileImportContext) {
+  const failures = new WeakSet<object>();
+  let primitive: { value: unknown } | undefined;
+  const track =
+    <A extends unknown[], R>(port: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      try {
+        return await port(...args);
+      } catch (error) {
+        if (typeof error === "object" && error !== null) failures.add(error);
+        else primitive = { value: error };
+        throw error;
+      }
+    };
+  return {
+    ctx: {
+      ...ctx,
+      read: track(ctx.read),
+      write: track(ctx.write),
+      writeBinary: track(ctx.writeBinary),
+    } satisfies FileImportContext,
+    fromPort: (error: unknown) =>
+      typeof error === "object" && error !== null
+        ? failures.has(error)
+        : primitive !== undefined && primitive.value === error,
+  };
+}
 const safeName = (name: string) => {
   const parts = name.split("/");
   return (
@@ -189,13 +219,14 @@ export function createActivityFilesAdapter(
       file = cancellableFile(file, ctx.signal);
       const budget = new ActivityBudget(limits, ctx.signal);
       let skipped = 0;
+      const ports = portTracking(ctx);
       const parse = async (bytes: Uint8Array, name: string) => {
         ctx.signal?.throwIfAborted();
+        budget.beginFile();
         const hash = await digest(bytes);
         const fit = bytes.length >= 12 && String.fromCharCode(...bytes.subarray(8, 12)) === ".FIT";
         // Parse and validate the whole file before any writes: malformed XML suffixes/CRC failures cannot commit prefixes.
-        const activities = [];
-        const format = fit ? "fit" : "xml";
+        const activities: Activity[] = [];
         try {
           if (fit) activities.push(...fitActivities(bytes, budget));
           else
@@ -213,9 +244,26 @@ export function createActivityFilesAdapter(
           budget.warn("no-activities-in-file");
           return;
         }
-        const kind = format === "xml" ? await xmlFormat(bytes) : format;
+        const format = activities[0]?.format ?? (fit ? "fit" : "xml");
+        const origin = await originIri(name, hash);
+        // The original is stored once per file, never once per activity.
+        const original = activities.some((a) => !a.invalid && a.start !== undefined)
+          ? await writeOriginal(bytes, hash, format, ctx, budget)
+          : undefined;
+        const source = { hash, filename: name, format, origin, original };
         for (const activity of activities) {
-          await saveActivity(activity, bytes, hash, name, kind, ctx, budget);
+          if (activity.invalid) {
+            ctx.skip();
+            continue;
+          }
+          try {
+            await saveActivity(activity, source, ports.ctx, budget);
+          } catch (error) {
+            // Cancellation and Pod I/O failures fail the run; one bad activity never does.
+            if (ctx.signal?.aborted || ports.fromPort(error)) throw error;
+            ctx.skip();
+            budget.warn("activity-import-failed");
+          }
         }
       };
       ctx.progress({ label: "Reading activity files…", done: 0 });
@@ -284,12 +332,5 @@ export function createActivityFilesAdapter(
       return { skipped, warnings: [...budget.warnings] };
     },
   };
-}
-/** Root detection reuses the same bounded tokenizer, including prefixed XML roots. */
-async function xmlFormat(bytes: Uint8Array): Promise<string> {
-  const { xmlEvents } = await import("../core/mini-xml.js");
-  for await (const event of xmlEvents(decoded(bytes)))
-    if (event.kind === "start") return event.name === "gpx" ? "gpx" : "tcx";
-  return "xml";
 }
 export const activityFilesAdapter = createActivityFilesAdapter();

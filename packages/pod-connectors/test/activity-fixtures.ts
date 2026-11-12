@@ -71,12 +71,16 @@ export class FitEncoder {
     this.defs.set(local, { fields, dev, little });
     return this;
   }
+  /** Writes every declared field in order, for normal and compressed headers alike.
+   * `compressed` is an absolute FIT timestamp whose low five bits form the header
+   * offset; spec-conformant compressed messages use a definition without field 253.
+   */
   data(local: number, values: Record<number, number>, compressed?: number): this {
     const def = this.defs.get(local);
     if (!def) throw new Error("Missing test definition.");
+    if (compressed !== undefined && local > 3) throw new Error("Compressed local type is 0-3.");
     this.body.push(compressed === undefined ? local : 128 | (local << 5) | (compressed & 31));
     for (const f of def.fields) {
-      if (compressed !== undefined && f.id === 253) continue;
       const bytes = new Uint8Array(f.size).fill(255);
       const view = new DataView(bytes.buffer);
       const n = values[f.id];
@@ -138,6 +142,7 @@ export const U32 = (id: number): TestField => ({ id, size: 4, type: 134 });
 export const S32 = (id: number): TestField => ({ id, size: 4, type: 133 });
 export const semi = (n: number) => Math.round((n * 2147483648) / 180);
 export function syntheticFit(): Uint8Array {
+  // Local 2's compressed-timestamp record is spec-conformant: its definition has no field 253.
   return new FitEncoder()
     .definition(0, 0, [U8(0), U16(1), U16(2), U32(3)])
     .data(0, { 0: 4, 1: 1, 2: 100, 3: 42 })
@@ -174,7 +179,8 @@ export function syntheticFit(): Uint8Array {
       78: 2560,
       73: 3200,
     })
-    .data(1, { 0: semi(51.5001), 1: semi(-0.12), 3: 150, 4: 86 }, FIT_START + 5)
+    .definition(2, 20, [S32(0), S32(1), U8(3), U8(4)])
+    .data(2, { 0: semi(51.5001), 1: semi(-0.12), 3: 150, 4: 86 }, FIT_START + 5)
     .data(1, { 253: FIT_START + 60, 0: semi(51.501), 1: semi(-0.12), 3: 160, 5: 11100 })
     .definition(2, 999, [U32(1), { id: 2, size: 7, type: 7 }], [4])
     .data(2, { 1: 7 })

@@ -146,6 +146,7 @@ export function fitActivities(bytes: Uint8Array, budget: ActivityBudget): Activi
     if (!activity) {
       budget.activity();
       activity = new Activity(budget);
+      activity.format = "fit";
       lapDistance = lapElevation = lapHr = lapWeight = 0;
       activity.serial = serial;
       activity.creator = creator;
@@ -193,22 +194,19 @@ export function fitActivities(bytes: Uint8Array, budget: ActivityBudget): Activi
       const definition = definitions.get(local);
       if (!definition) throw new Error("Undefined FIT local message.");
       const values = new Map<number, number>();
-      if (
-        compressed &&
-        !definition.fields.some((f) => f.id === 253 && f.size === 4 && (f.type & 31) === 6)
-      )
-        throw new Error("Compressed FIT message lacks timestamp field.");
+      // Every declared field is decoded in order for both header kinds, so a
+      // compressed-header message with or without field 253 stays aligned.
       for (const field of definition.fields) {
-        if (compressed && field.id === 253) continue;
         const value = scalar(field, take(field.size), definition.little);
-        if (
-          value !== undefined &&
-          (field.id !== 253 || (field.size === 4 && (field.type & 31) === 6))
-        )
-          values.set(field.id, value);
+        if (value === undefined) continue;
+        // Only a uint32 timestamp is a time base; a compressed header's offset wins over it.
+        if (field.id === 253 && (compressed || field.size !== 4 || (field.type & 31) !== 6))
+          continue;
+        values.set(field.id, value);
       }
       take(definition.developer);
       if (compressed) {
+        // FIT protocol: the 5-bit offset rolls over against the previous timestamp's low 5 bits.
         if (previousTimestamp === undefined)
           throw new Error("Compressed FIT timestamp has no base.");
         let time = Math.floor(previousTimestamp / 32) * 32 + (h & 31);

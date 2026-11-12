@@ -22,6 +22,40 @@ export async function digest(bytes: Uint8Array): Promise<string> {
 }
 const keyHash = (value: string) => digest(new TextEncoder().encode(value));
 const indexSlug = (second: number) => `indexes/${second}.ttl`;
+/** xsd:duration with at most three fixed decimals; finish() bounds the value to [1 s, 7 days]. */
+export const formatDuration = (value: number): string =>
+  `PT${value.toFixed(3).replace(/\.?0+$/, "")}S`;
+/** Display names are literals only, at most 256 code points. */
+const displayName = (name: string) => Array.from(name).slice(0, 256).join("");
+/** Hash-only origin IRI: sha-256 over the content hash and the file name. */
+export async function originIri(filename: string, hash: string): Promise<string> {
+  return `urn:sha256:${await keyHash(`${hash}:${filename}`)}`;
+}
+/** One file's shared source facts; the original is written once per file. */
+export interface ActivitySource {
+  readonly hash: string;
+  readonly filename: string;
+  readonly format: string;
+  readonly origin: string;
+  /** URL of the stored original bytes, absent when over the binary cap. */
+  readonly original?: string;
+}
+/** Store a file's original bytes once (create-only), before its activities are saved. */
+export async function writeOriginal(
+  bytes: Uint8Array,
+  hash: string,
+  format: string,
+  ctx: FileImportContext,
+  budget: ActivityBudget,
+): Promise<string | undefined> {
+  if (bytes.length > DEFAULT_MAX_BYTES) {
+    budget.warn("original-binary-cap-exceeded");
+    return undefined;
+  }
+  const slug = `activities/${hash}.${format}`;
+  await ctx.writeBinary({ slug, body: bytes, contentType: "application/octet-stream" });
+  return ctx.resolve(slug);
+}
 const seconds = (duration: string | undefined): number | undefined => {
   const match = /^PT(\d+(?:\.\d+)?)S$/.exec(duration ?? "");
   const value = match ? Number(match[1]) : undefined;
@@ -33,13 +67,11 @@ const seconds = (duration: string | undefined): number | undefined => {
  */
 export async function saveActivity(
   a: Activity,
-  bytes: Uint8Array,
-  hash: string,
-  filename: string,
-  format: string,
+  source: ActivitySource,
   ctx: FileImportContext,
   budget: ActivityBudget,
 ): Promise<void> {
+  const { hash, format, origin } = source;
   if (a.start === undefined) {
     budget.warn("activity-missing-start");
     ctx.skip();
@@ -113,12 +145,11 @@ export async function saveActivity(
   if (a.end !== undefined && (!matched || resource.end === undefined))
     resource.end = new Date(a.end);
   if (a.duration !== undefined && (!matched || resource.duration === undefined))
-    resource.duration = `PT${a.duration}S`;
+    resource.duration = formatDuration(a.duration);
   if (a.distance !== undefined && (a.summary || resource.distance === undefined))
     resource.distance = `${a.distance} m`;
   if (a.calories !== undefined) resource.calories = `${a.calories} kcal`;
   if (a.creator || a.serial) resource.creator = [a.creator, a.serial].filter(Boolean).join(" / ");
-  const origin = `urn:sha256:${hash}:${encodeURIComponent(new TextDecoder().decode(new TextEncoder().encode(filename.slice(0, 1024))))}`;
   const provenance = new Provenance(`${url}#activity`, dataset, DataFactory);
   // Keep per-activity history bounded too, even across many distinct exports.
   if (
@@ -130,18 +161,12 @@ export async function saveActivity(
     return;
   }
   provenance.derivedFrom.add(origin);
-  if (bytes.length <= DEFAULT_MAX_BYTES) {
-    const binarySlug = `activities/${hash}.${format}`;
-    await ctx.writeBinary({
-      slug: binarySlug,
-      body: bytes,
-      contentType: "application/octet-stream",
-    });
-    resource.originals.add(ctx.resolve(binarySlug));
-    const original = new PodThing(ctx.resolve(binarySlug), dataset, DataFactory);
-    original.name = filename.slice(0, 1024);
+  if (source.original) {
+    resource.originals.add(source.original);
+    const original = new PodThing(source.original, dataset, DataFactory);
+    original.name = displayName(source.filename);
     original.identifier = hash;
-  } else budget.warn("original-binary-cap-exceeded");
+  }
   const metrics: [string, number | undefined, string][] = [
     ["Elevation gain", a.elevation, "m"],
     ["Average heart rate", a.avgHr, "bpm"],
@@ -209,7 +234,7 @@ export async function saveActivity(
   }
   const entry = new ActivityIndexEntry(entryId, ownIndex, DataFactory);
   entry.startTime = new Date(a.start);
-  entry.duration = `PT${a.duration}S`;
+  entry.duration = formatDuration(a.duration);
   entry.exerciseType = a.sport;
   entry.target = `${url}#activity`;
   await ctx.write({

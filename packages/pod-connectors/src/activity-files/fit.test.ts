@@ -41,16 +41,40 @@ describe("bounded FIT binary decoder", () => {
     expect(activity?.track[0]?.altitude).toBe(20);
   });
   it("handles compressed timestamp rollover and unchanged offsets", () => {
+    // Spec-conformant compressed records use a definition without field 253.
     const bytes = new FitEncoder()
       .definition(0, 20, [U32(253), S32(0), S32(1)])
+      .definition(1, 20, [S32(0), S32(1)])
       .data(0, { 253: 1023, 0: 0, 1: 0 })
-      .data(0, { 0: 0, 1: 0 }, 0)
-      .data(0, { 0: 0, 1: 0 }, 0)
+      .data(1, { 0: 0, 1: 0 }, 1024)
+      .data(1, { 0: 0, 1: 0 }, 1024)
+      .data(1, { 0: 0, 1: 0 }, 1050)
+      // Offset 4 < previous low bits 26: a second rollover, 37 s after the full timestamp.
+      .data(1, { 0: 0, 1: 0 }, 1060)
       .file();
     const [a] = parse(bytes);
     expect(a?.track.map((p) => p.time)).toEqual(
-      [1023, 1024, 1024].map((t) => FIT_EPOCH + t * 1000),
+      [1023, 1024, 1024, 1050, 1060].map((t) => FIT_EPOCH + t * 1000),
     );
+  });
+  it("decodes a declared field 253 in a compressed record but keeps the header time", () => {
+    const bytes = new FitEncoder()
+      .definition(0, 20, [U32(253), S32(0), S32(1)])
+      .definition(1, 20, [S32(0), U32(253), S32(1), U8(3)])
+      .data(0, { 253: FIT_START, 0: semi(1), 1: semi(2) })
+      .data(1, { 0: semi(3), 253: FIT_START + 999, 1: semi(4), 3: 123 }, FIT_START + 3)
+      .data(1, { 0: semi(5), 253: FIT_START + 999, 1: semi(6), 3: 124 }, FIT_START + 4)
+      .data(0, { 253: FIT_START + 10, 0: semi(7), 1: semi(8) })
+      .file();
+    const [a] = parse(bytes);
+    expect(a?.track.map((p) => p.time)).toEqual(
+      [0, 3, 4, 10].map((t) => FIT_EPOCH + (FIT_START + t) * 1000),
+    );
+    expect(a?.track[1]?.lat).toBeCloseTo(3, 5);
+    expect(a?.track[1]?.lon).toBeCloseTo(4, 5);
+    expect(a?.track.slice(1, 3).map((p) => p.hr)).toEqual([123, 124]);
+    expect(a?.track[3]?.lon).toBeCloseTo(8, 5);
+    expect(a?.duration).toBe(10);
   });
   it("skips unknown field sizes, developer data, and unknown message types without losing alignment", () => {
     const bytes = new FitEncoder()
@@ -184,17 +208,21 @@ describe("bounded FIT binary decoder", () => {
     e.body.push(...body);
     expect(() => parse(e.file())).toThrow();
   });
-  it("rejects compressed timestamps without a base or a timestamp field", () => {
+  it("rejects compressed timestamps without a base but never requires field 253", () => {
     const noBase = new FitEncoder()
-      .definition(0, 20, [U32(253)])
-      .data(0, {}, 1)
-      .file();
-    expect(() => parse(noBase)).toThrow("no base");
-    const noTimestamp = new FitEncoder()
       .definition(0, 20, [U8(3)])
       .data(0, { 3: 100 }, 1)
       .file();
-    expect(() => parse(noTimestamp)).toThrow("lacks timestamp");
+    expect(() => parse(noBase)).toThrow("no base");
+    const based = new FitEncoder()
+      .definition(0, 20, [U32(253)])
+      .definition(1, 20, [U8(3)])
+      .data(0, { 253: FIT_START })
+      .data(1, { 3: 100 }, FIT_START + 2)
+      .file();
+    const [a] = parse(based);
+    expect(a?.end).toBe(FIT_EPOCH + (FIT_START + 2) * 1000);
+    expect(a?.maxHr).toBe(100);
   });
   it("rejects truncated data and developer bytes with a corrected overall size/CRC", () => {
     const e = new FitEncoder().definition(0, 20, [U32(253)], [5]).data(0, { 253: FIT_START });
