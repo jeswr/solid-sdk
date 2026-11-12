@@ -61,6 +61,9 @@ the old one for that context; the old one stays catalogued so logout revokes it,
 grant has no refresh token. A rejected attempt restores the owner its own write replaced, and only
 while the stored owner is still that attempt's grant. A discarded grant is
 removed locally but not revoked, because per-grant revocation would supersede the shared fence.
+Outside a login attempt, an identity mismatch (a later upgrade authenticates someone else, or a
+restore's engine identity contradicts the pointer) signs out as `logout()` does: every catalogued grant
+is revoked before all grants, the owner and the pointer are cleared.
 Ownership-guarded attempts are never shared with concurrent logins.
 
 For an issuer-only Solid login, the returned WebID must list that issuer as `solid:oidcIssuer`.

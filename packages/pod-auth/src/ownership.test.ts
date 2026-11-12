@@ -540,3 +540,95 @@ test("a rejected reauthorization without a refresh token restores the grant it d
   expect([...f.values]).toEqual(saved);
   await expect(f.load().restore()).resolves.toMatchObject({ grantId: alice.grantId });
 });
+
+/** A third storage context, which only a later upgrade (outside any login attempt) visits. */
+const third = "https://pod.example/third/";
+
+/** Records every refresh token sent for revocation and every one redeemed by a refresh grant. */
+function tokenLog(f: ReturnType<typeof fixture>, route: () => ReturnType<typeof createMockOp>) {
+  const revoked: string[] = [];
+  const refreshed: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const form = async () => new URLSearchParams(await request.clone().text());
+    if (request.url === new URL("revoke", f.op.issuer).href)
+      revoked.push((await form()).get("token")!);
+    if (request.url === new URL("token", f.op.issuer).href) {
+      const token = (await form()).get("refresh_token");
+      if (token !== null) refreshed.push(token);
+    }
+    return await route().fetch(request);
+  });
+  return { revoked, refreshed };
+}
+
+const refreshTokens = (f: ReturnType<typeof fixture>) =>
+  f.records().map((record) => (record as { refreshToken: string }).refreshToken);
+
+const signedOut = async (f: ReturnType<typeof fixture>) => {
+  expect(f.records()).toEqual([]);
+  for (const name of ["active", "owner", "accounts"]) expect(f.named(name)).toBeUndefined();
+  await expect(f.load().restore()).resolves.toBeNull();
+};
+
+test("a later upgrade that authenticates someone else signs out, revoking every catalogued grant", async () => {
+  const f = fixture({ protectedUrls: [other, third] }, [other, third]);
+  // From the switch on, the issuer and pod answer as a deployment that authenticates Carol and no longer
+  // accepts Alice's tokens.
+  const carol = createMockOp({
+    subject: "https://id.example/carol",
+    webId: "https://id.example/carol#me",
+    refreshTokens: true,
+    revocation: true,
+    protectedUrls: [other, third],
+  });
+  let active = f.op;
+  const log = tokenLog(f, () => active);
+  const getCode = (url: URL, signal: AbortSignal) => active.getCode(url, signal);
+  // Another tab signed Alice in for two contexts.
+  const first = f.load({ getCode });
+  await first.login({ webId: f.op.webId! });
+  expect((await first.fetch(`${other}resource`)).status).toBe(200);
+  // This tab restores Alice, outside any login attempt.
+  const auth = f.load({ getCode });
+  await expect(auth.restore()).resolves.toMatchObject({ webId: f.op.webId });
+  const alice = refreshTokens(f);
+  expect(alice).toHaveLength(2);
+  active = carol;
+  const before = log.refreshed.length;
+  // The restored grant is refused (invalid_grant), so the upgrade authorizes interactively: Carol.
+  await expect(auth.fetch(`${third}resource`)).rejects.toThrow("selected account");
+  const dead = log.refreshed.slice(before);
+  expect(dead).toHaveLength(1);
+  expect(alice).toContain(dead[0]);
+  const live = alice.filter((token) => token !== dead[0]);
+  // Every catalogued grant is revoked before clearing: the other tab's grant for the second context
+  // and Carol's new grant. The refused grant was already dropped. Nothing is kept.
+  expect(log.revoked).toHaveLength(2);
+  expect(log.revoked).toEqual(expect.arrayContaining(live));
+  expect(log.revoked.filter((token) => !alice.includes(token))).toHaveLength(1);
+  expect(await auth.identity()).toBeNull();
+  await signedOut(f);
+});
+
+test("a restore whose engine identity contradicts the pointer signs out, revoking every catalogued grant", async () => {
+  const f = await twoContexts();
+  const alice = refreshTokens(f);
+  expect(alice).toHaveLength(2);
+  const log = tokenLog(f, () => f.op);
+  const { DPoPTokenProvider } = await import("@jeswr/reactive-authentication");
+  vi.spyOn(DPoPTokenProvider.prototype, "restore").mockResolvedValue({
+    issuer: f.op.issuer,
+    subject: "https://id.example/carol",
+    webId: "https://id.example/carol#me",
+    webIdVerified: true,
+  } as never);
+  const auth = f.load();
+  // restore() fails closed to null; the mismatch is not adopted.
+  await expect(auth.restore()).resolves.toBeNull();
+  expect(await auth.identity()).toBeNull();
+  // Both catalogued grants, including the other tab's second context, are revoked; nothing is kept.
+  expect(log.refreshed).toEqual([]);
+  expect([...log.revoked].sort()).toEqual([...alice].sort());
+  await signedOut(f);
+});

@@ -692,7 +692,8 @@ export function createProviders(
       const claims = await solidProvider.restore(request);
       if (claims === undefined) return undefined;
       if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
-        await persistence.exclusive(forget);
+        // The stored grant contradicts the pointer: sign out, revoking every catalogued grant.
+        await persistence.exclusive(logout);
         throw new Error("Restored identity does not match the remembered account");
       }
       await hooks.session(request, claims, "solid-oidc", selected);
@@ -700,14 +701,16 @@ export function createProviders(
       return claims;
     },
     logout: async () => await persistence.exclusive(logout),
+    /** Whether a pointer write is the running login's own publication (or no login is running). */
+    publishing: (request: Request) => loginRequest === undefined || loginRequest === request,
     /**
      * Rejects an authenticated identity. During a login attempt only that attempt's new grants are
      * removed, restoring what they displaced; other contexts' grants, the owner and the pointer stay.
+     * Outside an attempt (a later upgrade authenticated someone else) it signs out as `logout` does,
+     * revoking every catalogued grant before clearing them, the owner and the pointer.
      */
-    /** Whether a pointer write is the running login's own publication (or no login is running). */
-    publishing: (request: Request) => loginRequest === undefined || loginRequest === request,
     reject: async () => {
-      if (!persistence.attempting()) return await persistence.exclusive(forget);
+      if (!persistence.attempting()) return await persistence.exclusive(logout);
       boundary.clear();
       await persistence.discard();
     },
@@ -749,13 +752,6 @@ export function createProviders(
       }
     },
   };
-  async function forget() {
-    try {
-      await solidProvider.forget();
-    } finally {
-      await persistence.clear();
-    }
-  }
   /** Revocation and cleanup read every stored credential, including one a reauthorization bypasses. */
   async function logout() {
     await persistence.raw(purge);

@@ -71,8 +71,11 @@ pointer and stored grant owner again under the namespace mutation lock before pu
 owner and the pointer, rejecting with `OwnershipChangedError` after discarding only that attempt's new
 grant. Use `reauthorize: true` (WebID hints only, same account only) to replace a grant whose refresh
 persistently fails with something other than `invalid_grant`; it bypasses only its own context's
-stored credential, and logout/retirement keep reading (and revoking) every credential. A rejected identity also discards only
-the attempt's own new grant, never other contexts' grants, the owner or the pointer. `identity()` reads claims only; it never refreshes, contacts an issuer or
+stored credential, and logout/retirement keep reading (and revoking) every credential. Within a login attempt, a rejected identity
+also discards only the attempt's own new grant (locally, unrevoked), never other contexts' grants, the
+owner or the pointer. Outside an attempt (a later upgrade authenticates a different identity, or a
+restore's engine identity contradicts the pointer) it signs out as `logout()` does: every catalogued
+grant is revoked, then all grants, the owner and the pointer are cleared. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 
 Use the pure `./directory` entry point for shared sign-in address handling. `KNOWN_PROVIDERS` is deeply
