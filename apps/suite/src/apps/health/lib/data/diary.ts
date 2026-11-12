@@ -191,13 +191,13 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw new TypeError("Invalid diary entry URL");
     return safe;
   };
-  async function readEntry(url: string): Promise<DiaryEntry | null> {
+  async function readEntry(url: string, priority = false): Promise<DiaryEntry | null> {
     const safe = assertWithinPodScope(base, url);
     const legacy = /^(meals|symptoms)\/(?:\d{4}\/(?:0[1-9]|1[0-2])\/)?[A-Za-z0-9_-]+\.ttl$/.test(
       safe.slice(base.length),
     );
     if (!legacy) scoped(url);
-    const { document, etag } = await readDocument(url);
+    const { document, etag } = await readDocument(url, priority);
     const fields = new DiaryFields(`${url}#it`, document, DataFactory);
     const compatible = packageDataset(document);
     const meal = parseMeal(url, compatible);
@@ -243,27 +243,28 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     };
   }
   async function read(url: string): Promise<DiaryEntry> {
-    const entry = await readEntry(url);
+    const entry = await readEntry(url, true);
     if (!entry) throw new TypeError("This diary entry could not be read");
     return entry;
   }
   type MonthResult = { entries: DiaryEntry[]; failures: DiaryReadFailure[] };
   let catalogue: Promise<string[]> | undefined;
   const monthsCache = new Map<string, Promise<MonthResult>>();
-  // Legacy data is read-only here. Keep listings and month reads across suite mutations.
+  // Legacy data is read-only here. Keep listings and URL-keyed documents across suite mutations.
   const legacyListings = new Map<string, Promise<string[]>>();
-  const legacyMonths = new Map<string, Promise<MonthResult>>();
+  const legacyEntries = new Map<string, Promise<DiaryEntry | null>>();
   function invalidateSuite() {
     catalogue = undefined;
     monthsCache.clear();
   }
-  /** No URL means explicit Retry; notifications invalidate only their legacy subtree. */
+  /** Focus refreshes membership; targeted notifications and Retry also discard documents. */
   function invalidate(url?: string) {
     invalidateSuite();
-    for (const cache of [legacyListings, legacyMonths]) {
+    for (const cache of [legacyListings, legacyEntries]) {
       for (const key of cache.keys()) {
         if (
           url === undefined ||
+          (cache === legacyListings && url !== base && base.startsWith(url)) ||
           ((url.startsWith(`${base}meals/`) || url.startsWith(`${base}symptoms/`)) &&
             (key.startsWith(url) || url.startsWith(key)))
         )
@@ -271,11 +272,15 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       }
     }
   }
-  // One queue for all reads, including concurrent consumers and every level of the walk.
+  // One six-slot pool for every consumer. Entry/mutation reads precede queued listing reads.
   let activeReads = 0;
   const waiting: (() => void)[] = [];
-  async function readDocument(url: string) {
-    if (activeReads >= 6) await new Promise<void>((resolve) => waiting.push(resolve));
+  async function readDocument(url: string, priority = false) {
+    if (activeReads >= 6)
+      await new Promise<void>((resolve) => {
+        if (priority) waiting.unshift(resolve);
+        else waiting.push(resolve);
+      });
     else activeReads++;
     try {
       return await store.read(url);
@@ -321,17 +326,23 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
             ))),
     );
   }
-  async function readDocuments(urls: string[]): Promise<MonthResult> {
+  async function readDocuments(urls: string[], cachedLegacy = false): Promise<MonthResult> {
     const entries: DiaryEntry[] = [],
       failures: DiaryReadFailure[] = [];
     await Promise.all(
       urls
         .filter((url) => !url.endsWith("/"))
         .map(async (url) => {
+          let task = cachedLegacy ? legacyEntries.get(url) : undefined;
+          if (!task) {
+            task = readEntry(url);
+            if (cachedLegacy) legacyEntries.set(url, task);
+          }
           try {
-            const entry = await readEntry(url);
+            const entry = await task;
             if (entry) entries.push(entry);
           } catch (error) {
+            if (legacyEntries.get(url) === task) legacyEntries.delete(url);
             failures.push({ url, error });
           }
         }),
@@ -366,11 +377,11 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
         if (!range || (entry.at >= range.start && entry.at < range.end)) result.push(entry);
       }
     }
-    async function loadMonth(month: string, legacy: boolean, urls?: string[]) {
-      const cache = legacy ? legacyMonths : monthsCache;
+    async function loadMonth(month: string) {
+      const cache = monthsCache;
       let task = options.cached ? cache.get(month) : undefined;
       if (!task) {
-        task = urls ? readDocuments(urls) : childUrls(month, false).then(readDocuments);
+        task = childUrls(month, false).then((urls) => readDocuments(urls));
         if (options.cached) cache.set(month, task);
       }
       try {
@@ -394,8 +405,17 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
         options.failures?.push({ url: container, error });
         return;
       }
+      // Drop removed documents, including descendants of a removed year/month container.
+      const children = new Set(urls);
+      for (const key of legacyEntries.keys()) {
+        if (!key.startsWith(container)) continue;
+        const tail = key.slice(container.length);
+        const slash = tail.indexOf("/");
+        const child = slash < 0 ? key : `${container}${tail.slice(0, slash + 1)}`;
+        if (!children.has(child)) legacyEntries.delete(key);
+      }
       await Promise.all([
-        loadMonth(container, true, urls),
+        readDocuments(urls, options.cached).then(collect),
         ...urls
           .filter((url) => {
             if (!url.endsWith("/")) return false;
@@ -416,7 +436,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
           const key = month.slice(base.length, -1);
           return !first || !last || (key >= first && key <= last);
         })
-        .map((month) => loadMonth(month, false)),
+        .map(loadMonth),
       walkLegacy(`${base}meals/`),
       walkLegacy(`${base}symptoms/`),
     ]);
@@ -446,7 +466,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     const etag = existing ? version(existing.etag) : undefined;
     const moving = source !== undefined && source !== url;
     const condition = existing && !moving ? { etag: etag as string } : { create: true as const };
-    const current = existing ? await readDocument(source as string) : null;
+    const current = existing ? await readDocument(source as string, true) : null;
     if (moving && current?.etag !== etag) throw new HealthIoError(412, "move diary entry");
     const previous = packageDataset(current ? current.document : emptyHealthDocument());
     const previousMeal = parseMeal(source ?? url, previous);
@@ -501,7 +521,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     } catch (error) {
       if (!conflict(error)) throw error;
       // Creation timestamps differ when retrying a create after a lost response.
-      const actual = await readDocument(url);
+      const actual = await readDocument(url, true);
       const intended = [...document].filter((quad) => quad.predicate.value !== `${NS.DCT}created`);
       const stored = [...actual.document].filter(
         (quad) => quad.predicate.value !== `${NS.DCT}created`,

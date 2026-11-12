@@ -33,6 +33,7 @@ export function DiarySheet({
 }) {
   const { save } = useDiaryActions();
   const mode = useDiaryMode();
+  const tracking = mode.enabled && !mode.readError;
   const selectedExposure =
     entry?.kind === "meal"
       ? entry.exposures?.find(
@@ -155,7 +156,7 @@ export function DiarySheet({
                     kind,
                     foods: names,
                     items,
-                    exposures: mode.enabled
+                    exposures: tracking
                       ? [
                           ...(entry?.kind === "meal"
                             ? (entry.exposures ?? []).filter(
@@ -270,7 +271,7 @@ export function DiarySheet({
               <p id="hlt-diary-ingredients-error" role="alert">
                 {errors.ingredients}
               </p>
-              {mode.enabled && (
+              {tracking && (
                 <fieldset>
                   <legend>Food intolerance exposure</legend>
                   <label>

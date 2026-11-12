@@ -29,7 +29,7 @@ export function DiaryView() {
   const queryDate = query.get("date");
   const queryMode = query.get("mode");
   const mode = useDiaryMode();
-  const modeUnavailable = mode.loading || mode.readError;
+  const modeUnavailable = mode.loading;
   const { forVisit } = mode;
   useEffect(() => {
     if (queryMode === "coeliac") forVisit();

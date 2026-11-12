@@ -634,10 +634,21 @@ it("turns visit-only tracking off locally, removes only mode from the URL and ma
   });
   expect(writes).toEqual([]);
 });
-it("disables settings and Log/Edit after a settings read error until Retry loads the stored trigger", async () => {
-  const { session, pod } = await setup();
+it("keeps settings disabled but allows logging and exposure-preserving edits after a settings read error", async () => {
+  const { session, pod, diary } = await setup();
   const preferences = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
   await preferences.save({ enabled: true, trigger: "lactose" });
+  const meal = (await diary.list()).find((entry) => entry.kind === "meal");
+  if (meal?.kind !== "meal") throw new Error("Missing meal");
+  await diary.save(
+    {
+      ...meal,
+      exposures: [{ trigger: "lactose", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE }],
+    },
+    "meal",
+    meal,
+  );
+  route.query = "mode=coeliac";
   let fail = true;
   const writes: string[] = [];
   const fetch: typeof globalThis.fetch = (input, init) => {
@@ -652,12 +663,95 @@ it("disables settings and Log/Edit after a settings read error until Retry loads
   );
   await eventually(() => expect(view.host.textContent).toContain("Couldn't load diary settings"));
   expect(checkbox("Track a food intolerance").disabled).toBe(true);
-  expect(button("Log meal", view.host).disabled).toBe(true);
-  expect(button("Edit Porridge", view.host).disabled).toBe(true);
+  expect(button("Log meal", view.host).disabled).toBe(false);
+  expect(button("Log symptom", view.host).disabled).toBe(false);
+  expect(button("Edit Porridge", view.host).disabled).toBe(false);
+  await click(button("Log meal", view.host));
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Contains gluten");
+  await fill("#hlt-diary-foods", "Rice during settings outage");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await click(button("Log symptom", view.host));
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await click(button("Edit Porridge", view.host));
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Contains gluten");
+  await fill("#hlt-diary-note", "Edited during settings outage");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const edited = await diary.read(meal.url);
+  expect(edited.kind === "meal" && edited.exposures).toMatchObject([
+    { trigger: "lactose", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE },
+  ]);
+  expect(view.host.textContent).toContain("Couldn't load diary settings");
+  expect(button("Retry diary settings", view.host).disabled).toBe(false);
   expect(writes).toEqual([]);
   fail = false;
   await click(button("Retry diary settings", view.host));
   await eventually(() => expect(checkbox("Track a food intolerance").disabled).toBe(false));
   expect(view.host.querySelector<HTMLSelectElement>("#hlt-diary-trigger")?.value).toBe("lactose");
   expect(writes).toEqual([]);
+});
+
+it("revalidates legacy listings on storage-root notifications and retries failed documents", async () => {
+  const { session, pod } = await setup();
+  const folder = `${ROOT}health/diary/meals/${new Date().toISOString().slice(0, 7).replace("-", "/")}/`;
+  const original = `${folder}original.ttl`,
+    added = `${folder}added.ttl`;
+  for (const path of ["meals/", `meals/${new Date().getUTCFullYear()}/`, folder]) {
+    await pod.fetch(path.startsWith(ROOT) ? path : `${ROOT}health/diary/${path}`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "",
+    });
+  }
+  const put = async (url: string, name: string) =>
+    pod.fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await storeToTurtle(buildMeal(url, { startTime: new Date(), items: [{ name }] })),
+    });
+  await put(original, "Original meal");
+  const gets: string[] = [],
+    listeners = new Set<(url: string) => void>();
+  let fail = false;
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    const url = String(input);
+    if (!init?.method) {
+      if (url.includes("/diary/meals/") || url.includes("/diary/symptoms/")) gets.push(url);
+      if (fail && url === added) return Promise.resolve(new Response(null, { status: 503 }));
+    }
+    return pod.fetch(input, init);
+  };
+  const subscribe: PodSession["subscribe"] = (callback) => {
+    listeners.add(callback);
+    return () => listeners.delete(callback);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch, subscribe }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(view.host.textContent).toContain("Original meal"));
+  await put(added, "Added elsewhere");
+  gets.length = 0;
+  await act(async () => {
+    for (const notify of listeners) notify(ROOT);
+  });
+  await eventually(() => expect(view.host.textContent).toContain("Added elsewhere"));
+  expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
+  // A targeted notification discards this document, then focus retries its failed read.
+  fail = true;
+  await act(async () => {
+    for (const notify of listeners) notify(added);
+  });
+  await eventually(() => expect(view.host.textContent).toContain("1 entry couldn't be read"));
+  fail = false;
+  gets.length = 0;
+  await act(async () => {
+    for (const notify of listeners) notify(ROOT);
+  });
+  await eventually(() => {
+    expect(view.host.textContent).toContain("Added elsewhere");
+    expect(view.host.textContent).not.toContain("1 entry couldn't be read");
+  });
+  expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
 });

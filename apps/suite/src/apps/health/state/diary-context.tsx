@@ -74,10 +74,11 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
     if (!activated) return;
     const changed = new Set<string>();
     const off = session.subscribe((url) => {
+      const revalidate = url !== diary.base && diary.base.startsWith(url);
       const legacy =
         url.startsWith(`${diary.base}meals/`) || url.startsWith(`${diary.base}symptoms/`);
       if (
-        (pending.current && !legacy) ||
+        (pending.current && !legacy && !revalidate) ||
         !(url.startsWith(diary.base) || (url.endsWith("/") && diary.base.startsWith(url)))
       )
         return;

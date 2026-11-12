@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { buildMeal, buildSymptom, storeToTurtle } from "@jeswr/solid-health-diary";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   createDiaryStore,
   type DiaryReadFailure,
@@ -116,7 +116,7 @@ it("reads direct legacy documents and reports failures per document and containe
   );
   expect(pod.calls.every((call) => call.method === "GET")).toBe(true);
 });
-it("reports corrupt legacy records and caches them like month records until invalidated", async () => {
+it("reports corrupt legacy records without caching failed document reads", async () => {
   const pod = await legacyFixture();
   pod.put(pod.url, "not turtle {");
   const failures: DiaryReadFailure[] = [];
@@ -126,9 +126,100 @@ it("reports corrupt legacy records and caches them like month records until inva
     pod.url,
     await storeToTurtle(buildMeal(pod.url, { startTime: at, items: [{ name: "Recovered" }] })),
   );
-  expect(await pod.diary.list(undefined, { cached: true })).toHaveLength(2);
-  pod.diary.invalidate();
   expect(await pod.diary.list(undefined, { cached: true })).toHaveLength(3);
+  expect(pod.calls.filter((call) => call.url === pod.url)).toHaveLength(2);
+});
+it("refreshes legacy membership on focus, reuses documents and drops removed URLs", async () => {
+  const pod = await legacyFixture();
+  const list = () => pod.diary.list(undefined, { cached: true });
+  pod.resources.delete(pod.modern);
+  await list();
+  const added = `${BASE}diary/meals/2026/11/new.ttl`;
+  const body = await storeToTurtle(
+    buildMeal(added, { startTime: at, items: [{ name: "New meal" }] }),
+  );
+  pod.put(added, body);
+  pod.diary.invalidate(storage);
+  pod.calls.length = 0;
+  expect((await list()).map((entry) => entry.url)).toContain(added);
+  expect(pod.calls.filter((call) => !call.url.endsWith("/"))).toMatchObject([{ url: added }]);
+  pod.resources.delete(added);
+  pod.diary.invalidate(storage);
+  expect((await list()).map((entry) => entry.url)).not.toContain(added);
+  pod.put(added, body);
+  pod.diary.invalidate(storage);
+  pod.calls.length = 0;
+  expect((await list()).map((entry) => entry.url)).toContain(added);
+  expect(pod.calls.filter((call) => call.url === added)).toHaveLength(1);
+});
+it("retries transient legacy document failures on the next listing", async () => {
+  const pod = await legacyFixture();
+  pod.faults.set(`GET ${pod.url}`, () => new Response(null, { status: 503 }));
+  const failures: DiaryReadFailure[] = [];
+  expect(await pod.diary.list(undefined, { cached: true, failures })).toHaveLength(2);
+  expect(failures.map((failure) => failure.url)).toEqual([pod.url]);
+  pod.faults.delete(`GET ${pod.url}`);
+  pod.calls.length = 0;
+  const retried: DiaryReadFailure[] = [];
+  expect(await pod.diary.list(undefined, { cached: true, failures: retried })).toHaveLength(3);
+  expect(retried).toEqual([]);
+  expect(pod.calls.map((call) => call.url)).toEqual([pod.url]);
+});
+it("prioritizes a save's reads ahead of queued legacy listing reads within six slots", async () => {
+  const pod = createDemoPod({ root: storage });
+  const draft = { kind: "meal" as const, at, foods: ["Rice"], ingredients: "", tags: [], note: "" };
+  const existing = await createDiaryStore(pod.fetch, storage, OWNER).save(draft, "priority");
+  const folder = `${BASE}diary/meals/`;
+  await pod.fetch(folder, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
+  for (let i = 0; i < 18; i++) {
+    const url = `${folder}old-${i}.ttl`;
+    await pod.fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await storeToTurtle(buildMeal(url, { startTime: at, items: [{ name: "Old" }] })),
+    });
+  }
+  let blocked = true,
+    active = 0,
+    maximum = 0,
+    wrote = false;
+  const waiting: (() => void)[] = [],
+    reads: string[] = [];
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (init?.method === "PUT" && url === existing.url) wrote = true;
+    if (!init?.method && (url === existing.url || url.startsWith(folder)) && url.endsWith(".ttl")) {
+      reads.push(url);
+      active++;
+      maximum = Math.max(maximum, active);
+      try {
+        if (blocked && url.startsWith(folder))
+          await new Promise<void>((resolve) => waiting.push(resolve));
+        return await pod.fetch(input, init);
+      } finally {
+        active--;
+      }
+    }
+    return pod.fetch(input, init);
+  };
+  const diary = createDiaryStore(fetch, storage, OWNER);
+  const listing = diary.list();
+  await vi.waitFor(() => expect(waiting).toHaveLength(6));
+  reads.length = 0;
+  const saving = diary.save({ ...draft, note: "Priority edit" }, "priority", existing);
+  try {
+    waiting.shift()?.();
+    await vi.waitFor(() => expect(wrote).toBe(true));
+    waiting.shift()?.();
+    await vi.waitFor(() => expect(reads.filter((url) => url === existing.url)).toHaveLength(2));
+    expect(reads[0]).toBe(existing.url);
+    expect(maximum).toBe(6);
+    expect((await saving).note).toBe("Priority edit");
+  } finally {
+    blocked = false;
+    for (const release of waiting) release();
+    await Promise.all([listing, saving]);
+  }
 });
 it("prunes UTC legacy history outside the widened range and bounds every listing to six GETs", async () => {
   const pod = await legacyFixture();
@@ -169,7 +260,7 @@ it("prunes UTC legacy history outside the widened range and bounds every listing
   await diary.list();
   expect(maximum).toBe(6);
 });
-it("keeps legacy months across suite saves/removes and invalidates only the notified legacy path or Retry", async () => {
+it("keeps legacy documents across suite saves/removes and invalidates only the notified legacy path or Retry", async () => {
   const pod = createDemoPod({ root: storage });
   const folder = `${storage}health/diary/meals/2026/11/`,
     url = `${folder}legacy.ttl`;
