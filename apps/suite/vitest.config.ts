@@ -112,6 +112,7 @@ export default defineConfig({
         "src/apps/notes/lib/convert/**/*.ts",
         "src/apps/notes/lib/keep/**/*.ts",
         "src/apps/notes/state/pending-drafts.ts",
+        "src/apps/notes/components/notes-states.tsx",
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/tasks/lib/tree/**/*.ts",
