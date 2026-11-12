@@ -15,6 +15,7 @@ import {
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
+import { exactCreateSegment } from "./exact-create.js";
 import { discard, scoped, send } from "./http.js";
 import { pathParent, throwIfAborted } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
@@ -414,6 +415,8 @@ export function solidWrites(
     },
     async create(url, body, opts = {}) {
       if (isTrashEndpoint(client(), url)) {
+        if (opts.exactUrl !== undefined)
+          throw error("unsupported", "POST", scoped(root, "POST", url));
         return postTrash(client(), fetch, url, body, opts.signal, undefined, opts.keepalive);
       }
       const parent = container("POST", url);
@@ -421,7 +424,7 @@ export function solidWrites(
       if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");
       if (opts.contentType !== undefined || kind === "resource") contentType(opts.contentType);
       const type = kind === "container" ? "text/turtle" : (opts.contentType as string);
-      const segment = nameFor("POST", parent, opts.name);
+      const segment = exactCreateSegment(parent, opts) ?? nameFor("POST", parent, opts.name);
       if (segment !== undefined)
         return (
           await createExact(parent, segment, kind, body ?? "", type, opts.signal, opts.keepalive)

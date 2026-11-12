@@ -4007,12 +4007,15 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../pod-auth
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
-      '@jeswr/solid-dpop':
+      '@jeswr/storage-client':
         specifier: workspace:*
-        version: link:../solid-dpop
+        version: link:../storage-client
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../suite-vocab
