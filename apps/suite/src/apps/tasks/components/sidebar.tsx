@@ -49,6 +49,7 @@ import { useCalendarExchange } from "./calendar-exchange/calendar-exchange";
 import { DeleteCompletedDialog, DeleteCompletedMenuItem } from "./delete-completed";
 import "./calendar-exchange/calendar-exchange.css";
 import { useDropTarget } from "./dnd/use-task-drag";
+import { FiltersSection, NewFilterButton } from "./filters";
 import { TasksImportDialog } from "./import/import-dialog";
 import { LabelDot } from "./label-chip";
 import { LabelColourPicker } from "./label-colour-picker";
@@ -437,6 +438,7 @@ export function TasksSidebar() {
           )}
         </>
       )}
+      <FiltersSection />
       {favourites.length > 0 && (
         <section aria-label="Favourites">
           <h2 className="tsk-nav-heading">Favourites</h2>
@@ -542,6 +544,7 @@ export function TasksSidebar() {
         />
       )}
       <div className="tsk-sidebar-footer">
+        <NewFilterButton />
         <TasksImportDialog />
         {creating ? (
           <form

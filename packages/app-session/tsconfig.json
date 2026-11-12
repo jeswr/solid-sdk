@@ -1,0 +1,13 @@
+// AUTHORED-BY GPT-6.1 Sol
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "ESNext.Disposable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["node", "@testing-library/jest-dom"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}
