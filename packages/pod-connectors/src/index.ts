@@ -9,6 +9,8 @@ export * from "./core/file-import.js";
 export * from "./core/import-runner.js";
 /** Fetch-backed Pod writer factory. */
 export * from "./core/pod-writer.js";
+/** Conditional storage-client-backed Pod writer. */
+export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
 export * from "./core/types.js";
 /** File adapter registry. */
 export * from "./file-adapters.js";
