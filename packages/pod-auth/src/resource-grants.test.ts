@@ -522,6 +522,32 @@ test("a grant's server cannot force the shared session to renew", async () => {
   expect((await f.auth.fetch("https://pod.example/alice/private")).status).toBe(200);
 });
 
+test("a grant revoked during its upgrade fails closed and leaves the account session intact", async () => {
+  let auth!: ReturnType<typeof createPodAuth>;
+  let revokeOn401 = false;
+  const f = fixture({}, {}, (request) => {
+    if (!revokeOn401 || request.url !== `${shared}a` || request.headers.has("authorization"))
+      return undefined;
+    revokeOn401 = false;
+    // Revoke after the challenge returns, while the upgrade for this grant is under way.
+    return f.op.fetch(request).then((response) => {
+      setTimeout(() => auth.revokeResource!(shared), 0);
+      return response;
+    });
+  });
+  auth = f.auth;
+  await auth.login({ webId: f.op.webId });
+  await auth.grantResource!(shared);
+  revokeOn401 = true;
+  await auth.fetch(`${shared}a`).catch(() => undefined);
+  expect(auth.grants!()).toEqual([]);
+  // The account's session is still its own storage, so a fresh grant reuses it without signing in.
+  await auth.grantResource!(shared);
+  expect((await auth.fetch(`${shared}b`)).status).toBe(200);
+  expect((await auth.fetch(`${f.op.root}c`)).status).toBe(200);
+  expect(f.ui.getCode).toHaveBeenCalledTimes(1);
+});
+
 test("a granted sign-in remembers the established session, never the foreign URL", async () => {
   const writes: string[] = [];
   const sessions = createMemoryStore();

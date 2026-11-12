@@ -364,7 +364,9 @@ There is one grant mechanism with one set of rules, all enforced in the core:
 - Reads and writes inside a grant get the account's Solid-OIDC credentials, reusing its session
   (no second authorization). A request that starts inside a grant never follows a redirect,
   natively or after a 401: with the default `redirect: "follow"` it rejects with a `TypeError`, and
-  an explicit `manual` mode returns the redirect as it is. A grant never becomes a storage
+  an explicit `manual` mode returns the redirect as it is. Outside browsers that response exposes
+  its `Location`: never pass it to `auth.fetch` unless `isWithinGrantedScope(location)` is true.
+  Request containers with their trailing slash, since even a same-grant redirect rejects. A grant never becomes a storage
   (`Identity.storages`), an authorization-server trust anchor, a UMA/LWS resource or a login
   context, so UMA and LWS exchanges for a granted URL are refused, and a grant server's 401s
   cannot force the shared session to renew.

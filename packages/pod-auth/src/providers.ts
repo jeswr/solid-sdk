@@ -653,6 +653,8 @@ export function createProviders(
       return true;
     },
     upgrade: async (request, challenge) => {
+      // Decided before any await: a grant revoked mid-upgrade is still not the account's session.
+      const granted = !boundary.allowsOwn(request.url);
       // UMA performs its trust check before resolving the selected account or requesting credentials.
       const attemptHint = hint;
       const selected = solid ? await selectionFor(request) : undefined;
@@ -662,7 +664,6 @@ export function createProviders(
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
       // A granted upgrade reports and remembers the established session, never the foreign URL.
-      const granted = boundary.consented(await boundary.contextKey(request));
       await hooks.session(
         granted ? new Request(establishedUrl(), { signal: request.signal }) : request,
         claims,
@@ -674,7 +675,7 @@ export function createProviders(
     },
     invalidate: async (request, challenge) => {
       // A grant's server cannot force the account's shared session to renew by rejecting it.
-      if (boundary.consented(await boundary.contextKey(request))) return;
+      if (!boundary.allowsOwn(request.url)) return;
       await provider.invalidate!(request, challenge);
     },
     forget: async () => await provider.forget!(),

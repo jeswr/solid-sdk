@@ -386,6 +386,8 @@ export function createBoundary(
     },
     grants: () => grants,
     withinGrants,
+    /** Own storage (configured or verified roots), never a grant. Synchronous. */
+    allowsOwn,
     /** Inside a grant and outside own storage: requests from here must not follow redirects. */
     confined: (url: string | URL) => withinGrants(url) && !owns(url),
     /** Whether a context key names a consented grant rather than a storage root. */
