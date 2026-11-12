@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { ItemDetails } from "@jeswr/suite-ui";
 import { type DetailsPaneProps, ShellFrame, type SidebarNavProps } from "@jeswr/suite-ui/shell";
 import {
   Bell,
@@ -40,6 +41,7 @@ const states = [
   "not-found",
   "refreshing",
   "offline",
+  "embedded",
 ] as const;
 export type FixtureState = (typeof states)[number];
 export function fixtureState(value: string | undefined): FixtureState {
@@ -135,32 +137,48 @@ export function ShellFixture({
 }) {
   const [preferences, setPreferences] = useFixturePreferences();
   const [state, setState] = useState<FixtureState>(fixtureState(initialState));
-  const ready = ["ready", "refreshing", "offline"].includes(state);
+  const ready = ["ready", "refreshing", "offline", "embedded"].includes(state);
   const details: DetailsPaneProps = {
-    title: ready ? "Q3 Budget" : "File details",
-    ...(ready
+    title: ready && state !== "embedded" ? "Q3 Budget" : "File details",
+    ...(state === "embedded"
       ? {
-          preview: (
-            <div className="ds04-preview">
-              <Table2 size={48} strokeWidth={1.5} aria-hidden="true" />
-            </div>
+          children: (
+            <ItemDetails
+              variant="embedded"
+              title="Q3 Budget"
+              access={{ grants: [], canManage: false }}
+              metadata={[
+                { label: "Type", value: "Spreadsheet" },
+                { label: "Size", value: "24 KB" },
+                { label: "Location", value: "My Drive / Work" },
+              ]}
+              actions={<a href="#fixture-files">Open file</a>}
+            />
           ),
-          metadata: [
-            { label: "Type", value: "Spreadsheet" },
-            { label: "Size", value: "24 KB" },
-            { label: "Modified", value: "Today, 10:42" },
-            { label: "Location", value: "My Drive / Work" },
-            { label: "Owner", value: "You" },
-          ],
-          access: (
-            <p className="ds04-access">
-              <ShieldCheck size={20} strokeWidth={1.75} aria-hidden="true" />
-              Only you have access
-            </p>
-          ),
-          actions: <a href="#fixture-files">Open file</a>,
         }
-      : { children: <SurfaceState state={state} onReset={() => setState("ready")} /> }),
+      : ready
+        ? {
+            preview: (
+              <div className="ds04-preview">
+                <Table2 size={48} strokeWidth={1.5} aria-hidden="true" />
+              </div>
+            ),
+            metadata: [
+              { label: "Type", value: "Spreadsheet" },
+              { label: "Size", value: "24 KB" },
+              { label: "Modified", value: "Today, 10:42" },
+              { label: "Location", value: "My Drive / Work" },
+              { label: "Owner", value: "You" },
+            ],
+            access: (
+              <p className="ds04-access">
+                <ShieldCheck size={20} strokeWidth={1.75} aria-hidden="true" />
+                Only you have access
+              </p>
+            ),
+            actions: <a href="#fixture-files">Open file</a>,
+          }
+        : { children: <SurfaceState state={state} onReset={() => setState("ready")} /> }),
   };
   return (
     <ShellFrame

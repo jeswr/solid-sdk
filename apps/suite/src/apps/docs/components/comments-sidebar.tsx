@@ -81,12 +81,14 @@ export interface CommentActions {
 }
 function CommentMessage({
   comment,
+  authorName,
   root,
   own,
   reason,
   actions,
 }: {
   comment: DocumentComment;
+  authorName: string;
   root: boolean;
   own: boolean;
   reason: string | undefined;
@@ -102,7 +104,9 @@ function CommentMessage({
   return (
     <div className="docs-comment-message">
       <header>
-        <span>{comment.creator}</span>
+        <span title={comment.creator} aria-description={comment.creator}>
+          {authorName}
+        </span>
         <ModifiedTime value={comment.created} />
         {(own || (root && comment.resolved)) && (
           <div
@@ -183,6 +187,7 @@ function CommentMessage({
 }
 export function CommentsSidebar({
   threads,
+  authorName,
   active,
   focusRequest,
   composer,
@@ -199,6 +204,7 @@ export function CommentsSidebar({
   orphan,
 }: {
   threads: CommentThread[];
+  authorName: (webId: string) => string;
   active: string | undefined;
   focusRequest?: { url: string } | undefined;
   composer: CommentAnchor | undefined;
@@ -283,7 +289,7 @@ export function CommentsSidebar({
               ? "docs-comment-thread docs-comment-thread-active"
               : "docs-comment-thread"
           }
-          aria-label={`${root.creator}: ${root.anchor?.exact}`}
+          aria-label={`${authorName(root.creator)}: ${root.anchor?.exact}`}
         >
           <Button variant="ghost" className="docs-comment-quote" onClick={() => select(root)}>
             {root.anchor?.exact}
@@ -292,6 +298,7 @@ export function CommentsSidebar({
           {root.resolved && <p>Resolved</p>}
           <CommentMessage
             comment={root}
+            authorName={authorName(root.creator)}
             root
             own={root.creator === webId}
             reason={reason}
@@ -301,6 +308,7 @@ export function CommentsSidebar({
             <CommentMessage
               key={reply.url}
               comment={reply}
+              authorName={authorName(reply.creator)}
               root={false}
               own={reply.creator === webId}
               reason={reason}

@@ -20,7 +20,10 @@ async function capture(page: Page, info: TestInfo, name: string) {
 }
 async function reflow(page: Page) {
   await page.setViewportSize({ width: 320, height: 900 });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  // React's media-query surfaces settle after the browser changes the viewport.
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+    .toBeLessThanOrEqual(320);
   await accessible(page);
 }
 async function invalidBorder(control: Locator) {
