@@ -254,11 +254,17 @@ manifest release never resets the counter. Excess rows skip before any Pod write
 
 CON-A2 adds root-exported ConnectorScheduler and owner-only JSON settings/state ports.
 Read the README's Scheduled connectors contract before changing them. Preserve the
-whole-container run claim even for different accounts, bounded connection/concurrency/
-JSON/retry limits, transport cancellation, allowlisted health codes and legacy checkpoint
-projection. `health.counts` describe the latest attempt's document changes; old `counts`
-remain the last successful import's document/item counters. Keep account cursors separate,
-merge fresh snapshots after 412 and never roll back a newer successful cursor. Reauth is
-latched durably until explicit re-enable; cancellation starts no further state/config I/O.
+whole-container run claim even for different accounts, the continuous worker pool
+(single-flight, cap, drain on stop), bounded connection/concurrency/JSON/retry limits,
+transport cancellation, allowlisted health codes and legacy checkpoint projection.
+Invalid settings rows are skipped one by one as `invalid-config`; one connection's
+failure never rejects a tick. `health.counts` describe the latest attempt's document
+changes; old `counts` remain the last successful import's document/item counters. Keep
+account cursors separate (legacy cursor only for a sole connection; never rewrite root
+checkpoint fields), merge fresh snapshots after 412, distrust timestamps more than five
+minutes ahead and never roll back a newer successful cursor. Reauth (or two consecutive
+401/403) is latched durably until a newer `enabledAt` or explicit setEnabled;
+cancellation starts no further state/config I/O. Owner-JSON stores protect their ACL
+once per instance and on create, poll with If-None-Match, and `peek` is read-only.
 The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
 Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.

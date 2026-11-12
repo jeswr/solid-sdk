@@ -1,14 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import type { PodAuth } from "@jeswr/pod-auth";
 import {
   type ConnectorConnection,
   ConnectorScheduler,
   type ConnectorSchedulerOptions,
+  type ConnectorStateStore,
+  connectorAccountState,
   connectorHealth,
   createConnectionStore,
   createConnectorStateStore,
   createFetchPodWriter,
+  createRegistry,
+  parseConnectorConnections,
   ReauthoriseError,
   type TokenSource,
 } from "@jeswr/pod-connectors";
@@ -21,14 +26,17 @@ export const pendingVaultTokenSource: TokenSource = {
   },
 };
 export interface ConnectorConnectionHealth {
+  /** A registry id, or "-" for an invalid row whose id could not be validated. */
   readonly connectorId: string;
+  /** An opaque account id, or "-" for an invalid row whose account could not be validated. */
   readonly account: string;
   readonly enabled: boolean;
-  readonly health: "ok" | "stale" | "failing" | "needs-reauth";
+  readonly health: "ok" | "stale" | "failing" | "needs-reauth" | "invalid-config";
   readonly nextRunAt?: string;
 }
 export interface ConnectorsJob {
   tick(signal?: AbortSignal): Promise<void>;
+  /** Never rejects: failed passes log a fixed message and back off independently. */
   run(signal: AbortSignal): Promise<void>;
   list(signal?: AbortSignal): Promise<readonly ConnectorConnectionHealth[]>;
 }
@@ -46,6 +54,13 @@ export interface ConnectorsJobOptions {
   readonly log?: (message: string) => void;
   readonly runner?: ConnectorSchedulerOptions["runner"];
 }
+/** Job poll cadence and its failure back-off: 30 s doubling to 30 min, reset after success. */
+export const CONNECTORS_POLL_MS = 30_000;
+export const CONNECTORS_MAX_BACKOFF_MS = 30 * 60_000;
+export function connectorsPollDelay(failures: number): number {
+  if (failures <= 0) return CONNECTORS_POLL_MS;
+  return Math.min(CONNECTORS_MAX_BACKOFF_MS, CONNECTORS_POLL_MS * 2 ** Math.min(16, failures - 1));
+}
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const finish = () => {
@@ -60,13 +75,39 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 }
 /** Both launchd and cloud hosts use this job under their existing exclusive process lease. */
 export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
+  const registry = o.registry ?? createRegistry();
+  const settings = () =>
+    createConnectionStore({ podRoot: o.podRoot, webId: o.webId, fetch: o.podFetch });
+  // Long-lived stores protect their ACL once; polling uses conditional GETs.
+  const poll = settings();
+  const updates = settings();
+  let saving: Promise<unknown> = Promise.resolve();
+  const saveConnection = (c: ConnectorConnection, signal: AbortSignal): Promise<void> => {
+    // One read→write sequence at a time on the shared settings store.
+    const next = saving.then(() => updates.update(c, signal));
+    saving = next.catch(() => undefined);
+    return next;
+  };
+  const states = new Map<string, ReturnType<typeof createConnectorStateStore>>();
+  const stateStore = (adapterId: string, signal: AbortSignal): ConnectorStateStore => {
+    let store = states.get(adapterId);
+    if (!store) {
+      store = createConnectorStateStore({
+        podRoot: o.podRoot,
+        adapterId,
+        webId: o.webId,
+        fetch: o.podFetch,
+      });
+      states.set(adapterId, store);
+    }
+    const bound = store;
+    return { read: () => bound.read(signal), write: (state) => bound.write(state, signal) };
+  };
   let scheduler: ConnectorScheduler | undefined;
-  let pending: Promise<void> | undefined;
-  const connections = (signal?: AbortSignal) =>
-    createConnectionStore({ podRoot: o.podRoot, webId: o.webId, fetch: o.podFetch, signal });
-  function build(list: readonly ConnectorConnection[]) {
+  let seen = -1;
+  function build(rows: readonly unknown[]) {
     return new ConnectorScheduler({
-      connections: list,
+      connections: rows,
       tokenSource: o.tokenSource ?? pendingVaultTokenSource,
       // No implicit provider traffic: an enabled vault must explicitly supply its transport.
       sourceFetch:
@@ -83,37 +124,38 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
           fetch: o.podFetch,
           signal,
         }),
-      stateStore: (adapterId, signal) =>
-        createConnectorStateStore({
-          podRoot: o.podRoot,
-          adapterId,
-          webId: o.webId,
-          fetch: o.podFetch,
-          signal,
-        }),
-      saveConnection: (c, signal) => connections(signal).update(c),
-      registry: o.registry,
+      stateStore,
+      saveConnection,
+      registry,
       now: o.now,
       sleep: o.sleep,
       runner: o.runner,
+      onRunError: () => o.log?.(scrubLog("Connector run failed")),
     });
   }
+  /** Conditional GET of the settings; re-parse and refresh the scheduler only on change. */
+  async function refresh(signal?: AbortSignal): Promise<ConnectorScheduler> {
+    const rows = await poll.read(signal);
+    signal?.throwIfAborted();
+    if (scheduler && poll.revision === seen) return scheduler;
+    if (scheduler) await scheduler.setConnections(rows ?? []);
+    else scheduler = build(rows ?? []);
+    seen = poll.revision;
+    return scheduler;
+  }
+  let pending: Promise<void> | undefined;
   const tick = (signal?: AbortSignal): Promise<void> => {
     if (pending) return pending;
     if (signal?.aborted) return Promise.resolve();
     pending = (async () => {
-      const list = (await connections(signal).read()) ?? [];
+      const current = await refresh(signal);
       if (signal?.aborted) return;
-      if (scheduler) await scheduler.setConnections(list, signal);
-      else scheduler = build(list);
-      await scheduler.tick(signal);
+      await current.tick(signal);
       if (!signal?.aborted) o.log?.(scrubLog("Connectors pass complete"));
     })()
       .catch((error) => {
-        if (!signal?.aborted) {
-          o.log?.(scrubLog("Connectors pass failed"));
-          throw error;
-        }
+        // The caller (the daemon's once mode) logs a fixed failure message and continues.
+        if (!signal?.aborted) throw error;
       })
       .finally(() => {
         pending = undefined;
@@ -123,49 +165,72 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
   return {
     tick,
     async run(signal) {
-      while (!signal.aborted) {
-        await tick(signal);
-        if (!signal.aborted) await (o.sleep ?? pause)(30_000, signal);
+      let failures = 0;
+      try {
+        while (!signal.aborted) {
+          try {
+            (await refresh(signal)).dispatch(signal);
+            failures = 0;
+          } catch {
+            if (signal.aborted) break;
+            failures++;
+            o.log?.(scrubLog("Connectors pass failed"));
+          }
+          if (!signal.aborted) await (o.sleep ?? pause)(connectorsPollDelay(failures), signal);
+        }
+      } finally {
+        // Workers observe the same signal; drain them before the host drains its executor.
+        await scheduler?.idle();
       }
     },
+    /** Read-only: bounded GETs only, never ACL, settings or state writes. */
     async list(signal) {
-      const list = (await connections(signal).read()) ?? [];
-      const states = new Map<
+      const rows = (await settings().peek(signal)) ?? [];
+      const { connections, invalid } = parseConnectorConnections(rows, registry);
+      const docs = new Map<
         string,
-        Awaited<ReturnType<ReturnType<typeof createConnectorStateStore>["read"]>>
+        Awaited<ReturnType<ReturnType<typeof createConnectorStateStore>["peek"]>>
       >();
       const result: ConnectorConnectionHealth[] = [];
-      const seen = new Set<string>();
-      for (const c of list) {
-        if (!states.has(c.connectorId))
-          states.set(
+      const now = (o.now ?? Date.now)();
+      for (const c of connections) {
+        if (!docs.has(c.connectorId))
+          docs.set(
             c.connectorId,
             await createConnectorStateStore({
               podRoot: o.podRoot,
               adapterId: c.connectorId,
               webId: o.webId,
               fetch: o.podFetch,
-              signal,
-            }).read(),
+            }).peek(signal),
           );
-        const state = states.get(c.connectorId);
-        const account = state?.accounts
-          ? state.accounts[c.account]
-          : seen.has(c.connectorId)
-            ? undefined
-            : state;
-        seen.add(c.connectorId);
+        const sharing =
+          connections.filter((other) => other.connectorId === c.connectorId).length +
+          invalid.filter((row) => row.connectorId === c.connectorId).length;
+        const account = connectorAccountState(docs.get(c.connectorId), c.account, sharing);
         result.push({
           connectorId: c.connectorId,
           account: c.account,
           enabled: c.enabled,
           health: connectorHealth(
-            { state: account, intervalMinutes: c.intervalMinutes, status: c.status },
-            (o.now ?? Date.now)(),
+            {
+              state: account,
+              intervalMinutes: c.intervalMinutes,
+              status: c.status,
+              enabledAt: c.enabledAt,
+            },
+            now,
           ),
           ...(account?.health?.nextRunAt ? { nextRunAt: account.health.nextRunAt } : {}),
         });
       }
+      for (const row of invalid)
+        result.push({
+          connectorId: row.connectorId ?? "-",
+          account: row.account ?? "-",
+          enabled: false,
+          health: "invalid-config",
+        });
       return result;
     },
   };

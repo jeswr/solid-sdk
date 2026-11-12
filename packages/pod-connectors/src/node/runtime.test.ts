@@ -143,7 +143,9 @@ describe("owner-only checkpoint", () => {
       accessToken: "must-not-save",
       error: "must-not-save",
     } as ConnectorState);
-    expect(requests.map((r) => r.method)).toEqual(["HEAD", "PUT", "GET", "PUT"]);
+    // ACL, read, ACL re-installed before creating content, then the content.
+    expect(requests.map((r) => r.method)).toEqual(["HEAD", "PUT", "GET", "PUT", "PUT"]);
+    expect(requests.at(-2)?.url).toBe(`${checkpoint.url}.acl`);
     expect(requests.at(-1)?.headers.get("if-none-match")).toBe("*");
     expect(pod.get(checkpoint.url)).not.toContain("must-not-save");
     const rules = [

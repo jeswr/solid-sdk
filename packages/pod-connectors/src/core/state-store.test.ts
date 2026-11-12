@@ -7,7 +7,7 @@ import { ConnectorScheduler } from "./scheduler.js";
 import { connectorState } from "./state.js";
 import { createConnectorStateStore } from "./state-store.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
-import type { ConnectorState } from "./types.js";
+import { ConnectionRemovedError, type ConnectorState } from "./types.js";
 
 const AT = "2026-11-01T12:00:00.000Z";
 const base: ConnectorState = {
@@ -53,7 +53,7 @@ it("writes health with If-Match and merges another account and newer checkpoint 
           ...base,
           accounts: {
             other: { ...base, cursor: "unrelated" },
-            fixture: { ...base, lastSync: "2026-11-01T13:00:00.000Z", cursor: "newer-host" },
+            fixture: { ...base, lastSync: "2026-11-01T12:01:00.000Z", cursor: "newer-host" },
           },
         }),
         headers: { "content-type": "application/json" },
@@ -98,7 +98,14 @@ it("protects connection settings before reading, caps records and merges enablem
   await store.write([
     { connectorId: "spotify", account: "fixture", enabled: true, intervalMinutes: 60 },
   ]);
-  expect(h.requests.map((r) => r.method)).toEqual(["HEAD", "PUT", "GET", "PUT"]);
+  // ACL, read, ACL again before creating content, then the content.
+  expect(h.requests.map((r) => [r.method, r.url.endsWith(".acl")])).toEqual([
+    ["HEAD", false],
+    ["PUT", true],
+    ["GET", false],
+    ["PUT", true],
+    ["PUT", false],
+  ]);
   let conflict = true;
   const io: typeof fetch = async (input, init) => {
     if (String(input) === store.url && init?.method === "PUT" && conflict) {
@@ -132,7 +139,7 @@ it("protects connection settings before reading, caps records and merges enablem
   ]);
   await expect(
     store.update({ connectorId: "github", account: "missing", enabled: true }),
-  ).rejects.toThrow("removed");
+  ).rejects.toBeInstanceOf(ConnectionRemovedError);
 });
 it.each([
   undefined,
@@ -214,4 +221,105 @@ it("requires an explicit Pod transport instead of falling back to ambient fetch"
     createConnectorStateStore({ ...h.options, adapterId: "spotify", fetch: undefined as never }),
   ).toThrow("transport is required");
   expect(h.requests).toEqual([]);
+});
+
+it("protects the ACL once per store instance and polls with a conditional GET", async () => {
+  const h = fixture();
+  const seed = createConnectionStore(h.options);
+  await seed.read();
+  await seed.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  h.requests.length = 0;
+  let notModified = 0;
+  const io: typeof fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    const tag = headers.get("if-none-match");
+    if ((init?.method ?? "GET") === "GET" && tag && tag !== "*") {
+      const current = await h.io(input, { method: "GET" });
+      if (current.headers.get("etag") === tag) {
+        notModified++;
+        h.requests.push({ url: String(input), method: "GET", headers });
+        return new Response(null, { status: 304, headers: { etag: tag } });
+      }
+    }
+    return h.io(input, init);
+  };
+  const store = createConnectionStore({ ...h.options, fetch: io });
+  const first = await store.read();
+  const revision = store.revision;
+  expect(await store.read()).toBe(first);
+  expect(await store.read()).toBe(first);
+  expect(store.revision).toBe(revision);
+  expect(notModified).toBe(2);
+  const aclWrites = () =>
+    h.requests.filter((r) => r.method === "PUT" && r.url.endsWith(".acl")).length;
+  expect(aclWrites()).toBe(1);
+  expect(h.requests.filter((r) => r.method === "HEAD")).toHaveLength(1);
+  // A change by another writer is re-parsed once and bumps the revision.
+  await seed.read();
+  await seed.write([{ connectorId: "spotify", account: "fixture", enabled: false }]);
+  const before = aclWrites();
+  expect(await store.read()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: false },
+  ]);
+  expect(store.revision).toBe(revision + 1);
+  expect(aclWrites()).toBe(before);
+});
+it("re-parses only when a server ignoring If-None-Match returns a new validator", async () => {
+  const h = fixture();
+  const store = createConnectionStore(h.options);
+  await store.read();
+  await store.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  const value = await store.read();
+  const revision = store.revision;
+  expect(await store.read()).toBe(value);
+  expect(store.revision).toBe(revision);
+});
+it("peeks without ACL or data writes", async () => {
+  const h = fixture();
+  const seed = createConnectionStore(h.options);
+  await seed.read();
+  await seed.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  h.requests.length = 0;
+  const reader = createConnectionStore(h.options);
+  expect(await reader.peek()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: true },
+  ]);
+  expect(await createConnectorStateStore({ ...h.options, adapterId: "github" }).peek()).toBe(
+    undefined,
+  );
+  expect(h.requests.map((r) => r.method)).toEqual(["GET", "GET"]);
+});
+it("preserves rows it cannot interpret and stamps enabledAt on update", async () => {
+  const h = fixture(),
+    store = createConnectionStore(h.options);
+  await store.read();
+  const rows = [
+    {
+      connectorId: "spotify",
+      account: "fixture",
+      enabled: false,
+      status: "needs-reauth",
+      label: "x",
+    },
+    { connectorId: "Bad Id", account: "a", enabled: true },
+    42,
+  ];
+  await store.write(rows);
+  await store.update({
+    connectorId: "spotify",
+    account: "fixture",
+    enabled: true,
+    enabledAt: "2026-11-01T12:00:00.000Z",
+  });
+  expect(await store.read()).toEqual([
+    {
+      connectorId: "spotify",
+      account: "fixture",
+      enabled: true,
+      label: "x",
+      enabledAt: "2026-11-01T12:00:00.000Z",
+    },
+    rows[1],
+    42,
+  ]);
 });

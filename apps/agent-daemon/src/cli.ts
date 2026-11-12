@@ -28,10 +28,18 @@ export interface CliIo {
   confirm(prompt: string): Promise<boolean>;
   signal: AbortSignal;
 }
+/** What a lazy composition is asked to include; `connectors` mirrors `awp run --connectors`. */
+export interface CompositionRequest {
+  readonly connectors: boolean;
+}
+export interface RunOptions {
+  /** Opt into the scheduled connectors job (off by default). */
+  readonly connectors?: boolean;
+}
 export interface CliHost {
   connectors?: ConnectorsJob["list"];
-  run(signal: AbortSignal): Promise<void>;
-  once(signal?: AbortSignal): Promise<void>;
+  run(signal: AbortSignal, options?: RunOptions): Promise<void>;
+  once(signal?: AbortSignal, options?: RunOptions): Promise<void>;
   halt(): Promise<void>;
   status(): Promise<unknown>;
   accounts(): Promise<readonly { id: string; binding: string; enabled: boolean }[]>;
@@ -43,7 +51,11 @@ export interface CliHost {
 export interface CliHostOptions {
   /** Lazy authenticated owner-only read, independent of channel/model composition. */
   connectors?: ConnectorsJob["list"];
-  daemon: Daemon | (() => Promise<AuthenticatedComposition>);
+  /**
+   * A composed daemon, or a lazy factory. The factory receives the CLI's opt-in request and
+   * passes `connectors: { enabled: request.connectors }` to composeDaemon.
+   */
+  daemon: Daemon | ((request: CompositionRequest) => Promise<AuthenticatedComposition>);
   local: ReturnType<typeof createLocalState>;
   accounts: CliHost["accounts"];
   credentials: Deps;
@@ -53,10 +65,16 @@ export interface CliHostOptions {
   launchCommand: readonly string[];
 }
 export function createCliHost(o: CliHostOptions): CliHost {
-  async function execute(mode: "run" | "once", signal?: AbortSignal) {
-    const composition = typeof o.daemon === "function" ? await o.daemon() : undefined;
+  async function execute(mode: "run" | "once", signal?: AbortSignal, options: RunOptions = {}) {
+    const connectors = options.connectors === true;
+    // A pre-composed daemon cannot be asked to opt in; fail closed instead of ignoring it.
+    if (connectors && typeof o.daemon !== "function")
+      throw new Error("Connectors job is not configured");
+    const composition = typeof o.daemon === "function" ? await o.daemon({ connectors }) : undefined;
     const daemon = composition?.daemon ?? (o.daemon as Daemon);
     try {
+      if (connectors && !composition?.connectors)
+        throw new Error("Connectors job is not configured");
       if (mode === "once") await daemon.once(signal);
       else if (signal) await daemon.run(signal);
       else throw new Error("Run requires an abort signal");
@@ -69,7 +87,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
       o.connectors ??
       (async (signal) => {
         if (typeof o.daemon !== "function") throw new Error("Connectors job is not configured");
-        const composition = await o.daemon();
+        const composition = await o.daemon({ connectors: true });
         try {
           if (!composition.connectors) throw new Error("Connectors job is not configured");
           return await composition.connectors.list(signal);
@@ -77,8 +95,8 @@ export function createCliHost(o: CliHostOptions): CliHost {
           await composition.close();
         }
       }),
-    run: (signal) => execute("run", signal),
-    once: (signal) => execute("once", signal),
+    run: (signal, options) => execute("run", signal, options),
+    once: (signal, options) => execute("once", signal, options),
     halt: () => o.local.halt(),
     status: () => o.local.status(),
     accounts: o.accounts,
@@ -93,7 +111,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
   };
 }
 const usage =
-  "Usage: awp run | once | halt | status | accounts | connectors | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
+  "Usage: awp run [--connectors] | once [--connectors] | halt | status | accounts | connectors | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
 const compositionRequired = "awp requires a trusted composition module (Node --import)";
 function readLedger(path: string): readonly LedgerEntry[] {
@@ -172,7 +190,9 @@ export async function runCli(
       io.print(compositionRequired);
       return 1;
     }
-    if (rest.length && !["login", "stats", "audit"].includes(command ?? "")) {
+    const connectorsFlag =
+      (command === "run" || command === "once") && rest.length === 1 && rest[0] === "--connectors";
+    if (rest.length && !connectorsFlag && !["login", "stats", "audit"].includes(command ?? "")) {
       io.print(usage);
       return 2;
     }
@@ -183,9 +203,15 @@ export async function runCli(
         if (connections.length > 1_000) throw new Error("Too many connections");
         for (const c of connections) {
           if (
-            !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.connectorId) ||
-            !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(c.account) ||
-            !["ok", "stale", "failing", "needs-reauth"].includes(c.health)
+            !["ok", "stale", "failing", "needs-reauth", "invalid-config"].includes(c.health) ||
+            !(
+              /^[a-z0-9][a-z0-9-]{0,63}$/.test(c.connectorId) ||
+              (c.health === "invalid-config" && c.connectorId === "-")
+            ) ||
+            !(
+              /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(c.account) ||
+              (c.health === "invalid-config" && c.account === "-")
+            )
           )
             throw new Error("Invalid connector summary");
           io.print(
@@ -195,10 +221,12 @@ export async function runCli(
         break;
       }
       case "run":
-        await host.run(io.signal);
+        if (connectorsFlag) await host.run(io.signal, { connectors: true });
+        else await host.run(io.signal);
         break;
       case "once":
-        await host.once(io.signal);
+        if (connectorsFlag) await host.once(io.signal, { connectors: true });
+        else await host.once(io.signal);
         break;
       case "halt":
         await host.halt();

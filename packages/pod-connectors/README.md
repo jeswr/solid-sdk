@@ -744,46 +744,80 @@ checkpoint retention on source errors, and Dropbox deletions without production 
 ## Scheduled connectors (CON-A2 / sst-q0cp)
 
 The root entry exports `ConnectorScheduler`, `TokenSource`, `ReauthoriseError`,
-`connectorConnections`, `createConnectionStore`, `createConnectorStateStore`,
-`connectorHealth` and `connectorHealthSummary`. No host environment or vault is
-read by the scheduler. Hosts inject their connection settings, token source, a
-pristine source fetch, `podWriter(connection, signal)`,
-`stateStore(connectorId, signal)` and `saveConnection(connection, signal)`.
-The last port persists enablement/status changes in the host's settings store.
+`ConnectionRemovedError`, `parseConnectorConnections`, `connectorConnections`,
+`createConnectionStore`, `createConnectorStateStore`, `connectorHealth` and
+`connectorHealthSummary`. No host environment or vault is read by the scheduler.
+Hosts inject their connection settings, token source, a pristine source fetch,
+`podWriter(connection, signal)`, `stateStore(connectorId, signal)` and
+`saveConnection(connection, signal)`. The last port persists enablement/status changes
+in the host's settings store and throws `ConnectionRemovedError` when the row is gone.
 `createConnectionStore` supplies an owner-only JSON implementation at
 `<pod>/integrations/connections.json`; it accepts an array like:
 
 ```json
-[{ "connectorId": "spotify", "account": "primary", "intervalMinutes": 60, "enabled": true }]
+[{ "connectorId": "spotify", "account": "primary", "intervalMinutes": 60, "enabled": true,
+   "enabledAt": "2026-11-01T12:00:00.000Z" }]
 ```
 
 Account ids are opaque host labels (1–128 ASCII letters/digits/dots/underscores/hyphens,
 starting with a letter/digit), never addresses or credentials. Lists are limited to
-1,000 unique connector/account pairs and 256 KiB. Only registered OAuth API adapters
-can be scheduled; file imports remain manual. API catalog rows expose
+1,000 rows and 256 KiB; only a non-array or oversized document is rejected as a whole.
+Rows are validated individually: a malformed row, every copy of a duplicated
+connector/account pair, an unknown connector id or a non-`oauth-pkce` adapter is
+skipped and reported by `scheduler.invalid()` / `parseConnectorConnections(rows, registry)`
+as `{ index, connectorId?, account?, status: 'invalid-config' }` (ids echoed only when
+syntactically valid; no raw text). The store's `update` preserves rows it cannot
+interpret verbatim. File imports remain manual. API catalog rows expose
 `defaultIntervalMinutes` (currently 60). Requested intervals below 15 minutes are
 floored to 15; nonpositive/nonfinite values and intervals above one year are refused.
 
-`tick(signal?)` runs a due pass; overlapping ticks join the same pass. `run(signal)`
-provides a cancellable 30-second polling loop, with injectable `now`, `sleep` and
-`random` ports. Hosts with an existing loop use `tick`. Default concurrency is two
-(maximum 16), and accounts sharing a connector container run serially to preserve
-the runner's reconciliation contract. Separate hosts still need an exclusive host
-lease or other external serialization for imports into the same connector container;
-conditional health updates do not provide a distributed import lock.
+**`enabledAt`** is the durable re-enable signal. Every writer that enables a connection
+(the scheduler's `setEnabled`, and owner UIs) must set `enabled: true`, remove `status`,
+and set `enabledAt` to the current ISO instant. A needs-reauth latch clears in any
+process when `enabledAt` is newer than the latching run's `health.lastRunEndedAt`;
+an unchanged `enabledAt`, or one more than five minutes in the future, keeps the latch.
+
+The scheduler is a continuous worker pool (default cap two, maximum 16): whenever a
+worker frees up it starts the connection that is most overdue. It keeps single-flight
+per connection, and accounts sharing a connector container run serially to preserve
+the runner's reconciliation contract. `tick(signal?)` runs everything due (each
+connection at most once) and resolves when those runs drain; overlapping ticks join.
+`dispatch(signal?)` fills free workers without waiting, for hosts with their own poll
+loop; `idle()` waits for in-flight runs. `run(signal)` is a cancellable 30-second
+dispatch loop that drains workers on exit, with injectable `now`, `sleep` and
+`random` ports. Separate hosts still need an exclusive host lease or other external
+serialization for imports into the same connector container; conditional health
+updates do not provide a distributed import lock.
+
+Due times come from a cached snapshot of each connector's state, loaded once, refreshed
+after every run and reloaded when that connector's settings change. A pass reads a
+state document only for connections that are due (and then re-checks against it).
+`setConnections` replaces settings without waiting for in-flight runs.
+
+One connection never fails another: a run failure is recorded in its health, and a
+failure outside the import (state or settings persistence) backs off that connection
+alone in memory, reported through the optional `onRunError(connection, errorClass)`
+hook with a fixed class. Neither rejects `tick`. A connection removed mid-run keeps its
+health and skips its settings write quietly.
 
 Successful/partial runs schedule the next interval from completion. Failures retry
 with exponential delays starting at 15 minutes, multiplied by random jitter in
-[1, 1.25], capped at 24 hours. A success resets the failure counter.
-`ReauthoriseError` persists `{ enabled: false, status: 'needs-reauth' }` and latches
-health without a next-run time, including across restart. Explicit
-`setEnabled(connectorId, account, true)` clears the persisted latch and enables the
-host setting; `setConnections` also handles an observed disabled-to-enabled
-transition. When restoring an already-enabled list over latched state, call
-`setEnabled` explicitly so a failed settings write cannot silently re-enable it.
-`stop()` aborts and drains active work. Run signals reach both the runner and
-source/Pod transports. After cancellation no new state/config write starts; the
-previous checkpoint remains due for replay, as for a manually cancelled import.
+[1, 1.25], capped at 24 hours; a `RateLimitedError` delays at least its
+`retryAfterSeconds` (same cap). A success resets the failure counter.
+`ReauthoriseError`, or a second consecutive source 401/403 (`unauthorised`), persists
+`{ enabled: false, status: 'needs-reauth' }` and latches health without a next-run time,
+including across restart; for the 401/403 case the optional
+`TokenSource.invalidate({ connectorId, account })` is called (best effort). Explicit
+`setEnabled(connectorId, account, true)` stamps `enabledAt`, clears the persisted latch
+and enables the host setting. `stop()` aborts and drains active work. Run signals reach
+both the runner and source/Pod transports. After cancellation no new state/config write
+starts; the previous checkpoint remains due for replay, as for a manually cancelled import.
+
+Clock skew: stored next-run times are clamped to at most `now + max(interval, 24 h)`.
+Timestamps more than five minutes ahead are untrusted: they lose `mergeAccountState`
+comparisons, and `connectorHealth` reports `stale` instead of `ok`. When the stored
+attempt is still the one a run started from, the run's own health and checkpoint win
+even if a backward clock jump makes the stored values look newer.
 
 The existing owner-only `integrations/<id>/state.json` stays backward compatible.
 Its `connectedAt`, `lastSync`, `cursor`, `lastOutcome` and `counts` retain their
@@ -794,8 +828,12 @@ checkpoint meaning. Scheduler state adds:
   allowlisted `errorClass`, `consecutiveFailures`, effective `intervalMinutes`
   and optional `nextRunAt`.
 - `accounts`: independent checkpoints and health keyed by opaque account id.
-  The old account-free checkpoint migrates to the first configured account only.
-  The top-level checkpoint/health summarize the most recent connector activity.
+  An account-free legacy checkpoint migrates only when exactly one settings row names
+  that connector; otherwise the legacy cursor is dropped and the account imports in full.
+  The scheduler never rewrites the root checkpoint fields of an existing document, so the
+  legacy node CLI keeps reading the root as before; a document the scheduler creates
+  gets a root without `cursor`/`lastSync`. The root `health` reports the most recent
+  trusted attempt.
 
 Health change counts describe RDF documents; unchanged comparison excludes run
 provenance. They are bounded by document count and also surface as
@@ -809,16 +847,24 @@ import with skipped source records and still advances its successful checkpoint.
 State requires a strong ETag and sends `If-Match` (or `If-None-Match: *` on creation).
 On 412, the scheduler rereads and reapplies its per-account merge, at most three
 attempts. Concurrent other-account state and newer successful cursors survive.
-Both settings and state install the advertised in-container owner-only WAC ACL
-before accessing JSON, refuse redirects and bound response bytes. Incidental
+Both settings and state install the advertised in-container owner-only WAC ACL once
+per store instance (memoised after success) and again before creating the resource;
+later reads never rewrite it. Reads send `If-None-Match` with the last ETag and
+re-parse only on change; `revision` increments when new content is observed.
+`peek()` is a read-only GET (no ACL, validator or cache side effects) for listings.
+Stores refuse redirects and bound response bytes; read/write accept a per-call signal.
+One store instance serves one read→write sequence at a time. Incidental
 fields, provider messages, URLs and tokens are never copied into health. Error
 codes are `reauthorise`, `rate-limited`, `unauthorised`, `conflict`, `source-or-pod`,
 `unexpected` and `aborted` (reserved; cancelled runs start no health writes).
 
 `connectorHealthSummary(states, now)` returns counts `{ ok, stale, failing,
-'needs-reauth', total }`. Inputs may be checkpoints directly or
-`{ state, intervalMinutes?, status? }` for each connection. For a multi-account
-connector, pass its individual `state.accounts[account]` entries. Reauth takes
-precedence, then the latest failure, then staleness at three intervals without a
-success. A partial success refreshes that time; an absent checkpoint is stale.
-Pass epoch milliseconds explicitly for deterministic UI snapshots and tests.
+'needs-reauth', 'invalid-config', total }`. Inputs may be checkpoints directly or
+`{ state, intervalMinutes?, status?, enabledAt? }` for each connection; pass
+`{ status: 'invalid-config' }` for each skipped row. For a multi-account connector, pass
+its individual `state.accounts[account]` entries (`connectorAccountState` applies the
+migration rule). Invalid configuration takes precedence, then reauth (a latch cleared
+by a newer `enabledAt` reports `stale` until its run), then the latest failure, then
+staleness at three intervals without a trusted success. A partial success refreshes
+that time; an absent checkpoint is stale. Pass epoch milliseconds explicitly for
+deterministic UI snapshots and tests.

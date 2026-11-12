@@ -1194,6 +1194,85 @@ it("aborts and drains background connectors before executor drain and lease rele
   expect(h.state.held()).toBe(false);
 });
 
+it("keeps ingesting when the connectors job fails in once mode and logs only a fixed message", async () => {
+  const h = harness(),
+    log = vi.fn();
+  const connectors = {
+    tick: vi.fn(async () => {
+      throw new Error("token=secret https://private.example");
+    }),
+    run: vi.fn(),
+    list: vi.fn(),
+  };
+  await createDaemon({ ...h.options, accounts: [], connectors, log }).once();
+  expect(connectors.tick).toHaveBeenCalledOnce();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  expect(log).toHaveBeenCalledWith("Connectors pass failed");
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret|private/);
+  expect(h.state.held()).toBe(false);
+});
+it("never faults the run loop when the background connectors job rejects", async () => {
+  const h = harness(),
+    controller = new AbortController(),
+    log = vi.fn();
+  const connectors = {
+    tick: vi.fn(),
+    list: vi.fn(),
+    run: vi.fn(async () => {
+      throw new Error("secret");
+    }),
+  };
+  const run = createDaemon({ ...h.options, accounts: [], connectors, log }).run(controller.signal);
+  await vi.waitFor(() => expect(log).toHaveBeenCalledWith("Connectors pass failed"));
+  await vi.waitFor(() => expect(h.executor.runOutboxOnce).toHaveBeenCalled());
+  controller.abort();
+  await expect(run).resolves.toBeUndefined();
+  expect(h.state.held()).toBe(false);
+});
+it("awp run/once --connectors asks the lazy composition to opt in and fails closed without a job", async () => {
+  const h = harness(),
+    close = vi.fn(async () => undefined);
+  const daemon = createDaemon({ ...h.options, accounts: [] });
+  const job = { list: vi.fn(), tick: vi.fn(), run: vi.fn() };
+  const composition = vi.fn(async (request: { connectors: boolean }) => ({
+    auth: {} as never,
+    daemon,
+    ...(request.connectors ? { connectors: job } : {}),
+    close,
+  }));
+  const host = createCliHost({
+    daemon: composition,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  const io = { print: vi.fn(), confirm: vi.fn(), signal: new AbortController().signal };
+  expect(await runCli(["once"], host, io)).toBe(0);
+  expect(composition).toHaveBeenLastCalledWith({ connectors: false });
+  expect(await runCli(["once", "--connectors"], host, io)).toBe(0);
+  expect(composition).toHaveBeenLastCalledWith({ connectors: true });
+  expect(await runCli(["once", "--connector"], host, io)).toBe(2);
+  expect(await runCli(["run", "--connectors", "extra"], host, io)).toBe(2);
+  composition.mockImplementationOnce(async () => ({ auth: {} as never, daemon, close }));
+  const before = h.executor.runOutboxOnce.mock.calls.length;
+  expect(await runCli(["once", "--connectors"], host, io)).toBe(1);
+  expect(h.executor.runOutboxOnce.mock.calls.length).toBe(before);
+  expect(close).toHaveBeenCalledTimes(3);
+  const composed = createCliHost({
+    daemon,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  expect(await runCli(["once", "--connectors"], composed, io)).toBe(1);
+});
+
 it("awp connectors uses a lazy composed job and closes its pod session without running the daemon", async () => {
   const h = harness(),
     close = vi.fn(async () => undefined),
@@ -1218,6 +1297,7 @@ it("awp connectors uses a lazy composed job and closes its pod session without r
   const signal = new AbortController().signal;
   expect(await runCli(["connectors"], host, { print: vi.fn(), confirm: vi.fn(), signal })).toBe(0);
   expect(list).toHaveBeenCalledWith(signal);
+  expect(composition).toHaveBeenCalledWith({ connectors: true });
   expect(close).toHaveBeenCalledOnce();
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });

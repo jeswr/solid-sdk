@@ -287,6 +287,14 @@ export interface ConnectorRunHealth {
 /** The vault lane supplies this port. Credentials must never enter persisted state. */
 export interface TokenSource {
   accessToken(connectorId: string, account: string): Promise<string>;
+  /**
+   * Optional: discard a cached grant after the source rejected it twice in a row
+   * (two consecutive 401/403 outcomes). Failures here never fail the run.
+   */
+  invalidate?(connection: {
+    readonly connectorId: string;
+    readonly account: string;
+  }): Promise<void> | void;
 }
 
 /** A missing or revoked vault grant requires explicit owner re-enablement. */
@@ -294,6 +302,14 @@ export class ReauthoriseError extends Error {
   constructor() {
     super("Connector authorisation is required.");
     this.name = "ReauthoriseError";
+  }
+}
+
+/** The host settings row disappeared while a run was in flight; callers skip quietly. */
+export class ConnectionRemovedError extends Error {
+  constructor() {
+    super("Connector connection was removed.");
+    this.name = "ConnectionRemovedError";
   }
 }
 

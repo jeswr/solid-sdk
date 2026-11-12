@@ -40,38 +40,56 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
   expect(mocks.storage).toHaveBeenCalledWith({ fetch: io, storage: options.storageRoot });
   expect(logout).toHaveBeenCalledOnce();
   const state = createMemoryState();
-  const composition = await composeDaemon({
+  const prepare = async () =>
+    ({
+      accounts: [],
+      ...state,
+      agentWebId: "https://pod.example/agent#me",
+      executor: {
+        drain: vi.fn(),
+        runOutboxOnce: vi.fn(),
+        onApprovalChange: vi.fn(),
+        onControlOrMandateChange: vi.fn(),
+        transmit: vi.fn(),
+      },
+      gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
+      proposerContext: {
+        instructions: "fixture",
+        memoryRecall: vi.fn(),
+        pod: {
+          root: options.storageRoot,
+          webId: options.ownerWebId,
+          read: vi.fn(),
+          list: vi.fn(),
+          write: vi.fn(),
+          delete: vi.fn(),
+        },
+      },
+      isFlagged: async () => false,
+      proposalWritten: vi.fn(),
+      audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
+    }) satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">;
+  const composition = await composeDaemon({ ...options, prepare });
+  // Scheduled connector sync is opt-in: no job unless the config enables it.
+  expect(composition.connectors).toBeUndefined();
+  const injected = { tick: vi.fn(), run: vi.fn(), list: vi.fn() };
+  const ignored = await composeDaemon({
     ...options,
-    prepare: async () =>
-      ({
-        accounts: [],
-        ...state,
-        agentWebId: "https://pod.example/agent#me",
-        executor: {
-          drain: vi.fn(),
-          runOutboxOnce: vi.fn(),
-          onApprovalChange: vi.fn(),
-          onControlOrMandateChange: vi.fn(),
-          transmit: vi.fn(),
-        },
-        gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
-        proposerContext: {
-          instructions: "fixture",
-          memoryRecall: vi.fn(),
-          pod: {
-            root: options.storageRoot,
-            webId: options.ownerWebId,
-            read: vi.fn(),
-            list: vi.fn(),
-            write: vi.fn(),
-            delete: vi.fn(),
-          },
-        },
-        isFlagged: async () => false,
-        proposalWritten: vi.fn(),
-        audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
-      }) satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">,
+    connectors: { enabled: false },
+    prepare: async () => ({ ...(await prepare()), connectors: injected }),
   });
+  expect(ignored.connectors).toBeUndefined();
+  const enabled = await composeDaemon({ ...options, connectors: { enabled: true }, prepare });
+  expect(enabled.connectors).toEqual(
+    expect.objectContaining({ tick: expect.any(Function), run: expect.any(Function) }),
+  );
+  expect(io).not.toHaveBeenCalledWith(expect.stringContaining("integrations/"), expect.anything());
+  const explicit = await composeDaemon({
+    ...options,
+    connectors: { enabled: true },
+    prepare: async () => ({ ...(await prepare()), connectors: injected }),
+  });
+  expect(explicit.connectors).toBe(injected);
   expect(mocks.notifications).toHaveBeenCalledWith({
     fetch: io,
     storage: { root: options.storageRoot },

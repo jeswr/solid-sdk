@@ -14,6 +14,7 @@ import {
   connectorConnections,
   connectorNextRunAt,
   MAX_CONNECTOR_BACKOFF_MS,
+  parseConnectorConnections,
 } from "./scheduler.js";
 import {
   connectorState,
@@ -22,8 +23,8 @@ import {
   updateConnectorState,
 } from "./state.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
-import type { ConnectorState, IntegrationAdapter, PodWriter } from "./types.js";
-import { ReauthoriseError } from "./types.js";
+import type { ConnectorRunHealth, ConnectorState, IntegrationAdapter, PodWriter } from "./types.js";
+import { ConnectionRemovedError, ReauthoriseError } from "./types.js";
 import { CLASSES, MusicRecording } from "./vocab.js";
 
 const AT = Date.parse("2026-11-01T12:00:00.000Z");
@@ -121,8 +122,8 @@ describe("connection validation and due computation", () => {
       connectorConnections([{ ...connection(), intervalMinutes: 1 }])[0]?.intervalMinutes,
     ).toBe(15);
     expect(connectorNextRunAt(connection(), undefined)).toBe(0);
-    expect(connectorNextRunAt(connection(), legacy)).toBe(AT + 3_600_000);
-    expect(connectorNextRunAt(connection(), legacy, 120)).toBe(AT + 7_200_000);
+    expect(connectorNextRunAt(connection(), legacy, 60, AT)).toBe(AT + 3_600_000);
+    expect(connectorNextRunAt(connection(), legacy, 120, AT)).toBe(AT + 7_200_000);
     expect(connectorNextRunAt({ ...connection(), enabled: false }, legacy)).toBeUndefined();
     const h = harness([
       { ...connection(), intervalMinutes: 1 },
@@ -163,8 +164,25 @@ describe("connection validation and due computation", () => {
     expect(() => connectorConnections([connection(), connection()])).toThrow();
     for (const account of ["../state", "a@b.example", "x\nsecret", "x".repeat(129), "__proto__"])
       expect(() => connectorConnections([{ ...connection(), account }])).toThrow();
-    expect(() => harness([connection("netflix")])).toThrow();
-    expect(() => harness([connection("unknown")])).toThrow();
+    // Unschedulable rows are skipped individually instead of rejecting the list.
+    const skipped = harness([connection("netflix"), connection("unknown"), connection()]);
+    expect(skipped.scheduler.list().map((c) => c.connectorId)).toEqual(["spotify"]);
+    expect(skipped.scheduler.invalid()).toEqual([
+      {
+        index: 0,
+        connectorId: "netflix",
+        account: "fixture",
+        status: "invalid-config",
+        errorClass: "invalid-config",
+      },
+      {
+        index: 1,
+        connectorId: "unknown",
+        account: "fixture",
+        status: "invalid-config",
+        errorClass: "invalid-config",
+      },
+    ]);
     for (const concurrency of [0, 17, 1.5, NaN])
       expect(() => harness(undefined, { concurrency })).toThrow();
   });
@@ -277,11 +295,16 @@ describe("scheduler execution", () => {
       consecutiveFailures: 0,
     });
   });
-  it("recovers when the host refreshes a disabled connection to enabled", async () => {
+  it("recovers when the host refreshes a disabled connection to enabled with a newer enabledAt", async () => {
     const h = harness();
     h.tokenSource.accessToken.mockRejectedValueOnce(new ReauthoriseError());
     await h.scheduler.tick();
+    // Flipping enabled without a newer enabledAt keeps the durable latch.
     await h.scheduler.setConnections([connection()]);
+    await h.scheduler.tick();
+    expect(h.runner).not.toHaveBeenCalled();
+    h.setNow(AT + 60_000);
+    await h.scheduler.setConnections([{ ...connection(), enabledAt: iso(AT + 30_000) }]);
     await h.scheduler.tick();
     expect(h.runner).toHaveBeenCalledOnce();
   });
@@ -313,7 +336,7 @@ describe("scheduler execution", () => {
       }),
     });
     await h.scheduler.tick();
-    expect(h.states.get("spotify")).toMatchObject({
+    expect(h.states.get("spotify")?.accounts?.fixture).toMatchObject({
       cursor: "new",
       health: { outcome: "partial", consecutiveFailures: 0, counts: { skipped: 2 } },
     });
@@ -363,26 +386,73 @@ describe("scheduler execution", () => {
   });
   it("uses injectable sleep and stops a running loop on its signal", async () => {
     const controller = new AbortController(),
-      sleep = vi.fn(async (_ms, signal: AbortSignal) => {
-        expect(signal.aborted).toBe(false);
-        controller.abort();
-      });
-    const h = harness(undefined, { sleep });
+      ran = deferred(),
+      written = deferred();
+    const sleep = vi.fn(async (_ms, signal: AbortSignal) => {
+      expect(signal.aborted).toBe(false);
+      await written.promise;
+      controller.abort();
+    });
+    let runs = 0;
+    const states = new Map<string, ConnectorState>();
+    const h = harness(undefined, {
+      sleep,
+      runner: async (o) => {
+        runs++;
+        ran.resolve();
+        return report(o);
+      },
+      stateStore: (id) => ({
+        read: async () => states.get(id),
+        write: async (state) => {
+          states.set(id, state);
+          written.resolve();
+        },
+      }),
+    });
     await h.scheduler.run(controller.signal);
-    expect(h.runner).toHaveBeenCalledOnce();
+    await ran.promise;
+    expect(runs).toBe(1);
+    expect(states.get("spotify")?.accounts?.fixture?.health?.outcome).toBe("ok");
     expect(sleep).toHaveBeenCalledWith(30_000, expect.any(AbortSignal));
   });
-  it("fails closed on state persistence failures and drains other workers", async () => {
+  it("isolates a state persistence failure to its connection with its own back-off", async () => {
     const gate = deferred(),
-      entered = deferred();
+      entered = deferred(),
+      onRunError = vi.fn();
     let drained = false;
     const h = harness([connection(), connection("github")], {
+      onRunError,
       runner: async (o) => {
         if (o.adapter.metadata.id === "github") {
           entered.resolve();
           await gate.promise;
           drained = true;
         }
+        return report(o);
+      },
+      stateStore: (id) => ({
+        read: async () => undefined,
+        write: async () => {
+          if (id === "spotify") throw new Error("secret");
+        },
+      }),
+    });
+    const result = h.scheduler.tick();
+    await entered.promise;
+    gate.resolve();
+    await expect(result).resolves.toBeUndefined();
+    expect(drained).toBe(true);
+    expect(onRunError).toHaveBeenCalledWith(
+      expect.objectContaining({ connectorId: "spotify" }),
+      "unexpected",
+    );
+    expect(JSON.stringify(onRunError.mock.calls)).not.toContain("secret");
+    // The failed connection waits for its back-off (15 minutes, zero jitter).
+    let spotify = 0;
+    const counting = harness([connection()], {
+      runner: async (o) => {
+        spotify++;
         return report(o);
       },
       stateStore: () => ({
@@ -392,11 +462,31 @@ describe("scheduler execution", () => {
         },
       }),
     });
-    const result = h.scheduler.tick().catch((e) => e);
-    await entered.promise;
-    gate.resolve();
-    expect((await result).message).toBe("Connector scheduling or state persistence failed");
-    expect(drained).toBe(true);
+    await counting.scheduler.tick();
+    await counting.scheduler.tick();
+    expect(spotify).toBe(1);
+    counting.setNow(AT + 900_000);
+    await counting.scheduler.tick();
+    expect(spotify).toBe(2);
+  });
+  it("never lets one worker rejection reject the tick for other connections", async () => {
+    const h = harness([connection(), connection("github")], {
+      podWriter: (c) => {
+        if (c.connectorId === "spotify") throw new Error("private");
+        return {
+          resolve: (slug) => `https://pod.example/integrations/github/${slug}`,
+          read: async () => undefined,
+          write: vi.fn(),
+          registerType: vi.fn(),
+        };
+      },
+    });
+    await h.scheduler.tick();
+    expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unexpected",
+    });
+    expect(h.states.get("github")?.accounts?.fixture?.health?.outcome).toBe("ok");
   });
 });
 
@@ -447,7 +537,7 @@ it("rereads and reapplies a merge on 412 with a bounded retry budget", async () 
       latest = state;
     },
   };
-  await updateConnectorState(store, (current) => mergeAccountState(current, legacy));
+  await updateConnectorState(store, (current) => mergeAccountState(current, legacy, { now: AT }));
   expect(reads).toBe(2);
   expect(latest.cursor).toBe("concurrent");
   const write = vi.fn(async () => {
@@ -476,10 +566,18 @@ it("classifies health and counts each connection at the three-interval boundary"
         {},
         { state: { ...legacy, lastOutcome: "error" } },
         { state: { ...legacy, health } },
+        { status: "invalid-config" },
       ],
       AT,
     ),
-  ).toEqual({ ok: 1, stale: 1, failing: 1, "needs-reauth": 1, total: 4 });
+  ).toEqual({ ok: 1, stale: 1, failing: 1, "needs-reauth": 1, "invalid-config": 1, total: 5 });
+  // A latch cleared by a newer, trusted enabledAt awaits its run.
+  expect(connectorHealth({ state: { ...legacy, health }, enabledAt: iso(AT + 1) }, AT)).toBe(
+    "stale",
+  );
+  expect(connectorHealth({ state: { ...legacy, health }, enabledAt: iso(AT + 600_000) }, AT)).toBe(
+    "needs-reauth",
+  );
 });
 it("counts created/updated/unchanged documents through the real runner and preserves scheduler extensions", async () => {
   const pod = createMemoryPod();
@@ -580,10 +678,52 @@ it("retains a durable reauth latch when the settings save fails", async () => {
       throw new Error("unavailable");
     },
   });
-  await expect(h.scheduler.tick()).rejects.toThrow("state persistence failed");
-  expect(h.states.get("spotify")?.health?.outcome).toBe("needs-reauth");
+  await expect(h.scheduler.tick()).resolves.toBeUndefined();
+  expect(h.states.get("spotify")?.accounts?.fixture?.health?.outcome).toBe("needs-reauth");
+  // The settings row is still enabled with an unchanged (absent) enabledAt: the latch holds.
   await new ConnectorScheduler(h.options).tick();
   expect(h.runner).not.toHaveBeenCalled();
+  h.setNow(AT + 60_000);
+  await new ConnectorScheduler({
+    ...h.options,
+    connections: [{ ...connection(), enabledAt: iso(AT) }],
+  }).tick();
+  expect(h.runner).not.toHaveBeenCalled();
+});
+
+it("sees the owner's durable re-enable in a fresh process via a newer enabledAt", async () => {
+  const h = harness();
+  h.tokenSource.accessToken.mockRejectedValueOnce(new ReauthoriseError());
+  await h.scheduler.tick();
+  expect(h.saveConnection).toHaveBeenCalledWith(
+    expect.objectContaining({ enabled: false, status: "needs-reauth" }),
+    expect.any(AbortSignal),
+  );
+  h.setNow(AT + 120_000);
+  // An enabledAt more than five minutes ahead is untrusted and does not clear the latch.
+  const skewed = new ConnectorScheduler({
+    ...h.options,
+    connections: [{ ...connection(), enabledAt: iso(AT + 120_000 + 600_000) }],
+  });
+  await skewed.tick();
+  expect(h.runner).not.toHaveBeenCalled();
+  const fresh = new ConnectorScheduler({
+    ...h.options,
+    connections: [{ ...connection(), enabledAt: iso(AT + 60_000) }],
+  });
+  await fresh.tick();
+  expect(h.runner).toHaveBeenCalledOnce();
+  expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({ outcome: "ok" });
+});
+
+it("stamps enabledAt when setEnabled enables a connection", async () => {
+  const h = harness([{ ...connection(), enabled: false }]);
+  h.setNow(AT + 5_000);
+  await h.scheduler.setEnabled("spotify", "fixture", true);
+  expect(h.saveConnection).toHaveBeenCalledWith(
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: iso(AT + 5_000) },
+    expect.any(AbortSignal),
+  );
 });
 
 it("checks cancellation between a pending health read and its conditional write even for custom stores", async () => {
@@ -604,30 +744,390 @@ it("checks cancellation between a pending health read and its conditional write 
   expect(h.saveConnection).not.toHaveBeenCalled();
 });
 
-it("keeps the first account's legacy cursor when a different enabled account migrates state first", async () => {
+it("drops an ambiguous legacy cursor when several accounts share the connector", async () => {
   const h = harness([{ ...connection(), enabled: false }, connection("spotify", "second")]);
   h.states.set("spotify", legacy);
   await h.scheduler.tick();
   expect(h.runner.mock.calls[0]?.[0].state).toBeUndefined();
-  expect(h.states.get("spotify")?.accounts?.fixture?.cursor).toBe("old");
-  expect(h.states.get("spotify")?.accounts?.second?.cursor).toBe("new");
+  const state = h.states.get("spotify");
+  expect(state?.accounts?.fixture).toBeUndefined();
+  expect(state?.accounts?.second?.cursor).toBe("new");
+  // The legacy root checkpoint stays exactly as the node CLI wrote it.
+  expect(state).toMatchObject({
+    connectedAt: legacy.connectedAt,
+    lastSync: legacy.lastSync,
+    cursor: "old",
+    lastOutcome: "success",
+    counts: legacy.counts,
+  });
 });
 
-it("refuses a registry that returns another connector's adapter before obtaining a token", () => {
-  expect(() =>
-    harness(undefined, {
-      registry: {
-        adapterById: () => ({
-          ...fixtureAdapter(),
-          metadata: { ...fixtureAdapter().metadata, id: "github" },
-        }),
-      },
-    }),
-  ).toThrow("cannot be scheduled");
+it("migrates a legacy cursor for exactly one connection and never rewrites root checkpoint fields", async () => {
+  const h = harness();
+  h.states.set("spotify", legacy);
+  h.setNow(AT + 3_600_000);
+  await h.scheduler.tick();
+  expect(h.runner.mock.calls[0]?.[0].state?.cursor).toBe("old");
+  expect(h.states.get("spotify")?.accounts?.fixture?.cursor).toBe("new");
+  h.setNow(AT + 2 * 3_600_000);
+  await h.scheduler.tick();
+  expect(h.runner).toHaveBeenCalledTimes(2);
+  expect(h.states.get("spotify")).toMatchObject({ cursor: "old", lastSync: legacy.lastSync });
+  // A fresh document created by the scheduler carries no root cursor for the legacy CLI.
+  const fresh = harness();
+  await fresh.scheduler.tick();
+  expect(fresh.states.get("spotify")?.cursor).toBeUndefined();
+  expect(fresh.states.get("spotify")?.accounts?.fixture?.cursor).toBe("new");
+});
+
+it("skips a row whose registry returns another connector's adapter before obtaining a token", async () => {
+  const h = harness(undefined, {
+    registry: {
+      adapterById: () => ({
+        ...fixtureAdapter(),
+        metadata: { ...fixtureAdapter().metadata, id: "github" },
+      }),
+    },
+  });
+  await h.scheduler.tick();
+  expect(h.scheduler.list()).toEqual([]);
+  expect(h.scheduler.invalid()).toMatchObject([{ index: 0, status: "invalid-config" }]);
+  expect(h.tokenSource.accessToken).not.toHaveBeenCalled();
 });
 
 it("requires an explicit source transport instead of falling back to ambient fetch", () => {
   expect(() => harness(undefined, { sourceFetch: undefined })).toThrow(
     "source transport is required",
   );
+});
+
+describe("adversarial review fixes (CON-A2)", () => {
+  it("skips malformed rows individually and still schedules the valid ones", async () => {
+    const parsed = parseConnectorConnections(
+      [
+        connection(),
+        { connectorId: "github", account: "x\nsecret", enabled: true },
+        { connectorId: "strava", account: "ok", enabled: "yes" },
+        null,
+        connection("github", "dup"),
+        connection("github", "dup"),
+        { ...connection("strava"), enabledAt: "not a date" },
+      ],
+      createRegistry(),
+    );
+    expect(parsed.connections).toEqual([connection()]);
+    expect(parsed.invalid.map((row) => row.index)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(JSON.stringify(parsed.invalid)).not.toContain("secret");
+    expect(parsed.invalid[0]).toEqual({
+      index: 1,
+      connectorId: "github",
+      status: "invalid-config",
+      errorClass: "invalid-config",
+    });
+    expect(() => parseConnectorConnections({})).toThrow();
+    const h = harness([connection(), { connectorId: "github", enabled: true } as never]);
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledOnce();
+  });
+  it("reads a state document on a pass only for connections that are due", async () => {
+    const reads = vi.fn();
+    const states = new Map<string, ConnectorState>();
+    const h = harness([connection(), { ...connection("github"), intervalMinutes: 30 }], {
+      stateStore: (id) => ({
+        read: async () => {
+          reads(id);
+          return states.get(id);
+        },
+        write: async (state) => {
+          states.set(id, state);
+        },
+      }),
+    });
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledTimes(2);
+    reads.mockClear();
+    for (const at of [AT + 60_000, AT + 900_000, AT + 1_799_999]) {
+      h.setNow(at);
+      await h.scheduler.tick();
+    }
+    expect(reads).not.toHaveBeenCalled();
+    h.setNow(AT + 1_800_000);
+    await h.scheduler.tick();
+    // One read to confirm due-ness and one inside the conditional health update.
+    expect(reads.mock.calls.map(([id]) => id)).toEqual(["github", "github"]);
+    reads.mockClear();
+    // Changed settings reload that connector's snapshot once.
+    await h.scheduler.setConnections([
+      { ...connection(), intervalMinutes: 120 },
+      { ...connection("github"), intervalMinutes: 30 },
+    ]);
+    await h.scheduler.tick();
+    expect(reads.mock.calls.map(([id]) => id)).toEqual(["spotify"]);
+  });
+  it("clamps skewed next-run times and distrusts timestamps more than five minutes ahead", () => {
+    const health = (at: number, nextRunAt?: number) => ({
+      lastRunStartedAt: iso(at),
+      lastRunEndedAt: iso(at),
+      outcome: "ok" as const,
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+      consecutiveFailures: 0,
+      intervalMinutes: 60,
+      ...(nextRunAt === undefined ? {} : { nextRunAt: iso(nextRunAt) }),
+    });
+    const far = AT + 365 * 86_400_000;
+    expect(
+      connectorNextRunAt(connection(), { ...legacy, health: health(far, far + 3_600_000) }, 60, AT),
+    ).toBe(AT + MAX_CONNECTOR_BACKOFF_MS);
+    expect(connectorNextRunAt(connection(), { ...legacy, lastSync: iso(far) }, 60, AT)).toBe(
+      AT + MAX_CONNECTOR_BACKOFF_MS,
+    );
+    expect(
+      connectorNextRunAt(
+        { ...connection(), intervalMinutes: 2_880 },
+        { ...legacy, lastSync: iso(far) },
+        60,
+        AT,
+      ),
+    ).toBe(AT + 2_880 * 60_000);
+    // Future successes are untrusted: health reports stale, not ok.
+    expect(connectorHealth({ state: { ...legacy, lastSync: iso(AT + 600_000) } }, AT)).toBe(
+      "stale",
+    );
+    expect(connectorHealth({ state: { ...legacy, lastSync: iso(AT + 60_000) } }, AT)).toBe("ok");
+    // A future-stamped peer loses the merge; one within five minutes still wins.
+    const mine = { ...legacy, lastSync: iso(AT), cursor: "mine", health: health(AT) };
+    const skewed = {
+      ...legacy,
+      lastSync: iso(AT + 600_000),
+      cursor: "skewed",
+      health: health(AT + 600_000),
+    };
+    const close = {
+      ...legacy,
+      lastSync: iso(AT + 60_000),
+      cursor: "close",
+      health: health(AT + 60_000),
+    };
+    expect(mergeAccountState(skewed, mine, { now: AT })).toMatchObject({
+      cursor: "mine",
+      health: { lastRunEndedAt: iso(AT) },
+    });
+    expect(mergeAccountState(close, mine, { now: AT }).cursor).toBe("close");
+  });
+  it("keeps a run's health after a backward clock jump when the stored attempt is its base", () => {
+    const attempt = (at: number, outcome: ConnectorRunHealth["outcome"]): ConnectorRunHealth => ({
+      lastRunStartedAt: iso(at),
+      lastRunEndedAt: iso(at),
+      outcome,
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+      consecutiveFailures: outcome === "ok" ? 0 : 1,
+      intervalMinutes: 60,
+    });
+    const ahead = { ...legacy, health: attempt(AT + 120_000, "ok") };
+    const next = { ...legacy, health: attempt(AT + 60_000, "failed") };
+    // Unchanged since the snapshot the run started from: the new attempt wins.
+    expect(mergeAccountState(ahead, next, { now: AT + 60_000, base: ahead }).health?.outcome).toBe(
+      "failed",
+    );
+    // Without that proof (a concurrent writer), the newer trusted attempt still wins.
+    expect(mergeAccountState(ahead, next, { now: AT + 60_000 }).health?.outcome).toBe("ok");
+  });
+  it("persists a run behind a stored attempt from a faster clock when nobody else wrote", async () => {
+    const h = harness();
+    const ahead = {
+      lastRunStartedAt: iso(AT + 180_000),
+      lastRunEndedAt: iso(AT + 180_000),
+      outcome: "failed" as const,
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+      errorClass: "source-or-pod" as const,
+      consecutiveFailures: 1,
+      intervalMinutes: 60,
+      nextRunAt: iso(AT - 1),
+    };
+    h.states.set("spotify", { ...legacy, accounts: { fixture: { ...legacy, health: ahead } } });
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledOnce();
+    expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "ok",
+      lastRunEndedAt: iso(AT),
+    });
+  });
+  it("uses max(back-off, Retry-After) capped at 24 hours", async () => {
+    let retry = 7_200;
+    const h = harness(undefined, {
+      runner: async () => {
+        throw new RateLimitedError("spotify", "https://secret.example", retry);
+      },
+    });
+    await h.scheduler.tick();
+    let health = h.states.get("spotify")?.accounts?.fixture?.health;
+    expect(Date.parse(health?.nextRunAt ?? "") - AT).toBe(7_200_000);
+    retry = 60;
+    h.setNow(AT + 7_200_000);
+    await h.scheduler.tick();
+    health = h.states.get("spotify")?.accounts?.fixture?.health;
+    expect(Date.parse(health?.nextRunAt ?? "") - (AT + 7_200_000)).toBe(1_800_000);
+    retry = 10 * 86_400;
+    h.setNow(AT + 9_000_000);
+    await h.scheduler.tick();
+    health = h.states.get("spotify")?.accounts?.fixture?.health;
+    expect(Date.parse(health?.nextRunAt ?? "") - (AT + 9_000_000)).toBe(MAX_CONNECTOR_BACKOFF_MS);
+    expect(JSON.stringify(h.states.get("spotify"))).not.toContain("secret");
+  });
+  it("latches needs-reauth after two consecutive source 401/403 outcomes and invalidates the grant", async () => {
+    const invalidate = vi.fn(async () => {
+      throw new Error("vault private");
+    });
+    const tokenSource = { accessToken: vi.fn(async () => "synthetic-token"), invalidate };
+    const h = harness(undefined, {
+      tokenSource,
+      runner: async () => {
+        throw new IntegrationSyncError("spotify", "private", { status: 401 });
+      },
+    });
+    await h.scheduler.tick();
+    expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unauthorised",
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    h.setNow(AT + 900_000);
+    await h.scheduler.tick();
+    const health = h.states.get("spotify")?.accounts?.fixture?.health;
+    expect(health).toMatchObject({ outcome: "needs-reauth", errorClass: "unauthorised" });
+    expect(health?.nextRunAt).toBeUndefined();
+    expect(invalidate).toHaveBeenCalledWith({ connectorId: "spotify", account: "fixture" });
+    expect(h.saveConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, status: "needs-reauth" }),
+      expect.any(AbortSignal),
+    );
+    expect(h.scheduler.list()[0]).toMatchObject({ enabled: false });
+    // A 401 after a non-401 failure is a first strike only.
+    const other = harness(undefined, {
+      runner: async () => {
+        throw new IntegrationSyncError("spotify", "private", { status: 403 });
+      },
+    });
+    other.states.set("spotify", {
+      ...legacy,
+      accounts: {
+        fixture: {
+          ...legacy,
+          health: {
+            lastRunStartedAt: iso(AT - 10),
+            lastRunEndedAt: iso(AT - 10),
+            outcome: "failed",
+            errorClass: "source-or-pod",
+            counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+            consecutiveFailures: 1,
+            intervalMinutes: 60,
+            nextRunAt: iso(AT - 1),
+          },
+        },
+      },
+    });
+    await other.scheduler.tick();
+    expect(other.states.get("spotify")?.accounts?.fixture?.health?.outcome).toBe("failed");
+  });
+  it("skips quietly when the connection was removed mid-run", async () => {
+    const onRunError = vi.fn();
+    const h = harness(undefined, {
+      onRunError,
+      tokenSource: {
+        accessToken: async () => {
+          throw new ReauthoriseError();
+        },
+      },
+      saveConnection: async () => {
+        throw new ConnectionRemovedError();
+      },
+    });
+    await h.scheduler.tick();
+    expect(onRunError).not.toHaveBeenCalled();
+    expect(h.states.get("spotify")?.accounts?.fixture?.health?.outcome).toBe("needs-reauth");
+    // Removed from settings while running: health is kept, no settings write is attempted.
+    const gate = deferred(),
+      entered = deferred();
+    const removed = harness(undefined, {
+      tokenSource: {
+        accessToken: async () => {
+          entered.resolve();
+          await gate.promise;
+          throw new ReauthoriseError();
+        },
+      },
+    });
+    const pass = removed.scheduler.tick();
+    await entered.promise;
+    await removed.scheduler.setConnections([]);
+    gate.resolve();
+    await pass;
+    expect(removed.saveConnection).not.toHaveBeenCalled();
+  });
+  it("does not let a 6-hour run of A delay B's 15-minute schedule (continuous pool)", async () => {
+    vi.useFakeTimers({ now: AT });
+    try {
+      const starts: Record<string, number[]> = { spotify: [], github: [] };
+      let aFinished = false;
+      const h = harness(
+        [
+          { ...connection(), intervalMinutes: 15 },
+          { ...connection("github"), intervalMinutes: 15 },
+        ],
+        {
+          now: () => Date.now(),
+          sleep: undefined,
+          runner: async (o) => {
+            const id = o.adapter.metadata.id;
+            starts[id]?.push(Date.now());
+            if (id === "spotify" && starts.spotify?.length === 1) {
+              await new Promise((resolve) => setTimeout(resolve, 6 * 3_600_000));
+              aFinished = true;
+            }
+            return report(o);
+          },
+        },
+      );
+      const controller = new AbortController();
+      const loop = h.scheduler.run(controller.signal);
+      await vi.advanceTimersByTimeAsync(6 * 3_600_000 - 60_000);
+      expect(aFinished).toBe(false);
+      expect(starts.spotify).toHaveLength(1);
+      // B ran every 15 minutes (within one 30-second poll) while A was busy.
+      expect(starts.github?.length).toBeGreaterThanOrEqual(23);
+      const gaps = (starts.github ?? []).slice(1).map((t, i) => t - (starts.github?.[i] ?? 0));
+      expect(Math.max(...gaps)).toBeLessThanOrEqual(900_000 + 30_000);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(aFinished).toBe(true);
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      await loop;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("drains in-flight workers on shutdown of the continuous loop", async () => {
+    const entered = deferred();
+    let aborted = false;
+    const h = harness(undefined, {
+      runner: async (o) => {
+        entered.resolve();
+        await new Promise<void>((resolve) =>
+          o.signal?.addEventListener("abort", () => resolve(), { once: true }),
+        );
+        aborted = true;
+        o.signal?.throwIfAborted();
+        return report(o);
+      },
+      sleep: (_ms, signal) =>
+        new Promise((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })),
+    });
+    const controller = new AbortController();
+    const loop = h.scheduler.run(controller.signal);
+    await entered.promise;
+    controller.abort();
+    await loop;
+    expect(aborted).toBe(true);
+    expect(h.writes).not.toHaveBeenCalled();
+  });
 });

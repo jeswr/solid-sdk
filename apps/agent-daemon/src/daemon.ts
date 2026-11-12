@@ -50,6 +50,11 @@ export async function composeDaemon(options: {
   privateTypeIndex: string;
   /** Canonical owner profile document; defaults to the configured WebID document. */
   profileDocumentUrl?: string;
+  /**
+   * Opt-in scheduled connector sync (CON-A2). Off by default: the job, including a
+   * `prepare`-supplied one, is composed only when `enabled` is true.
+   */
+  connectors?: { readonly enabled?: boolean };
   prepare: (
     workspace: PodWorkspace,
   ) => Promise<Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">>;
@@ -65,16 +70,18 @@ export async function composeDaemon(options: {
     });
     const prepared = await options.prepare(workspace);
     const connectors =
-      prepared.connectors ??
-      createConnectorsJob({
-        podRoot: storage.root,
-        webId: options.ownerWebId,
-        profileDocumentUrl:
-          options.profileDocumentUrl ?? (options.ownerWebId.split("#", 1)[0] as string),
-        podFetch: auth.fetch,
-        now: prepared.now,
-        log: prepared.log,
-      });
+      options.connectors?.enabled === true
+        ? (prepared.connectors ??
+          createConnectorsJob({
+            podRoot: storage.root,
+            webId: options.ownerWebId,
+            profileDocumentUrl:
+              options.profileDocumentUrl ?? (options.ownerWebId.split("#", 1)[0] as string),
+            podFetch: auth.fetch,
+            now: prepared.now,
+            log: prepared.log,
+          }))
+        : undefined;
     const daemon = createDaemon({
       ...prepared,
       connectors,
@@ -300,7 +307,6 @@ export function createDaemon(o: DaemonOptions): Daemon {
       ? AbortSignal.any([signal, connectorController.signal])
       : connectorController.signal;
     let connectorTask: Promise<void> = Promise.resolve();
-    let connectorFault = false;
     const disposers: (() => void)[] = [];
     const invalidate = (kind: "control" | "approval") => {
       // Invoke synchronously: the executor fences in-flight snapshots before waiting.
@@ -374,17 +380,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const due = new Map<string, number>();
       await maintain();
       armMaintenance();
+      // Connector sync is isolated: its failures are logged and never fault the daemon.
       if (o.connectors) {
         if (repeat && signal)
           connectorTask = o.connectors.run(connectorSignal).catch(() => {
-            connectorFault = true;
+            o.log?.(scrubLog("Connectors pass failed"));
           });
-        else await o.connectors.tick(connectorSignal);
+        else
+          try {
+            await o.connectors.tick(connectorSignal);
+          } catch {
+            o.log?.(scrubLog("Connectors pass failed"));
+          }
       }
       do {
         if (signal?.aborted) break;
         const at = now();
-        if (connectorFault) throw new Error("Connectors job failed");
         if (fault) throw new Error("Authority reconciliation failed");
         for (const account of accounts) {
           if (signal?.aborted || fault) break;

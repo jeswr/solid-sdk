@@ -113,21 +113,74 @@ export function connectorState(value: unknown): ConnectorState {
   return { ...base, accounts };
 }
 
+/** Peer/host timestamps further ahead than this are untrusted (clock skew). */
+export const MAX_FUTURE_SKEW_MS = 5 * 60 * 1_000;
+/** An ISO timestamp usable for ordering, or "" when absent or too far in the future. */
+export function trustedTime(value: string | undefined, now: number = Date.now()): string {
+  return value !== undefined && Date.parse(value) <= now + MAX_FUTURE_SKEW_MS ? value : "";
+}
+export interface MergeAccountStateOptions {
+  /** Instant used to distrust timestamps more than five minutes ahead. */
+  readonly now?: number;
+  /**
+   * The snapshot this attempt started from. When the stored account still carries that
+   * snapshot's checkpoint/attempt, nobody else wrote in between and the new values win
+   * even if a backward clock jump makes the stored timestamps look newer.
+   */
+  readonly base?: ConnectorAccountState;
+}
 /** Preserve a concurrent newer successful cursor independently of the most recent attempt. */
 export function mergeAccountState(
   previous: ConnectorAccountState | undefined,
   next: ConnectorAccountState,
+  options: MergeAccountStateOptions = {},
 ): ConnectorAccountState {
   if (!previous) return next;
-  const checkpoint = (previous.lastSync ?? "") > (next.lastSync ?? "") ? previous : next;
+  const now = options.now ?? Date.now();
+  const base = options.base;
+  const unchangedCheckpoint =
+    base !== undefined && previous.lastSync === base.lastSync && previous.cursor === base.cursor;
+  const unchangedAttempt =
+    base !== undefined &&
+    previous.health?.lastRunStartedAt === base.health?.lastRunStartedAt &&
+    previous.health?.lastRunEndedAt === base.health?.lastRunEndedAt;
+  const checkpoint =
+    !unchangedCheckpoint && trustedTime(previous.lastSync, now) > trustedTime(next.lastSync, now)
+      ? previous
+      : next;
   const attempt =
-    (previous.health?.lastRunEndedAt ?? "") > (next.health?.lastRunEndedAt ?? "") ? previous : next;
+    !unchangedAttempt &&
+    trustedTime(previous.health?.lastRunEndedAt, now) >
+      trustedTime(next.health?.lastRunEndedAt, now)
+      ? previous
+      : next;
   return {
-    ...checkpoint,
+    ...withoutAccounts(checkpoint),
     connectedAt: previous.connectedAt < next.connectedAt ? previous.connectedAt : next.connectedAt,
     lastOutcome: attempt.lastOutcome,
     ...(attempt.health ? { health: attempt.health } : {}),
   };
+}
+function withoutAccounts(state: ConnectorState): ConnectorAccountState {
+  const { accounts: _accounts, ...rest } = state;
+  return rest;
+}
+/**
+ * The checkpoint for one host account. Once `accounts` exists only that entry counts.
+ * An account-free legacy checkpoint migrates only when exactly one configured row
+ * names this connector; otherwise the legacy cursor is dropped (a full import).
+ */
+export function connectorAccountState(
+  state: ConnectorState | undefined,
+  account: string,
+  connectionsForConnector: number,
+): ConnectorAccountState | undefined {
+  if (!state) return undefined;
+  if (state.accounts)
+    return Object.hasOwn(state.accounts, account) ? state.accounts[account] : undefined;
+  if (connectionsForConnector !== 1) return undefined;
+  const { accounts: _accounts, ...legacy } = state;
+  return legacy;
 }
 
 export class StateConflictError extends Error {
