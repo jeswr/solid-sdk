@@ -167,3 +167,11 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }
+/* Permissions History: what is still shared, then every answer. */
+.hm-history-page section {
+  margin-top: var(--space-6);
+}
+.hm-history-page h2 {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
