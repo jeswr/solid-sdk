@@ -61,6 +61,7 @@ export function useTasksOffline(session: PodSession) {
             online: () => true,
             outbox: () => shell.outbox,
             onConfirm: offline.confirm,
+            onSettled: offline.settled,
             baseEtag: offline.baseEtag,
           });
           return replay.replay(delivery, ctx);

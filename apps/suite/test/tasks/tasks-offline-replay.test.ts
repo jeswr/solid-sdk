@@ -662,3 +662,79 @@ it("persists the confirmed base ETag for a delete queued behind its own edit", a
   expect(f.outbox.conflicts()).toHaveLength(1);
   expect(f.pod.files.has(task.url)).toBe(true);
 });
+
+it("keeps a queued move's source until its destination create has replayed", async () => {
+  const f = await setup();
+  const target = await f.cache.createProject("Home");
+  if (!target) throw new Error("Missing target");
+  await f.cache.loadTasks(target);
+  const task = await f.cache.createTask(f.inbox, { title: "Travelling" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  const moved = await f.cache.moveTaskToProject(task, target);
+  if (!moved) throw new Error("Missing moved task");
+  f.connect(true);
+  f.pod.intercept = (request) =>
+    request.url === moved.url && request.method === "PUT"
+      ? new Response(null, { status: 403 })
+      : undefined;
+  await f.adapter.reconnected();
+  // The destination create failed, so nothing after it in the move replays.
+  expect(f.pod.files.has(task.url)).toBe(true);
+  expect(f.outbox.pending().every((item) => item.status === "failed")).toBe(true);
+  f.pod.intercept = undefined;
+  await f.adapter.retryAll();
+  expect(f.outbox.pending()).toEqual([]);
+  expect(f.pod.files.has(task.url)).toBe(false);
+  expect((await f.remote.readTask(moved.url)).task.title).toBe("Travelling");
+});
+
+it("retries a change that waited on a failed predecessor once the predecessor syncs", async () => {
+  const f = await setup();
+  const task = await f.cache.createTask(f.inbox, { title: "Task" });
+  if (!task) throw new Error("Missing task");
+  f.connect(false);
+  await f.cache.updateTask(task, (value) => {
+    value.title = "First";
+  });
+  await f.cache.updateTask(task, (value) => {
+    value.title = "Second";
+  });
+  f.connect(true);
+  f.pod.intercept = (request) =>
+    request.method === "PUT" ? new Response(null, { status: 500 }) : undefined;
+  await f.adapter.reconnected();
+  const [first] = f.outbox.pending();
+  if (!first) throw new Error("Missing predecessor");
+  f.pod.intercept = undefined;
+  await f.outbox.retry(first.id);
+  await vi.waitFor(() => expect(f.outbox.pending()).toEqual([]));
+  expect((await f.remote.readTask(task.url)).task.title).toBe("Second");
+});
+
+it("ignores a listing response begun before a queued create replayed", async () => {
+  const f = await setup();
+  const folder = f.inbox.tracker.stateStore as string;
+  f.connect(false);
+  await f.cache.createTask(f.inbox, { title: "Queued" });
+  f.connect(true);
+  const stale = await f.pod.fetch(folder);
+  const started = Promise.withResolvers<void>();
+  const response = Promise.withResolvers<Response>();
+  let held = false;
+  f.pod.intercept = (request) => {
+    if (!held && request.url === folder && request.method === "GET") {
+      held = true;
+      started.resolve();
+      return response.promise;
+    }
+    return undefined;
+  };
+  const reading = f.store.listTasks(folder);
+  await started.promise;
+  await f.adapter.reconnected();
+  expect(f.outbox.pending()).toEqual([]);
+  response.resolve(stale);
+  expect((await reading).map((task) => task.task.title)).toEqual(["Queued"]);
+  expect((await f.store.listTasks(folder)).map((task) => task.task.title)).toEqual(["Queued"]);
+});

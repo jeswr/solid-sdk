@@ -11,6 +11,7 @@ import { createTask, TaskItem, taskDetails, validateTask } from "../lib/model/ta
 import { TaskTracker } from "../lib/model/tracker";
 
 export const TASKS_REPLAY = "tasks.intent.v1";
+export const DEPENDENCY_MESSAGE = "An earlier Tasks change must sync first";
 const savedSchema = z.object({
   body: z.string(),
   etag: z.string().nullable(),
@@ -58,6 +59,23 @@ export class TasksOffline {
   };
   readonly baseEtag = (url: string, local: string | null) =>
     this.validators.get(`${url}\u0000${local}`) ?? local;
+  /** A replay settled this resource: fence listing reads that began before it. */
+  readonly settled = (url: string) => {
+    for (const key of [url, new URL(".", url).href])
+      this.changes.set(key, (this.changes.get(key) ?? 0) + 1);
+  };
+  // Writes inside one scope (a project move) replay in order across resources: a source
+  // delete never replays before the destination create it depends on has succeeded.
+  private scope: string[] | undefined;
+  readonly together = async <T>(run: () => Promise<T>): Promise<T> => {
+    const outer = this.scope;
+    this.scope = outer ?? [];
+    try {
+      return await run();
+    } finally {
+      this.scope = outer;
+    }
+  };
   // A later queued delete must compare the server generation of its own earlier
   // write, including when the app reloads between deliveries.
   private readonly validators = new Map<string, string | null>();
@@ -77,6 +95,7 @@ export class TasksOffline {
       onConfirm?: (url: string, local: string, remote: string | null) => void;
       baseEtag?: (url: string, local: string | null) => string | null;
       onEnqueue?: () => void;
+      onSettled?: (url: string) => void;
     },
   ) {
     this.key = `suite.tasks.cache.v1.${options.webId}\u0000${options.storageUrl}`;
@@ -243,7 +262,8 @@ export class TasksOffline {
     if (!task?.isTask && !tracker?.isTracker) return this.options.fetch(input, init);
     const headers = new Headers(init?.headers);
     const creating = headers.get("If-None-Match") === "*";
-    if (this.options.online() && !this.waiting(url)) {
+    // Once a write in this scope is queued, later writes in it queue behind it.
+    if (this.options.online() && !this.waiting(url) && !this.scope?.length) {
       try {
         const response = await this.options.fetch(input, init);
         if (response.ok) await this.remember(url, after, response.headers.get("ETag"), false);
@@ -267,9 +287,10 @@ export class TasksOffline {
         .pending()
         .filter((item) => item.guard?.tag === TASKS_REPLAY && item.url === url)
         .slice(-1)
-        .map((item) => item.id),
+        .map((item) => item.id)
+        .concat(this.scope ?? []),
     };
-    await outbox.enqueue({
+    const queued = await outbox.enqueue({
       op: creating ? "create" : method === "DELETE" ? "delete" : "write",
       url,
       ...(creating
@@ -290,6 +311,7 @@ export class TasksOffline {
     });
     const etag = `"tasks-offline-${intent.revision}"`;
     await this.remember(url, after, etag, true);
+    this.scope?.push(queued.id);
     this.options.onEnqueue?.();
     return new Response(null, { status: 204, headers: { ETag: etag } });
   };
@@ -318,10 +340,25 @@ export class TasksOffline {
       : "This task changed elsewhere";
   }
 
+  /** Changes that failed only because an earlier one had not synced get another try. */
+  private resumeFollowers() {
+    const outbox = this.options.outbox();
+    for (const item of outbox?.pending() ?? [])
+      if (
+        item.guard?.tag === TASKS_REPLAY &&
+        item.status === "failed" &&
+        item.error?.includes(DEPENDENCY_MESSAGE)
+      )
+        // Not awaited: the outbox serialises this retry after the active replay.
+        void outbox?.retry(item.id).catch(() => {});
+  }
   /** Every update is re-applied through typed accessors to a newly read document. */
   readonly replay: ReplayDelegate = async (delivery, ctx) => {
     try {
-      return await this.deliver(delivery, ctx);
+      const result = await this.deliver(delivery, ctx);
+      (this.options.onSettled ?? this.settled)(delivery.url);
+      this.resumeFollowers();
+      return result;
     } catch (error) {
       if (error instanceof ModelError && error.status === 0)
         throw new StorageError("network", { url: delivery.url, method: "PUT", cause: error });
@@ -339,10 +376,10 @@ export class TasksOffline {
         this.options
           .outbox()
           ?.pending()
-          .some((item) => item.id === id && item.url === intent.url),
+          .some((item) => item.id === id),
       )
     )
-      throw new Error("An earlier Tasks change must sync first");
+      throw new Error(DEPENDENCY_MESSAGE);
     const assertions = z.object({ url: z.string() }).parse(delivery.assertions);
     if (
       intent.url !== assertions.url ||
@@ -546,8 +583,16 @@ export class OfflineTaskStore extends TaskStore {
   constructor(
     options: ConstructorParameters<typeof TaskStore>[0],
     private readonly online: () => boolean,
+    private readonly together: <T>(run: () => Promise<T>) => Promise<T> = (run) => run(),
   ) {
     super(options);
+  }
+  /** A move's writes stay ordered across resources if any of them has to queue. */
+  override prepareTaskMove(...args: Parameters<TaskStore["prepareTaskMove"]>) {
+    const move = super.prepareTaskMove(...args);
+    const run = move.run.bind(move);
+    move.run = () => this.together(run);
+    return move;
   }
   override async bootstrapInbox() {
     if (this.online()) {

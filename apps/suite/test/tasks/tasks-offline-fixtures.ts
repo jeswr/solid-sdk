@@ -56,7 +56,7 @@ export async function setupOffline(register = true) {
     typeIndex: false,
     ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
   };
-  const store = new OfflineTaskStore(storeOptions, () => online);
+  const store = new OfflineTaskStore(storeOptions, () => online, offline.together);
   const remote = new TaskStore({ ...storeOptions, fetch: pod.fetch });
   const failures = vi.fn();
   const cache = new TasksCache(store, failures, webId);

@@ -40,6 +40,7 @@ function useTasksValue(session: PodSession) {
             ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
           },
           offline.online,
+          offline.together,
         ),
         (error, retry) => {
           toast.error(
