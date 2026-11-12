@@ -83,9 +83,9 @@ export function ConnectAssistant({ url }: { url: string | undefined }) {
         </p>
       )}
       <p className="assistant-note">
-        To disconnect an assistant, remove it in that assistant's connector settings. That stops
-        it using your pod. To also cut off its access on the server, ask whoever runs your
-        assistant server to revoke it.
+        To disconnect an assistant, remove it in that assistant's connector settings. That stops it
+        using your pod. To also cut off its access on the server, ask whoever runs your assistant
+        server to revoke it.
       </p>
     </section>
   );
@@ -139,7 +139,10 @@ export function PersonalDataReads({
         or address, aren't recorded yet. The data itself is never shown.
       </p>
       {!online ? (
-        <EmptyState variant="not-available-offline" body="Reconnect to load sensitive data reads." />
+        <EmptyState
+          variant="not-available-offline"
+          body="Reconnect to load sensitive data reads."
+        />
       ) : !current ? (
         <LoadingSkeleton preset="list" count={3} label="Loading sensitive data reads" />
       ) : current.status === "error" ? (
