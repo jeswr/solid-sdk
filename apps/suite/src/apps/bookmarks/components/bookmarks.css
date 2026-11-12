@@ -1,0 +1,357 @@
+/* AUTHORED-BY Codex (GPT-6.1 Sol) */
+.bkm-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 36px 40px;
+  color: var(--foreground);
+}
+.bkm-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+.bkm-heading h1,
+.bkm-heading h2 {
+  margin: 8px 0;
+  font-size: clamp(1.65rem, 3vw, 2.2rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+}
+.bkm-eyebrow {
+  color: var(--app-bookmarks);
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+}
+.bkm-muted {
+  color: var(--foreground-muted);
+  font-size: 0.875rem;
+}
+.bkm-import-export,
+.bkm-toolbar,
+.bkm-layout,
+.bkm-selection,
+.bkm-bulk,
+.bkm-brand,
+.bkm-tag-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bkm-sidebar {
+  padding: 20px 12px;
+  min-width: 0;
+}
+.bkm-brand {
+  color: var(--app-bookmarks);
+  padding: 4px 12px 24px;
+  font-size: 1.05rem;
+}
+.bkm-sidebar nav {
+  display: grid;
+  gap: 4px;
+}
+.bkm-sidebar :where(nav button) {
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  font-weight: 450;
+}
+.bkm-count {
+  color: var(--foreground-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+.bkm-tag-heading {
+  margin: 32px 12px 12px;
+  color: var(--foreground-muted);
+}
+.bkm-tag-heading h2 {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.bkm-tag-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bkm-sidebar-foot {
+  border-top: 1px solid var(--border);
+  margin: 32px 12px 0;
+  padding-top: 18px;
+  font-size: 0.75rem;
+  line-height: 1.8;
+  color: var(--foreground-muted);
+}
+.bkm-toolbar {
+  flex-wrap: wrap;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.bkm-search {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+}
+.bkm-search > svg {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  color: var(--foreground-muted);
+}
+.bkm-search input {
+  padding-left: 38px;
+  background: var(--surface);
+}
+.bkm-sort {
+  width: 160px;
+  background: var(--surface);
+}
+.bkm-layout {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.bkm-selection {
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  min-height: 48px;
+  color: var(--foreground-muted);
+  margin-bottom: 10px;
+}
+.bkm-bulk {
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.bkm-collection {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 12px;
+}
+.bkm-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 22px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.bkm-item-select {
+  padding-top: 10px;
+}
+.bkm-domain-tile {
+  display: grid;
+  place-items: center;
+  flex: 0 0 46px;
+  height: 54px;
+  border-radius: 10px;
+  color: var(--app-bookmarks);
+  background: var(--app-bookmarks-soft);
+}
+.bkm-item-content {
+  min-width: 0;
+  flex: 1;
+}
+.bkm-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--foreground-muted);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.bkm-item h3 {
+  margin: 6px 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.bkm-item h3 a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+.bkm-item h3 a:hover {
+  color: var(--app-bookmarks);
+  text-decoration: underline;
+}
+.bkm-item a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+.bkm-description,
+.bkm-notes {
+  color: var(--foreground-muted);
+  line-height: 1.65;
+  font-size: 0.85rem;
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.bkm-notes {
+  border-left: 2px solid var(--border-strong);
+  padding-left: 10px;
+  margin-top: 10px;
+}
+.bkm-item-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.bkm-item-footer time {
+  font-size: 0.7rem;
+  color: var(--foreground-muted);
+  margin-left: auto;
+}
+.bkm-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.bkm-item-tags button {
+  padding: 0;
+  height: auto;
+  min-height: 28px;
+}
+.bkm-item-tags [data-slot="badge"] {
+  max-width: 200px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.bkm-item-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.bkm-archived {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--foreground-muted);
+}
+.bkm-cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.bkm-cards .bkm-item {
+  position: relative;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.bkm-cards .bkm-item-select {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+}
+.bkm-cards .bkm-item-content {
+  flex-basis: 100%;
+}
+.bkm-cards .bkm-item-actions {
+  margin-left: auto;
+}
+.bkm-cards .bkm-domain-tile {
+  width: 46px;
+}
+.bkm-notice {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+.bkm-save-status {
+  min-height: 24px;
+  padding-top: 12px;
+  font-size: 0.75rem;
+  color: var(--foreground-muted);
+}
+.bkm-form {
+  display: grid;
+  gap: 10px;
+}
+.bkm-form [data-slot="dialog-footer"] {
+  margin-top: 10px;
+}
+.bkm-dialog {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.bkm-error {
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
+.bkm-mobile-filters {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .bkm-mobile-filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .bkm-page {
+    padding: 24px;
+  }
+  .bkm-item-actions {
+    flex-direction: column;
+  }
+}
+@media (max-width: 600px) {
+  .bkm-page {
+    padding: 20px 16px;
+  }
+  .bkm-heading {
+    display: block;
+    margin-bottom: 20px;
+  }
+  .bkm-import-export {
+    margin-top: 20px;
+  }
+  .bkm-search {
+    flex-basis: 100%;
+  }
+  .bkm-sort {
+    flex: 1;
+  }
+  .bkm-layout {
+    margin-left: auto;
+  }
+  .bkm-item {
+    padding: 16px 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .bkm-item-select {
+    padding-top: 3px;
+  }
+  .bkm-list .bkm-domain-tile {
+    display: none;
+  }
+  .bkm-item-content {
+    flex-basis: calc(100% - 42px);
+  }
+  .bkm-item-actions {
+    flex-direction: row;
+    margin-left: auto;
+  }
+  .bkm-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .bkm-bulk {
+    gap: 0;
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+}

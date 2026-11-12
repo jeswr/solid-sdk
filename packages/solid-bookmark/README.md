@@ -51,6 +51,9 @@ const bookmark: BookmarkData | undefined = await parseBookmarkTtl(
 
 - Model: `Bookmark`, `BookmarkData`, `buildBookmark`, `parseBookmark`, `parseBookmarkTtl`,
   `serializeBookmark`, `bookmarkSubject`.
+- Input URLs: `httpIriOrUndefined(value)` returns a canonical HTTP(S) href or `undefined`;
+  `isHttpIri(value)` tests whether a value is already canonical. Use the former for typed
+  or imported URLs (including missing trailing slashes, uppercase hosts/schemes and Unicode).
 - Vocabulary: `BOOK`, `BOOKMARK_CLASS`, `BOOK_ARCHIVED`, `BOOK_NOTES`, reused schema.org and
   Dublin Core constants, and `PREFIXES`; the focused entry is `@jeswr/solid-bookmark/vocab`.
 - Node-only artifacts: `bookmarkOntologyTtl`, `bookmarkShapeTtl`, and path constants from
@@ -120,6 +123,63 @@ Mirror publishing keeps `@jeswr/model-runtime` as a runtime dependency: this pac
 `--dep-sha @jeswr/model-runtime=<mirror-sha>` to `scripts/mirror-publish.mjs solid-bookmark`
 alongside pins for the package's other workspace runtime dependencies. No runtime is
 declared inlined; the generator is a devDependency and is stripped from mirrors.
+
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+## Browser bookmark interchange and pod storage
+
+`@jeswr/solid-bookmark/netscape` exports pure `parseNetscapeBookmarks(html)` and
+`serializeNetscapeBookmarks(bookmarks)`. The parser returns `{ bookmarks, skipped }`;
+folders become tags, `TAGS` is merged and deduplicated, and `ADD_DATE` is read as epoch
+seconds. Only HTTP(S) targets survive. Markup is never executed or rendered: a tolerant
+tokenizer retains an inert subset before the platform DOMParser handles it. Without a DOM,
+the tokenizer decodes numeric, core, Latin-1 and common punctuation entities; unknown names
+remain literal. Input is bounded to 10 MB, 100,000 tokens and 128 nesting levels.
+Byte/token overflow returns `{ bookmarks: [], skipped: 0, error: "file-too-large" }`,
+never a partial import or an exception. Excessive folder depth still throws `RangeError`.
+The optional `NetscapeImport.error` field distinguishes overflow from an empty export.
+URLs are stored as canonical hrefs after entity decoding; unsafe schemes are skipped.
+Missing closing tags and malformed optional dates are tolerated. Export escapes all text
+and attributes. `DESCRIPTION`, `NOTES` and `ARCHIVED` are optional extension attributes;
+the standard `DD` description and `TAGS` remain usable in other bookmark managers.
+Tags containing commas cannot round-trip through the Netscape comma-separated `TAGS` field.
+
+`@jeswr/solid-bookmark/pod` exports `createBookmarkRepository({ storage, profile, fetch? })`
+for an injected SDK storage client. Obtain it with `createPodClient` from
+`@jeswr/storage-client`, which owns backend discovery and selection. The former
+`createSolidBookmarkRepository` factory has been removed.
+Initialisation creates/reuses `bookmarks/` and attempts to register its canonical bookmark
+class in the private Type Index. Registration is best effort: a failure logs only a fixed
+message and error code, leaves CRUD usable, and retries once on a later initialise in the
+repository's lifetime. Concurrent initialisers share an attempt. Read the live
+`repository.registration` status (`pending`, `registered`, `failed`) to show a dismissible hint.
+Private registration means unlisted; it does not change access permissions.
+Records contain `{ url, etag, data }`. Both `create` and `update` canonicalise bookmark target
+URLs with `httpIriOrUndefined`,
+the same guard as the importer (for example, `http://example.org` becomes
+`http://example.org/`). Invalid, relative, obfuscated-scheme and non-HTTP(S) URLs are rejected
+before pod I/O. Returned records contain the canonical href; input objects are not mutated.
+Edits use generated accessors on the original dataset, preserve unrelated RDF and require the
+observed ETag. Missing or follow-up-only write validators
+require refreshing before another edit or delete. Collections over 5,000 entries fail explicitly.
+`list()` returns a `BookmarkListing`: `{ items: StoredBookmark[], skipped: { url, reason }[] }`.
+Child `unauthenticated` errors fail the whole listing so callers can show their session-expiry
+path. The first `rate-limited` child stops further reads and returns the bookmarks already read,
+with a `skipped` entry whose `reason: "rate-limited"` marks the collection incomplete (remaining
+children have not been read). Other child errors are skipped; `reason` is a storage error code
+or `unknown`.
+Untyped resources are ignored. Container listing and initialisation errors still propagate.
+The current storage-client `readRdf` API has no per-resource byte limit; listings use a
+4 MB per-page limit. Failed creates attempt to delete an orphan only after a fresh read
+confirms it is empty, using that read's ETag or the creation response's own validator;
+cleanup cannot delete a committed bookmark or
+overwrite the original error. If no safe validator is available, the empty resource remains.
+Import `BookmarkPatch`, `BookmarkRepository`, `BookmarkListing`,
+`BookmarkRegistrationStatus` and `StoredBookmark` types from this subpath.
+
+The existing aliases cover `https://w3id.org/jeswr/bookmark#`, not Pod Manager's
+`http://www.w3.org/2002/01/bookmark#` type, `recalls` or `hasTopic` predicates. Those
+W3C resources are skipped rather than rewritten. No ontology, profile, facade or generated
+model change was needed for the Bookmarks app.
 
 ## Links
 
