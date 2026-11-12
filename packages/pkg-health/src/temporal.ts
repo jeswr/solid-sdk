@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { Literal } from "@rdfjs/types";
+import { DataFactory as df } from "n3";
 import { health, type ReadNode, S, TIME, XSD } from "./read.js";
 import type { HealthPeriod } from "./types.js";
 
@@ -49,6 +51,17 @@ export function temporalTime(term: Literal): number | undefined {
     kind === "dateTime" ? `T${match[4]}:${match[5]}:${match[6]}${match[7] ?? ""}` : "T00:00:00";
   // Four-digit years, checked calendar/time fields and checked offsets are representable.
   return Date.parse(date + time + (zone ?? "Z"));
+}
+/** Parse a lexical XSD date/time whose datatype was not kept, inferring it from its shape. */
+export function lexicalTime(value: string): number | undefined {
+  const kind = value.includes("T")
+    ? "dateTime"
+    : /^\d{4}-\d{2}-\d{2}/.test(value)
+      ? "date"
+      : /^\d{4}-\d{2}/.test(value)
+        ? "gYearMonth"
+        : "gYear";
+  return temporalTime(df.literal(value, df.namedNode(XSD + kind)));
 }
 export function readPeriod(node: ReadNode): HealthPeriod {
   const start = node.literal(`${S}validFrom`),

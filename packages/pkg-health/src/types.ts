@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type {
   Belief,
   EpistemicStatus,
@@ -46,6 +47,11 @@ export interface HealthFactBase {
   replacedBy: string[];
   corroboration: number;
   provenance: FactProvenance;
+  /**
+   * The batch source records could not be read; `provenance` then holds only the
+   * nanopub's own envelope (no sources, agent label, message times or speakers).
+   */
+  provenanceUnavailable?: true;
 }
 export type HealthFact =
   | (HealthFactBase & { kind: "condition"; onset?: string; abatement?: string })
@@ -77,6 +83,8 @@ export interface HealthGraphView {
 }
 export interface HealthFilterOptions {
   beliefs?: Belief[];
+  /** Clock for timeline tones (ISO dateTime); defaults to the current time. */
+  now?: string;
 }
 export interface ObservationSeries {
   id: string;

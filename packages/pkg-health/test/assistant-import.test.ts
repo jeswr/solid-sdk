@@ -1,13 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { spawnSync } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as memory from "@jeswr/pkg-memory";
 import { DataFactory as df } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { codePointOrder, termOrder } from "../src/assistant-import.js";
+import {
+  codePointOrder,
+  MAX_FACT_QUOTES,
+  MAX_NODE_STATEMENTS,
+  termOrder,
+} from "../src/assistant-import.js";
 import { importAssistantTurtle, importHealthExport, projectHealthFacts } from "../src/index.js";
 import { batch, claim, condition, generatedAt, owner } from "./helpers.js";
 
@@ -550,11 +555,10 @@ it("merges separate batches with a tolerant existing export and retains both pro
     owner,
   });
   const imported = await importAssistantTurtle(await readFile(fixture, "utf8"), options);
-  const merged = await memory.parseNanopublications(
-    (await memory.serializeNanopublications(existing.value)) +
-      (await memory.serializeNanopublications(imported.value)),
-  );
-  merged.affected = existing.value.affected;
+  // AUTHORED-BY Claude Opus 5.5
+  // The documented recipe: merge parsed values, never concatenated TriG.
+  const merged = memory.mergeNanopublications(existing.value, imported.value);
+  expect(merged.affected).toEqual(existing.value.affected);
   const view = projectHealthFacts(merged, { owner });
   expect(view.facts).toHaveLength(9);
   expect(view.facts.find((f) => f.label === "Fictional earlier concern")?.provenance.batch).toBe(
@@ -829,6 +833,77 @@ it("drops over-long quotes but keeps a fact with another exact quote", async () 
   expect(only.skipped).toEqual({ count: 1, reasons: { InvalidEvidence: 1 } });
 });
 
+describe("adversarial cost", () => {
+  // AUTHORED-BY Claude Opus 5.5
+  const many = (count: number, term: (i: number) => string) =>
+    Array.from({ length: count }, (_, i) => term(i)).join(", ");
+  it("refuses many tied blank-node objects quickly, before any canonicalization", async () => {
+    const canonicalize = vi.spyOn(memory, "canonicalizeAssertion");
+    const body = fact.replace(
+      'oa:exact "Fictional quote"',
+      `oa:exact "Fictional quote" ; ex:p ${many(1000, () => "[]")}`,
+    );
+    const started = performance.now();
+    const result = await importAssistantTurtle(prefixes + source + body, options);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(result.skipped).toEqual({ count: 1, reasons: { InvalidFact: 1 } });
+    expect(result.value.nanopubs).toEqual([]);
+    expect(canonicalize).not.toHaveBeenCalled();
+  }, 5000);
+  it("refuses blank-node objects on sources and products", async () => {
+    const blankSource = await importAssistantTurtle(
+      prefixes + source.replace(" ; s:dateCreated", " ; ex:p [] ; s:dateCreated") + fact,
+      options,
+    );
+    expect(blankSource.skipped).toEqual({ count: 1, reasons: { InvalidSource: 1 } });
+    const medicine = `ex:product a h:MedicinalProduct ; s:name "Fictionalium" ; ex:p [] .
+  ex:fact a h:MedicationStatement ; h:patient <${owner}> ; s:name "Fictional medicine use" ; h:medication ex:product ;
+  prov:wasDerivedFrom ex:source ; oa:exact "Fictional quote" ; p:epistemicStatus "SelfReportedExplicit" ; p:validityStatus "Current" .`;
+    const blankProduct = await importAssistantTurtle(prefixes + source + medicine, options);
+    expect(blankProduct.skipped).toEqual({ count: 1, reasons: { InvalidFact: 1 } });
+  });
+  it(`caps outgoing statements per node at ${MAX_NODE_STATEMENTS}`, async () => {
+    const extra = (count: number) =>
+      fact.replace(
+        'oa:exact "Fictional quote"',
+        `oa:exact "Fictional quote" ; ex:p ${many(count, (i) => `ex:o${i}`)}`,
+      );
+    // The fact already has 8 statements; fill exactly to the cap, then one past it.
+    const atCap = await importAssistantTurtle(
+      prefixes + source + extra(MAX_NODE_STATEMENTS - 8),
+      options,
+    );
+    expect(atCap.skipped.count).toBe(0);
+    const over = await importAssistantTurtle(
+      prefixes + source + extra(MAX_NODE_STATEMENTS - 7),
+      options,
+    );
+    expect(over.skipped).toEqual({ count: 1, reasons: { TooManyStatements: 1 } });
+  });
+  it(`keeps at most ${MAX_FACT_QUOTES} quotes per fact, the first in term order`, async () => {
+    const quotes = Array.from(
+      { length: 30 },
+      (_, i) => `Fictional quote ${String(i).padStart(2, "0")}`,
+    );
+    const result = await importAssistantTurtle(
+      prefixes +
+        source +
+        fact.replace(
+          'oa:exact "Fictional quote"',
+          `oa:exact ${[...quotes]
+            .reverse()
+            .map((q) => `"${q}"`)
+            .join(", ")}`,
+        ),
+      options,
+    );
+    expect(result.skipped.count).toBe(0);
+    expect(result.value.nanopubs[0]?.evidence.map((e) => e.quote).sort()).toEqual(
+      quotes.slice(0, MAX_FACT_QUOTES),
+    );
+  });
+});
+
 it("accepts a named URN export and preserves zoned dateTime dates as UTC", async () => {
   const body = minimal
     .replaceAll("ex:fact", "<urn:example.org:health-export:2026:fact>")
@@ -929,7 +1004,30 @@ describe("CLI", () => {
         await readFile(join(dir, "out.trig"), "utf8"),
       );
       expect(projectHealthFacts(value, { owner }).facts).toHaveLength(8);
-      expect((await run(process.execPath, args)).stdout).toBe('{"imported":8,"skipped":3}\n');
+      // AUTHORED-BY Claude Opus 5.5
+      // Owner-only file mode; an existing output, a symlink, or the input path is refused.
+      expect((await stat(join(dir, "out.trig"))).mode & 0o777).toBe(0o600);
+      const written = await readFile(join(dir, "out.trig"), "utf8");
+      const at = (path: string) => args.map((v) => (v === join(dir, "out.trig") ? path : v));
+      await expect(run(process.execPath, args)).rejects.toMatchObject({
+        stderr: "Assistant health import failed\n",
+        stdout: "",
+      });
+      expect(await readFile(join(dir, "out.trig"), "utf8")).toBe(written);
+      await writeFile(join(dir, "target"), "fictional existing content");
+      await symlink(join(dir, "target"), join(dir, "link.trig"));
+      await expect(run(process.execPath, at(join(dir, "link.trig")))).rejects.toMatchObject({
+        stderr: "Assistant health import failed\n",
+        stdout: "",
+      });
+      expect(await readFile(join(dir, "target"), "utf8")).toBe("fictional existing content");
+      await expect(run(process.execPath, at(fixture.pathname))).rejects.toMatchObject({
+        stderr: "Assistant health import failed\n",
+        stdout: "",
+      });
+      expect((await run(process.execPath, at(join(dir, "again.trig")))).stdout).toBe(
+        '{"imported":8,"skipped":3}\n',
+      );
       await expect(
         run(process.execPath, [script.pathname, "--unknown-private-argument"]),
       ).rejects.toMatchObject({ stderr: "Assistant health import failed\n", stdout: "" });

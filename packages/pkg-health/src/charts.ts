@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+import { codePointOrder } from "./assistant-import.js";
+import { lexicalTime } from "./temporal.js";
 import type {
   HealthFilterOptions,
   HealthGraphView,
@@ -50,11 +52,26 @@ export function observationSeries(
     );
   return { series, skipped };
 }
+/** Undated items first, then parsed start time, then unparsable starts; ties by lexical start and ID. */
+function timelineOrder(
+  a: { start?: string; id: string; time?: number },
+  b: { start?: string; id: string; time?: number },
+): number {
+  const rank = (item: { start?: string; time?: number }) =>
+    item.start === undefined ? 0 : item.time === undefined ? 2 : 1;
+  return (
+    rank(a) - rank(b) ||
+    (a.time ?? 0) - (b.time ?? 0) ||
+    codePointOrder(a.start ?? "", b.start ?? "") ||
+    codePointOrder(a.id, b.id)
+  );
+}
 /** History is retained by default; callers may filter by belief before rendering. */
 export function healthTimeline(
   view: HealthGraphView,
   options: HealthFilterOptions = {},
 ): HealthTimeline {
+  const now = options.now === undefined ? Date.now() : Date.parse(options.now);
   const lanes: HealthTimeline = {
     condition: [],
     medication: [],
@@ -63,30 +80,41 @@ export function healthTimeline(
     documents: [],
   };
   for (const kind of Object.keys(lanes) as TimelineKind[]) {
+    const items: (HealthTimeline[TimelineKind][number] & { time?: number })[] = [];
     for (const fact of view.byKind[kind === "documents" ? "document" : kind]) {
       if (options.beliefs && !options.beliefs.includes(fact.belief)) continue;
       if (fact.kind === "document" && fact.dateCreated === undefined) continue;
-      lanes[kind].push({
+      const start =
+        (fact.kind === "document" ? fact.dateCreated : fact.period.start) ??
+        (fact.kind === "encounter" || fact.kind === "immunization" ? fact.date : undefined);
+      const end = fact.period.end;
+      // An end date in the future means ongoing. An end that cannot be parsed, or
+      // an invalid clock, never gives `active` and never claims the period ended.
+      const ended =
+        end !== undefined &&
+        (fact.period.endTime === undefined || !Number.isFinite(now)
+          ? undefined
+          : fact.period.endTime <= now);
+      items.push({
         id: fact.id,
         label: fact.label,
-        start:
-          (fact.kind === "document" ? fact.dateCreated : fact.period.start) ??
-          (fact.kind === "encounter" || fact.kind === "immunization" ? fact.date : undefined),
-        end: fact.period.end,
+        start,
+        end,
         belief: fact.belief,
         ...(fact.affectedBySkipped ? { affectedBySkipped: true as const } : {}),
         // An unreadable later update means the fact may have changed: never show it as active.
         tone:
-          fact.period.end !== undefined || fact.belief === "past"
+          fact.belief === "past" || ended === true
             ? "past"
-            : fact.validity === "Current" && !fact.affectedBySkipped
-              ? "active"
-              : "neutral",
+            : ended === undefined
+              ? "neutral"
+              : fact.validity === "Current" && !fact.affectedBySkipped
+                ? "active"
+                : "neutral",
+        time: start === undefined ? undefined : lexicalTime(start),
       });
     }
-    lanes[kind].sort(
-      (a, b) => (a.start ?? "").localeCompare(b.start ?? "") || a.id.localeCompare(b.id),
-    );
+    lanes[kind] = items.sort(timelineOrder).map(({ time: _time, ...item }) => item);
   }
   return lanes;
 }

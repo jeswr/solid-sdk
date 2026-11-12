@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pkg-health
 
@@ -93,11 +94,18 @@ Time comes from effective time, otherwise the period start. Missing/invalid time
 nonnumeric values increment `skipped` after belief filtering. Points sort by time;
 series sort by ID. No unit conversion or aggregation occurs.
 
-`healthTimeline(view, { beliefs? })` returns condition, medication, immunization,
+`healthTimeline(view, { beliefs?, now? })` returns condition, medication, immunization,
 encounter and documents arrays of `{ id, start?, end?, label, belief, affectedBySkipped?, tone }`.
-An end or past belief gives `past`; otherwise Current without `affectedBySkipped` gives
-`active`; remaining facts (including every fact with an unreadable later update) are `neutral`. Dates remain
-lexical; the original four lanes retain undated items. The documents lane includes
+A past belief, or an end whose parsed time is at or before `now`, gives `past`. A future
+end means ongoing. An end that cannot be parsed (or an invalid `now`) gives `neutral`:
+the timeline never claims such a period is active or has ended. Otherwise Current without
+`affectedBySkipped` gives `active`; remaining facts (including every fact with an
+unreadable later update) are `neutral`. `now` is an ISO dateTime and defaults to the
+current time; pass it for repeatable output. Tones are display only: belief and validity
+never depend on the clock. Dates remain lexical; the original four lanes retain undated
+items. Lanes list undated items first, then items by parsed start instant (so offsets and
+mixed precisions sort chronologically), then items whose start cannot be parsed; ties
+break on the lexical start and then the ID, in code-point order. The documents lane includes
 only documents with `dateCreated`, using that date. Notes never enter a timeline.
 Document `dateCreated` is exposed only when its typed literal passes the same
 calendar/timezone checks as `temporalTime`; arbitrary strings and invalid dates are omitted.
@@ -165,7 +173,9 @@ import context, not persisted RDF; serializing only the retained graphs loses it
 
 The owner must be an explicit safe HTTP(S) IRI. Import retains all valid nanopubs,
 including non-health and foreign claims; apply purpose policy and owner-scoped
-projection before display. pkg-memory's existing RDFlib parity policy still excludes
+projection before display. Imported attribution, epistemic status and batch are
+self-asserted and unsigned: nothing verifies them, so an imported nanopub can claim any
+agent (including the owner) and project as `definitely`. pkg-memory's existing RDFlib parity policy still excludes
 `xsd:double` and `xsd:dateTimeStamp`: tolerant import counts/skips these as unsupported
 datatypes, while the projector can read them in an existing `Nanopublications` value.
 
@@ -173,7 +183,7 @@ Assistant Turtle import
 
 ```ts
 import { importAssistantTurtle, importHealthExport, projectHealthFacts } from "@jeswr/pkg-health";
-import { serializeNanopublications, parseNanopublications } from "@jeswr/pkg-memory";
+import { mergeNanopublications } from "@jeswr/pkg-memory";
 
 const assistant = await importAssistantTurtle(turtle, {
   owner: ownerWebId,
@@ -183,24 +193,28 @@ const assistant = await importAssistantTurtle(turtle, {
 });
 const view = projectHealthFacts(assistant.value, { owner: ownerWebId });
 
-// Import the existing PKG independently. The caller merges the two separate batches.
+// Import the existing PKG independently, then merge the parsed values.
 const existing = await importHealthExport(otherTrig, { owner: ownerWebId });
-const merged = await parseNanopublications(
-  (await serializeNanopublications(existing.value)) +
-  (await serializeNanopublications(assistant.value)),
-);
-// Preserve tolerant-import context when present; it is not serialized RDF.
-merged.affected = existing.value.affected;
+const merged = mergeNanopublications(existing.value, assistant.value);
 const combined = projectHealthFacts(merged, { owner: ownerWebId });
 ```
 
-Use distinct batch IDs for independent exports and the same explicit owner. Stable claim
+Merge with pkg-memory's `mergeNanopublications(a, b)`, never by concatenating TriG.
+Concatenated TriG lets one export add records to another export's batch graphs (batch
+graph names derive from the batch ID alone) and merges unrelated blank nodes that
+happen to share a label. The helper unions the two datasets, keeps one copy of any
+graph present in both only when the copies are identical, and refuses (one fixed error,
+no values) when a shared graph differs or when one input supplies a batch source/entity
+or envelope graph that the other input's nanopubs read but do not hold. Blank nodes are
+relabelled per input, and `affected` is the union of both inputs' lists.
+
+Use distinct batch IDs for independent exports and the same explicit owner; the merge
+refuses an export that reuses another's batch ID with different batch records. Stable claim
 IDs derive from the fact IRIs; fixed input/options yield the same nanopub metadata,
 assertion IDs and byte-identical serialized TriG. Generated OA builders give evidence
 targets/selectors stable named IRIs, replacing only new envelope provenance blanks.
 Do not flatten assertion/provenance graphs or rewrite existing hashes. For empty
 batches, combine only nonempty nanopub exports: the nanopub parser requires a head.
-If both imports were tolerant nanopub imports, union their `affected` lists.
 
 The local importer uses pkg-memory's existing `parseReferenceRdf` suite-parser boundary.
 It accepts both schema.org schemes and both `https://w3id.org/jeswr/pkg#` and
@@ -248,9 +262,15 @@ claim's provenance without claiming that every derived source said the quoted te
 
 `skipped` counts fact nodes once, with fixed aggregate reasons: OtherSubject,
 UnsupportedType, UnknownEpistemicStatus, UnknownValidityStatus, InvalidEvidence,
-InvalidSource, UnsupportedValue, UnsupportedDatePrecision or InvalidFact. Raw outgoing
-terms on facts, products and sources pass memory's unchanged literal-parity and term
-safety checks before assertions are built. No values or parser diagnostics enter errors
+InvalidSource, UnsupportedValue, UnsupportedDatePrecision, TooManyStatements or
+InvalidFact. Raw outgoing terms on facts, products and sources pass memory's unchanged
+literal-parity and term safety checks (`validateAssertionTerms`, linear per quad) before
+anything else reads the node or assertions are built. Untrusted nodes are never
+canonicalized to validate them. A blank-node object on a fact, product or source refuses
+it (InvalidFact; an invalid source makes its facts InvalidSource), and a node with more
+than `MAX_NODE_STATEMENTS` (256) outgoing statements is refused (TooManyStatements),
+so a few kilobytes of Turtle cannot make the importer slow. At most `MAX_FACT_QUOTES`
+(20) usable quotes are kept per fact, the first 20 in term order; extras are dropped. No values or parser diagnostics enter errors
 or reports. Invalid syntax throws a fixed HealthGraphError; invalid options fail before
 parsing. Invalid sources cause their referencing facts to be skipped.
 
@@ -275,7 +295,9 @@ node packages/pkg-health/scripts/import-assistant-turtle.mjs in.ttl out.trig \
 ```
 
 Build first. The CLI writes TriG through pkg-memory and prints only imported/skipped
-counts. `--generated-at <xsd:dateTime>` fixes the clock for repeatable runs; otherwise
+counts. The output file is created with owner-only mode (0600) and must not exist: an
+existing file or symlink at the output path, or an output path equal to the input path,
+fails without writing. `--generated-at <xsd:dateTime>` fixes the clock for repeatable runs; otherwise
 it uses the current time. Failures print one fixed message with no paths or diagnostics.
 
 Fictional demo
@@ -330,10 +352,19 @@ The builder only persists each evidence's timestamp/speaker on a message record 
 `message_id` is supplied. For direct document/thread evidence, these per-evidence fields
 cannot be recovered; the reader leaves them absent. It does not mislabel the assertion's
 earliest aggregate provenance time as each quote's timestamp. Missing source metadata
-stays optional. Ambiguous or wrongly typed source scalar fields fail closed. The projector uses a per-call provenance reader that copies each batch source graph
-once, and an assertion graph cache. There is no global cache: later projections read
-fresh data. All whole-dataset graph lookups use indexed `match` operations. Regression
-tests count these operations over 4,500 records, without a timing threshold.
+stays optional. Ambiguous or wrongly typed source scalar fields fail closed for that
+fact only: the projector keeps the fact (its assertion and belief are unaffected) and
+sets `provenanceUnavailable: true`, with `provenance` holding only the nanopub's own
+envelope (generation time, agent IRI, batch, attribution, and evidence source IRIs,
+quotes and locators). Source records, the agent label and message times/speakers are
+omitted rather than guessed. Keeping the fact is the safer choice: hiding it would let
+one malformed or forged batch record remove the owner's data from view. The rest of the
+view renders normally. The projector uses a per-call provenance reader that copies each
+batch source graph once, reads each nanopub's provenance once, and an assertion graph
+cache. There is no global cache: later projections read fresh data. Whole-dataset and
+graph lookups use `match` over subject or object indexes (pkg-memory's `readNamedGraph`
+indexes both). Regression tests count these operations over 4,500 records and count
+term comparisons for 2,000 linked notes, without a timing threshold.
 
 Body-system heuristic (display only)
 

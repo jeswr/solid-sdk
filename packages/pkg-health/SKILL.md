@@ -30,7 +30,10 @@ low/decreased/reduced, abnormal/positive, normal/negative/unremarkable/within no
 limits. Borderline and compound/negated/parenthetical text have no interpretation.
 Numeric strings become numbers only when faithfully representable. Labels prefer
 name, rdfs label, code value/preferred label/rdfs label, then humanised kind. Sector observation subtypes
-are recognised. `healthTimeline` returns five lanes, including dated `documents`.
+are recognised. `healthTimeline(view, { beliefs?, now? })` returns five lanes, including
+dated `documents`. An end at or before `now` (default: current time) is `past`, a future
+end is ongoing, an unparsable end is `neutral`; lanes sort by parsed start instant.
+Imported attribution and epistemic status are unsigned and unverified.
 Notes use propertyID labels and require owner additionalProperty links plus health
 categories; documents require owner about/subjectOf links and a health category or
 no categories at all. Exclude documents categorized only as non-health. Expose
@@ -52,7 +55,9 @@ blank-node dose/code records and mixed temporal/value datatypes use small read-o
 wrapper views; do not add handwritten model accessors to bypass admission.
 
 Provenance comes from pkg-memory's `readNanopubProvenance`; do not derive batch graph
-names here. Message timestamps/speakers are optional and unavailable for direct
+names here. An unreadable provenance record degrades only its own facts: they stay in
+the view with `provenanceUnavailable: true` and envelope-only provenance (no sources,
+agent label, message times or speakers); never fail the whole projection for it. Message timestamps/speakers are optional and unavailable for direct
 non-message evidence. Keep quotes attached to their own nanopub, even when assertions
 are shared. Use only fictional example.org fixtures. `@jeswr/pkg-health/testing` exports
 `exampleHealthKnowledge({ now? })`, a fixed-clock fictional Avery story built solely
@@ -64,7 +69,11 @@ per-fact full-dataset scans or global caches.
 Use `importAssistantTurtle(text, { owner, assistant: { iri, label }, batchId, generatedAt })`
 for non-nanopub assistant exports. It accepts both schema.org schemes and pkg namespaces,
 validates each fact/source/product before building, and skips invalid facts with fixed
-aggregate reasons. Scalar aliases must agree, except NFC-normalized case-only name
+aggregate reasons. Validation is linear (`validateAssertionTerms` per quad) and runs
+before any other read of the node: never canonicalize untrusted nodes to validate them.
+Blank-node objects on facts/products/sources are refused, a node may have at most
+`MAX_NODE_STATEMENTS` (256) outgoing statements (TooManyStatements), and at most
+`MAX_FACT_QUOTES` (20) quotes are kept per fact, the first in term order. Scalar aliases must agree, except NFC-normalized case-only name
 variants; keep the original literal of the first variant in Unicode code-point order.
 Repeated source titles keep the first non-empty title in code-point order (or an explicit
 empty title when all are empty). Source dates compare by calendar day, dropping date
@@ -88,6 +97,8 @@ The assistant is the worker and attributed agent.
 Generated local import facets preserve qualitative observations, date/dateTime precision,
 statement schedules, source creation/model metadata and note labels. See the README's
 import gaps before extending admission. Keep independent exports in separate batches with
-the same owner; merge their TriG using the nanopub parser and preserve `affected` context.
-The local CLI prints counts only; `--generated-at` fixes the clock. Never put real health
+the same owner; merge parsed values with pkg-memory's `mergeNanopublications(a, b)`
+(it refuses conflicting shared batch/envelope graphs and unions `affected`). Never
+concatenate TriG. The local CLI prints counts only, writes its output with mode 0600 and
+flag `wx` (no overwrite, no symlink, not the input path); `--generated-at` fixes the clock. Never put real health
 exports in fixtures or logs.

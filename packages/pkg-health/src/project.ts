@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
@@ -7,6 +8,7 @@ import {
   classifyNanopublications,
   createNanopubProvenanceReader,
   type FactProvenance,
+  type Nanopublication,
   type Nanopublications,
   readNamedGraph,
 } from "@jeswr/pkg-memory";
@@ -91,12 +93,28 @@ function readCode(node: ReadNode): HealthCode | undefined {
     system: iri ? codingSystem(iri) : "other",
   };
 }
+/**
+ * Provenance from the nanopub's own envelope only, for a fact whose batch source
+ * records cannot be read. Batch-graph data (source records, agent label, message
+ * times and speakers) is omitted rather than guessed.
+ */
+function envelopeProvenance(np: Nanopublication): FactProvenance {
+  return {
+    generatedAt: np.generatedAt,
+    agent: { iri: np.agent },
+    batch: np.batch,
+    attributedTo: [...np.attributedTo],
+    sources: [],
+    evidence: np.evidence.map(({ source, quote, locator }) => ({ source, quote, locator })),
+  };
+}
 function base(
-  provenance: FactProvenance,
+  { provenance, unavailable }: { provenance: FactProvenance; unavailable: boolean },
   np: ClassifiedNanopublication,
   node: ReadNode,
 ): HealthFactBase {
   return {
+    ...(unavailable ? { provenanceUnavailable: true as const } : {}),
     id: np.id,
     assertionId: np.assertionId,
     subject: node.value,
@@ -292,7 +310,22 @@ export function projectHealthFacts(
       sources: [],
       excludedOtherSubjects: 0,
     };
-    const provenance = createNanopubProvenanceReader(value);
+    const reader = createNanopubProvenanceReader(value);
+    // One unreadable provenance record (for example a duplicated source field from
+    // a merged export) degrades only its own facts; the rest of the view renders.
+    const provenanceCache = new Map<string, { provenance: FactProvenance; unavailable: boolean }>();
+    const provenance = (np: Nanopublication) => {
+      let result = provenanceCache.get(np.id);
+      if (!result) {
+        try {
+          result = { provenance: reader(np), unavailable: false };
+        } catch {
+          result = { provenance: envelopeProvenance(np), unavailable: true };
+        }
+        provenanceCache.set(np.id, result);
+      }
+      return result;
+    };
     const assertions = new Map<string, { graph: DatasetCore; nodes: ReadNode[] }>();
     const kindCache = new WeakMap<ReadNode, HealthFactKind[]>();
     const kindsOf = (node: ReadNode): HealthFactKind[] => {

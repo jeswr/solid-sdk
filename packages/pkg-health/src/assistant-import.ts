@@ -11,10 +11,11 @@ import {
   pkgId,
   type Source,
   serializeNanopublications,
+  validateAssertionTerms,
 } from "@jeswr/pkg-memory";
-import type { DatasetCore, Literal, Term } from "@rdfjs/types";
+import type { DatasetCore, Literal, Quad, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
-import { DataFactory as df, Store } from "n3";
+import { DataFactory as df, type Store } from "n3";
 import { entities } from "./generated/model.js";
 import { H, RDF_TYPE, ReadNode, S, SUBJECT_LINK_PREDICATES, XSD } from "./read.js";
 import { temporalTime } from "./temporal.js";
@@ -105,9 +106,25 @@ function iri(term: Term): string {
     throw new Skip("InvalidFact");
   return term.value;
 }
-/** Validate all outgoing terms, including fields not copied into the assertion. */
+/** Outgoing statements allowed on one fact, product or source node. */
+export const MAX_NODE_STATEMENTS = 256;
+/** Exact quotes kept per fact; extras are dropped in term order. */
+export const MAX_FACT_QUOTES = 20;
+/**
+ * Validate all outgoing terms, including fields not copied into the assertion,
+ * with linear per-quad checks before anything reads the node. Blank-node objects
+ * are refused (none is ever copied; named IRIs are required) and a node may have
+ * at most MAX_NODE_STATEMENTS outgoing statements, so untrusted input cannot make
+ * validation or the alias reads after it expensive.
+ */
 function validate(node: ReadNode): void {
-  canonicalizeAssertion(new Store([...node.dataset.match(node.term)]));
+  const quads: Quad[] = [];
+  for (const quad of node.dataset.match(node.term)) {
+    if (quads.length === MAX_NODE_STATEMENTS) throw new Skip("TooManyStatements");
+    if (quad.object.termType === "BlankNode") throw new Skip("InvalidFact");
+    quads.push(quad);
+  }
+  validateAssertionTerms(quads);
 }
 function checkedDate(term: Term, reason: string): Literal {
   if (
@@ -157,8 +174,8 @@ function readSource(
 ): Source | undefined {
   try {
     const node = new ReadNode(iri(term), dataset);
-    if (node.owners.some((t) => t.termType !== "NamedNode" || t.value !== owner)) return undefined;
     validate(node);
+    if (node.owners.some((t) => t.termType !== "NamedNode" || t.value !== owner)) return undefined;
     // Assistant exports may repeat source names and creation dates. Keep the first
     // name in code-point order and the earliest date, so output is deterministic.
     const names = terms(node, schema("name")).map(string);
@@ -207,10 +224,10 @@ function assertion(node: ReadNode, kind: string, owner: string): Store {
       break;
     case "medication": {
       const product = new ReadNode(iri(requireValue(one(node, [`${H}medication`]))), node.dataset);
+      validate(product);
       // A product that names another person is foreign data: never copy its name.
       if (product.owners.some((t) => t.termType !== "NamedNode" || t.value !== owner))
         throw new Skip("OtherSubject");
-      validate(product);
       if (
         !product
           .terms(RDF_TYPE)
@@ -351,6 +368,7 @@ export async function importAssistantTurtle(
     try {
       iri(term);
       const node = new ReadNode(term, dataset);
+      validate(node);
       // On a fact, schema:about is also a subject link (assistant exports use it so).
       const owners = [...node.owners, ...terms(node, schema("about"))];
       if (
@@ -358,7 +376,6 @@ export async function importAssistantTurtle(
         owners.some((t) => t.termType !== "NamedNode" || t.value !== config.owner)
       )
         throw new Skip("OtherSubject");
-      validate(node);
       const kinds = new Set(
         node
           .terms(RDF_TYPE)
@@ -384,10 +401,12 @@ export async function importAssistantTurtle(
         throw new Skip("UnknownValidityStatus");
       const derived = terms(node, [`${PROV}wasDerivedFrom`]);
       // A quote must stay exact, so an over-long quote is dropped rather than cut.
-      // The fact is kept when at least one usable quote remains.
+      // The fact is kept when at least one usable quote remains. At most
+      // MAX_FACT_QUOTES usable quotes are kept, the first in term order.
       const quotes = terms(node, [`${OA}exact`])
         .map(string)
-        .filter((q) => q && [...q].length <= 300);
+        .filter((q) => q && [...q].length <= 300)
+        .slice(0, MAX_FACT_QUOTES);
       if (!derived.length || !quotes.length) throw new Skip("InvalidEvidence");
       const factSources = derived.map((target): Source => {
         const source = sources.get(iri(target));
