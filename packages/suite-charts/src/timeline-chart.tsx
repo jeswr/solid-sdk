@@ -17,9 +17,9 @@ import {
 } from "./shared.js";
 import type { TimelineChartProps, XValue } from "./types.js";
 
-function displayTime(value: XValue) {
+function displayTime(value: XValue, format = timeText) {
   const time = value instanceof Date ? value.getTime() : toTime(value);
-  return Number.isFinite(time) ? timeText(time) : rawX(value);
+  return Number.isFinite(time) ? format(time) : rawX(value);
 }
 
 export function TimelineChart(props: TimelineChartProps) {
@@ -67,14 +67,14 @@ export function TimelineChart(props: TimelineChartProps) {
             l.items.map((i) => [
               l.label,
               i.label,
-              displayTime(i.start),
+              displayTime(i.start, props.formatX),
               i.end === undefined
                 ? i.tone === "active"
                   ? now === undefined
                     ? "Ongoing"
-                    : `Ongoing (through ${displayTime(now)})`
+                    : `Ongoing (through ${displayTime(now, props.formatX)})`
                   : "Point event"
-                : displayTime(i.end),
+                : displayTime(i.end, props.formatX),
               i.tone ?? "neutral",
             ]),
           )}
@@ -88,6 +88,8 @@ export function TimelineChart(props: TimelineChartProps) {
           domain={domain}
           width={width}
           height={height}
+          formatTime={props.formatX ?? timeText}
+          formatAxis={props.formatX ?? ((n) => timeText(n).slice(0, 10))}
         />
       )}
     </Frame>
@@ -112,12 +114,16 @@ function TimelinePlot({
   domain,
   width,
   height,
+  formatTime,
+  formatAxis,
 }: {
   title: string;
   lanes: PreparedLanes;
   domain: [number, number];
   width: number;
   height: number;
+  formatTime: (time: number) => string;
+  formatAxis: (time: number) => string;
 }) {
   const narrow = width < 480;
   const left = narrow ? 16 : 136,
@@ -143,7 +149,7 @@ function TimelinePlot({
     key: item.key,
     px: item.px,
     py: item.py,
-    text: `${item.lane}, ${item.label}: ${timeText(item.start)}${item.open ? `, ongoing through ${timeText(item.end)}` : item.point ? ", point event" : ` to ${timeText(item.end)}`}, ${item.tone ?? "neutral"}`,
+    text: `${item.lane}, ${item.label}: ${formatTime(item.start)}${item.open ? `, ongoing through ${formatTime(item.end)}` : item.point ? ", point event" : ` to ${formatTime(item.end)}`}, ${item.tone ?? "neutral"}`,
   }));
   const interaction = usePoints(marks);
   return (
@@ -179,7 +185,7 @@ function TimelinePlot({
           values={domain[0] === domain[1] ? [domain[0]] : domain}
           scale={x}
           bottom={bottom}
-          format={(n) => timeText(n).slice(0, 10)}
+          format={formatAxis}
           label="UTC"
         />
         {visible.map((item, i) => {

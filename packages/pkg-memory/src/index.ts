@@ -21,7 +21,10 @@ export type {
   NanopubEvidence,
   Nanopublication,
   Nanopublications,
+  ParseNanopublicationsOptions,
+  SkippedNanopublication,
   Source,
+  TolerantNanopublications,
   ValidityStatus,
 } from "./model.js";
 export {
@@ -29,10 +32,13 @@ export {
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,
+  parseNanopublicationsTolerant,
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";
 export type { PodConditions, PodPort } from "./pod-port.js";
+export type { FactProvenance, SourceInfo } from "./provenance.js";
+export { createNanopubProvenanceReader, readNanopubProvenance } from "./provenance.js";
 export type { MemoryPurpose } from "./purpose.js";
 export {
   createDefaultPolicy,
@@ -40,6 +46,9 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+/** Suite RDF parser without nanopub-envelope or literal validation; validate before building. */
+export { parseReferenceRdf } from "./rdf.js";
+export { readNamedGraph } from "./read-graph.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
 export type { Fact, PaymentCardBrand, TemporalValue } from "./templates.js";

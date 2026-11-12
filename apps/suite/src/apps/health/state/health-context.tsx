@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -72,9 +73,11 @@ const Context = createContext<HealthContextValue | null>(null);
 export function HealthProvider({
   session,
   children,
+  enabled = true,
 }: {
   session: PodSession;
   children: ReactNode;
+  enabled?: boolean;
 }) {
   const store = useMemo(
     () => createHealthDataStore(session.fetch, session.storageUrl, session.webId),
@@ -82,9 +85,10 @@ export function HealthProvider({
   );
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
+    if (!enabled) return;
     const timer = setInterval(() => setClock(new Date()), 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [enabled]);
   const [revision, setRevision] = useState(0);
   const [boot, setBoot] = useState<AsyncState<null>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -116,6 +120,7 @@ export function HealthProvider({
   const invalidate = useCallback(() => setRevision((value) => value + 1), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries initialization
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     setBoot({ status: "loading" });
     void ensureSample(session)
@@ -131,8 +136,9 @@ export function HealthProvider({
     return () => {
       live = false;
     };
-  }, [session, store, attempt]);
+  }, [session, store, attempt, enabled]);
   useEffect(() => {
+    if (!enabled) return;
     let timer: ReturnType<typeof setTimeout>;
     const off = session.subscribe((url) => {
       // Focus reconciliation can invalidate the storage root or an ancestor
@@ -146,7 +152,7 @@ export function HealthProvider({
       off();
       clearTimeout(timer);
     };
-  }, [session, store, invalidate]);
+  }, [session, store, invalidate, enabled]);
   const mutate = useCallback(
     async <T,>(write: () => Promise<T>, message: string): Promise<T> => {
       setSaving((value) => value + 1);

@@ -32,8 +32,25 @@ const config: NextConfig = {
   webpack(config, { isServer, webpack }) {
     // rdf-engine's lazy WASM loader includes a Node-only disk fallback. Browser
     // initialization uses its emitted WASM URL and never enters that branch.
-    if (!isServer)
+    if (!isServer) {
       config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:fs\/promises$/ }));
+      // pkg-memory's hash and URL helpers use Node-prefixed imports. Webpack's
+      // scheme reader runs before aliases, so normalize just these two imports
+      // to Next's existing browser fallbacks. Server imports stay native.
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /^node:(crypto|url)$/,
+          (resource: { request: string }) => {
+            resource.request = resource.request.slice(5);
+          },
+        ),
+      );
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "node:crypto": "crypto",
+        "node:url": "url",
+      };
+    }
     // Imported model files use Node-style .js specifiers for their TypeScript sources.
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
