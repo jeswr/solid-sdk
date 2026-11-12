@@ -2,6 +2,7 @@
 
 /** Canonical suite and standard namespace bases. These constants never build RDF. */
 export const NS = {
+  LEGACY: "https://jeswr.org/ns/legacy#",
   CORE: "https://jeswr.org/ns/core#",
   TASK: "https://jeswr.org/ns/task#",
   FED: "https://jeswr.org/ns/fed#",

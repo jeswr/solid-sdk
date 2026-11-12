@@ -247,3 +247,20 @@ html[data-app-colours="true"] .suite-rail-button[href="/money"] {
 html[data-app-colours="true"] .suite-rail-button[href="/health"] {
   color: var(--presence-health);
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.legacy-settings {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+.legacy-settings :where(p, li, a) {
+  overflow-wrap: anywhere;
+}
+.legacy-settings li {
+  margin-block: var(--space-2);
+}
+.legacy-folder-path {
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+}

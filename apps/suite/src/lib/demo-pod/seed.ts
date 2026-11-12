@@ -17,6 +17,7 @@ import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedContacts } from "./seed-contacts";
 import { buildHomeSeed } from "./seed-home";
+import { seedLegacy, withDemoRecoveryProfile } from "./seed-legacy";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
 
@@ -132,11 +133,12 @@ export async function buildDemoSeed(
   ].join("\n");
   const files: DemoSeedFile[] = [
     ...(await buildHomeSeed(now)),
+    ...(await seedLegacy(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     ...(await buildAgentSeed(now)),
     {
       path: "profile/card",
-      body: await withDemoAgentKey(profile),
+      body: await withDemoAgentKey(await withDemoRecoveryProfile(profile)),
       contentType: "text/turtle",
       modified: now - 40 * DAY,
     },

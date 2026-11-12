@@ -285,7 +285,7 @@ for (const [section, title] of [
     const sidebar = page
       .getByRole("navigation", { name: "Settings sections", exact: true })
       .filter({ visible: true });
-    await expect(sidebar.getByRole("link")).toHaveCount(7);
+    await expect(sidebar.getByRole("link")).toHaveCount(8);
     await expect(sidebar.getByRole("link", { name: title, exact: true })).toHaveAttribute(
       "aria-current",
       "page",

@@ -351,7 +351,11 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   const respond = (status: number, headers: Record<string, string> = {}, body?: BodyInit) =>
     new Response(status === 204 || status === 205 || status === 304 ? null : (body ?? null), {
       status,
-      headers: { "x-solid-demo-access-control": "none", ...headers },
+      headers: {
+        "x-solid-demo-access-control": "none",
+        date: new Date(now()).toUTCString(),
+        ...headers,
+      },
     });
 
   const currentEtag = (url: string): string | undefined =>
