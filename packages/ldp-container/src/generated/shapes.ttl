@@ -1,0 +1,29 @@
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix ldp: <http://www.w3.org/ns/ldp#>.
+@prefix posix: <http://www.w3.org/ns/posix/stat#>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix sh: <http://www.w3.org/ns/shacl#>.
+@prefix shapes: <https://jeswr.org/ns/ldp-container/shapes#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+shapes:0b4bcbfcd040501211f8558fc20e6cdac03e920e0f2048ab1ea0828c1120e275-Container-contains sh:minCount 0;
+    sh:nodeKind sh:IRI;
+    sh:path ldp:contains.
+shapes:4a701297d4443bdd660c61514a7e2008867f6181bd6e478d4985363ab75bb770-Resource-size sh:datatype xsd:integer;
+    sh:minCount 0;
+    sh:path posix:size.
+shapes:64eef3eb873557fdf5327e860c29fd6e5fe59da829565d79ad5f449e7acbd42e-Resource-title sh:datatype xsd:string;
+    sh:minCount 0;
+    sh:path dct:title.
+shapes:ContainerShape a sh:NodeShape;
+    sh:property shapes:0b4bcbfcd040501211f8558fc20e6cdac03e920e0f2048ab1ea0828c1120e275-Container-contains;
+    sh:targetClass ldp:Container.
+shapes:MemberShape a sh:NodeShape;
+    sh:property shapes:4a701297d4443bdd660c61514a7e2008867f6181bd6e478d4985363ab75bb770-Resource-size, shapes:64eef3eb873557fdf5327e860c29fd6e5fe59da829565d79ad5f449e7acbd42e-Resource-title, shapes:a415f4382658f629882aacf4d89c986dbd4a33cf05e8ec9750c8c4252bf64394-Resource-format, shapes:df3ea4f6741077845b8f3268920273a1908d0e5925f6c2934bae1c9ede92023f-Resource-modified;
+    sh:targetClass ldp:Resource.
+shapes:a415f4382658f629882aacf4d89c986dbd4a33cf05e8ec9750c8c4252bf64394-Resource-format sh:datatype xsd:string;
+    sh:minCount 0;
+    sh:path dct:format.
+shapes:df3ea4f6741077845b8f3268920273a1908d0e5925f6c2934bae1c9ede92023f-Resource-modified sh:datatype xsd:dateTime;
+    sh:minCount 0;
+    sh:path dct:modified.
