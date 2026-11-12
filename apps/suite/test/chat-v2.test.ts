@@ -1116,7 +1116,7 @@ it("reports no drops for a healthy multi-day room where one member never posted"
   }
 });
 
-it("propagates a transport failure while streaming another member's day, and malformed JSON", async () => {
+it("propagates a transport failure while streaming another member's day", async () => {
   const pod = wacPod();
   await createRoom(pod.as(ALICE), ROOT, "team", input);
   const day = dayUrl(await memberContainer(ROOM, BOB), AT);
@@ -1132,8 +1132,8 @@ it("propagates a transport failure while streaming another member's day, and mal
     );
   for (const response of [
     () => failing(new TypeError("terminated")),
-    () => failing(new Error("connection reset")),
-    () => new Response('{"@id": ', { headers: { "content-type": "application/ld+json" } }),
+    () => failing(Object.assign(new Error("connection reset"), { code: "ECONNRESET" })),
+    () => failing(Object.assign(new Error("socket closed"), { code: "UND_ERR_SOCKET" })),
   ]) {
     pod.fail((url, method) => (url === day && method === "GET" ? response() : undefined));
     const failure = await loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE }).catch(
@@ -1141,6 +1141,24 @@ it("propagates a transport failure while streaming another member's day, and mal
     );
     expect(failure).toBeInstanceOf(RdfFetchError);
     expect((failure as RdfFetchError).status).toBeUndefined();
+  }
+});
+
+it("isolates another member's malformed or invalid JSON-LD day as content", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const day = dayUrl(await memberContainer(ROOM, BOB), AT);
+  const own = dayUrl(await memberContainer(ROOM, ALICE), AT);
+  const jsonld = (body: string) =>
+    new Response(body, { headers: { "content-type": "application/ld+json" } });
+  for (const body of ['{"@id": ', '{"@id":"#m","http://e/p":{"@value":5,"@direction":"ltr"}}']) {
+    pod.fail((url, method) => (url === day && method === "GET" ? jsonld(body) : undefined));
+    const page = await loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE });
+    expect(page.dropped).toBe(1);
+    pod.fail((url, method) => (url === own && method === "GET" ? jsonld(body) : undefined));
+    await expect(
+      loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE }),
+    ).rejects.toBeInstanceOf(RdfFetchError);
   }
 });
 

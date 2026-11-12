@@ -95,11 +95,11 @@ search also includes these drops in its skipped-records count. One shared client
 limiter bounds member reads across rooms to six concurrent requests; the open room's
 timeline reads start before queued search and unread reads. For another member's resources,
 404/410 are an absent day (empty, not counted). 403/406/415/501 (501 is CSS's answer when a
-stored type has no RDF conversion), invalid N3, JSON-LD processing errors, unsupported content
-types and parser-budget failures are empty and each increments `dropped`. fetch-rdf does not
-separate body transport failures from parser failures, so only recognisable parser errors are
-isolated: a failure while streaming a foreign body, and a malformed JSON syntax error, both
-propagate. `reader` is required; the reader's own days retain strict errors (404 remains
+stored type has no RDF conversion), invalid N3, malformed or invalid JSON-LD, unsupported
+content types and parser-budget failures are empty and each increments `dropped`. fetch-rdf does
+not separate body transport failures from parser failures, so a parse-stage cause that is a
+TypeError or carries a system code (ECONNRESET, UND_ERR_*) is treated as transport and
+propagates; any other parser Error is the writer's content and is isolated. `reader` is required; the reader's own days retain strict errors (404 remains
 empty); index, network and other HTTP failures propagate. Merge order remains
 publication time then ID.
 Search, unread counts and history use those same pages. Files are discovered inside

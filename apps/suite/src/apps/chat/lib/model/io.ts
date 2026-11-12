@@ -130,10 +130,10 @@ export interface MemberReadOptions {
 const FOREIGN_REFUSALS = new Set([403, 406, 415, 501]);
 /**
  * fetch-rdf reports body transport failures and parser failures alike (no status, a content
- * type, the failure as `cause`), so only recognisable content failures are isolated: budgets,
- * unusable media types (decided before any body read), N3 syntax errors (`context`), JSON-LD
- * processing errors (spaced `code`) and the default loader's remote-context refusal. Anything
- * else, including malformed JSON, stays strict.
+ * type, the failure as `cause`). Budgets and unusable media types (decided before any body read)
+ * are content failures. For a parse-stage cause, a TypeError or an Error carrying a system code
+ * (ECONNRESET, UND_ERR_*) is transport and stays strict; any other Error (N3 syntax, JSON-LD
+ * processing or malformed JSON, coded or not) is the writer's content and is isolated.
  */
 function contentFailure(error: RdfFetchError): boolean {
   if (error.status !== undefined) return FOREIGN_REFUSALS.has(error.status);
@@ -146,11 +146,10 @@ function contentFailure(error: RdfFetchError): boolean {
   if (cause instanceof RdfFetchError)
     return cause.status === undefined && cause.cause === undefined;
   if (!(cause instanceof Error) || cause instanceof TypeError) return false;
-  const { context, code } = cause as Error & { context?: unknown; code?: unknown };
-  return (
-    (typeof context === "object" && context !== null) ||
-    (typeof code === "string" && code.includes(" "))
-  );
+  // Transport failures surface as TypeError (fetch) or carry a system code (ECONNRESET,
+  // UND_ERR_*). JSON-LD parsers raise content failures as plain Errors, some with no code.
+  const { code } = cause as Error & { code?: unknown };
+  return !(typeof code === "string" && /^[A-Z][A-Z0-9_]*$/.test(code));
 }
 /** Only foreign member resources are isolated; index, own and transport failures stay strict. */
 export async function loadMemberChat(
