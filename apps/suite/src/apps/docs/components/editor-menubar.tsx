@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
   Kbd,
 } from "@jeswr/suite-ui";
-import type { Editor } from "@tiptap/react";
+import { type Editor, useEditorState } from "@tiptap/react";
 import Link from "next/link";
 import { type ReactNode, useId, useRef, useState } from "react";
 import type { EditorAction } from "../editor/actions";
@@ -23,6 +23,7 @@ import { clipboardAction } from "../editor/clipboard";
 import type { DownloadFormat } from "../editor/export-document";
 import { indentDocument, paragraphSpacing } from "../editor/formatting";
 import { keyboardLabel } from "../lib/editor/logic";
+import { suggestionAt } from "../lib/editor/suggestions";
 import { DownloadMenu } from "./download-menu";
 import { VersionMenu, type VersionMenuProps } from "./version-menu";
 
@@ -113,6 +114,10 @@ export function openMenuAfter(current: string | null, label: string, expanded: b
 /** Radix owns menu/submenu navigation and typeahead; this adds menubar traversal. */
 export function EditorMenubar(props: EditorMenubarProps) {
   const { editor, actions, mac, readOnly, resolveSuggestions: resolveAll } = props;
+  const canReview = useEditorState({
+    editor,
+    selector: ({ editor: current }) => !!suggestionAt(current.state),
+  });
   const shareReasonId = useId();
   const commentReasonId = useId();
   const shareDisabledReason =
@@ -360,6 +365,7 @@ export function EditorMenubar(props: EditorMenubarProps) {
               "Review current suggestion",
               () => editor.view.dom.dispatchEvent(new Event("docs-review-suggestion")),
               "Mod+Alt+Shift+A",
+              !canReview,
             )}
             {item("Accept all suggestions", () => resolveAll(true))}
             {item("Reject all suggestions", () => resolveAll(false))}

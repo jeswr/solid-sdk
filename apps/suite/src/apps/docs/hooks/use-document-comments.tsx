@@ -206,6 +206,7 @@ export function useDocumentComments(runtime: DocumentPersistence, editor: Editor
         reason={reason}
         error={error ?? loadError}
         webId={runtime.session.webId}
+        session={runtime.session}
         showResolved={showResolved}
         setShowResolved={setShowResolved}
         select={select}

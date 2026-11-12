@@ -76,7 +76,19 @@ beforeEach(() => {
     stored: { url: resource },
     online: true,
     readOnly: true,
-    session: { webId, storageUrl: "https://pod.example/", displayName: "Alice", fetch: pod.fetch },
+    session: {
+      webId,
+      storageUrl: "https://pod.example/",
+      displayName: "Alice",
+      fetch: pod.fetch,
+      publicFetch: vi.fn(
+        async () =>
+          new Response(
+            '<https://bob.example/#me> <http://xmlns.com/foaf/0.1/name> "Bob Builder" .',
+            { headers: { "content-type": "text/turtle" } },
+          ),
+      ),
+    },
   } as unknown as DocumentPersistence;
   root = {
     url: "https://pod.example/docs/plan/comments/one.ttl",
@@ -163,8 +175,10 @@ it("activates from highlights, follows edits, labels orphan threads, and support
   render(<Harness />);
   await waitFor(() => expect(button("Comments (1 open)")).toBeTruthy());
   await act(async () => commentKey.getState(editor.state)?.activate?.(root.url));
-  const article = await screen.findByRole("article", { name: `${webId}: word` });
+  const article = await screen.findByRole("article", { name: "You: word" });
   expect(article).toBe(document.activeElement);
+  expect(screen.getByText("You").title).toBe(webId);
+  expect((await screen.findByText("Bob Builder")).title).toBe("https://bob.example/#me");
   fireEvent.keyDown(article, { key: "a" });
   fireEvent.keyDown(article, { key: "Escape" });
   expect(screen.queryByRole("complementary")).toBeNull();

@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1
 // @vitest-environment jsdom
 import { type GrantSnapshot, readGrants } from "@jeswr/pod-access/roles";
-import type { Editor } from "@tiptap/react";
+import { Editor } from "@tiptap/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
@@ -12,6 +12,7 @@ import {
   waitFor,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { EditorMenubar } from "../src/apps/docs/components/editor-menubar";
+import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { useDocumentSharing } from "../src/apps/docs/hooks/use-document-sharing";
 import {
   applySharing,
@@ -55,6 +56,7 @@ type Options = {
   readOnly?: boolean;
 };
 let sharing: ReturnType<typeof useDocumentSharing>;
+let editor: Editor;
 const noop = () => {};
 function Harness({
   resource: url = resource,
@@ -68,7 +70,7 @@ function Harness({
     <>
       {sharing.button}
       <EditorMenubar
-        editor={{} as Editor}
+        editor={editor}
         actions={[]}
         mac={false}
         online={online}
@@ -123,6 +125,7 @@ async function permissionError(status: number | "scope" | "unsupported") {
   throw new Error("Expected the SDK permission read to fail");
 }
 beforeEach(() => {
+  editor = new Editor({ extensions: baseExtensions(fetch), content: "<p></p>" });
   vi.clearAllMocks();
   vi.mocked(loadSharing).mockResolvedValue(snapshot());
   vi.mocked(applySharing).mockResolvedValue(snapshot());
@@ -138,6 +141,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  editor.destroy();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });

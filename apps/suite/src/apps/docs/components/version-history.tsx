@@ -11,6 +11,7 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDisplayNames } from "@/lib/profile/use-display-names";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
 import { podScopedFetch } from "../editor/private-image";
@@ -110,6 +111,10 @@ export function VersionHistory({
     [resource, http],
   );
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  const displayName = useDisplayNames(
+    versions.map((version) => version.creator),
+    runtime.session,
+  );
   const [selected, setSelected] = useState<DocumentVersion>();
   const [preview, setPreview] = useState<JSONContent>();
   const [error, setError] = useState<string>();
@@ -308,11 +313,7 @@ export function VersionHistory({
                   onClick={() => void choose(version)}
                 >
                   <span>{version.name || new Date(version.created).toLocaleString()}</span>
-                  <small>
-                    {version.creator === runtime.session.webId
-                      ? runtime.session.displayName
-                      : version.creator || "Unknown author"}
-                  </small>
+                  <small title={version.creator}>{displayName(version.creator)}</small>
                 </button>
               </li>
             ))}

@@ -114,7 +114,13 @@ function inlineCode(text: string): string {
 // exported (`attributes`) or deliberately dropped (`omitted`, see MARKDOWN_NOTES).
 // A mark whose every attribute is omitted carries nothing to export and is dropped.
 type MarkdownRule = { tag: string; attributes: string[]; omitted?: string[] };
-const OMITTED_BLOCK_STYLES = ["indent", "lineHeight", "spaceBefore", "spaceAfter"];
+const OMITTED_BLOCK_STYLES = [
+  "indent",
+  "lineHeight",
+  "spaceBefore",
+  "spaceAfter",
+  "suggestionBreaks",
+];
 export const MARKDOWN_NODE_RULES: Record<string, MarkdownRule> = {
   doc: { tag: "", attributes: [] },
   text: { tag: "", attributes: [] },
@@ -126,7 +132,7 @@ export const MARKDOWN_NODE_RULES: Record<string, MarkdownRule> = {
   listItem: { tag: "li", attributes: [] },
   taskList: { tag: "ul", attributes: [] },
   taskItem: { tag: "li", attributes: ["checked"] },
-  codeBlock: { tag: "pre", attributes: ["language"] },
+  codeBlock: { tag: "pre", attributes: ["language"], omitted: ["suggestionBreaks"] },
   hardBreak: { tag: "br", attributes: [] },
   horizontalRule: { tag: "hr", attributes: [] },
   image: { tag: "img", attributes: ["src", "alt", "title", "width", "height", "link"] },

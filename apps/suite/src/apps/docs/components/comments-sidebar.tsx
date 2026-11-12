@@ -3,6 +3,8 @@
 import { Button } from "@jeswr/suite-ui";
 import { Check, MessageSquare, MoreVertical, X } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { useDisplayNames } from "@/lib/profile/use-display-names";
+import type { PodSession } from "@/lib/session/types";
 import type { CommentAnchor, CommentThread, DocumentComment } from "../lib/model/comments";
 import { ModifiedTime } from "./modified-time";
 import { VersionAction } from "./version-history";
@@ -85,12 +87,14 @@ function CommentMessage({
   own,
   reason,
   actions,
+  name,
 }: {
   comment: DocumentComment;
   root: boolean;
   own: boolean;
   reason: string | undefined;
   actions: CommentActions;
+  name: string;
 }) {
   const [menu, setMenu] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -102,7 +106,7 @@ function CommentMessage({
   return (
     <div className="docs-comment-message">
       <header>
-        <span>{comment.creator}</span>
+        <span title={comment.creator}>{own ? "You" : name}</span>
         <ModifiedTime value={comment.created} />
         {(own || (root && comment.resolved)) && (
           <div
@@ -189,6 +193,7 @@ export function CommentsSidebar({
   reason,
   error,
   webId,
+  session,
   showResolved,
   setShowResolved,
   select,
@@ -205,6 +210,7 @@ export function CommentsSidebar({
   reason: string | undefined;
   error: string | undefined;
   webId: string;
+  session?: PodSession;
   showResolved: boolean;
   setShowResolved: (value: boolean) => void;
   select: (comment: DocumentComment) => void;
@@ -214,6 +220,14 @@ export function CommentsSidebar({
   actions: CommentActions;
   orphan: (comment: DocumentComment) => boolean;
 }) {
+  const displayName = useDisplayNames(
+    threads.flatMap(({ root, replies }) => [
+      root.creator,
+      ...replies.map((reply) => reply.creator),
+    ]),
+    session,
+  );
+  const authorName = (creator: string) => (creator === webId ? "You" : displayName(creator));
   const heading = useRef<HTMLHeadingElement>(null);
   const panel = useRef<HTMLElement>(null);
   const [replying, setReplying] = useState<string>();
@@ -283,7 +297,7 @@ export function CommentsSidebar({
               ? "docs-comment-thread docs-comment-thread-active"
               : "docs-comment-thread"
           }
-          aria-label={`${root.creator}: ${root.anchor?.exact}`}
+          aria-label={`${authorName(root.creator)}: ${root.anchor?.exact}`}
         >
           <Button variant="ghost" className="docs-comment-quote" onClick={() => select(root)}>
             {root.anchor?.exact}
@@ -296,6 +310,7 @@ export function CommentsSidebar({
             own={root.creator === webId}
             reason={reason}
             actions={actions}
+            name={authorName(root.creator)}
           />
           {replies.map((reply) => (
             <CommentMessage
@@ -305,6 +320,7 @@ export function CommentsSidebar({
               own={reply.creator === webId}
               reason={reason}
               actions={actions}
+              name={authorName(reply.creator)}
             />
           ))}
           {!root.resolved && (

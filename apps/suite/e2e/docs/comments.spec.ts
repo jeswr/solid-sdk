@@ -50,6 +50,7 @@ test("anchors, replies, resolves, reopens and persists a comment after editing b
   await expect(highlight).toHaveText("word");
   const thread = panel.getByRole("article");
   await expect(thread).toContainText("Check this word");
+  await expect(thread.locator("header span[title]")).toHaveText("You");
   await thread.getByRole("button", { name: "Reply to thread", exact: true }).click();
   await thread.getByRole("textbox", { name: "Reply", exact: true }).fill("Agreed");
   await thread.getByRole("button", { name: "Reply", exact: true }).click();

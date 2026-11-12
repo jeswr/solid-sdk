@@ -152,9 +152,11 @@ describe("suggesting transactions", () => {
     s.select(2);
     s.apply(s.state.tr.split(2));
     expect(s.state.doc.childCount).toBe(2);
+    const split = marks(s);
+    expect(split).toMatchObject([{ kind: "suggestionInsert" }]);
     for (const meta of [ySyncPluginKey, yUndoPluginKey, suggestionAction]) {
       s.apply(s.state.tr.insertText("r").setMeta(meta, {}));
-      expect(marks(s)).toEqual([]);
+      expect(marks(s)).toEqual(split);
     }
     s.apply(s.state.tr.insertText("s"));
     const before = s.state.doc.toJSON();
