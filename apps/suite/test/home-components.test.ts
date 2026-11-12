@@ -131,11 +131,11 @@ const card = (src: string) =>
 
 describe("Home attribution", () => {
   it.each([
-    { metadata: 'a prov:SoftwareAgent; schema:name "MyHealth"', label: "Added by MyHealth" },
+    { metadata: 'a prov:SoftwareAgent; schema:name "MyHealth"', label: "Provided by MyHealth" },
     { metadata: 'a foaf:Person; foaf:name "Bob"', label: "Provided by Bob" },
-    { metadata: 'schema:name " "', label: "Added by foreign.example" },
-    { metadata: 'schema:name "https://private.example/id"', label: "Added by foreign.example" },
-    { metadata: "a prov:SoftwareAgent", label: "Added by foreign.example" },
+    { metadata: 'schema:name " "', label: "Provided by someone else" },
+    { metadata: 'schema:name "https://private.example/id"', label: "Provided by foreign.example" },
+    { metadata: "a prov:SoftwareAgent", label: "Provided by foreign.example" },
   ])("uses loaded identity metadata or an unresolved label: $label ($metadata)", async ({
     metadata,
     label,
