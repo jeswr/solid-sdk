@@ -2,7 +2,22 @@
 <!-- AUTHORED-BY Claude Fable 5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
 # Solid Access Manager
+
+> **Moved: Access Manager now lives in Solid Suite Permissions.** The access-request
+> inbox (approve with a pinned `previewDecision` preview, deny), the History of answered
+> requests with revoking of active approvals, and the grant dashboard are all at the
+> suite's `/permissions` route (`/permissions/requests`, `/permissions/history`). This
+> app's entry point now redirects there: `src/suite-redirect.ts` builds the URL from
+> `VITE_SUITE_URL` (default `https://solid-suite.vercel.app`; anything that is not HTTPS,
+> or loopback HTTP, falls back to the default) and shows a link while the browser
+> follows it. `public/clientid.jsonld` and its headers are still served unchanged, so
+> existing Client ID references keep resolving; `?demo` still renders the read-only
+> demo. The standalone app's source and tests remain (the old mount is
+> `src/legacy-entry.tsx`) but it is no longer reachable from the entry point. The rest of
+> this README describes the standalone app as it was.
 
 See, review, grant and revoke access to your Solid pod — in plain, human terms
 (data classes + purposes), not raw ACL triples. The standalone owner console of
@@ -93,7 +108,7 @@ app can be embedded in walkthrough iframes with no auth and no network:
 - `?demo=dataclass` — the data-class view
 
 Demo mode is gated STRICTLY on the `?demo` query param (`src/demo/gate.ts`);
-without it the entry point builds the real `LoginController`, unchanged. The
+without it the entry point redirects to Solid Suite Permissions (see above). The
 demo fetch (`src/demo/pod.ts`) serves fixtures on GET/HEAD only and THROWS on
 every mutating method, so Approve / Deny / Revoke are visibly present but
 provably inert — the refusal surfaces in the saving indicator. Tests in
