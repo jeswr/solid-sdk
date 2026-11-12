@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 (workspace import edits) -->
+<!-- AUTHORED-BY Claude Opus 5.5 (Suite Calendar model, sst-q6hu) -->
 
 # @jeswr/solid-scheduling
 
@@ -144,6 +145,13 @@ These are **candidates**, not filed proposals — the sector is never edited her
 and the reused vocab constants/builders (`SCHED`, `TASK_CLASS`, `SCHED_SUMMARY`,
 `ATTENDANCE_STATUS`, `PREFIXES`, …).
 
+The Suite Calendar model (see [Suite Calendar](#suite-calendar)): `buildCalendarDocument`,
+`parseCalendarDocument`, `isCalendarDocument`, `CalendarDocumentView`,
+`CalendarDocumentData`/`CalendarDocumentInput`; `buildCalendarEventFields`,
+`parseCalendarEventFields`, `isCalendarEvent`, `CalendarEventView`,
+`CalendarEventFields`/`CalendarEventInput`; and `SUITE_SCHED`, `SUITE_CALENDAR_CLASS`,
+`SUITE_EVENT_CLASS`, `SCHEMA_EVENT_CLASS`.
+
 `./shape` (**Node-only** — `readFileSync`s the shipped `.ttl`s):
 `schedulingShapeTtl`, `schedulingProposalsTtl`, `SCHEDULING_SHAPE_PATH`,
 `SCHEDULING_PROPOSALS_PATH`. Kept off the root so a browser bundle never pulls in
@@ -186,6 +194,60 @@ hand-written model imported in #279, they differ as follows, pinned in
   canonicalise an IDN, uppercase-host or raw-Unicode URL first.
 - One malformed federation (`wf:`) value now drops only that field, and accepted
   federation IRIs come back exactly as stored (task-model's `parseTask` filters them).
+
+## Suite Calendar
+
+The Suite Calendar app (`apps/suite`, Calendar) stores calendar documents and events on
+the re-minted `https://jeswr.org/ns/sectors/scheduling#` namespace (`jsched:`) with
+`https://schema.org/` and `dct:`. Pods already hold that data, so the generated
+`CalendarDocument` and `CalendarEvent` entities keep those IRIs exactly; the profile
+header in `codegen/scheduling.shapes.ttl` states each mapping from the sector shapes.
+
+```turtle
+<#it> a jsched:Calendar ; dct:title "Work" ; schema:color "#123abc" .        # calendar.ttl
+<#it> a jsched:CalendarEvent, schema:Event ;                                  # event.ttl
+  schema:name "Meeting" ; schema:location "Home" ; schema:description "Notes" ;
+  schema:identifier "uid-1" ; jsched:timeZone "Europe/London" .
+```
+
+Reads accept the read-only aliases `http://schema.org/` for every schema.org field, the
+w3id `sched:timeZone`, and the classes `schema:Event` (the Pod Manager form),
+`http://schema.org/Event` and the w3id `sched:CalendarEvent`. Writes use only the
+canonical IRIs. `buildCalendarEventFields` adds `schema:Event` beside the generated
+`jsched:CalendarEvent` (facade policy: a generated entity stamps one class).
+
+The generator cannot express the rest of an event, so the app keeps it:
+
+- start, end, recurrence `until` and exception dates are `xsd:date` OR `xsd:dateTime`
+  (the sector's `sh:or` union); a generated field has one datatype.
+- `jsched:summary` and `jsched:inCalendar` have legacy w3id aliases that are this
+  package's canonical `sched:summary` / `sched:inCalendar`; one manifest cannot alias
+  another owner's canonical predicate.
+- recurrence and reminder nodes are blank nodes (any number of reminders, untyped legacy
+  rules); composite links follow one named node per link.
+
+`jsched:timeZone` is a Suite extension the sector does not declare.
+
+### Exact divergences from the Suite Calendar's hand-written model
+
+Pinned in `test/suite-calendar-compatibility.test.ts`:
+
+- A calendar document typed only by the w3id `sched:Calendar` is no longer recognised
+  (the app canonicalised every legacy namespace; that class is this package's Vikunja
+  calendar).
+- A root typed by a data-graph subclass of a calendar or event class is recognised.
+- Two values, a language-tagged literal, an IRI or a non-`xsd:string` literal for
+  `title`, `color`, `name`, `location`, `description`, `uid` or `timeZone` drop the field;
+  the app read the first term's lexical value. A missing or dropped title still makes the
+  app's `parseCalendar` throw "Calendar title is required"; a dropped name falls back to
+  `jsched:summary`.
+- Control characters are stripped from written titles, colours, locations and
+  descriptions. Names (kept byte-equal to `jsched:summary`), UIDs and time zones are
+  written as given.
+- Built events list the generated fields first, so the written Turtle orders predicates
+  differently; the triples are the same.
+- A resource URL that is not a canonical absolute http(s) URL without a fragment makes
+  build throw a `TypeError` and the readers return `undefined`/`false`.
 
 ## Develop
 

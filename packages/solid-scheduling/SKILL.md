@@ -1,6 +1,6 @@
 ---
 name: solid-scheduling
-description: Use when reading or writing Solid tasks and calendars through @jeswr/solid-scheduling, changing its SHACL or vocabulary use, or maintaining its sched:Task to wf:Task cross-serialisation.
+description: Use when reading or writing Solid tasks, calendars or Suite Calendar documents and events through @jeswr/solid-scheduling, changing its SHACL or vocabulary use, or maintaining its sched:Task to wf:Task cross-serialisation.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -28,6 +28,12 @@ filter IRIs and throws on a wrong term kind, so `parseSchedulingTask` guards tha
 http(s)-filters every `wf:` IRI it returns. The completion timestamp is computed
 once and written to both `sched:completedAt` and `prov:endedAtTime`; an explicit
 `completed: false` wins over a supplied `completedAt`.
+
+`src/suite-calendar.ts` is the Suite Calendar facade over the generated `CalendarDocument`
+and `CalendarEvent` entities, on the app's exact `jsched:`/schema.org/`dct:` IRIs. It adds
+only the second event class (`schema:Event`). Event dates, `jsched:summary`,
+`jsched:inCalendar`, recurrence and reminders stay in the Suite app (README "Suite Calendar"
+says why); its divergences are pinned in `test/suite-calendar-compatibility.test.ts`.
 
 `scheduling.shacl.ttl` is the published package profile (Task, RecurrenceRule, Reminder,
 Calendar); `codegen/scheduling.shapes.ttl` is the generation input derived from it, with

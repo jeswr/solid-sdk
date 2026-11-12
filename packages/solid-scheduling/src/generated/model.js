@@ -13,9 +13,122 @@ const manifest = {
     "sched": "https://w3id.org/jeswr/sectors/scheduling#",
     "core": "https://w3id.org/jeswr/core#",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jsched": "https://jeswr.org/ns/sectors/scheduling#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/"
   },
   "entities": [
+    {
+      "name": "CalendarDocument",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/scheduling#Calendar"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "color",
+          "predicate": "https://schema.org/color",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/color"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "CalendarEvent",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/scheduling#CalendarEvent"
+      ],
+      "aliasTypeIris": [
+        "http://schema.org/Event",
+        "https://schema.org/Event",
+        "https://w3id.org/jeswr/sectors/scheduling#CalendarEvent"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "timeZone",
+          "predicate": "https://jeswr.org/ns/sectors/scheduling#timeZone",
+          "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/sectors/scheduling#timeZone"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/description"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "uid",
+          "predicate": "https://schema.org/identifier",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/identifier"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "location",
+          "predicate": "https://schema.org/location",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/location"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/name"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        }
+      ]
+    },
     {
       "name": "Calendar",
       "typeIris": [
@@ -224,7 +337,10 @@ const nodeViewsManifest = {
     "sched": "https://w3id.org/jeswr/sectors/scheduling#",
     "core": "https://w3id.org/jeswr/core#",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jsched": "https://jeswr.org/ns/sectors/scheduling#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/"
   },
   "entities": [
     {

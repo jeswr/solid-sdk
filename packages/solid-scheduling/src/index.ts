@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 5.5 (Suite Calendar exports)
 /**
  * `@jeswr/solid-scheduling` — the scheduling-sector **calendar / task** RDF model
  * (the data model a [Vikunja](https://vikunja.io)→Solid fork writes to a pod).
@@ -42,6 +43,24 @@ export {
   serializeCalendar,
 } from "./calendar.js";
 export { assertResourceUrl, httpIriOrUndefined, isHttpIri, isResourceUrl } from "./iri.js";
+export {
+  buildCalendarDocument,
+  buildCalendarEventFields,
+  type CalendarDocumentData,
+  type CalendarDocumentInput,
+  CalendarDocumentView,
+  type CalendarEventFields,
+  type CalendarEventInput,
+  CalendarEventView,
+  isCalendarDocument,
+  isCalendarEvent,
+  parseCalendarDocument,
+  parseCalendarEventFields,
+  SCHEMA_EVENT_CLASS,
+  SUITE_CALENDAR_CLASS,
+  SUITE_EVENT_CLASS,
+  SUITE_SCHED,
+} from "./suite-calendar.js";
 export {
   buildSchedulingTask,
   parseSchedulingTask,

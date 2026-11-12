@@ -5,6 +5,72 @@ import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
+export interface CalendarDocumentData {
+  "title": string;
+  "color"?: string;
+}
+
+export interface CalendarDocumentWrapper extends EntityWrapper {
+  "title"?: string;
+  "color"?: string;
+}
+
+export interface CalendarDocumentEntity {
+  readonly name: "CalendarDocument";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => CalendarDocumentWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: CalendarDocumentData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): CalendarDocumentData | undefined;
+  serialize(resourceUrl: string, data: CalendarDocumentData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<CalendarDocumentData | undefined>;
+}
+
+export interface CalendarEventData {
+  "timeZone"?: string;
+  "description"?: string;
+  "uid"?: string;
+  "location"?: string;
+  "name"?: string;
+}
+
+export interface CalendarEventWrapper extends EntityWrapper {
+  "timeZone"?: string;
+  "description"?: string;
+  "uid"?: string;
+  "location"?: string;
+  "name"?: string;
+}
+
+export interface CalendarEventEntity {
+  readonly name: "CalendarEvent";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => CalendarEventWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: CalendarEventData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): CalendarEventData | undefined;
+  serialize(resourceUrl: string, data: CalendarEventData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<CalendarEventData | undefined>;
+}
+
 export interface CalendarData {
   "description"?: string;
   "organizer"?: string;
@@ -126,6 +192,8 @@ export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;
   readonly entities: {
+  readonly CalendarDocument: CalendarDocumentEntity;
+  readonly CalendarEvent: CalendarEventEntity;
   readonly Calendar: CalendarEntity;
   readonly Task: TaskEntity;
   };
