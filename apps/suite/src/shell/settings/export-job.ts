@@ -127,6 +127,7 @@ export function createTakeoutJob(
       let destination: SaveDestination | undefined;
       let written = 0;
       let lastProgress = -Infinity;
+      let completed = false;
       try {
         // Invoke the picker synchronously from the button click, before any pod GET.
         if (pickFile) {
@@ -167,7 +168,8 @@ export function createTakeoutJob(
         });
         if (signal.aborted) return;
         if (destination) await destination.close();
-        if (!signal.aborted)
+        if (!signal.aborted) {
+          completed = true;
           publish({
             phase: "complete",
             plan,
@@ -180,6 +182,7 @@ export function createTakeoutJob(
                   ),
                 }),
           });
+        }
       } catch (error) {
         const pickerCancelled =
           !destination && error instanceof DOMException && error.name === "AbortError";
@@ -195,7 +198,7 @@ export function createTakeoutJob(
                   : "Export failed. Try again.",
           });
       } finally {
-        if (destination && (signal.aborted || state.phase !== "complete"))
+        if (destination && (signal.aborted || !completed))
           await destination.abort().catch(() => {});
         chunks.length = 0;
         headers.clear();
