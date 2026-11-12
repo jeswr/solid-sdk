@@ -34,6 +34,29 @@ const rejects = (ttl: string, construct?: string | RegExp): void => {
   if (construct) expect((error as FormAdmissionError).construct).toMatch(construct);
 };
 
+/** Counts rdfs:subClassOf lookups: a deterministic proxy for class-walk work (no wall clock). */
+function countSubclassLookups(store: Store): { calls: number } {
+  const counter = { calls: 0 };
+  const isSubclass = (term: unknown) =>
+    typeof term === "object" &&
+    term !== null &&
+    (term as { value?: unknown }).value === SUBCLASS.value;
+  const readQuads = store.readQuads.bind(store);
+  const match = store.match.bind(store);
+  store.readQuads = ((...args: Parameters<Store["readQuads"]>) => {
+    if (isSubclass(args[1])) counter.calls++;
+    return readQuads(...args);
+  }) as Store["readQuads"];
+  store.match = ((...args: Parameters<Store["match"]>) => {
+    if (isSubclass(args[1])) counter.calls++;
+    return match(...args);
+  }) as Store["match"];
+  return counter;
+}
+// Without the operation-wide budget these fixtures need tens of millions of lookups;
+// with the 100,000-read budget the total stays near that budget.
+const WALK_CEILING = 200_000;
+
 describe("operation-wide class-walk budget", () => {
   it("bounds parse of many class-checked values sharing a long subclass chain", () => {
     const model = form("sh:nodeKind sh:IRI; sh:class ex:Top");
@@ -44,9 +67,10 @@ describe("operation-wide class-walk budget", () => {
       data.add(quad(namedNode(SUBJECT), namedNode(`${EX}value`), value));
       data.add(quad(value, RDF_TYPE, namedNode(`${EX}C0`)));
     }
-    const start = performance.now();
+    const lookups = countSubclassLookups(data);
     const values = parse(model, SUBJECT, data);
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(lookups.calls).toBeGreaterThan(0);
+    expect(lookups.calls).toBeLessThan(WALK_CEILING);
     // Exhausting the shared budget stops recognising further values (fail closed).
     expect((values.value as string[]).length).toBeLessThan(20);
   });
@@ -61,9 +85,10 @@ describe("operation-wide class-walk budget", () => {
       data.add(quad(namedNode(SUBJECT), namedNode(`${EX}value`), child));
       data.add(quad(child, RDF_TYPE, namedNode(`${EX}C0`)));
     }
-    const start = performance.now();
+    const lookups = countSubclassLookups(data);
     const values = parse(model, SUBJECT, data);
-    expect(performance.now() - start).toBeLessThan(1000);
+    expect(lookups.calls).toBeGreaterThan(0);
+    expect(lookups.calls).toBeLessThan(WALK_CEILING);
     expect((values.value as unknown[]).length).toBeLessThan(20);
   });
   it("still accepts many values whose class walks are short", () => {
@@ -87,9 +112,20 @@ describe("operation-wide class-walk budget", () => {
         quad(namedNode(`x:o${i}`), RDF_TYPE, namedNode(`${SH}NodeShape`)),
       ),
     ];
-    const start = performance.now();
-    expect(() => compileForm(new Store(quads), SHAPE)).toThrow(/class walk limit/);
-    expect(performance.now() - start).toBeLessThan(1000);
+    // compileForm copies the shapes into its own store, so count on the prototype.
+    let calls = 0;
+    const original = Store.prototype.readQuads;
+    Store.prototype.readQuads = function (this: Store, ...args: Parameters<Store["readQuads"]>) {
+      if ((args[1] as { value?: unknown } | null)?.value === SUBCLASS.value) calls++;
+      return original.apply(this, args);
+    } as Store["readQuads"];
+    try {
+      expect(() => compileForm(new Store(quads), SHAPE)).toThrow(/class walk limit/);
+    } finally {
+      Store.prototype.readQuads = original;
+    }
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThan(WALK_CEILING);
   });
 });
 
