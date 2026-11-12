@@ -124,3 +124,44 @@ closed without writes, with `UNSUPPORTED_SYSTEM` copy: the SDK refuses ESS's que
 URL (`?ext=acr`) for every implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
 that SDK work and a trusted implementation signal, which the session does not provide;
 see the comment above `options` in `adapter.ts`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Docs companion sharing
+
+Docs injects `loadDocumentSharing` / `applyDocumentSharing` into `ShareDialog`; Drive's
+file/folder adapter and behavior are unchanged. One selection covers the `.ttl` resource
+(resource scope) and its sibling `<slug>/` (folder scope). Viewer is Read on both;
+Editor is Read+Write on both, with Write also permitting Append. Public Viewer/Editor
+uses the same mapping. Folder grants cover existing and future updates, assets, comments
+and version history through WAC defaults / ACP member access.
+
+`DocsStore.createContainer` creates container RDF without ACLs or ACRs, so new companion
+sub-containers already inherit. Versions are created lazily the same way. Loading checks
+all existing `updates/`, `assets/`, `comments/`, `versions/`; only 404 counts as absent.
+Existing sub-containers with explicit grants are additional folder targets. Inheriting
+children keep inheriting. Every target goes through Drive's SDK adapter and independent
+`verify.ts` checks. Unsupported rules and `partial-scope` still fail closed; this coordinator
+never writes access RDF itself or changes permissions outside this document's tree.
+
+The dialog shows the main document's roles. Effective roles are compared without source
+or inherited/explicit presentation differences. A mismatch displays “Some parts of this
+document are shared differently. Saving will make them match.” and an explicit Save action
+repairs the companions even when the document selection is unchanged. Every part must
+recognise the caller as an owner; other owners and external inherited rules remain locked.
+
+Saving first applies only removals/downgrades to the document, then the full selection to
+the companion root and its explicit sub-containers, then grants/upgrades to the document.
+This also orders mixed grant/revoke plans safely. ACP child contributions can be changed
+once the coordinated parent's effective sharing matches the selection; external inheritance
+remains immutable. Descendant snapshots are refreshed after our parent write, with all
+access-document GETs pinned to their original status/ETag. Only accepted conditional PUTs
+advance those pins, so the refresh cannot silently overwrite concurrent edits. A missing
+write-response ETag fails verification rather than adopting an unbound validator.
+
+A failure stops the plan. `SharingRefreshError` names the confirmed targets, the unconfirmed
+step, and steps not attempted; the dialog never announces success. Retry reloads the whole
+plan for review, and Save repairs any remaining differences. It does not automatically retry
+a conflict or overwrite a newer selection. Final verification reloads every existing part,
+including inheriting children. Multiple access documents are not a transaction: readers can
+observe intermediate permissions, and a change after the final check remains possible.

@@ -14,17 +14,19 @@ import {
 import { EditorMenubar } from "../src/apps/docs/components/editor-menubar";
 import { useDocumentSharing } from "../src/apps/docs/hooks/use-document-sharing";
 import {
-  applySharing,
+  applyDocumentSharing as applySharing,
+  loadDocumentSharing as loadSharing,
+} from "../src/apps/docs/lib/sharing/document-sharing";
+import {
   loadError,
-  loadSharing,
   type SharingSession,
   type SharingSnapshot,
 } from "../src/apps/drive/lib/sharing/adapter";
 
-vi.mock("../src/apps/drive/lib/sharing/adapter", async (original) => ({
-  ...(await original<typeof import("../src/apps/drive/lib/sharing/adapter")>()),
-  loadSharing: vi.fn(),
-  applySharing: vi.fn(),
+vi.mock("../src/apps/docs/lib/sharing/document-sharing", async (original) => ({
+  ...(await original<typeof import("../src/apps/docs/lib/sharing/document-sharing")>()),
+  loadDocumentSharing: vi.fn(),
+  applyDocumentSharing: vi.fn(),
 }));
 const resource = "https://example.org/docs/plan.ttl";
 const session: SharingSession = {
@@ -32,9 +34,13 @@ const session: SharingSession = {
   webId: "https://example.org/profile#me",
   storageUrl: "https://example.org/",
 };
-function snapshot(overrides: Partial<SharingSnapshot> = {}): SharingSnapshot {
+function snapshot(
+  overrides: Partial<SharingSnapshot> = {},
+): Awaited<ReturnType<typeof loadSharing>> {
   return {
     resource,
+    companions: [],
+    pins: new Map<string, string>(),
     grants: { url: resource, grants: [], version: "test" } as unknown as GrantSnapshot,
     canManage: true,
     contentsDiffer: false,
@@ -149,13 +155,7 @@ it("opens the same Drive dialog from the header and File menu for the main resou
   await act(() => header().focus());
   fireEvent.click(header());
   const dialog = await screen.findByRole("dialog", { name: "Share “Plan”" });
-  expect(dialog.querySelector('[role="note"]')?.textContent).toMatch(
-    /update log, assets and comments/,
-  );
-  const notice = dialog.querySelector('[role="note"]')?.textContent;
-  expect(notice).toContain("Collaborators may not be able to open the document");
-  expect(notice).toContain("edits may not save");
-  expect(notice).toContain("Anyone with the link");
+  expect(dialog.querySelector('[role="note"]')).toBeNull();
   await screen.findByLabelText("Who can access");
   fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
   await waitFor(() => expect(applySharing).toHaveBeenCalledOnce());
@@ -284,7 +284,7 @@ it.each([
 
 it("keeps the focused Share button mounted across permission and connectivity changes", async () => {
   const warn = vi.spyOn(console, "warn");
-  let finish!: (value: SharingSnapshot) => void;
+  let finish!: (value: ReturnType<typeof snapshot>) => void;
   vi.mocked(loadSharing).mockImplementationOnce(
     () =>
       new Promise((resolve) => {
@@ -318,7 +318,7 @@ it.each([
   "saved",
   "failed",
 ])("shows an in-flight sharing outcome after going offline (%s)", async (outcome) => {
-  let resolve!: (value: SharingSnapshot) => void;
+  let resolve!: (value: ReturnType<typeof snapshot>) => void;
   let reject!: (reason: Error) => void;
   vi.mocked(applySharing).mockImplementationOnce(
     () =>
@@ -353,7 +353,7 @@ it.each([
 });
 
 it("discards stale permission reads across resource/account changes and closes on draft transitions", async () => {
-  let finish!: (value: SharingSnapshot) => void;
+  let finish!: (value: ReturnType<typeof snapshot>) => void;
   vi.mocked(loadSharing).mockImplementationOnce(
     () =>
       new Promise((resolve) => {
@@ -376,4 +376,49 @@ it("discards stale permission reads across resource/account changes and closes o
   await screen.findByRole("dialog");
   view.rerender(<Harness resource="draft" />);
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+// Repair uses the entry point's current selection, even when no role was changed.
+it("shows legacy differences and saves them through the document plan", async () => {
+  vi.mocked(loadSharing).mockResolvedValue(
+    snapshot({
+      notice: "Some parts of this document are shared differently. Saving will make them match.",
+      needsSave: true,
+    }),
+  );
+  render(<Harness />);
+  await enabled();
+  fireEvent.click(header());
+  await screen.findByText(
+    "Some parts of this document are shared differently. Saving will make them match.",
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
+  await screen.findByText("Sharing saved");
+  expect(screen.queryByRole("note")).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Save$/ })).toBeNull();
+  expect(applySharing).toHaveBeenCalledWith(session, expect.anything(), snapshot().state);
+});
+
+it("offers Retry for an incomplete document plan, then shows the legacy repair action", async () => {
+  const { SharingRefreshError } = await import("../src/apps/drive/lib/sharing/adapter");
+  const error = new SharingRefreshError(new Error("second target"), false);
+  error.message =
+    "Document sharing is incomplete. Companion matches; document not confirmed. Retry.";
+  vi.mocked(applySharing).mockRejectedValueOnce(error);
+  render(<Harness />);
+  await enabled();
+  fireEvent.click(header());
+  await screen.findByLabelText("Who can access");
+  fireEvent.change(screen.getByLabelText("Who can access"), { target: { value: "anyone" } });
+  await screen.findByText(error.message);
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+  vi.mocked(loadSharing).mockResolvedValue(
+    snapshot({
+      notice: "Some parts of this document are shared differently. Saving will make them match.",
+      needsSave: true,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(await screen.findByRole("button", { name: /^Save$/ }));
+  await screen.findByText("Sharing saved");
 });

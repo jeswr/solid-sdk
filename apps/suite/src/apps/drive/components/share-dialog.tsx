@@ -75,6 +75,8 @@ export function ShareDialog({
   onCloseAutoFocus,
   notice,
   disabledReason,
+  load = loadSharing,
+  apply = applySharing,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -84,6 +86,8 @@ export function ShareDialog({
   onCloseAutoFocus?: (event: Event) => void;
   notice?: string;
   disabledReason?: string | undefined;
+  load?: typeof loadSharing;
+  apply?: typeof applySharing;
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -107,7 +111,7 @@ export function ShareDialog({
     setLoading(true);
     setSnapshot(undefined);
     setError("");
-    loadSharing(session, item.url).then(
+    load(session, item.url).then(
       (value) => {
         if (live) {
           setSnapshot(value);
@@ -125,7 +129,7 @@ export function ShareDialog({
     return () => {
       live = false;
     };
-  }, [session, item.url, retry]);
+  }, [session, item.url, retry, load]);
 
   useEffect(() => {
     if (saving) return;
@@ -154,7 +158,7 @@ export function ShareDialog({
     setSaving(true);
     setError("");
     try {
-      setSnapshot(await applySharing(session, snapshot, selection));
+      setSnapshot(await apply(session, snapshot, selection));
       setPeople([]);
       setQuery("");
       setAnnouncement("Sharing saved");
@@ -234,6 +238,16 @@ export function ShareDialog({
         )}
         {!loading && state && (
           <div className="su-stack" aria-busy={saving}>
+            {snapshot.notice && (
+              <p className="su-muted" role="note">
+                {snapshot.notice}
+              </p>
+            )}
+            {snapshot.needsSave && (
+              <Button disabled={blocked} onClick={() => void save(state)}>
+                Save
+              </Button>
+            )}
             {!snapshot.canManage && (
               <p className="su-muted" role="status">
                 {snapshot.readOnly ??
