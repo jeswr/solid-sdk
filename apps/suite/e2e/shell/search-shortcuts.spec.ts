@@ -169,6 +169,10 @@ test("palette filters actions, creates, searches and restores focus", async ({ p
   await expect(trigger).toBeFocused();
   await page.keyboard.press("Control+k");
   await input.fill("a unique search");
+  await expect(
+    dialog.getByRole("option", { name: "No matching actions", exact: true }),
+  ).toHaveAttribute("aria-disabled", "true");
+  await accessible(page);
   await input.press("Enter");
   await expect(page.getByText("Palette search for a unique search", { exact: true })).toBeVisible();
   await trigger.click();
@@ -191,6 +195,39 @@ test("palette hides an explicit backlog app unless backlog is enabled", async ({
   await trigger.click();
   await expect(dialog.getByRole("option", { name: /^Calendar/ })).toBeVisible();
 });
+
+for (const [component, triggerName, dialogName] of [
+  ["command-palette", "Open command palette", "Command palette"],
+  ["shortcut-help", "Show keyboard shortcuts", "Keyboard shortcuts"],
+] as const) {
+  test(`${component} stays within the viewport when resized while open`, async ({ page }) => {
+    await ready(page, component);
+    await page.getByRole("button", { name: triggerName }).click();
+    const dialog = page.getByRole("dialog", { name: dialogName });
+    await expect(dialog).toBeVisible();
+    for (const width of [320, 1280, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width);
+      await expect
+        .poll(() =>
+          dialog.evaluate((el) => {
+            const bounds = el.getBoundingClientRect();
+            return (
+              bounds.left >= 15.5 &&
+              bounds.right <= window.innerWidth - 15.5 &&
+              el.scrollWidth <= el.clientWidth
+            );
+          }),
+        )
+        .toBe(true);
+      await accessible(page);
+    }
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: triggerName })).toBeFocused();
+  });
+}
 
 test("palette Enter navigates to Drive", async ({ page }) => {
   await signInDemo(page);

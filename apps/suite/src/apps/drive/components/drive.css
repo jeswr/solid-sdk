@@ -1,4 +1,5 @@
 /* AUTHORED-BY Claude Opus 5.5 */
+/* AUTHORED-BY Codex GPT-6.1-Sol */
 /* Drive screens (04-drive). Tokens only; no raw colours. */
 
 .drv-boot {
@@ -963,4 +964,25 @@ tr:focus .drv-star {
   .drv-cell-menu {
     display: none;
   }
+}
+.drv-text-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.drv-text-editor textarea {
+  width: 100%;
+  min-height: 50vh;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--background);
+  color: inherit;
+  font: inherit;
+  resize: vertical;
+}
+.drv-text-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
