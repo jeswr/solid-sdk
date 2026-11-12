@@ -1370,6 +1370,196 @@ test("restore propagates caller cancellation into an in-flight refresh", async (
   }
 });
 
+// AUTHORED-BY Claude Opus 5.5
+/** Hold the restore's token refresh until released; abort still rejects it. */
+function holdRefresh(issuer: string) {
+  const transport = globalThis.fetch;
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let hold = false;
+  let signal: AbortSignal | undefined;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (hold && request.url === issuer + "token") {
+      signal = request.signal;
+      ready.resolve();
+      await Promise.race([
+        release.promise,
+        new Promise<never>((_resolve, reject) =>
+          request.signal.addEventListener("abort", () => reject(request.signal.reason), {
+            once: true,
+          }),
+        ),
+      ]);
+    }
+    return transport(request);
+  });
+  return {
+    arm: () => {
+      hold = true;
+    },
+    ready: ready.promise,
+    release: release.resolve,
+    aborted: () => signal?.aborted === true,
+  };
+}
+
+test("a joining restore's cancellation leaves the initiator's restore running", async () => {
+  const f = fixture();
+  const held = holdRefresh(f.alice.issuer);
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  try {
+    await original.login();
+    held.arm();
+    const initiator = restored.restore();
+    const joiner = new AbortController();
+    const joined = expect(restored.restore({ signal: joiner.signal })).rejects.toThrow(
+      "joiner left",
+    );
+    await held.ready;
+    joiner.abort(Error("joiner left"));
+    await joined;
+    expect(held.aborted()).toBe(false);
+    held.release();
+    expect((await initiator)?.webId).toBe(f.alice.webId);
+    expect(f.alice.stats.refreshes).toBe(1);
+  } finally {
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("an initiating restore's cancellation does not reject a joining waiter", async () => {
+  const f = fixture();
+  const held = holdRefresh(f.alice.issuer);
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  try {
+    await original.login();
+    held.arm();
+    const initiator = new AbortController();
+    const started = expect(restored.restore({ signal: initiator.signal })).rejects.toThrow(
+      "initiator left",
+    );
+    const joiner = restored.restore({ signal: new AbortController().signal });
+    await held.ready;
+    initiator.abort(Error("initiator left"));
+    await started;
+    expect(held.aborted()).toBe(false);
+    held.release();
+    expect((await joiner)?.webId).toBe(f.alice.webId);
+  } finally {
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("a shared restore stops only after every cancellable waiter has left", async () => {
+  const f = fixture();
+  const held = holdRefresh(f.alice.issuer);
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  const events: string[] = [];
+  restored.on("restore", (event) => events.push(event.type));
+  try {
+    await original.login();
+    held.arm();
+    const first = new AbortController(),
+      second = new AbortController();
+    const one = expect(restored.restore({ signal: first.signal })).rejects.toThrow("first");
+    const two = expect(restored.restore({ signal: second.signal })).rejects.toThrow("second");
+    await held.ready;
+    first.abort(Error("first"));
+    await one;
+    expect(held.aborted()).toBe(false);
+    second.abort(Error("second"));
+    await two;
+    await vi.waitFor(() => expect(held.aborted()).toBe(true));
+    expect(events).toEqual([]);
+    expect(await restored.identity()).toBeNull();
+    // A later restore starts fresh instead of joining the cancelled one.
+    held.release();
+    expect((await restored.restore())?.webId).toBe(f.alice.webId);
+    expect(events).toEqual(["restore"]);
+  } finally {
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("a restore cancelled after its refresh but before publication emits nothing", async () => {
+  const f = fixture();
+  const original = createPodAuth(f.options),
+    restored = createPodAuth(f.options);
+  const events: string[] = [];
+  restored.on("restore", (event) => events.push(event.type));
+  try {
+    await original.login();
+    const controller = new AbortController();
+    const set = f.storage.sessions.setItem.getMockImplementation()!;
+    const get = f.storage.sessions.getItem.getMockImplementation()!;
+    let pointerWritten = false;
+    let armed = true;
+    f.storage.sessions.setItem.mockImplementation(async (key, value) => {
+      await set(key, value);
+      if (JSON.parse(key).at(-1) === "active") pointerWritten = true;
+    });
+    f.storage.sessions.getItem.mockImplementation(async (key) => {
+      const value = await get(key);
+      // The durable credential read (presence check) is the last await before publication.
+      if (armed && pointerWritten && String(JSON.parse(key).at(-1)).startsWith("[")) {
+        armed = false;
+        controller.abort(Error("left before publication"));
+      }
+      return value;
+    });
+    await expect(restored.restore({ signal: controller.signal })).rejects.toThrow(
+      "left before publication",
+    );
+    // The caller is released at once; let the abandoned shared restore run to completion.
+    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(armed).toBe(false);
+    expect(events).toEqual([]);
+    expect(await restored.identity()).toBeNull();
+  } finally {
+    original.dispose?.();
+    restored.dispose?.();
+  }
+});
+
+test("a restore cancelled during missing-credential cleanup does not expire the instance", async () => {
+  const f = fixture();
+  const original = createPodAuth(f.options);
+  await original.login();
+  original.dispose?.();
+  f.alice.failRefresh("invalid_grant");
+  const restored = createPodAuth(f.options);
+  const expired: string[] = [];
+  restored.on("expired", (event) => expired.push(event.type));
+  const controller = new AbortController();
+  const remove = f.storage.sessions.removeItem.getMockImplementation()!;
+  let cleaned = false;
+  f.storage.sessions.removeItem.mockImplementation(async (key) => {
+    await remove(key);
+    if (JSON.parse(key).at(-1) === "active") {
+      cleaned = true;
+      controller.abort(Error("left during cleanup"));
+    }
+  });
+  try {
+    await expect(restored.restore({ signal: controller.signal })).rejects.toThrow(
+      "left during cleanup",
+    );
+    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cleaned).toBe(true);
+    expect(expired).toEqual([]);
+    expect(await restored.identity()).toBeNull();
+  } finally {
+    restored.dispose?.();
+  }
+});
+
 test("logout during restore's first generation read prevents any refresh", async () => {
   const f = fixture();
   const auth = createPodAuth(f.options);

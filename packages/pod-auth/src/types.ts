@@ -102,7 +102,11 @@ export interface PodAuth {
    * Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
-  /** Restore the remembered account; never requests interactive authorization. Signal cancels OIDC restore. */
+  /**
+   * Restore the remembered account; never requests interactive authorization. Concurrent calls share
+   * one restore. A caller's signal cancels only its own wait; the shared restore stops once every
+   * cancellable waiter has left, and a cancelled restore publishes no identity and emits no event.
+   */
   restore(options?: { signal?: AbortSignal }): Promise<Identity | null>;
   /**
    * Revoke when advertised, purge local credentials, and emit logout even if revocation fails.

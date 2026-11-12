@@ -38,7 +38,14 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   let durableSession = false;
   let expired = false;
   let expiring: Promise<void> | undefined;
-  let restoring: Promise<Identity | null> | undefined;
+  /** One shared restore; it is cancelled only when every waiter has cancelled (or the instance is disposed). */
+  interface SharedRestore {
+    promise: Promise<Identity | null>;
+    controller: AbortController;
+    waiters: number;
+    uncancellable: boolean;
+  }
+  let restoring: SharedRestore | undefined;
   let loggingOut: Promise<void> | undefined;
   let epoch = 0;
   let mode: "login" | "restore" = "login";
@@ -104,6 +111,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       if (current === null) durableSession = await providers.persistence.present(account);
     }
     if (started !== epoch) throw new Error("Session changed during authentication");
+    // A cancelled restore or login publishes no identity and emits no event.
+    request.signal.throwIfAborted();
     const first = current === null;
     observedFence = providers.fence.signal;
     current = {
@@ -209,10 +218,37 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       const abort = restoreOptions?.signal;
       if (abort?.aborted) return Promise.reject(abort.reason);
       if (loggingOut || pending) return Promise.reject(new Error("Authentication is in progress"));
-      if (restoring) return restoring;
+      // Each caller's signal cancels only its own wait; the shared work stops once nobody waits.
+      const join = (shared: SharedRestore): Promise<Identity | null> => {
+        if (abort === undefined) {
+          shared.uncancellable = true;
+          return shared.promise;
+        }
+        shared.waiters++;
+        return new Promise<Identity | null>((resolve, reject) => {
+          const onAbort = () => {
+            reject(abort.reason);
+            if (--shared.waiters === 0 && !shared.uncancellable)
+              shared.controller.abort(abort.reason);
+          };
+          abort.addEventListener("abort", onAbort, { once: true });
+          shared.promise.then(
+            (value) => {
+              abort.removeEventListener("abort", onAbort);
+              resolve(value);
+            },
+            (error: unknown) => {
+              abort.removeEventListener("abort", onAbort);
+              reject(error);
+            },
+          );
+        });
+      };
+      if (restoring !== undefined && !restoring.controller.signal.aborted) return join(restoring);
       if (expired) return Promise.resolve(null);
       const started = ++epoch;
-      const signal = AbortSignal.any([lifetime.signal, ...(abort === undefined ? [] : [abort])]);
+      const controller = new AbortController();
+      const signal = AbortSignal.any([lifetime.signal, controller.signal]);
       let failure: unknown;
       const promise = (async () => {
         mode = "restore";
@@ -243,19 +279,27 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         current = null;
         // A missing credential (invalid_grant or unusable key) drops its pointer. Transient failures keep it.
         if (account !== null) {
-          if (!(await providers.persistence.present(account))) {
+          const present = await providers.persistence.present(account);
+          signal.throwIfAborted();
+          if (!present) {
             await providers.persistence.forgetPointer();
+            signal.throwIfAborted();
             if (started === epoch) await expire();
           }
         }
         if (failure instanceof StorageFailure) throw failure.cause;
         return null;
       })().finally(() => {
-        restoring = undefined;
-        mode = "login";
+        if (restoring === shared) {
+          restoring = undefined;
+          mode = "login";
+        }
       });
-      restoring = promise;
-      return promise;
+      // Waiters observe the outcome; a restore cancelled after its last waiter left has no observer.
+      promise.catch(() => {});
+      const shared: SharedRestore = { promise, controller, waiters: 0, uncancellable: false };
+      restoring = shared;
+      return join(shared);
     },
     logout: (logoutOptions) => {
       if (lifetime.signal.aborted) return Promise.reject(lifetime.signal.reason);

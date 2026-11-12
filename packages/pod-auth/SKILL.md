@@ -183,6 +183,9 @@ single-session fallback is needed. Existing PodAuthProvider integrations remain 
 FIFO fallback coordinates only the current realm, not workers/processes; browsers without Web Locks
 fail closed. Restore permits one `prompt=none` attempt through `ui.getCode` only after definitive
 `invalid_grant`, never interactive fallback or an iframe. Initial interactive login requests consent.
+Concurrent `restore()` calls share one attempt; `restore({ signal })` cancels only that caller's wait,
+the shared attempt stops when every cancellable waiter has left, and a cancelled restore publishes no
+identity and emits no `restore` event.
 
 Persist only refresh records beside the matching non-extractable ES256 private key and exportable
 public key, scoped by issuer/WebID/actual client ID and DPoP public key inside an application namespace.
