@@ -570,11 +570,11 @@ it("pages backwards across missing days and sorts the messages chronologically",
     body: await serializeChat(appendMessage(new Store(), room, { ...input, at: yesterday })),
     etag: '"older"',
   });
-  const page = await loadMessages(p.fetch, room, at, yesterday, 2);
+  const page = await loadMessages(p.fetch, room, at, yesterday, 2, { reader: alice });
   expect(page.documents).toHaveLength(2);
   expect(page.messages).toHaveLength(1);
   expect(page.next?.toISOString()).toBe("2026-10-24T00:00:00.000Z");
-  const all = await loadMessages(p.fetch, room, at, yesterday, 3);
+  const all = await loadMessages(p.fetch, room, at, yesterday, 3, { reader: alice });
   expect(all.messages.map((m) => m.published)).toEqual([yesterday.toISOString(), at.toISOString()]);
   expect(all.next).toBeNull();
   expect(all.documents[0]?.etag).toBe('"seed"');
@@ -585,10 +585,9 @@ it("pages backwards across missing days and sorts the messages chronologically",
     ),
     etag: '"two"',
   });
-  expect((await loadMessages(p.fetch, room, at, at, 1)).messages.map((m) => m.id)).toEqual([
-    subject,
-    `${dayUrl(room, at)}#m2`,
-  ]);
+  expect(
+    (await loadMessages(p.fetch, room, at, at, 1, { reader: alice })).messages.map((m) => m.id),
+  ).toEqual([subject, `${dayUrl(room, at)}#m2`]);
 });
 
 it("propagates read, parse, network and permission errors rather than treating them as empty", async () => {
@@ -596,12 +595,14 @@ it("propagates read, parse, network and permission errors rather than treating t
     const p = pod();
     p.setFault(() => new Response(null, { status }));
     await expect(loadRooms(p.fetch, storage)).rejects.toMatchObject({ status });
-    await expect(loadMessages(p.fetch, room, at, at, 1)).rejects.toMatchObject({ status });
+    await expect(loadMessages(p.fetch, room, at, at, 1, { reader: alice })).rejects.toMatchObject({
+      status,
+    });
     await expect(sendMessage(p.fetch, room, input)).rejects.toMatchObject({ status });
   }
   const p = pod();
   p.files.set(dayUrl(room, at), { body: "invalid turtle !", etag: '"x"' });
-  await expect(loadMessages(p.fetch, room, at, at, 1)).rejects.toThrow();
+  await expect(loadMessages(p.fetch, room, at, at, 1, { reader: alice })).rejects.toThrow();
   const network: typeof fetch = async () => {
     throw new TypeError("network unavailable");
   };
@@ -636,6 +637,8 @@ it("sorts undated imported messages by ID before dated messages", async () => {
     etag: '"import"',
   });
   expect(
-    (await loadMessages(p.fetch, room, at, at, 1)).messages.map((message) => message.id),
+    (await loadMessages(p.fetch, room, at, at, 1, { reader: alice })).messages.map(
+      (message) => message.id,
+    ),
   ).toEqual([`${dayUrl(room, at)}#a`, `${dayUrl(room, at)}#z`]);
 });

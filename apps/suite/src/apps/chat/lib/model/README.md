@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Chat model (CHT-00)
 
@@ -91,9 +92,14 @@ LongChat `foaf:maker`, and bind subjects to the fetched document. An authorless
 message inherits its container owner; malformed or mismatched claims are dropped.
 The page's `dropped` counter reports rejected messages and events for debugging;
 search also includes these drops in its skipped-records count. One shared client
-limiter bounds member reads across rooms to six concurrent requests. For another member's resources,
-403/404/410, invalid RDF, unsupported content types and parser-budget failures are empty
-and each increments `dropped`. The reader's own days retain strict errors (404 remains
+limiter bounds member reads across rooms to six concurrent requests; the open room's
+timeline reads start before queued search and unread reads. For another member's resources,
+404/410 are an absent day (empty, not counted). 403/406/415/501 (501 is CSS's answer when a
+stored type has no RDF conversion), invalid N3, JSON-LD processing errors, unsupported content
+types and parser-budget failures are empty and each increments `dropped`. fetch-rdf does not
+separate body transport failures from parser failures, so only recognisable parser errors are
+isolated: a failure while streaming a foreign body, and a malformed JSON syntax error, both
+propagate. `reader` is required; the reader's own days retain strict errors (404 remains
 empty); index, network and other HTTP failures propagate. Merge order remains
 publication time then ID.
 Search, unread counts and history use those same pages. Files are discovered inside
@@ -124,8 +130,10 @@ author checks hold only between honest v1 clients.
 A v1 member has Append on the room and can append SIOC descriptors to the index,
 making clients read that room as v2. V1 authorship was already only a claim; v2
 layout detection trusts the index writer and does not upgrade legacy ACL guarantees.
-Resuming creation with no index refuses an existing root ACL granting other agents
-Append or Write, before creating member containers or publishing a v2 index.
+Resuming creation with no index refuses (`unsafe-acl`) an existing root ACL that grants any
+mode other than Read (Append, Write, Control or an unknown mode) to an agent other than the
+owner, an agent class or a group, before creating member containers or publishing a v2 index.
+Every subject with `acl:mode` counts, typed `acl:Authorization` or not.
 
 The SIOC member-container accessors remain in `layout.ts` until they move to the
 generated model under sst-m3nr.

@@ -1,15 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { AclResource, Authorization, Group } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import {
   appendMessage,
+  appendReaction,
   buildRoom,
   buildRoomAcl,
   buildRoomV2,
+  ChatModelError,
   ChatNode,
   createRoom,
   dayUrl,
@@ -237,7 +241,9 @@ it("lets members send/edit/delete/task only in their own day and permits explici
   await expect(removeMessage(pod.as(BOB), ROOM, second, BOB, AT)).rejects.toThrow("not-author");
   await removeMessage(pod.as(ALICE), ROOM, second, ALICE, AT);
   expect(
-    (await loadMessages(pod.as(BOB), ROOM, AT, AT, 1)).messages.every((m) => m.tombstone),
+    (await loadMessages(pod.as(BOB), ROOM, AT, AT, 1, { reader: BOB })).messages.every(
+      (m) => m.tombstone,
+    ),
   ).toBe(true);
   const writes = pod.calls.filter(
     (c) =>
@@ -301,7 +307,7 @@ it("merges member days, binds authors, drops forged messages/Like/Undo, and igno
   new ChatNode(id, honest, DataFactory).types.add(`${NS.AS}Tombstone`);
   await saveChat(pod.as(BOB), ROOM, bobDay, honest, { ifMatch: document.etag as string });
   await react(pod.as(ALICE), ROOM, { id: "alice", message: id, actor: ALICE, emoji: "👍", at: AT });
-  const page = await loadMessages(pod.as(BOB), ROOM, AT, AT, 1);
+  const page = await loadMessages(pod.as(BOB), ROOM, AT, AT, 1, { reader: BOB });
   expect(page.messages.map((m) => m.author)).toEqual([BOB, BOB, ALICE]);
   expect(page.dropped).toBe(4);
   expect(page.documents).toHaveLength(2);
@@ -355,7 +361,7 @@ it("uses member days for the client, search, unread counts, reaction toggles, fi
     expect((await owner.search("garden", { timeZone: "UTC" })).results).toHaveLength(1);
     const container = await memberContainer(room.url, BOB);
     await pod.as(BOB)(`${container}photo.png`, { method: "PUT", body: "image" });
-    expect(await loadRoomFiles(pod.as(ALICE), room.url)).toEqual({
+    expect(await loadRoomFiles(pod.as(ALICE), room.url, { reader: ALICE })).toEqual({
       files: [`${container}photo.png`],
       dropped: 0,
     });
@@ -402,7 +408,9 @@ it("retains the v1 wire model, append ACLs, shared events and author claims", as
     emoji: "👍",
     at: AT,
   });
-  expect((await loadMessages(pod.as(BOB), ROOM, AT, AT, 1)).messages[0]?.author).toBe(BOB);
+  expect(
+    (await loadMessages(pod.as(BOB), ROOM, AT, AT, 1, { reader: BOB })).messages[0]?.author,
+  ).toBe(BOB);
   expect(
     [
       ...new AclResource(buildRoomAcl(ROOM, `${ROOM}.acl`, ALICE, [BOB]), DataFactory)
@@ -431,7 +439,7 @@ it("refuses malformed v2 boundaries without downgrading, including ownerless des
     async () =>
       new Response(await serializeChat(dataset), { headers: { "content-type": "text/turtle" } }),
   );
-  expect((await loadMessages(fetch, ROOM, AT, AT, 1)).documents).toEqual([]);
+  expect((await loadMessages(fetch, ROOM, AT, AT, 1, { reader: ALICE })).documents).toEqual([]);
   expect(fetch).toHaveBeenCalledTimes(1);
   const invalid = new Store([...dataset]);
   invalid.deleteMatches(
@@ -440,9 +448,11 @@ it("refuses malformed v2 boundaries without downgrading, including ownerless des
   );
   await expect(readRoomLayout(ROOM, invalid)).rejects.toThrow("invalid-input");
   const empty = createDemoPod({ root: ROOT });
-  await expect(loadRoomFiles(empty.fetch, ROOM)).rejects.toMatchObject({ status: 404 });
+  await expect(loadRoomFiles(empty.fetch, ROOM, { reader: ALICE })).rejects.toMatchObject({
+    status: 404,
+  });
   await expect(
-    loadRoomFiles(async () => new Response(null, { status: 503 }), ROOM),
+    loadRoomFiles(async () => new Response(null, { status: 503 }), ROOM, { reader: ALICE }),
   ).rejects.toMatchObject({ status: 503 });
 });
 
@@ -473,7 +483,7 @@ it("bounds a v2 page to six concurrent member-day reads, treats 404 as empty, an
     active--;
     return new Response(null, { status: 404 });
   };
-  const pending = loadMessages(fetch, ROOM, AT, AT, 1);
+  const pending = loadMessages(fetch, ROOM, AT, AT, 1, { reader: ALICE });
   await ready;
   expect(peak).toBe(6);
   release();
@@ -590,23 +600,55 @@ it("toggles cross-member client reactions in the actor day, rejects forged targe
 const badMemberResponses = [
   {
     name: "invalid RDF",
+    counted: true,
     response: () =>
       new Response("this is not Turtle", { headers: { "content-type": "text/turtle" } }),
   },
   {
     name: "unsupported media type",
+    counted: true,
     response: () =>
       new Response("binary", { headers: { "content-type": "application/octet-stream" } }),
   },
   {
+    name: "malformed content type",
+    counted: true,
+    response: () => new Response("binary", { headers: { "content-type": "not a type;;" } }),
+  },
+  {
     name: "parser budget",
+    counted: true,
     response: () =>
       new Response(`${"[".repeat(130)}0${"]".repeat(130)}`, {
         headers: { "content-type": "application/ld+json" },
       }),
   },
-  ...[403, 404, 410].map((status) => ({
+  {
+    name: "JSON-LD processing error",
+    counted: true,
+    response: () =>
+      new Response('{"@id": 5, "https://example.org/p": "v"}', {
+        headers: { "content-type": "application/ld+json" },
+      }),
+  },
+  {
+    name: "remote JSON-LD context",
+    counted: true,
+    response: () =>
+      new Response('{"@context": "https://evil.example/context", "@id": "#x"}', {
+        headers: { "content-type": "application/ld+json" },
+      }),
+  },
+  // CSS answers 501 when a stored type has no conversion to the requested RDF types.
+  ...[403, 406, 415, 501].map((status) => ({
     name: String(status),
+    counted: true,
+    response: () => new Response(null, { status }),
+  })),
+  // A member who did not post that day: absent, not a failure.
+  ...[404, 410].map((status) => ({
+    name: String(status),
+    counted: false,
     response: () => new Response(null, { status }),
   })),
 ];
@@ -616,6 +658,7 @@ it.each(
 )("isolates another member's $name day across timeline, reactions, unread and search", async ({
   response,
   name,
+  counted,
 }) => {
   vi.useFakeTimers();
   vi.setSystemTime(AT);
@@ -633,14 +676,14 @@ it.each(
         code: "PARSE_LIMIT",
       });
     const page = await client.messages(ROOM, { before: AT, since: AT, days: 1 });
-    expect(page.dropped).toBe(1);
+    expect(page.dropped).toBe(counted ? 1 : 0);
     expect(page.messages.map((m) => m.id)).toEqual([message.id]);
     expect(page.messages[0]?.reactions).toEqual([{ emoji: "👍", count: 1, reactedByMe: true }]);
     expect(await client.unreadCounts([{ url: ROOM }])).toEqual({ [ROOM]: 0 });
     const search = await client.search("garden", { days: 1, timeZone: "UTC" });
     expect(search.results.map((result) => result.message.id)).toEqual([message.id]);
     expect(search.skipped).toEqual([]);
-    expect(search.droppedRecords).toBe(1);
+    expect(search.droppedRecords).toBe(counted ? 1 : 0);
     const own = new ChatClient(pod.as(BOB), ROOT, BOB);
     if (name === "404")
       expect((await own.messages(ROOM, { before: AT, since: AT, days: 1 })).dropped).toBe(0);
@@ -654,6 +697,7 @@ it.each(
   badMemberResponses,
 )("isolates $name member file listings at each date depth, retaining own errors", async ({
   response,
+  counted,
 }) => {
   for (const depth of ["", "2026/", "2026/11/"]) {
     const pod = wacPod();
@@ -680,7 +724,7 @@ it.each(
     );
     expect(await loadRoomFiles(pod.as(ALICE), ROOM, { reader: ALICE })).toEqual({
       files: [`${alice}2026/11/photo.png`],
-      dropped: 1,
+      dropped: counted ? 1 : 0,
     });
     await expect(loadRoomFiles(pod.as(BOB), ROOM, { reader: BOB })).rejects.toThrow();
   }
@@ -712,8 +756,8 @@ it("propagates index, authentication, server, network and own parsing failures",
     "Network error",
   );
   pod.fail((url) => (url === roomIndex(ROOM) ? badMemberResponses[0]?.response() : undefined));
-  await expect(loadMessages(pod.as(ALICE), ROOM, AT, AT, 1)).rejects.toThrow();
-  await expect(loadRoomFiles(pod.as(ALICE), ROOM)).rejects.toThrow();
+  await expect(loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE })).rejects.toThrow();
+  await expect(loadRoomFiles(pod.as(ALICE), ROOM, { reader: ALICE })).rejects.toThrow();
 });
 
 it("refuses to resume creation under a legacy Append ACL before writing member containers or index", async () => {
@@ -725,9 +769,9 @@ it("refuses to resume creation under a legacy Append ACL before writing member c
     ifMatch: acl.etag as string,
   });
   const before = pod.calls.length;
-  await expect(createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true })).rejects.toThrow(
-    "existing root ACL grants members Append",
-  );
+  await expect(
+    createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true }),
+  ).rejects.toMatchObject({ name: "ChatModelError", code: "unsafe-acl" });
   expect(
     pod.calls
       .slice(before)
@@ -747,7 +791,7 @@ it("refuses an interrupted direct message with a legacy root ACL", async () => {
   await saveChat(pod.as(ALICE), ROOT, acl.url, buildRoomAcl(room.url, acl.url, ALICE, [BOB]), {
     ifMatch: acl.etag as string,
   });
-  await expect(client.createDirect(BOB)).rejects.toThrow("existing root ACL grants members Append");
+  await expect(client.createDirect(BOB)).rejects.toMatchObject({ code: "unsafe-acl" });
   expect((await pod.as(ALICE)(roomIndex(room.url))).status).toBe(404);
 });
 
@@ -890,7 +934,7 @@ it.each([
   }
 });
 
-it("stops queued day and file reads after a fatal failure, and never starts the next unread room", async () => {
+it("stops queued day and file reads after a fatal failure, and settles every unread room before failing", async () => {
   const descriptor = await serializeChat(
     await buildRoomV2(ROOM, {
       ...input,
@@ -906,16 +950,26 @@ it("stops queued day and file reads after a fatal failure, and never starts the 
       return new Response(null, { status: 503 });
     };
     await expect(
-      files ? loadRoomFiles(fetch, ROOM) : loadMessages(fetch, ROOM, AT, AT, 1),
+      files
+        ? loadRoomFiles(fetch, ROOM, { reader: ALICE })
+        : loadMessages(fetch, ROOM, AT, AT, 1, { reader: ALICE }),
     ).rejects.toMatchObject({ status: 503 });
     expect(started).toBe(6);
   }
   const client = new ChatClient(async () => new Response(null, { status: 404 }), ROOT, ALICE);
-  const messages = vi.spyOn(client, "messages").mockRejectedValue(new Error("fatal"));
+  let settled = false;
+  const messages = vi.spyOn(client, "messages").mockImplementation(async (url) => {
+    if (url === ROOM) throw new Error("fatal");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    settled = true;
+    return { messages: [], next: null };
+  });
   await expect(client.unreadCounts([{ url: ROOM }, { url: `${ROOM}next/` }])).rejects.toThrow(
     "fatal",
   );
-  expect(messages).toHaveBeenCalledTimes(1);
+  expect(messages).toHaveBeenCalledTimes(2);
+  expect(messages).toHaveBeenCalledWith(ROOM, { background: true });
+  expect(settled).toBe(true);
 });
 
 it("bounds the member-key cache while retaining deterministic hashes and cache hits", async () => {
@@ -937,27 +991,66 @@ it.each([
   "write",
   "public",
   "group",
+  "control",
+  "untyped",
+  "unknown-mode",
 ])("fails closed on resumed %s grants to other agents", async (grant) => {
   const pod = wacPod();
   await createRoom(pod.as(ALICE), ROOT, "team", input);
   await pod.as(ALICE)(roomIndex(ROOM), { method: "DELETE" });
   const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
   const rule = new Authorization(`${acl.url}#extra`, acl.dataset, DataFactory);
-  rule.type.add(`${NS.ACL}Authorization`);
+  // Some WAC servers (acl-check) honour rules without the acl:Authorization type.
+  if (grant !== "untyped") rule.type.add(`${NS.ACL}Authorization`);
   rule.accessTo = ROOM;
   rule.default = ROOM;
   if (grant === "write") {
     rule.agent.add(BOB);
     rule.canWrite = true;
+  } else if (grant === "control") {
+    // Control lets Bob rewrite this ACL and grant himself Append.
+    rule.agent.add(BOB);
+    rule.canRead = true;
+    rule.canReadWriteAcl = true;
+  } else if (grant === "untyped") {
+    rule.agent.add(BOB);
+    rule.canAppend = true;
+  } else if (grant === "unknown-mode") {
+    rule.agent.add(BOB);
+    rule.mode.add("https://example.org/modes#Publish");
   } else {
     rule.canAppend = true;
     if (grant === "public") rule.accessibleToAny = true;
     else rule.agentGroup = new Group(`${ROOT}group#it`, acl.dataset, DataFactory);
   }
   await saveChat(pod.as(ALICE), ROOT, acl.url, acl.dataset, { ifMatch: acl.etag as string });
-  await expect(createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true })).rejects.toThrow(
-    "existing root ACL",
+  const before = pod.calls.length;
+  const refusal = await createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true }).catch(
+    (error: unknown) => error,
   );
+  expect(refusal).toBeInstanceOf(ChatModelError);
+  expect(refusal).toMatchObject({ code: "unsafe-acl" });
+  expect(
+    pod.calls.slice(before).some((c) => c.method === "PUT" && c.url.includes("/members/")),
+  ).toBe(false);
+});
+
+it("resumes under an owner-only Control rule and a members Read rule, typed or not", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  await pod.as(ALICE)(roomIndex(ROOM), { method: "DELETE" });
+  const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
+  const rule = new Authorization(`${acl.url}#untyped-owner`, acl.dataset, DataFactory);
+  rule.agent.add(ALICE);
+  rule.accessTo = ROOM;
+  rule.canReadWriteAcl = true;
+  const read = new Authorization(`${acl.url}#untyped-read`, acl.dataset, DataFactory);
+  read.agent.add(BOB);
+  read.accessTo = ROOM;
+  read.canRead = true;
+  await saveChat(pod.as(ALICE), ROOT, acl.url, acl.dataset, { ifMatch: acl.etag as string });
+  const resumed = await createRoom(pod.as(ALICE), ROOT, "team", input, { resume: true });
+  expect((await readRoomLayout(ROOM, resumed.dataset))?.memberContainers).toHaveLength(2);
 });
 
 it("rejects raw reaction events with missing or mismatched member bindings", async () => {
@@ -982,4 +1075,245 @@ it("rejects raw reaction events with missing or mismatched member bindings", asy
       { url: alice, owner: ALICE },
     ]).size,
   ).toBe(0);
+});
+
+const CAROL = "https://carol.example/#me";
+const DAY = 86_400_000;
+
+it("reports no drops for a healthy multi-day room where one member never posted", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(AT);
+  try {
+    const pod = wacPod();
+    await createRoom(pod.as(ALICE), ROOT, "team", {
+      ...input,
+      members: [BOB, CAROL],
+      created: new Date(AT.getTime() - 3 * DAY),
+    });
+    await sendMessage(pod.as(ALICE), ROOM, {
+      id: "one",
+      author: ALICE,
+      content: "Garden one",
+      at: new Date(AT.getTime() - 2 * DAY),
+    });
+    await sendMessage(pod.as(BOB), ROOM, {
+      id: "two",
+      author: BOB,
+      content: "Garden two",
+      at: new Date(AT.getTime() - DAY),
+    });
+    const client = new ChatClient(pod.as(ALICE), ROOT, ALICE);
+    await client.join(ROOM);
+    const page = await client.messages(ROOM, { before: AT, days: 4 });
+    expect(page.messages.map((m) => m.content)).toEqual(["Garden one", "Garden two"]);
+    expect(page.dropped).toBe(0);
+    const search = await client.search("garden", { days: 4, timeZone: "UTC" });
+    expect(search.results).toHaveLength(2);
+    expect(search.skipped).toEqual([]);
+    expect(search.droppedRecords).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("propagates a transport failure while streaming another member's day, and malformed JSON", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const day = dayUrl(await memberContainer(ROOM, BOB), AT);
+  const failing = (failure: Error) =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("<#a> <#b> <#c> ."));
+          controller.error(failure);
+        },
+      }),
+      { headers: { "content-type": "text/turtle" } },
+    );
+  for (const response of [
+    () => failing(new TypeError("terminated")),
+    () => failing(new Error("connection reset")),
+    () => new Response('{"@id": ', { headers: { "content-type": "application/ld+json" } }),
+  ]) {
+    pod.fail((url, method) => (url === day && method === "GET" ? response() : undefined));
+    const failure = await loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(RdfFetchError);
+    expect((failure as RdfFetchError).status).toBeUndefined();
+  }
+});
+
+it("requires a reader, and an absent one never makes a member container lenient", async () => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  const bob = await memberContainer(ROOM, BOB);
+  pod.fail((url, method) =>
+    url.startsWith(bob) && method === "GET" ? new Response(null, { status: 403 }) : undefined,
+  );
+  await expect(
+    // @ts-expect-error a reader is required for member reads
+    loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, {}),
+  ).rejects.toMatchObject({ status: 403 });
+  // @ts-expect-error a reader is required for member reads
+  await expect(loadRoomFiles(pod.as(ALICE), ROOM, {})).rejects.toMatchObject({ status: 403 });
+  expect((await loadMessages(pod.as(ALICE), ROOM, AT, AT, 1, { reader: ALICE })).dropped).toBe(1);
+});
+
+it.each([
+  ["v2", "none"],
+  ["v2", "weak"],
+  ["v1", "none"],
+])("removes %s duplicate reactions when PATCH answers with a %s ETag", async (layout, etag) => {
+  const pod = wacPod();
+  await createRoom(pod.as(ALICE), ROOT, "team", input);
+  if (layout === "v1") {
+    const acl = await loadChat(pod.as(ALICE), ROOM, `${ROOM}.acl`);
+    await saveChat(pod.as(ALICE), ROOT, acl.url, buildRoomAcl(ROOM, acl.url, ALICE, [BOB]), {
+      ifMatch: acl.etag as string,
+    });
+    const index = await loadChat(pod.as(ALICE), ROOM, roomIndex(ROOM));
+    await saveChat(pod.as(ALICE), ROOT, index.url, buildRoom(ROOM, input), {
+      ifMatch: index.etag as string,
+    });
+  }
+  const sent = await sendMessage(pod.as(ALICE), ROOM, {
+    id: "target",
+    author: ALICE,
+    content: "Hello",
+    at: AT,
+  });
+  const id = `${sent.url}#target`;
+  // Two tabs both added a Like before either saw the other.
+  for (const like of ["one", "two"])
+    await react(pod.as(BOB), ROOM, { id: like, message: id, actor: BOB, emoji: "👍", at: AT });
+  const patches: string[] = [];
+  const stripped: typeof fetch = async (url, init) => {
+    const response = await pod.as(BOB)(url, init);
+    if (init?.method !== "PATCH") return response;
+    patches.push(String(url));
+    const headers = new Headers(response.headers);
+    if (etag === "weak") headers.set("etag", 'W/"weak"');
+    else headers.delete("etag");
+    return new Response(response.body, { status: response.status, headers });
+  };
+  const bob = new ChatClient(stripped, ROOT, BOB);
+  await bob.react(ROOM, id, "👍");
+  expect(patches).toHaveLength(2);
+  expect(
+    (await bob.messages(ROOM, { before: AT, since: AT, days: 1 })).messages.find((m) => m.id === id)
+      ?.reactions,
+  ).toEqual([]);
+});
+
+it("starts the open room's timeline before queued unread reads, which run rooms concurrently", async () => {
+  const rooms = Array.from({ length: 3 }, (_, i) => ({ url: `${ROOT}chat/rooms/r-${i}/` }));
+  const open = `${ROOT}chat/rooms/open/`;
+  const indexes = new Map(
+    await Promise.all(
+      [...rooms.map(({ url }) => url), open].map(
+        async (url) =>
+          [
+            roomIndex(url),
+            await serializeChat(
+              await buildRoomV2(url, {
+                ...input,
+                members: Array.from({ length: 8 }, (_, i) => `https://member-${i}.example/#me`),
+              }),
+            ),
+          ] as const,
+      ),
+    ),
+  );
+  const fetched = new Set<string>();
+  const held: (() => void)[] = [];
+  let holding = true;
+  let six!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    six = resolve;
+  });
+  const fetch: typeof globalThis.fetch = async (target) => {
+    const url = String(target);
+    fetched.add(url);
+    const index = indexes.get(url);
+    if (index) return new Response(index, { headers: { "content-type": "text/turtle" } });
+    if (holding && url.includes("/members/") && !url.startsWith(open)) {
+      await new Promise<void>((resolve) => {
+        held.push(resolve);
+        if (held.length === 6) six();
+      });
+    }
+    return new Response(null, { status: 404 });
+  };
+  const client = new ChatClient(fetch, ROOT, ALICE);
+  const unread = client.unreadCounts(rooms);
+  await ready;
+  // Rooms run together: every room's index was read before any day read finished.
+  expect(rooms.every(({ url }) => fetched.has(roomIndex(url)))).toBe(true);
+  let done = false;
+  const page = client.messages(open, { before: AT, since: AT, days: 1 }).then((result) => {
+    done = true;
+    return result;
+  });
+  let releases = 0;
+  while (!done && releases < 20) {
+    held.shift()?.();
+    releases++;
+    for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  expect(done).toBe(true);
+  expect(releases).toBeLessThanOrEqual(3);
+  expect((await page).dropped).toBe(0);
+  holding = false;
+  for (const release of held.splice(0)) release();
+  expect(await unread).toEqual(Object.fromEntries(rooms.map(({ url }) => [url, 0])));
+});
+
+it("bounds reaction sources, keeping the most recently loaded documents", async () => {
+  const room = `${ROOT}chat/rooms/legacy/`;
+  const bodies = new Map<string, string>([
+    [roomIndex(room), await serializeChat(buildRoom(room, input))],
+  ]);
+  const start = Date.UTC(2025, 0, 1, 12);
+  const days = 520;
+  for (let i = 0; i < days; i++) {
+    const at = new Date(start + i * DAY);
+    const url = dayUrl(room, at);
+    const message = appendMessage(new Store(), room, {
+      id: "m",
+      author: ALICE,
+      content: "x",
+      at,
+    });
+    const like = appendReaction(message, room, {
+      id: "r",
+      message: `${url}#m`,
+      actor: ALICE,
+      emoji: "👍",
+      at,
+    });
+    bodies.set(url, await serializeChat(new Store([...message, ...like])));
+  }
+  const fetch: typeof globalThis.fetch = async (url) => {
+    const body = bodies.get(String(url));
+    return body
+      ? new Response(body, { headers: { "content-type": "text/turtle" } })
+      : new Response(null, { status: 404 });
+  };
+  const client = new ChatClient(fetch, ROOT, ALICE);
+  const sources = (client as unknown as { reactionSources: Map<string, unknown> }).reactionSources;
+  const last = new Date(start + (days - 1) * DAY);
+  const first = await client.messages(room, { before: last, days: 366 });
+  expect(first.messages).toHaveLength(366);
+  await client.messages(room, { before: first.next as Date, days: 366 });
+  // Empty days hold no reactions and are not kept.
+  await client.messages(room, { before: new Date(start - DAY), days: 30 });
+  expect(sources.size).toBe(512);
+  expect(sources.has(dayUrl(room, new Date(start)))).toBe(true);
+  expect(sources.has(dayUrl(room, new Date(start + 300 * DAY)))).toBe(true);
+  expect(sources.has(dayUrl(room, new Date(start - DAY)))).toBe(false);
+  expect(sources.has(dayUrl(room, last))).toBe(false);
+  await client.messages(room, { before: last, since: last, days: 1 });
+  expect(sources.size).toBe(512);
+  expect(sources.has(dayUrl(room, last))).toBe(true);
 });

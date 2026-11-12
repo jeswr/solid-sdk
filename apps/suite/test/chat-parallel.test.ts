@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { expect, it, vi } from "vitest";
 import { createConcurrentMapper } from "../src/lib/parallel";
 
@@ -43,4 +44,31 @@ it("stops failed maps' queued work, drains active jobs, and remains usable", asy
   expect(await map([9], async (n) => n)).toEqual([9]);
   expect(() => createConcurrentMapper(0)).toThrow(RangeError);
   expect(() => createConcurrentMapper(1.5)).toThrow(RangeError);
+});
+
+it("starts queued priority jobs before queued normal jobs, without preempting running ones", async () => {
+  const map = createConcurrentMapper(1);
+  const order: string[] = [];
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const work = async (value: string) => {
+    order.push(value);
+    if (value === "a1") await held;
+    return value;
+  };
+  const normal = map(["a1", "a2", "a3"], work);
+  await Promise.resolve();
+  const urgent = map(["b1", "b2"], work, { priority: true });
+  const later = map(["c1"], work);
+  await Promise.resolve();
+  expect(order).toEqual(["a1"]);
+  release();
+  expect(await Promise.all([normal, urgent, later])).toEqual([
+    ["a1", "a2", "a3"],
+    ["b1", "b2"],
+    ["c1"],
+  ]);
+  expect(order).toEqual(["a1", "b1", "b2", "a2", "a3", "c1"]);
 });

@@ -381,6 +381,7 @@ it("lists only safe room files for Drive without fetching link previews", async 
     await loadRoomFiles(
       async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
       room.url,
+      { reader: ME },
     ),
   ).toEqual({ files: [`${room.url}good.png`], dropped: 0 });
 });

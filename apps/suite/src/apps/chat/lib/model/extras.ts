@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
@@ -42,7 +43,7 @@ export async function loadProfileName(
 export async function loadRoomFiles(
   fetch: typeof globalThis.fetch,
   room: string,
-  { reader, map = createConcurrentMapper() }: MemberReadOptions = {},
+  { reader, map = createConcurrentMapper() }: MemberReadOptions,
 ): Promise<{ files: string[]; dropped: number }> {
   const base = roomContainer(room);
   let layout: Awaited<ReturnType<typeof readRoomLayout>>;

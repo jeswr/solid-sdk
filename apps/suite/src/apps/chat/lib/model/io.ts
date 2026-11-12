@@ -1,10 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+// AUTHORED-BY Claude Opus 5.5
+import {
+  extractMediaType,
+  fetchRdf,
+  RdfFetchError,
+  SUPPORTED_RDF_MEDIA_TYPES,
+} from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import type { MessageTask } from "@jeswr/solid-chat-interop";
 import type { DatasetCore } from "@rdfjs/types";
-import { AclResource, Container } from "@solid/object";
+import { AclResource, Authorization, Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { type ConcurrentMapper, createConcurrentMapper } from "../../../../lib/parallel";
 import {
@@ -43,6 +49,12 @@ import {
 } from "./rooms";
 import { ChatModelError, segment, strongEtag } from "./validation";
 
+/** Every subject with an `acl:mode` is a rule, whether or not it is typed `acl:Authorization`. */
+class AclRules extends AclResource {
+  get rules(): Iterable<Authorization> {
+    return this.subjectsOf(`${NS.ACL}mode`, Authorization);
+  }
+}
 export interface ChatDocument {
   url: string;
   dataset: Store;
@@ -110,8 +122,35 @@ async function optionalChat(
   }
 }
 export interface MemberReadOptions {
-  reader?: string;
+  /** The reading WebID: required, so a missing reader can never make its own container lenient. */
+  reader: string;
   map?: ConcurrentMapper;
+}
+/** HTTP answers to another member's resource that its writer controls (stored type, ACL). */
+const FOREIGN_REFUSALS = new Set([403, 406, 415, 501]);
+/**
+ * fetch-rdf reports body transport failures and parser failures alike (no status, a content
+ * type, the failure as `cause`), so only recognisable content failures are isolated: budgets,
+ * unusable media types (decided before any body read), N3 syntax errors (`context`), JSON-LD
+ * processing errors (spaced `code`) and the default loader's remote-context refusal. Anything
+ * else, including malformed JSON, stays strict.
+ */
+function contentFailure(error: RdfFetchError): boolean {
+  if (error.status !== undefined) return FOREIGN_REFUSALS.has(error.status);
+  if (error.code === "PARSE_LIMIT") return true;
+  if (error.contentType === undefined) return false;
+  const media = extractMediaType(error.contentType);
+  if (media === null || !(SUPPORTED_RDF_MEDIA_TYPES as readonly string[]).includes(media))
+    return true;
+  const cause: unknown = error.cause;
+  if (cause instanceof RdfFetchError)
+    return cause.status === undefined && cause.cause === undefined;
+  if (!(cause instanceof Error) || cause instanceof TypeError) return false;
+  const { context, code } = cause as Error & { context?: unknown; code?: unknown };
+  return (
+    (typeof context === "object" && context !== null) ||
+    (typeof code === "string" && code.includes(" "))
+  );
 }
 /** Only foreign member resources are isolated; index, own and transport failures stay strict. */
 export async function loadMemberChat(
@@ -119,25 +158,21 @@ export async function loadMemberChat(
   base: string,
   url: string,
   owner: string | undefined,
-  reader?: string,
+  reader: string,
   optional = true,
 ): Promise<{ document: ChatDocument; dropped: number }> {
   try {
     return { document: await loadChat(fetch, base, url), dropped: 0 };
   } catch (error) {
-    const foreign = owner !== undefined && owner !== reader;
+    // An absent reader (a JS caller) is strict: it never makes every container foreign.
+    const foreign = owner !== undefined && reader !== undefined && owner !== reader;
     if (error instanceof RdfFetchError) {
-      if (
-        foreign &&
-        (error.status === 403 ||
-          error.status === 404 ||
-          error.status === 410 ||
-          (error.status === undefined && error.contentType !== undefined) ||
-          error.code === "PARSE_LIMIT")
-      )
-        return { document: { url, dataset: new Store(), etag: null }, dropped: 1 };
-      if (optional && error.status === 404)
-        return { document: { url, dataset: new Store(), etag: null }, dropped: 0 };
+      const empty = { url, dataset: new Store(), etag: null };
+      // A member who did not post that day has no document: that is not a failure.
+      if (foreign && (error.status === 404 || error.status === 410))
+        return { document: empty, dropped: 0 };
+      if (foreign && contentFailure(error)) return { document: empty, dropped: 1 };
+      if (optional && error.status === 404) return { document: empty, dropped: 0 };
     }
     throw error;
   }
@@ -293,7 +328,7 @@ export async function loadMessages(
   before: Date,
   since: Date,
   days: number,
-  { reader, map = createConcurrentMapper() }: MemberReadOptions = {},
+  { reader, map = createConcurrentMapper() }: MemberReadOptions,
 ) {
   const page = dayPage(room, before, since, days);
   const [layout] = await map([room], (url) => roomLayout(fetch, url));
@@ -599,16 +634,16 @@ export async function createRoom(
   );
   if (rootAcl === null) {
     const existing = await loadChat(fetch, base, aclUrl);
-    for (const rule of new AclResource(existing.dataset, DataFactory).authorizations) {
+    // Members may only read the root: any other mode (Append, Write, Control or unknown) for
+    // anyone but the owner refuses, typed or not, since some WAC servers honour untyped rules.
+    for (const rule of new AclRules(existing.dataset, DataFactory).rules) {
       if (
-        (rule.canAppend || rule.canWrite) &&
+        [...rule.mode].some((mode) => mode !== `${NS.ACL}Read`) &&
         ([...rule.agent].some((agent) => agent !== input.creator) ||
           rule.agentClass.size > 0 ||
           rule.agentGroup !== undefined)
       )
-        throw new Error(
-          "Cannot resume a v2 room: the existing root ACL grants members Append or Write. Repair the room ACL before retrying.",
-        );
+        throw new ChatModelError("unsafe-acl");
     }
   }
   await ensureContainer(fetch, base, `${room}members/`);
