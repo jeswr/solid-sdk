@@ -19,6 +19,8 @@ const secondDemoAccount = {
   webId: "https://example.org/rowan/profile#me",
   storageUrl: "https://example.org/rowan/",
 };
+// A failed change stays unsent: the demo outbox treats any reconnect as syncing
+// "pending" items, which raced the active account's sign-out assertions.
 const pendingOutbox = JSON.stringify({
   pending: [
     {
@@ -26,7 +28,7 @@ const pendingOutbox = JSON.stringify({
       label: "Rename a file",
       where: "My Drive",
       queuedAt: "2026-11-01T12:00:00Z",
-      state: "pending",
+      state: "failed",
     },
   ],
   conflicts: [],
