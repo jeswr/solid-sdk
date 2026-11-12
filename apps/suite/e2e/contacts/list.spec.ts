@@ -324,3 +324,22 @@ test("external WebIDs stay links and label edits persist", async ({ page }) => {
   await detail.getByRole("link", { name: "Edit", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Full name", exact: true })).toBeVisible();
 });
+
+// Next 16.2 seeded a reloaded static page's plain-path router cache entry with the queried URL,
+// so a later link to /contacts came back filtered. Next 16.4 keys that entry by the real search.
+test("All contacts clears a reloaded search after visiting duplicates", async ({ page }) => {
+  const count = page.locator(".con-list-heading").getByRole("status");
+  await open(page);
+  await search(page, "Ada Fern");
+  await expect(count).toHaveText("1 contacts matching “Ada Fern”");
+  await page.reload();
+  await expect(count).toHaveText("1 contacts matching “Ada Fern”");
+  await navigation(page, /^Merge duplicates/);
+  await expect(page.getByRole("heading", { name: "Merge duplicates", exact: true })).toBeVisible();
+  await navigation(page, /^All contacts/);
+  await expect(page).toHaveURL(/\/contacts$/);
+  await expect(count).toHaveText("40 contacts");
+  await expect(page.getByRole("searchbox", { name: "Search Contacts", exact: true })).toHaveValue(
+    "",
+  );
+});
