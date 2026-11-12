@@ -33,6 +33,7 @@ import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useConnectionState } from "../../../shell/sync/connection-state";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
 import type { SaveStatus } from "../lib/autosave";
@@ -50,6 +51,7 @@ import { WorkbookComments } from "./cell-comments";
 import { ShareWorkbook } from "./share-workbook";
 import { DataMenus } from "./sheet-data-menus";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
+import { SheetNotFound, SheetsAccessNotice, SheetsLoadError } from "./sheets-states";
 import "@univerjs/preset-sheets-sort/lib/index.css";
 import "@univerjs/preset-sheets-filter/lib/index.css";
 import "@univerjs/preset-sheets-find-replace/lib/index.css";
@@ -77,15 +79,7 @@ const statusText: Record<SaveStatus, string> = {
   error: "Couldn't save",
 };
 
-export function SheetNotFound() {
-  return (
-    <div className="sht-state">
-      <h1>Can't open this spreadsheet</h1>
-      <p>It may have moved or you may not have access.</p>
-      <Link href="/sheets">Back to spreadsheets</Link>
-    </div>
-  );
-}
+export { SheetNotFound } from "./sheets-states";
 
 function Grid({
   snapshot,
@@ -201,6 +195,7 @@ function Grid({
 }
 
 export function SheetEditor({ container }: { container: string }) {
+  const offline = useConnectionState() === "offline";
   const state = useWorkbook(container);
   const sharingConnection = useNeedsConnection();
   const service = useWorkbookService();
@@ -292,12 +287,15 @@ export function SheetEditor({ container }: { container: string }) {
     return <SheetNotFound />;
   if (state.error)
     return (
-      <div className="sht-state" role="alert">
-        <h1>Couldn't open this spreadsheet</h1>
-        {state.error instanceof WorkbookLinkError && <p>{state.error.message}</p>}
-        <Button onClick={state.retryOpen}>Retry</Button>
-        <Link href="/sheets">Back to spreadsheets</Link>
-      </div>
+      <SheetsLoadError
+        onRetry={state.retryOpen}
+        offline={offline}
+        message={
+          state.error instanceof WorkbookLinkError
+            ? state.error.message
+            : "Couldn't open this spreadsheet. Check your connection and try again."
+        }
+      />
     );
   return (
     <SuiteFrame
@@ -400,40 +398,43 @@ export function SheetEditor({ container }: { container: string }) {
     >
       <div className="sht-editor">
         <h1 className="sr-only">{title}</h1>
-        {state.workbook && (
-          <WorkbookComments
-            container={container}
-            engine={chartEngine}
-            onLoadingChange={setCommentsLoading}
-          />
-        )}
-        {state.workbook ? (
-          <>
-            <Grid
-              key={grid?.revision ?? 0}
-              snapshot={state.workbook.snapshot}
-              revision={state.workbook.version.snapshotEtag}
-              onChange={state.scheduleSave}
-              onSaved={state.onSaved}
-              engineRef={engine}
-              onReady={setChartEngine}
-              readOnly={state.readOnly}
+        <SheetsAccessNotice offline={offline} readOnly={state.readOnly} />
+        <div className="sht-editor-content">
+          {state.workbook && (
+            <WorkbookComments
+              container={container}
+              engine={chartEngine}
+              onLoadingChange={setCommentsLoading}
             />
-            <Suspense fallback={null}>
-              <ChartWorkspace
-                key={chartRevision}
-                engine={chartEngine}
+          )}
+          {state.workbook ? (
+            <>
+              <Grid
+                key={grid?.revision ?? 0}
                 snapshot={state.workbook.snapshot}
-                readOnly={state.readOnly || commentsLoading}
+                revision={state.workbook.version.snapshotEtag}
+                onChange={state.scheduleSave}
+                onSaved={state.onSaved}
+                engineRef={engine}
+                onReady={setChartEngine}
+                readOnly={state.readOnly}
               />
-            </Suspense>
-          </>
-        ) : (
-          <div className="sht-skeleton" role="status" aria-label="Opening spreadsheet">
-            <span />
-            <span />
-          </div>
-        )}
+              <Suspense fallback={null}>
+                <ChartWorkspace
+                  key={chartRevision}
+                  engine={chartEngine}
+                  snapshot={state.workbook.snapshot}
+                  readOnly={state.readOnly || commentsLoading}
+                />
+              </Suspense>
+            </>
+          ) : (
+            <div className="sht-skeleton" role="status" aria-label="Opening spreadsheet">
+              <span />
+              <span />
+            </div>
+          )}
+        </div>
       </div>
       {dialog === "share" && (
         <ShareWorkbook container={container} title={title} onClose={() => setDialog(undefined)} />

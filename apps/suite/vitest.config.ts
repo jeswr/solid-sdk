@@ -61,6 +61,7 @@ export default defineConfig({
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/sheets/lib/comments/**/*.ts",
         "src/apps/sheets/components/cell-comments.tsx",
+        "src/apps/sheets/components/sheets-states.tsx",
         "src/apps/sheets/lib/autosave.ts",
         "src/apps/sheets/lib/pending-saves.ts",
         "src/apps/sheets/lib/sharing.ts",
