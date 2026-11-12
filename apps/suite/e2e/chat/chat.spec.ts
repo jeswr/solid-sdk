@@ -6,12 +6,12 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { roomInvitation } from "@jeswr/pod-access/notify";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
-import { seedDemoSession } from "../demo-session";
 // solid-agent-notify is pod-access's transport; its activity module has no demo-pod imports.
 import {
   buildActivity,
   serializeTurtle,
 } from "../../../../packages/solid-agent-notify/src/activity";
+import { seedDemoSession } from "../demo-session";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
