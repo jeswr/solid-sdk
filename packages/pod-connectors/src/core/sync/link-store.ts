@@ -51,6 +51,18 @@ export class WeakEtagError extends Error {
     this.name = "WeakEtagError";
   }
 }
+/**
+ * The manifest (and with it the shard salt) is missing while link documents exist. A fresh salt
+ * would place every existing record in the wrong shard, so the run stops instead. Recovery:
+ * restore `<account>/links/manifest.ttl` from a backup, or delete the whole `<account>/links/`
+ * container so the next run re-adopts items from a full inbound pass.
+ */
+export class LinkManifestLostError extends Error {
+  constructor() {
+    super("Sync link manifest is missing while link documents exist.");
+    this.name = "LinkManifestLostError";
+  }
+}
 /** The provider identity is already linked to another pod resource. */
 export class DuplicateSyncIdentityError extends Error {
   constructor() {
@@ -99,6 +111,10 @@ export function checkedText(value: unknown): string {
     throw new Error("Invalid sync record text.");
   return value;
 }
+function checkCount(value: number | undefined): void {
+  if (value !== undefined && (!Number.isSafeInteger(value) || value < 0 || value > 1_000))
+    throw new Error("Invalid sync counter.");
+}
 /** Reject malformed records rather than turning them into apparently new items. */
 function validate(link: SyncLink): void {
   checkedText(link.podUrl);
@@ -113,7 +129,9 @@ function validate(link: SyncLink): void {
     checkedText(link.pendingCreate.hash);
     strongEtag(link.pendingCreate.podEtag);
     checkedText(link.pendingCreate.resourceUrl);
+    checkCount(link.pendingCreate.attempts);
   }
+  checkCount(link.deleteHeldRuns);
   if (link.conflict) {
     checkedText(link.conflict.snapshotUrl);
     checkedText(link.conflict.remoteVersion);
@@ -372,7 +390,11 @@ export function createLinkStore(
   }
   function reindex(slug: string, records: ReadonlyMap<string, SyncLink>): void {
     for (const url of [...(docMembers.get(slug) ?? [])]) unindex(url);
-    for (const link of records.values()) index(link, slug, !noIdentity.has(link.podUrl));
+    // A mover and the record it replaces may share one document: the mover owns the identity.
+    const replaced = new Set<string>();
+    for (const link of records.values()) if (link.movedFrom) replaced.add(link.movedFrom);
+    for (const link of records.values())
+      index(link, slug, !noIdentity.has(link.podUrl) && !replaced.has(link.podUrl));
   }
   /** Merged documents may carry concurrent records; reject identity clashes before writing. */
   function checkIdentities(
@@ -382,7 +404,8 @@ export function createLinkStore(
   ): void {
     const remoteIds = new Set<string>();
     for (const link of records.values()) {
-      if (!link.remoteId || noIdentity.has(link.podUrl)) continue;
+      // The record a move replaces may sit in the same document as its mover.
+      if (!link.remoteId || noIdentity.has(link.podUrl) || link.podUrl === replacing) continue;
       const existing = byRemote.get(link.remoteId);
       if (
         remoteIds.has(link.remoteId) ||
@@ -569,6 +592,14 @@ export function createLinkStore(
       if (loaded) return;
       let manifest = await readManifest();
       if (!manifest) {
+        // Never re-salt existing shards: their records would silently land in wrong shards.
+        const baseUrl = writer.resolve(base);
+        for await (const entry of writer.list(base))
+          if (
+            entry.url.startsWith(baseUrl) &&
+            /^[0-9a-f]{2}(?:-\d+)?\.ttl$/.test(entry.url.slice(baseUrl.length))
+          )
+            throw new LinkManifestLostError();
         const fresh = [...crypto.getRandomValues(new Uint8Array(32))]
           .map((b) => b.toString(16).padStart(2, "0"))
           .join("");

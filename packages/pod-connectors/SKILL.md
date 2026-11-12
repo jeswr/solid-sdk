@@ -83,23 +83,39 @@ subjects; slugs are framework-owned (`<prefix>/<32 hex of sha-256(id)>.ttl`), ne
 from raw ids. Then use `ctx.sync.upsert`/`delete`/`fail` with explicit remote versions,
 tombstones and any provider-echoed create key. One mapped item per document; never silently
 treat a collection document as an item. `fieldsForHash` is the single mapped-predicate
-declaration: inbound updates replace only those quads and keep every other pod triple.
+declaration: list every field inbound updates must change there, because unmapped incoming
+facts only fill gaps (never overwrite). Hashing and merges cover only the item's own subjects
+(document URL plus its fragments, or plus exactly `itemSubjects(url)` when declared) and the
+blank closure their mapped quads reach; quads about other subjects are never hashed or
+removed. A merge that removes pod quads absent from the incoming document trashes the
+previous pod version first.
 Keep the single shared import-session claim until outbound completes. Write-back and delete
 propagation default off; explicit write grants gate execution. Remote methods use their
 injected `options.api`, enforce conditional versions, and deduplicate durable create keys
-(or declare `deduplicatesCreateKeys: false`, which defers unconfirmed creates). Preserve
+(or declare `deduplicatesCreateKeys: false`, which defers unconfirmed creates). Three
+provider rejections of a create (4xx other than 401/403/408/429) retire it as a manual
+conflict. Preserve
 original create payload snapshots through retries and later local edits. Never absorb a later
 pod ETag into the baseline of an earlier outbound write. Owner protection precedes sensitive
 body access; read sync resources through the session's `readResource(slug, false)` seam to
 preserve ETags and normalize legacy aliases without retaining a run-long resource cache.
 Isolate item failures with the fixed `SyncSkipReason` classes (never provider text); only
-abort, budget, rate-limit and 401/403 errors end a run. Failed and deferred inbound items stay
-in the owner-only manifest and in `pendingRemoteIds()`, which also lists manual conflicts.
+abort, budget, rate-limit, 401/403 and `LinkManifestLostError` end a run. Failed and deferred
+inbound items stay in the owner-only manifest and in `pendingRemoteIds()`, which also lists
+manual conflicts; an inbound failure without a valid remote id holds the cursor
+(`cursorHeld`).
 The first two-way run (no adoption marker) does a full inbound without the cursor; outbound
-never creates an unlinked resource carrying this connector's import provenance. Unresolved
-create intents defer keyless unlinked inbound items. Duplicate identities become manual
-conflict-only records; tombstone activity becomes a manual conflict; a vanished link plus a new
-resource with the same location-independent hash is a move. Unsupported ACL discovery, absent
+never creates an unlinked resource carrying this connector's import provenance. A keyless
+unlinked inbound item is deferred only when its hash equals an open create that will still be
+re-sent; adoption by echoed key requires the intent's hash (else a manual conflict). An open
+create whose pod resource is gone and whose lookup misses is retired as a manual conflict.
+Duplicate identities become manual conflict-only records; tombstone activity becomes a manual
+conflict. A vanished link plus a new resource with the same location-independent hash, or one
+whose subjects or PROV links name the old URL, is a move (reference pairs rebase verbatim
+subjects and push an update). A run with an `unlinked-import` or an ambiguous move candidate
+propagates no pod deletes: links are held as pending deletes and a second held run records a
+manual conflict. A missing manifest beside existing shards is `LinkManifestLostError`, never a
+new salt. Unsupported ACL discovery, absent
 strong validators (per item), incomplete listings and malformed links fail closed;
 sub-containers and non-RDF members are skipped. Link shards: 64 HMAC-salted base shards of 128
 records with overflow documents, a 50,000-link hard cap that skips (never throws), and

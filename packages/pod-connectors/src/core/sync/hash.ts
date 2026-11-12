@@ -45,27 +45,98 @@ export function datasetBytes(dataset: DatasetCore): number {
   return bytes;
 }
 
+/** The subjects one sync item owns inside its document. */
+export interface SyncItemScope {
+  /** The document URL, plus its fragment IRIs or exactly the declared subjects. */
+  readonly ownsSubject: (subject: string) => boolean;
+  /** Blank nodes reached from the owned subjects' mapped quads (transitively). */
+  readonly blanks: ReadonlySet<string>;
+}
+
+/**
+ * An item's own subjects: the document URL and its fragment IRIs, or, when the adapter declares
+ * its subjects, the document URL and exactly those; plus the blank-node closure reached from
+ * those subjects' mapped quads. Quads about any other subject (such as a fragment the owner
+ * added beside a declared item subject) are neither hashed nor replaced by an inbound merge.
+ */
+export function syncItemScope(
+  dataset: DatasetCore,
+  fields: readonly string[],
+  documentUrl: string,
+  declared?: readonly string[],
+): SyncItemScope {
+  if (
+    declared !== undefined &&
+    (!Array.isArray(declared) ||
+      declared.length > 32 ||
+      declared.some((s) => typeof s !== "string" || !safeIri(s)))
+  )
+    throw new RangeError("Declare at most 32 item subject IRIs.");
+  const subjects = declared && new Set(declared);
+  const ownsSubject = (subject: string) =>
+    subject === documentUrl ||
+    (subjects ? subjects.has(subject) : subject.startsWith(`${documentUrl}#`));
+  const selected = new Set(fields);
+  const blanks = new Set<string>();
+  const queue: string[] = [];
+  const reach = (term: Term) => {
+    if (term.termType === "BlankNode" && !blanks.has(term.value)) {
+      blanks.add(term.value);
+      queue.push(term.value);
+    }
+  };
+  // One pass: seed from owned mapped quads and index blank-subject edges for the closure.
+  const edges = new Map<string, Term[]>();
+  for (const q of dataset) {
+    if (q.subject.termType === "BlankNode" && q.object.termType === "BlankNode") {
+      const out = edges.get(q.subject.value);
+      if (out) out.push(q.object);
+      else edges.set(q.subject.value, [q.object]);
+    }
+    if (
+      selected.has(q.predicate.value) &&
+      q.subject.termType === "NamedNode" &&
+      ownsSubject(q.subject.value)
+    )
+      reach(q.object);
+  }
+  while (queue.length) for (const next of edges.get(queue.pop() as string) ?? []) reach(next);
+  return { ownsSubject, blanks };
+}
+/** Whether a quad's subject belongs to the item (a mapped quad of it is item data). */
+export function inScope(scope: SyncItemScope, q: Quad): boolean {
+  return q.subject.termType === "BlankNode"
+    ? scope.blanks.has(q.subject.value)
+    : q.subject.termType === "NamedNode" && scope.ownsSubject(q.subject.value);
+}
+
 /**
  * Exact canonical RDF projection, not a serialization hash. Terms retain datatype/language
  * and graph identity. Blank labels are minimized over all bijections, with a hard work cap;
  * complex graphs fail closed rather than using a collision-prone approximate graph hash.
- * Fields select predicates throughout this one-item document, including linked blank nodes.
- * With `documentUrl`, the document URL and its fragment IRIs hash relative to it, so a resource
- * moved to another URL keeps its hash; all other IRIs stay absolute.
+ * Fields select predicates. With `documentUrl`, only the item's own subjects count (see
+ * syncItemScope), and the document URL and its fragment IRIs hash relative to it, so a
+ * resource moved to another URL keeps its hash; all other IRIs stay absolute. Without it the
+ * whole dataset is selected.
  */
 export async function canonicalHash(
   dataset: DatasetCore,
   fields: readonly string[],
   documentUrl?: string,
+  declaredSubjects?: readonly string[],
 ): Promise<string> {
   datasetBytes(dataset);
   if (!fields.length || fields.length > 128 || fields.some((f) => !safeIri(f)))
     throw new RangeError("Declare 1–128 mapped field predicate IRIs.");
   const selected = new Set(fields);
+  const scope =
+    documentUrl === undefined
+      ? undefined
+      : syncItemScope(dataset, fields, documentUrl, declaredSubjects);
   const quads: Quad[] = [];
   const blanks = new Set<string>();
   for (const q of dataset) {
-    if (!selected.has(q.predicate.value)) continue;
+    if (!selected.has(q.predicate.value) || (scope && !inScope(scope, q))) continue;
     quads.push(q);
     for (const term of [q.subject, q.object, q.graph])
       if (term.termType === "BlankNode") blanks.add(term.value);

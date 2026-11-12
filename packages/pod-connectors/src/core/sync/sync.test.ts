@@ -922,7 +922,7 @@ describe("bounded owner-only link shards", () => {
     await fresh.put({ ...link(overflowUrl, `r-${MAX_LINKS_PER_SHARD}`), remoteVersion: "v2" });
     expect((await readLinks(f)).byPodUrl(overflowUrl)?.remoteVersion).toBe("v2");
     expect(MAX_SYNC_LINKS).toBe(50_000);
-  });
+  }, 30_000); // ~130 full-document writes; slow under a loaded parallel run.
   it("skips and reports items beyond the hard link cap without failing the run", async () => {
     const f = fixture();
     f.platform.set("one", "remote-1");

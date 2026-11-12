@@ -36,11 +36,13 @@ export const LINK_RECORD_PREDICATES: ReadonlySet<string> = new Set([
   SYNC.createHash,
   SYNC.createEtag,
   SYNC.createResource,
+  SYNC.createAttempts,
   SYNC.conflictResource,
   SYNC.conflictVersion,
   SYNC.conflictRemoteId,
   SYNC.conflictResolution,
   SYNC.pendingDelete,
+  SYNC.deleteHeldRuns,
   SYNC.status,
   SYNC.deletedAt,
   SYNC.movedFrom,
@@ -70,6 +72,13 @@ export class LinkRecord extends PodThing {
   private iri(predicate: string): string | undefined {
     return OptionalFrom.subjectPredicate(this, predicate, NamedNodeAs.string);
   }
+  /** A small non-negative counter; anything else is a malformed record. */
+  private count(predicate: string): number | undefined {
+    const value = OptionalFrom.subjectPredicate(this, predicate, LiteralAs.number);
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0 || value > 1_000))
+      throw new Error("Invalid sync counter.");
+    return value;
+  }
   get podUrl(): string | undefined {
     return OptionalFrom.subjectPredicate(this, SYNC.podUrl, NamedNodeAs.string);
   }
@@ -97,6 +106,9 @@ export class LinkRecord extends PodThing {
       !(snapshotUrl && version && resolution)
     )
       throw new Error("Incomplete conflict record.");
+    const attempts = this.count(SYNC.createAttempts);
+    const deleteHeldRuns = this.count(SYNC.deleteHeldRuns);
+    if (attempts !== undefined && !key) throw new Error("Incomplete create intent.");
     const deletedAt = OptionalFrom.subjectPredicate(this, SYNC.deletedAt, LiteralAs.date);
     if (deletedAt && !Number.isFinite(deletedAt.getTime()))
       throw new Error("Invalid sync deletion time.");
@@ -108,7 +120,13 @@ export class LinkRecord extends PodThing {
       lastSyncedHash: this.text(SYNC.lastSyncedHash),
       needsInbound: OptionalFrom.subjectPredicate(this, SYNC.needsInbound, LiteralAs.boolean),
       pendingCreate: key
-        ? { key, hash: hash as string, podEtag: etag as string, resourceUrl: resourceUrl as string }
+        ? {
+            key,
+            hash: hash as string,
+            podEtag: etag as string,
+            resourceUrl: resourceUrl as string,
+            ...(attempts === undefined ? {} : { attempts }),
+          }
         : undefined,
       conflict: snapshotUrl
         ? {
@@ -119,6 +137,7 @@ export class LinkRecord extends PodThing {
           }
         : undefined,
       pendingDelete: OptionalFrom.subjectPredicate(this, SYNC.pendingDelete, LiteralAs.boolean),
+      ...(deleteHeldRuns === undefined ? {} : { deleteHeldRuns }),
       status: this.text(SYNC.status) as SyncLink["status"],
       deletedAt: deletedAt?.toISOString(),
       movedFrom: this.iri(SYNC.movedFrom),
@@ -150,6 +169,13 @@ export class LinkRecord extends PodThing {
     ] as const)
       OptionalAs.object(this, predicate, iri, NamedNodeFrom.string);
     OptionalAs.object(this, SYNC.pendingDelete, value?.pendingDelete, LiteralFrom.boolean);
+    OptionalAs.object(
+      this,
+      SYNC.createAttempts,
+      value?.pendingCreate?.attempts,
+      LiteralFrom.integer,
+    );
+    OptionalAs.object(this, SYNC.deleteHeldRuns, value?.deleteHeldRuns, LiteralFrom.integer);
     OptionalAs.object(this, SYNC.needsInbound, value?.needsInbound, LiteralFrom.boolean);
     OptionalAs.object(
       this,

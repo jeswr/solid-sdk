@@ -101,11 +101,15 @@ export const CONNECTOR_SYNC = {
   createHash: `${NS.CORE}connectorPendingCreateHash`,
   createEtag: `${NS.CORE}connectorPendingCreateEtag`,
   createResource: `${NS.CORE}connectorPendingCreateResource`,
+  /** Provider rejections of a pending create so far; the third retires it as a manual conflict. */
+  createAttempts: `${NS.CORE}connectorPendingCreateAttempts`,
   conflictResource: `${NS.CORE}connectorConflictResource`,
   conflictVersion: `${NS.CORE}connectorConflictVersion`,
   conflictRemoteId: `${NS.CORE}connectorConflictRemoteId`,
   conflictResolution: `${NS.CORE}connectorConflictResolution`,
   pendingDelete: `${NS.CORE}connectorPendingDelete`,
+  /** Consecutive runs a pod delete was held back as a possible unrecognised move. */
+  deleteHeldRuns: `${NS.CORE}connectorDeleteHeldRuns`,
   status: `${NS.CORE}connectorSyncStatus`,
   deletedAt: `${NS.CORE}connectorDeletedAt`,
   movedFrom: `${NS.CORE}connectorMovedFrom`,

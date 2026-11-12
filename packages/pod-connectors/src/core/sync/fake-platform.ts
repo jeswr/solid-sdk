@@ -195,6 +195,7 @@ export function createFakeTwoWayAdapter(account = "account", config: FakeTwoWayO
     },
     fixtures: () => [],
     fieldsForHash: [`${SCHEMA}name`],
+    itemSubjects: (url) => [`${url}#item`],
     writeBackContainers: ["items/"],
     requiredWriteScopes: ["fake:write"],
     ...(dedupe ? {} : { deduplicatesCreateKeys: false }),

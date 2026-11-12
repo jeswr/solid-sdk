@@ -108,13 +108,21 @@ export interface RemoteWriteOptions {
 export interface TwoWayAdapter<Op = unknown> extends IntegrationAdapter {
   /**
    * The adapter's mapped predicates: the fields the canonical hash covers AND the only quads an
-   * inbound update replaces. Every other triple in a pod resource is preserved.
+   * inbound update replaces. List every field an inbound update must change: unmapped incoming
+   * facts only fill gaps, never overwrite. Every other triple in a pod resource is preserved.
    */
   readonly fieldsForHash: readonly string[];
   /**
+   * The item's subject IRIs in the document at `documentUrl` (at most 32), e.g.
+   * `${documentUrl}#item`. Hashing and inbound merges cover only the item's subjects (the
+   * document URL plus these) and the blank nodes their mapped quads reach; other fragments the
+   * owner adds stay pod-only. Without a declaration every fragment IRI is the item's.
+   */
+  itemSubjects?(documentUrl: string): readonly string[];
+  /**
    * Whether applyRemote deduplicates a repeated create by `idempotencyKey` (default true).
    * A provider that cannot declares false; the framework then never re-sends an unconfirmed
-   * create and defers it (and unlinked inbound items) until the key lookup finds it.
+   * create and defers it until the key lookup finds it (such creates never defer inbound items).
    */
   readonly deduplicatesCreateKeys?: boolean;
   /** Leaf container slugs relative to the connection account; no recursive discovery. */
@@ -181,9 +189,16 @@ export interface SyncLink {
     readonly podEtag: string;
     /** Immutable original mapped resource, for retries after subsequent local edits. */
     readonly resourceUrl: string;
+    /** Provider rejections (4xx) so far; the third retires the create as a manual conflict. */
+    readonly attempts?: number;
   };
   readonly conflict?: SyncConflict;
   readonly pendingDelete?: boolean;
+  /**
+   * Consecutive runs this pod delete was held back because the run also saw an unlinked
+   * import or an ambiguous move candidate; the second held run records a manual conflict.
+   */
+  readonly deleteHeldRuns?: number;
   readonly status?: "remote-deleted" | "trashed" | "pod-deleted";
   /** When a tombstone was recorded; tombstones are garbage-collected 30 days later. */
   readonly deletedAt?: string;
