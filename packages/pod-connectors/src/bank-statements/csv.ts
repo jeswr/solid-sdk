@@ -16,7 +16,11 @@ import {
 } from "./values.js";
 
 export const MAX_BANK_FIELD_CHARS = 16 * 1024;
-export type BankCsvFormat = "revolut" | "hsbc-uk" | "monzo" | "starling";
+/** The explicit `csvFormat` values; omit `csvFormat` to detect the layout from the contents. */
+export const BANK_CSV_FORMATS = ["revolut", "hsbc-uk", "monzo", "starling"] as const;
+export type BankCsvFormat = (typeof BANK_CSV_FORMATS)[number];
+/** Longest accepted `accountLabel`, in UTF-16 code units. */
+export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */
   readonly csvFormat?: BankCsvFormat;
@@ -191,12 +195,14 @@ export function bankCsvCells(record: string): string[] {
 export function validateBankOptions(options: BankStatementOptions): void {
   if (
     options.csvFormat !== undefined &&
-    !["revolut", "hsbc-uk", "monzo", "starling"].includes(options.csvFormat)
+    !(BANK_CSV_FORMATS as readonly string[]).includes(options.csvFormat)
   )
     throw new TypeError("Unsupported bank CSV format");
   if (
     options.accountLabel !== undefined &&
-    (!hasText(options.accountLabel) || options.accountLabel.length > 256)
+    (typeof options.accountLabel !== "string" ||
+      !hasText(options.accountLabel) ||
+      options.accountLabel.length > MAX_BANK_ACCOUNT_LABEL_CHARS)
   )
     throw new TypeError("Account label must contain 1–256 characters");
   if (options.currency !== undefined && !currencyCode(options.currency))

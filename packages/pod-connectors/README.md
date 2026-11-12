@@ -268,6 +268,10 @@ const adapter = createBankStatementsFileAdapter({
 ```
 
 `csvFormat` can also constrain detection to `revolut`, `monzo` or `starling`.
+Hosts build format pickers from `BANK_CSV_FORMATS` and check user input with the
+adapter's own `validateBankOptions` (labels: visible text, at most
+`MAX_BANK_ACCOUNT_LABEL_CHARS` = 256 characters). The Node CLI and Suite's connect flow
+both pass these options.
 `accountLabel` distinguishes accounts absent from an export; keep it stable across
 overlapping imports. Revolut defaults to one account per Product/Currency. Monzo
 and Starling default to one account per bank/currency; provide labels when importing
@@ -423,7 +427,25 @@ Build the package and run `pod-connectors import spotify`, or
 `node packages/pod-connectors/dist/node/bin.js import spotify` from the workspace.
 `import netflix --file ./NetflixViewingHistory.csv` uses the file runner. Add the bare
 `--since` flag to an API import to resume its stored cursor; omission starts a full import.
-File imports reject `--since`. `--help` prints usage. Streaming adapters receive the stat
+File imports reject `--since`. `--help` prints usage.
+
+Bank statement imports accept two more flags, and only with `import bank-statements --file`:
+
+```sh
+pod-connectors import bank-statements --file ./hsbc.csv --format hsbc-uk --account-label "HSBC everyday"
+pod-connectors import bank-statements --file ./monzo-joint.csv --account-label "Monzo joint"
+```
+
+`--format <auto|revolut|hsbc-uk|monzo|starling>` maps to the adapter's `csvFormat`
+(`BANK_CSV_FORMATS`); `auto`, the default, detects the layout, including generic CSV and
+OFX/QFX. `--account-label <text>` maps to `accountLabel` and must pass the adapter's
+`validateBankOptions` (visible text, at most 256 characters). `--format hsbc-uk` requires a
+label, so headerless HSBC UK exports import from the CLI. Give two accounts of the same
+bank different labels, or they share one account folder. Invalid values, repeated flags
+and bank flags on other connectors fail with exit code 2 before any Pod request; the CLI
+never echoes the label.
+
+Streaming adapters receive the stat
 size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI never
 loads their entire upload. `text()` remains capped at 64 MiB. The whole-upload size limit
 applies only to adapters without `streaming: true`.

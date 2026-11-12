@@ -32,10 +32,13 @@ import { amountKey, normaliseAmount } from "./values.js";
 import { vocabMap } from "./vocab-map.js";
 
 export {
+  BANK_CSV_FORMATS,
   type BankCsvFormat,
   type BankStatementOptions,
+  MAX_BANK_ACCOUNT_LABEL_CHARS,
   parseBankCsv,
   type Transaction,
+  validateBankOptions,
 } from "./csv.js";
 export {
   BANK_DOCUMENT_BUDGET,
