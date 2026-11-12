@@ -25,7 +25,8 @@ async function session() {
   const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
   const listeners = new Set<(url: string) => void>();
   const session: PodSession = {
-    mode: "demo",
+    mode: "solid",
+    publicFetch: pod.fetch,
     webId: DEMO_WEBID,
     displayName: "Alice",
     storageUrl: DEMO_ROOT,
@@ -36,7 +37,6 @@ async function session() {
         listeners.delete(listener);
       };
     },
-    reset: async () => {},
   };
   return {
     session,
@@ -364,6 +364,50 @@ it("announces only successful writes, whatever form the request takes", () => {
   expect(writtenUrl(url, undefined, ok)).toBeUndefined();
   expect(writtenUrl(url, { method: "HEAD" }, ok)).toBeUndefined();
   expect(writtenUrl(url, { method: "PUT" }, new Response(null, { status: 412 }))).toBeUndefined();
+});
+
+it("polls quietly in demo mode while the demo agent is active", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+  const fixture = await session();
+  const io = vi.fn(fixture.session.fetch);
+  const active: PodSession = {
+    ...fixture.session,
+    mode: "demo",
+    reset: async () => {},
+    fetch: io,
+    subscribe: () => () => {},
+  };
+  let status: ReturnType<typeof useDaemonStatus> | undefined;
+  const states: string[] = [];
+  function Probe() {
+    status = useDaemonStatus();
+    states.push(status.query.status);
+    return null;
+  }
+  const view = await mount(
+    h(AgentWorkspaceProvider, {
+      session: active,
+      children: h(Probe),
+      fallback: () => null,
+    }),
+  );
+  await eventually(
+    () => status?.query.status === "ready" && status.lastSeen === new Date().toISOString(),
+  );
+  expect(status?.demo).toBe(true);
+  const heartbeatReads = () =>
+    io.mock.calls.filter(
+      ([url, init]) => String(url) === `${BASE}control/heartbeat.ttl` && init?.method !== "PUT",
+    ).length;
+  const before = heartbeatReads();
+  states.length = 0;
+  await act(() => vi.advanceTimersByTime(STATUS_REFRESH_MS));
+  await eventually(() => heartbeatReads() > before && status?.query.status === "ready");
+  expect(status?.state).toBe("running");
+  expect(states).not.toContain("loading");
+  expect(io.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(1);
+  await view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
 });
 it("keeps the credentialed read for an extension profile inside the storage", async () => {
   const fixture = await session();

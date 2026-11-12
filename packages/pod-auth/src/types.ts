@@ -35,6 +35,8 @@ export interface PodAuthOptions {
     storageEndpoints?: string[];
   };
   storage?: { sessions: KvStore; caches: KvStore };
+  /** Independent session/key/fence namespace. Keep this public identifier stable across restores. */
+  sessionScope?: string;
   ui: {
     getWebId(): Promise<string>;
     chooseIssuer?(issuers: string[]): Promise<string>;
@@ -100,10 +102,20 @@ export interface PodAuth {
    * Agents ignore the signal once started.
    */
   login(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
-  /** Restore the remembered account; never requests interactive authorization. */
-  restore(): Promise<Identity | null>;
-  /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
-  logout(): Promise<void>;
+  /**
+   * Restore the remembered account; never requests interactive authorization. Concurrent calls share
+   * one restore. A caller's signal cancels only its own wait; the shared restore stops once every
+   * cancellable waiter has left, and a cancelled restore publishes no identity and emits no event.
+   */
+  restore(options?: { signal?: AbortSignal }): Promise<Identity | null>;
+  /**
+   * Revoke when advertised, purge local credentials, and emit logout even if revocation fails.
+   * `scope: "session"` requires an explicit sessionScope and purges only that scope's sessions/keys.
+   * Without a sessionScope, ordinary logout purges every stored session for this client configuration.
+   */
+  logout(options?: { scope: "session" }): Promise<void>;
+  /** Release this instance and cancel its work without deleting remembered credentials. */
+  dispose?(): void;
   /** Read only the credential-free remembered pointer, without discovery or credential access. */
   remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */

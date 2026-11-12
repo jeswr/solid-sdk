@@ -24,6 +24,7 @@ import {
 import { createGateway } from "@jeswr/agent-model-gateway";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { type DataIntegrityProof, DataIntegritySuite, type KeyPair } from "@jeswr/solid-vc";
+import { createPodClient } from "@jeswr/storage-client";
 import { type ChildProcess, fork } from "child_process";
 import { once } from "events";
 import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
@@ -85,7 +86,9 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       headers.set("authorization", `WebID ${owner}`);
       return transport(input, { ...init, headers });
     };
+    const { storage } = await createPodClient({ fetch: io, storage: root });
     const workspace = new PodWorkspace({
+      storage,
       io,
       root,
       ownerWebId: owner,
@@ -220,6 +223,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       },
       controls: {
         haltFileExists: async () => false,
+        assertNotHalted: () => {},
         async listVerified() {
           const response = await io(controlUrl);
           if (response.status === 404) return [];

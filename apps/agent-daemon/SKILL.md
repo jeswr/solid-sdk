@@ -9,13 +9,46 @@ description: Use when working on the host-neutral daemon composition, scheduler,
 A-012 implements the host-neutral daemon and CLI. Read agent DESIGN §2 / §6 / §9.1 and
 README.md before changing behavior. Root exports the runtime, pod workspace,
 local state, process lease, CLI composition and installer. `./testing` contains
-only ephemeral synthetic state and a conditional pod transport.
+only ephemeral synthetic state and an SDK memory StorageClient with a fetch adapter.
+
+Inject a Solid `storage: StorageClient` into `PodWorkspace`; `composeDaemon` shares the
+single root-entry `createPodClient({ fetch: auth.fetch, storage })` result with
+notifications. Workspace operations use that client. Retain the scoped `io` seam
+for the legacy importer. Use `createMemoryPod(root?).storage` for offline workspace
+tests; its fetch adapter, request records and resource snapshots share the SDK state.
+The constructor refuses non-Solid clients. Workspace and memory fetch-adapter creates
+use `createAt` from `@jeswr/storage-client/helpers` so URL encoding mismatches fail
+before creation. Use canonical encoded child names (`x%3Ay.ttl`, not `x:y.ttl` or
+`x%3ay.ttl`). `proposalLocation` accepts only IDs passing the shared `isExactChildUrl`
+predicate as direct `.ttl` children of `proposals/`; all other IDs use a deterministic
+digest location. Before outbox projection, repair and persist cached legacy IDs through
+the same rule without invoking the Proposer again, only when neither ledger evidence
+(model-call or proposal records) nor a legacy-URL resource shows an earlier projection.
+Otherwise keep the legacy ID end to end; an unpublished one fails closed for manual
+migration. Never project one proposal under two IDs.
+Replay/retry only remapped name-taken 412s; real 409s fail. Container
+creation conflicts require a confirming HEAD before provisioning continues.
+The memory adapter forwards the SDK memory backend's exact name-taken 412 directly;
+kind collisions retain 409.
 
 Use pod-auth/node client-credentials DPoP fetch for pod access. Keep the trusted
 host composition explicit. No credentials, provider implementations or account
 permissions may be inferred from model output or unverified pod statements.
 Executor controls/approvals/mandates must verify owner proofs; structural parsing
 never grants authority. Channel send imports remain executor-only.
+Wire local.halted and local.assertNotHalted into the executor's asynchronous gate and
+synchronous dispatch fence. CLI resume uses the same verified control adapter and
+removes HALT only after a fresh signed owner Resume; never parse a control as authority.
+The Resume must be signed after the local stop: compare its browser timestamp strictly
+with the later of HALT's recorded `halted <ISO time>` and its modification time, check
+authorisation again under halt.lock, keep a HALT with no readable time, and reject
+future statements. HALT stops new dispatches once visible; it is not atomic with an
+in-flight send in another process (do not claim otherwise).
+Clock skew between devices can delay or refuse resume; refusal is the safe direction.
+Halt atomically writes mode-0600 HALT without a lock. Only Resume takes halt.lock;
+both local fences treat that lock as stopped during removal. Preserve a racing Halt
+by checking the removed identity and rechecking after unlink. A crashed Resume lock
+requires operator recovery after establishing quiescence; it must never block Halt.
 
 Keep owner-only ACLs before content, bounded ingestion, per-account cursor commits
 after persistence, deterministic-first Reader extraction, and Proposer eligibility

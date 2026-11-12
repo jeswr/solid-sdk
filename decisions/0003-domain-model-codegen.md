@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # 0003 Domain-model code generation in the workspace
@@ -62,6 +63,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | Media `hadParticipant` MUST relaxation | already done: `sectors/media/media.shacl.ttl` grades it `sh:Warning` | media sector | sst-ild.7.4 (closed) |
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | implemented: generated Task + RecurrenceRule composite and Calendar behind facades; sector ratchet still open (normative) | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
+| W2 Sheets: extract Suite workbook and column descriptor models into a generated shared package | implemented: four flat generated entities composed by layout/order facades; Suite imports the package | `packages/solid-sheets`, `apps/suite` | sst-ild.7 |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
@@ -74,6 +76,21 @@ each predicate separately and selects the guarded canonical value before aliases
 conflicting legacy triples can therefore parse even when the emitted SHACL rejects the
 union's `maxCount`. The reviewed solid-bookmark oracle is binding here (round-6 M1 declined).
 Writes are canonical-only and clear aliases, so the runtime never produces such data.
+
+Write-time alias migration keeps its shared 10,000-read preservation audit whenever
+cleanup is possible. A setter/build field with no predicate aliases, or `mark` with no
+type aliases, skips that audit only if no other owner in any migration-context manifest
+declares aliases. Other owners remain conservative because co-typing and data-graph
+subclasses can overlap their focus nodes. Alias-free edits therefore do not scan unrelated
+subjects; explicit writes retain all guards and sanitization.
+
+Multi-subject readers should pass an explicit runtime `createParseScope(dataset)` to
+`entity.parse(url, dataset, { scope })`. One scope memoises class membership and shares a
+100,000-read type/subclass budget (configurable 0–1,000,000) across roots and nested class
+checks. Exhaustion is observable and sticky, with all subsequent class checks failing
+closed. Scopes are bound to one unchanged dataset and must be discarded after mutation;
+write paths never consult them. Parses without a scope keep independent 10,000-read checks.
+The generator emits the optional `ParseOptions` parameter on every entity parse signature.
 
 Two follow-ups are recorded rather than decided here: `model-runtime` serialises with
 `n3.Writer` directly instead of through `@jeswr/rdf-serialize`, and it carries its own http(s)

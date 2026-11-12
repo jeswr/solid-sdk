@@ -11,14 +11,15 @@ export function SettingsScreen() {
   return (
     <Screen title="Settings">
       <h2>Agent status</h2>
-      {status.query.status === "loading" ? (
-        <LoadingSkeleton />
-      ) : status.query.status === "error" ? (
+      {status.query.status === "loading" && <LoadingSkeleton />}
+      {status.query.status === "error" && (
         <ErrorState error="unreachable" actions={{ retry: status.query.reload }} />
-      ) : (
-        <StatusPill status={status} />
       )}
-      <AgentControl stopped={status.state === "stopped"} />
+      <StatusPill status={status} />
+      <AgentControl
+        stopped={status.ownerHalted === true}
+        localStop={status.state === "stopped" && status.ownerHalted !== true}
+      />
       <article className="agent-card">
         <h2>Approval key on this device</h2>
         <p>

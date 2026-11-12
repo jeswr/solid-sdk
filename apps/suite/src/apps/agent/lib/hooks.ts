@@ -13,6 +13,7 @@ import {
 } from "react";
 import type { PodSession } from "../../../lib/session/pod-session";
 import { type AgentClient, createAgentClient } from "./client";
+import { startDemoAgent } from "./demo-agent";
 import { discoverWorkspace } from "./paths";
 
 export type Query<T> =
@@ -146,7 +147,11 @@ export function AgentWorkspaceProvider({
       active = false;
     };
   }, [session, reload, attempt, bus]);
-  const pollClient = state.status === "ready" ? state.data.client : undefined;
+  const pollClient =
+    state.status === "ready" && state.data.session === session ? state.data.client : undefined;
+  useEffect(() => {
+    if (pollClient) return startDemoAgent(session, pollClient);
+  }, [pollClient, session]);
   useEffect(() => {
     if (!pollClient) return;
     // One poller per workspace; it targets the status key only and skips hidden tabs.

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import {
   aggregateTaskStats,
@@ -51,6 +52,7 @@ function fixture() {
     run: vi.fn(),
     once: vi.fn(),
     halt: vi.fn(),
+    resume: vi.fn(),
     status: vi.fn(),
     accounts: vi.fn(),
     login: vi.fn(),
