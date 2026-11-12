@@ -276,7 +276,7 @@ checkpoints after source/Pod failures. Log and count capped-day skips. The adapt
 opts into a 32-activity provenance history cap; other adapters retain their existing
 history semantics. Watch mode rereads protected state each cycle, serializes imports,
 backs off with jitter, and classifies failures by cause with `classifyVeSyncFailure`
-(`src/node/vesync-failure.ts`): transient source/network/Pod 5xx-408-412 and transient
+(`src/node/vesync-failure.ts`): transient source/network/Pod 5xx-408-412-429 and transient
 `StateStoreError`s retry; VeSync login rejection, Pod 401/403 and other 4xx,
 `PreconditionUnsupportedError` (weak ETags), structural state problems and config stop.
 Hidden prompts enter raw mode before the label and always pause stdin afterwards. Any
