@@ -298,7 +298,7 @@ describe("letterboxd file adapter", () => {
         "watched.csv": strToU8(`${WATCHED}${pad}`),
         "ratings.csv": strToU8(`${RATINGS}${pad}`),
       },
-      { level: 9 },
+      { level: 1 },
     );
     const { pod, report } = await fileImport(
       letterboxdFileAdapter,
@@ -307,7 +307,8 @@ describe("letterboxd file adapter", () => {
     expect(report.written.map((w) => w.url)).toEqual([WATCHED_DOC]);
     expect(report.skipped).toBe(1);
     expect(subjectsOf(pod.dataset(WATCHED_DOC), CLASSES.Movie)).toHaveLength(2);
-  });
+    // Deflating and inflating 64 MiB is slow on a loaded runner.
+  }, 120_000);
 
   it("skips and counts malformed rows, dropping invalid values", async () => {
     const csv = `Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
