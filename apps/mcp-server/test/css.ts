@@ -14,12 +14,16 @@ import {
 } from "node:fs";
 import { rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { getCACertificates, setDefaultCACertificates } from "node:tls";
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { forClientCredentials } from "@jeswr/pod-auth/node";
+import { Agent } from "@solid/object";
 import { DataFactory as df, Writer } from "n3";
+import { navigation } from "./navigation.js";
 
 export const CSS = "https://localhost:3390/";
 export const MCP = "https://127.0.0.1:3391";
@@ -98,12 +102,28 @@ export async function startCss() {
   );
   const configPath = join(root, "config.json");
   writeFileSync(configPath, JSON.stringify(configuration));
+  // CSS's CLI binds TCP on every interface. Keep CSS on a private Unix socket and
+  // forward TLS bytes through an explicitly loopback-bound TCP listener instead.
+  const socketPath = join(root, "css.sock");
+  const sockets = new Set<Socket>();
+  const proxy = createServer((socket) => {
+    const upstream = connect(socketPath);
+    for (const connection of [socket, upstream]) {
+      sockets.add(connection);
+      connection.once("close", () => sockets.delete(connection));
+      connection.on("error", () => {
+        socket.destroy();
+        upstream.destroy();
+      });
+    }
+    socket.pipe(upstream).pipe(socket);
+  });
   const child = spawn(
     process.execPath,
     [
       binary,
-      "-p",
-      "3390",
+      "--socket",
+      socketPath,
       "-b",
       CSS,
       "-m",
@@ -120,6 +140,8 @@ export async function startCss() {
     { stdio: "ignore", env: { ...process.env, NODE_EXTRA_CA_CERTS: certPath } },
   );
   const stop = async () => {
+    for (const socket of sockets) socket.destroy();
+    if (proxy.listening) await new Promise<void>((resolve) => proxy.close(() => resolve()));
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, "exit");
       child.kill("SIGTERM");
@@ -131,6 +153,10 @@ export async function startCss() {
     setDefaultCACertificates(previousCAs);
   };
   try {
+    await new Promise<void>((resolve, reject) => {
+      proxy.once("error", reject);
+      proxy.listen(3390, "127.0.0.1", resolve);
+    });
     const deadline = Date.now() + 90_000;
     while (Date.now() < deadline) {
       if (child.exitCode !== null || child.signalCode !== null)
@@ -195,7 +221,8 @@ export async function cssAccount() {
     controls: { password: { create: string }; account: { pod: string; clientCredentials: string } };
   }>(`${CSS}.account/`);
   await json(controls.password.create, { email: `${pod}@example.org`, password: randomUUID() });
-  await json(controls.account.pod, { name: pod });
+  // Let CSS render its own profile name, then preserve it through typed seeding.
+  await json(controls.account.pod, { name: pod, settings: { name: "MCP test owner" } });
   const cc = await json<{ id: string; secret: string }>(controls.account.clientCredentials, {
     name: "mcp-e2e",
     webId,
@@ -217,24 +244,13 @@ export async function cssAccount() {
     },
   });
   const fetcher = auth.fetch;
-  // Seed required profile data through a Writer; no interpolated Turtle syntax.
+  // Retain CSS's profile and add storage/issuer through its existing typed model.
+  const { dataset } = await fetchRdf(webId, { fetch: fetcher });
+  const person = new Agent(webId, dataset, df);
+  person.oidcIssuer.add(CSS);
+  person.pimStorage.add(podRoot);
   const writer = new Writer();
-  const person = df.namedNode(webId);
-  writer.addQuad(
-    person,
-    df.namedNode("http://www.w3.org/ns/solid/terms#oidcIssuer"),
-    df.namedNode(CSS),
-  );
-  writer.addQuad(
-    person,
-    df.namedNode("http://www.w3.org/ns/pim/space#storage"),
-    df.namedNode(podRoot),
-  );
-  writer.addQuad(
-    person,
-    df.namedNode("http://xmlns.com/foaf/0.1/name"),
-    df.literal("MCP test owner"),
-  );
+  writer.addQuads([...dataset]);
   const profile = await new Promise<string>((resolve, reject) =>
     writer.end((error, text) => (error ? reject(error) : resolve(text))),
   );
@@ -300,4 +316,49 @@ export async function completeCssLogin(
     location = ((await response.json()) as { location?: string }).location ?? null;
   }
   throw new Error("CSS login failed to reach the exact MCP callback");
+}
+
+/** Read the actual form action and CSRF field; never infer browser POST endpoints. */
+export async function mcpForm(response: Response, jar: CookieJar, origin = MCP) {
+  jar.absorb(response);
+  if (response.status !== 200) throw new Error(`MCP form status ${response.status}`);
+  const html = await response.text();
+  const action = html.match(/<form method="post" action="([^"]+)"/)?.[1];
+  const csrf = html.match(/name="csrf" value="([^"]+)"/)?.[1];
+  if (!action || !csrf) throw new Error("Missing native MCP form");
+  const target = new URL(action, origin);
+  if (target.origin !== origin) throw new Error("MCP form escaped local origin");
+  return async (fields: Record<string, string>) => {
+    const result = await fetch(target, {
+      method: "POST",
+      redirect: "manual",
+      headers: { origin, cookie: jar.header, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ ...fields, csrf }),
+    });
+    jar.absorb(result);
+    return result;
+  };
+}
+
+/** Follow native forms/links and CSS controls, stopping before the external client callback. */
+export async function completeMcpAuthorization(
+  authorization: URL,
+  account: Awaited<ReturnType<typeof cssAccount>>,
+) {
+  if (authorization.origin !== MCP) throw new Error("Authorization escaped local MCP");
+  const jar = new CookieJar();
+  const postLogin = await mcpForm(await fetch(authorization, { redirect: "manual" }), jar);
+  const upstream = await postLogin({ webid: account.webId });
+  if (upstream.status !== 200) throw new Error(`MCP login status ${upstream.status}`);
+  const upstreamUrl = await navigation(upstream);
+  if (upstreamUrl.origin !== new URL(CSS).origin) throw new Error("Login escaped local CSS");
+  const callback = await completeCssLogin(upstreamUrl.href, account);
+  const consent = await fetch(callback, { headers: { cookie: jar.header }, redirect: "manual" });
+  if (!consent.headers.get("content-security-policy")?.includes("default-src 'none'"))
+    throw new Error("Consent lacks its strict CSP");
+  const approve = await mcpForm(consent, jar);
+  const approval = await approve({ decision: "allow" });
+  if (approval.status !== 200) throw new Error(`MCP consent status ${approval.status}`);
+  // Return this URL to the test client. Never navigate to claude.ai or chatgpt.com.
+  return navigation(approval);
 }
