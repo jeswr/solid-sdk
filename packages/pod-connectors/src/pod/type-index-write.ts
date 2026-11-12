@@ -16,12 +16,14 @@ import {
   refuseRedirects,
   snapshotFetchInput,
 } from "@jeswr/guarded-fetch";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { canonicalJeswrIri } from "../core/canonical-vocab.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
+import { writeStorageRdf } from "./storage-resource.js";
 import {
   ProfileTypeIndexAnchor,
   TypeIndexDataset,
@@ -83,6 +85,9 @@ export async function ensureTypeRegistrations(opts: {
   podRoot: string;
   registrations: DesiredRegistration[];
   fetchImpl?: typeof fetch;
+  /** Storage-backed registration reuses the same document selection and validation. */
+  storageFor?: (url: string) => StorageClient;
+  signal?: AbortSignal;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations } = opts;
   const profileDocument = documentUrl(opts.profileDocumentUrl ?? webId);
@@ -94,12 +99,35 @@ export async function ensureTypeRegistrations(opts: {
   ) {
     throw new PodScopeError("Profile document must be an HTTP(S) URL without credentials.");
   }
+  const readRdf = async (url: string, fetchImpl: typeof fetch) => {
+    opts.signal?.throwIfAborted();
+    return opts.storageFor
+      ? opts.storageFor(url).readRdf(url, { signal: opts.signal })
+      : freshRdf(url, fetchImpl);
+  };
+  const writeRdf = async (
+    url: string,
+    dataset: DatasetCore,
+    options: Parameters<typeof writeResource>[2],
+  ) => {
+    opts.signal?.throwIfAborted();
+    if (opts.storageFor) {
+      await writeStorageRdf(
+        opts.storageFor(url),
+        url,
+        dataset,
+        options?.createOnly ? { ifNoneMatch: "*" } : { ifMatch: options?.etag ?? undefined },
+        opts.signal,
+        options?.prefixes ?? {},
+      );
+    } else await writeResource(url, dataset, options);
+  };
   const authenticatedFetch = refuseRedirects(opts.fetchImpl);
   const profileFetch = documentFetch(profileDocument, authenticatedFetch);
 
   // Read-modify-write: both reads MUST revalidate — a heuristically cached
   // copy would carry a stale ETag into If-Match (spurious 412 on the write).
-  const { dataset: profileDs, etag: profileEtag } = await freshRdf(profileDocument, profileFetch);
+  const { dataset: profileDs, etag: profileEtag } = await readRdf(profileDocument, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
@@ -119,19 +147,20 @@ export async function ensureTypeRegistrations(opts: {
   };
 
   if (!indexUrl) {
-    indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
-    await createIndexDocument(indexUrl, fetchImpl);
+    indexUrl = selectedIndex;
+    await createIndexDocument(indexUrl, fetchImpl, writeRdf);
     // Link it from the profile (read-modify-write, ETag-guarded).
     const anchor = new ProfileTypeIndexAnchor(webId, profileDs, DataFactory);
     anchor.privateIndex = indexUrl;
-    await writeResource(profileDocument, profileDs, {
+    await writeRdf(profileDocument, profileDs, {
       etag: profileEtag,
       fetchImpl: profileFetch,
     });
     bootstrapped = true;
   }
 
-  const { dataset: indexDs, etag: indexEtag } = await freshRdf(indexUrl, fetchImpl);
+  indexUrl = selectedIndex;
+  const { dataset: indexDs, etag: indexEtag } = await readRdf(indexUrl, fetchImpl);
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -151,7 +180,7 @@ export async function ensureTypeRegistrations(opts: {
   }
 
   if (added > 0) {
-    await writeResource(indexUrl, indexDs, {
+    await writeRdf(indexUrl, indexDs, {
       etag: indexEtag,
       fetchImpl,
       prefixes: PREFIXES,
@@ -172,11 +201,19 @@ function documentFetch(document: string, fetchImpl: typeof fetch): typeof fetch 
 }
 
 /** Mint a fresh, empty private type index. Tolerates "already exists" (412). */
-async function createIndexDocument(indexUrl: string, fetchImpl?: typeof fetch): Promise<void> {
+async function createIndexDocument(
+  indexUrl: string,
+  fetchImpl?: typeof fetch,
+  write: (
+    url: string,
+    dataset: DatasetCore,
+    options: Parameters<typeof writeResource>[2],
+  ) => Promise<unknown> = writeResource,
+): Promise<void> {
   const store = new Store();
   new TypeIndexDocument(indexUrl, store, DataFactory).markUnlistedIndex();
   try {
-    await writeResource(indexUrl, store, {
+    await write(indexUrl, store, {
       createOnly: true,
       fetchImpl,
       prefixes: PREFIXES,
@@ -184,7 +221,7 @@ async function createIndexDocument(indexUrl: string, fetchImpl?: typeof fetch): 
   } catch (e) {
     // 412 under If-None-Match:* = the document already exists (e.g. created
     // out-of-band but never linked) — that is fine, we link and reuse it.
-    if (e instanceof ResourceWriteError && e.status === 412) return;
+    if ((e instanceof ResourceWriteError || e instanceof StorageError) && e.status === 412) return;
     throw e;
   }
 }

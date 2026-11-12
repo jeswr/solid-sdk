@@ -69,6 +69,12 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
   validator; `"follow-up"` came from a later HEAD and may already be another writer's version.
   Use only a `"response"` ETag as `ifMatch` when a follow-up write or delete must not clobber
   a concurrent update.
+- Solid `create(container, body, { exactUrl })` preserves one canonical direct child URL and uses
+  `If-None-Match: *`. It cannot be combined with `name`; queries/fragments (including empty ones),
+  nested or foreign targets and wrong trailing-slash kinds fail before I/O. LWS rejects
+  `exactUrl` as unsupported. Use this for existing deterministic paths, including raw colons.
+  Memory exact creates materialize missing Solid parents after body collection and cancellation
+  checks, matching Solid PUT; a failed body leaves those parents absent.
 - With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
   a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
   identifier. Without a name, both use POST. Always use the returned `url`, including after
