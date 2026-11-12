@@ -86,7 +86,7 @@ export async function saveActivity(
   const second = Math.floor(a.start / 1000);
   let ownIndex = new Store();
   let matched = false;
-  for (let bucket = second - 2; bucket <= second + 2; bucket++) {
+  buckets: for (let bucket = second - 2; bucket <= second + 2; bucket++) {
     const found = await ctx.read(indexSlug(bucket));
     if (found && found.size > 4096) throw new Error("Oversized activity deduplication bucket.");
     const dataset = copyDataset(found);
@@ -126,7 +126,7 @@ export async function saveActivity(
         throw new Error("Invalid activity deduplication target.");
       slug = `activities/${relative.split("#")[0]}`;
       matched = true;
-      break;
+      break buckets;
     }
   }
   const url = ctx.resolve(slug);

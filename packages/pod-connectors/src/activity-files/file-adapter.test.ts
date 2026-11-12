@@ -395,6 +395,25 @@ it("retains the first deduplication anchor instead of chaining two-second drifts
   expect(docs(pod)).toHaveLength(2);
 });
 
+it("merges into the first matching activity when two earlier ones are in range", async () => {
+  const shift = (iso: string, seconds: number) =>
+    new Date(Date.parse(iso) + seconds * 1000).toISOString();
+  const tcx = (offset: number) =>
+    GARMIN_TCX.replaceAll(START, shift(START, offset)).replaceAll(END, shift(END, offset));
+  const { pod } = await fileImport(activityFilesAdapter, memoryFile("a.tcx", tcx(0)));
+  const [first] = docs(pod);
+  await fileImport(activityFilesAdapter, memoryFile("c.tcx", tcx(3)), { pod });
+  const second = docs(pod).find((u) => u !== first) as string;
+  expect(docs(pod)).toHaveLength(2);
+  // 1.5 s from both: the earlier bucket's activity is checked first and must win.
+  await fileImport(activityFilesAdapter, memoryFile("d.tcx", tcx(1.5)), { pod });
+  expect(docs(pod)).toHaveLength(2);
+  const originals = (url: string) =>
+    new ActivityResource(`${url}#activity`, pod.dataset(url), DataFactory).originals.size;
+  expect(originals(first as string)).toBe(2);
+  expect(originals(second)).toBe(1);
+});
+
 it("bounds the compressed archive size before reading its directory", async () => {
   const input = file(zipSync({ "run.gpx": encoder.encode(STRAVA_GPX) }));
   const { report, pod } = await fileImport(createActivityFilesAdapter({ totalBytes: 64 }), input);

@@ -13,6 +13,11 @@ describe("decodeXmlEntities", () => {
   it("leaves unknown entities untouched", () => {
     expect(decodeXmlEntities("&nbsp;")).toBe("&nbsp;");
   });
+  it("never resolves inherited object properties as entities", () => {
+    for (const name of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+      expect(decodeXmlEntities(`&${name};`)).toBe(`&${name};`);
+    }
+  });
 });
 
 describe("extractElements", () => {

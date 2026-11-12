@@ -39,7 +39,7 @@ export function decodeXmlEntities(s: string): string {
         ? String.fromCodePoint(code)
         : whole;
     }
-    return DECODE[body] ?? whole;
+    return Object.hasOwn(DECODE, body) ? DECODE[body] : whole;
   });
 }
 
