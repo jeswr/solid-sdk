@@ -43,7 +43,7 @@ describe("load recovery and pagination", () => {
     expect(loaded.trips).toHaveLength(205);
     expect(loaded.reservations).toHaveLength(205);
     expect(loaded.notice?.skipped).toBe(0);
-  });
+  }, 30_000); // 410 sequential writes plus a paged load; the 5 s default is too tight on loaded CI runners
   it.each([
     "malformed",
     "oversized",
