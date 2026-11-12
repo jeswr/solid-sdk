@@ -351,4 +351,11 @@ it("clamps stored timestamps to Last-Modified plus five minutes, never using it 
   expect(validPlan(all)).toBe(true);
   expect(clampStoredTimes(p, null)).toBe(p);
   expect(clampStoredTimes(p, new Date(NaN))).toBe(p);
+  expect(clampStoredTimes(p, null, new Date(NaN))).toBe(p);
+  // Without Last-Modified the bounded current time plus five minutes is the bound.
+  const clock = new Date("2026-01-31T11:00:00Z");
+  expect(clampStoredTimes(p, null, clock)).toEqual(clamped);
+  expect(clampStoredTimes(p, new Date(NaN), clock)).toEqual(clamped);
+  // A valid Last-Modified takes precedence over the clock.
+  expect(clampStoredTimes(p, new Date("2026-02-03T12:00:00Z"), clock)).toEqual(p);
 });

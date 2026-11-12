@@ -23,8 +23,10 @@ interface LegacySession {
   store: ReturnType<typeof createLegacyStore>;
   fetch: typeof fetch;
   snapshot: LegacySnapshot | null;
-  /** Increments only when another tab or device changed the plan's content. */
+  /** Increments when another tab or device changed the content, or the plan was deleted. */
   revision: number;
+  /** Why the editor was last remounted; shown when it mounts. */
+  notice: string;
   now(): Date;
   /** `base` is the snapshot the draft was edited from; a changed plan refuses the save. */
   save(plan: LegacyPlan, base: LegacySnapshot | null): Promise<void>;
@@ -38,6 +40,9 @@ interface LegacyContextValue {
   withdraw?: (() => Promise<void>) | undefined;
 }
 const Context = createContext<LegacyContextValue>({ session: null, error: "", loading: false });
+export const LEGACY_CHANGED_ELSEWHERE =
+  "Your legacy plan was changed in another tab or device. The latest saved version is shown; unsaved changes were not kept.";
+export const LEGACY_DELETED = "Legacy plan deleted. Nothing has been shared.";
 export const LEGACY_CONFLICT =
   "Your legacy plan was changed in another tab or device. Review the latest version, then save again.";
 
@@ -107,7 +112,14 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
         storage: account.storageUrl,
         signal: controller.signal,
       });
-      store = createLegacyStore({ storage, fetch, owner: account.webId });
+      // The account's own root: an assumed origin root (or any other) is refused before any request.
+      store = createLegacyStore({
+        storage,
+        fetch,
+        owner: account.webId,
+        expectedRoot: account.storageUrl,
+        now,
+      });
       const snapshot = await store.load();
       if (!current()) return;
       if (snapshot?.plan) {
@@ -130,7 +142,10 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
       /** Observe the winner of a conflict; a content change remounts the editor. */
       const observe = (fresh: LegacySnapshot | null) => {
         if (!current()) return;
-        if (!sameContent(fresh, opened.snapshot)) opened.revision++;
+        if (!sameContent(fresh, opened.snapshot)) {
+          opened.revision++;
+          opened.notice = LEGACY_CHANGED_ELSEWHERE;
+        }
         opened.snapshot = fresh;
         setSession({ ...opened });
       };
@@ -140,6 +155,7 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
         store: loaded,
         snapshot,
         revision: 0,
+        notice: "",
         fetch,
         now,
         async save(plan, base) {
@@ -171,9 +187,18 @@ export function LegacyProvider({ children }: { children: ReactNode }) {
           if (!current()) throw new Error("The account changed. Reload before deleting.");
           if (!sameContent(opened.snapshot, base)) throw new Error(LEGACY_CONFLICT);
           if (!opened.snapshot) return;
-          await loaded.delete(opened.snapshot.etag);
+          try {
+            await loaded.delete(opened.snapshot.etag);
+          } catch (error) {
+            if (!conflict(error)) throw error;
+            observe(await loaded.load()); // Never retried automatically.
+            throw new Error(LEGACY_CONFLICT);
+          }
           if (!current()) return;
+          // Reset the editor: the deleted plan must not linger as an unsaved draft.
           opened.snapshot = null;
+          opened.revision++;
+          opened.notice = LEGACY_DELETED;
           setSession({ ...opened });
         },
       };

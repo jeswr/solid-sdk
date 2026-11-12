@@ -98,13 +98,19 @@ export function samePlan(
 }
 /**
  * Load-time sanity bound: no stored timestamp can be later than the resource's own Last-Modified
- * plus five minutes of skew. Clamping is monotonic, so the order created ≤ modified/lastActivity
- * is preserved. Last-Modified is never used as the current time. A missing or invalid
- * Last-Modified leaves the plan unchanged.
+ * plus five minutes of skew. Without a parseable Last-Modified, the caller's (bounded) current time
+ * plus five minutes is the bound instead. Clamping is monotonic, so the order created ≤
+ * modified/lastActivity is preserved. Last-Modified is never used as the current time. With
+ * neither bound valid the plan is returned unchanged.
  */
-export function clampStoredTimes(plan: LegacyPlan, lastModified: Date | null): LegacyPlan {
-  if (!validDate(lastModified)) return plan;
-  const bound = lastModified.getTime() + 300_000;
+export function clampStoredTimes(
+  plan: LegacyPlan,
+  lastModified: Date | null,
+  now?: Date,
+): LegacyPlan {
+  const reference = validDate(lastModified) ? lastModified : validDate(now) ? now : null;
+  if (!reference) return plan;
+  const bound = reference.getTime() + 300_000;
   const clamp = (date: Date) => new Date(Math.min(date.getTime(), bound));
   return {
     ...plan,

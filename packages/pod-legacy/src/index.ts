@@ -15,4 +15,4 @@ export {
   validPlan,
 } from "./plan.js";
 export type { LegacySnapshot } from "./storage.js";
-export { createLegacyStore, LegacyPrivacyError } from "./storage.js";
+export { createLegacyStore, LegacyPrivacyError, LegacyStorageRootError } from "./storage.js";

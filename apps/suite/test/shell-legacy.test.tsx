@@ -256,6 +256,7 @@ function session(overrides: Record<string, unknown> = {}) {
     fetch: vi.fn(async () => new Response(null, { status: 404 })),
     snapshot: { plan: plan(), etag: '"one"' },
     revision: 0,
+    notice: "",
     now: () => new Date("2026-06-01T12:00:00Z"),
     save: vi.fn(async (_plan: LegacyPlan, _base: unknown) => {}),
     delete: vi.fn(async (_base: unknown) => {}),
@@ -287,7 +288,11 @@ it("remounts the editor with a notice when another tab changed the plan, droppin
   expect(enabled()).toBe(true);
   // Another tab's content change bumps the revision: the latest version replaces the draft.
   const winner = { ...plan(), enabled: false, contacts: [] };
-  const second = session({ snapshot: { plan: winner, etag: '"two"' }, revision: 1 });
+  const second = session({
+    snapshot: { plan: winner, etag: '"two"' },
+    revision: 1,
+    notice: "Your legacy plan was changed in another tab or device.",
+  });
   view.rerender(settings({ session: second }));
   expect(enabled()).toBe(false);
   expect(screen.queryByRole("button", { name: "Remove Alex" })).toBeNull();
@@ -355,4 +360,36 @@ it("offers deletion when privacy cannot be verified and reports its failure", as
     fireEvent.click(screen.getByRole("button", { name: "Delete my legacy plan" }));
   });
   expect(withdraw).toHaveBeenCalledTimes(2);
+});
+it("never saves modified earlier than created when the device clock is slow", async () => {
+  const save = vi.fn(async (_plan: LegacyPlan) => {});
+  const p = plan();
+  p.created = new Date("2026-03-01T12:00:00Z");
+  p.modified = p.created;
+  p.lastActivity = p.created;
+  render(
+    h(LegacyEditor, {
+      initial: p,
+      folders: [],
+      people: [],
+      onSave: save,
+      now: () => new Date("2026-01-01T00:00:00Z"),
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(save.mock.calls[0]?.[0].modified).toEqual(p.created);
+  cleanup();
+  render(
+    h(LegacyEditor, {
+      initial: p,
+      folders: [],
+      people: [],
+      onSave: save,
+      now: () => new Date("2026-04-01T00:00:00Z"),
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save legacy plan" }));
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  expect(save.mock.calls[1]?.[0].modified).toEqual(new Date("2026-04-01T00:00:00Z"));
 });

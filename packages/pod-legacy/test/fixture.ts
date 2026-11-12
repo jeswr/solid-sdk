@@ -54,6 +54,6 @@ export async function fixture() {
     }
   };
   const storage = { ...memory, head };
-  const store = createLegacyStore({ storage, owner, fetch });
+  const store = createLegacyStore({ storage, owner, fetch, expectedRoot: root });
   return { fetch, storage, store };
 }

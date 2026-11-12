@@ -5,13 +5,16 @@ import {
   type LegacyPlan,
   LegacyPrivacyError,
   type LegacySnapshot,
+  LegacyStorageRootError,
   recordActivity,
 } from "@jeswr/pod-legacy";
 import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LegacyBanner } from "../src/shell/legacy/banner";
 import {
+  LEGACY_CHANGED_ELSEWHERE,
   LEGACY_CONFLICT,
+  LEGACY_DELETED,
   LegacyProvider,
   sameContent,
   useLegacy,
@@ -367,11 +370,58 @@ it("withdraws the plan with its current validator and fences stale deletion", as
   });
   expect(backend.delete).toHaveBeenCalledExactlyOnceWith('"current"');
   expect(actions.session?.snapshot).toBeNull();
+  // The editor is reset (remounted) with a deletion notice rather than keeping a stale draft.
+  expect(actions.session?.revision).toBe(1);
+  expect(actions.session?.notice).toBe(LEGACY_DELETED);
   await session.delete(null);
   expect(backend.delete).toHaveBeenCalledOnce();
   accounts.current = { ...accounts.current, active: bob };
   await expect(session.delete(null)).rejects.toThrow("account changed");
   await expect(session.save(plan(), null)).rejects.toThrow("account changed");
+});
+it("observes the winner when a delete hits 412 and shows the conflict, never retrying", async () => {
+  const backend = store({ plan: plan(), etag: '"current"' });
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  backend.delete.mockRejectedValueOnce(precondition());
+  const winner = { ...plan(), inactivityMonths: 12 };
+  backend.load.mockResolvedValue({ plan: winner, etag: '"winner"' });
+  let failure: unknown;
+  await act(async () => {
+    failure = await actions.session!.delete(actions.session!.snapshot).catch((e) => e);
+  });
+  expect((failure as Error).message).toBe(LEGACY_CONFLICT);
+  expect(backend.delete).toHaveBeenCalledOnce();
+  await waitFor(() => expect(actions.session?.snapshot?.etag).toBe('"winner"'));
+  expect(actions.session?.revision).toBe(1);
+  expect(actions.session?.notice).toBe(LEGACY_CHANGED_ELSEWHERE);
+  backend.delete.mockRejectedValueOnce(new Error("offline"));
+  backend.load.mockClear();
+  await expect(actions.session!.delete(actions.session!.snapshot)).rejects.toThrow("offline");
+  expect(backend.load).not.toHaveBeenCalled();
+});
+it("binds the store to the account's own storage root and the session clock", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+  store(null);
+  render(tree());
+  await waitFor(() => expect(actions.session).toBeTruthy());
+  const options = vi.mocked(createLegacyStore).mock.calls.at(-1)?.[0];
+  expect(options?.expectedRoot).toBe(alice.storageUrl);
+  expect(options?.now?.()).toEqual(now);
+});
+it("refuses a misresolved storage root without offering deletion or any write", async () => {
+  const backend = store(null);
+  vi.mocked(createLegacyStore).mockImplementation(() => {
+    throw new LegacyStorageRootError();
+  });
+  render(tree());
+  await waitFor(() => expect(actions.error).toContain("storage root could not be confirmed"));
+  expect(actions.session).toBeNull();
+  expect(actions.withdraw).toBeUndefined();
+  expect(backend.load).not.toHaveBeenCalled();
+  expect(backend.save).not.toHaveBeenCalled();
+  expect(backend.delete).not.toHaveBeenCalled();
 });
 it("bounds activity and the banner to an exposed Date header despite a fast device clock", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });

@@ -313,7 +313,11 @@ export function LegacyEditor({
           onClick={() => {
             setSaving(true);
             setMessage("Saving…");
-            void onSave({ ...plan, modified: validNow(now()) })
+            // A slow device clock must not produce modified < created, which would fail validation.
+            void onSave({
+              ...plan,
+              modified: new Date(Math.max(validNow(now()).getTime(), plan.created.getTime())),
+            })
               .then(
                 () => setMessage("Legacy plan saved. Nothing has been shared."),
                 (error: unknown) =>
@@ -487,11 +491,7 @@ export function LegacySettings() {
           onSave={(plan) => session.save(plan, session.snapshot)}
           onDelete={session.snapshot ? () => session.delete(session.snapshot) : undefined}
           now={session.now}
-          notice={
-            session.revision
-              ? "Your legacy plan was changed in another tab or device. The latest saved version is shown; unsaved changes were not kept."
-              : ""
-          }
+          notice={session.notice}
         />
       )}
     </div>

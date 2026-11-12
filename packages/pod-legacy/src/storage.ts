@@ -55,16 +55,37 @@ async function emptyBody(read: Awaited<ReturnType<StorageClient["read"]>>): Prom
   }
 }
 
-/** WAC only in this slice: unknown, ACP, LWS and unrepresentable access all refuse. No ACL edits. */
+export class LegacyStorageRootError extends Error {
+  constructor() {
+    super(
+      "Your pod's storage root could not be confirmed, so your legacy plan was not read or changed.",
+    );
+    this.name = "LegacyStorageRootError";
+  }
+}
+
+/**
+ * WAC only in this slice: unknown, ACP, LWS and unrepresentable access all refuse. No ACL edits.
+ *
+ * `expectedRoot` is the account's own storage root (e.g. its WebID profile's pim:storage). A
+ * resolved root that differs — such as an `assumed-origin-root` fallback when the pod root does
+ * not advertise pim:Storage — may belong to someone else, so construction refuses before any
+ * request: nothing is read, written or deleted. `now` supplies the caller's bounded clock for the
+ * stored-time clamp when no Last-Modified is available.
+ */
 export function createLegacyStore(options: {
   storage: StorageClient;
   owner: string;
   fetch: typeof globalThis.fetch;
+  expectedRoot: string;
+  now?: () => Date;
 }) {
-  const { storage, owner, fetch } = options;
+  const { storage, owner, fetch, now = () => new Date() } = options;
   const root = storage.root;
   if (!isWebId(owner) || !root.endsWith("/") || !isWebId(root))
     throw new TypeError("An owner WebID and HTTPS storage root are required");
+  if (!isWebId(options.expectedRoot) || new URL(options.expectedRoot).href !== root)
+    throw new LegacyStorageRootError();
   const settings = new URL("settings/", root).href;
   const url = new URL("legacy-plan.ttl", settings).href;
   const privacy = async (target = url, members = false) => {
@@ -167,7 +188,7 @@ export function createLegacyStore(options: {
     const parsed = parsePlan(url, rdf.dataset);
     if (!parsed || parsed.owner !== owner || parsed.storage !== root)
       return { plan: null, etag, invalid: true };
-    return { plan: clampStoredTimes(parsed, read.lastModified), etag };
+    return { plan: clampStoredTimes(parsed, read.lastModified, now()), etag };
   };
   return {
     url,
@@ -215,7 +236,9 @@ export function createLegacyStore(options: {
       const result = await storage.write(url, body, { contentType: "text/turtle", ifMatch: etag });
       if (result.etagSource === "response" && result.etag) {
         // A weak validator is no more usable than an absent one.
-        if (/^"[^"\r\n]+"$/.test(result.etag)) return { plan: snapshot, etag: result.etag };
+        // Keep the same stored-time bound a later load would apply (no Last-Modified here).
+        if (/^"[^"\r\n]+"$/.test(result.etag))
+          return { plan: clampStoredTimes(snapshot, null, now()), etag: result.etag };
       }
       // Without a validator for our own write, the reload may observe another writer's version.
       // Timestamps may differ (a later heartbeat, or the load-time clamp); content must not.

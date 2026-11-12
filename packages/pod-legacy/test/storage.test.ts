@@ -2,7 +2,7 @@
 import { ownerPolicy, writeAcp, writeWac } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, vi } from "vitest";
-import { createLegacyStore, LegacyPrivacyError } from "../src/storage.js";
+import { createLegacyStore, LegacyPrivacyError, LegacyStorageRootError } from "../src/storage.js";
 import { fixture, owner, plan, root, url } from "./fixture.js";
 
 it("does not create a plan on load, creates only an empty resource before the privacy proof, and conditionally persists", async () => {
@@ -60,8 +60,46 @@ it("requires correct owner/storage on writes and valid records", async () => {
         ...input,
         storage: input.storage as StorageClient,
         fetch: globalThis.fetch,
+        expectedRoot: root,
       }),
     ).toThrow();
+});
+it.each([
+  ["an assumed origin root above the account's pod", "https://alice.example/", `${root}alice/`],
+  ["another pod's root", root, "https://bob.example/"],
+  ["an unsafe expected root", root, "http://alice.example/"],
+  ["a missing expected root", root, ""],
+])("refuses %s before any request, so nothing can be read, written or deleted", async (_, resolved, expectedRoot) => {
+  const { storage, fetch } = await fixture();
+  const calls = [
+    vi.spyOn(storage, "read"),
+    vi.spyOn(storage, "readRdf"),
+    vi.spyOn(storage, "head"),
+    vi.spyOn(storage, "write"),
+    vi.spyOn(storage, "create"),
+    vi.spyOn(storage, "delete"),
+  ];
+  const guarded = vi.fn(fetch);
+  expect(() =>
+    createLegacyStore({
+      storage: { ...storage, root: resolved },
+      owner,
+      fetch: guarded,
+      expectedRoot,
+    }),
+  ).toThrow(LegacyStorageRootError);
+  for (const call of calls) expect(call).not.toHaveBeenCalled();
+  expect(guarded).not.toHaveBeenCalled();
+});
+it("accepts an expected root equal to the resolved root after URL normalisation", async () => {
+  const { storage, fetch } = await fixture();
+  const store = createLegacyStore({
+    storage,
+    owner,
+    fetch,
+    expectedRoot: "https://ALICE.example/",
+  });
+  expect(await store.load()).toBeNull();
 });
 describe("owner-only verification", () => {
   it.each([
@@ -159,7 +197,7 @@ describe("owner-only verification", () => {
     const other = { ...storage, protocol: "lws" as const };
     const create = vi.spyOn(other, "create");
     await expect(
-      createLegacyStore({ storage: other, fetch, owner }).save(plan(), null),
+      createLegacyStore({ storage: other, fetch, owner, expectedRoot: root }).save(plan(), null),
     ).rejects.toBeInstanceOf(LegacyPrivacyError);
     expect(create).not.toHaveBeenCalled();
   });
@@ -287,7 +325,12 @@ it("refuses unsupported protocol on load and an ancestor escaping storage", asyn
   const { storage, store, fetch } = await fixture();
   const saved = await store.save(plan(), null);
   await expect(
-    createLegacyStore({ storage: { ...storage, protocol: "lws" }, owner, fetch }).load(),
+    createLegacyStore({
+      storage: { ...storage, protocol: "lws" },
+      owner,
+      fetch,
+      expectedRoot: root,
+    }).load(),
   ).rejects.toBeInstanceOf(LegacyPrivacyError);
   const within = storage.isWithinStorage.bind(storage);
   vi.spyOn(storage, "isWithinStorage").mockImplementation((target) =>
@@ -362,7 +405,7 @@ it.each([
   );
   restore();
   // A new account-fenced store/session can resume without deleting or creating the resource.
-  const resumed = createLegacyStore({ storage, fetch, owner });
+  const resumed = createLegacyStore({ storage, fetch, owner, expectedRoot: root });
   const empty = await resumed.load();
   expect(empty).toEqual({ plan: null, etag: (await storage.head(url)).etag });
   const create = vi.spyOn(storage, "create");
@@ -629,7 +672,8 @@ it("clamps stored timestamps later than the resource's Last-Modified plus five m
     { ...plan(), created: plan().created, modified: future, lastActivity: future },
     null,
   );
-  expect(saved.plan.lastActivity).toEqual(future);
+  // The strong-ETag result is already clamped against the default device clock.
+  expect(saved.plan.lastActivity.getTime()).toBeLessThanOrEqual(Date.now() + 300_000);
   const bound = (await storage.read(url)).lastModified!.getTime() + 300_000;
   const loaded = (await store.load())!.plan!;
   expect(loaded.lastActivity.getTime()).toBe(bound);
@@ -674,4 +718,23 @@ it("accepts a validator-less write whose reload differs only in heartbeat timest
     return { ...result, etag: null };
   });
   expect((await store.save(plan(), saved.etag)).plan.lastActivity).toEqual(later);
+});
+it("clamps a strong-ETag save result and a Last-Modified-less load against the bounded clock", async () => {
+  const { storage, fetch } = await fixture();
+  const clock = new Date("2026-06-01T12:00:00Z");
+  const bound = clock.getTime() + 300_000;
+  const store = createLegacyStore({ storage, owner, fetch, expectedRoot: root, now: () => clock });
+  const future = new Date("2099-01-01T00:00:00Z");
+  const saved = await store.save({ ...plan(), modified: future, lastActivity: future }, null);
+  expect(saved.plan.lastActivity.getTime()).toBe(bound);
+  expect(saved.plan.modified.getTime()).toBe(bound);
+  expect(saved.plan.created).toEqual(plan().created);
+  const read = storage.read.bind(storage);
+  vi.spyOn(storage, "read").mockImplementation(async (...args) => ({
+    ...(await read(...args)),
+    lastModified: null,
+  }));
+  const loaded = (await store.load())!.plan!;
+  expect(loaded.lastActivity.getTime()).toBe(bound);
+  expect(loaded.modified.getTime()).toBe(bound);
 });
