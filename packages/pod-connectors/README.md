@@ -123,8 +123,11 @@ unchanged until the complete scan and reconciliation succeed. The journal is rem
 by the runner's `commit` step, after the cursor has been reported; a run that fails or is
 cancelled during the sweep or final membership flush leaves it, so the next run refetches no
 completed payload. A raw message that exceeds its cap or whose response times out is
-skipped and counted in `skipped`, keeping any stored copy; a timed-out message is not
-journalled as complete, so a resumed full sync retries it. Budgets must fit the profile,
+skipped and counted in `skipped`, keeping any stored copy. A timed-out message is not
+journalled as complete, so it is retried only when the run is interrupted and a later run
+resumes the full sync. Known limitation: once a full sync completes (the journal is
+cleared) or a history replay moves the cursor past it, a timed-out message is not
+re-attempted until the message changes or a later full sync lists it again. Budgets must fit the profile,
 labels, one listing page and at least one message. The journal's reconciliation manifest is
 bounded independently at 2,000,000 identifiers and 16 MiB of UTF-8 identifier text.
 
@@ -134,9 +137,17 @@ run byte allowance; inspected error bodies still do. Requests, records, response
 and the total deadline apply to downloads too. A per-response timeout saves metadata with
 `contentSkipped: "timeout"` and continues to the next file; run exhaustion and caller
 cancellation still fail the import. Timed-out files are listed in `drive/_content-retry.ttl`
-(their metadata subjects, at most 10,000) and an incremental run re-reads each one that its
-change list omits (`files/<id>`, one request and one item) and downloads it again; a 404
-drops it, and the list is rewritten or removed after every successful run. A request-capped retry reuses already-linked
+(their metadata subjects with a timed-out attempt count, at most 10,000 entries) and an
+incremental run re-reads each one that its change list omits (`files/<id>`, one request and
+one item) and downloads it again. A file is dropped after 3 timed-out attempts
+(`MAX_RETRY_ATTEMPTS`), after a successful or otherwise-skipped download, or on a 404.
+Retries are best-effort after the change set is committed: none starts with less than one
+response timeout (or half of `maxDurationMs`) remaining, and a request, item, byte or
+duration budget failure among them stops retrying, carries the remaining entries forward
+and still returns the new cursor. Foreign, non-canonical, malformed or excess entries are
+dropped on load (and the list rewritten), never failing the run. The retry list's
+`DriveContentRetry`/`DriveRetryEntry` accessors are hand-written like `DriveMetadata`, and
+move to codegen with the rest of this package's models. A request-capped retry reuses already-linked
 unchanged representations and progresses to the remaining files.
 
 Exhaustion throws `RunBudgetExceededError`, a subtype of `IntegrationSyncError`, exported

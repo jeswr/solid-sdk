@@ -59,7 +59,7 @@ export class DriveMetadata extends PodThing {
 
 /**
  * Files whose content download timed out. Incremental change listings omit unmodified files,
- * so the adapter keeps their metadata subjects here and re-attempts them on the next run.
+ * so the adapter keeps their metadata subjects here and re-attempts them on later runs.
  */
 export class DriveContentRetry extends PodThing {
   get files(): Set<string> {
@@ -69,5 +69,16 @@ export class DriveContentRetry extends PodThing {
       NamedNodeAs.string,
       NamedNodeFrom.string,
     );
+  }
+}
+
+/** One retry-list entry: a file's metadata subject, described inside the retry document. */
+export class DriveRetryEntry extends PodThing {
+  /** Timed-out download attempts so far. */
+  get attempts(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DRIVE_VOCAB}retryAttempts`, LiteralAs.number);
+  }
+  set attempts(value: number | undefined) {
+    OptionalAs.object(this, `${DRIVE_VOCAB}retryAttempts`, value, LiteralFrom.integer);
   }
 }

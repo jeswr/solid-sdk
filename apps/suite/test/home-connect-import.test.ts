@@ -189,6 +189,24 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     expect(report.written.every(({ url }) => url.includes("/top-"))).toBe(true);
     expect(report.cursor).toBeUndefined();
   });
+  it("drops the adapter's commit step from a partial-scope run along with its cursor", async () => {
+    const commit = vi.fn(async () => undefined);
+    const base = createRegistry().adapterById("spotify");
+    if (!base) throw new Error("Spotify adapter missing");
+    const adapter = withSelectedScopes(
+      { ...base, import: async () => ({ cursor: "next", commit }) },
+      ["user-top-read"],
+    );
+    const ctx = { cursor: "previous" } as Parameters<typeof adapter.import>[0];
+    const partial = await adapter.import(ctx);
+    expect(partial).toEqual({ cursor: "previous" });
+    expect("commit" in partial).toBe(false);
+    const full = await withSelectedScopes(
+      { ...base, import: async () => ({ cursor: "next", commit }) },
+      base.metadata.scopes,
+    ).import(ctx);
+    expect(full).toEqual({ cursor: "next", commit });
+  });
   it("imports the recorded Spotify fixture, with readable provenance and stable resource URLs/counts", async () => {
     const { pod, session } = await setup();
     const adapter = createRegistry().adapterById("spotify");

@@ -333,7 +333,7 @@ describe("deadline after the adapter resolves", () => {
     expect(pod.urls().some((url) => url.endsWith("_provenance.ttl"))).toBe(true);
   });
 
-  it("ignores a failing commit and skips it after a caller cancel", async () => {
+  it("ignores a failing commit and still runs commit when the cancel follows onState", async () => {
     const pod = createMemoryPod();
     const controller = new AbortController();
     const report = await runImport({

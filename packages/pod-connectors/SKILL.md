@@ -72,7 +72,8 @@ Do not refetch completed raw payloads or double-charge list/raw messages. Save t
 after the last page when it completed IDs, and clear it only through `ImportOutcome.commit`,
 which the runner calls after provenance and `onState` (best-effort, holding the connector
 claim); never delete it inside `import`. Raw-message `SourceTimeoutError` is skipped and
-counted like `ResponseTooLargeError`, but is not journalled as complete. Return its original history id so
+counted like `ResponseTooLargeError`, but is not journalled as complete: it is retried only
+when an interrupted full sync resumes (documented limitation; no Gmail retry list yet). Return its original history id so
 mutations during partial runs replay next time. Bound retained reconciliation identifiers
 across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item-, byte- and
 duration-capped runs, incomplete message retries and final removal of vanished mail.
@@ -82,8 +83,11 @@ run byte budget, because content is committed per file. The central wrapper exem
 successful Drive representation endpoints; JSON and inspected error bodies remain metered.
 Downloads still consume requests and deadlines. Only a source response timeout becomes
 `contentSkipped: "timeout"`; run budget failures and caller cancellation must propagate.
-Timed-out file ids persist in `drive/_content-retry.ttl`; incremental runs re-read and retry
-those their change list omits, and every successful run replaces the list.
+Timed-out file ids persist in `drive/_content-retry.ttl` with attempt counts; incremental runs
+re-read and retry those their change list omits, dropping a file after `MAX_RETRY_ATTEMPTS`
+(3). Retries are best-effort after the committed change set: stop on low `remainingMs` or a
+caught `RunBudgetExceededError` (the one place it is caught; caller cancel still propagates),
+carry unreached entries and return the cursor. Drop invalid or excess entries on load.
 Preserve unchanged-representation reuse and
 test that request-capped retries make progress with content larger than the run JSON allowance.
 

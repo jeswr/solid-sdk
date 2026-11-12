@@ -17,9 +17,15 @@ import {
   TEST_WEBID,
 } from "../core/testing.js";
 import type { ConnectorState, FixtureRoute } from "../core/types.js";
-import { createGoogleDriveAdapter, DEFAULT_MAX_BYTES, googleDriveAdapter } from "./adapter.js";
+import { SCHEMA } from "../core/vocab.js";
+import {
+  createGoogleDriveAdapter,
+  DEFAULT_MAX_BYTES,
+  googleDriveAdapter,
+  MAX_RETRY_ATTEMPTS,
+} from "./adapter.js";
 import { DRIVE_API, type DriveFile, FILES, GOOGLE_APPS } from "./fixtures.js";
-import { DriveMetadata } from "./vocab.js";
+import { DRIVE_VOCAB, DriveContentRetry, DriveMetadata, DriveRetryEntry } from "./vocab.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -1491,4 +1497,150 @@ it("drops a retried file that has since disappeared and keeps one that times out
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe("Drive content retry list", () => {
+  const RetryUrl = `${ROOT}drive/_content-retry.ttl`;
+  const metaIri = (id: string) => `${metaUrl(id)}#it`;
+  const fileUrl = (id: string) => `${DRIVE_API}/files/${encodeURIComponent(id)}`;
+  /** Seeds the list as raw Turtle, so hostile entries bypass the adapter's own writer. */
+  const seed = async (
+    pod: ReturnType<typeof createMemoryPod>,
+    entries: readonly (readonly [string, string | undefined])[],
+  ) => {
+    const lines = entries.flatMap(([iri, attempts]) => [
+      `<#it> <${SCHEMA}hasPart> <${iri}> .`,
+      ...(attempts === undefined ? [] : [`<${iri}> <${DRIVE_VOCAB}retryAttempts> ${attempts} .`]),
+    ]);
+    expect((await pod.fetch(RetryUrl, { method: "PUT", body: lines.join("\n") })).ok).toBe(true);
+  };
+  const saved = (pod: ReturnType<typeof createMemoryPod>) => {
+    const dataset = pod.dataset(RetryUrl);
+    return new Map(
+      [...new DriveContentRetry(`${RetryUrl}#it`, dataset, DataFactory).files].map((iri) => [
+        iri,
+        new DriveRetryEntry(iri, dataset, DataFactory).attempts,
+      ]),
+    );
+  };
+  const retried = (api: { mock: { calls: unknown[][] } }) =>
+    api.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.startsWith(`${DRIVE_API}/files/`) && url.includes("?fields="))
+      .map((url) =>
+        decodeURIComponent(url.slice(`${DRIVE_API}/files/`.length).split("?")[0] ?? ""),
+      );
+  const files = (n: number, prefix = "retry") =>
+    Array.from({ length: n }, (_, i) => ({ ...BINARY, id: `${prefix}-${i}` }));
+
+  it("returns the cursor and carries the unretried rest when the budget runs out mid-retry", async () => {
+    const { run, pod } = setup();
+    const stale = files(3);
+    await seed(
+      pod,
+      stale.map((file) => [metaIri(file.id), "1"]),
+    );
+    const { api, result } = run(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        ...stale.map((file) => ({ url: fileUrl(file.id), json: file })),
+      ],
+      {
+        cursor: "1000",
+        media: Object.fromEntries(stale.map((file) => [mediaUrl(file.id), bytes()])),
+        limits: { maxRequests: 3 }, // the change page, then one file's metadata and media
+      },
+    );
+    const report = await result;
+    expect(report.cursor).toBe("1001");
+    expect(report.state?.lastOutcome).toBe("success");
+    expect(retried(api)).toEqual(["retry-0"]);
+    expect(pod.bytes(contentUrl(stale[0] as DriveFile))).toBeDefined();
+    expect(saved(pod)).toEqual(
+      new Map([
+        [metaIri("retry-1"), 1],
+        [metaIri("retry-2"), 1],
+      ]),
+    );
+  });
+
+  it("counts timed-out attempts and drops a file after the last allowed one", async () => {
+    vi.useFakeTimers();
+    try {
+      const { run, pod } = setup();
+      const [again, last] = files(2);
+      if (!again || !last) throw new Error("Missing fixture");
+      await seed(pod, [
+        [metaIri(again.id), "1"],
+        [metaIri(last.id), String(MAX_RETRY_ATTEMPTS - 1)],
+      ]);
+      const stall = () => new Promise<Response>(() => {});
+      const { result } = run(
+        [
+          changes({ changes: [], newStartPageToken: "1001" }),
+          { url: fileUrl(again.id), json: again },
+          { url: fileUrl(last.id), json: last },
+        ],
+        {
+          cursor: "1000",
+          media: { [mediaUrl(again.id)]: stall, [mediaUrl(last.id)]: stall },
+        },
+      );
+      let settled = false;
+      void result.finally(() => {
+        settled = true;
+      });
+      for (let i = 0; i < 5 && !settled; i++) await vi.advanceTimersByTimeAsync(61_000);
+      expect((await result).cursor).toBe("1001");
+      expect(saved(pod)).toEqual(new Map([[metaIri(again.id), 2]]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops foreign, non-canonical and malformed entries instead of failing", async () => {
+    const { run, pod } = setup();
+    const [badCount, zero, tooMany, valid] = files(4);
+    if (!badCount || !zero || !tooMany || !valid) throw new Error("Missing fixture");
+    await seed(pod, [
+      ["https://evil.test/integrations/google-drive/drive/files/x/meta.ttl#it", "1"],
+      [`${ROOT}drive/files/~2E~2E/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/a%2Fb/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/a/b/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/x/other.ttl#it`, "1"],
+      [metaIri(badCount.id), '"x"'],
+      [metaIri(zero.id), "0"],
+      [metaIri(tooMany.id), "99"],
+      [metaIri(valid.id), undefined],
+    ]);
+    const { api, result } = run(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        ...[badCount, zero, tooMany, valid].map((file) => ({ url: fileUrl(file.id), json: file })),
+      ],
+      { cursor: "1000", media: { [mediaUrl(valid.id)]: bytes() } },
+    );
+    expect((await result).cursor).toBe("1001");
+    expect(retried(api)).toEqual([valid.id]);
+    expect(pod.get(RetryUrl)).toBeUndefined();
+  });
+
+  it("keeps at most 10,000 entries and rewrites an oversized list", async () => {
+    const { run, pod } = setup();
+    const ids = Array.from({ length: 10_005 }, (_, i) => `big-${String(i).padStart(5, "0")}`);
+    await seed(
+      pod,
+      ids.map((id) => [metaIri(id), "1"]),
+    );
+    const { api, result } = run([changes({ changes: [], newStartPageToken: "1001" })], {
+      cursor: "1000",
+      limits: { maxRequests: 1 },
+    });
+    expect((await result).cursor).toBe("1001");
+    expect(retried(api)).toEqual([]);
+    const kept = saved(pod);
+    expect(kept.size).toBe(10_000);
+    expect(kept.has(metaIri("big-09999"))).toBe(true);
+    expect(kept.has(metaIri("big-10000"))).toBe(false);
+  });
 });

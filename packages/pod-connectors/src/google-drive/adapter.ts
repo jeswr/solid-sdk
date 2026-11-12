@@ -4,9 +4,11 @@
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
+import { RunBudgetExceededError } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import { arr, optionalDate, optionalText } from "../core/safe.js";
+import { SOURCE_RESPONSE_TIMEOUT_MS } from "../core/source-timeout.js";
 import type { BinaryDoc, ImportContext, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, SCHEMA } from "../core/vocab.js";
 import { binaryType, download } from "./content.js";
@@ -18,7 +20,7 @@ import {
   type DriveFileList,
   GOOGLE_APPS,
 } from "./fixtures.js";
-import { DriveContentRetry, DriveMetadata } from "./vocab.js";
+import { DriveContentRetry, DriveMetadata, DriveRetryEntry } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "google-drive";
@@ -27,6 +29,8 @@ const FIELDS =
 /** Persisted ids of files whose content download timed out, retried by the next run. */
 const RETRY = "drive/_content-retry.ttl";
 const MAX_RETRY_FILES = 10_000;
+/** A file is dropped from the retry list once this many downloads have timed out. */
+export const MAX_RETRY_ATTEMPTS = 3;
 const REPRESENTATION = /^content(?:-[a-f0-9]{24})?(?:\.(?:pdf|txt))?$/;
 const EXPORTABLE = new Set(
   ["document", "spreadsheet", "presentation", "drawing"].map((type) => `${GOOGLE_APPS}${type}`),
@@ -136,9 +140,31 @@ export function createGoogleDriveAdapter({
       // A change listing omits files that timed out earlier but have not changed since; a
       // full listing has already re-attempted every listed file.
       const retry = await sync.loadRetry();
-      if (incremental)
-        for (const id of retry.ids) if (!snapshot.files.has(id)) await sync.retryContent(id);
-      await sync.saveRetry(retry);
+      const carried = new Set<string>();
+      if (incremental) {
+        const pending = [...retry.ids.keys()].filter((id) => !snapshot.files.has(id));
+        // The snapshot is already committed: retries are best-effort, so a run that runs out
+        // of time or budget among them still saves the remaining entries and its cursor.
+        const reserve = Math.min(SOURCE_RESPONSE_TIMEOUT_MS, (ctx.limits?.maxDurationMs ?? 0) / 2);
+        let stopped = false;
+        for (const id of pending) {
+          if (!stopped && ctx.budget.remainingMs <= reserve) stopped = true;
+          if (!stopped)
+            try {
+              await sync.retryContent(id);
+              continue;
+            } catch (error) {
+              if (
+                !(error instanceof RunBudgetExceededError) ||
+                (ctx.signal?.aborted && ctx.signal.reason !== error)
+              )
+                throw error;
+              stopped = true;
+            }
+          carried.add(id);
+        }
+      }
+      await sync.saveRetry(retry, carried);
       ctx.progress({ label: "Done", done: snapshot.files.size, total: snapshot.files.size });
       return { cursor: snapshot.cursor, skipped: sync.skipped || undefined };
     },
@@ -216,21 +242,33 @@ class Sync {
     }
   }
 
-  async loadRetry(): Promise<{ ids: Set<string>; stored: boolean }> {
+  /** Valid entries only: foreign, non-canonical or excess entries are dropped, never fatal. */
+  async loadRetry(): Promise<{ ids: Map<string, number>; stored: boolean; clean: boolean }> {
     const stored = await this.ctx.read(RETRY);
-    const ids = new Set<string>();
-    if (!stored) return { ids, stored: false };
+    const ids = new Map<string, number>();
+    if (!stored) return { ids, stored: false, clean: true };
+    let listed = 0;
     const base = this.ctx.resolve("drive/files/");
     const suffix = "meta.ttl#it";
+    const entries: [string, number][] = [];
     for (const iri of new DriveContentRetry(`${this.ctx.resolve(RETRY)}#it`, stored, DataFactory)
       .files) {
+      listed++;
       if (!iri.startsWith(base) || !iri.endsWith(suffix)) continue;
       const id = idOf(iri.slice(base.length, -suffix.length));
-      if (id !== undefined) ids.add(id);
-      if (ids.size > MAX_RETRY_FILES)
-        throw new IntegrationSyncError(ID, "The Drive content retry list is too long.");
+      if (id === undefined || `${this.ctx.resolve(`${root(id)}meta.ttl`)}#it` !== iri) continue;
+      let attempts: number | undefined;
+      try {
+        attempts = new DriveRetryEntry(iri, stored, DataFactory).attempts ?? 1;
+      } catch {
+        continue; // Several or malformed counts.
+      }
+      if (Number.isInteger(attempts) && attempts >= 1 && attempts < MAX_RETRY_ATTEMPTS)
+        entries.push([id, attempts]);
     }
-    return { ids, stored: true };
+    entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const [id, attempts] of entries.slice(0, MAX_RETRY_FILES)) ids.set(id, attempts);
+    return { ids, stored: true, clean: ids.size === listed };
   }
 
   /** Re-reads one previously timed-out file's metadata and stores it, downloading again. */
@@ -254,21 +292,41 @@ class Sync {
     else await this.store(file as unknown as DriveFile);
   }
 
-  /** Persists this run's timed-out files; the list is replaced, never accumulated. */
-  async saveRetry(previous: { ids: ReadonlySet<string>; stored: boolean }): Promise<void> {
-    const ids = this.timedOut;
-    if (ids.size === previous.ids.size && [...ids].every((id) => previous.ids.has(id))) return;
-    if (ids.size === 0) {
+  /**
+   * Replaces the list with this run's timeouts (counting attempts) plus `carried` entries the
+   * run did not reach. A file is dropped after MAX_RETRY_ATTEMPTS timeouts or a success.
+   */
+  async saveRetry(
+    previous: { ids: ReadonlyMap<string, number>; stored: boolean; clean: boolean },
+    carried: ReadonlySet<string>,
+  ): Promise<void> {
+    const next = new Map<string, number>();
+    for (const id of carried) next.set(id, previous.ids.get(id) ?? 1);
+    for (const id of this.timedOut) {
+      const attempts = (previous.ids.get(id) ?? 0) + 1;
+      if (attempts < MAX_RETRY_ATTEMPTS) next.set(id, attempts);
+    }
+    // A list with dropped (invalid or excess) entries is rewritten even if nothing changed.
+    if (
+      previous.clean &&
+      next.size === previous.ids.size &&
+      [...next].every(([id, attempts]) => previous.ids.get(id) === attempts)
+    )
+      return;
+    if (next.size === 0) {
       if (previous.stored) await this.ctx.remove(RETRY);
       return;
     }
-    if (ids.size > MAX_RETRY_FILES)
-      throw new IntegrationSyncError(ID, "Too many Drive downloads timed out.");
     const dataset = new Store();
     const list = new DriveContentRetry(`${this.ctx.resolve(RETRY)}#it`, dataset, DataFactory);
     list.types.add(CLASSES.Dataset);
-    for (const id of [...ids].sort())
-      list.files.add(`${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`);
+    for (const [id, attempts] of [...next]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .slice(0, MAX_RETRY_FILES)) {
+      const iri = `${this.ctx.resolve(`${root(id)}meta.ttl`)}#it`;
+      list.files.add(iri);
+      new DriveRetryEntry(iri, dataset, DataFactory).attempts = attempts;
+    }
     await this.ctx.write({
       slug: RETRY,
       category: "documents",
