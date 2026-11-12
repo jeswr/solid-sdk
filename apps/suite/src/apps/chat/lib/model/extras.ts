@@ -16,6 +16,7 @@ export async function loadProfileName(
   publicFetch: typeof globalThis.fetch,
   storage: string,
   webId: string,
+  fallback?: string,
 ): Promise<string> {
   const url = new URL(httpIri(webId));
   const local = isWithinPodScope(storage, webId);
@@ -33,7 +34,7 @@ export async function loadProfileName(
   return (
     readText(document.dataset, webId, `${NS.FOAF}name`)?.trim() ||
     readText(document.dataset, webId, `${NS.VCARD}fn`)?.trim() ||
-    `${url.host}${url.pathname}${url.hash}`
+    (fallback ?? `${url.host}${url.pathname}${url.hash}`)
   );
 }
 export async function loadRoomFiles(

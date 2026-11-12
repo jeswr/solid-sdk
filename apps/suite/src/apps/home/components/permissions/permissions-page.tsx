@@ -27,6 +27,7 @@ import {
 import { useRequestCaps, useRequests } from "../../state/requests";
 import { useHomeSession } from "../home-app";
 import { PermissionAccessRow } from "./permission-access";
+import { SigningKeys } from "./signing-keys";
 
 export function usePermissionPreferences() {
   const [view, setView] = useState<PermissionsView>("overview");
@@ -201,6 +202,7 @@ export function PermissionsPage() {
           );
         })}
       </Tabs>
+      <SigningKeys />
     </div>
   );
 }

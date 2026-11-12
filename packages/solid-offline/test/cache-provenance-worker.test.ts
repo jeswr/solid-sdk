@@ -12,6 +12,7 @@ afterEach(() => {
   dispose?.();
   dispose = undefined;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function worker() {
@@ -95,10 +96,11 @@ it('does not intercept pod data before storage configuration', async () => {
   expect(h.open).not.toHaveBeenCalled();
 });
 
-it('tags a network fallback when cache storage cannot open', async () => {
+it('tags a network fallback when IndexedDB cannot open', async () => {
   const h = await worker();
   h.configure();
-  h.open.mockRejectedValue(new Error('Cache storage unavailable'));
+  const { MetadataStore } = await import('../src/metadata-store.js');
+  vi.spyOn(MetadataStore, 'open').mockRejectedValue(new Error('IndexedDB unavailable'));
   const response = await h.request(url).response;
   expect(cacheProvenance(response as Response)).toBe('miss');
   expect(await response?.text()).toBe('network');
