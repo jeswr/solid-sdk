@@ -3,6 +3,7 @@
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { type ControlStatementClaims, issueControlStatement } from "@jeswr/agent-mandate/control";
 import type { ActionProposal } from "@jeswr/agent-model";
+import { archivePartition } from "./archive";
 import type { AgentClient } from "./client";
 import { withApprovalKey } from "./keys";
 import type { ProfileSession } from "./profile";
@@ -38,7 +39,7 @@ export function createAgentSigner(
       > = {},
     ) {
       const at = now();
-      const container = kind === "Archive" ? client.paths.archive : client.paths.control;
+      const container = kind === "Archive" ? archivePartition(client, at) : client.paths.control;
       const id = `${container}${at.getTime()}-${kind}-${crypto.randomUUID()}.trig`;
       const claims: ControlStatementClaims = {
         ...fields,
