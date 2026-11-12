@@ -63,6 +63,18 @@ export function lexicalTime(value: string): number | undefined {
         : "gYear";
   return temporalTime(df.literal(value, df.namedNode(XSD + kind)));
 }
+/**
+ * The first instant after an inclusive end, from its parsed start time: a date,
+ * gYearMonth or gYear ends with its whole day, month or year; a dateTime at itself.
+ */
+export function endInstant(value: string, time: number): number {
+  if (value.includes("T")) return time;
+  const end = new Date(time);
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) end.setUTCDate(end.getUTCDate() + 1);
+  else if (/^\d{4}-\d{2}/.test(value)) end.setUTCMonth(end.getUTCMonth() + 1);
+  else end.setUTCFullYear(end.getUTCFullYear() + 1);
+  return end.getTime();
+}
 export function readPeriod(node: ReadNode): HealthPeriod {
   const start = node.literal(`${S}validFrom`),
     end = node.literal(`${S}validThrough`);

@@ -78,7 +78,8 @@ export interface HealthGraphView {
   facts: HealthFact[];
   byKind: Record<HealthFactKind, HealthFact[]>;
   unrecognised: HealthFactBase[];
-  sources: SourceInfo[];
+  /** One record per (batch, source IRI); `batch` names the batch that describes it. */
+  sources: (SourceInfo & { batch: string })[];
   excludedOtherSubjects: number;
 }
 export interface HealthFilterOptions {
@@ -96,6 +97,8 @@ export interface ObservationSeries {
     factId: string;
     belief: Belief;
     affectedBySkipped?: true;
+    /** The fact's batch source records could not be read (see HealthFactBase). */
+    provenanceUnavailable?: true;
   }[];
 }
 export type TimelineKind = "condition" | "medication" | "immunization" | "encounter" | "documents";
@@ -106,6 +109,8 @@ export interface HealthTimelineItem {
   label: string;
   belief: Belief;
   affectedBySkipped?: true;
+  /** The fact's batch source records could not be read (see HealthFactBase). */
+  provenanceUnavailable?: true;
   tone: "active" | "past" | "neutral";
 }
 export type HealthTimeline = Record<TimelineKind, HealthTimelineItem[]>;

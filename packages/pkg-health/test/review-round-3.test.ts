@@ -4,8 +4,23 @@ import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { entities } from "../src/generated/model.js";
-import { healthTimeline, importHealthExport, projectHealthFacts } from "../src/index.js";
-import { batch, type claim, condition, FixtureNode, generatedAt, owner, S, X } from "./helpers.js";
+import {
+  healthTimeline,
+  importHealthExport,
+  observationSeries,
+  projectHealthFacts,
+} from "../src/index.js";
+import {
+  batch,
+  type claim,
+  condition,
+  FixtureNode,
+  generatedAt,
+  observation,
+  owner,
+  S,
+  X,
+} from "./helpers.js";
 
 const thread = "urn:uuid:12345678-1234-4234-8234-123456789abc";
 /** A claim with message evidence, so its provenance reads the batch sources graph. */
@@ -230,3 +245,96 @@ it("projects many linked notes with a linear number of term comparisons", async 
     equals.mockRestore();
   }
 }, 30_000);
+
+describe("delta review round 2", () => {
+  it("keeps the owner's source record when another batch cites the same IRI", async () => {
+    const owned = await batch([evidenced("owned")], "fictional-owned");
+    const foreign = await memory.buildNanopublications(
+      {
+        batch_id: "fictional-foreign",
+        worker: { agent_id: "https://example.org/agents/client", agent_label: "Fictional" },
+        sources: [
+          {
+            id: "chat",
+            kind: "claude-session",
+            thread_id: "12345678-1234-4234-8234-123456789abc",
+            title: "Forged title",
+          },
+        ],
+        claims: [evidenced("foreign")],
+      },
+      { owner, generatedAt },
+    );
+    for (const [a, b] of [
+      [owned, foreign],
+      [foreign, owned],
+    ] as const) {
+      const view = projectHealthFacts(memory.mergeNanopublications(a, b), { owner });
+      expect(view.sources.map((s) => [s.batch, s.kind, s.title])).toEqual([
+        ["fictional-foreign", "claude-session", "Forged title"],
+        ["fictional-owned", "codex-thread", "Fictional health discussion"],
+      ]);
+    }
+  });
+
+  it("carries provenanceUnavailable into timeline items and series points", async () => {
+    const value = await batch([
+      evidenced("condition"),
+      {
+        ...evidenced("reading"),
+        assertion: observation({ id: "reading", value: "70", date: "2026-11-01T10:00:00Z" }),
+      },
+    ]);
+    new FixtureNode(thread, sources(value, "health-test")).text(`${S}name`, "Second title");
+    const view = projectHealthFacts(value, { owner });
+    expect(healthTimeline(view, { now: generatedAt }).condition[0]?.provenanceUnavailable).toBe(
+      true,
+    );
+    expect(observationSeries(view).series[0]?.points[0]?.provenanceUnavailable).toBe(true);
+    const clean = projectHealthFacts(await batch([evidenced("condition")]), { owner });
+    expect(healthTimeline(clean).condition[0]).not.toHaveProperty("provenanceUnavailable");
+  });
+
+  it("treats date, month and year ends as inclusive", async () => {
+    const ends = await batch([
+      evidenced("day", {
+        template: "condition",
+        value: {
+          id: "https://example.org/entities/day",
+          name: "Fictional day",
+          validThrough: { datatype: "date", value: "2026-11-12" },
+        },
+      }),
+      evidenced("year", {
+        template: "condition",
+        value: {
+          id: "https://example.org/entities/year",
+          name: "Fictional year",
+          validThrough: { datatype: "gYear", value: "2026" },
+        },
+      }),
+      evidenced("month", {
+        template: "condition",
+        value: {
+          id: "https://example.org/entities/month",
+          name: "Fictional month",
+          validThrough: { datatype: "gYearMonth", value: "2026-11" },
+        },
+      }),
+    ]);
+    const view = projectHealthFacts(ends, { owner });
+    const tones = (now: string) =>
+      Object.fromEntries(healthTimeline(view, { now }).condition.map((i) => [i.label, i.tone]));
+    expect(tones("2026-11-12T23:59:59Z")).toEqual({
+      "Fictional day": "active",
+      "Fictional month": "active",
+      "Fictional year": "active",
+    });
+    expect(tones("2026-11-13T00:00:00Z")["Fictional day"]).toBe("past");
+    expect(tones("2026-12-01T00:00:00Z")).toMatchObject({
+      "Fictional month": "past",
+      "Fictional year": "active",
+    });
+    expect(tones("2027-01-01T00:00:00Z")["Fictional year"]).toBe("past");
+  });
+});

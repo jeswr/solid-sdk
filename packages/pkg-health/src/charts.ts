@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { codePointOrder } from "./assistant-import.js";
-import { lexicalTime } from "./temporal.js";
+import { endInstant, lexicalTime } from "./temporal.js";
 import type {
   HealthFilterOptions,
   HealthGraphView,
@@ -42,6 +42,7 @@ export function observationSeries(
       factId: fact.id,
       belief: fact.belief,
       ...(fact.affectedBySkipped ? { affectedBySkipped: true as const } : {}),
+      ...(fact.provenanceUnavailable ? { provenanceUnavailable: true as const } : {}),
     });
     groups.set(id, group);
   }
@@ -88,13 +89,14 @@ export function healthTimeline(
         (fact.kind === "document" ? fact.dateCreated : fact.period.start) ??
         (fact.kind === "encounter" || fact.kind === "immunization" ? fact.date : undefined);
       const end = fact.period.end;
-      // An end date in the future means ongoing. An end that cannot be parsed, or
-      // an invalid clock, never gives `active` and never claims the period ended.
+      // An end date in the future means ongoing; a date-precision end includes its
+      // whole day (month, year). An end that cannot be parsed, or an invalid clock,
+      // never gives `active` and never claims the period ended.
       const ended =
         end !== undefined &&
         (fact.period.endTime === undefined || !Number.isFinite(now)
           ? undefined
-          : fact.period.endTime <= now);
+          : endInstant(end, fact.period.endTime) <= now);
       items.push({
         id: fact.id,
         label: fact.label,
@@ -102,6 +104,7 @@ export function healthTimeline(
         end,
         belief: fact.belief,
         ...(fact.affectedBySkipped ? { affectedBySkipped: true as const } : {}),
+        ...(fact.provenanceUnavailable ? { provenanceUnavailable: true as const } : {}),
         // An unreadable later update means the fact may have changed: never show it as active.
         tone:
           fact.belief === "past" || ended === true

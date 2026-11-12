@@ -23,7 +23,9 @@ await correctHealthFact(store, nanopubId, correctedFact, { clientId, batchId });
 ```
 
 `projectHealthFacts(value, { owner, now? })` returns `facts`, `byKind`, `unrecognised`,
-`sources` and `excludedOtherSubjects`. Kinds are condition, allergy, medication,
+`sources` and `excludedOtherSubjects`. `sources` holds one record per (batch, source IRI),
+each with the `batch` that describes it, so a batch citing another batch's source IRI adds
+its own record and never replaces that batch's kind or title. Kinds are condition, allergy, medication,
 observation, immunization, encounter, note and document. Each fact carries its nanopub ID, assertion
 ID, typed subject IRI, label, code, lexical period and parsed epoch milliseconds,
 belief/validity/epistemic metadata, hedge, categories, replacement IDs, corroboration
@@ -86,7 +88,7 @@ legacy w3id aliases) project as observations, once even when base types are also
 This is a fixed sector inventory, not reasoning over untrusted ontology statements.
 
 `observationSeries(view, { beliefs? })` returns `{ series, skipped }`. Each series is
-`{ id, label, unit?, points: [{ x: ISO, y: number, factId, belief, affectedBySkipped? }] }`. Numeric observations
+`{ id, label, unit?, points: [{ x: ISO, y: number, factId, belief, affectedBySkipped?, provenanceUnavailable? }] }`. Numeric observations
 group by code IRI (otherwise system/value), or normalized label, plus exact unit.
 Code IRI namespaces identify SNOMED, LOINC, ICD-10, ATC and dm+d; unknowns remain
 `other`. Values that cannot be represented faithfully as a JS number remain strings.
@@ -95,8 +97,12 @@ nonnumeric values increment `skipped` after belief filtering. Points sort by tim
 series sort by ID. No unit conversion or aggregation occurs.
 
 `healthTimeline(view, { beliefs?, now? })` returns condition, medication, immunization,
-encounter and documents arrays of `{ id, start?, end?, label, belief, affectedBySkipped?, tone }`.
-A past belief, or an end whose parsed time is at or before `now`, gives `past`. A future
+encounter and documents arrays of `{ id, start?, end?, label, belief, affectedBySkipped?, provenanceUnavailable?, tone }`.
+Timeline items and series points carry `provenanceUnavailable: true` from their fact.
+A past belief, or an end that `now` has passed, gives `past`. Ends are inclusive: a date,
+gYearMonth or gYear end covers its whole day, month or year (`validThrough
+"2026-11-12"^^xsd:date` is past from 2026-11-13T00:00 in its zone, UTC when zone-less);
+a dateTime end is past from that instant. A future
 end means ongoing. An end that cannot be parsed (or an invalid `now`) gives `neutral`:
 the timeline never claims such a period is active or has ended. Otherwise Current without
 `affectedBySkipped` gives `active`; remaining facts (including every fact with an
@@ -262,15 +268,23 @@ claim's provenance without claiming that every derived source said the quoted te
 
 `skipped` counts fact nodes once, with fixed aggregate reasons: OtherSubject,
 UnsupportedType, UnknownEpistemicStatus, UnknownValidityStatus, InvalidEvidence,
-InvalidSource, UnsupportedValue, UnsupportedDatePrecision, TooManyStatements or
-InvalidFact. Raw outgoing terms on facts, products and sources pass memory's unchanged
+InvalidSource, UnsupportedValue, UnsupportedDatePrecision, TooManyStatements,
+ImportLimit or InvalidFact. Raw outgoing terms on facts, products and sources pass memory's unchanged
 literal-parity and term safety checks (`validateAssertionTerms`, linear per quad) before
 anything else reads the node or assertions are built. Untrusted nodes are never
 canonicalized to validate them. A blank-node object on a fact, product or source refuses
 it (InvalidFact; an invalid source makes its facts InvalidSource), and a node with more
 than `MAX_NODE_STATEMENTS` (256) outgoing statements is refused (TooManyStatements),
 so a few kilobytes of Turtle cannot make the importer slow. At most `MAX_FACT_QUOTES`
-(20) usable quotes are kept per fact, the first 20 in term order; extras are dropped. No values or parser diagnostics enter errors
+(20) usable quotes are kept per fact, the first 20 in term order; extras are dropped.
+A fact citing more than `MAX_FACT_SOURCES` (16) derived-from sources skips as
+InvalidEvidence. Import-wide, at most `MAX_IMPORT_FACTS` (1000) facts and
+`MAX_IMPORT_EVIDENCE` (2000) evidence entries are accepted. Facts are processed in term
+order; the first fact that would exceed either limit, and every later fact, skips as
+ImportLimit without being read, so `skipped.reasons.ImportLimit` tells the caller to split
+the export. These bounds keep a worst-case import to a few seconds and under about
+100 MB of heap; generated builders cost roughly 0.15 ms each, which dominates the
+per-fact time. No values or parser diagnostics enter errors
 or reports. Invalid syntax throws a fixed HealthGraphError; invalid options fail before
 parsing. Invalid sources cause their referencing facts to be skipped.
 

@@ -4,7 +4,6 @@ import { isSafeAbsoluteIri, readLiteral, sanitizeText } from "@jeswr/model-runti
 import {
   buildNanopublications,
   type Claim,
-  canonicalizeAssertion,
   createFactAssertion,
   type Nanopublications,
   parseReferenceRdf,
@@ -15,7 +14,7 @@ import {
 } from "@jeswr/pkg-memory";
 import type { DatasetCore, Literal, Quad, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
-import { DataFactory as df, type Store } from "n3";
+import { DataFactory as df, termToId as n3TermToId, type Store } from "n3";
 import { entities } from "./generated/model.js";
 import { H, RDF_TYPE, ReadNode, S, SUBJECT_LINK_PREDICATES, XSD } from "./read.js";
 import { temporalTime } from "./temporal.js";
@@ -50,11 +49,10 @@ function requireValue<T>(value: T | undefined): T {
 }
 /** Aliases are combined: neither namespace can conceal a conflicting scalar. */
 function terms(node: ReadNode, predicates: readonly string[]): Term[] {
-  const result: Term[] = [];
+  const result = new Map<string, Term>();
   for (const predicate of predicates)
-    for (const term of node.terms(predicate))
-      if (!result.some((other) => term.equals(other))) result.push(term);
-  return result.sort(termOrder);
+    for (const term of node.terms(predicate)) result.set(termToId(term), term);
+  return [...result.values()].sort(termOrder);
 }
 /** A total, locale-free order includes literal datatype and language. */
 export function termOrder(a: Term, b: Term): number {
@@ -106,10 +104,18 @@ function iri(term: Term): string {
     throw new Skip("InvalidFact");
   return term.value;
 }
+// N3 accepts external RDF/JS terms; @types/n3 narrows this helper to N3 terms.
+const termToId = n3TermToId as (term: Term) => string;
 /** Outgoing statements allowed on one fact, product or source node. */
 export const MAX_NODE_STATEMENTS = 256;
 /** Exact quotes kept per fact; extras are dropped in term order. */
 export const MAX_FACT_QUOTES = 20;
+/** Derived-from sources allowed per fact; more skip the fact (InvalidEvidence). */
+export const MAX_FACT_SOURCES = 16;
+/** Facts accepted per import; later facts in term order skip as ImportLimit. */
+export const MAX_IMPORT_FACTS = 1000;
+/** Evidence entries per import; the fact that would exceed it, and every later fact, skip as ImportLimit. */
+export const MAX_IMPORT_EVIDENCE = 2000;
 /**
  * Validate all outgoing terms, including fields not copied into the assertion,
  * with linear per-quad checks before anything reads the node. Blank-node objects
@@ -364,8 +370,12 @@ export async function importAssistantTurtle(
   };
   const acceptedSources = new Map<string, Source>();
   const reasons: Record<string, number> = {};
+  // Import-wide work bounds: once a limit is reached, later facts are not read.
+  let evidenceCount = 0;
+  let limited = false;
   for (const term of [...ids.values()].sort(termOrder)) {
     try {
+      if (limited) throw new Skip("ImportLimit");
       iri(term);
       const node = new ReadNode(term, dataset);
       validate(node);
@@ -400,6 +410,7 @@ export async function importAssistantTurtle(
       if (validityToken !== "Current" && validityToken !== "Past")
         throw new Skip("UnknownValidityStatus");
       const derived = terms(node, [`${PROV}wasDerivedFrom`]);
+      if (derived.length > MAX_FACT_SOURCES) throw new Skip("InvalidEvidence");
       // A quote must stay exact, so an over-long quote is dropped rather than cut.
       // The fact is kept when at least one usable quote remains. At most
       // MAX_FACT_QUOTES usable quotes are kept, the first in term order.
@@ -413,8 +424,19 @@ export async function importAssistantTurtle(
         if (!source) throw new Skip("InvalidSource");
         return source;
       });
+      const evidenceSize =
+        factSources.length === 1 ? quotes.length : factSources.length + quotes.length;
+      if (
+        claims.length === MAX_IMPORT_FACTS ||
+        evidenceCount + evidenceSize > MAX_IMPORT_EVIDENCE
+      ) {
+        limited = true;
+        throw new Skip("ImportLimit");
+      }
       const graph = assertion(node, [...kinds][0] as string, config.owner);
-      canonicalizeAssertion(graph);
+      // Per-fact check, so one bad value skips its fact instead of failing the batch.
+      validateAssertionTerms(graph);
+      evidenceCount += evidenceSize;
       claims.push({
         id: pkgId("assistant-health-fact", node.value),
         assertion: graph,

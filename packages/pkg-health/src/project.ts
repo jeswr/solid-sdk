@@ -14,6 +14,7 @@ import {
 } from "@jeswr/pkg-memory";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
+import { codePointOrder } from "./assistant-import.js";
 import { entities } from "./generated/model.js";
 import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
 import { effectiveTime, readPeriod, temporalTime } from "./temporal.js";
@@ -412,12 +413,22 @@ export function projectHealthFacts(
       }
       if (excluded) view.excludedOtherSubjects += 1;
     }
+    // Keyed by batch and IRI: another batch citing the same IRI adds its own record
+    // and can never replace this batch's kind or title.
     const sources = new Map(
       [...view.facts, ...view.unrecognised].flatMap((f) =>
-        f.provenance.sources.map((s) => [s.iri, s] as const),
+        f.provenance.sources.map(
+          (s) =>
+            [
+              JSON.stringify([f.provenance.batch, s.iri]),
+              { ...s, batch: f.provenance.batch },
+            ] as const,
+        ),
       ),
     );
-    view.sources = [...sources.values()].sort((a, b) => a.iri.localeCompare(b.iri));
+    view.sources = [...sources.values()].sort(
+      (a, b) => a.iri.localeCompare(b.iri) || codePointOrder(a.batch, b.batch),
+    );
     return view;
   } catch (error) {
     if (error instanceof HealthGraphError) throw error;

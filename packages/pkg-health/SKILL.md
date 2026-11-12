@@ -73,7 +73,11 @@ aggregate reasons. Validation is linear (`validateAssertionTerms` per quad) and 
 before any other read of the node: never canonicalize untrusted nodes to validate them.
 Blank-node objects on facts/products/sources are refused, a node may have at most
 `MAX_NODE_STATEMENTS` (256) outgoing statements (TooManyStatements), and at most
-`MAX_FACT_QUOTES` (20) quotes are kept per fact, the first in term order. Scalar aliases must agree, except NFC-normalized case-only name
+`MAX_FACT_QUOTES` (20) quotes are kept per fact, the first in term order. More than
+`MAX_FACT_SOURCES` (16) derived sources skips the fact (InvalidEvidence); past
+`MAX_IMPORT_FACTS` (1000) facts or `MAX_IMPORT_EVIDENCE` (2000) evidence entries the rest
+skip as ImportLimit. `view.sources` has one record per (batch, IRI) with `batch`; timeline
+items and series points carry `provenanceUnavailable`; date/month/year ends are inclusive. Scalar aliases must agree, except NFC-normalized case-only name
 variants; keep the original literal of the first variant in Unicode code-point order.
 Repeated source titles keep the first non-empty title in code-point order (or an explicit
 empty title when all are empty). Source dates compare by calendar day, dropping date

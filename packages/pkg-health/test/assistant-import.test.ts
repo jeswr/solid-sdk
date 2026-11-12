@@ -10,6 +10,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   codePointOrder,
   MAX_FACT_QUOTES,
+  MAX_FACT_SOURCES,
+  MAX_IMPORT_EVIDENCE,
+  MAX_IMPORT_FACTS,
   MAX_NODE_STATEMENTS,
   termOrder,
 } from "../src/assistant-import.js";
@@ -880,6 +883,78 @@ describe("adversarial cost", () => {
     );
     expect(over.skipped).toEqual({ count: 1, reasons: { TooManyStatements: 1 } });
   });
+  const sourcesTtl = (count: number) =>
+    Array.from(
+      { length: count },
+      (_, i) =>
+        `ex:s${i} a s:CreativeWork ; s:name "Fictional ${i}" ; s:dateCreated "2026-10-01T12:00:00Z"^^xsd:dateTime .`,
+    ).join("\n");
+  const citing = (id: number, sources: number, quotes: number) =>
+    fact
+      .replace("ex:fact", `ex:fact${id}`)
+      .replace(
+        "prov:wasDerivedFrom ex:source",
+        `prov:wasDerivedFrom ${many(sources, (i) => `ex:s${i}`)}`,
+      )
+      .replace(
+        'oa:exact "Fictional quote"',
+        `oa:exact ${many(quotes, (i) => `"Fictional quote ${i}"`)}`,
+      );
+  it("refuses the reviewer's wide-evidence shape quickly", async () => {
+    // 220 sources, 64 facts each citing every source with 20 quotes (~180 KB).
+    const body =
+      prefixes +
+      sourcesTtl(220) +
+      Array.from({ length: 64 }, (_, i) => citing(i, 220, 20)).join("\n");
+    const started = performance.now();
+    const result = await importAssistantTurtle(body, options);
+    expect(performance.now() - started).toBeLessThan(3000);
+    expect(result.skipped).toEqual({ count: 64, reasons: { InvalidEvidence: 64 } });
+  }, 10_000);
+  it(`allows at most ${MAX_FACT_SOURCES} derived-from sources per fact`, async () => {
+    const ok = await importAssistantTurtle(
+      prefixes + sourcesTtl(MAX_FACT_SOURCES + 1) + citing(0, MAX_FACT_SOURCES, 1),
+      options,
+    );
+    expect(ok.skipped.count).toBe(0);
+    expect(ok.value.nanopubs[0]?.evidence).toHaveLength(MAX_FACT_SOURCES + 1);
+    const over = await importAssistantTurtle(
+      prefixes + sourcesTtl(MAX_FACT_SOURCES + 1) + citing(0, MAX_FACT_SOURCES + 1, 1),
+      options,
+    );
+    expect(over.skipped).toEqual({ count: 1, reasons: { InvalidEvidence: 1 } });
+  });
+  it(`stops at ${MAX_IMPORT_EVIDENCE} evidence entries per import`, async () => {
+    const perFact = MAX_FACT_SOURCES + MAX_FACT_QUOTES;
+    const fit = Math.floor(MAX_IMPORT_EVIDENCE / perFact);
+    // Fact IDs sort in term order, so the accepted facts are the first ones.
+    const body =
+      prefixes +
+      sourcesTtl(MAX_FACT_SOURCES) +
+      Array.from({ length: fit + 3 }, (_, i) =>
+        citing(1000 + i, MAX_FACT_SOURCES, MAX_FACT_QUOTES),
+      ).join("\n");
+    const started = performance.now();
+    const result = await importAssistantTurtle(body, options);
+    expect(performance.now() - started).toBeLessThan(20_000);
+    expect(result.value.nanopubs).toHaveLength(fit);
+    expect(result.skipped).toEqual({ count: 3, reasons: { ImportLimit: 3 } });
+    const evidence = result.value.nanopubs.reduce((sum, np) => sum + np.evidence.length, 0);
+    expect(evidence).toBe(fit * perFact);
+  }, 30_000);
+  it(`stops at ${MAX_IMPORT_FACTS} facts per import`, async () => {
+    const body =
+      prefixes +
+      source +
+      Array.from({ length: MAX_IMPORT_FACTS + 2 }, (_, i) =>
+        fact.replace("ex:fact", `ex:fact${10_000 + i}`),
+      ).join("\n");
+    const started = performance.now();
+    const result = await importAssistantTurtle(body, options);
+    expect(performance.now() - started).toBeLessThan(20_000);
+    expect(result.value.nanopubs).toHaveLength(MAX_IMPORT_FACTS);
+    expect(result.skipped).toEqual({ count: 2, reasons: { ImportLimit: 2 } });
+  }, 30_000);
   it(`keeps at most ${MAX_FACT_QUOTES} quotes per fact, the first in term order`, async () => {
     const quotes = Array.from(
       { length: 30 },
