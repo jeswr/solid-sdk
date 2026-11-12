@@ -26,6 +26,10 @@ the public Solid Client ID Document, and HTTP composition.
   ownership before contacting the issuer. Crashed refreshes fail closed and require new login.
 - Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
   MCP revocation/reuse retires the pod session and invalidates all grants bound to it.
+- Pass `verifyWebId: false` to the Node engine: the broker owns the single guarded fetch-rdf
+  profile binding check at completion, alongside storage discovery and content negotiation.
+  Refresh retains that binding and verifies subject/nonce/WebID without another profile fetch
+  after refresh rotation.
 - Resolve profiles through fetch-rdf + wrapper accessors, require profile issuer trust, scope
   authenticated fetch to advertised storage roots, refuse caller credentials and redirects.
 - Require PKCE S256, nonempty state, exact redirects, and an exact configured resource.
