@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
 import {
@@ -23,6 +24,7 @@ import {
  * via {@link deriveConfirmedConclusion} (the sole `confirmed` path) and persisted too.
  */
 import { useCallback } from "react";
+import type { PodStorage } from "../pod/client";
 import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
 import { syncConclusion, syncProtocol } from "../diary/sync";
 import {
@@ -31,6 +33,7 @@ import {
   storedProtocolToData,
   updateProtocolRecord,
 } from "../protocol/persist";
+import { podErrorMessage } from "../pod/errors";
 import { useSession } from "./context";
 import { NotSignedInError } from "./use-diary-actions";
 
@@ -57,12 +60,12 @@ export interface AdvanceRejected {
 }
 
 export function useProtocolActions() {
-  const { store, storageRoot, webId, authedFetch } = useSession();
+  const { store, storageRoot, webId, storage } = useSession();
 
   const requireCtx = useCallback(() => {
-    if (!store || !storageRoot || !webId) throw new NotSignedInError();
-    return { store, storageRoot, webId, authedFetch };
-  }, [store, storageRoot, webId, authedFetch]);
+    if (!store || !storageRoot || !webId || !storage) throw new NotSignedInError();
+    return { store, storageRoot, webId, storage };
+  }, [store, storageRoot, webId, storage]);
 
   /**
    * Start a challenge for a trigger (the one-tap "start an elimination challenge for
@@ -157,18 +160,18 @@ type Ctx = {
   store: NonNullable<ReturnType<typeof useSession>["store"]>;
   storageRoot: string;
   webId: string;
-  authedFetch: typeof globalThis.fetch;
+  storage: PodStorage;
 };
 
 async function flushProtocol(ctx: Ctx, record: StoredProtocol): Promise<void> {
   try {
     await syncProtocol(
-      { authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot },
+      { storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot },
       record,
     );
     await ctx.store.markProtocolSync(record.ulid, "synced");
   } catch (err) {
-    await ctx.store.markProtocolSync(record.ulid, "error", (err as Error).message);
+    await ctx.store.markProtocolSync(record.ulid, "error", podErrorMessage(err));
     throw err;
   }
 }
@@ -176,12 +179,12 @@ async function flushProtocol(ctx: Ctx, record: StoredProtocol): Promise<void> {
 async function flushConclusion(ctx: Ctx, record: StoredConclusion): Promise<void> {
   try {
     await syncConclusion(
-      { authedFetch: ctx.authedFetch, webId: ctx.webId, storageRoot: ctx.storageRoot },
+      { storage: ctx.storage, webId: ctx.webId, storageRoot: ctx.storageRoot },
       record,
     );
     await ctx.store.markConclusionSync(record.ulid, "synced");
   } catch (err) {
-    await ctx.store.markConclusionSync(record.ulid, "error", (err as Error).message);
+    await ctx.store.markConclusionSync(record.ulid, "error", podErrorMessage(err));
     throw err;
   }
 }

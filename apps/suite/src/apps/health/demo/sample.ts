@@ -21,7 +21,12 @@ export function ensureSample(session: PodSession, now = new Date()): Promise<voi
 async function seed(session: PodSession, now: Date) {
   if (session.mode !== "demo") return;
   const store = createHealthDataStore(session.fetch, session.storageUrl, session.webId);
-  const exists = await session.fetch(store.base, { method: "HEAD", redirect: "error" });
+  // The demo pod's own seed already creates health/ (for Activity sharing), so whether the
+  // observations/ container exists tells us if Health's sample has been seeded.
+  const exists = await session.fetch(`${store.base}observations/`, {
+    method: "HEAD",
+    redirect: "error",
+  });
   if (exists.ok) return;
   if (exists.status !== 404) throw new Error("Couldn't check your Health storage");
   const samples: Measurement[] = [];

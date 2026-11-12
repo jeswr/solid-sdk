@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Load RECRUITING coeliac trials for the Trials view (Phase 3b §4). Offline-first:
@@ -39,7 +40,7 @@ function browserLocale(): string | undefined {
 }
 
 export function useTrials(): TrialsViewState {
-  const { publicFetch, authedFetch, storageRoot, webId } = useSession();
+  const { publicFetch, storage, storageRoot, webId } = useSession();
   const [all, setAll] = useState<TrialStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +55,8 @@ export function useTrials(): TrialsViewState {
 
     let cached: TrialStudy[] | undefined;
     let cacheFresh = false;
-    if (storageRoot) {
-      const env = await readKnowledgeCache<TrialStudy[]>(authedFetch, storageRoot, CACHE_SLUG);
+    if (storageRoot && storage) {
+      const env = await readKnowledgeCache<TrialStudy[]>(storage, storageRoot, CACHE_SLUG);
       cached = Array.isArray(env?.data) ? env?.data : undefined;
       cacheFresh = !!env && !isStale(env, new Date());
       if (cached) {
@@ -77,15 +78,15 @@ export function useTrials(): TrialsViewState {
       setAll(studies);
       setFromCache(false);
       setError(null);
-      if (storageRoot && webId) {
-        void writeKnowledgeCache(authedFetch, storageRoot, webId, CACHE_SLUG, studies);
+      if (storageRoot && webId && storage) {
+        void writeKnowledgeCache(storage, storageRoot, webId, CACHE_SLUG, studies);
       }
     } catch (err) {
       if (!cached) setError(`Couldn't reach the trials registry (${(err as Error).message}).`);
     } finally {
       setLoading(false);
     }
-  }, [publicFetch, authedFetch, storageRoot, webId]);
+  }, [publicFetch, storage, storageRoot, webId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount data hook: the sync setState is the intentional loading flag; data setState runs in the async continuation (new react-hooks v6 rule, Next 16 upgrade)
