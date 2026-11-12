@@ -107,21 +107,20 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
         basis: { kind: "public" },
       },
     };
+    // Real JWS payloads: direct render and preview decode the signed message itself.
+    const jws = (value: unknown) =>
+      `e30.${Buffer.from(canonicalJson(value)).toString("base64url")}.c2ln`;
+    const seedMessage = { ...message, id: "urn:message:seed" };
     const direct = createInMemoryDirectBinding({
       tokens,
-      verify: async (carrier) =>
-        carrier.startsWith("seed.") ? { ...message, id: "urn:message:seed" } : message,
+      verify: async (carrier) => (carrier === jws(seedMessage) ? seedMessage : message),
       now: () => Date.parse(at),
     });
-    // A real JWS payload, so the direct preview (the decoded signed message) can be shown.
-    const renderable = {
-      message,
-      compactJws: `e30.${Buffer.from(canonicalJson(message)).toString("base64url")}.c2ln`,
-    };
+    const renderable = { message, compactJws: jws(message) };
     const wire = await direct.send.render(renderable, direct.carriage);
     // Seed one local inbound carrier without a provider or real credential.
     const seed = await direct.send.render(
-      { message: { ...message, id: "urn:message:seed" }, compactJws: "seed.signed.message" },
+      { message: seedMessage, compactJws: jws(seedMessage) },
       direct.carriage,
     );
     await direct.send.transmit(seed, {

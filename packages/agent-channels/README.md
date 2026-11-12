@@ -19,16 +19,28 @@ unsupported input. The executor compares this result byte for byte with the appr
 a difference or parse refusal records `refused(preview-mismatch)` and a
 `tamper-suspected` audit outcome, like `wire-mismatch`.
 
-Preview strings preserve visible text and whitespace, with LF line endings:
+Preview strings preserve visible text and whitespace, with LF line endings. Where the
+wire also delivers the signed envelope to the recipient's agent (email, Teams, native
+Matrix), the preview appends `\n\nSigned message sent to the recipient's agent:\n` and the
+canonical JSON of the raw JWS payload, so the owner approves everything that is sent, not
+only the human summary.
 
 | Send family | Preview |
 | --- | --- |
-| MIME renderer, Gmail, Graph mail (including Workspace) | `To: <To header>\nSubject: <Subject header>\n\n<decoded text/plain>`; includes the footer, normalizes only decoded CRLF to LF, and excludes HTML and JSON-LD |
-| Matrix, including Signal/WhatsApp bridges | Exact `content.body`, including footer |
-| Graph Teams | Adaptive Card visible `TextBlock.text` values joined with LF, including footer |
-| Mastodon | Exact `request.status`, including mention and footer |
-| Discord | Exact `content`, LF, then the visible embed `footer.text` |
+| MIME renderer, Gmail, Graph mail (including Workspace) | `To: <To header>\nSubject: <Subject header>\n\n<decoded text/plain>` (footer included, only decoded CRLF becomes LF), then the signed message. The HTML alternative must equal the renderer's HTML for that text and carrier; any header beyond the renderer's own (Cc, Bcc, Reply-To…) refuses |
+| Matrix | Exact `content.body`, then the signed message from the native envelope. Content must be exactly `msgtype: m.text`, `body` and the envelope: edits, relations and formatted bodies refuse |
+| Signal/WhatsApp bridges | Exact `content.body` (bridges send no envelope; the body already includes every body value) |
+| Graph Teams | The card's single `TextBlock.text`, then the signed message from the card data. The HTML chat body must equal that text, escaped, plus the attachment marker; extra card, request or attachment fields refuse |
+| Mastodon | Exact `request.status`; the request must be exactly a `direct` status (no spoiler, poll or media) |
+| Discord | Exact `content`, LF, then the embed `footer.text`; no components, polls or mention changes |
 | Direct | The signed message as canonical JSON, decoded from the JWS payload: native carriage has no human text, so the owner approves the message itself |
+
+All preview text refuses characters that render as nothing: controls, bidi and other
+format characters, default-ignorable code points (other variation selectors, Hangul
+fillers), U+2800, line/paragraph separators and private use. Emoji sequences survive: a
+variation selector directly after a pictograph or keycap base, and a zero-width joiner
+only between pictographs. Markdown is not interpreted: Discord and Teams may render
+markup in the text differently from the plain preview.
 
 Reserved send scaffolds, including Slack, have no renderer or send capability yet.
 When implemented, their preview must decode the wire's visible text and footer.

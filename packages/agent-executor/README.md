@@ -27,10 +27,11 @@ transport request. Every retry, resend and pre-dispatch re-evaluation checks aga
 Existing uncertain commitments survive a preview refusal.
 
 Email previews contain `To: <To header>\nSubject: <Subject header>\n\n` followed by
-the decoded text/plain body and footer (only CRLF becomes LF); HTML and JSON-LD are
-excluded. Matrix uses content.body; Teams joins visible card TextBlocks with LF;
-Mastodon uses request.status; Discord joins content and embed footer with LF. Direct's
-native envelope carries no human text and has an empty preview. Reserved scaffolds
+the decoded text/plain body and footer (only CRLF becomes LF). Matrix uses content.body;
+Teams uses its card TextBlock; Mastodon uses request.status; Discord joins content and
+embed footer with LF. When the wire also delivers the signed envelope (email, Teams,
+native Matrix), the preview appends the complete signed message as canonical JSON.
+Direct's native envelope carries no human text, so its preview is the signed message. Reserved scaffolds
 such as Slack have no send half yet. See agent-channels for parsing bounds.
 
 `runOutboxOnce()` processes the trusted outbox queue. The daemon must call

@@ -1,18 +1,39 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { digestBytes } from "@jeswr/agent-model";
+import { decodeEnvelopeObject } from "../envelope.js";
 import { ChannelParseError } from "../errors.js";
-import { previewJson, previewObject, previewText } from "../preview.js";
+import {
+  exactKeys,
+  previewJson,
+  previewObject,
+  previewText,
+  withSignedMessage,
+} from "../preview.js";
 import { TEAMS_CARD } from "../profiles.js";
 import type { Wire } from "../types.js";
-import { CARD_TYPE } from "./card.js";
+import { CARD_SCHEMA, CARD_TYPE, htmlFor } from "./card.js";
 
+/**
+ * Closed world: one card with one text block, an HTML body that says exactly the same, and
+ * the signed envelope (delivered to the recipient's agent), which is shown in full.
+ */
 export async function preview(wire: Wire): Promise<string> {
   const plan = previewJson(wire, "application/vnd.jeswr.teams-message+json", TEAMS_CARD.maxBytes);
-  const attachments = previewObject(plan.request).attachments;
+  exactKeys(plan, ["account", "chat", "request"], "Teams");
+  const request = previewObject(plan.request);
+  exactKeys(request, ["body", "attachments"], "Teams request");
+  const attachments = request.attachments;
   if (!Array.isArray(attachments) || attachments.length !== 1)
     throw new ChannelParseError("unsupported Teams preview attachments");
   const attachment = previewObject(attachments[0]);
-  if (attachment.contentType !== CARD_TYPE || typeof attachment.content !== "string")
+  exactKeys(attachment, ["id", "contentType", "content"], "Teams attachment");
+  if (
+    attachment.contentType !== CARD_TYPE ||
+    typeof attachment.content !== "string" ||
+    typeof attachment.id !== "string" ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(attachment.id)
+  )
     throw new ChannelParseError("unsupported Teams preview card");
   // Nested card JSON needs the same byte, depth, node and string bounds as the outer wire.
   const card = previewJson(
@@ -24,17 +45,25 @@ export async function preview(wire: Wire): Promise<string> {
     "application/json",
     TEAMS_CARD.maxBytes,
   );
-  if (card.type !== "AdaptiveCard" || !Array.isArray(card.body) || card.body.length === 0)
+  exactKeys(card, ["$schema", "type", "version", "body", "data"], "Teams card");
+  if (
+    card.$schema !== CARD_SCHEMA ||
+    card.type !== "AdaptiveCard" ||
+    card.version !== "1.2" ||
+    !Array.isArray(card.body) ||
+    card.body.length !== 1
+  )
     throw new ChannelParseError("unsupported Teams preview body");
-  return card.body
-    .map((value) => {
-      const block = previewObject(value);
-      if (
-        block.type !== "TextBlock" ||
-        Object.keys(block).some((key) => !["type", "text", "wrap"].includes(key))
-      )
-        throw new ChannelParseError("unsupported Teams preview block");
-      return previewText(block.text);
-    })
-    .join("\n");
+  const block = previewObject(card.body[0]);
+  exactKeys(block, ["type", "text", "wrap"], "Teams block");
+  if (block.type !== "TextBlock" || block.wrap !== true)
+    throw new ChannelParseError("unsupported Teams preview block");
+  const text = previewText(block.text);
+  const body = previewObject(request.body);
+  exactKeys(body, ["contentType", "content"], "Teams body");
+  if (body.contentType !== "html" || body.content !== htmlFor(text, attachment.id))
+    throw new ChannelParseError("Teams preview body differs from its card");
+  const data = previewObject(card.data);
+  exactKeys(data, ["envelope"], "Teams card data");
+  return withSignedMessage(text, decodeEnvelopeObject(data.envelope), TEAMS_CARD.maxBytes);
 }

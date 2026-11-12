@@ -32,12 +32,16 @@ Biome, and Vitest. Maintain 100% branches/functions/lines/statements coverage.
 Every send half must provide `preview(wire): Promise<string>`: a pure, bounded,
 hostile-input parser of the wire itself, throwing ChannelParseError on refusal.
 Never re-render or consult a verifier, resolver, credentials or transport to preview.
-Preserve visible text and whitespace. MIME previews are
-`To: <header>\nSubject: <header>\n\n<decoded text/plain including footer>`;
-normalize only the decoded body's CRLF to LF, excluding HTML and JSON-LD. Matrix
-uses content.body; Teams joins visible card TextBlocks with LF; Mastodon uses
-request.status; Discord joins content and its embed footer with LF. Direct carries
-only a native signed envelope and previews as the signed message's canonical JSON. Slack and
+Preserve visible text and whitespace; refuse invisible characters via `previewText`.
+Parsers are closed-world (`exactKeys`): any field the renderer doesn't write refuses.
+MIME previews are `To: <header>\nSubject: <header>\n\n<decoded text/plain including
+footer>`; normalize only the decoded body's CRLF to LF, require the HTML alternative to
+equal `renderHtml(plain, carrier)` and refuse extra headers. Matrix uses content.body;
+Teams uses its single card TextBlock and requires the matching HTML body; Mastodon uses
+request.status; Discord joins content and its embed footer with LF. Whenever the wire
+delivers the signed envelope (email, Teams, native Matrix), append it with
+`withSignedMessage`. Direct carries only a native signed envelope and previews as the
+signed message's canonical JSON. Slack and
 other reserved send scaffolds must implement wire-derived visible previews when
 they acquire send capability. Executor refusal is preview-mismatch (including parse
 failures), audited like wire-mismatch before authority or credential work.

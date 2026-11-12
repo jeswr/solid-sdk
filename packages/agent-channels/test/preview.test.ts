@@ -6,14 +6,23 @@ import type { CarriageProfile } from "../src/binding.js";
 import { preview as directPreview } from "../src/direct/preview.js";
 import { envelope } from "../src/direct/shared.js";
 import { createDiscordSend } from "../src/discord/send.js";
+import { renderHtml } from "../src/email/bodies.js";
 import { createEmailRenderer } from "../src/email-mime/send.js";
 import { ChannelParseError } from "../src/errors.js";
 import { createGmailSend } from "../src/gmail/send.js";
 import { createGraphMailSend } from "../src/graph-mail/send.js";
+import { htmlFor } from "../src/graph-teams/card.js";
 import { createGraphTeamsSend } from "../src/graph-teams/send.js";
 import { createMastodonSend } from "../src/mastodon/send.js";
 import { createMatrixSend } from "../src/matrix/send.js";
-import { previewBytes, previewJson, previewObject, previewText } from "../src/preview.js";
+import {
+  previewBytes,
+  previewJson,
+  previewObject,
+  previewText,
+  SIGNED_MESSAGE_HEADING,
+  signedMessage,
+} from "../src/preview.js";
 import {
   AGENT_FOOTER,
   DISCORD_FOOTER,
@@ -53,7 +62,16 @@ const emailText = [
   "",
   AGENT_FOOTER,
 ].join("\n");
-const emailPreview = `To: recipient@example.test\nSubject: [Agent] describe\n\n${emailText}`;
+const signedJson = canonicalJson(
+  JSON.parse(
+    Buffer.from(signed().compactJws.split(".")[1] as string, "base64url").toString("utf8"),
+  ),
+);
+/** Envelope carriages deliver the whole signed message, so the preview shows all of it. */
+const withSigned = (text: string) => `${text}\n\n${SIGNED_MESSAGE_HEADING}\n${signedJson}`;
+const emailPreview = withSigned(
+  `To: recipient@example.test\nSubject: [Agent] describe\n\n${emailText}`,
+);
 const families = [
   "email-mime",
   "gmail",
@@ -96,7 +114,9 @@ async function fixture(family: (typeof families)[number]) {
     matrix: {
       send: createMatrixSend(matrix),
       profile: MATRIX_CONTENT,
-      expected: `Automated message from ${message.from.actor}\n\n${summary}\n\n${AGENT_FOOTER}`,
+      expected: withSigned(
+        `Automated message from ${message.from.actor}\n\n${summary}\n\n${AGENT_FOOTER}`,
+      ),
     },
     signal: {
       send: createMatrixSend({ ...matrix, bridgeRooms: new Map([[roomId, "signal"]]) }),
@@ -109,7 +129,7 @@ async function fixture(family: (typeof families)[number]) {
         recipients: new Map([[message.to?.actor as string, "chat-id"]]),
       }),
       profile: TEAMS_CARD,
-      expected: `Sent by a software agent.\n${summary}\n${AGENT_FOOTER}`,
+      expected: withSigned(`Sent by a software agent.\n${summary}\n${AGENT_FOOTER}`),
     },
     mastodon: {
       send: createMastodonSend({
@@ -132,11 +152,7 @@ async function fixture(family: (typeof families)[number]) {
       send: direct.send,
       profile: direct.carriage,
       // The signed message itself, decoded from the JWS payload.
-      expected: canonicalJson(
-        JSON.parse(
-          Buffer.from(proposal.compactJws.split(".")[1] as string, "base64url").toString("utf8"),
-        ),
-      ),
+      expected: signedJson,
     },
   };
   const result = cases[family];
@@ -176,18 +192,22 @@ it.each(
     await expect(f.send.preview(wire)).rejects.toBeInstanceOf(ChannelParseError);
 });
 
-it("email decodes plain text exactly, normalizing only CRLF and ignoring HTML and carrier text", async () => {
+function replacePart(wire: string, contentType: string, text: string): string {
+  const start = wire.indexOf(`Content-Type: ${contentType};`);
+  const bodyStart = wire.indexOf("\r\n\r\n", start) + 4;
+  const bodyEnd = wire.indexOf("\r\n--", bodyStart);
+  return wire.slice(0, bodyStart) + Buffer.from(text).toString("base64") + wire.slice(bodyEnd);
+}
+it("email decodes plain text exactly, requires a matching HTML part and closed headers", async () => {
   const f = await fixture("email-mime");
-  const start = f.wire.bytes.indexOf("Content-Type: text/plain;");
-  const bodyStart = f.wire.bytes.indexOf("\r\n\r\n", start) + 4;
-  const bodyEnd = f.wire.bytes.indexOf("\r\n--", bodyStart);
+  const carrier = envelope(signed().compactJws);
   const text = `  literal <b>& text\t \r\nsecond\r\n\r\n${AGENT_FOOTER}  \n`;
-  const changed =
-    f.wire.bytes.slice(0, bodyStart) +
-    Buffer.from(text).toString("base64") +
-    f.wire.bytes.slice(bodyEnd);
+  const plainOnly = replacePart(f.wire.bytes, "text/plain", text);
+  const changed = replacePart(plainOnly, "text/html", renderHtml(text, carrier));
   expect(await f.send.preview(bytes(f.wire, changed))).toBe(
-    `To: recipient@example.test\nSubject: [Agent] describe\n\n${text.replaceAll("\r\n", "\n")}`,
+    withSigned(
+      `To: recipient@example.test\nSubject: [Agent] describe\n\n${text.replaceAll("\r\n", "\n")}`,
+    ),
   );
   expect(
     await f.send.preview(
@@ -204,6 +224,18 @@ it("email decodes plain text exactly, normalizing only CRLF and ignoring HTML an
       .replace("Subject: [Agent] describe", "Subject: [Agent] describe\t "),
   );
   for (const bad of [
+    // The HTML alternative must say exactly what the plain text says.
+    plainOnly,
+    replacePart(f.wire.bytes, "text/html", "<p>something else</p>"),
+    // Hidden recipients and redirected replies are never previewed away.
+    f.wire.bytes.replace("To: ", "Cc: other@example.test\r\nTo: "),
+    f.wire.bytes.replace("To: ", "Bcc: other@example.test\r\nTo: "),
+    f.wire.bytes.replace("To: ", "Reply-To: other@example.test\r\nTo: "),
+    f.wire.bytes.replace(
+      "Content-Type: text/html; charset=utf-8\r\n",
+      "Content-Type: text/html; charset=utf-8\r\nContent-Disposition: attachment\r\n",
+    ),
+    replacePart(f.wire.bytes, "application/ld+json", "{}"),
     f.wire.bytes.replace("multipart/alternative", "multipart/mixed"),
     f.wire.bytes.replace("To: ", "To: extra@example.test\r\nTo: "),
     f.wire.bytes.replace("Subject: ", "Subject: extra\r\nSubject: "),
@@ -215,41 +247,100 @@ it("email decodes plain text exactly, normalizing only CRLF and ignoring HTML an
     await expect(f.send.preview(bytes(f.wire, bad))).rejects.toBeInstanceOf(ChannelParseError);
 });
 
-it("Matrix refuses unsupported visible content and preserves literal markup and whitespace", async () => {
+it("Matrix previews only closed-world plain text and shows the native envelope", async () => {
   const f = await fixture("matrix");
-  for (const content of [
+  const plan = JSON.parse(f.wire.bytes);
+  const content = plan.content;
+  for (const value of [
     null,
     [],
-    { msgtype: "m.image", body: "hidden" },
-    { msgtype: "m.text", body: "ok", formatted_body: "other" },
-    { msgtype: "m.text", body: 1 },
+    { ...content, msgtype: "m.image" },
+    { ...content, formatted_body: "other" },
+    { ...content, body: 1 },
+    { ...content, "m.relates_to": { rel_type: "m.thread", event_id: "$x" } },
+    { ...content, "m.new_content": { msgtype: "m.text", body: "edited" } },
+    { msgtype: "m.text", body: "no envelope" },
   ])
-    await expect(f.send.preview(edited(f.wire, { content }))).rejects.toBeInstanceOf(
-      ChannelParseError,
-    );
-  expect(
-    await f.send.preview(
-      edited(f.wire, { content: { msgtype: "m.text", body: " <b>literal</b> \n\t🙂 " } }),
-    ),
-  ).toBe(" <b>literal</b> \n\t🙂 ");
+    await expect(
+      f.send.preview(edited(f.wire, { ...plan, content: value })),
+    ).rejects.toBeInstanceOf(ChannelParseError);
+  for (const value of [
+    { ...plan, extra: true },
+    { ...plan, compactJws: signed().compactJws },
+  ])
+    await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
+  const body = " <b>literal</b> \n\t🙂 ";
+  expect(await f.send.preview(edited(f.wire, { ...plan, content: { ...content, body } }))).toBe(
+    withSigned(body),
+  );
+  const s = await fixture("signal");
+  const bridged = JSON.parse(s.wire.bytes);
+  for (const value of [
+    {
+      ...bridged,
+      content: {
+        ...bridged.content,
+        "org.jeswr.agent.envelope": content["org.jeswr.agent.envelope"],
+      },
+    },
+    { ...bridged, content: { ...bridged.content, "m.relates_to": {} } },
+  ])
+    await expect(s.send.preview(edited(s.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
 });
 
-it("Teams joins only visible TextBlocks, retaining their exact whitespace", async () => {
+it("Teams previews one text block whose HTML body matches it, plus the envelope", async () => {
   const f = await fixture("teams");
   const plan = JSON.parse(f.wire.bytes);
   const attachment = plan.request.attachments[0];
   const card = JSON.parse(attachment.content);
-  card.body = [
-    { type: "TextBlock", text: " first \t", wrap: true },
-    { type: "TextBlock", text: "second\nline " },
-  ];
-  attachment.content = canonicalJson(card);
-  expect(await f.send.preview(edited(f.wire, plan))).toBe(" first \t\nsecond\nline ");
+  const text = " first \t\nsecond <b>&'\" ";
+  const withText = (value: string, extra: Record<string, unknown> = {}) => ({
+    ...plan,
+    request: {
+      body: { contentType: "html", content: htmlFor(value, attachment.id) },
+      attachments: [
+        {
+          ...attachment,
+          content: canonicalJson({
+            ...card,
+            body: [{ type: "TextBlock", text: value, wrap: true }],
+            ...extra,
+          }),
+        },
+      ],
+    },
+  });
+  expect(await f.send.preview(edited(f.wire, withText(text)))).toBe(withSigned(text));
+  const cardWith = (value: Record<string, unknown>) => ({
+    ...plan,
+    request: {
+      ...plan.request,
+      attachments: [{ ...attachment, content: canonicalJson({ ...card, ...value }) }],
+    },
+  });
   for (const value of [
+    // The HTML chat body Teams shows must say what the card says.
+    { ...plan, request: { ...plan.request, body: { contentType: "html", content: "other" } } },
+    { ...plan, request: { ...plan.request, body: { ...plan.request.body, contentType: "text" } } },
+    { ...plan, request: { ...plan.request, mentions: [] } },
+    { ...plan, extra: true },
+    withText(text, { actions: [{ type: "Action.OpenUrl", url: "https://x.example" }] }),
+    cardWith({
+      body: [
+        { type: "TextBlock", text: "a", wrap: true },
+        { type: "TextBlock", text: "b", wrap: true },
+      ],
+    }),
+    cardWith({ body: [{ type: "TextBlock", text: card.body[0].text, wrap: false }] }),
+    cardWith({ version: "1.5" }),
+    cardWith({ data: {} }),
+    cardWith({ data: { ...card.data, other: 1 } }),
+    { ...plan, request: { ...plan.request, attachments: [{ ...attachment, id: "bad id" }] } },
+    { ...plan, request: { ...plan.request, attachments: [{ ...attachment, name: "x" }] } },
     { request: null },
     { request: { attachments: null } },
-    { request: { attachments: [] } },
-    { request: { attachments: [attachment, attachment] } },
+    { ...plan, request: { ...plan.request, attachments: [] } },
+    { ...plan, request: { ...plan.request, attachments: [attachment, attachment] } },
     ...[
       {},
       { ...attachment, contentType: "other" },
@@ -263,18 +354,31 @@ it("Teams joins only visible TextBlocks, retaining their exact whitespace", asyn
         { type: "AdaptiveCard", body: [{ type: "Image", text: "hidden" }] },
         { type: "AdaptiveCard", body: [{ type: "TextBlock", text: "x", isVisible: false }] },
         { type: "AdaptiveCard", body: [{ type: "TextBlock", text: null }] },
-      ].map((value) => ({ ...attachment, content: canonicalJson(value) })),
-    ].map((value) => ({ request: { attachments: [value] } })),
+      ].map((value) => ({ ...attachment, content: canonicalJson({ ...card, ...value }) })),
+    ].map((value) => ({ ...plan, request: { ...plan.request, attachments: [value] } })),
   ])
     await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
 });
 
-it("Mastodon refuses missing or non-text statuses", async () => {
+it("Mastodon refuses missing or non-text statuses and any field beyond a direct status", async () => {
   const f = await fixture("mastodon");
-  for (const request of [null, {}, { status: 1 }])
-    await expect(f.send.preview(edited(f.wire, { request }))).rejects.toBeInstanceOf(
+  const plan = JSON.parse(f.wire.bytes);
+  for (const request of [
+    null,
+    {},
+    { ...plan.request, status: 1 },
+    { ...plan.request, visibility: "public" },
+    { ...plan.request, spoiler_text: "hidden" },
+    { ...plan.request, poll: { options: ["a", "b"], expires_in: 60 } },
+    { ...plan.request, media_ids: ["1"] },
+    { ...plan.request, in_reply_to_id: "1" },
+  ])
+    await expect(f.send.preview(edited(f.wire, { ...plan, request }))).rejects.toBeInstanceOf(
       ChannelParseError,
     );
+  await expect(f.send.preview(edited(f.wire, { ...plan, extra: 1 }))).rejects.toBeInstanceOf(
+    ChannelParseError,
+  );
 });
 
 it("Discord includes the visible embed footer and refuses unsupported or oversized visible fields", async () => {
@@ -291,11 +395,30 @@ it("Discord includes the visible embed footer and refuses unsupported or oversiz
     { content: "x", embeds: [{ footer: { text: "f".repeat(2049) } }] },
   ])
     await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
+  const plan = JSON.parse(f.wire.bytes);
+  for (const value of [
+    { ...plan, content: 1 },
+    { ...plan, content: "x".repeat(2001) },
+    { ...plan, embeds: null },
+    { ...plan, embeds: [] },
+    { ...plan, embeds: [plan.embeds[0], plan.embeds[0]] },
+    { ...plan, embeds: [{ footer: { text: "f".repeat(2049) } }] },
+    { ...plan, embeds: [{ footer: { ...plan.embeds[0].footer, icon_url: "https://x.example" } }] },
+    { ...plan, components: [{ type: 1, components: [] }] },
+    { ...plan, poll: { question: { text: "q" }, answers: [] } },
+    { ...plan, allowed_mentions: { parse: ["everyone"] } },
+    { ...plan, enforce_nonce: false },
+    { ...plan, nonce: "bad nonce" },
+  ])
+    await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
+  expect(await f.send.preview(edited(f.wire, { ...plan, content: "y" }))).toBe(
+    `y\n${AGENT_FOOTER}`,
+  );
 });
 
-it("direct previews the signed message and refuses a payload that isn't JSON", async () => {
-  for (const payload of ["not json", "\u00ff\u00fe"]) {
-    const jws = `e30.${Buffer.from(payload, "latin1").toString("base64url")}.c2ln`;
+it("direct previews the signed message and refuses a payload that isn't JSON or hides text", async () => {
+  for (const payload of ["not json", "\u00ff\u00fe", '{"x":"a\u202eb"}', '{"x":"a\u3164b"}']) {
+    const jws = `e30.${Buffer.from(payload, payload.startsWith("{") ? "utf8" : "latin1").toString("base64url")}.c2ln`;
     const bytes = envelope(jws);
     await expect(
       directPreview({ bytes, mediaType: "application/ld+json", digest: digestBytes(bytes) }),
@@ -344,4 +467,58 @@ it("refuses hostile wire shapes and getters without evaluating them", () => {
   expect(previewText(" \t🙂\n ")).toBe(" \t🙂\n ");
   // Emoji ZWJ sequences are ordinary text.
   expect(previewText("👩\u200D💻")).toBe("👩\u200D💻");
+  for (const jws of ["", "a.b", "a.b.c.d", "a.b+.c"])
+    expect(() => signedMessage(jws, 65536)).toThrow(ChannelParseError);
+  // Invisible characters that a preview could hide text with.
+  for (const text of [
+    "a\uFE0F",
+    "a\uFE0E",
+    "a\u{E0100}",
+    "\u3164",
+    "\u115F",
+    "\u1160",
+    "\uFFA0",
+    "\u2800",
+    "\u2028",
+    "\u2029",
+    "\u034F",
+    "\u2060",
+    "\uFEFF",
+    "\uE000",
+    "😀\u200D\u200D😀",
+    "\u200D😀",
+    "😀\u200D",
+    "a\u200Db",
+  ])
+    expect(() => previewText(text), JSON.stringify(text)).toThrow(ChannelParseError);
+  for (const text of [
+    "❤\uFE0F",
+    "1\uFE0F\u20E3",
+    "👍🏽",
+    "👁\uFE0F\u200D🗨\uFE0F",
+    "👨\u200D👩\u200D👧",
+    "🧑🏽\u200D💻",
+    "☺\uFE0E",
+  ])
+    expect(previewText(text)).toBe(text);
+});
+
+it("direct render refuses a raw payload that differs from what the verifier returned", async () => {
+  const proposal = signed();
+  const other = signed({ ...message, id: "urn:example:message:other" });
+  const direct = createInMemoryDirectBinding({
+    tokens: new RecordingTokenProvider(),
+    // A verifier that normalises or substitutes its result must not pass a different payload.
+    verify: vi.fn(async () => proposal.message),
+    now: () => at,
+  });
+  await expect(
+    direct.send.render(
+      { message: proposal.message, compactJws: other.compactJws },
+      direct.carriage as CarriageProfile,
+    ),
+  ).rejects.toThrow(ChannelParseError);
+  expect((await direct.send.render(proposal, direct.carriage as CarriageProfile)).bytes).toBe(
+    envelope(proposal.compactJws),
+  );
 });

@@ -24,8 +24,9 @@ Mismatch or parser exception means refused(preview-mismatch), with the same
 tamper-suspected and decision audit handling as wire-mismatch. Never substitute a
 free-text summary, HTML alternative or renderable-derived preview. Email includes
 To, Subject and decoded text/plain with footer (CRLF to LF only). Matrix uses body;
-Teams joins card text blocks; Mastodon uses status; Discord includes content and
-embed footer. Direct's native envelope has no visible text and previews as empty.
+Teams uses its card text block; Mastodon uses status; Discord includes content and
+embed footer. Envelope carriages (email, Teams, native Matrix) append the complete
+signed message; Direct previews as the signed message itself.
 Preserve uncertain obligations when refusing a resend. Preview parsers must be pure,
 bounded, hostile-input hardened and throw ChannelParseError on refusal.
 
