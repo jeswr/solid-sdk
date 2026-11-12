@@ -13,7 +13,13 @@ import { createConnectorsJob } from "./connectors.js";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
-import type { AuthenticatedComposition, Daemon, DaemonAccount, DaemonOptions } from "./types.js";
+import type {
+  AuthenticatedComposition,
+  Daemon,
+  DaemonAccount,
+  DaemonOptions,
+  ProposalResult,
+} from "./types.js";
 import { PodWorkspace } from "./workspace.js";
 
 export const POLL_MS = 30_000;
@@ -64,6 +70,7 @@ export async function composeDaemon(options: {
     const { storage } = await createPodClient({ fetch: auth.fetch, storage: options.storageRoot });
     const workspace = new PodWorkspace({
       io: auth.fetch,
+      storage,
       root: storage.root,
       ownerWebId: options.ownerWebId,
       privateTypeIndex: options.privateTypeIndex,
@@ -152,6 +159,18 @@ export function createDaemon(o: DaemonOptions): Daemon {
         ...task,
       });
   }
+  /** Whether the ledger holds evidence that an earlier pass reached this result's projection. */
+  function auditedEarlier(result: ProposalResult): boolean {
+    const calls = new Set(result.calls.map((call) => call.id));
+    const proposals = new Set(result.proposals.map((proposal) => proposal.id));
+    return o.audit
+      .entries()
+      .some(
+        ({ record }) =>
+          (record.type === "model-call" && calls.has(record.id)) ||
+          (record.type === "proposal" && proposals.has(record.id)),
+      );
+  }
   async function accountPass(account: DaemonAccount) {
     const cursor = await o.checkpoints.get(account.id);
     let next: string | undefined;
@@ -220,8 +239,38 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const triage = triageSchema.parse(extraction.data);
       await o.workspace.triage(source, triage);
       let result = await o.proposalResults.get(key);
-      if (result) result = checkedProposalResult(result);
-      else {
+      if (result) {
+        const cached = checkedProposalResult(result);
+        result = cached;
+        const legacy = cached.proposals.filter(
+          (proposal) => o.workspace.proposalLocation(proposal.id) !== proposal.id,
+        );
+        if (legacy.length > 0) {
+          const published: boolean[] = [];
+          for (const proposal of legacy)
+            published.push(
+              o.workspace.legacyProposal(proposal.id) &&
+                (await o.workspace.legacyProposalPublished(proposal.id)),
+            );
+          if (auditedEarlier(cached) || published.includes(true)) {
+            // An earlier release projected this result into the outbox before auditing or
+            // publishing it. Keep its IDs end to end: re-projection is then idempotent, while
+            // a repaired ID would add a second outbox entry for the same proposal.
+            if (published.includes(false))
+              throw new Error("Legacy proposal already projected; manual migration needed");
+          } else {
+            result = checkedProposalResult({
+              calls: cached.calls,
+              proposals: cached.proposals.map((proposal) => ({
+                ...proposal,
+                id: o.workspace.proposalLocation(proposal.id),
+              })),
+            });
+            // No evidence of projection: repair durably before the outbox sees the new IDs.
+            await o.proposalResults.put(key, result);
+          }
+        }
+      } else {
         const flagged = await o.isFlagged(account.id, thread);
         // A structured part is a processing hint; it never authenticates a sender.
         if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
@@ -268,14 +317,14 @@ export function createDaemon(o: DaemonOptions): Daemon {
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      const proposalRef =
-        result.proposals.length === 1 && result.proposals[0]
-          ? o.workspace.proposalLocation(result.proposals[0].id)
-          : undefined;
+      // Model-call evidence names the proposal ID that is projected and published.
+      const proposalRef = result.proposals.length === 1 ? result.proposals[0]?.id : undefined;
       await calls(result.calls, task, proposalRef);
       for (const entry of entries) {
         const proposal = entry.proposal;
-        await o.workspace.proposal(proposal);
+        if (o.workspace.proposalLocation(proposal.id) === proposal.id)
+          await o.workspace.proposal(proposal);
+        else await o.workspace.confirmLegacyProposal(proposal);
         const terms = proposalApprovalTerms(entry);
         await append({
           type: "proposal",
