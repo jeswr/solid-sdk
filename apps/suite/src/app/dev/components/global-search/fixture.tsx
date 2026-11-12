@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, Input, Label, TooltipProvider } from "@jeswr/suite-ui";
+import { Button, Input, Label, suiteApps, TooltipProvider } from "@jeswr/suite-ui";
 import { useMemo, useState } from "react";
 import type { SearchResult, SearchSource } from "../../../../shell/lib/search-results";
 import { CommandPalette } from "../../../../shell/search/command-palette";
@@ -58,6 +58,10 @@ const syntheticResults: SearchResult[] = [
     parent: "My data",
   },
 ];
+// Keep backlog visibility testable as real apps become available.
+const backlogApps = suiteApps.map((app) =>
+  app.slug === "calendar" ? { ...app, status: "backlog" as const } : app,
+);
 function ScopedShortcut({ enabled }: { enabled: boolean }) {
   const [message, setMessage] = useState("");
   useShortcut({
@@ -128,7 +132,16 @@ function FixtureContent({
           value={state}
           onChange={(event) => setState(event.target.value)}
         >
-          {["ready", "slow", "error", "empty", "results", "results-error"].map((value) => (
+          {[
+            "ready",
+            "slow",
+            "error",
+            "empty",
+            "results",
+            "results-error",
+            "backlog",
+            "backlog-visible",
+          ].map((value) => (
             <option key={value}>{value}</option>
           ))}
         </select>
@@ -168,6 +181,8 @@ function FixtureContent({
       <CommandPalette
         open={palette}
         onOpenChange={setPalette}
+        apps={state === "backlog" || state === "backlog-visible" ? backlogApps : suiteApps}
+        showBacklog={state === "backlog-visible"}
         createActions={[
           {
             id: "new-document",
