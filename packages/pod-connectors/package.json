@@ -343,6 +343,8 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-dpop": "workspace:*",
+    "@jeswr/solid-health": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",

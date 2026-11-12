@@ -1,0 +1,23 @@
+# AUTHORED-BY Claude Opus 5.5
+# Node-level composition for the exported validation shape (./health.shacl.ttl).
+# SHACL targets do not inherit, so a node typed only health:StepCountObservation,
+# health:SleepObservation or health:HeartRateObservation is not a focus node of
+# hsh:ObservationShape. The federation health sector composes its subtype shapes
+# with `sh:node hsh:ObservationShape` so the Observation MUSTs (code, patient,
+# effective time, value, UCUM unit) still apply.
+# federation-codegen admission rejects that composition in codegen/health.shapes.ttl
+# ("sh:node: no runtime projection"), and rejects repeating the Observation
+# property constraints on the subtype shapes ("field claims a runtime structural
+# predicate"). The generated runtime already enforces the Observation composite
+# when it parses a subtype; only the exported SHACL artefact lacked it.
+# scripts/build-shacl.mjs therefore merges src/generated/shapes.ttl with exactly
+# these triples (parsed with n3, written with n3.Writer) into dist/health.shacl.ttl.
+# Every subject and object must be a NodeShape of the generated shapes, and only
+# sh:node is allowed here; the build fails otherwise. Generator gap: tracker
+# inbox note personal-connectors-codegen-node-composition (parent epic sst-ild).
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix hsh: <https://jeswr.org/ns/sectors/health/import-shapes#> .
+
+hsh:HeartRateShape sh:node hsh:ObservationShape .
+hsh:StepsShape sh:node hsh:ObservationShape .
+hsh:SleepShape sh:node hsh:ObservationShape .
