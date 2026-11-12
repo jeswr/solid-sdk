@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { DelayedDeletes } from "../../src/apps/tasks/state/delayed-delete";
-import { OfflineTaskStore, TasksOffline } from "../../src/apps/tasks/state/offline";
+import {
+  OfflineTaskStore,
+  SKIPPED_MESSAGE,
+  TasksOffline,
+} from "../../src/apps/tasks/state/offline";
 import { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { now, storage, webId } from "./pod";
 
@@ -687,6 +691,41 @@ it("keeps a queued move's source until its destination create has replayed", asy
   expect(f.outbox.pending()).toEqual([]);
   expect(f.pod.files.has(task.url)).toBe(false);
   expect((await f.remote.readTask(moved.url)).task.title).toBe("Travelling");
+});
+
+it("keeps a queued move's source when Keep both leaves a child pointing at it", async () => {
+  const f = await setup();
+  const target = await f.cache.createProject("Home");
+  if (!target) throw new Error("Missing target");
+  await f.cache.loadTasks(target);
+  const task = await f.cache.createTask(f.inbox, { title: "Parent" });
+  const created = await f.cache.createTask(f.inbox, { title: "Child" });
+  if (!task || !created) throw new Error("Missing tasks");
+  await f.cache.updateTask(created, (value) => {
+    value.parent = task.task.id;
+  });
+  const child = f.cache.getSnapshot().tasks[f.inbox.url]?.items.find((t) => t.url === created.url);
+  if (!child) throw new Error("Missing child");
+  f.connect(false);
+  const moved = await f.cache.moveTaskToProject(task, target);
+  if (!moved) throw new Error("Missing moved task");
+  await f.remote.updateTask(child, (value) => {
+    value.title = "Remote child";
+  });
+  f.connect(true);
+  await f.adapter.reconnected();
+  const conflict = f.outbox.conflicts().find((item) => item.url === child.url);
+  if (!conflict) throw new Error("Missing child conflict");
+  await f.adapter.resolve(conflict.id, "both");
+  await vi.waitFor(() =>
+    expect(f.outbox.pending().filter((item) => item.status === "replaying")).toEqual([]),
+  );
+  // The original child still refers to the source, so the source must survive.
+  expect((await f.remote.readTask(child.url)).task.parent).toBe(task.task.id);
+  expect(f.pod.files.has(task.url)).toBe(true);
+  const held = f.outbox.pending().find((item) => item.url === task.url);
+  expect(held?.status).toBe("failed");
+  expect(held?.error).toContain(SKIPPED_MESSAGE);
 });
 
 it("retries a change that waited on a failed predecessor once the predecessor syncs", async () => {

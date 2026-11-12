@@ -12,6 +12,8 @@ import { TaskTracker } from "../lib/model/tracker";
 
 export const TASKS_REPLAY = "tasks.intent.v1";
 export const DEPENDENCY_MESSAGE = "An earlier Tasks change must sync first";
+export const SKIPPED_MESSAGE = "An earlier Tasks change was not applied, so this one was held back";
+const APPLIED_LIMIT = 1000;
 const savedSchema = z.object({
   body: z.string(),
   etag: z.string().nullable(),
@@ -24,6 +26,8 @@ const intentSchema = z.object({
   after: z.string().nullable(),
   etag: z.string().nullable(),
   dependsOn: z.array(z.string()).default([]),
+  /** Earlier changes in the same scope (a move) that must have applied, not only settled. */
+  requires: z.array(z.string()).default([]),
   revision: z.string(),
 });
 type Saved = z.infer<typeof savedSchema>;
@@ -79,6 +83,10 @@ export class TasksOffline {
   // A later queued delete must compare the server generation of its own earlier
   // write, including when the app reloads between deliveries.
   private readonly validators = new Map<string, string | null>();
+  // Queue entries whose own intent reached the pod. A follower may replay only after its
+  // prerequisites applied: one resolved by "Keep both" or discarded leaves the original
+  // reference unchanged, so a dependent source delete must not run.
+  private readonly applied = new Set<string>();
   private readonly changes = new Map<string, number>();
   private readonly versions = new Map<string, Saved>();
   private readonly documents = new Map<string, Saved>();
@@ -106,11 +114,13 @@ export class TasksOffline {
           webId: z.string(),
           documents: z.record(z.string(), savedSchema),
           validators: z.record(z.string(), z.string().nullable()).default({}),
+          applied: z.array(z.string()).default([]),
         })
         .parse(JSON.parse(options.storage?.getItem(this.key) ?? "null"));
       if (stored.webId === options.webId) {
         for (const [url, saved] of Object.entries(stored.documents)) this.documents.set(url, saved);
         for (const [key, etag] of Object.entries(stored.validators)) this.validators.set(key, etag);
+        for (const id of stored.applied) this.applied.add(id);
       }
     } catch {
       /* Missing, corrupt or unavailable cache is a miss. */
@@ -125,6 +135,7 @@ export class TasksOffline {
           webId: this.options.webId,
           documents: Object.fromEntries(this.documents),
           validators: Object.fromEntries(this.validators),
+          applied: [...this.applied].slice(-APPLIED_LIMIT),
         }),
       );
     } catch {
@@ -136,6 +147,7 @@ export class TasksOffline {
     this.documents.clear();
     this.versions.clear();
     this.validators.clear();
+    this.applied.clear();
     this.changes.clear();
     try {
       this.options.storage?.removeItem(this.key);
@@ -289,6 +301,7 @@ export class TasksOffline {
         .slice(-1)
         .map((item) => item.id)
         .concat(this.scope ?? []),
+      requires: [...(this.scope ?? [])],
     };
     const queued = await outbox.enqueue({
       op: creating ? "create" : method === "DELETE" ? "delete" : "write",
@@ -353,9 +366,24 @@ export class TasksOffline {
         void outbox?.retry(item.id).catch(() => {});
   }
   /** Every update is re-applied through typed accessors to a newly read document. */
+  private async entryId(delivery: Parameters<ReplayDelegate>[0]): Promise<string | undefined> {
+    const outbox = this.options.outbox();
+    for (const item of outbox?.pending() ?? []) {
+      if (item.url !== delivery.url || item.guard?.tag !== TASKS_REPLAY) continue;
+      const body = await outbox?.localBody(item.id);
+      if (body && equal([...body], [...(delivery.body ?? [])])) return item.id;
+    }
+    return undefined;
+  }
   readonly replay: ReplayDelegate = async (delivery, ctx) => {
     try {
+      // "Keep both" copies the change elsewhere, so the queued intent itself never applies.
+      const id = delivery.purpose === "resolve-both" ? undefined : await this.entryId(delivery);
       const result = await this.deliver(delivery, ctx);
+      if (id) {
+        this.applied.add(id);
+        this.save();
+      }
       (this.options.onSettled ?? this.settled)(delivery.url);
       this.resumeFollowers();
       return result;
@@ -371,15 +399,12 @@ export class TasksOffline {
     const intent = intentSchema.parse(
       JSON.parse(new TextDecoder().decode(delivery.body ?? new Uint8Array())),
     );
-    if (
-      intent.dependsOn.some((id) =>
-        this.options
-          .outbox()
-          ?.pending()
-          .some((item) => item.id === id),
-      )
-    )
+    const pending = this.options.outbox()?.pending() ?? [];
+    if (intent.dependsOn.some((id) => pending.some((item) => item.id === id)))
       throw new Error(DEPENDENCY_MESSAGE);
+    // A same-resource follower rebases on whatever its predecessor's resolution left. A
+    // scoped prerequisite (e.g. a child remap before a move deletes its source) must apply.
+    if (intent.requires.some((id) => !this.applied.has(id))) throw new Error(SKIPPED_MESSAGE);
     const assertions = z.object({ url: z.string() }).parse(delivery.assertions);
     if (
       intent.url !== assertions.url ||
