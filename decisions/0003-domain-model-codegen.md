@@ -48,6 +48,25 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
    new `@jeswr/rdf-serialize/wrapper` subpath. Every consumer already depends on
    rdf-serialize, and `escapeIri` (the write chokepoint those helpers call) lives there.
 
+## Admission coverage (generator lane A: sst-ild.4.3.1, sst-ild.4.3.4)
+
+| Input construct | Admission and runtime projection |
+|---|---|
+| `sh:class C` with direct named ontology individuals, C unprojected | Closed sorted IRI enum (`in` plus `guards.iriEnum: true`); intersect explicit `sh:in`; literal-union TypeScript type. Emitted SHACL lowers the class to `sh:in`. Invalid supplied writes throw existing `TypeError`; reads retain severity-graded drops. A Warning-graded concept class still becomes a strict runtime enum (nonmember writes throw, reads drop), while emitted `sh:in` retains `sh:Warning`: runtime membership enforcement is stricter than the advisory SHACL severity. Blank individuals and inferred subclasses are excluded. |
+| `sh:class C` with zero named individuals, a projected C, an explicit `sh:node`, or a configured composite link | Existing class/link rules; never invent an enum or bypass class conformance. Only used concept classes are exempt from NodeShape coverage; labels and definitions still apply. |
+| Several NodeShapes targeting the same canonical class and alias set | One entity under the class config; shape-IRI order; merge property constraints, retaining source severity and messages. Compatible same-path bounds/enums intersect; differing datatype/class/nodeKind/node/name/pattern or alternative paths, impossible counts/bounds, and empty enum intersections reject with both shapes named. Presence is fail-closed when a source has Violation-grade `minCount >= 1`. |
+| Duplicate property paths inside one NodeShape, mismatched alias focus sets across merged shapes, or anonymous property shapes reused across classes | Rejected; no overwrite, widening of legacy focus sets or cross-class skolem identity reuse. Shared anonymous properties within one class group keep one identity. |
+| Competing flat entity configs, or flat/composite claims to the same class | Rejected rather than selecting the first config. Existing composite ownership/tree checks still apply. |
+| `sh:and`, `sh:or`, `sh:not`, `sh:hasValue`, qualified shapes | Rejected, including constructs on additional merged safety shapes. These require lane B; the diet safety invariants remain closed. |
+| Ordered config `fields.<name>.ordered: { position: <IRI>, value: <IRI> }` | Exact distinct safe predicate keys; matching direct `sh:node` to one named, single-target item NodeShape. Item shapes are owned by ordered fields, never also flat/composite entity configs. No item aliases/merged shapes, extra properties, scalar link guards or unrepresented constraints. |
+| Ordered item position | Exactly `xsd:integer`, `minCount 1`, `maxCount 1`; optional safe-integer `minInclusive <= 1` (build starts at 1). Other position constraints reject. |
+| Ordered item value | Exactly one value (`minCount 1`, `maxCount 1`), a previously validated literal datatype or explicit `sh:IRI` with existing scalar guards. Every item constraint is fidelity checked. Defaults and set-only config policies reject. Data/accessor type is `readonly T[]` with a replacing setter, including composite node lenses. |
+| Ordered runtime | Numeric sorting; duplicate values/gaps preserved; duplicate positions or any invalid item reject at outer Violation grade, Warning/Info drop the whole field. Safe same-document http(s) NamedNodes distinct from document/owner subjects only; blank nodes reject consistently with composite traversal. Require data-graph item-class membership. Cap 256 items and 10,000 shared raw reads per ordered field; migration's existing aggregate cap still applies. |
+| Ordered RDF writes and normalized SHACL | Mint `<document>#<resolvedFieldName>-<n>` (positive decimal n without leading zeros), skipping occupied unrelated/shared IRIs; positions 1..n and item types. Replacing clears links and only the field's item-class/position/value triples on safe same-document nodes explicitly typed with the item class, matching that exact minted fragment pattern, distinct from document/owner subjects, and exclusively referenced by that owner/field. Preserve other nodes and unrelated/shared/foreign data. Setters/build throw before mutation on surviving counts outside outer minCount/maxCount at every severity. Generation rejects composite node fragments matching any ordered field's resolved item-fragment pattern on that entity. Normalized SHACL adds explicit item `sh:class` and `sh:nodeKind sh:IRI`: targetClass alone does not constrain `sh:node` values. Negative positions follow the optional lower bound; position uniqueness and caps are runtime policies. |
+
+All original shape triples remain visible to admission. Existing single-shape models and
+ordinary `sh:in` write behavior retain their generated bytes and runtime contract.
+
 ## Phase map
 
 | Phase | State | Workspace target | Bead |

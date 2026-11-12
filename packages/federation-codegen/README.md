@@ -21,7 +21,7 @@ only in the inlined JSON).
 
 ## What it generates
 
-For each `sh:NodeShape` in a domain's SHACL profile:
+For the configured entities in a domain's SHACL profile (grouping NodeShapes by target class):
 
 | Artifact | What it is |
 |---|---|
@@ -67,6 +67,113 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
 - **Determinism (§5):** `(generator artifact, input bytes) → output bytes`. Double-build + permuted
   input-order byte-equality is tested.
 
+Unprojected vocabulary concept classes with direct named ontology instances compile to
+closed, sorted IRI enumerations. The manifest uses `in` plus `guards.iriEnum: true`, the
+TypeScript field is a union of exact IRI strings, and emitted SHACL lowers `sh:class` to
+`sh:in`. Concepts need no `rdf:type` assertions in pod data. Explicit `sh:in` intersects
+the vocabulary set; zero named individuals and projected composite links retain the
+existing class/link behavior. Supplied nonmember writes throw the runtime's `TypeError`;
+reads retain severity-graded drops. Ordinary `sh:in` writes still drop invalid values.
+This also applies to a Warning-graded `sh:class` on a concept class: the runtime enum
+is strict, so supplied nonmember writes throw and reads drop nonmembers. The emitted
+`sh:in` retains `sh:Warning`; runtime membership enforcement is stricter than that
+advisory SHACL severity. Strictness cannot weaken silently: an advisory `sh:class` on a
+projected class that has named individuals fails generation, and `gen` compares against
+the committed `model.json` so a field that was a concept enum and would become
+unenforced fails (delete the committed `model.json` to accept that deliberately).
+Concept members excluded by the property's http(s) `sh:pattern` fail generation.
+
+**Validate against the emitted `shapes.ttl`, not the sector profile.** Lowering
+`sh:class C` to `sh:in` diverges from the sector SHACL in both directions: a
+runtime-written member with no `rdf:type C` fails the sector shape, while an IRI typed
+`C` in the pod that is not a named ontology individual (or a subclass instance) passes
+the sector shape but is dropped by the runtime.
+
+## Ordered collections
+
+Opt in per field with full predicate IRIs (also supported in composite node `fields`,
+including `rename`):
+
+```json
+{
+  "fields": {
+    "instructions": {
+      "ordered": {
+        "position": "http://schema.org/position",
+        "value": "http://schema.org/text"
+      }
+    }
+  }
+}
+```
+
+The owning property uses `sh:node` to one named item NodeShape:
+
+```turtle
+ex:RecipeShape a sh:NodeShape; sh:targetClass schema:Recipe;
+  sh:property [
+    sh:name "instructions"; sh:path schema:recipeInstructions;
+    sh:node ex:StepShape; sh:minCount 1
+  ] .
+ex:StepShape a sh:NodeShape; sh:targetClass schema:HowToStep;
+  sh:property [
+    sh:path schema:position; sh:datatype xsd:integer;
+    sh:minCount 1; sh:maxCount 1; sh:minInclusive 1
+  ], [
+    sh:path schema:text; sh:datatype xsd:string;
+    sh:minCount 1; sh:maxCount 1
+  ] .
+```
+
+| Input | Admission |
+|---|---|
+| Ordered config | Exactly `{ position, value }`, distinct safe absolute IRIs, distinct from the owning predicate and `rdf:type`; matching field and named `sh:node` required. |
+| Owning property | Direct, unaliased node link; optional `sh:nodeKind sh:IRI`, cardinality and severity. An explicit `sh:class` must equal the item's target class. Scalar constraints on the link reject, as do outer `sh:minCount`/`sh:maxCount` above 256 (`MAX_ORDERED_ITEMS`). A named property shape shared by several NodeShapes must be ordered with the same `{ position, value }` on every owner; sharing it with a plain or differently ordered owner rejects. |
+| Item NodeShape | Exactly one target class and exactly the two configured properties; no target aliases, merged item shapes, competing flat/composite ownership, or extra node constraints. Metadata is allowed. Item shapes are consumed by ordered fields, not emitted as separate entities. |
+| Position property | Exactly `xsd:integer`, `minCount 1`, `maxCount 1`; optional `nodeKind Literal` and `minInclusive` (safe integer ≤ 1 so writes starting at 1 conform). Other constraints reject. |
+| Item property severity | Optional `sh:severity` on the position or value property must be `sh:Violation`: the runtime enforces item properties at the outer severity, so an advisory item severity rejects instead of yielding laxer SHACL. |
+| Value property | Exactly one value (`minCount 1`, `maxCount 1`); an existing validated literal datatype or explicit `sh:IRI`, with the existing enum, pattern, length and numeric guards. Class/node links, aliases and extra properties reject. |
+| Config policies | Existing value `iriScheme`, `nonBlank`, `sanitizeText`, outer `requiredFailClosed`, and composite `rename` are supported. Defaults, set sorting/trimming/dropping, and unknown keys reject. |
+| Unsupported/missing/ambiguous encoding | `AdmissionError`; diagnostics identify the ordered field and item shape. Compilation and fidelity recheck the complete item contract; fidelity also rejects any non-nested field compiled from a constraint carrying `sh:node`, or a fail-closed non-concept `sh:class`, unless that field is ordered. |
+
+The manifest uses `collection: "ordered"`; its `kind`, `datatype`, `in`, and scalar
+guards constrain the item value. `ordered` records `itemClass`, `position`, `value`,
+optional `minPosition`, and outer `severity`. Outer cardinality counts linked items.
+Data and wrapper types use `readonly T[]`; assigning a new array replaces the field.
+Composite `nodes` lenses retain this contract.
+
+Runtime reads sort safe integer positions numerically, retain duplicate values, and permit
+gaps. Duplicate positions or any malformed item reject the entity at Violation severity;
+Warning/Info drop the entire field. A merged outer property rejects if any source is
+Violation. Strict composite-child validation still rejects every present violation.
+Named items must be safe http(s) IRIs in the same lexical document, distinct from the
+document and owner subjects; blank nodes reject,
+matching composite NamedNode traversal. Item class membership uses the existing bounded
+data-graph subclass walk. Fields cap at 256 items and 10,000 raw link/item/class reads.
+
+Writes mint `<document>#<resolvedFieldName>-<1-based index>`, assert the item class,
+and write positions 1..n. Invalid scalar values follow the existing datatype drop/sanitize
+policy; surviving values keep their relative order and receive consecutive positions.
+Oversized/nonarray inputs and surviving item counts outside outer `sh:minCount`/`sh:maxCount`
+throw before mutation, including omitted fields below their minimum, at every severity.
+Replacement clears links and only removes the item class, position and value triples from
+safe same-document nodes explicitly typed with the item class, whose fragments match exactly
+`<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner
+subjects, and exclusively referenced by that owner/field. Other nodes and unrelated predicates/types
+survive, and a cleaned-up item IRI that keeps any other triple is not reused. Minting skips
+occupied unrelated/shared IRIs. A setter refuses (`TypeError`) to replace present links that
+fail validation, because the getter cannot distinguish them from an absent field; the
+runtime's `resetOrderedField(wrapper, name, values = [])` is the explicit discard. Composite node fragments matching any
+ordered field's resolved item-fragment pattern on that entity are rejected during generation.
+
+Two deliberate refinements keep the encoding interoperable: normalized SHACL adds explicit
+`sh:class <itemClass>` and `sh:nodeKind sh:IRI` on the owning property, because
+`sh:targetClass` alone does not constrain values of `sh:node`. This is the requested
+typed-item runtime policy made explicit for other validators. Position uniqueness, safety
+and resource caps remain runtime policies. Negative positions are valid only when the
+profile's optional lower bound permits them; use `sh:minInclusive 1` for positive positions.
+No ordered opt-in means unchanged generation bytes.
+
 ## The bookmarks pilot + the parity bar
 
 [`examples/bookmark/`](./examples/bookmark/README.md) points to the production
@@ -95,7 +202,10 @@ No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alia
 - One NodeShape can have several `sh:targetClass` IRIs when exactly one is explicitly
   declared `owl:Class` in the ontology. It becomes the canonical `typeIris` member; extra
   targets become sorted `aliasTypeIris` (at most four). Zero or several declared OWL
-  classes, non-IRI targets, and duplicate canonical shapes fail admission. A single target
+  classes and non-IRI targets fail admission. Shapes sharing a canonical target and the
+  same target alias set merge in shape-IRI order; conflicting property constraints fail
+  admission with both shapes named, including a source `sh:in` decoded with a value kind
+  or datatype that differs from the conjoined field. A single target
   retains the existing OWL/RDFS behavior.
 - `sh:path [ sh:alternativePath ( p1 … pn ) ]` accepts 2–4 distinct IRI members when exactly
   one is declared as a property by the ontology adapter. That member becomes `predicate`;
@@ -128,9 +238,10 @@ projections and reached children; any changed recognition or parsed result throw
 `MigrationError` before emission. It includes unreached typed nodes, and shares a 10,000
 read/visit budget across scanning, class walks and re-parsing. The input store is unchanged.
 
-`parseShapes(ttl, shapesBase, ontology?, ontologyQuads?)` uses the adapter's normalized ontology
-to resolve aliases and raw ontology quads to check composite subclass ancestry. `generateModel`
-supplies both automatically; the legacy third-argument quad form uses the OWL/RDFS adapter.
+`parseShapes(ttl, shapesBase, ontology?, ontologyQuads?, config?)` uses the adapter's normalized ontology
+to resolve aliases and raw ontology quads for composite subclass ancestry and concept individuals.
+The optional config identifies projected targets and composite links before selecting enums.
+`generateModel` supplies these automatically; the legacy third-argument quad form uses the OWL/RDFS adapter.
 Shapes stay deterministic
 under triple permutation and blank-node relabelling. SHACL complex-path roots **remain blank
 nodes with deterministic labels**: turning one into an IRI would change its meaning to a

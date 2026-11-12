@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * THE P0 EXIT CRITERION — the build-time FIDELITY ASSERTION (design §7.2). model.json
  * is a VERIFIED PROJECTION of shapes.ttl, not a bespoke schema: at generation time
@@ -23,8 +25,10 @@ import {
   expandDatatype,
   isCompositeEntity,
   literalMapper,
+  type ManifestEntity,
   type ManifestField,
   type ManifestFieldGuards,
+  type ManifestNode,
   type ModelManifest,
 } from "@jeswr/model-runtime";
 import {
@@ -35,10 +39,14 @@ import {
   isHttpPattern,
   linkTargetConforms,
 } from "./compile.js";
+import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
+import { compareStrings, SH } from "./rdf.js";
 import {
+  enumValues,
   implicitClassTargets,
   localName,
   type NormalizedShapes,
+  propertySources,
   type ShapeConstraint,
   type ShapeScalar,
   sharedAliasPredicates,
@@ -53,7 +61,7 @@ interface FieldProjection {
   datatype: string | null;
   minCount: number | null;
   maxCount: number | null;
-  collection: boolean;
+  collection: "set" | "ordered" | null;
   /** JSON of the closed `sh:in` value set, or null when the field has none. */
   inValues: string | null;
 }
@@ -73,7 +81,7 @@ function norm(datatype: string | undefined): string | null {
 }
 
 function sortFields(fields: FieldProjection[]): FieldProjection[] {
-  return fields.slice().sort((a, b) => a.predicate.localeCompare(b.predicate));
+  return fields.slice().sort((a, b) => compareStrings(a.predicate, b.predicate));
 }
 
 function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]> {
@@ -88,8 +96,8 @@ function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]>
       datatype: norm(c.datatype),
       minCount: c.minCount ?? null,
       maxCount: c.maxCount ?? null,
-      collection: c.maxCount !== 1,
-      inValues: inJson(c.in),
+      collection: c.ordered ? "ordered" : c.maxCount !== 1 ? "set" : null,
+      inValues: inJson(enumValues(c)),
     }));
     out.set(shape.targetClass, sortFields(fields));
   }
@@ -110,7 +118,7 @@ function projectManifest(manifest: ModelManifest): Map<string, FieldProjection[]
       datatype: norm(f.datatype),
       minCount: f.minCount ?? null,
       maxCount: f.maxCount ?? null,
-      collection: f.collection === "set",
+      collection: f.collection ?? null,
       inValues: inJson(f.in as ShapeScalar[] | undefined),
     }));
     for (const typeIri of entity.typeIris) out.set(typeIri, sortFields(fields));
@@ -255,6 +263,7 @@ function guardIsShapeDerived(
   guard: string,
 ): boolean {
   if (constraint === undefined) return false;
+  if (guard === "iriEnum") return guards.iriEnum === true && constraint.conceptIris !== undefined;
   if (guard === "iriScheme")
     return (
       guards.iriScheme === iriSchemeForPattern(constraint.pattern) &&
@@ -270,12 +279,7 @@ function guardIsShapeDerived(
   // Severity-aware (G1): a required guard is shape-derived only when the minCount ≥ 1
   // constraint is Violation-graded (or severity absent) AND the guard fails closed.
   if (guard === "requiredFailClosed")
-    return (
-      guards.requiredFailClosed === true &&
-      constraint.minCount !== undefined &&
-      constraint.minCount >= 1 &&
-      isFailClosedSeverity(constraint.severity)
-    );
+    return guards.requiredFailClosed === true && isPresenceMust(constraint);
   if (guard === "minInclusive")
     return constraint.minInclusive !== undefined && guards.minInclusive === constraint.minInclusive;
   if (guard === "maxInclusive")
@@ -289,6 +293,7 @@ function guardIsShapeDerived(
 /** Re-derive ALL required scalar guards from SHACL, independently of the compiler. */
 function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
   const required: ManifestFieldGuards = {};
+  if (c.conceptIris !== undefined) required.iriEnum = true;
   if (isPresenceMust(c)) required.requiredFailClosed = true;
   if (c.kind === "iri" && isHttpPattern(c.pattern)) {
     required.iriScheme = iriSchemeForPattern(c.pattern);
@@ -390,10 +395,8 @@ function assertTraceability(compiled: CompileResult, shapes: NormalizedShapes): 
 
 /** True for a shape property that requires PRESENCE at Violation grade (a runtime MUST). */
 function isPresenceMust(constraint: ShapeConstraint): boolean {
-  return (
-    constraint.minCount !== undefined &&
-    constraint.minCount >= 1 &&
-    isFailClosedSeverity(constraint.severity)
+  return propertySources(constraint).some(
+    (c) => (c.minCount ?? 0) >= 1 && isFailClosedSeverity(c.severity),
   );
 }
 
@@ -510,7 +513,11 @@ function assertCompositeFidelity(
         continue;
       }
 
-      if (node.name !== composite.root && constraint.hasClass !== undefined) {
+      if (
+        node.name !== composite.root &&
+        constraint.hasClass !== undefined &&
+        constraint.conceptIris === undefined
+      ) {
         throw new FidelityError(
           `child shape sh:class constraint ${field.predicate} requires a projected composite link`,
         );
@@ -525,8 +532,8 @@ function assertCompositeFidelity(
         datatype: norm(constraint.datatype),
         minCount: constraint.minCount ?? null,
         maxCount: constraint.maxCount ?? null,
-        collection: constraint.maxCount !== 1,
-        inValues: inJson(constraint.in),
+        collection: constraint.ordered ? "ordered" : constraint.maxCount !== 1 ? "set" : null,
+        inValues: inJson(enumValues(constraint)),
       };
       const manifestProj: FieldProjection = {
         name: field.name,
@@ -536,7 +543,7 @@ function assertCompositeFidelity(
         datatype: norm(field.datatype),
         minCount: field.minCount ?? null,
         maxCount: field.maxCount ?? null,
-        collection: field.collection === "set",
+        collection: field.collection ?? null,
         inValues: inJson(field.in as ShapeScalar[] | undefined),
       };
       const diffs = diffField(shapeProj, manifestProj).filter((d) => !d.startsWith("name:"));
@@ -574,6 +581,58 @@ function assertCompositeFidelity(
   }
 }
 
+const IRI_NODE_KINDS = new Set([`${SH}IRI`, `${SH}BlankNodeOrIRI`]);
+
+/**
+ * The structural projection is derived from the MERGED constraint, so a merge mistake
+ * would pass it by construction. Re-check the conjunction against every original
+ * source property shape: it must keep each explicitly stated kind, datatype, class,
+ * node and pattern, be at least as tight on every bound, and enumerate only members
+ * of each source enum decoded with the same RDF term kind (an IRI is never the
+ * same-spelled string literal).
+ */
+function assertConjunctionCoversSources(c: ShapeConstraint): void {
+  const sources = propertySources(c);
+  if (sources.length < 2) return;
+  const fail = (source: ShapeConstraint, what: string): never => {
+    throw new FidelityError(
+      `merged property ${c.pathIri} does not cover source ${source.shapeIri}: ${what}`,
+    );
+  };
+  const values = enumValues(c);
+  for (const source of sources) {
+    if (source.datatype !== undefined && norm(source.datatype) !== norm(c.datatype))
+      fail(source, "datatype");
+    if (source.datatype !== undefined && c.kind !== "literal") fail(source, "value kind");
+    if (source.nodeKind !== undefined) {
+      const expected = IRI_NODE_KINDS.has(source.nodeKind)
+        ? "iri"
+        : source.nodeKind === `${SH}Literal`
+          ? "literal"
+          : undefined;
+      if (expected !== undefined && expected !== c.kind) fail(source, "node kind");
+    }
+    for (const key of ["hasClass", "node", "pattern"] as const)
+      if (source[key] !== undefined && source[key] !== c[key]) fail(source, key);
+    for (const key of ["minCount", "minInclusive", "minLength"] as const) {
+      const bound = source[key];
+      if (bound !== undefined && !((c[key] ?? Number.NEGATIVE_INFINITY) >= bound))
+        fail(source, key);
+    }
+    for (const key of ["maxCount", "maxInclusive"] as const) {
+      const bound = source[key];
+      if (bound !== undefined && !((c[key] ?? Number.POSITIVE_INFINITY) <= bound))
+        fail(source, key);
+    }
+    if (source.in !== undefined) {
+      if (source.kind !== c.kind || norm(source.datatype) !== norm(c.datatype))
+        fail(source, "sh:in decoded with a different value kind");
+      if (values === undefined || values.some((v) => !source.in?.includes(v)))
+        fail(source, "sh:in");
+    }
+  }
+}
+
 /**
  * Assert model.json is a faithful, fully-traceable projection of shapes.ttl.
  * Throws {@link FidelityError} on any mismatch (fails the build). This is the P0
@@ -582,6 +641,62 @@ function assertCompositeFidelity(
  * is projected inside that composite, never also as a flat entity).
  */
 export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult): void {
+  // Validate the complete item shape again, then independently check every descriptor
+  // and project its scalar constraints through the ordinary structural/guard checks.
+  const itemTargets = orderedItemTargets(shapes);
+  const owners = compiled.manifest.entities.flatMap<ManifestEntity | ManifestNode>((e) =>
+    isCompositeEntity(e) ? e.nodes : [e],
+  );
+  for (const owner of owners)
+    for (const field of owner.fields) {
+      const c = shapes.nodeShapes
+        .find((s) => owner.typeIris.includes(s.targetClass))
+        ?.properties.find((p) => p.pathIri === field.predicate);
+      if (field.ordered !== undefined && !c?.ordered)
+        throw new FidelityError(`unsourced ordered field ${field.name}`);
+      // A flat (non-nested) field must never silently drop a node/class constraint:
+      // sh:node is projected only by an ordered field (composite links are `nested`),
+      // and a fail-closed sh:class only by an ordered field or a concept enum.
+      if (field.kind === "nested" || c === undefined || field.collection === "ordered") continue;
+      if (c.node !== undefined)
+        throw new FidelityError(`flat field ${field.name} drops sh:node ${c.node}`);
+      if (
+        c.hasClass !== undefined &&
+        c.conceptIris === undefined &&
+        propertySources(c).some((source) => isFailClosedSeverity(source.severity))
+      )
+        throw new FidelityError(`flat field ${field.name} drops sh:class ${c.hasClass}`);
+    }
+  for (const shape of shapes.nodeShapes)
+    for (const c of shape.properties) {
+      if (!c.ordered) continue;
+      const { descriptor } = resolveOrdered(shapes, c);
+      const field = owners
+        .find((o) => o.typeIris.includes(shape.targetClass))
+        ?.fields.find((f) => f.predicate === c.pathIri);
+      if (
+        field?.collection !== "ordered" ||
+        !field.ordered ||
+        Object.keys(field.ordered).length !== Object.keys(descriptor).length ||
+        Object.entries(descriptor).some(
+          ([key, value]) => field.ordered?.[key as keyof typeof descriptor] !== value,
+        )
+      )
+        throw new FidelityError(
+          `ordered field ${c.name ?? c.pathIri} changes or drops its item shape ${c.node}`,
+        );
+    }
+  shapes = {
+    ...shapes,
+    nodeShapes: shapes.nodeShapes
+      .filter((s) => !itemTargets.has(s.targetClass))
+      .map((s) => ({
+        ...s,
+        properties: s.properties.map((c) =>
+          c.ordered ? orderedScalar(c, resolveOrdered(shapes, c).value) : c,
+        ),
+      })),
+  };
   if (implicitClassTargets(shapes.quads).length)
     throw new FidelityError("implicit class targets are not modeled by the runtime");
   if (sharedAliasPredicates(shapes).length)
@@ -591,6 +706,9 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   // Independently mirror the compiler's pre-projection satisfiability checks.
   for (const shape of shapes.nodeShapes) {
     for (const c of shape.properties) {
+      assertConjunctionCoversSources(c);
+      if (c.conceptIris !== undefined && (c.kind !== "iri" || enumValues(c)?.length === 0))
+        throw new FidelityError(`property ${c.shapeIri} has an invalid concept IRI enumeration`);
       if (c.kind === "iri" && c.datatype !== undefined) {
         throw new FidelityError(
           `property ${c.shapeIri} has an incompatible datatype and IRI node kind`,

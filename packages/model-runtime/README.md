@@ -46,6 +46,15 @@ the spelling they will store. The guard inventory is:
   At the root, a `requiredFailClosed` failure rejects the record; an optional failure drops
   the field. Nested children validate all present values before projection.
   Closed `in` enums filter reads and writes, including live-set additions; invalid writes drop.
+  Ontology-derived concept enums add `guards.iriEnum: true`: supplied nonmember values
+  throw `TypeError` on build, setters and live-set additions. Reads use the same exact
+  membership checks and severity-graded drops; concept types need not be in pod data.
+  Even a Warning-graded concept `sh:class` becomes a strict runtime enum: supplied
+  nonmember writes throw and reads drop nonmembers, while emitted `sh:in` retains
+  `sh:Warning`. Runtime membership enforcement is stricter than that advisory SHACL severity.
+  With `iriScheme`, every concept member must satisfy the scheme guard (manifest validation).
+  The generated `shapes.ttl` lowers `sh:class` to `sh:in`: validate pod data for these fields
+  against it, not against the sector SHACL profile.
 - **Singleton / default semantics** — `default`, `materializeDefault`, `defaultNow`, `emptyStringDrop`.
 - **Control-char sanitization** on every untrusted text write (C0/C1 stripped; tab/newline/cr preserved).
 - **One serialization boundary**, after alias migration: `serializeTurtle` checks every
@@ -80,6 +89,10 @@ new bookmark.Wrapper(subjectIri, store, factory); // direct typed accessor (exte
 `build` preserves the facade's non-validating write contract: missing/invalid required values
 are dropped and may leave a typed shell. Call `parse(resourceUrl, builtStore)` and require a defined
 result before publishing when MUST validation is needed. `serialize` uses the same build contract.
+Supplied invalid concept-enum values are the strict exception: `guards.iriEnum: true`
+throws `TypeError` before writing that value. Omitted fields retain the absence contract.
+Ordered fields also throw when the surviving item count violates their outer `sh:minCount`
+or `sh:maxCount`, including omitted fields below their minimum.
 
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
@@ -99,6 +112,60 @@ The XSD string family (`normalizedString`, `token`, `language`, `NMTOKEN`, `Name
 Whitespace-normalizing types conservatively require normalized spelling; invalid lexical
 forms drop without sanitization. Dates translate validated XSD years to ECMAScript syntax
 on read, so expanded, negative and zero years round-trip within the JS Date range.
+
+## Ordered collections
+
+The generator accepts `fields.instructions.ordered = { position: "http://schema.org/position",
+value: "http://schema.org/text" }` for a property referencing an item NodeShape. Its
+manifest projection is:
+
+```json
+{
+  "name": "instructions",
+  "predicate": "http://schema.org/recipeInstructions",
+  "kind": "literal",
+  "datatype": "http://www.w3.org/2001/XMLSchema#string",
+  "collection": "ordered",
+  "ordered": {
+    "itemClass": "http://schema.org/HowToStep",
+    "position": "http://schema.org/position",
+    "value": "http://schema.org/text",
+    "minPosition": 1,
+    "severity": "Violation"
+  }
+}
+```
+
+```ts
+const store = recipe.build(resourceUrl, { instructions: ["Boil water", "Add pasta", "Add pasta"] });
+const wrapper = new recipe.Wrapper(recipe.subject(resourceUrl), store, DataFactory);
+wrapper.instructions = ["New first step", "New second step"];
+// Getter: readonly string[] snapshot; assigning replaces. Local array mutation is not persisted.
+
+// The getter returns undefined for an absent AND for a present-but-invalid field, so the
+// setter refuses (TypeError) to replace links that fail validation: a snapshot edit such as
+// `w.instructions = [...(w.instructions ?? []), "Serve"]` after an untrusted append would
+// otherwise delete every valid item. Discard invalid data only explicitly:
+resetOrderedField(wrapper, "instructions", ["Serve"]); // values default to [] (clear)
+```
+
+| Contract | Behavior |
+|---|---|
+| Item admission | Same lexical document, safe absolute http(s) NamedNode, distinct from the document and owner subjects; blank/literal/foreign/unsafe links fail. Require the item class through actual data-graph types/subclasses. |
+| Position | Exactly one `xsd:integer` term, validated by the existing integer mapper (safe-integer precision cap); apply optional `minPosition`. Numeric ascending order, gaps allowed, duplicate positions invalid even for equal values. Negative integers are allowed without a restricting lower bound. |
+| Value | Exactly one term, read/written with the same datatype, enum, IRI scheme, pattern, length, range and text sanitization rules as scalar fields. Duplicate values survive. No new string-size or lexical policy is invented. |
+| Failure grading | Any invalid item, duplicate position or outer cardinality failure rejects at Violation severity (even on a present optional field); Warning/Info omit the whole field. `requiredFailClosed` still enforces absence. Strict `sh:node` children retain their all-constraints policy. |
+| Bounds | `MAX_ORDERED_ITEMS = 256` per field, plus 10,000 shared raw link/position/value/class reads per ordered read. Existing shared migration budgets also apply. Reads fail closed; oversized/nonarray writes and surviving item counts outside outer `sh:minCount`/`sh:maxCount` throw `TypeError` before mutation, at every severity. Ordered `minCount`/`maxCount` above 256 fail manifest validation. |
+| Write identity | `<document>#<resolvedFieldName>-<n>`, where n is a positive decimal integer without leading zeros; occupied unrelated/shared IRIs, and cleaned-up item IRIs that still carry any other triple, are skipped and the item class is asserted. Invalid scalar writes drop members just as other collection writes do; surviving positions are consecutive. |
+| Replacement | Clear owner links; remove only matching item class, position and value triples from safe same-document nodes explicitly typed with the item class, matching exactly `#<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner subjects, and exclusively referenced by that owner/field. Preserve every other node's triples, unrelated predicates/types, and shared/foreign data; preserved triples stay on their old node, whose IRI is not reused for a new member. |
+| Accessors/migration | Fresh array snapshots with a replacing setter; `undefined`/empty arrays clear when the minimum permits. When owner links are present but fail validation, every setter assignment (including `undefined`/`[]`) throws `TypeError` before mutation; `resetOrderedField(wrapper, name, values = [])` is the only explicit discard (same array/cap/outer-cardinality checks, and it stays usable past the 256-link stored cap). Arrays preserve order and multiplicity during migration preservation checks. Composite and generated node views share the same implementation. |
+
+Manifest validation rejects missing/unknown descriptor keys, unsafe or overlapping predicate
+IRIs, invalid severity or unwritable position bounds, outer counts above `MAX_ORDERED_ITEMS`, item classes owned as migration aliases,
+and scalar defaults, aliases or set policies on ordered fields. The generator's closed item
+profile requires exactly position + one value property, each with minCount/maxCount 1.
+It emits explicit item-class and IRI node-kind SHACL constraints because targetClass alone
+does not constrain a linked item. See federation-codegen's ordered admission table.
 
 ## Read-only IRI aliases
 
