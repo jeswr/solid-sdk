@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
-import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import {
+  createSolidDriveClient,
+  DrivePartialFailureError,
+  DriveUploadError,
+} from "../src/apps/drive/lib/client/client";
 import { type UploadQueue, useUploadQueue } from "../src/apps/drive/state/uploads";
 import { rdfPod } from "./drive-rdf-pod";
 import { act, click, h, mount } from "./drive-ui-dom";
@@ -78,4 +83,46 @@ it.each([
     expect(queue.tasks[0]?.status).toBe("done");
   });
   expect(view.host.querySelector("h2[aria-live]")?.textContent).toBe("1 upload complete");
+});
+
+it.each([
+  [false, false],
+  [false, true],
+  [true, false],
+  [true, true],
+  [false, "failed"],
+  [true, "failed"],
+])("shows uncertified upload errors in the dock and toast (too large: %s, recovery: %s)", async (tooLarge, recovery) => {
+  vi.clearAllMocks();
+  const f = await rdfPod();
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
+  const url = `${PRIVATE}upload.txt`;
+  const cause = new DriveUploadError(url, tooLarge);
+  const error =
+    recovery === "failed"
+      ? new DrivePartialFailureError(url, [], [], [], new Error("Recovery failed"), cause)
+      : recovery
+        ? new DrivePartialFailureError(url, [], [], [`${PRIVATE}recovery`], cause)
+        : cause;
+  const write = vi.spyOn(client, "write").mockRejectedValue(error);
+  function Probe() {
+    queue = useUploadQueue(client, vi.fn());
+    return h(UploadDock);
+  }
+  const view = await mount(h(Probe));
+  await act(async () => queue.enqueue(PRIVATE, [new File(["upload"], "upload.txt")]));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(queue.tasks[0]?.status).toBe("failed");
+  });
+  const expected = tooLarge
+    ? "Your storage didn't confirm this upload, and the file is too large to check. Try a smaller file or a different storage."
+    : "Your storage didn't confirm this upload, and the stored file couldn't be verified. Check your storage before retrying.";
+  expect(view.host.querySelector(".drv-dock-error")?.textContent).toContain(expected);
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining(expected));
+  if (recovery === true)
+    expect(view.host.querySelector(".drv-dock-error")?.textContent).toContain(
+      `Recovery copies retained at: ${PRIVATE}recovery`,
+    );
+  write.mockRestore();
 });
