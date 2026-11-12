@@ -289,18 +289,53 @@ the explicit construction-time owner identity without I/O for owner-checked cons
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-Tolerant import is opt-in: `parseNanopublications(text, { invalid: "skip", baseIRI? })`
-returns the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]`. Existing calls,
+Tolerant import is opt-in: `parseNanopublicationsTolerant(text, { baseIRI? })`
+returns `Promise<TolerantNanopublications>` without overload ambiguity. The compatible
+`parseNanopublications(text, { invalid: "skip", baseIRI? })` overload remains available.
+Both return the usual dataset/nanopubs plus `skipped: [{ id, errorClass }]` and
+`affected: string[]`. Existing calls,
 including the string baseIRI overload, retain atomic behaviour. Each complete
 head/assertion/provenance/pubinfo envelope is validated once per graph; invalid shared
-assertions drop every user. Referenced batch source/entity graphs must also validate.
+assertions drop every user. Referenced batch source/entity graphs must also validate,
+including retraction context declared by `pkg:correspondenceBatch`, read with the
+same typed helper as the store. Malformed correspondence declarations still throw.
 Only graphs referenced by retained nanopubs survive, including their batch graphs.
+Envelopes referencing a skipped nanopub ID as any graph name are also dropped with
+`SharedGraphWithSkipped`, transitively. No skipped head survives via sharing, so a
+nonempty retained result round-trips through the atomic serializer/parser.
 All-skipped input returns an empty dataset and nanopub list. Malformed TriG, absent
 heads and malformed metadata still throw. Reports contain only nanopub IDs and error
-class names, never rejected values, datatypes or diagnostic messages. The supported
-literal parity set is unchanged (double/dateTimeStamp remain excluded).
+class names, never rejected values, datatypes or diagnostic messages. The
+validation error name defaults to `Error` for a non-Error throw or a falsy Error name.
+The supported literal parity set is unchanged (double/dateTimeStamp remain excluded).
+
+For each skipped envelope, only IRI objects of `prov:wasRevisionOf` and
+`pkg:contradicts` in its head/provenance/pubinfo graphs are collected; literals and
+blank nodes never supply targets. Contradiction targets always count. Revision
+targets resolve like `classifyNanopublications`: when a skipped nanopub names kept
+envelopes, only those envelopes count; otherwise its assertion targets (including
+the store's retraction links) resolve to every retained nanopub carrying that
+assertion. `affected` lists each retained ID once. `classifyNanopublications`
+never changes a `past` claim (a readable retraction or replacement is final), lowers
+`definitely` to `might`, keeps `might` and `mentioned`, and sets
+`affectedBySkipped: true` on every non-past affected claim, so a skipped update can
+never revive an old fact as definite. Consumers can display “a later update to this could not be read”. Preserve
+the optional `Nanopublications.affected` field through filtering/projection. It is
+derived context and is not serialized into RDF; serializing only retained graphs
+loses it. All-skipped input has an empty `affected` list.
 
 `createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation
 batch graph cache. Use it when projecting many nanopubs; the uncached
 `readNanopubProvenance(value, np)` remains available. Neither caches across reads or
 changes graph-scoped evidence semantics.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Parsing constructs one reference-aware N3 store through fetch-rdf, preserving language
+spelling without replaying the document. When tolerant import drops any graph, it
+returns a new compact store holding only the retained graphs (N3's term index would
+otherwise keep skipped terms); otherwise it returns the parsed store unchanged. Read paths use `readNamedGraph(dataset, name)`: a read-only
+snapshot with a compact subject index, retaining the original graph names. Nested
+matches share its quads; `add` and `delete` throw. Take a fresh snapshot after edits.
+The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
+this changes index allocation only, and retains the N3 Store API and reference
+language deduplication. No RDF terms, canonicalization or hash inputs change.

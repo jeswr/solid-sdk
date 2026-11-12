@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
@@ -7,12 +8,13 @@ import {
   createNanopubProvenanceReader,
   type FactProvenance,
   type Nanopublications,
+  readNamedGraph,
 } from "@jeswr/pkg-memory";
-import type { DatasetCore } from "@rdfjs/types";
-import { DataFactory as df, Store } from "n3";
+import type { DatasetCore, Term } from "@rdfjs/types";
+import { DataFactory as df } from "n3";
 import { entities } from "./generated/model.js";
 import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
-import { effectiveTime, readPeriod } from "./temporal.js";
+import { effectiveTime, readPeriod, temporalTime } from "./temporal.js";
 import {
   type HealthCode,
   type HealthFact,
@@ -103,6 +105,7 @@ function base(
     code: readCode(node),
     period: readPeriod(node),
     belief: np.belief,
+    affectedBySkipped: np.affectedBySkipped,
     validity: np.validity,
     epistemic: np.epistemic,
     hedge: np.hedge,
@@ -126,13 +129,15 @@ function project(
       if (property === undefined || value === undefined) return undefined;
       return { ...result, kind, property, value, label: humanise(property) };
     }
-    case "document":
+    case "document": {
+      const created = node.literal(`${S}dateCreated`);
       return {
         ...result,
         kind,
         name: result.label,
-        dateCreated: node.literal(`${S}dateCreated`)?.value,
+        dateCreated: created && temporalTime(created) !== undefined ? created.value : undefined,
       };
+    }
     case "condition":
       return { ...result, kind, onset: base.period.start, abatement: base.period.end };
     case "allergy":
@@ -188,11 +193,13 @@ function project(
   }
 }
 function subjectNodes(graph: DatasetCore): ReadNode[] {
-  const ids = new Map<string, ReadNode>();
+  const ids = new Map<string, Term>();
   for (const q of graph) {
-    ids.set(`${q.subject.termType}:${q.subject.value}`, new ReadNode(q.subject, graph));
+    ids.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
   }
-  return [...ids.values()].sort((a, b) => a.value.localeCompare(b.value));
+  return [...ids.values()]
+    .map((term) => new ReadNode(term, graph))
+    .sort((a, b) => a.value.localeCompare(b.value));
 }
 const observationModels = [
   entities.Observation,
@@ -223,15 +230,24 @@ export function humanise(value: string): string {
     .trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
-/** Ordered, whole-word display keywords. Never interpret negated/uncertain results. */
+const interpretations = new Map<string, "normal" | "abnormal" | "high" | "low" | undefined>([
+  ["high", "high"],
+  ["elevated", "high"],
+  ["raised", "high"],
+  ["low", "low"],
+  ["decreased", "low"],
+  ["reduced", "low"],
+  ["abnormal", "abnormal"],
+  ["positive", "abnormal"],
+  ["normal", "normal"],
+  ["negative", "normal"],
+  ["unremarkable", "normal"],
+  ["within normal limits", "normal"],
+  ["borderline", undefined],
+]);
+/** Exact display phrases only; compound and negated text remains uninterpreted. */
 function interpretation(value: string): "normal" | "abnormal" | "high" | "low" | undefined {
-  const text = value.toLowerCase().replace(/\([^)]*\)/g, "");
-  if (/\b(not|no|possibly|possible|uncertain|unknown)\b/.test(text)) return undefined;
-  if (/\b(high|elevated|raised)\b/.test(text)) return "high";
-  if (/\b(low|decreased|reduced)\b/.test(text)) return "low";
-  if (/\b(abnormal|positive)\b/.test(text)) return "abnormal";
-  if (/\b(normal|negative|unremarkable)\b/.test(text)) return "normal";
-  return undefined;
+  return interpretations.get(value.trim().toLowerCase());
 }
 function linkedOwners(node: ReadNode, kind: HealthFactKind): import("@rdfjs/types").Term[] {
   if (kind !== "note" && kind !== "document") return [];
@@ -246,9 +262,9 @@ function linkedOwners(node: ReadNode, kind: HealthFactKind): import("@rdfjs/type
     ].map((q) => q.subject),
   ];
 }
-function foreign(node: ReadNode, owner: string): boolean {
+function foreign(node: ReadNode, owner: string, kinds: readonly HealthFactKind[]): boolean {
   // A health category or one owner link never overrides another subject.
-  const links = [...node.owners, ...kinds(node).flatMap((kind) => linkedOwners(node, kind))];
+  const links = [...node.owners, ...kinds.flatMap((kind) => linkedOwners(node, kind))];
   return links.some((term) => term.termType !== "NamedNode" || term.value !== owner);
 }
 /** Local, read-only projection. Apply purpose policy before supplying data to a consumer. */
@@ -276,15 +292,34 @@ export function projectHealthFacts(
       excludedOtherSubjects: 0,
     };
     const provenance = createNanopubProvenanceReader(value);
-    const assertions = new Map<string, Store>();
+    const assertions = new Map<string, { graph: DatasetCore; nodes: ReadNode[] }>();
+    const kindCache = new WeakMap<ReadNode, HealthFactKind[]>();
+    const kindsOf = (node: ReadNode): HealthFactKind[] => {
+      let result = kindCache.get(node);
+      if (!result) {
+        result = kinds(node);
+        kindCache.set(node, result);
+      }
+      return result;
+    };
+    const foreignCache = new WeakMap<ReadNode, boolean>();
+    const isForeign = (node: ReadNode): boolean => {
+      let result = foreignCache.get(node);
+      if (result === undefined) {
+        result = foreign(node, options.owner, kindsOf(node));
+        foreignCache.set(node, result);
+      }
+      return result;
+    };
     for (const np of classifyNanopublications(value)) {
       const category = np.categories.some((c) => categories.has(c));
-      let graph = assertions.get(np.assertionId);
-      if (!graph) {
-        graph = new Store([...value.dataset.match(null, null, null, df.namedNode(np.assertionId))]);
-        assertions.set(np.assertionId, graph);
+      let assertion = assertions.get(np.assertionId);
+      if (!assertion) {
+        const graph = readNamedGraph(value.dataset, np.assertionId);
+        assertion = { graph, nodes: subjectNodes(graph) };
+        assertions.set(np.assertionId, assertion);
       }
-      const nodes = subjectNodes(graph);
+      const { graph, nodes } = assertion;
       const supporting = nodes.filter(
         (n) =>
           n.term.termType === "NamedNode" &&
@@ -293,15 +328,14 @@ export function projectHealthFacts(
       );
       const qualifies =
         category ||
-        supporting.some(
-          (n) => !foreign(n, options.owner) && n.owners.some((t) => t.value === options.owner),
-        );
-      let excluded = supporting.some((n) => foreign(n, options.owner)),
+        supporting.some((n) => !isForeign(n) && n.owners.some((t) => t.value === options.owner));
+      let excluded = supporting.some(isForeign),
         recognised = false;
       for (const node of nodes) {
-        for (const kind of kinds(node)) {
+        for (const kind of kindsOf(node)) {
+          if (kind === "document" && !category && np.categories.length > 0) continue;
           const linked = linkedOwners(node, kind);
-          if (foreign(node, options.owner)) {
+          if (isForeign(node)) {
             excluded = true;
             continue;
           }
@@ -328,10 +362,10 @@ export function projectHealthFacts(
       if (qualifies && !recognised) {
         // Explicit foreign subjects exclude the category fallback too. Never recover their labels.
         const candidates = nodes.filter(
-          (node) => !kinds(node).some((kind) => kind === "note" || kind === "document"),
+          (node) => !kindsOf(node).some((kind) => kind === "note" || kind === "document"),
         );
-        const owned = candidates.filter((n) => n.owners.length && !foreign(n, options.owner));
-        const other = nodes.some((n) => foreign(n, options.owner));
+        const owned = candidates.filter((n) => n.owners.length && !isForeign(n));
+        const other = nodes.some(isForeign);
         if (other) excluded = true;
         if (!other || owned.length) {
           const node =

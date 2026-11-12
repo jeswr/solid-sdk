@@ -32,6 +32,7 @@ export {
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,
+  parseNanopublicationsTolerant,
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";
@@ -45,6 +46,7 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+export { readNamedGraph } from "./read-graph.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
 export type { Fact, PaymentCardBrand, TemporalValue } from "./templates.js";

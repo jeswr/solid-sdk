@@ -44,7 +44,9 @@ A recognised record qualifies if it has a health category or an explicit owner l
 through canonical/legacy `health:patient`, `fhir:subject` or `schema:subject`.
 Notes require a health category and an owner `schema:additionalProperty` link to a
 `schema:PropertyValue`. Documents require `schema:about` owner or owner
-`schema:subjectOf` document. Foreign or malformed links in either direction refuse
+`schema:subjectOf` document, and their nanopub must have a health category or no
+categories at all. A document categorized only as non-health (such as `pd:Financial`)
+is excluded. Foreign or malformed links in either direction refuse
 these records, including mixed owner/foreign links; unlinked records never qualify
 through the category fallback. Named and blank note/document subjects are supported.
 Any foreign or malformed subject link on a record excludes it, even beside an
@@ -83,7 +85,7 @@ legacy w3id aliases) project as observations, once even when base types are also
 This is a fixed sector inventory, not reasoning over untrusted ontology statements.
 
 `observationSeries(view, { beliefs? })` returns `{ series, skipped }`. Each series is
-`{ id, label, unit?, points: [{ x: ISO, y: number, factId }] }`. Numeric observations
+`{ id, label, unit?, points: [{ x: ISO, y: number, factId, belief, affectedBySkipped? }] }`. Numeric observations
 group by code IRI (otherwise system/value), or normalized label, plus exact unit.
 Code IRI namespaces identify SNOMED, LOINC, ICD-10, ATC and dm+d; unknowns remain
 `other`. Values that cannot be represented faithfully as a JS number remain strings.
@@ -92,10 +94,13 @@ nonnumeric values increment `skipped` after belief filtering. Points sort by tim
 series sort by ID. No unit conversion or aggregation occurs.
 
 `healthTimeline(view, { beliefs? })` returns condition, medication, immunization,
-encounter and documents arrays of `{ id, start?, end?, label, tone }`. An end or past belief gives
-`past`; otherwise Current gives `active`; remaining facts are `neutral`. Dates remain
+encounter and documents arrays of `{ id, start?, end?, label, belief, affectedBySkipped?, tone }`.
+An end or past belief gives `past`; otherwise Current without `affectedBySkipped` gives
+`active`; remaining facts (including every fact with an unreadable later update) are `neutral`. Dates remain
 lexical; the original four lanes retain undated items. The documents lane includes
 only documents with `dateCreated`, using that date. Notes never enter a timeline.
+Document `dateCreated` is exposed only when its typed literal passes the same
+calendar/timezone checks as `temporalTime`; arbitrary strings and invalid dates are omitted.
 These are display tones, not clinical conclusions.
 
 Labels and qualitative results
@@ -107,16 +112,18 @@ Medication product names remain a fallback for statements without their own labe
 Series grouping prefers code IRI, then code system/value, then normalised label.
 
 Observations retain qualitative string results. `interpretation` is optional and
-uses this ordered, case-insensitive whole-word display table. Parenthetical text is
-ignored, so “normal (numeric value not transcribed)” displays as normal. Outside
-parentheses, not/no/possibly/possible/uncertain/unknown suppress interpretation.
+matches only an entire phrase from this fixed table after trimming and lower-casing.
+Compound text, negation and parenthetical additions remain uninterpreted: “Negative
+for high-risk HPV”, “Low risk”, “High normal”, “within normal limits, slightly low”
+and “normal (numeric value not transcribed)” all have no interpretation.
 
 | Interpretation | Keywords |
 | --- | --- |
 | high | high, elevated, raised |
 | low | low, decreased, reduced |
 | abnormal | abnormal, positive |
-| normal | normal, negative, unremarkable |
+| normal | normal, negative, unremarkable, within normal limits |
+| undefined | borderline |
 
 This table does not interpret clinical meaning, ranges, or units. Unmatched text
 stays a string with no interpretation. Numeric decimal/integer/double literals are
@@ -131,15 +138,30 @@ const view = projectHealthFacts(value, { owner: ownerWebId });
 // skipped: { count, reasons: { UnsupportedLiteralCharacterError: 2 } }
 ```
 
-The importer delegates to additive pkg-memory `parseNanopublications(text,
-{ invalid: "skip", baseIRI? })`, whose result also has `skipped: [{ id, errorClass }]`.
+The importer delegates to pkg-memory `parseNanopublicationsTolerant(text, { baseIRI? })`,
+whose result also has `skipped: [{ id, errorClass }]` and `affected: string[]`.
 Existing parser calls stay atomic, including the string baseIRI overload. Tolerance
 covers literal/term validation only; invalid TriG or malformed nanopub metadata still
 fails, exposed here as a fixed `HealthGraphError`. Each head/assertion/provenance/pubinfo
 envelope is kept or dropped together. A bad shared assertion drops every referencing
-nanopub; a bad batch source/entity graph drops its batch users. Batch graphs survive
+nanopub; a bad batch source/entity graph, including declared `pkg:correspondenceBatch`
+context on retraction envelopes, drops its users. Batch graphs survive
 only with a kept user. Unrelated/orphan graphs are omitted. Nothing rewrites hashes,
 terms or literal values. No values or diagnostics enter skip reasons.
+An otherwise retained envelope whose graph names include a skipped nanopub ID is
+also skipped with reason `SharedGraphWithSkipped`, transitively, so retained heads
+remain complete and the result can be serialized and parsed atomically.
+
+The returned `value.affected` contains retained nanopub IDs targeted by IRI objects
+of `prov:wasRevisionOf` or `pkg:contradicts` in skipped head/provenance/pubinfo graphs.
+Contradiction targets always count; revision targets naming kept envelopes affect only
+those envelopes, otherwise their assertion targets, including retraction targets;
+literal and blank-node objects never supply targets. Past facts never change (a
+readable retraction or replacement is final). Affected `definitely` facts become
+`might`, `might` and `mentioned` keep their level, and every non-past affected fact,
+including unrecognised facts, has `affectedBySkipped: true`. A UI can display “a later update to this could not be read”.
+Keep `affected` with the imported value when filtering or projecting. It is derived
+import context, not persisted RDF; serializing only the retained graphs loses it.
 
 The owner must be an explicit safe HTTP(S) IRI. Import retains all valid nanopubs,
 including non-health and foreign claims; apply purpose policy and owner-scoped
@@ -282,3 +304,20 @@ apply the owner's purpose policy before supplying data to a UI or tool, and perf
 any required special-category audit in the application. This reader does not confer
 access rights. Mutations use NanopubStore's existing owner-only protection. Tests use
 fictional example.org identities and the in-memory PodPort; no real person's data.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+For a local import benchmark, build the packages and run
+`node --expose-gc packages/pkg-health/scripts/bench-import.mjs <file>` from the workspace
+root. Set `PKG_BENCH_OWNER` to the export owner's WebID; the default is the fictional
+`https://example.org/people/avery#me`. Output contains counts, operation time and sampled
+peak `heapUsed` after explicit GC, without fact
+values or parser diagnostics. Timing uses an uninstrumented pass, including automatic
+GC, with no forced GC between import and projection. A separate pass samples
+`heapUsed` after forced GC during store insertion, graph reads and at operation
+boundaries; profiling time is excluded. The peak is sampled, rather than continuous.
+
+Generate a reproducible fictional input with
+`node packages/pkg-health/test/support/synthetic-export.ts /tmp/fictional-health.trig`.
+It builds 4,500 nanopubs across 40 batches using public batch/fact builders and the
+pkg-memory serializer. An optional final argument changes the nanopub count. The CI
+regression uses 600 nanopubs and counts store insertions instead of timing assertions.

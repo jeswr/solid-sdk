@@ -37,6 +37,8 @@ export interface HealthFactBase {
   code?: HealthCode;
   period: HealthPeriod;
   belief: Belief;
+  /** A later update could not be read; display the uncertainty alongside any non-past belief. */
+  affectedBySkipped?: true;
   validity: ValidityStatus;
   epistemic: EpistemicStatus;
   hedge?: string;
@@ -79,7 +81,13 @@ export interface ObservationSeries {
   id: string;
   label: string;
   unit?: string;
-  points: { x: string; y: number; factId: string }[];
+  points: {
+    x: string;
+    y: number;
+    factId: string;
+    belief: Belief;
+    affectedBySkipped?: true;
+  }[];
 }
 export type TimelineKind = "condition" | "medication" | "immunization" | "encounter" | "documents";
 export interface HealthTimelineItem {
@@ -87,6 +95,8 @@ export interface HealthTimelineItem {
   start?: string;
   end?: string;
   label: string;
+  belief: Belief;
+  affectedBySkipped?: true;
   tone: "active" | "past" | "neutral";
 }
 export type HealthTimeline = Record<TimelineKind, HealthTimelineItem[]>;

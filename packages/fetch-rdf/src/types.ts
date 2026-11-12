@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import type { DatasetCore, Quad } from "@rdfjs/types";
+import type { DataFactory, DatasetCore, Quad } from "@rdfjs/types";
 import type { IJsonLdParserOptions } from "jsonld-streaming-parser";
 import type { Store } from "n3";
 import type { SUPPORTED_RDF_MEDIA_TYPES } from "./media-types.js";
@@ -33,6 +33,10 @@ export interface RdfParser {
 
 /** Options for {@link parseRdf}. */
 export interface ParseRdfOptions {
+  /** Default-parser term factory, wrapped by the same construction budgets. Ignored with engine. */
+  factory?: DataFactory;
+  /** Fresh empty N3 Store for default-parser output. Ignored with engine. Discard it on failure. */
+  storeFactory?: () => Store;
   /** Maximum input UTF-8 bytes, including an engine buffer. Default: 16 MiB. */
   maxBytes?: number;
   /** Maximum JSON object/array nesting in default-parser documents and contexts. Default: 128. */
@@ -65,7 +69,14 @@ export interface ParseRdfOptions {
 export interface ParseRdfSyncOptions
   extends Pick<
     ParseRdfOptions,
-    "baseIRI" | "signal" | "maxBytes" | "maxQuads" | "maxTermLength" | "maxTotalTermLength"
+    | "baseIRI"
+    | "signal"
+    | "maxBytes"
+    | "maxQuads"
+    | "maxTermLength"
+    | "maxTotalTermLength"
+    | "factory"
+    | "storeFactory"
   > {
   /** Omit for n3's permissive Turtle/TriG/quad mode; specify to restrict the syntax. */
   format?: Exclude<RdfMediaType, "application/ld+json">;

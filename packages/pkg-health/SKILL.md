@@ -10,17 +10,30 @@ pkg-memory atomically. The projector accepts `Nanopublications`, never raw strin
 Tolerant imports skip complete envelopes for term/literal validation failures and
 return aggregate error-class counts; malformed RDF/metadata still fails. The existing
 pkg-memory parity boundary still rejects double/dateTimeStamp during import.
+Import uses `parseNanopublicationsTolerant`; keep `value.affected` when projecting or
+filtering. These retained nanopub IDs are targets of IRI revision/contradiction links
+in skipped metadata, including retractions. Past facts never change; affected
+`definitely` facts become `might`; every non-past affected fact has
+`affectedBySkipped: true` (timeline tone never `active`, series points marked): show “a later update to this could not be read”. This
+context is not stored in RDF and is lost by serializing only the retained graphs.
+Correspondence-batch graphs are validated/retained; envelopes sharing a skipped
+head are also skipped transitively (`SharedGraphWithSkipped`).
 Apply the owner's purpose policy before handing data to a UI. The projector keeps
 all belief levels and history; consumers choose filters. Current validity is required
 in addition to definite belief before acting on a fact.
 
 `observationSeries` returns `{ series, skipped }`; qualitative strings stay in the
-observation view with optional display-only interpretation. Numeric strings become
-numbers only when faithfully representable. Labels prefer name, rdfs label, code
-value/preferred label/rdfs label, then humanised kind. Sector observation subtypes
+observation view with optional display-only interpretation.
+Interpretation matches whole trimmed, lower-cased phrases only: high/elevated/raised,
+low/decreased/reduced, abnormal/positive, normal/negative/unremarkable/within normal
+limits. Borderline and compound/negated/parenthetical text have no interpretation.
+Numeric strings become numbers only when faithfully representable. Labels prefer
+name, rdfs label, code value/preferred label/rdfs label, then humanised kind. Sector observation subtypes
 are recognised. `healthTimeline` returns five lanes, including dated `documents`.
 Notes use propertyID labels and require owner additionalProperty links plus health
-categories; documents require owner about/subjectOf links. Refuse foreign/mixed links
+categories; documents require owner about/subjectOf links and a health category or
+no categories at all. Exclude documents categorized only as non-health. Expose
+dateCreated only for typed values passing `temporalTime`. Refuse foreign/mixed links
 in either direction. Notes never appear on the timeline.
 Body-system classification is a display heuristic, never clinical inference. Preserve
 lexical dates and units; do not invent precision, unit conversions or source metadata.

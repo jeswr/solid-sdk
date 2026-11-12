@@ -101,6 +101,12 @@ wrapped as parse errors; an aborted signal still throws its original reason.
 readers whose preference ties depend on source order. Store iteration can reorder
 them. Discard observations if a later budget check, insertion, or callback fails.
 
+The default parser also accepts `factory` (an RDF/JS term factory) and
+`storeFactory` (returning a fresh empty N3 Store). Matching factories let callers
+retain term spelling through parsing and store reads without a second parse.
+Construction budgets still wrap the supplied factory; discard a custom store on
+failure. Both hooks work with `parseRdfSync` and are ignored when using `engine`.
+
 `ParseRdfOptions` and `FetchRdfOptions` accept these finite, nonnegative integer
 limits (`maxContextConcurrency` must be positive). Increase them explicitly for
 larger trusted resources. Exceeding a budget rejects with `RdfFetchError`
