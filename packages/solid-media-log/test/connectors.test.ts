@@ -185,6 +185,9 @@ it.each([
   "Series 2",
   "Limited Series",
   "Part 3",
+  "Volume 1",
+  "Book 2",
+  "Chapter 3",
 ])("groups explicit %s episodes and counts distinct titles across documents", (marker) => {
   const entries = [1, 1, 2].flatMap((episode, i) => {
     const dataset = new Store();
@@ -214,4 +217,30 @@ it("recognises connector documents even when their WatchActions have no media pr
   new WatchAction("https://pod.example/takeout#watch", dataset, DataFactory).mark();
   expect(isConnectorDocument(dataset)).toBe(true);
   expect(connectorEntries(dataset)).toEqual([]);
+});
+it.each([
+  ["Book", Book],
+  ["VideoGame", VideoGame],
+] as const)("does not exempt a dropped %s document, even alongside a WatchAction", (_, Wrapper) => {
+  const dataset = new Store();
+  new Wrapper("https://pod.example/import#item", dataset, DataFactory).mark().name = " ";
+  expect(connectorEntries(dataset)).toEqual([]);
+  expect(isConnectorDocument(dataset)).toBe(false);
+  new WatchAction("https://pod.example/import#watch", dataset, DataFactory).mark();
+  expect(connectorEntries(dataset)).toEqual([]);
+  expect(isConnectorDocument(dataset)).toBe(false);
+});
+it("groups Love, Death & Robots volume titles as an unfinished series", () => {
+  const entries = ["Sonnie's Edge", "Three Robots"].map((episode, i) => ({
+    id: `https://pod.example/netflix/history-${i}#watch`,
+    data: {
+      title: `Love, Death & Robots: Volume 1: ${episode}`,
+      kind: "film" as const,
+      status: "finished" as const,
+      source: "Netflix",
+    },
+  }));
+  expect(groupNetflixEntries(entries)).toMatchObject([
+    { data: { title: "Love, Death & Robots", kind: "tv", status: "in-progress", progress: 2 } },
+  ]);
 });

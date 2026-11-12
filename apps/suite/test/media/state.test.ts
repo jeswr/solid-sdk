@@ -380,12 +380,27 @@ it.each([
   expect(await store.importEntries(watchlist.entries)).toMatchObject({ imported: 1, failed: 0 });
   const record = store.getSnapshot().records[0] as MediaRecord;
   // Another client enriches the item after this store's watchlist snapshot.
-  const current = await repo.save({ ...record.data, creator: "Aster Vale" }, record);
+  const current = await repo.save(
+    {
+      ...record.data,
+      title: "The Copper SHORE",
+      creator: "Aster Vale",
+      source: "My cinema journal",
+      origin: "https://example.org/films/copper-shore",
+      repeatCount: 3,
+      cover: "https://example.org/covers/copper-shore.jpg",
+      started: "2026-11-01",
+      progress: 1,
+      progressUnit: "episode",
+    },
+    record,
+  );
   const save = vi.spyOn(repo, "save");
   const write = vi.spyOn(storage, "write");
   const diary = parseLetterboxdCsv(
-    "Name,Year,Watched Date,Rating,Review\nThe Copper Shore,2025,2026-11-09,4.5,A favourite",
+    "Name,Year,Watched Date,Rating,Review,Letterboxd URI\nThe Copper Shore,2025,2026-11-09,4.5,A favourite,https://letterboxd.com/film/the-copper-shore/",
   );
+  expect(diary.entries[0]?.repeatCount).toBe(0);
   expect(await store.importEntries(diary.entries)).toMatchObject({
     imported: 1,
     skipped: 0,
@@ -403,13 +418,33 @@ it.each([
       finished: "2026-11-09",
       rating: 4.5,
       review: "A favourite",
-      creator: "Aster Vale",
     },
+  });
+  expect(updated.data).toEqual({
+    ...current.data,
+    status: "finished",
+    finished: "2026-11-09",
+    rating: 4.5,
+    review: "A favourite",
   });
   expect(updated.etag).not.toBe(record.etag);
   expect(
     parseMediaLog(updated.url as string, (await storage.readRdf(updated.url as string)).dataset),
   ).toMatchObject(updated.data);
+});
+it("keeps an existing rating and review when a completion CSV omits them", async () => {
+  const repo = repository();
+  const existing = { ...original, data: { ...entry, review: "My earlier notes", repeatCount: 2 } };
+  vi.mocked(repo.load).mockResolvedValue({ records: [existing], incomplete: false });
+  const store = new MediaStore(Promise.resolve(repo));
+  await store.load();
+  const diary = parseLetterboxdCsv("Name,Year,Watched Date\nPaper Moons,,2026-11-09");
+  expect(await store.importEntries(diary.entries)).toMatchObject({ imported: 1, failed: 0 });
+  expect(store.getSnapshot().records[0]?.data).toEqual({
+    ...existing.data,
+    status: "finished",
+    finished: "2026-11-09",
+  });
 });
 it("rolls back a failed optimistic completion import and retains the watchlist item", async () => {
   const { repo, store } = await ready();

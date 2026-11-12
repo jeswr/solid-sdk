@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 
-import { Book, WatchAction } from "@jeswr/pod-connectors/core/vocab";
+import { Book, VideoGame, WatchAction } from "@jeswr/pod-connectors/core/vocab";
 import type { TypeIndex } from "@jeswr/pod-type-index";
-import { StorageError } from "@jeswr/storage-client";
+import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { DataFactory, Store } from "n3";
@@ -21,6 +21,13 @@ function typeIndex(sources = new Map<string, string[]>()): TypeIndex {
     unregister: vi.fn(async () => {}),
     listClasses: vi.fn(async () => []),
   };
+}
+function pending<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
 }
 for (const protocol of ["solid", "lws"] as const)
   describe(`repository / ${protocol}`, () => {
@@ -257,7 +264,7 @@ it("skips stale registrations, forbidden and non-RDF resources and facade valida
   );
   const listing = await repo.load();
   expect(listing.records.map((record) => record.url)).toEqual([good.url]);
-  expect(listing.incomplete).toBe(true);
+  expect(listing.incomplete).toBe(false);
   expect(new Set(listing.skipped?.map((item) => item.url))).toEqual(
     new Set([missing, badTitle.url, badRating.url, forbidden.url, nonRdf.url]),
   );
@@ -457,6 +464,186 @@ it("keeps rejected resources separate from an unscanned library and ignores gene
     expect(new Set(listing.skipped?.map((skip) => skip.url))).toEqual(
       new Set([forbidden.url, nonRdf.url]),
     );
+  }
+});
+it.each([
+  429,
+  502,
+  503,
+  504,
+  "network",
+] as const)("marks retryable entry reads as unscanned (%s)", async (failure) => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const repo = mediaRepository(storage, typeIndex());
+  const good = await repo.save(entry);
+  const unavailable = await repo.save({ ...entry, title: "Unavailable" });
+  const error =
+    failure === "network"
+      ? new StorageError("network", { url: unavailable.url as string, method: "GET" })
+      : toStorageError("GET", unavailable.url as string, new Response(null, { status: failure }));
+  const read = storage.readRdf.bind(storage);
+  vi.spyOn(storage, "readRdf").mockImplementation((url, options) =>
+    url === unavailable.url ? Promise.reject(error) : read(url, options),
+  );
+  for (const complete of [false, true]) {
+    expect(await repo.load({ complete })).toMatchObject({
+      records: [{ url: good.url }],
+      incomplete: true,
+      skipped: [{ url: unavailable.url, reason: error.code }],
+    });
+  }
+});
+it("marks a connector source document with a retryable 503 as unscanned", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const dataset = new Store();
+  new Book(`${root}goodreads#book`, dataset, DataFactory).mark().name = "The Orchard Letters";
+  const document = await storage.create(root, null, { contentType: "text/turtle" });
+  await storage.writeRdf(document.url, dataset, {
+    contentType: "text/turtle",
+    ifMatch: document.etag as string,
+  });
+  const index = typeIndex(new Map([["https://schema.org/Book", [document.url]]]));
+  const repo = mediaRepository(storage, index);
+  const good = await repo.save(entry);
+  const read = storage.readRdf.bind(storage);
+  vi.spyOn(storage, "readRdf").mockImplementation((url, options) =>
+    url === document.url
+      ? Promise.reject(toStorageError("GET", url, new Response(null, { status: 503 })))
+      : read(url, options),
+  );
+  expect(await repo.load({ complete: true })).toMatchObject({
+    records: [{ url: good.url }],
+    incomplete: true,
+    skipped: [{ url: document.url, reason: "server" }],
+  });
+});
+it.each([
+  403, 404, 429, 503,
+])("classifies a registered instance's failed HEAD (%s)", async (status) => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const source = `${root}registered-instance`;
+  const index = typeIndex(new Map([["https://schema.org/Book", [source]]]));
+  const repo = mediaRepository(storage, index);
+  const good = await repo.save(entry);
+  const error = toStorageError("HEAD", source, new Response(null, { status }));
+  const head = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation((url, options) =>
+    url === source ? Promise.reject(error) : head(url, options),
+  );
+  for (const complete of [false, true]) {
+    expect(await repo.load({ complete })).toMatchObject({
+      records: [{ url: good.url }],
+      incomplete: status !== 403 && status !== 404,
+      skipped: [{ url: source, reason: error.code }],
+    });
+  }
+});
+it.each([
+  ["Book", Book],
+  ["VideoGame", VideoGame],
+] as const)("reports a connector document whose %s items are all dropped", async (type, Wrapper) => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const dataset = new Store();
+  new Wrapper(`${root}connector#missing-title`, dataset, DataFactory).mark();
+  new Wrapper(`${root}connector#oversized`, dataset, DataFactory).mark().name = "x".repeat(501);
+  const document = await storage.create(root, null, { contentType: "text/turtle" });
+  await storage.writeRdf(document.url, dataset, {
+    contentType: "text/turtle",
+    ifMatch: document.etag as string,
+  });
+  const index = typeIndex(new Map([[`https://schema.org/${type}`, [document.url]]]));
+  const listing = await mediaRepository(storage, index).load({ complete: true });
+  expect(listing).toEqual({
+    records: [],
+    incomplete: false,
+    skipped: [{ url: document.url, reason: "invalid-or-unavailable" }],
+  });
+});
+it("lets an import cancel its initialisation wait without aborting a concurrent save", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  const lookup = pending<string[]>();
+  vi.mocked(index.find).mockReturnValueOnce(lookup.promise);
+  const repo = mediaRepository(storage, index);
+  const caller = new AbortController();
+  const scan = repo.load({ complete: true, signal: caller.signal });
+  const rejected = expect(scan).rejects.toMatchObject({ name: "AbortError" });
+  const save = repo.save(entry);
+  caller.abort();
+  await rejected;
+  lookup.resolve([]);
+  const saved = await save;
+  expect(saved).toMatchObject({ data: entry, unconfirmed: false });
+  expect(await repo.load({ complete: true })).toMatchObject({
+    records: [{ url: saved.url }],
+    incomplete: false,
+  });
+  expect(index.register).toHaveBeenCalledOnce();
+});
+it("lets a second caller cancel its own wait for shared initialisation", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  const lookup = pending<string[]>();
+  vi.mocked(index.find).mockReturnValueOnce(lookup.promise);
+  const repo = mediaRepository(storage, index);
+  const first = repo.load({ complete: true });
+  const caller = new AbortController();
+  const second = repo.load({ complete: true, signal: caller.signal });
+  const rejected = expect(second).rejects.toMatchObject({ name: "AbortError" });
+  caller.abort();
+  await rejected;
+  lookup.resolve([]);
+  expect(await first).toEqual({ records: [], incomplete: false, skipped: [] });
+  expect(index.register).toHaveBeenCalledOnce();
+});
+it("never starts registration after a container request exceeds the initialisation deadline", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  const container = await storage.create(root, null, { kind: "container", name: "media" });
+  const metadata = await storage.head(container.url);
+  const started = pending<void>();
+  const head = pending<typeof metadata>();
+  vi.spyOn(storage, "head").mockImplementationOnce(() => {
+    started.resolve();
+    return head.promise;
+  });
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+  try {
+    const task = mediaRepository(storage, index).load({ complete: true });
+    const rejected = expect(task).rejects.toMatchObject({ name: "TimeoutError" });
+    await started.promise;
+    deadline.abort(new DOMException("Timed out", "TimeoutError"));
+    await rejected;
+    head.resolve(metadata);
+    // Flush the late transport result without starting any registration work.
+    await head.promise;
+    expect(index.register).not.toHaveBeenCalled();
+  } finally {
+    timeout.mockRestore();
+  }
+});
+it("checks the deadline immediately before registration after a successful HEAD", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const index = typeIndex();
+  await storage.create(root, null, { kind: "container", name: "media" });
+  const metadata = await storage.head(`${root}media/`);
+  const deadline = new AbortController();
+  const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
+  vi.spyOn(storage, "head").mockResolvedValueOnce({
+    ...metadata,
+    get url() {
+      deadline.abort(new DOMException("Timed out", "TimeoutError"));
+      return metadata.url;
+    },
+  });
+  try {
+    await expect(mediaRepository(storage, index).load({ complete: true })).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
+    expect(index.register).not.toHaveBeenCalled();
+  } finally {
+    timeout.mockRestore();
   }
 });
 it("retries Type Index discovery on refresh without retaining initialisation failures", async () => {

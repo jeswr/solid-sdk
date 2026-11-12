@@ -208,9 +208,10 @@ export class MediaStore {
           const next = target
             ? validateEntry({
                 ...target.data,
-                ...Object.fromEntries(
-                  Object.entries(data).filter(([, value]) => value !== undefined),
-                ),
+                status: data.status,
+                finished: data.finished ?? target.data.finished,
+                rating: data.rating ?? target.data.rating,
+                review: data.review ?? target.data.review,
               })
             : data;
           known.add(data);

@@ -30,7 +30,7 @@ export interface MediaSkip {
 }
 export interface MediaListing {
   records: MediaRecord[];
-  /** Discovery or a source scan did not finish; rejected individual items do not count. */
+  /** Discovery or a source scan did not finish, including retryable reads of individual items. */
   incomplete: boolean;
   skipped?: MediaSkip[];
 }
@@ -58,12 +58,10 @@ function reason(error: unknown): string {
 /** Injection seam keeps domain storage reusable by any app, CLI or importer. */
 export function mediaRepository(storage: StorageClient, index: TypeIndex): MediaRepository {
   let initialising: Promise<{ container: string; hint?: TypeHint | undefined }> | undefined;
-  function initialise(callerSignal?: AbortSignal) {
+  function initialise() {
     if (initialising) return initialising;
-    const signal = AbortSignal.any([
-      AbortSignal.timeout(20000),
-      ...(callerSignal ? [callerSignal] : []),
-    ]);
+    // Shared session work outlives any one caller's cancelled wait.
+    const signal = AbortSignal.timeout(20000);
     initialising = (async () => {
       let locations: string[] = [];
       try {
@@ -117,6 +115,8 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
       }
       let hint: TypeHint | undefined;
       try {
+        // TypeIndex has no signal option; do not start registration after our deadline.
+        signal.throwIfAborted();
         hint = await interrupted(index.register(LOG_ENTRY, { container }), signal);
       } catch {
         signal.throwIfAborted();
@@ -137,7 +137,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
             AbortSignal.timeout(20000),
             ...(options.signal ? [options.signal] : []),
           ]);
-      const { container } = await interrupted(initialise(signal), signal);
+      const { container } = await interrupted(initialise(), signal);
       const skipped = new Map<string, string>();
       let sources = [container];
       let incomplete = false;
@@ -185,7 +185,8 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
             }
           }
         } catch (error) {
-          if (signal.aborted) incomplete = true;
+          if (signal.aborted || (error instanceof StorageError && error.retryable))
+            incomplete = true;
           skipped.set(url, signal.aborted ? "timeout-or-cancelled" : reason(error));
         }
       }
@@ -195,6 +196,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
           break;
         }
         let listed = false;
+        let listing = source === container;
         const batch: Promise<void>[] = [];
         try {
           const head =
@@ -203,6 +205,7 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
               : await interrupted(storage.head(source, { signal }), signal);
           if (head.kind === "resource") await read(source);
           else {
+            listing = true;
             const iterator = storage
               .listAll(source, { signal, maxBytes: 2 * 1024 * 1024 })
               [Symbol.asyncIterator]();
@@ -219,7 +222,15 @@ export function mediaRepository(storage: StorageClient, index: TypeIndex): Media
           }
         } catch (error) {
           if (source === container && !listed && !signal.aborted) throw error;
-          incomplete = true;
+          // A missing/forbidden instance is rejected. A failed container scan can hide entries.
+          if (
+            signal.aborted ||
+            listing ||
+            !(error instanceof StorageError) ||
+            error.retryable ||
+            (error.code !== "not-found" && error.code !== "forbidden")
+          )
+            incomplete = true;
           skipped.set(source, signal.aborted ? "timeout-or-cancelled" : reason(error));
         } finally {
           await Promise.all(batch);

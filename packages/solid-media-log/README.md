@@ -50,13 +50,15 @@ keeps it visible and asks for refresh before the next edit, rather than reportin
 Discovery follows scoped SDK locations and paginated listing. View scans cap source locations
 at 32, use six concurrent resource reads and a 20-second deadline, and return partial records
 with `incomplete` and `skipped: [{url, reason}]`. There is no 1,000-record cap. Only unscanned
-sources (discovery/listing failures, source caps or timeouts) set `incomplete` and prevent imports.
-Individual invalid entries and forbidden/non-RDF resources are rejected and reported in `skipped`
-without making the library incomplete. Empty reservations and recognised connector documents
-that project no media are ignored. Discovery is retried on every load; initialisation failures
-are not retained in later scans. Initialisation, including container HEAD/create, has a 20-second
-deadline even for complete scans. Only an
-unreadable primary container (first page, outside a timeout) fails the load. Other source failures
+sources (discovery/listing failures, retryable resource reads, source caps or timeouts) set
+`incomplete` and prevent imports. Individual invalid entries and forbidden/non-RDF resources,
+including missing or forbidden registered instances, are rejected and reported in `skipped`
+without making the library incomplete. Empty reservations and WatchAction-only connector
+documents that project no media are ignored; Book/VideoGame documents whose items are all
+dropped are rejected. Discovery is retried on every load; initialisation failures are not retained
+in later scans. Initialisation, including container HEAD/create, has a 20-second deadline even for
+complete scans. Cancelling a caller's wait does not cancel shared initialisation for concurrent loads
+or saves. Only an unreadable primary container (first page, outside a timeout) fails the load. Other source failures
 never discard readable records. `load({complete: true, signal})` scans every source without the
 view's deadline, still at six reads at a time; imports use it to check duplicates against the
 entire library and refuse to write when that scan is incomplete. Callers can cancel this scan.
@@ -67,8 +69,8 @@ capability discovery; do not infer this option from arbitrary pod data.
 `connectorEntries` reads **the existing typed pod-connectors wrappers**, without mutating imports:
 
 - Netflix `schema:WatchAction`: title and `startTime`; `groupNetflixEntries` groups episode titles
-  with explicit `Season N`, `Series N`, `Limited Series` or `Part N` markers after a show name
-  into one in-progress series across documents. Progress counts distinct episode titles, so
+  with explicit `Season N`, `Series N`, `Limited Series`, `Part N`, `Volume N`, `Book N` or
+  `Chapter N` markers after a show name into one in-progress series across documents. Progress counts distinct episode titles, so
   rewatches do not inflate it. Film subtitles and `Episode IV` alone do not imply TV. Standalone titles
   are films by default and can be corrected by the user. No episode count implies series completion.
 - Goodreads `schema:Book`: title, author, personal rating and reading shelf. The existing
@@ -99,7 +101,9 @@ when present, not Letterboxd's differing diary/film URLs. An undated watched/rat
 any dated log of the same work; distinct dated rewatches remain distinct. Duplicate detection
 uses an indexed map so large imports do not repeatedly scan titles. A finished row matching
 an undated want/in-progress record updates that record's status, finish date, rating and review
-through the usual conditional save, retaining its URL and any metadata absent from the CSV.
+through the usual conditional save, retaining its URL and every other existing field (including
+title, creator, source label, origin and repeat count). Missing rating/review values retain the
+existing values.
 For example, importing watchlist.csv then diary.csv completes the existing watchlist item.
 An existing finished record wins; merging richer metadata into finished duplicates remains
 a separate feature. `mediaImportIndex().completionTarget(entry)` exposes the pending item

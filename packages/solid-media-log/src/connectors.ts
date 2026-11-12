@@ -16,13 +16,15 @@ function subjectIds(dataset: DatasetCore): Set<string> {
     if (quad.subject.termType === "NamedNode") subjects.add(quad.subject.value);
   return subjects;
 }
-/** Recognised connector documents may intentionally project no media (for example Twitch). */
+/** WatchAction-only documents may intentionally project no media (for example Twitch). */
 export function isConnectorDocument(dataset: DatasetCore): boolean {
+  let watch = false;
   for (const id of subjectIds(dataset)) {
     const types = new Book(id, dataset, DataFactory).types;
-    if (CONNECTOR_CLASSES.some((type) => types.has(type))) return true;
+    if (types.has(CLASSES.Book) || types.has(CLASSES.VideoGame)) return false;
+    if (types.has(CLASSES.WatchAction)) watch = true;
   }
-  return false;
+  return watch;
 }
 /** Read individual adapter items; group only after collecting every document's episodes.
  * Source documents are never mutated.
@@ -115,9 +117,10 @@ export function groupNetflixEntries(entries: readonly ConnectorEntry[]): Connect
       result.push(entry);
       continue;
     }
-    const episodic = /^(.+?):\s*((?:(?:season|series|part)\s+\d+|limited series)\b.*)$/i.exec(
-      entry.data.title,
-    );
+    const episodic =
+      /^(.+?):\s*((?:(?:season|series|part|volume|book|chapter)\s+\d+|limited series)\b.*)$/i.exec(
+        entry.data.title,
+      );
     if (!episodic) {
       result.push(entry);
       continue;

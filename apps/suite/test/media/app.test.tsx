@@ -4,7 +4,7 @@ import { Blob as NodeBlob } from "node:buffer";
 
 import { WatchAction } from "@jeswr/pod-connectors/core/vocab";
 import { mediaRepository } from "@jeswr/solid-media-log";
-import { StorageError } from "@jeswr/storage-client";
+import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { DataFactory, Store } from "n3";
 import type { ReactNode } from "react";
@@ -121,6 +121,46 @@ it("explains why nothing was imported when the duplicate scan leaves a source un
   );
   expect(mocks.save).not.toHaveBeenCalled();
   expect(mocks.toastSuccess).not.toHaveBeenCalled();
+});
+it("refuses an import with the explanatory toast when an entry returns 429 during duplicate checking", async () => {
+  vi.stubGlobal("Blob", NodeBlob);
+  const storage = createMemoryStorage({ root: mocks.session.storageUrl, protocol: "solid" });
+  const repo = mediaRepository(storage, {
+    find: async () => [],
+    findAll: async () => new Map(),
+    register: async () => undefined,
+    unregister: async () => {},
+    listClasses: async () => [],
+  });
+  const existing = await repo.save({
+    title: "A New Film",
+    kind: "film",
+    status: "want",
+    year: 2025,
+  });
+  const read = storage.readRdf.bind(storage);
+  let checking = false;
+  vi.spyOn(storage, "readRdf").mockImplementation((url, options) =>
+    checking && url === existing.url
+      ? Promise.reject(toStorageError("GET", url, new Response(null, { status: 429 })))
+      : read(url, options),
+  );
+  mocks.load.mockImplementation((options) => {
+    checking = !!options?.complete;
+    return repo.load(options);
+  });
+  mocks.save.mockImplementation(repo.save);
+  render(<MediaApp />);
+  await screen.findByRole("heading", { name: "A New Film", level: 3 });
+  await importCsv();
+  await waitFor(() =>
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      "Couldn't check your whole library for duplicates, so nothing was imported. Refresh and try again.",
+    ),
+  );
+  expect(mocks.save).not.toHaveBeenCalled();
+  expect(mocks.toastSuccess).not.toHaveBeenCalled();
+  expect((await read(existing.url as string)).etag).toBe(existing.etag);
 });
 it("loads a connector WatchAction, non-RDF file and 403 item as a complete scan, reports two rejections and imports", async () => {
   vi.stubGlobal("Blob", NodeBlob);
