@@ -38,7 +38,8 @@
   },
   "devDependencies": {
     "@jeswr/federation-codegen": "workspace:*",
-    "@types/n3": "^1.26.1"
+    "@types/n3": "^1.26.1",
+    "typescript": "^6.0.3"
   },
   "engines": {
     "node": ">=24"
