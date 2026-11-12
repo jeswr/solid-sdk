@@ -94,6 +94,26 @@ the safe-integer cap. Enum reads compare exact lexical forms and datatypes again
 runtime writer's canonical literals; admission rejects noncanonical enum members that a
 value-only manifest cannot preserve (`"01"^^xsd:integer`, for example).
 
+**Opt-in exact decimals.** A literal field with `"decimal": "exact"` (allowed only on
+`xsd:decimal`, never its integer subtypes) maps to a `string` holding the exact lexical:
+an optional ASCII sign, ASCII digits, and an optional `.` followed by ASCII digits, at most
+64 characters (`isExactDecimalLexical`). No significand passes through a JS number, so
+`9007199254740993.01` survives and `10.50` keeps its scale byte-for-byte; leading zeros, `+1`
+and `-0.0` are preserved as written. `.5`, `5.`, exponents, whitespace, non-ASCII digits,
+non-strings and over-long values drop on read, write and set add under the usual
+optional-drop / required-reject policy (build keeps its non-validating drop contract).
+Reads require a Literal typed exactly `xsd:decimal`. Exact fields reject `in`, numeric
+bounds, text guards and non-lexical defaults at manifest validation. Without the key,
+the number mapping is unchanged. `fieldLiteralMapper(datatype, decimal)` is the single
+resolution used by the runtime, manifest validation and the generator's emitted types.
+
+**Closed string pattern.** `guards.stringPattern: "upper-alpha-3"` (only on an `xsd:string`
+literal) keeps exactly three ASCII uppercase letters (`isUpperAlpha3`), the projection of
+`sh:pattern "^[A-Z]{3}$"` (the ISO 4217 alphabetic code shape; list membership is domain
+policy). It is checked character by character, never as a regex from manifest text, and the
+value is validated raw: write sanitization is skipped so `"US\u0000D"` drops instead of
+being repaired to `USD`.
+
 The XSD string family (`normalizedString`, `token`, `language`, `NMTOKEN`, `Name`, `NCName`,
 `ID`, `IDREF`, `ENTITY` and their list types) has closed lexical checks on reads and writes.
 Whitespace-normalizing types conservatively require normalized spelling; invalid lexical

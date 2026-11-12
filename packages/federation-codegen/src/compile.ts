@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Compile a normalized SHACL shape model + the per-domain codegen config into a
  * {@link ModelManifest} (model.json) — the VERIFIED PROJECTION of shapes.ttl
@@ -16,6 +17,7 @@
 import {
   type AnyManifestEntity,
   type CompositeManifestEntity,
+  expandDatatype,
   literalMapper,
   type ManifestEntity,
   type ManifestField,
@@ -23,7 +25,9 @@ import {
   type ManifestNode,
   type ModelManifest,
   RUNTIME_MAJOR,
+  type StringPattern,
   validateManifest,
+  XSD,
 } from "@jeswr/model-runtime";
 import {
   type CodegenConfig,
@@ -76,6 +80,30 @@ export function iriSchemeForPattern(pattern: string | undefined): ManifestFieldG
 
 export function isHttpPattern(pattern: string | undefined): boolean {
   return iriSchemeForPattern(pattern) !== undefined;
+}
+
+/**
+ * Closed LITERAL string patterns with a reviewed runtime projection, matched by exact
+ * pattern TEXT (no regex is ever compiled from shape input). Only `^[A-Z]{3}$` (the
+ * ISO 4217 alphabetic currency-code shape) maps, to `upper-alpha-3`. Every other
+ * pattern, including equivalent spellings, stays unsupported.
+ */
+export function stringPatternFor(pattern: string | undefined): StringPattern | undefined {
+  return pattern === "^[A-Z]{3}$" ? "upper-alpha-3" : undefined;
+}
+
+/**
+ * The closed string-pattern guard a constraint projects to: a reviewed pattern on a
+ * literal whose datatype is exactly `xsd:string`, else `undefined`.
+ */
+export function stringPatternGuard(constraint: {
+  kind: "iri" | "literal";
+  datatype?: string;
+  pattern?: string;
+}): StringPattern | undefined {
+  if (constraint.kind !== "literal" || constraint.datatype === undefined) return undefined;
+  if (expandDatatype(constraint.datatype) !== `${XSD}string`) return undefined;
+  return stringPatternFor(constraint.pattern);
 }
 
 /** Class compatibility uses ONLY explicit rdfs:subClassOf edges from the input ontology. */
@@ -151,6 +179,30 @@ function compileField(
   const collection = collectionOf(constraint);
   if (collection) field.collection = collection;
   if (constraint.kind === "literal" && constraint.datatype) field.datatype = constraint.datatype;
+  if (fieldConfig?.decimal !== undefined) {
+    // Opt-in exact xsd:decimal mapping (config-declared, traced by fidelity). Restricted
+    // to a literal typed exactly xsd:decimal: the derived integer types carry sign/range
+    // value spaces with no reviewed exact-string projection. Shape constraints that
+    // only have a numeric projection fail closed instead of being silently dropped.
+    if (fieldConfig.decimal !== "exact") {
+      throw new Error(`field ${name} config decimal must be "exact"`);
+    }
+    if (
+      constraint.kind !== "literal" ||
+      constraint.datatype === undefined ||
+      expandDatatype(constraint.datatype) !== `${XSD}decimal`
+    ) {
+      throw new Error(`field ${name} config decimal "exact" requires an xsd:decimal literal`);
+    }
+    if (constraint.in !== undefined) {
+      throw new Error(`field ${name} config decimal "exact" cannot project a sh:in enumeration`);
+    }
+    if (constraint.minInclusive !== undefined || constraint.maxInclusive !== undefined) {
+      throw new Error(`field ${name} config decimal "exact" cannot project numeric bounds`);
+    }
+    field.decimal = "exact";
+    provenance.configGuards.push("decimal");
+  }
   if (constraint.minCount !== undefined) field.minCount = constraint.minCount;
   if (constraint.maxCount !== undefined) field.maxCount = constraint.maxCount;
   // G2 — a closed `sh:in` value set compiles to the manifest's enum list. An empty
@@ -185,6 +237,9 @@ function compileField(
     guards.minLength = constraint.minLength;
   }
   if (constraint.pattern === "\\S" && hasStringRuntimeValue(constraint)) guards.nonBlank = true;
+  // Shape-derived closed string pattern (`^[A-Z]{3}$` on an xsd:string literal).
+  const stringPattern = stringPatternGuard(constraint);
+  if (stringPattern !== undefined) guards.stringPattern = stringPattern;
 
   // Config-supplied guards (recorded as provenance so fidelity can trace them).
   if (fieldConfig) {

@@ -68,6 +68,14 @@ const w = new bookmark.Wrapper(bookmark.subject(resourceUrl), store, DataFactory
   by comparing canonical decimal spellings before/after JS number conversion.
   String-subtype lexical validators run on raw values on reads and writes; never
   sanitize an invalid lexical form into a valid one.
+- `"decimal": "exact"` on an `xsd:decimal` literal field (never an integer subtype)
+  surfaces a `string` in the closed grammar `[+-]?[0-9]+(\.[0-9]+)?`, at most 64 chars
+  (`isExactDecimalLexical`), preserved byte-for-byte (scale, leading zeros, sign). It
+  rejects `in`, numeric bounds, text guards and non-lexical defaults. Resolve a field's
+  mapper with `fieldLiteralMapper(datatype, field.decimal)`, never `literalMapper` alone.
+- `guards.stringPattern: "upper-alpha-3"` (xsd:string literals only) keeps exactly three
+  ASCII `A`-`Z` letters; values are checked raw (no write sanitization). It is the only
+  string pattern guard; add another only as a new reviewed enum value plus checker.
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias

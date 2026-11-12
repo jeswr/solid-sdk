@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The compiled shape-manifest — the runtime's ONLY input schema, and the
  * data-not-code boundary (design §7.1/§7.2). A manifest is pure data: flag / enum
@@ -14,8 +15,14 @@
  * different runtime major is rejected rather than mis-interpreted.
  */
 
-import { literalMapper } from "./datatypes.js";
-import { isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import {
+  type DecimalMapping,
+  expandDatatype,
+  fieldLiteralMapper,
+  isExactDecimalLexical,
+  XSD,
+} from "./datatypes.js";
+import { isSafeAbsoluteIri, isTurtlePrefixName, type StringPattern } from "./guards.js";
 
 /** The manifest schema version this runtime interprets. */
 export const MANIFEST_VERSION = 1 as const;
@@ -66,6 +73,11 @@ export interface ManifestFieldGuards {
   minLength?: number;
   /** Singleton non-blank string: a blank (whitespace-only / empty) value is dropped. */
   nonBlank?: boolean;
+  /**
+   * Closed string pattern projected from a reviewed `sh:pattern` (`upper-alpha-3` ⇐
+   * exactly `^[A-Z]{3}$`) on an `xsd:string` literal field. A value outside it is dropped.
+   */
+  stringPattern?: StringPattern;
 }
 
 /** A literal scalar a manifest may carry (default value / `sh:in` member). */
@@ -98,6 +110,12 @@ export interface ManifestField {
   collection?: "set";
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
   datatype?: string;
+  /**
+   * Opt-in literal mapping. `"exact"` (only on an `xsd:decimal` field) surfaces the
+   * value as its exact lexical STRING instead of a JS number; absent ⇒ the default
+   * number mapping.
+   */
+  decimal?: DecimalMapping;
   minCount?: number;
   maxCount?: number;
   /** A literal default value applied on read/build (data, never computed). */
@@ -274,6 +292,7 @@ const GUARD_KEYS = new Set<string>([
   "maxInclusive",
   "minLength",
   "nonBlank",
+  "stringPattern",
 ]);
 const FIELD_KEYS = new Set<string>([
   "name",
@@ -285,6 +304,7 @@ const FIELD_KEYS = new Set<string>([
   "classOnly",
   "collection",
   "datatype",
+  "decimal",
   "minCount",
   "maxCount",
   "default",
@@ -370,6 +390,11 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
   if (raw.minLength !== undefined)
     g.minLength = checkCount(raw.minLength, "field.guards.minLength");
   if (raw.nonBlank !== undefined) g.nonBlank = checkBoolean(raw.nonBlank, "field.guards.nonBlank");
+  if (raw.stringPattern !== undefined) {
+    if (raw.stringPattern !== "upper-alpha-3")
+      fail('field.guards.stringPattern must be "upper-alpha-3"');
+    g.stringPattern = raw.stringPattern;
+  }
   return g;
 }
 
@@ -391,6 +416,7 @@ function validateNestedField(
   for (const forbidden of [
     "aliasPredicates",
     "datatype",
+    "decimal",
     "collection",
     "maxCount",
     "default",
@@ -475,6 +501,12 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   if (collection) field.collection = collection;
   if (datatype) field.datatype = datatype;
+  if (raw.decimal !== undefined) {
+    if (raw.decimal !== "exact") fail('field.decimal must be "exact" when present');
+    if (kind !== "literal" || expandDatatype(datatype as string) !== `${XSD}decimal`)
+      fail("field.decimal requires an xsd:decimal literal field");
+    field.decimal = "exact";
+  }
 
   if (raw.minCount !== undefined) field.minCount = checkCount(raw.minCount, "field.minCount");
   if (raw.maxCount !== undefined) field.maxCount = checkCount(raw.maxCount, "field.maxCount");
@@ -503,7 +535,8 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
 
   field.guards = validateGuards(raw.guards);
   const g = field.guards;
-  const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
+  const datatypeMapper =
+    kind === "literal" ? fieldLiteralMapper(datatype as string, field.decimal) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";
   if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");
   if (g.iriPattern !== undefined && kind !== "iri") fail("iriPattern requires an IRI field");
@@ -523,6 +556,30 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   if (g.sanitizeText !== undefined && datatypeMapper?.lexicalValid !== undefined) {
     fail("sanitizeText is not applied to a datatype with strict lexical validation");
+  }
+  if (
+    g.stringPattern !== undefined &&
+    (kind !== "literal" ||
+      field.decimal !== undefined ||
+      expandDatatype(datatype as string) !== `${XSD}string`)
+  )
+    fail("stringPattern requires an xsd:string literal field");
+  if (field.decimal !== undefined) {
+    // The exact mapping has no reviewed exact enum / text-guard projection: fail closed
+    // rather than interpret a numeric member or a text guard against a decimal lexical.
+    if (field.in !== undefined) fail("field.in is not supported on an exact decimal field");
+    for (const key of [
+      "minLength",
+      "nonBlank",
+      "trim",
+      "dropBlank",
+      "emptyStringDrop",
+      "sanitizeText",
+    ] as const) {
+      if (g[key] !== undefined) fail(`${key} is not supported on an exact decimal field`);
+    }
+    if (field.default !== undefined && !isExactDecimalLexical(field.default))
+      fail("an exact decimal field.default must be an exact decimal lexical string");
   }
   if (g.emptyStringDrop !== undefined && collection === "set")
     fail("emptyStringDrop requires a singleton");

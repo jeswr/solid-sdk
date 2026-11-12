@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Datatype → `@rdfjs/wrapper` mapper resolution. The manifest names a field's RDF
  * datatype (or IRI term kind); this module resolves it to a strict term reader and
@@ -579,6 +580,73 @@ export function literalMapper(datatypeIri: string): DatatypeMapper {
     default:
       throw new TypeError(`unsupported datatype: ${iri}`);
   }
+}
+
+/**
+ * The opt-in literal mappings a manifest field may select instead of the default
+ * mapping for its datatype. `"exact"` applies only to `xsd:decimal` and maps it to a
+ * lexical STRING instead of a JS number (see {@link exactDecimalMapper}).
+ */
+export type DecimalMapping = "exact";
+
+/** Hard cap on an exact `xsd:decimal` lexical, sign and point included. */
+export const EXACT_DECIMAL_MAX_LENGTH = 64;
+
+/**
+ * True for a lexical in the closed EXACT `xsd:decimal` grammar: an optional ASCII
+ * `+`/`-` sign, one or more ASCII digits, and optionally a `.` followed by one or
+ * more ASCII digits, at most {@link EXACT_DECIMAL_MAX_LENGTH} characters in total.
+ * This is a strict subset of the XSD 1.1 decimal lexical space: it rejects the
+ * XSD-legal `.5` and `5.` spellings, every exponent form, whitespace, and non-ASCII
+ * digits. Leading zeros, a `+` sign, `-0` and trailing fraction zeros are accepted
+ * and preserved byte-for-byte (scale is data). Checked character by character; no
+ * regex is built from manifest or shape text.
+ */
+export function isExactDecimalLexical(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > EXACT_DECIMAL_MAX_LENGTH) return false;
+  let i = value[0] === "+" || value[0] === "-" ? 1 : 0;
+  const integerStart = i;
+  while (i < value.length && value.charCodeAt(i) >= 0x30 && value.charCodeAt(i) <= 0x39) i++;
+  if (i === integerStart) return false;
+  if (i === value.length) return true;
+  if (value[i] !== ".") return false;
+  const fractionStart = ++i;
+  while (i < value.length && value.charCodeAt(i) >= 0x30 && value.charCodeAt(i) <= 0x39) i++;
+  return i > fractionStart && i === value.length;
+}
+
+/**
+ * The EXACT mapper for `xsd:decimal`: reads the literal's lexical form as a string
+ * (datatype-exact: the term must be a Literal typed exactly `xsd:decimal`), writes
+ * the string back unchanged, typed `xsd:decimal`. {@link isExactDecimalLexical} is its
+ * lexical validator, so a value outside the grammar drops fail-closed on read, write
+ * and set add. No significand ever passes through a JS number. Any other datatype,
+ * including the `xsd:decimal`-derived integer types, throws: their value-space
+ * (sign / range) checks have no reviewed exact-string projection.
+ */
+export function exactDecimalMapper(datatypeIri: string): DatatypeMapper {
+  const iri = expandDatatype(datatypeIri);
+  if (iri !== `${XSD}decimal`) {
+    throw new TypeError(`exact decimal mapping requires xsd:decimal, not ${iri}`);
+  }
+  return {
+    as: (term) => literalLexical(term, iri),
+    from: typedStringFrom(iri) as DatatypeMapper["from"],
+    jsType: "string",
+    lexicalValid: isExactDecimalLexical,
+  };
+}
+
+/**
+ * Resolve the mapper for a literal field: the default {@link literalMapper} for its
+ * datatype, or the opt-in exact decimal mapper. Every caller that decides a field's JS
+ * surface (runtime plans, manifest validation, emitted types) resolves through this.
+ */
+export function fieldLiteralMapper(datatypeIri: string, decimal?: DecimalMapping): DatatypeMapper {
+  if (decimal === undefined) return literalMapper(datatypeIri);
+  if (decimal !== "exact") throw new TypeError("unsupported decimal mapping");
+  return exactDecimalMapper(datatypeIri);
 }
 
 /**
