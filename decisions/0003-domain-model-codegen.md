@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # 0003 Domain-model code generation in the workspace
@@ -75,6 +76,21 @@ each predicate separately and selects the guarded canonical value before aliases
 conflicting legacy triples can therefore parse even when the emitted SHACL rejects the
 union's `maxCount`. The reviewed solid-bookmark oracle is binding here (round-6 M1 declined).
 Writes are canonical-only and clear aliases, so the runtime never produces such data.
+
+Write-time alias migration keeps its shared 10,000-read preservation audit whenever
+cleanup is possible. A setter/build field with no predicate aliases, or `mark` with no
+type aliases, skips that audit only if no other owner in any migration-context manifest
+declares aliases. Other owners remain conservative because co-typing and data-graph
+subclasses can overlap their focus nodes. Alias-free edits therefore do not scan unrelated
+subjects; explicit writes retain all guards and sanitization.
+
+Multi-subject readers should pass an explicit runtime `createParseScope(dataset)` to
+`entity.parse(url, dataset, { scope })`. One scope memoises class membership and shares a
+100,000-read type/subclass budget (configurable 0–1,000,000) across roots and nested class
+checks. Exhaustion is observable and sticky, with all subsequent class checks failing
+closed. Scopes are bound to one unchanged dataset and must be discarded after mutation;
+write paths never consult them. Parses without a scope keep independent 10,000-read checks.
+The generator emits the optional `ParseOptions` parameter on every entity parse signature.
 
 Two follow-ups are recorded rather than decided here: `model-runtime` serialises with
 `n3.Writer` directly instead of through `@jeswr/rdf-serialize`, and it carries its own http(s)

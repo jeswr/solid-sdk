@@ -114,6 +114,36 @@ test("a rotated refresh credential survives a failed final fence read and restor
   }
 });
 
+// AUTHORED-BY Claude Opus 5.5
+test("a failed rotation write removes the consumed refresh credential instead of keeping it", async () => {
+  const f = setup();
+  const setSession = f.sessions.setItem;
+  const failure = new Error("rotation write failed");
+  let sessionKey;
+  let failNextWrite = false;
+  f.sessions.setItem = async (key, value) => {
+    if (failNextWrite) {
+      failNextWrite = false;
+      throw failure;
+    }
+    sessionKey = key;
+    await setSession(key, value);
+  };
+  const request = new Request(`${rs.url}/alice/rotation-write-failure`);
+  try {
+    await f.load().provider.upgrade(request);
+    assert.ok(await f.sessions.getItem(sessionKey));
+    const refreshes = op.stats.refresh;
+    failNextWrite = true;
+    await assert.rejects(f.load().provider.restore(request), (e) => e === failure);
+    assert.equal(op.stats.refresh, refreshes + 1);
+    // The spent refresh token must not survive in durable storage.
+    assert.equal(await f.sessions.getItem(sessionKey), null);
+  } finally {
+    f.fence.close();
+  }
+});
+
 test("stored keys allow a fresh session to revoke without redeeming a refresh token", async () => {
   const f = setup();
   const keys = [];
