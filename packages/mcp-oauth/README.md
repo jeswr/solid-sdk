@@ -106,7 +106,12 @@ a new ES256 DPoP key for each login. It resolves an issuer directly, or falls ba
 WebID's profile only when discovery returns HTTP 404. Ambiguous/missing profile issuers fail;
 malformed discovery, transport failures and issuer mismatches never trigger fallback. After
 OIDC completion, the verified WebID must match a supplied WebID and advertise the selected issuer
-in its own profile. Remote JSON-LD contexts are refused by the RDF parser.
+in its own profile. The broker passes `verifyWebId: false` to the protocol engine and owns this
+binding check once, using its SSRF-guarded fetch-rdf transport for content negotiation and storage
+root discovery in the same profile read. This avoids a second, Turtle-only engine fetch. Refresh
+keeps that session's established profile binding and checks refreshed subject, nonce and WebID;
+it does not repeat the profile read after the OP rotates the refresh token. Remote JSON-LD
+contexts are refused by the RDF parser.
 
 LWS storages are answered by exchanging the session's verified ID token, under pod-auth's
 exchange rule. The resource must be inside a stored root, and the authorization server must
