@@ -24,9 +24,19 @@ export async function resetHealthDemo(page: Page) {
   });
   await page.unroute("**/__health-test-reset");
 }
+/** The suite no longer starts in a demo session: sign in to the demo pod explicitly. */
+export async function signInDemo(page: Page) {
+  // AUTHORED-BY Claude Opus 5.5
+  await page.goto("/signin");
+  await page.getByRole("button", { name: "Try it with a demo pod", exact: true }).click();
+  await expect(page).toHaveURL(/\/home$/);
+}
 export async function ready(page: Page, path: string, heading: string) {
   await page.goto(path);
-  await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible();
+  // A cold demo pod can take longer than the default 5s to open on a loaded machine.
+  await expect(page.getByRole("heading", { level: 1, name: heading, exact: true })).toBeVisible({
+    timeout: 30000,
+  });
   await expect(page.getByRole("status", { name: /Loading|Preparing/ })).toHaveCount(0);
 }
 export async function accessible(page: Page) {

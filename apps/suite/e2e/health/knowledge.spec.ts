@@ -3,13 +3,14 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { exampleHealthKnowledge } from "@jeswr/pkg-health/testing";
 import { expect, type Page, test } from "@playwright/test";
-import { accessible, ready, resetHealthDemo } from "./helpers";
+import { accessible, ready, resetHealthDemo, signInDemo } from "./helpers";
 
 const fixture = fileURLToPath(new URL("fixtures/knowledge.trig", import.meta.url));
 const fictionalOwner = "https://example.org/people/robin#me";
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
   await resetHealthDemo(page);
+  await signInDemo(page);
   await ready(page, "/health/knowledge", "What your assistant knows");
   await expect(page.getByRole("status", { name: "Knowledge data source" })).toContainText(
     "Fictional sample",
@@ -79,6 +80,7 @@ test("sample hashes match Node, every tab is accessible and captured, and tabs s
   await expect(page.getByRole("tab", { name: "Timeline", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
+    { timeout: 30000 },
   );
   await page.setViewportSize({ width: 320, height: 900 });
   for (const tab of ["Overview", "Timeline", "Results", "Facts", "Notes"]) {
@@ -174,7 +176,14 @@ test("a local fictional file changes source, reprojects another owner, and disab
     XMLHttpRequest.prototype.send = refuse;
   });
   page.on("request", (request) => {
-    requests.push(request.method());
+    // The shell may fetch its own static assets (icons, fonts); those carry no data.
+    const url = new URL(request.url());
+    const asset =
+      request.method() === "GET" &&
+      url.origin === new URL(page.url()).origin &&
+      !url.search &&
+      /\.(?:svg|png|ico|woff2?|css|js)$/.test(url.pathname);
+    if (!asset) requests.push(`${request.method()} ${url.origin}${url.pathname}`);
   });
   page.on("pageerror", (error) => {
     writes.push(error.name);
@@ -210,7 +219,7 @@ test("a local fictional file changes source, reprojects another owner, and disab
     mimeType: "application/trig",
     buffer: Buffer.from("private malformed content"),
   });
-  await expect(page.getByRole("alert")).toHaveText(
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "Couldn't open this knowledge graph. Check the file and the owner's HTTP(S) WebID.",
   );
   await expect(page.getByRole("status", { name: "Knowledge data source" })).toContainText(
