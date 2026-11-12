@@ -1,5 +1,31 @@
 // AUTHORED-BY Codex GPT-6.1
-import { expect, test } from "@playwright/test";
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { expect, type Page, test } from "@playwright/test";
+import { AclResource } from "@solid/object";
+import { DataFactory } from "n3";
+import { docContainerUrls } from "../../src/apps/docs/lib/model/layout";
+import { decodeRef } from "../../src/lib/refs";
+
+async function companionGrants(page: Page, person: string) {
+  const resource = decodeRef(new URL(page.url()).pathname.split("/").at(-1) as string);
+  const { container } = docContainerUrls(resource);
+  const url = `${container}.acl`;
+  const turtle = await page.evaluate(async (url) => {
+    const pod = window.__suiteDemoPod;
+    if (!pod) throw new Error("Demo pod is not ready");
+    const response = await pod.fetch(url);
+    if (!response.ok) throw new Error(`Companion ACL read failed: ${response.status}`);
+    return response.text();
+  }, url);
+  const dataset = await parseRdf(turtle, "text/turtle", { baseIRI: url });
+  return [...new AclResource(dataset, DataFactory).authorizations]
+    .filter((rule) => rule.agent.has(person) || rule.agentClass.has(person))
+    .map((rule) => ({
+      accessTo: rule.accessTo,
+      defaults: rule.default,
+      modes: [...rule.mode].sort(),
+    }));
+}
 
 const BOB = "https://bob.example.org/profile#me";
 
@@ -21,7 +47,7 @@ test.beforeEach(async ({ page }) => {
   await page.unroute("**/__docs-share-reset");
 });
 
-test("shares a saved document from its header and File menu, persisting main-resource access", async ({
+test("shares a saved document from its header and File menu, persisting document and companion access", async ({
   page,
   context,
 }) => {
@@ -41,14 +67,7 @@ test("shares a saved document from its header and File menu, persisting main-res
   const documentUrl = page.url();
   await share.click();
   let dialog = page.getByRole("dialog", { name: "Share “Shared plan”" });
-  await expect(dialog.getByRole("note")).toContainText(
-    "update log, assets and comments keep their existing permissions",
-  );
-  await expect(dialog.getByRole("note")).toContainText(
-    "Collaborators may not be able to open the document",
-  );
-  await expect(dialog.getByRole("note")).toContainText("edits may not save");
-  await expect(dialog.getByRole("note")).toContainText('"Anyone with the link"');
+  await expect(dialog.getByRole("note")).toHaveCount(0);
   const bounds = await dialog.boundingBox();
   expect(bounds?.width).toBeLessThanOrEqual(page.viewportSize()?.width ?? 1280);
   await dialog.getByRole("combobox", { name: "Add people" }).fill(BOB);
@@ -56,6 +75,16 @@ test("shares a saved document from its header and File menu, persisting main-res
   await dialog.getByLabel("Role for added people").selectOption("editor");
   await dialog.getByRole("button", { name: "Share", exact: true }).click();
   await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveValue("editor");
+  const companion = docContainerUrls(
+    decodeRef(new URL(page.url()).pathname.split("/").at(-1) as string),
+  ).container;
+  expect(await companionGrants(page, BOB)).toEqual([
+    {
+      accessTo: companion,
+      defaults: companion,
+      modes: ["Append", "Read", "Write"].map((mode) => `http://www.w3.org/ns/auth/acl#${mode}`),
+    },
+  ]);
   await dialog.getByRole("button", { name: "Copy link" }).click();
   await expect(dialog.getByText("Link copied", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(documentUrl);
@@ -74,8 +103,17 @@ test("shares a saved document from its header and File menu, persisting main-res
   await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveValue("editor");
   await dialog.getByLabel("Who can access").selectOption("anyone");
   await expect(dialog.getByLabel("Link role")).toHaveValue("viewer");
+  await expect(dialog.getByText("Sharing saved", { exact: true })).toBeVisible();
+  expect(await companionGrants(page, "http://xmlns.com/foaf/0.1/Agent")).toEqual([
+    {
+      accessTo: companion,
+      defaults: companion,
+      modes: ["http://www.w3.org/ns/auth/acl#Read"],
+    },
+  ]);
   await dialog.getByRole("button", { name: `Remove access for ${BOB}` }).click();
   await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveCount(0);
+  expect(await companionGrants(page, BOB)).toEqual([]);
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(file).toBeFocused();
 });

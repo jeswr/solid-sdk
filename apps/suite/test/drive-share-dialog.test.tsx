@@ -582,3 +582,9 @@ it("returns focus stranded by a save to the control, or to Done when the control
   active.mockRestore();
   expect(share).toHaveProperty("disabled", true);
 });
+
+it("shows a caller-provided sharing notice", async () => {
+  show({ notice: "Sharing guidance" });
+  await ready();
+  expect(screen.getByRole("note").textContent).toBe("Sharing guidance");
+});
