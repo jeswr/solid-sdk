@@ -3,11 +3,6 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import { DatasetWrapper } from "@rdfjs/wrapper";
-import { ContainerDataset } from "@solid/object";
-import { DataFactory } from "n3";
-import { validateCommentSnapshot } from "../comments/anchors";
-import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import {
   httpIri,
   parseDescriptor,
@@ -19,16 +14,15 @@ import {
   SPREADSHEET_CLASS,
   serializeDescriptor,
   serializeWorkbook,
+  sheetRegistrations,
   type WorkbookMetadata,
   workbookLayout,
-} from "./rdf";
+} from "@jeswr/solid-sheets";
+import { ContainerDataset } from "@solid/object";
+import { DataFactory } from "n3";
+import { validateCommentSnapshot } from "../comments/anchors";
+import { type Column, csvToGrid, type Grid, gridToCsv } from "./grid";
 import { type Snapshot, serializeSnapshot } from "./snapshot";
-
-class TypeIndexDataset extends DatasetWrapper {
-  get registrations() {
-    return this.instancesOf(`${SOLID}TypeRegistration`, SheetResource);
-  }
-}
 
 export type Precondition =
   | { ifMatch: string; ifNoneMatch?: never }
@@ -205,8 +199,7 @@ export function createSheetStorage(fetch: typeof globalThis.fetch, podRoot: stri
       assertWithinPodScope(podRoot, root);
       const result = await read(index, "text/turtle");
       const dataset = await parseRdf(result.value, "text/turtle", { baseIRI: index });
-      const wrappers = new TypeIndexDataset(dataset, DataFactory);
-      for (const registration of wrappers.registrations) {
+      for (const registration of sheetRegistrations(dataset)) {
         if (
           registration.iri(`${SOLID}forClass`) === SPREADSHEET_CLASS &&
           registration.iri(`${SOLID}instance`) === subject &&
