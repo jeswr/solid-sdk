@@ -74,6 +74,7 @@ const active: HistoryEntry = {
     url: `${ROOT}settings/access-records/grant-1.ttl`,
     targets: [`${ROOT}activity/`, `${ROOT}health/sleep/`],
     role: "viewer",
+    targetRoles: { [`${ROOT}activity/`]: "viewer", [`${ROOT}health/sleep/`]: "viewer" },
   },
 };
 const denied: HistoryEntry = {

@@ -29,6 +29,7 @@ import { useRef, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import {
   type ActiveHistoryEntry,
+  HistoryChangedError,
   type HistoryEntry,
   HistoryRevokeError,
   isActiveGrant,
@@ -81,8 +82,12 @@ export function ActiveGrantRow({
       await onRevoke(entry);
       toast.success(`${name} no longer has this access.`);
     } catch (caught) {
-      if (!(caught instanceof HistoryRevokeError)) console.error("Revoking access failed", caught);
-      setError(caught instanceof HistoryRevokeError ? PARTIAL_REVOKE : REVOKE_FAILED);
+      if (caught instanceof HistoryChangedError) setError(caught.message);
+      else {
+        if (!(caught instanceof HistoryRevokeError))
+          console.error("Revoking access failed", caught);
+        setError(caught instanceof HistoryRevokeError ? PARTIAL_REVOKE : REVOKE_FAILED);
+      }
       running.current = false;
       setBusy(false);
     }
@@ -121,7 +126,8 @@ export function ActiveGrantRow({
             <AlertDialogTitle>Remove {name}'s access?</AlertDialogTitle>
             <AlertDialogDescription>
               {name} will no longer be able to use the {placesText(entry.grant.targets.length)}{" "}
-              listed. Any other access you gave {name} to those places ends too.
+              listed. If {name} already had the same access to one of those places before you
+              approved, that ends too.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

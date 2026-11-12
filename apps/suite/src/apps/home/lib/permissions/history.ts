@@ -9,7 +9,7 @@
  */
 
 import { ACCM, DCT, DPV as DPV_TERMS, requireStrongEtag } from "@jeswr/pod-access/requests-solid";
-import { removeGrant } from "@jeswr/pod-access/roles";
+import { grantsWithRoles, removeGrant } from "@jeswr/pod-access/roles";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { LiteralFrom, NamedNodeFrom, RequiredAs } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -25,6 +25,8 @@ export interface HistoryGrant {
   url: string;
   targets: string[];
   role: "viewer" | "editor";
+  /** The role the approval set on each place. */
+  targetRoles: Record<string, "viewer" | "editor">;
   revokedAt?: string;
 }
 
@@ -77,18 +79,20 @@ function assignees(dataset: DatasetCore, url: string): string[] {
 function grantOf(dataset: DatasetCore, url: string): HistoryGrant | undefined {
   const policy = subjectOf(dataset, url);
   if (!policy.types.includes(`${ODRL}Agreement`)) return undefined;
-  const targets = new Set<string>();
-  let editor = false;
+  const targetRoles: Record<string, "viewer" | "editor"> = {};
   for (const permission of policy.objects(`${ODRL}permission`)) {
     const rule = subjectOf(dataset, permission);
-    for (const target of rule.iris(`${ODRL}target`)) targets.add(target);
-    if (rule.iris(`${ODRL}action`).some((action) => EDIT_ACTIONS.has(action))) editor = true;
+    const edits = rule.iris(`${ODRL}action`).some((action) => EDIT_ACTIONS.has(action));
+    for (const target of rule.iris(`${ODRL}target`))
+      if (edits || targetRoles[target] === undefined)
+        targetRoles[target] = edits ? "editor" : "viewer";
   }
   const revokedAt = firstDate(policy.texts(ACCM.revokedAt));
   return {
     url,
-    targets: [...targets].sort(),
-    role: editor ? "editor" : "viewer",
+    targets: Object.keys(targetRoles).sort(),
+    role: Object.values(targetRoles).includes("editor") ? "editor" : "viewer",
+    targetRoles,
     ...(revokedAt && { revokedAt }),
   };
 }
@@ -154,8 +158,8 @@ export function isActiveGrant(entry: HistoryEntry): entry is ActiveHistoryEntry 
 /** The grant record no longer says what the history showed: nothing was changed. */
 export class HistoryChangedError extends Error {
   override name = "HistoryChangedError";
-  constructor() {
-    super("This access record changed; refresh before trying again");
+  constructor(message = "This access record changed; refresh before trying again") {
+    super(message);
   }
 }
 
@@ -207,9 +211,12 @@ async function updateRecord(
 
 /**
  * Revoke an approval from the history. The grant is re-read first and must still name the same
- * recipient and places; then `removeGrant` takes the recipient's direct role off every place (so
- * access shared with them another way on those places ends too), and only once every place
- * succeeded are the grant and receipt marked. A partial failure leaves the grant active.
+ * recipient and places. Each place's current direct role for the recipient must still be exactly
+ * the role the approval set; if it was changed since (someone edited it in Permissions), revoking
+ * refuses rather than take away access the approval never gave. A place where the recipient has
+ * no direct role any more has nothing to remove. Then `removeGrant` takes the recipient's direct
+ * role off the remaining places, and only once every place succeeded are the grant and receipt
+ * marked. A partial failure leaves the grant active.
  */
 export async function revokeHistoryGrant(
   entry: ActiveHistoryEntry,
@@ -234,8 +241,20 @@ export async function revokeHistoryGrant(
   if (current.revokedAt === undefined) {
     const removed: string[] = [];
     const failed: { url: string; error: unknown }[] = [];
+    const holding: string[] = [];
+    for (const url of current.targets) {
+      const kind = url.endsWith("/") ? "folder" : "resource";
+      const direct = (await grantsWithRoles(url, { fetch: scoped, root: storage, kind })).filter(
+        ({ agent, inherited }) => !inherited && agent.type === "webid" && agent.id === recipient,
+      );
+      if (direct.some(({ role }) => role !== current.targetRoles[url]))
+        throw new HistoryChangedError(
+          "Their access was changed after this approval; change it in Permissions instead",
+        );
+      if (direct.length) holding.push(url);
+    }
     for (const kind of ["folder", "resource"] as const) {
-      const urls = current.targets.filter((url) => url.endsWith("/") === (kind === "folder"));
+      const urls = holding.filter((url) => url.endsWith("/") === (kind === "folder"));
       if (!urls.length) continue;
       const result = await removeGrant(
         urls,

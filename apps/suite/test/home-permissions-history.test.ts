@@ -44,10 +44,10 @@ const ownerRule = (target: string, folder: boolean) =>
   `<#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${target}>; ${
     folder ? `acl:default <${target}>; ` : ""
   }acl:mode acl:Read, acl:Write, acl:Control.`;
-const bobRule = (target: string, folder: boolean) =>
+const bobRule = (target: string, folder: boolean, write = false) =>
   `<#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${target}>; ${
     folder ? `acl:default <${target}>; ` : ""
-  }acl:mode acl:Read.`;
+  }acl:mode acl:Read${write ? ", acl:Write" : ""}.`;
 const carolRule = (target: string) =>
   `<#carol> a acl:Authorization; acl:agent <${CAROL}>; acl:accessTo <${target}>; acl:mode acl:Read.`;
 
@@ -91,7 +91,7 @@ function pod() {
   resource(
     FILE,
     `${PREFIXES} <> dct:title "Plan".`,
-    `${PREFIXES} ${ownerRule(FILE, false)} ${bobRule(FILE, false)} ${carolRule(FILE)}`,
+    `${PREFIXES} ${ownerRule(FILE, false)} ${bobRule(FILE, false, true)} ${carolRule(FILE)}`,
   );
   put(
     RECORDS,
@@ -181,7 +181,12 @@ describe("access history", () => {
         recipient: BOB,
         purpose: { iri: "https://w3id.org/dpv#ServiceProvision", label: "Provide the service" },
         decidedAt: "2026-11-01T09:00:00.000Z",
-        grant: { url: GRANT, targets: [FOLDER, FILE], role: "editor" },
+        grant: {
+          url: GRANT,
+          targets: [FOLDER, FILE],
+          role: "editor",
+          targetRoles: { [FOLDER]: "viewer", [FILE]: "editor" },
+        },
       },
       {
         receipt: DENIAL,
@@ -251,6 +256,7 @@ describe("access history", () => {
         url: GRANT,
         targets: [FOLDER],
         role: "viewer",
+        targetRoles: { [FOLDER]: "viewer" },
         revokedAt: "2026-11-05T00:00:00.000Z",
       },
     });
@@ -313,6 +319,22 @@ describe("revoking from the history", () => {
     await revokeHistoryGrant(entry, options(memory));
     expect(await agentsOn(memory, FILE)).not.toContain(BOB);
     expect(memory.writes().filter((url) => url === `${FOLDER}.acl`)).toHaveLength(1);
+  });
+
+  it("refuses when the recipient's role on a place changed after the approval", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    // Someone raised Bob to editor on the folder in Permissions after approving viewer.
+    memory.put(
+      `${FOLDER}.acl`,
+      `${PREFIXES} ${ownerRule(FOLDER, true)} ${bobRule(FOLDER, true, true)}`,
+    );
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryChangedError);
+    expect((error as Error).message).toContain("changed after this approval");
+    expect(memory.writes()).toEqual([]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+    expect(await agentsOn(memory, FILE)).toContain(BOB);
   });
 
   it("refuses a grant record that no longer says what was shown, before any change", async () => {
