@@ -16,9 +16,406 @@ const manifest = {
     "foaf": "http://xmlns.com/foaf/0.1/",
     "dcterms": "http://purl.org/dc/terms/",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jmedia": "https://jeswr.org/ns/sectors/media#",
+    "jcore": "https://jeswr.org/ns/core#",
+    "schema": "https://schema.org/"
   },
   "entities": [
+    {
+      "name": "LibraryAlbum",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/media#Album"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "performedByArtist",
+          "predicate": "https://jeswr.org/ns/sectors/media#performedByArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "byArtist",
+          "predicate": "https://schema.org/byArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "track",
+          "predicate": "https://schema.org/track",
+          "kind": "iri",
+          "collection": "set",
+          "guards": {}
+        },
+        {
+          "name": "url",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "LibraryArtist",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/media#Artist"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "foafName",
+          "predicate": "http://xmlns.com/foaf/0.1/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "performedByArtist",
+          "predicate": "https://jeswr.org/ns/sectors/media#performedByArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "byArtist",
+          "predicate": "https://schema.org/byArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "url",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Listen",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/media#PlaybackEvent"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "atTime",
+          "predicate": "https://jeswr.org/ns/core#atTime",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "hadParticipant",
+          "predicate": "https://jeswr.org/ns/core#hadParticipant",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "msPlayed",
+          "predicate": "https://jeswr.org/ns/sectors/media#msPlayed",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "playedWork",
+          "predicate": "https://jeswr.org/ns/sectors/media#playedWork",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "agent",
+          "predicate": "https://schema.org/agent",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "endTime",
+          "predicate": "https://schema.org/endTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "listenedTo",
+          "predicate": "https://schema.org/object",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "startTime",
+          "predicate": "https://schema.org/startTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "LibraryPlaylist",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/media#Playlist"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "performedByArtist",
+          "predicate": "https://jeswr.org/ns/sectors/media#performedByArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "byArtist",
+          "predicate": "https://schema.org/byArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "url",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "LibraryTrack",
+      "typeIris": [
+        "https://jeswr.org/ns/sectors/media#Track"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "sanitizeText": false,
+            "minLength": 1,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "durationSeconds",
+          "predicate": "https://jeswr.org/ns/sectors/media#durationSeconds",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#decimal",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        },
+        {
+          "name": "inAlbum",
+          "predicate": "https://jeswr.org/ns/sectors/media#inAlbum",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "isrc",
+          "predicate": "https://jeswr.org/ns/sectors/media#isrc",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "loved",
+          "predicate": "https://jeswr.org/ns/sectors/media#loved",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "performedByArtist",
+          "predicate": "https://jeswr.org/ns/sectors/media#performedByArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "byArtist",
+          "predicate": "https://schema.org/byArtist",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "contentUrl",
+          "predicate": "https://schema.org/contentUrl",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "duration",
+          "predicate": "https://schema.org/duration",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "image",
+          "predicate": "https://schema.org/image",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "schemaInAlbum",
+          "predicate": "https://schema.org/inAlbum",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "lyrics",
+          "predicate": "https://schema.org/lyrics",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "url",
+          "predicate": "https://schema.org/url",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
     {
       "name": "Scrobble",
       "kind": "composite",
@@ -205,7 +602,10 @@ const nodeViewsManifest = {
     "foaf": "http://xmlns.com/foaf/0.1/",
     "dcterms": "http://purl.org/dc/terms/",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jmedia": "https://jeswr.org/ns/sectors/media#",
+    "jcore": "https://jeswr.org/ns/core#",
+    "schema": "https://schema.org/"
   },
   "entities": [
     {

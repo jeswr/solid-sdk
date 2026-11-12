@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Claude Opus 5.5
 /**
  * `@jeswr/solid-listening` — the media-sector **listening-history / scrobble** RDF
  * model (the data model a [Web Scrobbler](https://github.com/web-scrobbler/web-scrobbler)→Solid
@@ -25,6 +26,15 @@ export {
   buildOwnerOnlyAcl,
   writeOwnerOnlyAcl,
 } from "./acl.js";
+export {
+  LIBRARY_CO_TYPES,
+  LIBRARY_MEDIA,
+  type LibraryField,
+  type LibraryValue,
+  type LibraryView,
+  libraryFieldQuads,
+  libraryTypeQuads,
+} from "./library.js";
 export {
   Album,
   Artist,

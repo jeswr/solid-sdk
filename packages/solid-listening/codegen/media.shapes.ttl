@@ -1,4 +1,5 @@
 # AUTHORED-BY Claude Opus 4.8
+# AUTHORED-BY Claude Opus 5.5 (Suite Music library profile)
 #
 # Generation INPUT (SHACL profile, L2) for @jeswr/solid-listening's generated model.
 #
@@ -26,6 +27,43 @@
 # media:Track, matching this package's published listening.shacl.ttl: the generator
 # links class-only constraints to exactly-matching shapes, and sh:class is checked
 # against the data graph, where a scrobble's track is typed media:Track.
+#
+# ---------------------------------------------------------------------------------
+# Suite Music library profile (AUTHORED-BY Claude Opus 5.5; bead sst-urdp).
+#
+# Five FLAT entities (subject convention "self": one subject per track, artist, album,
+# playlist or play, many per document) describing exactly what the Suite Music app
+# writes to pods, so the app's canonical writes go through the generated model. The
+# shapes start from the same sector shapes, under the sector's jeswr.org namespace
+# (`jmedia:` / `jcore:`, https://jeswr.org/ns/…) that the app has always written; its
+# on-pod IRIs are kept exactly. Mappings and narrowings, each deliberate:
+#   - Additive schema.org mirrors the app writes beside the sector term (the app
+#     dual-writes both): schema:name beside dcterms:title / foaf:name, schema:byArtist
+#     beside media:performedByArtist, schema:inAlbum beside media:inAlbum,
+#     schema:duration (an ISO "PT…S" xsd:string, the app's historic form) beside
+#     media:durationSeconds, schema:object beside media:playedWork, schema:startTime
+#     beside core:atTime, schema:agent beside core:hadParticipant. They are distinct
+#     canonical fields, not read aliases: aliases are migrated away on write, and the
+#     app keeps both terms on the pod.
+#   - App-only fields: schema:url, schema:image, schema:contentUrl, schema:lyrics,
+#     schema:track (album track list) and schema:endTime; artist/album/playlist also
+#     carry the byArtist / performedByArtist / url / image fields because every app
+#     entity accepts them.
+#   - Sector sh:class hints on IRI links (performedByArtist → Artist, inAlbum → Album,
+#     playedWork → CreativeWork) are omitted: flat fields cannot carry class hints,
+#     and the app links to resources in other documents whose types it cannot see.
+#   - The ISRC sh:pattern is omitted (as for the scrobble composite above).
+#   - core:hadParticipant is narrowed to sh:maxCount 1 (the app writes one listener).
+#   - No IRI field carries an ^https?:// pattern: the runtime scheme guard normalizes
+#     IRIs, and the app keeps exact lexical identities (it validates http(s) itself).
+#   - The schema.org second type (schema:MusicRecording, schema:MusicGroup,
+#     schema:MusicAlbum, schema:MusicPlaylist, schema:ListenAction) is a co-type added by
+#     the facade (src/library.ts), not a type alias, which mark() would remove.
+#   - Playlist entries (blank schema:ListItem nodes with schema:position + schema:item)
+#     are not modelled: generated wrappers address named subjects only.
+#   - Play instants reuse the composite's PlayedAtInstantShape node (time:Instant).
+# Read tolerance for foreign and legacy data (mo:, http://schema.org/, w3id.org media,
+# untyped literals) stays in the app; see README "Suite Music library".
 @prefix mdsh:    <https://w3id.org/jeswr/sectors/media/shapes#> .
 @prefix media:   <https://w3id.org/jeswr/sectors/media#> .
 @prefix core:    <https://w3id.org/jeswr/core#> .
@@ -34,6 +72,10 @@
 @prefix dcterms: <http://purl.org/dc/terms/> .
 @prefix time:    <http://www.w3.org/2006/time#> .
 @prefix foaf:    <http://xmlns.com/foaf/0.1/> .
+@prefix jmedia:  <https://jeswr.org/ns/sectors/media#> .
+@prefix jcore:   <https://jeswr.org/ns/core#> .
+@prefix schema:  <https://schema.org/> .
+@prefix lib:     <https://jeswr.org/ns/sectors/media/shapes#> .
 
 mdsh:PlaybackEventShape
     a sh:NodeShape ;
@@ -159,4 +201,296 @@ mdsh:AlbumShape
         sh:maxCount 1 ;
         sh:datatype xsd:string ;
         sh:severity sh:Warning ;
+    ] .
+
+lib:LibraryTrackShape
+    a sh:NodeShape ;
+    sh:targetClass jmedia:Track ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:name "title" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:pattern "\\S" ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path schema:name ;
+        sh:name "name" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:byArtist ;
+        sh:name "byArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:performedByArtist ;
+        sh:name "performedByArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:url ;
+        sh:name "url" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:image ;
+        sh:name "image" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:inAlbum ;
+        sh:name "inAlbum" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:inAlbum ;
+        sh:name "schemaInAlbum" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:durationSeconds ;
+        sh:name "durationSeconds" ;
+        sh:datatype xsd:decimal ;
+        sh:maxCount 1 ; sh:minInclusive 0 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:duration ;
+        sh:name "duration" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:loved ;
+        sh:name "loved" ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:isrc ;
+        sh:name "isrc" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:contentUrl ;
+        sh:name "contentUrl" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:lyrics ;
+        sh:name "lyrics" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+lib:LibraryArtistShape
+    a sh:NodeShape ;
+    sh:targetClass jmedia:Artist ;
+    sh:property [
+        sh:path foaf:name ;
+        sh:name "foafName" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:name ;
+        sh:name "name" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:byArtist ;
+        sh:name "byArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:performedByArtist ;
+        sh:name "performedByArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:url ;
+        sh:name "url" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:image ;
+        sh:name "image" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+lib:LibraryAlbumShape
+    a sh:NodeShape ;
+    sh:targetClass jmedia:Album ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:name "title" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path schema:name ;
+        sh:name "name" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:byArtist ;
+        sh:name "byArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:performedByArtist ;
+        sh:name "performedByArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:url ;
+        sh:name "url" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:image ;
+        sh:name "image" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:track ;
+        sh:name "track" ;
+        sh:nodeKind sh:IRI ;
+        sh:severity sh:Info ;
+    ] .
+
+lib:LibraryPlaylistShape
+    a sh:NodeShape ;
+    sh:targetClass jmedia:Playlist ;
+    sh:property [
+        sh:path dcterms:title ;
+        sh:name "title" ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path schema:name ;
+        sh:name "name" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:byArtist ;
+        sh:name "byArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:performedByArtist ;
+        sh:name "performedByArtist" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:url ;
+        sh:name "url" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:image ;
+        sh:name "image" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+lib:ListenShape
+    a sh:NodeShape ;
+    sh:targetClass jmedia:PlaybackEvent ;
+    sh:property [
+        sh:path jmedia:playedWork ;
+        sh:name "playedWork" ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path schema:object ;
+        sh:name "listenedTo" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jcore:atTime ;
+        sh:name "atTime" ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path schema:startTime ;
+        sh:name "startTime" ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path schema:endTime ;
+        sh:name "endTime" ;
+        sh:datatype xsd:dateTime ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jcore:hadParticipant ;
+        sh:name "hadParticipant" ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Warning ;
+    ] ;
+    sh:property [
+        sh:path schema:agent ;
+        sh:name "agent" ;
+        sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path jmedia:msPlayed ;
+        sh:name "msPlayed" ;
+        sh:datatype xsd:integer ;
+        sh:maxCount 1 ; sh:minInclusive 0 ;
+        sh:severity sh:Info ;
     ] .

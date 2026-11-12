@@ -1,6 +1,6 @@
 ---
 name: solid-listening
-description: Use when reading or writing Solid listening-history scrobbles through @jeswr/solid-listening, changing its codegen inputs or SHACL, regenerating its model core, or maintaining its facade over the generated media-sector composite.
+description: Use when reading or writing Solid listening-history scrobbles through @jeswr/solid-listening, writing Suite Music library or history data through its library facade, changing its codegen inputs or SHACL, regenerating its model core, or maintaining its facades over the generated media-sector entities.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
@@ -22,6 +22,17 @@ Parse behaviour: required links (`playedWork`, `atTime`) and the track title fai
 closed on any non-conforming value (a language-tagged title rejects the scrobble; README
 "Exact divergences" lists the changes from the July package). The links are `sh:class`-only, so an optional problem on a child (two artists,
 two albums, a malformed optional value) drops only that field.
+
+The Suite Music library (`src/library.ts`) adds five flat entities (`LibraryTrack`,
+`LibraryArtist`, `LibraryAlbum`, `LibraryPlaylist`, `Listen`) under the jeswr.org sector
+namespace the app writes, and reuses the composite's `playedAt` node for instants.
+`libraryTypeQuads` stamps the sector class plus its schema.org co-type;
+`libraryFieldQuads` returns one field's quads from a scratch store (merge them into the
+live dataset after clearing the field) and throws `RangeError` when the model rejects a
+value. Do not write through wrappers on a large live dataset: each write re-checks alias
+migration over every typed subject under a 10,000-read budget. Tolerant foreign reads,
+playlist ListItems, instant allocation and `msPlayed` writes stay in the app (README
+"Suite Music library").
 
 From the workspace root:
 

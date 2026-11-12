@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { normalizePodBase } from "@jeswr/guarded-fetch";
-import { LiteralFrom, OptionalAs, SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
+import { LiteralFrom, OptionalAs } from "@rdfjs/wrapper";
 import type { Store } from "n3";
 import { type MusicReference, Track } from "./entities";
 import { DataFactory, MusicNode } from "./rdf";
@@ -19,21 +20,27 @@ export interface Playback {
   artist?: string | undefined;
 }
 
-/** schema:ListenAction and the solid-listening sector PlaybackEvent converge here. */
+/**
+ * schema:ListenAction and the solid-listening sector PlaybackEvent converge here.
+ * Canonical writes go through @jeswr/solid-listening's generated Listen model.
+ */
 export class PlaybackEvent extends MusicNode {
   stampType(): this {
-    return this.stamp(`${S}ListenAction`, `${M}PlaybackEvent`);
+    return this.stampModel("Listen");
   }
   get trackIri(): string | undefined {
     return this.iris(`${S}object`, `${M}playedWork`)[0];
   }
   set trackIri(value: string | undefined) {
     // Validate before touching either alias.
-    if (value !== undefined) httpIri(value);
+    const checked = value === undefined ? undefined : httpIri(value);
+    const quads = [
+      ...this.modelQuads("Listen", "listenedTo", checked),
+      ...this.modelQuads("Listen", "playedWork", checked),
+    ];
     this.clear(`${S}object`);
     this.clear(`${M}playedWork`);
-    this.writeIri(`${S}object`, value);
-    this.writeIri(`${M}playedWork`, value);
+    this.addQuads(quads);
   }
   get startTime(): Date | undefined {
     const direct = this.date(this, `${S}startTime`, `${NS.CORE}atTime`);
@@ -70,35 +77,41 @@ export class PlaybackEvent extends MusicNode {
       }
     }
     const instant = new MusicNode(instantIri, dataset);
+    const instantTime = instant.modelQuads("ListenInstant", "playedAt", value);
+    const quads = [
+      ...this.modelQuads("Listen", "startTime", value),
+      ...this.modelQuads("Listen", "atTime", value === undefined ? undefined : instantIri),
+    ];
     if (value !== undefined) {
-      instant.stamp(`${NS.TIME}Instant`);
+      instant.stampModel("ListenInstant");
       instant.clear(`${NS.TIME}inXSDDateTime`);
-      OptionalAs.object(instant, `${NS.TIME}inXSDDateTime`, value, LiteralFrom.dateTime);
+      instant.addQuads(instantTime);
     }
     this.clear(`${S}startTime`);
     this.clear(`${NS.CORE}atTime`);
-    OptionalAs.object(this, `${S}startTime`, value, LiteralFrom.dateTime);
-    if (value !== undefined) {
-      SetFrom.subjectPredicate(this, `${NS.CORE}atTime`, TermAs.is, TermFrom.instance).add(instant);
-    }
+    this.addQuads(quads);
   }
   get endTime(): Date | undefined {
     return this.date(this, `${S}endTime`);
   }
   set endTime(value: Date | undefined) {
     if (value !== undefined) validDate(value);
+    const quads = this.modelQuads("Listen", "endTime", value);
     this.clear(`${S}endTime`);
-    OptionalAs.object(this, `${S}endTime`, value, LiteralFrom.dateTime);
+    this.addQuads(quads);
   }
   get agent(): string | undefined {
     return this.iris(`${S}agent`, `${NS.CORE}hadParticipant`)[0];
   }
   set agent(value: string | undefined) {
-    if (value !== undefined) httpIri(value);
+    const checked = value === undefined ? undefined : httpIri(value);
+    const quads = [
+      ...this.modelQuads("Listen", "agent", checked),
+      ...this.modelQuads("Listen", "hadParticipant", checked),
+    ];
     this.clear(`${S}agent`);
     this.clear(`${NS.CORE}hadParticipant`);
-    this.writeIri(`${S}agent`, value);
-    this.writeIri(`${NS.CORE}hadParticipant`, value);
+    this.addQuads(quads);
   }
   get msPlayed(): number | undefined {
     for (const text of this.strings(`${M}msPlayed`)) {
@@ -112,6 +125,9 @@ export class PlaybackEvent extends MusicNode {
     if (checked !== undefined && !Number.isInteger(checked)) {
       throw new InvalidMusicError("Milliseconds played must be an integer");
     }
+    // Hand-written on purpose: the generated xsd:integer writer drops integers beyond
+    // Number.MAX_SAFE_INTEGER, which this field has always written exactly (README of
+    // @jeswr/solid-listening, "Suite Music library").
     this.clear(`${M}msPlayed`);
     OptionalAs.object(this, `${M}msPlayed`, checked, (milliseconds, factory) =>
       LiteralFrom.datatypeTuple([`${NS.XSD}integer`, BigInt(milliseconds).toString()], factory),

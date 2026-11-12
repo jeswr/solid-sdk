@@ -5,6 +5,218 @@ import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
 import type { EntityWrapper, ModelManifest } from "@jeswr/model-runtime";
 import type { Store } from "n3";
 
+export interface LibraryAlbumData {
+  "title"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  "track"?: string[];
+  "url"?: string;
+}
+
+export interface LibraryAlbumWrapper extends EntityWrapper {
+  "title"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  readonly "track": Set<string>;
+  "url"?: string;
+}
+
+export interface LibraryAlbumEntity {
+  readonly name: "LibraryAlbum";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => LibraryAlbumWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: LibraryAlbumData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): LibraryAlbumData | undefined;
+  serialize(resourceUrl: string, data: LibraryAlbumData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<LibraryAlbumData | undefined>;
+}
+
+export interface LibraryArtistData {
+  "foafName"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryArtistWrapper extends EntityWrapper {
+  "foafName"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryArtistEntity {
+  readonly name: "LibraryArtist";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => LibraryArtistWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: LibraryArtistData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): LibraryArtistData | undefined;
+  serialize(resourceUrl: string, data: LibraryArtistData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<LibraryArtistData | undefined>;
+}
+
+export interface ListenData {
+  "atTime": string;
+  "hadParticipant"?: string;
+  "msPlayed"?: number;
+  "playedWork": string;
+  "agent"?: string;
+  "endTime"?: Date;
+  "listenedTo"?: string;
+  "startTime"?: Date;
+}
+
+export interface ListenWrapper extends EntityWrapper {
+  "atTime"?: string;
+  "hadParticipant"?: string;
+  "msPlayed"?: number;
+  "playedWork"?: string;
+  "agent"?: string;
+  "endTime"?: Date;
+  "listenedTo"?: string;
+  "startTime"?: Date;
+}
+
+export interface ListenEntity {
+  readonly name: "Listen";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => ListenWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: ListenData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): ListenData | undefined;
+  serialize(resourceUrl: string, data: ListenData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<ListenData | undefined>;
+}
+
+export interface LibraryPlaylistData {
+  "title"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryPlaylistWrapper extends EntityWrapper {
+  "title"?: string;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "image"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryPlaylistEntity {
+  readonly name: "LibraryPlaylist";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => LibraryPlaylistWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: LibraryPlaylistData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): LibraryPlaylistData | undefined;
+  serialize(resourceUrl: string, data: LibraryPlaylistData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<LibraryPlaylistData | undefined>;
+}
+
+export interface LibraryTrackData {
+  "title": string;
+  "durationSeconds"?: number;
+  "inAlbum"?: string;
+  "isrc"?: string;
+  "loved"?: boolean;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "contentUrl"?: string;
+  "duration"?: string;
+  "image"?: string;
+  "schemaInAlbum"?: string;
+  "lyrics"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryTrackWrapper extends EntityWrapper {
+  "title"?: string;
+  "durationSeconds"?: number;
+  "inAlbum"?: string;
+  "isrc"?: string;
+  "loved"?: boolean;
+  "performedByArtist"?: string;
+  "byArtist"?: string;
+  "contentUrl"?: string;
+  "duration"?: string;
+  "image"?: string;
+  "schemaInAlbum"?: string;
+  "lyrics"?: string;
+  "name"?: string;
+  "url"?: string;
+}
+
+export interface LibraryTrackEntity {
+  readonly name: "LibraryTrack";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => LibraryTrackWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: LibraryTrackData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): LibraryTrackData | undefined;
+  serialize(resourceUrl: string, data: LibraryTrackData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<LibraryTrackData | undefined>;
+}
+
 export interface ScrobbleData {
   "msPlayed"?: number;
   "trackTitle": string;
@@ -92,6 +304,11 @@ export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;
   readonly entities: {
+  readonly LibraryAlbum: LibraryAlbumEntity;
+  readonly LibraryArtist: LibraryArtistEntity;
+  readonly Listen: ListenEntity;
+  readonly LibraryPlaylist: LibraryPlaylistEntity;
+  readonly LibraryTrack: LibraryTrackEntity;
   readonly Scrobble: ScrobbleEntity;
   };
 }
