@@ -173,6 +173,13 @@ describe("Spotify history parts, failures and duplicates in Music", () => {
     expect(titled(history, "Other Song")).toHaveLength(1);
   });
 
+  it("keeps real repeat plays from one Basic export", async () => {
+    const { pod, run } = await demo();
+    await run([basic(0), basic(1)]);
+    const history = await loadHistory(pod.fetch, DEMO_ROOT, NOW);
+    expect(titled(history, "Fixture Song")).toHaveLength(2);
+  });
+
   it("drops a file play that repeats a live recently-played listen", () => {
     const live = `${DEMO_ROOT}integrations/spotify/music/recently-played.ttl`;
     const file = spotifyHistoryUrl(DEMO_ROOT, "2026-10", 1);

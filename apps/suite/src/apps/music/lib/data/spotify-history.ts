@@ -69,7 +69,8 @@ const artistKeys = (artist: string | undefined) =>
  * (minute-precision, names) and Extended (second-precision, track URI) exports of the
  * same plays hash differently. Imported plays with the same normalised title and a shared
  * artist, within {@link IMPORTED_DUPLICATE_MS}, are one listen when they come from
- * different sources or one of them has Basic's minute precision. Precise plays win.
+ * different sources or exactly one of them has Basic's minute precision (two minute-precise
+ * plays from one export are real repeats). Precise plays win.
  * Native Music history is never passed here.
  */
 export function dedupeImportedPlays(plays: readonly Playback[], liveDocument: string): Playback[] {
@@ -97,7 +98,7 @@ export function dedupeImportedPlays(plays: readonly Playback[], liveDocument: st
           others === undefined ||
           [...artists].some((artist) => others.has(artist))) &&
         Math.abs(other.startTime.getTime() - play.startTime.getTime()) <= IMPORTED_DUPLICATE_MS &&
-        (source(other) !== source(play) || minuteAligned(other) || minuteAligned(play))
+        (source(other) !== source(play) || minuteAligned(other) !== minuteAligned(play))
       );
     });
     if (duplicate) continue;

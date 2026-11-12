@@ -108,7 +108,10 @@ builds it in a scratch store and it is moved onto `iris` term for term, so
 `buildScrobble(url, data)` and each call costs the same however large the dataset is. The
 five subjects must be distinct safe absolute IRIs. A track, artist or album subject (or
 any other) may already be in the dataset only with exactly the description this scrobble
-gives it, so plays can share recording nodes; anything else throws before writing:
+gives it, so plays can share recording nodes; anything else throws before writing.
+Build into a fresh store and merge it into stored data afterwards: a document read back
+from a pod carries extra quads (such as provenance) on its subjects, so re-adding to it
+throws:
 
 ```ts
 import { addScrobble } from "@jeswr/solid-listening";

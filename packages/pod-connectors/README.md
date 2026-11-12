@@ -651,8 +651,9 @@ a `media:PlaybackEvent` with `media:msPlayed`, `media:playedWork` → a titled `
 `media:Album`, and `core:atTime` → `time:Instant`. The event is `#scrobble-<id>` and its
 instant `#scrobble-<id>-instant`. Plays of one recording in a document share its
 `#track-<key>`, `#artist-<key>` and `#album-<key>` nodes, keyed by a hash of every value the
-node describes, so Music counts them as one track. Recordings are not shared across
-documents. The model still emits the legacy `w3id.org/jeswr` media/core namespaces; the
+node describes. Music's top artists and recently played use imported plays; its "most
+played tracks" counts only library tracks, so imported plays do not appear there yet.
+Recordings are not shared across documents. The model still emits the legacy `w3id.org/jeswr` media/core namespaces; the
 adapter stores them under the canonical `@jeswr/suite-vocab` namespaces with
 `canonicalizeJeswrDataset`. The adapter writes no hand-built accessors, `schema:` types,
 `media:playedVia` or Spotify track link (the generated profile leaves out `playedVia`).
