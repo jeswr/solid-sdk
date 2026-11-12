@@ -3,6 +3,7 @@
 
 import type { PodAuth } from "@jeswr/pod-auth";
 import {
+  type ConnectionSaveResult,
   type ConnectorConnection,
   ConnectorScheduler,
   type ConnectorSchedulerOptions,
@@ -82,8 +83,13 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
   const poll = settings();
   const updates = settings();
   let saving: Promise<unknown> = Promise.resolve();
-  const saveConnection = (c: ConnectorConnection, signal: AbortSignal): Promise<void> => {
-    // One read→write sequence at a time on the shared settings store.
+  const saveConnection = (
+    c: ConnectorConnection,
+    signal: AbortSignal,
+  ): Promise<ConnectionSaveResult> => {
+    // One read→write sequence at a time on the shared settings store. The result reports a
+    // needs-reauth disable the owner's newer enabledAt superseded, so the scheduler keeps
+    // its in-memory row and the owner's fresh grant.
     const next = saving.then(() => updates.update(c, signal));
     saving = next.catch(() => undefined);
     return next;

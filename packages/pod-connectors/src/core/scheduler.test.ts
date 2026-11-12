@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../registry.js";
@@ -1235,6 +1236,131 @@ describe("adversarial review fixes (CON-A2)", () => {
     gate.resolve();
     await pass;
     expect(removed.saveConnection).not.toHaveBeenCalled();
+  });
+  describe("a needs-reauth latch the owner superseded during the run", () => {
+    const X = iso(AT - 86_400_000),
+      Y = iso(AT + 1_000);
+    const struck: ConnectorState = {
+      ...legacy,
+      accounts: {
+        fixture: {
+          ...legacy,
+          health: {
+            lastRunStartedAt: iso(AT - 3_600_000),
+            lastRunEndedAt: iso(AT - 3_600_000),
+            outcome: "failed",
+            errorClass: "unauthorised",
+            counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+            consecutiveFailures: 1,
+            intervalMinutes: 60,
+            nextRunAt: iso(AT - 1),
+          },
+        },
+      },
+    };
+    /** A pod settings row plus a saveConnection port with createConnectionStore's rule. */
+    function owner(gated: boolean) {
+      let pod: ConnectorConnection = { ...connection(), enabledAt: X };
+      const gate = deferred(),
+        entered = deferred();
+      let reject401 = true;
+      const invalidate = vi.fn(async () => undefined);
+      const saveConnection = vi.fn(async (c: ConnectorConnection) => {
+        if (!c.enabled && c.status === "needs-reauth" && pod.enabledAt !== c.enabledAt)
+          return "superseded" as const;
+        pod = { ...c };
+        return "applied" as const;
+      });
+      const runner = vi.fn(async (o: RunImportOptions) => {
+        entered.resolve();
+        if (gated) await gate.promise;
+        if (reject401) throw new IntegrationSyncError("spotify", "private", { status: 401 });
+        return report(o);
+      });
+      const h = harness([pod], {
+        tokenSource: { accessToken: vi.fn(async () => "synthetic-token"), invalidate },
+        saveConnection,
+        runner,
+      });
+      h.states.set("spotify", struck);
+      return {
+        ...h,
+        invalidate,
+        saveConnection,
+        runner,
+        gate,
+        entered,
+        pod: () => pod,
+        setPod: (row: ConnectorConnection) => {
+          pod = row;
+        },
+        succeed: () => {
+          reject401 = false;
+        },
+      };
+    }
+    it("keeps the re-enabled row scheduled when setConnections lands mid-run", async () => {
+      const h = owner(true);
+      const pass = h.scheduler.tick();
+      await h.entered.promise;
+      // The owner reconnects (fresh grant, enabledAt Y); the host poll applies it mid-run.
+      h.setNow(AT + 60_000);
+      const reenabled: ConnectorConnection = { ...connection(), enabledAt: Y };
+      h.setPod(reenabled);
+      await h.scheduler.setConnections([reenabled]);
+      h.gate.resolve();
+      await pass;
+      // The latch is recorded against X, which Y clears; nothing disables the row.
+      expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+        outcome: "needs-reauth",
+        latchedEnabledAt: X,
+      });
+      expect(h.scheduler.list()).toEqual([reenabled]);
+      expect(h.pod()).toEqual(reenabled);
+      // The owner's fresh grant is never discarded for the old grant's rejection.
+      expect(h.invalidate).not.toHaveBeenCalled();
+      // No setConnections follows (the pod document did not change); it still runs.
+      h.succeed();
+      h.setNow(AT + 30 * 60_000);
+      await h.scheduler.tick();
+      expect(h.runner).toHaveBeenCalledTimes(2);
+      expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({ outcome: "ok" });
+      expect(h.pod()).toEqual(reenabled);
+    });
+    it("leaves the in-memory row untouched when the settings save is superseded", async () => {
+      const h = owner(true);
+      const pass = h.scheduler.tick();
+      await h.entered.promise;
+      // The owner re-enables on the pod, but the host has not polled it yet.
+      const reenabled: ConnectorConnection = { ...connection(), enabledAt: Y };
+      h.setPod(reenabled);
+      h.gate.resolve();
+      await pass;
+      expect(h.saveConnection).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false, status: "needs-reauth", enabledAt: X }),
+        expect.any(AbortSignal),
+      );
+      expect(h.pod()).toEqual(reenabled);
+      expect(h.scheduler.list()).toEqual([{ ...connection(), enabledAt: X }]);
+      expect(h.invalidate).not.toHaveBeenCalled();
+      // The latch still holds against X until the host delivers Y, which runs it.
+      h.setNow(AT + 30 * 60_000);
+      await h.scheduler.tick();
+      expect(h.runner).toHaveBeenCalledTimes(1);
+      h.succeed();
+      await h.scheduler.setConnections([reenabled]);
+      await h.scheduler.tick();
+      expect(h.runner).toHaveBeenCalledTimes(2);
+      expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({ outcome: "ok" });
+    });
+    it("invalidates exactly once and disables the row when nothing superseded the latch", async () => {
+      const h = owner(false);
+      await h.scheduler.tick();
+      expect(h.invalidate).toHaveBeenCalledTimes(1);
+      expect(h.invalidate).toHaveBeenCalledWith({ connectorId: "spotify", account: "fixture" });
+      expect(h.pod()).toMatchObject({ enabled: false, status: "needs-reauth", enabledAt: X });
+      expect(h.scheduler.list()[0]).toMatchObject({ enabled: false, status: "needs-reauth" });
+    });
   });
   it("does not let a 6-hour run of A delay B's 15-minute schedule (continuous pool)", async () => {
     vi.useFakeTimers({ now: AT });

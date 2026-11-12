@@ -297,7 +297,12 @@ back a newer successful cursor. Reauth (or two consecutive 401s; 403 stays a bac
 `enabledAt` in `latchedEnabledAt`, until that value changes (string compare) or an
 explicit setEnabled, which takes priority over pool claims for its container. The
 latch's settings disable is conditional on the row's enabledAt being unchanged;
-cancellation starts no further state/config I/O. Owner-JSON stores protect their ACL
+`saveConnection`/`update` resolve `"superseded"` when it was skipped. The in-memory row
+is disabled only while it still carries the run-start enabledAt and the save was not
+superseded; otherwise the current row stays untouched. `TokenSource.invalidate` runs
+only for the grant in use for the rejected run, after an applied (or row-removed) save
+with no superseding enabledAt; vaults discard only a token matching that grant.
+Cancellation starts no further state/config I/O. Owner-JSON stores protect their ACL
 once per instance and on create, poll with If-None-Match, and `peek` is read-only.
 The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
 Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.

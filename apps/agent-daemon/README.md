@@ -321,7 +321,9 @@ The default `pendingVaultTokenSource` deliberately throws `ReauthoriseError`.
 It is the sst-3erb vault integration stub: enabled connections become disabled with
 `needs-reauth`, without provider traffic. A trusted host can later inject its
 vault-backed `TokenSource` (optionally with `invalidate`, called only after two
-consecutive source 401s confirm an invalid access token), registry and separate
+consecutive source 401s confirm an invalid access token, only for the grant that run
+used and never when the owner's re-enable superseded the latch; it should discard only
+a token matching that grant), registry and separate
 pristine `sourceFetch`. The canonical `profileDocumentUrl` comes from the host's profile
 load; composition without it uses the configured owner's document and refuses redirects.
 

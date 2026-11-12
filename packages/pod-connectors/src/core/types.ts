@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
@@ -297,6 +298,13 @@ export interface TokenSource {
    * Optional: discard a cached grant confirmed invalid — called only after two
    * consecutive source 401 (access token rejected) outcomes, never for 403s, rate limits
    * or other failures. Failures here never fail the run.
+   *
+   * It is called only for the grant that was in use for the rejected run, and never when
+   * an owner re-enable superseded the latch (the row's `enabledAt` changed during the run,
+   * in memory or in the stored settings) or the settings write failed or was cancelled.
+   * The call can still race a reconnection, so implementations should discard only a
+   * token matching that grant (e.g. the one they last returned from `accessToken`),
+   * never a newer grant the owner has just supplied.
    */
   invalidate?(connection: {
     readonly connectorId: string;

@@ -823,8 +823,14 @@ never compared. An unchanged `enabledAt` keeps the latch. (Latches written befor
 itself stamped more than five minutes ahead is cleared by any `enabledAt`.) The
 scheduler's needs-reauth disable is conditional: `createConnectionStore().update` applies
 it only while the row's `enabledAt` still equals the value the latch recorded, including
-after a 412 re-read, so an owner's re-enable during the run is never reverted. Custom
-`saveConnection` ports should apply the same rule.
+after a 412 re-read, so an owner's re-enable during the run is never reverted, and
+resolves `"superseded"` when it skipped the disable (`"applied"` otherwise). Custom
+`saveConnection` ports should apply the same rule and report it (resolving nothing
+counts as applied). The scheduler disables its in-memory row only while that row still
+carries the `enabledAt` captured at run start and the save was not superseded; an owner
+re-enable that reached memory mid-run (via `setConnections` or `setEnabled`) or the
+stored row is kept as is, so the connection stays scheduled and its recorded latch is
+cleared by the new value.
 
 The scheduler is a continuous worker pool (default cap two, maximum 16): whenever a
 worker frees up it starts the connection that is most overdue. It keeps single-flight
@@ -859,7 +865,11 @@ with exponential delays starting at 15 minutes, multiplied by random jitter in
 was rejected), persists `{ enabled: false, status: 'needs-reauth' }` and latches health
 without a next-run time, including across restart. Only for the double 401 is the
 optional `TokenSource.invalidate({ connectorId, account })` called (best effort); it is
-for a confirmed invalid access token only. Source errors carry no `WWW-Authenticate`
+for a confirmed invalid access token only, and only for the grant that was in use for
+the rejected run: it is skipped when an owner re-enable superseded the latch (in memory
+or in the stored settings), and when the settings write failed or was cancelled. Vault
+implementations should discard only a token matching that grant, never a newer one the
+owner has just supplied. Source errors carry no `WWW-Authenticate`
 header, so a 401 status alone qualifies. A 403 is `forbidden` and stays a backed-off
 `failed` run however often it repeats, because providers use it for rate limits,
 download quotas and developer allowlists (Google, Drive, Spotify dev mode) while the

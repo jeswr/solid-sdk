@@ -2,7 +2,11 @@
 // AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { createOwnerJsonStore } from "./owner-json.js";
-import { type ConnectorConnection, connectorConnections } from "./scheduler.js";
+import {
+  type ConnectionSaveResult,
+  type ConnectorConnection,
+  connectorConnections,
+} from "./scheduler.js";
 import { MAX_CONNECTIONS, StateConflictError } from "./state.js";
 import { ConnectionRemovedError } from "./types.js";
 
@@ -59,13 +63,17 @@ export function createConnectionStore(options: {
      * concurrent edits on 412. A missing row throws ConnectionRemovedError. A needs-reauth
      * disable (`enabled: false, status: 'needs-reauth'`) is conditional: it applies only
      * while the row's `enabledAt` equals `connection.enabledAt` (both absent counts as
-     * equal); otherwise the owner re-enabled during the run and the row is left unchanged.
+     * equal); otherwise the owner re-enabled during the run, the row is left unchanged and
+     * the result is `"superseded"`. Every applied write resolves `"applied"`.
      */
-    async update(connection: ConnectorConnection, signal?: AbortSignal): Promise<void> {
+    async update(
+      connection: ConnectorConnection,
+      signal?: AbortSignal,
+    ): Promise<ConnectionSaveResult> {
       const [next] = connectorConnections([connection]);
       if (!next) throw new Error("Invalid connector connection");
       const latching = !next.enabled && next.status === "needs-reauth";
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; ; attempt++) {
         const current = (await store.read(signal)) ?? [];
         let found = false;
         let superseded = false;
@@ -89,10 +97,11 @@ export function createConnectionStore(options: {
           };
         });
         if (!found) throw new ConnectionRemovedError();
-        if (superseded && merged.every((row, i) => row === current[i])) return;
+        // A superseded row is returned as is and no other row changes: nothing to write.
+        if (superseded) return "superseded";
         try {
           await store.write(merged, signal);
-          return;
+          return "applied";
         } catch (error) {
           if (!(error instanceof StateConflictError) || attempt === 2) throw error;
         }

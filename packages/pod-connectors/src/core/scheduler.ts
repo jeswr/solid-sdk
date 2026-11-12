@@ -164,6 +164,12 @@ export function connectorConnections(value: unknown): ConnectorConnection[] {
   if (invalid.length) throw new Error("Invalid connector connection");
   return connections;
 }
+/**
+ * What a `saveConnection` port did: `"superseded"` when a needs-reauth disable was skipped
+ * because the stored row's `enabledAt` no longer equals the latched one (the owner
+ * re-enabled during the run). `"applied"` (or no value, for older ports) means written.
+ */
+export type ConnectionSaveResult = "applied" | "superseded";
 export interface ConnectorSchedulerOptions {
   /** Settings rows; invalid or unschedulable rows are skipped and reported by `invalid()`. */
   readonly connections: readonly ConnectorConnection[] | readonly unknown[];
@@ -178,8 +184,13 @@ export interface ConnectorSchedulerOptions {
   /**
    * Persist only this connection's change, merging host config on conflict. Throw
    * ConnectionRemovedError when the row no longer exists; the scheduler skips quietly.
+   * A needs-reauth disable must apply only while the stored row's `enabledAt` equals
+   * `connection.enabledAt`; otherwise leave the row and resolve `"superseded"`.
    */
-  readonly saveConnection: (connection: ConnectorConnection, signal: AbortSignal) => Promise<void>;
+  readonly saveConnection: (
+    connection: ConnectorConnection,
+    signal: AbortSignal,
+  ) => Promise<ConnectionSaveResult | undefined>;
   readonly registry?: Registry;
   readonly concurrency?: number;
   readonly now?: () => number;
@@ -536,14 +547,36 @@ export class ConnectorScheduler {
       await this.persist(c, { ...checkpoint, health }, previous, signal);
       return true;
     }
-    const disabled: ConnectorConnection = { ...c, enabled: false, status: "needs-reauth" };
-    const configured = this.find(c) !== undefined;
-    this.connections = this.connections.map((other) =>
-      other.connectorId === c.connectorId && other.account === c.account ? disabled : other,
-    );
+    // The latch belongs to the row as it was at run start (`c`). An owner re-enable that
+    // reached memory meanwhile (setConnections/setEnabled with a new enabledAt) supersedes
+    // it: the current row is left untouched, no settings disable is attempted and the
+    // owner's fresh grant is never invalidated. The persisted latch records c's enabledAt,
+    // which the new value clears.
+    const current = this.find(c);
+    let superseded = current !== undefined && current.enabledAt !== c.enabledAt;
+    const disabled: ConnectorConnection | undefined =
+      current && !superseded ? { ...current, enabled: false, status: "needs-reauth" } : undefined;
+    if (current && disabled) this.replace(current, disabled);
     // Persist health even if the host config write fails; the health latch also fails closed.
     await this.persist(c, { ...checkpoint, health }, previous, signal);
-    if (code === "unauthorised" && this.options.tokenSource.invalidate) {
+    signal.throwIfAborted();
+    if (current && disabled) {
+      let skipped = false;
+      try {
+        skipped = (await this.options.saveConnection(disabled, signal)) === "superseded";
+      } catch (error) {
+        if (!(error instanceof ConnectionRemovedError)) throw error;
+      }
+      if (skipped) {
+        // The stored row carries a different enabledAt: undo only our own in-memory
+        // disable; a row replaced meanwhile is the newer owner state and stays.
+        superseded = true;
+        this.replace(disabled, current);
+      }
+    }
+    // Only the grant that was in use for this rejected run, and only while no owner
+    // re-enable superseded the latch (in memory or in the stored settings).
+    if (code === "unauthorised" && !superseded && this.options.tokenSource.invalidate) {
       try {
         await this.options.tokenSource.invalidate({
           connectorId: c.connectorId,
@@ -553,14 +586,11 @@ export class ConnectorScheduler {
         // Best effort: the durable latch already blocks further source traffic.
       }
     }
-    signal.throwIfAborted();
-    if (!configured) return true;
-    try {
-      await this.options.saveConnection(disabled, signal);
-    } catch (error) {
-      if (!(error instanceof ConnectionRemovedError)) throw error;
-    }
     return true;
+  }
+  /** Swap one in-memory row object for another, only while `from` is still installed. */
+  private replace(from: ConnectorConnection, to: ConnectorConnection) {
+    this.connections = this.connections.map((other) => (other === from ? to : other));
   }
   private async persist(
     c: ConnectorConnection,

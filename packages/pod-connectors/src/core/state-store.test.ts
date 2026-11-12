@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
@@ -305,12 +306,14 @@ it("preserves rows it cannot interpret and stamps enabledAt on update", async ()
     42,
   ];
   await store.write(rows);
-  await store.update({
-    connectorId: "spotify",
-    account: "fixture",
-    enabled: true,
-    enabledAt: "2026-11-01T12:00:00.000Z",
-  });
+  expect(
+    await store.update({
+      connectorId: "spotify",
+      account: "fixture",
+      enabled: true,
+      enabledAt: "2026-11-01T12:00:00.000Z",
+    }),
+  ).toBe("applied");
   expect(await store.read()).toEqual([
     {
       connectorId: "spotify",
@@ -346,7 +349,7 @@ it("skips a needs-reauth disable when the owner re-enabled during the run, inclu
     { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: owner },
   ]);
   h.requests.length = 0;
-  await store.update(disable);
+  expect(await store.update(disable)).toBe("superseded");
   expect(h.requests.filter((r) => r.method === "PUT")).toEqual([]);
   expect(await store.read()).toEqual([
     { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: owner },
@@ -375,7 +378,9 @@ it("skips a needs-reauth disable when the owner re-enabled during the run, inclu
     }
     return h.io(input, init);
   };
-  await createConnectionStore({ ...h.options, fetch: io }).update(disable);
+  expect(await createConnectionStore({ ...h.options, fetch: io }).update(disable)).toBe(
+    "superseded",
+  );
   expect(raced).toBe(true);
   expect(await store.read()).toEqual([
     {
@@ -388,7 +393,7 @@ it("skips a needs-reauth disable when the owner re-enabled during the run, inclu
   ]);
   // Unchanged enabledAt (here: absent on both sides) still disables.
   await store.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
-  await store.update({ ...disable, enabledAt: undefined });
+  expect(await store.update({ ...disable, enabledAt: undefined })).toBe("applied");
   expect(await store.read()).toEqual([
     { connectorId: "spotify", account: "fixture", enabled: false, status: "needs-reauth" },
   ]);

@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createConnectionStore, ReauthoriseError } from "@jeswr/pod-connectors";
+// AUTHORED-BY Claude Opus 5.5
+import {
+  createConnectionStore,
+  IntegrationSyncError,
+  ReauthoriseError,
+} from "@jeswr/pod-connectors";
 import { expect, it, vi } from "vitest";
 import { type CliHost, runCli } from "../src/cli.js";
 import {
@@ -303,4 +308,71 @@ it("a fresh process sees the owner's durable re-enable through enabledAt", async
   await fresh.tick();
   expect(runner).toHaveBeenCalledOnce();
   expect((await fresh.list())[0]?.health).toBe("ok");
+});
+it("keeps an owner's mid-run re-enable when the run's second 401 latches", async () => {
+  const h = fixture();
+  const X = "2026-10-31T12:00:00.000Z",
+    Y = "2026-11-01T12:21:00.000Z";
+  const config = await seed(h, [
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: X },
+  ]);
+  let now = AT,
+    polls = 0,
+    release!: () => void,
+    entered!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const controller = new AbortController();
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
+  const sleep = vi.fn(async () => {
+    polls++;
+    await settle();
+    if (polls === 2) {
+      // The second run is in flight: the owner reconnects (fresh grant, enabledAt Y)
+      // and the next poll hands the row to the scheduler before the run ends.
+      await started;
+      await config.read();
+      await config.write([
+        { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: Y },
+      ]);
+      now += 60_000;
+      return;
+    }
+    if (polls === 3) {
+      // The run latches; Y clears that latch, so the worker pool runs it again at once.
+      release();
+      await settle();
+    }
+    if (polls === 4) controller.abort();
+    now += 30 * 60_000;
+  });
+  const runner = vi.fn(async () => {
+    if (runner.mock.calls.length === 2) {
+      entered();
+      await gate;
+    }
+    if (runner.mock.calls.length <= 2)
+      throw new IntegrationSyncError("spotify", "private", { status: 401 });
+    return okRun();
+  });
+  const invalidate = vi.fn(async () => undefined);
+  const job = createConnectorsJob({
+    ...h.options,
+    now: () => now,
+    sleep,
+    runner,
+    tokenSource: { accessToken: async () => "synthetic", invalidate },
+  });
+  await job.run(controller.signal);
+  // The superseded latch neither disabled the row nor discarded the owner's new grant.
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(await config.read()).toEqual([
+    { connectorId: "spotify", account: "fixture", enabled: true, enabledAt: Y },
+  ]);
+  expect(runner).toHaveBeenCalledTimes(3);
+  expect((await job.list())[0]).toMatchObject({ enabled: true, health: "ok" });
 });
