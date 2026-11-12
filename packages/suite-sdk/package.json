@@ -50,6 +50,7 @@
   "license": "MIT",
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",

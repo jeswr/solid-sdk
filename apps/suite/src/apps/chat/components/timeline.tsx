@@ -7,19 +7,31 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   IconButton,
   toast,
 } from "@jeswr/suite-ui";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, SmilePlus } from "lucide-react";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Message } from "../lib/client";
-import { buildTimeline } from "../lib/timeline";
-import { type Outgoing, useChat } from "../state/chat-context";
+import { buildTimeline, visibleReactions } from "../lib/timeline";
+import { type Outgoing, useChat, useChatActions } from "../state/chat-context";
 import { useProfile } from "./chat-app";
 import { MessageText } from "./message-text";
 
 type TimelineMessage = Message & { status?: "sending" | "failed" | undefined };
+const REACTION_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👀"];
+function ReactionChoices({ react }: { react: (emoji: string) => void }) {
+  return REACTION_EMOJI.map((emoji) => (
+    <DropdownMenuItem key={emoji} aria-label={`React with ${emoji}`} onSelect={() => react(emoji)}>
+      {emoji}
+    </DropdownMenuItem>
+  ));
+}
 function dayLabel(day: string) {
   const now = new Date();
   const key = (date: Date) =>
@@ -31,6 +43,7 @@ function dayLabel(day: string) {
     : new Date(`${day}T12:00:00`).toLocaleDateString(undefined, { dateStyle: "long" });
 }
 function MessageArticle({
+  url,
   message,
   grouped,
   tabIndex,
@@ -42,6 +55,7 @@ function MessageArticle({
   discard,
   canRewrite,
 }: {
+  url: string;
   message: TimelineMessage;
   grouped: boolean;
   tabIndex: number;
@@ -54,6 +68,41 @@ function MessageArticle({
   canRewrite: boolean;
 }) {
   const { session } = useChat();
+  const actions = useChatActions();
+  // A ref guards double submits; chips stay focusable (aria-disabled) so focus is never dropped.
+  // IconButton's `disabled` is aria-disabled too, so the picker returns focus to its trigger.
+  const busy = useRef(false);
+  const [reacting, setReacting] = useState(false);
+  const chips = useRef<HTMLFieldSetElement>(null);
+  const addReaction = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  const react = (emoji: string) => {
+    if (busy.current) return;
+    busy.current = true;
+    refocus.current = !!chips.current?.contains(document.activeElement);
+    setReacting(true);
+    void actions
+      .react(url, message.id, emoji)
+      .catch(() => {
+        refocus.current = false;
+        toast.error("Couldn't update reaction");
+      })
+      .finally(() => {
+        busy.current = false;
+        setReacting(false);
+      });
+  };
+  // Removing the last reaction of an emoji unmounts the focused chip; keep focus in the message.
+  useLayoutEffect(() => {
+    // Only the first refresh after a finished write may move focus; a chip that survives that
+    // refresh clears the request, so a later poll never steals focus or scrolls the timeline.
+    if (!message.reactions || !refocus.current || busy.current) return;
+    refocus.current = false;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    addReaction.current?.focus();
+  }, [message.reactions]);
+  const { shown, hidden } = visibleReactions(message.reactions);
   const profile = useProfile(message.author ?? "");
   const name = profile.displayName || message.author || "Unknown author";
   const time = message.published
@@ -90,6 +139,25 @@ function MessageArticle({
         {message.task && !message.deleted && (
           <p className="chat-task-marker">Task: {message.task.title}</p>
         )}
+        {!message.deleted && !message.status && message.reactions.length > 0 && (
+          <fieldset ref={chips} className="chat-reactions" aria-label="Reactions">
+            {shown.map(({ emoji, count, reactedByMe }) => (
+              <Button
+                key={emoji}
+                size="sm"
+                variant="outline"
+                className="chat-reaction"
+                aria-pressed={reactedByMe}
+                aria-label={`${emoji} ${count} ${count === 1 ? "reaction" : "reactions"}${reactedByMe ? ", including you" : ""}`}
+                aria-disabled={reacting || undefined}
+                onClick={() => react(emoji)}
+              >
+                <span aria-hidden="true">{emoji}</span> {count}
+              </Button>
+            ))}
+            {hidden > 0 && <span className="chat-reaction-more">+{hidden} more</span>}
+          </fieldset>
+        )}
         {message.status === "sending" && <p className="chat-delivery">Sending…</p>}
         {message.status === "failed" && (
           <div className="chat-send-failure" role="status">
@@ -104,39 +172,77 @@ function MessageArticle({
         )}
       </div>
       {!message.deleted && !message.status && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton label="Message actions" className="chat-message-menu" variant="ghost">
-              <MoreHorizontal size={18} aria-hidden="true" />
-            </IconButton>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="chat-message-actions">
-            {message.author === session.webId && canRewrite && (
-              <>
-                <DropdownMenuItem onSelect={() => onEdit(message)}>Edit</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onDelete(message)}>Delete</DropdownMenuItem>
-              </>
-            )}
-            {!canRewrite && (
-              <DropdownMenuLabel className="chat-hint">
-                Editing needs write access to this room
-              </DropdownMenuLabel>
-            )}
-            <DropdownMenuItem onSelect={() => onTask(message)}>Turn into task</DropdownMenuItem>
-            {message.author !== session.webId && (
-              <DropdownMenuItem
-                onSelect={() => {
-                  void navigator.clipboard.writeText(message.content).then(
-                    () => toast.success("Message copied"),
-                    () => toast.error("Couldn't copy message"),
-                  );
-                }}
+        <div className="chat-message-tools">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton
+                ref={addReaction}
+                label="Add reaction"
+                size="icon-sm"
+                variant="ghost"
+                disabled={reacting}
               >
-                Copy text
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <SmilePlus size={18} aria-hidden="true" />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="chat-reaction-picker"
+              aria-label="Add reaction"
+            >
+              <ReactionChoices react={react} />
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton
+                label="Message actions"
+                className="chat-message-menu"
+                size="icon-sm"
+                variant="ghost"
+              >
+                <MoreHorizontal size={18} aria-hidden="true" />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="chat-message-actions">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger disabled={reacting}>Add reaction</DropdownMenuSubTrigger>
+                <DropdownMenuPortal>
+                  <DropdownMenuSubContent
+                    className="chat-reaction-picker"
+                    aria-label="Add reaction"
+                  >
+                    <ReactionChoices react={react} />
+                  </DropdownMenuSubContent>
+                </DropdownMenuPortal>
+              </DropdownMenuSub>
+              {message.author === session.webId && canRewrite && (
+                <>
+                  <DropdownMenuItem onSelect={() => onEdit(message)}>Edit</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onDelete(message)}>Delete</DropdownMenuItem>
+                </>
+              )}
+              {!canRewrite && (
+                <DropdownMenuLabel className="chat-hint">
+                  Editing needs write access to this room
+                </DropdownMenuLabel>
+              )}
+              <DropdownMenuItem onSelect={() => onTask(message)}>Turn into task</DropdownMenuItem>
+              {message.author !== session.webId && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void navigator.clipboard.writeText(message.content).then(
+                      () => toast.success("Message copied"),
+                      () => toast.error("Couldn't copy message"),
+                    );
+                  }}
+                >
+                  Copy text
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       )}
     </article>
   );
@@ -401,6 +507,7 @@ export function Timeline({
               </div>
             )}
             <MessageArticle
+              url={url}
               message={message}
               grouped={grouped}
               tabIndex={focused === message.id ? 0 : -1}

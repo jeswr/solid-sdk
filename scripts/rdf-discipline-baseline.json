@@ -17,12 +17,6 @@
   "apps/coeliac/src/lib/community/share-rdf.ts": {
     "rdf-factory": 6
   },
-  "apps/coeliac/src/lib/pod/type-index.ts": {
-    "rdf-factory": 1
-  },
-  "apps/extension/src/background/core/class-resolution-budget.ts": {
-    "rdf-factory": 1
-  },
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
   },
@@ -52,12 +46,6 @@
   },
   "apps/pod-migrator/src/engine/isomorphism.ts": {
     "rdf-factory": 1
-  },
-  "apps/pod-music/src/lib/model.ts": {
-    "rdf-factory": 5
-  },
-  "apps/pod-music/src/lib/typeIndex.ts": {
-    "rdf-factory": 2
   },
   "apps/suite/src/apps/chat/lib/model/io.ts": {
     "rdf-literal": 1
