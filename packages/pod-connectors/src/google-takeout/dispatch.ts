@@ -352,7 +352,8 @@ export async function importArchive(
         raw,
         googleReceiver: true,
         trashed: labels.folders.some((folder) => folder.key === "Trash"),
-        receivedAt: googleReceivedTime(raw) ?? separatorDate,
+        // Google writes the mbox From_ separator; Received headers are positional fallbacks only.
+        receivedAt: separatorDate ?? googleReceivedTime(raw),
         ...labels,
         fallbackId,
         threadKey: thrid && /^\d+$/.test(thrid) ? `gmail-${BigInt(thrid).toString(16)}` : undefined,

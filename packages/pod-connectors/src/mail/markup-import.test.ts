@@ -4,6 +4,8 @@ import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import {
   EMAIL_MARKUP_FIXTURES,
+  gmailTrace,
+  googleMxReceived,
   jsonLdFixture,
   microdataFixture,
 } from "../../test-support/markup-fixtures.js";
@@ -257,7 +259,7 @@ it.each([
 ])("%s refuses a forged lower Google header during an actual import", async (id) => {
   const { pod, podWriter } = setup(id);
   const headers = [
-    "Authentication-Results: mx.google.com; dmarc=fail header.from=example.test",
+    ...gmailTrace("dmarc=fail header.from=example.test"),
     "Authentication-Results: mx.google.com; dmarc=pass header.from=example.test",
   ];
   if (id === "gmail")
@@ -289,29 +291,28 @@ it.each([
   "google-takeout",
 ])("%s stores Google authentication and reuses it on re-scan", async (id) => {
   const { pod, podWriter } = setup(id);
-  const header = "Authentication-Results: mx.google.com; dmarc=pass header.from=example.test";
+  const headers = gmailTrace("dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=example.test");
   if (id === "gmail")
     await runImport({
       adapter: createGmailAdapter(),
       podWriter,
       mode: "live",
-      sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "verified", headers: [header] }])) },
+      sourceAuth: { fetch: fixtureFetch(id, gmailRoutes([{ id: "verified", headers }])) },
     });
   else
     await runFileImport({
       adapter: createGoogleTakeoutFileAdapter(),
       podWriter,
       file: takeoutFile([
-        `From sender Thu Jan 1 09:00:00 2026\n${[header, "Received: from sender by mx.google.com; Thu, 01 Jan 2026 08:00:00 +0000", ...lines(jsonLdFixture(EMAIL_MARKUP_FIXTURES[2]))].join("\n")}\n`,
+        `From sender Thu Jan 1 09:00:00 2026\n${[...headers, ...lines(jsonLdFixture(EMAIL_MARKUP_FIXTURES[2]))].join("\n")}\n`,
       ]),
     });
   const url = urls(pod)[0] as string;
   let resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
   expect(resource.trust).toBe("verified");
   expect(resource.senderKey).toBe("example.test");
-  expect(resource.dateModified).toEqual(
-    new Date(id === "gmail" ? "2026-01-01T09:00:00Z" : "2026-01-01T08:00:00Z"),
-  );
+  // Gmail internalDate; Takeout prefers Google's From_ separator over the 08:00 Received trace.
+  expect(resource.dateModified).toEqual(new Date("2026-01-01T09:00:00Z"));
   const { createImportSession } = await import("../core/import-session.js");
   const { rescanMailMarkup } = await import("./markup-writer.js");
   const session = createImportSession(podWriter, id, `urn:test:${id}`, {});
@@ -425,4 +426,123 @@ it("leaves Gmail modification time unknown when internalDate is absent", async (
   expect(
     new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).dateModified,
   ).toBeUndefined();
+});
+
+it.each([
+  "gmail",
+  "google-takeout",
+])("%s keeps a forged Google assertion below another provider's trace unverified", async (id) => {
+  // Mail migrated or appended into the mailbox: no Google inbound receipt above the assertion,
+  // so it cannot replace the genuine, verified booking of the same sender.
+  const { pod, podWriter } = setup(id);
+  const order = (status: string) =>
+    jsonLdFixture({
+      "@type": "Order",
+      orderNumber: "TEST-112-555",
+      orderStatus: status,
+      seller: { "@type": "Organization", name: "Example Retail" },
+    });
+  const genuine = {
+    id: "genuine",
+    headers: gmailTrace("dmarc=pass (p=QUARANTINE) header.from=example.test"),
+    html: order("https://schema.org/OrderProcessing"),
+  };
+  const forged = {
+    id: "forged",
+    internalDate: "1767430800000",
+    headers: [
+      "Received: from relay.attacker.test by mx.oldprovider.test with ESMTP id 9; Sat, 03 Jan 2026 09:00:00 +0000",
+      "Authentication-Results: mx.google.com; dmarc=pass header.from=example.test",
+      "Message-ID: <forged@attacker.test>",
+    ],
+    html: order("https://schema.org/OrderCancelled"),
+  };
+  if (id === "gmail") {
+    const run = (messages: (typeof genuine)[]) =>
+      runImport({
+        adapter: createGmailAdapter(),
+        podWriter,
+        mode: "live",
+        sourceAuth: { fetch: fixtureFetch(id, gmailRoutes(messages)) },
+      });
+    await run([genuine]);
+    await run([genuine, forged]);
+  } else {
+    const mbox = (separator: string, message: typeof genuine) =>
+      `${separator}\n${[
+        ...message.headers,
+        ...lines(message.html).filter((line) => !line.startsWith("Message-ID:")),
+      ].join("\n")}\n`;
+    await runFileImport({
+      adapter: createGoogleTakeoutFileAdapter(),
+      podWriter,
+      file: takeoutFile([
+        mbox("From sender Thu Jan 1 09:00:00 2026", genuine),
+        mbox("From sender Sat Jan 3 09:00:00 2026", forged),
+      ]),
+    });
+  }
+  // Same sender and booking identity: the unverified assertion may not replace the verified one.
+  expect(urls(pod)).toHaveLength(1);
+  const url = urls(pod)[0] as string;
+  const booking = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
+  expect(booking.trust).toBe("verified");
+  expect([...booking.strings("orderStatus")]).toEqual(["https://schema.org/OrderProcessing"]);
+  expect([...booking.derivedFrom]).toHaveLength(1);
+  expect([...booking.derivedFrom][0]).not.toContain("forged");
+  // The forged message itself was imported, and recorded as unverified.
+  const trust = pod
+    .urls()
+    .filter((url) => /\/messages\/.+\.ttl$/.test(url))
+    .map((url) => new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).trust)
+    .sort();
+  expect(trust).toEqual(["unverified", "verified"]);
+});
+
+it("dates Takeout mail by the From_ separator, not a forgeable Received header", async () => {
+  const { pod, podWriter } = setup("google-takeout");
+  const message = (separator: string, headers: string[], id: string) =>
+    `${separator}\n${[
+      `Message-ID: <${id}@example.test>`,
+      ...headers,
+      ...lines(
+        jsonLdFixture({ ...EMAIL_MARKUP_FIXTURES[2], reservationNumber: `TEST-${id}` }),
+      ).filter((line) => !line.startsWith("Message-ID:")),
+    ].join("\n")}\n`;
+  await runFileImport({
+    adapter: createGoogleTakeoutFileAdapter(),
+    podWriter,
+    file: takeoutFile([
+      // A sender-written receipt (forged or not) never outranks Google's separator.
+      message(
+        "From sender Thu Jan 1 09:00:00 2026",
+        googleMxReceived("Fri, 01 Jan 2099 00:00:00 +0000"),
+        "separator",
+      ),
+      // Without a separator date, only a positionally anchored Google receipt is used.
+      message("From sender", googleMxReceived("Fri, 02 Jan 2026 08:00:00 +0000"), "anchored"),
+      message(
+        "From sender",
+        [
+          "Received: from relay.attacker.test by mta.attacker.test with ESMTP id 1; Fri, 02 Jan 2026 07:00:00 +0000",
+          ...googleMxReceived("Fri, 02 Jan 2026 08:00:00 +0000"),
+        ],
+        "unanchored",
+      ),
+    ]),
+  });
+  const dates = Object.fromEntries(
+    urls(pod).map((url) => {
+      const resource = new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory);
+      const source = [...resource.derivedFrom][0] ?? "";
+      return [
+        source.replace(/^.*\/messages\/|\.ttl#it$/g, ""),
+        resource.dateModified?.toISOString(),
+      ];
+    }),
+  );
+  expect(Object.values(dates).sort()).toEqual(
+    ["2026-01-01T09:00:00.000Z", "2026-01-02T08:00:00.000Z", undefined].sort(),
+  );
+  expect(Object.keys(dates)).toHaveLength(3);
 });

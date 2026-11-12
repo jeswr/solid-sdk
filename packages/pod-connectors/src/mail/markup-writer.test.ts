@@ -66,6 +66,19 @@ function source(index = 2, extra: Partial<MailMarkupSource> = {}): MailMarkupSou
     ...extra,
   };
 }
+/** Store minimal source EmailMessages; markup is written only for a stored source. */
+async function seed(ctx: Pick<ImportContext, "write">, ...iris: string[]) {
+  for (const iri of iris) {
+    const dataset = new Store();
+    new MailMessage(iri, dataset, DataFactory).types.add(MAIL_CLASSES.EmailMessage);
+    await ctx.write({
+      slug: iri.slice(ROOT.length, -"#it".length),
+      category: "mail",
+      forClass: MAIL_CLASSES.EmailMessage,
+      dataset,
+    });
+  }
+}
 const resource = (pod: ReturnType<typeof createMemoryPod>, item: StoredEmailMarkup) =>
   new MailMarkupResource(item.iri, pod.dataset(`${ROOT}${item.slug}`), DataFactory);
 const markupUrls = (pod: ReturnType<typeof createMemoryPod>) =>
@@ -75,6 +88,7 @@ describe("MailMarkupWriter persistence", () => {
   it("writes every supported type, nested resources, trust, message provenance and registrations", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, ...EMAIL_MARKUP_FIXTURES.map((_, index) => message(String(index))));
       const writer = createMailMarkupWriter(ctx, account);
       for (const [index, fixture] of EMAIL_MARKUP_FIXTURES.entries()) {
         const [result] = await writer.add(source(index, { messageIri: message(String(index)) }));
@@ -99,6 +113,7 @@ describe("MailMarkupWriter persistence", () => {
     const { pod, run } = setup();
     let first: StoredEmailMarkup;
     await run(async (ctx) => {
+      await seed(ctx, message("one"), message("change"));
       [first] = (await createMailMarkupWriter(ctx, account).add(source())) as StoredEmailMarkup[];
     });
     await run(async (ctx) => {
@@ -138,6 +153,12 @@ describe("MailMarkupWriter persistence", () => {
   it("separates providers, root types, accounts, and numberless message/index identities", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(
+        ctx,
+        message("one"),
+        message("two"),
+        `${ROOT}${messageSlug("two@example.test", "one")}#it`,
+      );
       const writer = createMailMarkupWriter(ctx, account);
       const [one] = await writer.add(source());
       const [other] = await writer.add(
@@ -169,6 +190,7 @@ describe("MailMarkupWriter persistence", () => {
   it("marks stored receiver evidence verified and prevents an unverified change from replacing it", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"), message("spoof"));
       const writer = createMailMarkupWriter(ctx, account);
       const [verified] = await writer.add(source(2, { authentication: { dmarc: "pass" } }));
       expect(resource(pod, verified as StoredEmailMarkup).trust).toBe("verified");
@@ -184,6 +206,7 @@ describe("MailMarkupWriter persistence", () => {
   it("stores strings as literals and finite numeric/boolean values through typed accessors", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"));
       const [item] = await createMailMarkupWriter(ctx, account).add(
         source(0, {
           html: jsonLdFixture({
@@ -216,6 +239,7 @@ describe("MailMarkupWriter persistence", () => {
   it("leaves missing receiver dates unknown and ignores sender markup modification times", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"));
       const writer = createMailMarkupWriter(ctx, account);
       const [a] = await writer.add(source(0, { dateModified: new Date(NaN) }));
       expect(resource(pod, a as StoredEmailMarkup).dateModified).toBeUndefined();
@@ -258,10 +282,12 @@ describe("MailMarkupWriter persistence", () => {
   it("preserves conditional-write conflicts", async () => {
     const { pod, podWriter, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"));
       const ports = {
         ...ctx,
         async read(slug: string) {
           const old = await ctx.read(slug);
+          if (!slug.includes("/trips/")) return old;
           await podWriter.write(
             {
               slug,
@@ -334,6 +360,7 @@ describe("markup update and re-scan boundaries", () => {
   it("updates by orderNumber, removes old nested fields and preserves case-sensitive provider identities", async () => {
     const { pod, run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"), message("order-change"));
       const writer = createMailMarkupWriter(ctx, account);
       const [first] = await writer.add(source(0));
       const [changed] = await writer.add(
@@ -380,6 +407,7 @@ describe("markup update and re-scan boundaries", () => {
   it("uses a nested airline provider when the reservation has no top-level provider", async () => {
     const { run } = setup();
     await run(async (ctx) => {
+      await seed(ctx, message("one"), message("changed"));
       const writer = createMailMarkupWriter(ctx, account);
       const html = jsonLdFixture({
         "@type": "FlightReservation",
@@ -388,6 +416,7 @@ describe("markup update and re-scan boundaries", () => {
       });
       const [one] = await writer.add(source(2, { html }));
       const [two] = await writer.add(source(2, { html, messageIri: message("changed") }));
+      expect(one?.iri).toBeDefined();
       expect(one?.iri).toBe(two?.iri);
     });
   });
@@ -454,6 +483,7 @@ describe("markup update and re-scan boundaries", () => {
 it("identifies a hotel or restaurant as the provider when no booking agent is given", async () => {
   const { run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("changed"));
     const writer = createMailMarkupWriter(ctx, account);
     for (const [type, service] of [
       ["LodgingReservation", "Hotel"],
@@ -466,6 +496,7 @@ it("identifies a hotel or restaurant as the provider when no booking agent is gi
       });
       const [one] = await writer.add(source(5, { html }));
       const [two] = await writer.add(source(5, { html, messageIri: message("changed") }));
+      expect(one?.iri).toBeDefined();
       expect(one?.iri).toBe(two?.iri);
     }
   });
@@ -474,6 +505,7 @@ it("identifies a hotel or restaurant as the provider when no booking agent is gi
 it("promotes verified evidence despite an unverified future timestamp", async () => {
   const { pod, run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("future"));
     const writer = createMailMarkupWriter(ctx, account);
     const [unverified] = await writer.add(
       source(2, { messageIri: message("future"), dateModified: new Date("2099-01-01T00:00:00Z") }),
@@ -491,6 +523,7 @@ it("releases source reads and skipped markup reads without dropping write precon
   await run(async (ctx) => {
     const releaseRead = vi.fn(ctx.releaseRead);
     const ports = { ...ctx, releaseRead };
+    await seed(ctx, message("one"), message("old"));
     const writer = createMailMarkupWriter(ports, account);
     const [first] = await writer.add(source(2, { authentication: { dmarc: "pass" } }));
     expect(releaseRead).not.toHaveBeenCalledWith(first?.slug);
@@ -556,6 +589,7 @@ it.each([
 ] as const)("enforces the update matrix %s -> %s", async (before, after, allowed) => {
   const { pod, run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("next"));
     const writer = createMailMarkupWriter(ctx, account);
     const [first] = await writer.add(
       source(2, {
@@ -583,6 +617,7 @@ it.each([
 it("isolates two senders reusing provider and booking number", async () => {
   const { pod, run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("attacker"));
     const writer = createMailMarkupWriter(ctx, account);
     const [one] = await writer.add(source());
     const [two] = await writer.add(
@@ -598,6 +633,7 @@ it("isolates two senders reusing provider and booking number", async () => {
 it("shares item and write budgets across messages and counts failed attempts", async () => {
   const { run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("two"), message("three"));
     const writer = createMailMarkupWriter(ctx, account, { maxTotalItems: 2 });
     expect(await writer.add(source())).toHaveLength(1);
     expect(await writer.add(source(2, { messageIri: message("two") }))).toHaveLength(1);
@@ -629,6 +665,7 @@ it("skips oversized serialized items and keeps later small items", async () => {
   const { pod, run } = setup();
   const { serialize } = await import("@jeswr/rdf-serialize");
   await run(async (ctx) => {
+    await seed(ctx, message("one"));
     const writer = createMailMarkupWriter(ctx, account);
     const items = await writer.add(
       source(0, {
@@ -695,18 +732,11 @@ it("indexes markup before writes and removes only the current source's resources
 it("prunes orphan assertions while retaining assertions with an existing source", async () => {
   const { pod, run } = setup();
   await run(async (ctx) => {
+    await seed(ctx, message("one"), message("missing"));
     const writer = createMailMarkupWriter(ctx, account);
     await writer.add(source(0));
     await writer.add(source(2, { messageIri: message("missing") }));
-    const dataset = new Store();
-    const mail = new MailMessage(message("one"), dataset, DataFactory);
-    mail.types.add(MAIL_CLASSES.EmailMessage);
-    await ctx.write({
-      slug: messageSlug(account, "one"),
-      category: "mail",
-      forClass: MAIL_CLASSES.EmailMessage,
-      dataset,
-    });
+    await ctx.remove(messageSlug(account, "missing"));
   });
   expect(markupUrls(pod)).toHaveLength(2);
   await run(async (ctx) => {
@@ -740,6 +770,7 @@ it("never uses stored dateSent or legacy dateReceived when re-scanning without t
     expect(
       new MailMarkupResource(`${url}#it`, pod.dataset(url), DataFactory).dateModified,
     ).toBeUndefined();
+    await seed(ctx, message("next"));
     const [next] = await createMailMarkupWriter(ctx, account).add(
       source(2, { messageIri: message("next"), dateModified: date }),
     );

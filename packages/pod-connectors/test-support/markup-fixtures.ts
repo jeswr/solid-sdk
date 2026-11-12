@@ -145,3 +145,37 @@ export function microdataFixture(node: object, property?: string): string {
     )
     .join("")}</div>`;
 }
+
+const TRACE_DATE = "Thu, 01 Jan 2026 08:00:00 +0000";
+/** Google's inbound MX receipt as Gmail folds it (synthetic hosts, ids and documentation IPs). */
+export function googleMxReceived(date = TRACE_DATE, protocol = "ESMTPS"): string[] {
+  return [
+    "Received: from mta.example.test (mta.example.test. [192.0.2.10])",
+    `        by mx.google.com with ${protocol} id s1-20020a17090a000100b0012345si1.2026.01.01.08.00.00`,
+    "        for <alex@example.test>",
+    "        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);",
+    `        ${date}`,
+  ];
+}
+/** Google's receiver assertion for `dmarc` (a full result clause), folded as Gmail writes it. */
+export function googleAuthenticationResults(dmarc: string): string[] {
+  return [
+    "Authentication-Results: mx.google.com;",
+    "       dkim=pass header.i=@example.test header.s=s1 header.b=synthetic;",
+    "       spf=pass (google.com: domain of bounce@mta.example.test designates 192.0.2.10 as permitted sender) smtp.mailfrom=bounce@mta.example.test;",
+    `       ${dmarc}`,
+  ];
+}
+/** A genuine Gmail header layout: an internal IPv6 relay hop, the inbound MX receipt, then
+ * Google's Authentication-Results directly below it. */
+export function gmailTrace(dmarc: string, date = TRACE_DATE): string[] {
+  return [
+    `Received: by 2002:a05:6a10:1234:b0:5ab:cdef:1234 with SMTP id a1b2c3d4e5f6; ${date}`,
+    `X-Received: by 2002:a17:90a:1234:b0:2a1:1234:abcd with SMTP id x9y8z7; ${date}`,
+    "ARC-Seal: i=1; a=rsa-sha256; t=1767254400; cv=none; d=google.com; s=arc-20240605; b=synthetic",
+    "Return-Path: <bounce@mta.example.test>",
+    ...googleMxReceived(date),
+    "Received-SPF: pass (google.com: domain of bounce@mta.example.test designates 192.0.2.10 as permitted sender) client-ip=192.0.2.10;",
+    ...googleAuthenticationResults(dmarc),
+  ];
+}
