@@ -247,3 +247,9 @@ html[data-app-colours="true"] .suite-rail-button[href="/money"] {
 html[data-app-colours="true"] .suite-rail-button[href="/health"] {
   color: var(--presence-health);
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.export-choice,
+.export-skipped {
+  overflow-wrap: anywhere;
+}

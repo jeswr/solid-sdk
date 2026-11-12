@@ -14,6 +14,7 @@ const sections = [
   ["account", "Account"],
   ["appearance", "Appearance"],
   ["storage", "Storage"],
+  ["export", "Export"],
   ["notifications", "Notifications"],
   ["offline", "Offline"],
   ["shortcuts", "Shortcuts"],
