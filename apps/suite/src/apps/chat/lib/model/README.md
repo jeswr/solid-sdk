@@ -24,6 +24,27 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   aliases; tombstones erase bodies and task overlay, preserving author/time/id.
   Task overlays use the SAME message subject and existing wf:Task vocabulary.
   The corresponding I/O functions re-read the original day and conditionally PUT.
+- `appendReaction` / `appendUndo` (hand-written for now: the chat-interop codegen profile has
+  no Like/Undo shape yet. These Like/Undo field mappings move into the generated
+  `@jeswr/solid-chat-interop` model once its codegen flip, sst-m3nr, lands. That move is bead sst-v8od,
+  which depends on sst-m3nr. After it, this file keeps only the domain policy below as a thin
+  facade): return only a new `as:Like` / `as:Undo`
+  subject in the target message's day, retaining the sanitised emoji in `as:content`.
+  Reactions are emoji only (`isReactionEmoji`: at most 32 UTF-16 units; digits, `#` and `*`
+  only inside keycap sequences, so `👍999` is refused). `appendUndo`
+  returns `null` when the same author already undid the Like, so a race with
+  another tab is not an error. `readReactions(dataset, document)` ignores
+  malformed, non-emoji and cross-document events, and events stored in any
+  document other than `document`, and subtracts only Undos from the Like's author.
+  `#reaction-`/`#undo-` subjects, and Like/Undo subjects not also typed as a
+  message, never appear in `readMessages`; adding `a as:Like` to a message does
+  not hide it.
+  Authorship is what the writer claims in `as:attributedTo`: a member with Append
+  can write Likes or Undos in another member's name, as with message authorship.
+  The author check holds between honest clients only; the timeline caps chips at
+  `MAX_REACTION_CHIPS` per message.
+  `react` / `unreact` use only PATCH INSERT DATA with the day's strong If-Match,
+  re-reading and retrying one 412. Missing or deleted messages cannot be reacted to.
 - `createRoom`: creates parents, then a new room, its advertised WAC ACL and
   index, in that order. Owner gets Read/Write/Control, members Read/Append with
   default inheritance. No public grants. It does not auto-join the owner or send

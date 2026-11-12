@@ -349,7 +349,7 @@ export function putAccount(document: MoneyDocument, value: Account): void {
   node.types.add(V.accountClass);
   node.label = value.label;
 }
-function putMoney(document: MoneyDocument, id: string, value: Money): Term {
+export function putMoney(document: MoneyDocument, id: string, value: Money): Term {
   const owner = DataFactory.namedNode(id);
   let amountId = document.node(id).amountNode;
   if (
