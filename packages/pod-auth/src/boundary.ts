@@ -211,7 +211,7 @@ export function createBoundary(
             const links = parseLinks(confirmation.headers.get("link"), root);
             const only = (rel: string) => {
               const matching = links.filter((link) => link.rel === rel);
-              return matching.length === 1 && matching[0]!.href === storage;
+              return matching.length === 1 && matching[0]!.href === identifier.href;
             };
             if (
               only(LWS_STORAGE) ||
