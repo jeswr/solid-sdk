@@ -1,38 +1,59 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /**
- * Provider assumptions live here. Source: Google's Health REST v4 / scopes docs
- * (developers.google.com/health), supplied with sst-uqit CON-A4; no live verification.
- * Facts supplied: health.googleapis.com/v4; users/me/dataTypes/{kebab-case type}/
- * dataPoints[:reconcile]; pageSize/pageToken/filter/dataSourceFamily; dataPoints +
- * nextPageToken (absent or "" terminates); camelCase union payloads; interval/sample
- * times; optional users/{user}/dataTypes/{type}/dataPoints/{id} name. Reconcile
- * summary types, list sessions/samples. Google OAuth + offline PKCE; Fitbit tokens
- * cannot migrate. All Health scopes are Restricted.
+ * Every Google Health provider assumption lives here. Source of record: the Google Health
+ * API v4 discovery document (`https://health.googleapis.com/$discovery/rest?version=v4`,
+ * revision 20261110, read on 2026-11-12), which carries the reference text of
+ * developers.google.com/health/reference/rest/v4/users.dataTypes.dataPoints (that site was
+ * unreachable from the authoring sandbox). Facts used, quoted from that document:
  *
- * VERIFY against https://developers.google.com/health/scopes (unreachable from the
- * authoring sandbox; confirmed on 2026-11-12 only through search-result extracts of that
- * page and developers.google.cn/health/scopes): every scope is the
- * `https://www.googleapis.com/auth/googlehealth` prefix plus `.<category>.readonly|writeonly`,
- * with categories `activity_and_fitness`, `health_metrics_and_measurements`, `sleep` and
- * `nutrition`. Access tokens carry only the scopes the user consented to. Nutrition is not
- * imported, so it is not requested.
+ * - Methods: `list` GET `v4/{parent}/dataPoints`, `dailyRollUp` POST
+ *   `v4/{parent}/dataPoints:dailyRollUp` ("Roll up data points over civil time intervals");
+ *   parent `users/me/dataTypes/{data_type}`. `list` takes `filter`, `pageSize`, `pageToken`.
+ *   "The maximum page size is 10000 … The maximum page size for `exercise` and `sleep` is
+ *   25." Responses: `dataPoints` + `nextPageToken` ("empty if the response is complete");
+ *   `rollupDataPoints` + `nextPageToken` ("If this field is omitted, there are no subsequent
+ *   pages"). Points are "ordered by the interval start time in descending order".
+ * - Filters (AIP-160, `>=` and `<`, `AND`): `{sample_data_type}.sample_time.physical_time`
+ *   (RFC 3339); `{session_data_type}.interval.civil_start_time` "Excluding Sleep and ECG"
+ *   (ISO 8601 `YYYY-MM-DD[THH:mm:ss]`, no zone); sleep only `sleep.interval.end_time`
+ *   (RFC 3339) or `sleep.interval.civil_end_time`. Physical and civil bounds are never mixed.
+ * - dailyRollUp request: `range` CivilTimeInterval {start, end: CivilDateTime} (closed-open),
+ *   `windowSizeDays` (default 1), `pageSize` ("maximum page size is `90`. For … `total-calories`,
+ *   the default and maximum page size is `14`"); maximum range 14 days for `total-calories`,
+ *   90 days otherwise. Each DailyRollupDataPoint has `civilStartTime`, `civilEndTime` and one
+ *   value: `steps.countSum` (int64), `distance.millimetersSum` (int64),
+ *   `totalCalories.kcalSum` (double). `total-calories` exists only as a rollup.
+ * - DataPoint: optional `name` `users/{user}/dataTypes/{data_type}/dataPoints/{data_point}`,
+ *   optional `dataSource` {platform, recordingMethod, device{formFactor, manufacturer,
+ *   displayName}, application{packageName, webClientId, googleWebClientId}}, and one payload
+ *   member: `heartRate` {sampleTime, beatsPerMinute int64 "[1, 300]"}, `weight` {sampleTime,
+ *   weightGrams double "[0, 1000000]"}, `exercise` {interval (SessionTimeInterval),
+ *   exerciseType enum, displayName ("generated name based on `exercise_type` (e.g.
+ *   \"Walking\" for `WALKING`)"), metricsSummary {distanceMillimeters double, …},
+ *   updateTime}, `sleep` {interval, stages[{type enum AWAKE|LIGHT|DEEP|REM|ASLEEP|RESTLESS,
+ *   startTime, endTime, startUtcOffset, endUtcOffset}], metadata{processed, …}, updateTime}.
+ * - ObservationSampleTime {physicalTime, utcOffset (Duration), civilTime (output only)};
+ *   SessionTimeInterval {startTime, endTime, startUtcOffset, endUtcOffset, civilStartTime,
+ *   civilEndTime}; CivilDateTime {date{year, month, day}, time{hours, minutes, seconds,
+ *   nanos}}. int64 fields are JSON strings (proto3 JSON); Durations are strings like "-18000s".
+ * - Scopes: `https://www.googleapis.com/auth/googlehealth.{activity_and_fitness,sleep,
+ *   health_metrics_and_measurements}.readonly`, all listed by the document's oauth2 section.
  *
- * The supplied facts do not specify payload members, time member spellings, units,
- * exercise-session type or filter grammar. The deliberately narrow synthetic profile
- * below assumes startTime/endTime or time, steps.count, distance.meters,
- * calories.kilocalories, heartRate.beatsPerMinute, weight.kilograms,
- * sleep.stages[{startTime,endTime,stage}], exerciseSession.{activityName,distanceMeters},
- * an optional `dataSource` object and an optional `updateTime`. RFC 3339 times keep the
- * provider's own UTC offset; a daily summary's civil date is its start date in that offset.
- * Search extracts of the v4 reference suggest real points nest times (for example
- * `sampleTime.physicalTime`, `civilTime`, `utcOffset`) and describe `dataSource` with
- * `recordingMethod`, `device`, `application` and `platform`; VERIFY before a live client.
- * Filters assume `endTime > "A" AND endTime <= "B"` for intervals and
- * `time >= "A" AND time < "B"` for samples: one UTC day per request window.
- * Permanently invalid points are skipped. No guessing of units, native Fitbit identifiers,
- * or multi-day allocations. Named resources retain API/name as identity/provenance only;
- * these URLs are never fetched.
+ * VERIFY (not stated by that document, so handled conservatively):
+ * - A UTC offset or zero-valued field may be omitted as proto3 JSON omits defaults: a
+ *   missing offset counts as UTC and a rollup value member without its field counts as 0.
+ * - Real-world civil offsets stay within UTC-14…UTC+14 (DateTime allows ±18 h); larger
+ *   offsets are refused as invalid values.
+ * - The generated `displayName` strings (other than "Walking") are not enumerated, so legacy
+ *   Fitbit rows (`activityName`, e.g. "Run") match only when the strings are equal.
+ * - A dailyRollUp range may end on a civil date that has not started for the user yet.
+ * - Rate-limit 403s carry the Google API error reasons `rateLimitExceeded`,
+ *   `userRateLimitExceeded`, `quotaExceeded`, `dailyLimitExceeded`, `RATE_LIMIT_EXCEEDED`
+ *   or status `RESOURCE_EXHAUSTED` (Google API error conventions, not the Health reference).
+ *
+ * Fitbit tokens cannot migrate; nutrition is not imported, so it is not requested.
+ * Named resources retain API/name as identity/provenance only; they are never fetched.
  */
 import { type RunBudget, readJson } from "../core/budget.js";
 import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../core/errors.js";
@@ -44,45 +65,72 @@ export const API = "https://health.googleapis.com/v4";
 /** The shared import session's source fallback, also used to recognise migrated records. */
 export const SOURCE_ORIGIN = `${new URL(API).origin}/`;
 const SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth";
-/** Steps, distance, calories and exercise sessions. */
+/** Steps, distance, total calories, heart rate and exercise. */
 export const ACTIVITY_SCOPE = `${SCOPE_PREFIX}.activity_and_fitness.readonly`;
 /** Sleep sessions and stages. */
 export const SLEEP_SCOPE = `${SCOPE_PREFIX}.sleep.readonly`;
-/** Heart rate and weight. */
+/** Weight. */
 export const METRICS_SCOPE = `${SCOPE_PREFIX}.health_metrics_and_measurements.readonly`;
 export const GOOGLE_HEALTH_SCOPES = [ACTIVITY_SCOPE, SLEEP_SCOPE, METRICS_SCOPE] as const;
+/** The v4 data type ids this adapter imports (URL path segments). */
 export const TYPES = [
   "steps",
   "distance",
-  "calories",
-  "exercise-session",
+  "total-calories",
+  "exercise",
   "heart-rate",
   "sleep",
   "weight",
 ] as const;
 export type HealthType = (typeof TYPES)[number];
 export const DAY_MS = 24 * 60 * 60 * 1000;
-export const OVERLAP_MS = 48 * 60 * 60 * 1000;
-/** Largest civil UTC offset the provider may render (UTC-12 … UTC+14). */
-export const MAX_OFFSET_MS = 14 * 60 * 60 * 1000;
+export const HOUR_MS = 60 * 60 * 1000;
+export const OVERLAP_MS = 48 * HOUR_MS;
+/** Largest civil UTC offset accepted (UTC-14 … UTC+14). */
+export const MAX_OFFSET_MS = 14 * HOUR_MS;
 export const DEFAULT_LOOKBACK_DAYS = 30;
 export const MAX_PAGE_BYTES = 2 * 1024 * 1024;
+/** List page size requested for sample types (documented maximum 10,000). */
 export const MAX_PAGE_ITEMS = 1000;
 export const MAX_STAGES = 500;
 export const MAX_TOKEN_CHARS = 2048;
-/** Per data type, per run. Exceeding it ends that type at its last fully written day. */
+/** Per data type, per run. Exceeding it ends that type at its last fully written window. */
 export const DEFAULT_LIMITS = { maxRequests: 512, maxItems: 250_000, maxBytes: 128 * 1024 * 1024 };
-/** Whole run, across all types. Exceeding it ends the run at the last fully written day. */
+/** Whole run, across all types. Exceeding it ends the run at the last fully written window. */
 export const DEFAULT_RUN_LIMITS = {
   maxRequests: 2048,
   maxItems: 1_000_000,
   maxBytes: 512 * 1024 * 1024,
 };
+/** Daily totals come from dailyRollUp; everything else is listed. */
 export const summary = (type: HealthType): boolean =>
-  ["steps", "distance", "calories"].includes(type);
+  type === "steps" || type === "distance" || type === "total-calories";
 export const sample = (type: HealthType): boolean => type === "heart-rate" || type === "weight";
+/** The documented page size: 25 for sessions, 14/90 for rollups, ours for samples. */
+export const pageSize = (type: HealthType): number =>
+  type === "exercise" || type === "sleep"
+    ? 25
+    : type === "total-calories"
+      ? 14
+      : summary(type)
+        ? 90
+        : MAX_PAGE_ITEMS;
+/** Longest dailyRollUp range, in days. */
+export const rollupDays = (type: HealthType): number => (type === "total-calories" ? 14 : 90);
 export const endpoint = (type: HealthType): string =>
-  `${API}/users/me/dataTypes/${type}/dataPoints${summary(type) ? ":reconcile" : ""}`;
+  `${API}/users/me/dataTypes/${type}/dataPoints${summary(type) ? ":dailyRollUp" : ""}`;
+/** The only non-GET request the transport forwards: a read-only civil-day rollup query. */
+export const ROLLUP_PATH =
+  /^\/v4\/users\/me\/dataTypes\/(?:steps|distance|total-calories)\/dataPoints:dailyRollUp$/;
+const PAYLOAD: Record<HealthType, string> = {
+  steps: "steps",
+  distance: "distance",
+  "total-calories": "totalCalories",
+  exercise: "exercise",
+  "heart-rate": "heartRate",
+  sleep: "sleep",
+  weight: "weight",
+};
 
 /** Provider-independent records consumed by the pod mapping. */
 export interface HealthPoint {
@@ -96,73 +144,158 @@ export interface HealthPoint {
   nativeId?: string;
   sourceUrl?: string;
   value?: number;
+  /** Exercise display name (the label Fitbit stored as `activityName`). */
   activity?: string;
+  /** Exercise `exerciseType` enum value. */
+  exerciseType?: string;
   distanceKm?: number;
-  /** Start wall-clock time in the provider's offset, rendered with a Z suffix (Fitbit's legacy form). */
+  /** Start wall-clock time in the user's offset, rendered with a Z suffix (Fitbit's legacy form). */
   wallStart?: string;
-  /** Summary types: civil date (YYYY-MM-DD) in the provider's offset, and that date's UTC span. */
-  civilDate?: string;
-  civilStart?: number;
-  civilEnd?: number;
+  /** Sleep whose stages Google is still processing (`metadata.processed` false). */
+  pending?: boolean;
   stages?: { start: string; end: string; label: string }[];
 }
+/** One civil day's rolled-up total. */
+export interface DailyTotal {
+  type: HealthType;
+  /** Civil date, YYYY-MM-DD. */
+  date: string;
+  value: number;
+}
+
 export const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
-const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
+/** Why a provider value was refused: an unrecognised shape, or a recognised but invalid value. */
+export type Invalid = "shape" | "value";
+class Refusal {
+  constructor(readonly reason: Invalid) {}
+}
+const shape = (): never => {
+  throw new Refusal("shape");
+};
+const refuse = (): never => {
+  throw new Refusal("value");
+};
+
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-](\d{2}):(\d{2}))$/;
+/** A validated RFC 3339 instant, normalised to UTC with millisecond precision. */
 export function timestamp(v: unknown): string | undefined {
   if (typeof v !== "string" || v.length > 40) return undefined;
-  const match = RFC3339.exec(v);
-  if (!match) return undefined;
-  const ms = Date.parse(v);
-  const [year, month, day] = v.slice(0, 10).split("-").map(Number);
-  const [hour, minute, second] = v.slice(11, 19).split(":").map(Number);
+  const m = RFC3339.exec(v);
+  if (!m) return undefined;
+  const [year, month, day, hour, minute, second] = m.slice(1, 7).map(Number) as number[];
   if (
-    !year ||
-    !month ||
-    !day ||
-    (hour ?? 24) > 23 ||
-    (minute ?? 60) > 59 ||
-    (second ?? 60) > 59 ||
-    new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) !== v.slice(0, 10)
+    !validDate(year as number, month as number, day as number) ||
+    (hour as number) > 23 ||
+    (minute as number) > 59 ||
+    (second as number) > 59
   )
     return undefined;
-  const offset = match[1] as string;
-  if (offset !== "Z") {
-    const [h, m] = offset.slice(1).split(":").map(Number);
-    if ((h ?? 99) * 60 + (m ?? 99) > MAX_OFFSET_MS / 60_000 || (m ?? 60) > 59) return undefined;
+  if (m[8] !== "Z") {
+    const h = Number(m[9]),
+      min = Number(m[10]);
+    if (min > 59 || h * 60 + min > MAX_OFFSET_MS / 60_000) return undefined;
   }
+  // Date.parse reads at most millisecond precision; nanosecond inputs are truncated.
+  const ms = Date.parse(`${v.slice(0, 19)}.${(m[7] ?? "").padEnd(3, "0").slice(0, 3)}${m[8]}`);
   // Keep normalized dates within the fixed-width range used by cursor comparisons.
   if (!Number.isFinite(ms) || ms < 0) return undefined;
   const normalized = new Date(ms).toISOString();
   return normalized.length === 24 ? normalized : undefined;
 }
-/** The provider's own offset of a validated RFC 3339 string, as `±HH:MM`. */
-function offsetOf(v: string): string {
-  const offset = RFC3339.exec(v)?.[1] ?? "Z";
-  return offset === "Z" ? "+00:00" : offset;
+function validDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || year < 1970 || year > 9999) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
 }
-/** Local wall-clock time of a validated RFC 3339 string, re-labelled as UTC. */
-function wallClock(v: string): string | undefined {
-  return timestamp(v.replace(/(?:Z|[+-]\d{2}:\d{2})$/, "Z"));
+const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+
+/** A required RFC 3339 instant: not a string or not RFC 3339 is an unrecognised shape. */
+function instant(v: unknown): string {
+  if (typeof v !== "string") return shape();
+  const result = timestamp(v);
+  if (result) return result;
+  return RFC3339.test(v) ? refuse() : shape();
 }
-const text = (v: unknown, max = 256): v is string =>
-  typeof v === "string" &&
-  v.length > 0 &&
-  v.length <= max &&
-  [...v].every((c) => {
-    const n = c.codePointAt(0) ?? 0;
-    return n >= 32 && (n < 0xd800 || n > 0xdfff);
-  });
-const number = (v: unknown, max: number): v is number =>
-  typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max;
+/** A Duration UTC offset ("-18000s") in ms; absent counts as UTC (VERIFY, see above). */
+function utcOffset(v: unknown): number {
+  if (v === undefined) return 0;
+  if (typeof v !== "string" || !/^-?\d{1,6}(?:\.0{1,9})?s$/.test(v)) return shape();
+  const ms = Number.parseInt(v, 10) * 1000;
+  if (Math.abs(ms) > MAX_OFFSET_MS) return refuse();
+  return ms === 0 ? 0 : ms;
+}
+/** A non-negative int64 sent as a JSON number or a bounded decimal digit string. */
+function int64(v: unknown, min: number, max: number): number {
+  let n: number;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string" && /^(?:0|[1-9]\d{0,15})$/.test(v)) n = Number(v);
+  else if (typeof v === "string" && /^-[1-9]\d{0,15}$/.test(v)) return refuse();
+  else return shape();
+  if (!Number.isSafeInteger(n) || n < min || n > max) return refuse();
+  return n;
+}
+/** A double sent as a finite JSON number or a plain decimal string (no NaN/Infinity/exponent). */
+function double(v: unknown, min: number, max: number): number {
+  let n: number;
+  if (typeof v === "number") n = v;
+  else if (typeof v === "string" && /^-?\d{1,16}(?:\.\d{1,16})?$/.test(v)) n = Number(v);
+  else return shape();
+  if (!Number.isFinite(n) || n < min || n > max) return refuse();
+  return n;
+}
+const int32 = (v: unknown, min: number, max: number): number => {
+  if (v === undefined) return 0; // proto3 JSON omits zero-valued fields.
+  if (typeof v !== "number" || !Number.isInteger(v)) return shape();
+  return v < min || v > max ? refuse() : v;
+};
+/** CivilDateTime → { date YYYY-MM-DD, wall YYYY-MM-DDTHH:mm:ss.sssZ }; undefined when absent. */
+function civilDateTime(v: unknown): { date: string; wall: string } | undefined {
+  if (v === undefined) return undefined;
+  if (!record(v) || !record(v.date)) return shape();
+  const d = v.date as Record<string, unknown>;
+  const year = int32(d.year, 0, 9999),
+    month = int32(d.month, 0, 12),
+    day = int32(d.day, 0, 31);
+  if (!validDate(year, month, day)) return refuse();
+  if (v.time !== undefined && !record(v.time)) return shape();
+  const t = (v.time ?? {}) as Record<string, unknown>;
+  const hours = int32(t.hours, 0, 23),
+    minutes = int32(t.minutes, 0, 59),
+    seconds = int32(t.seconds, 0, 59),
+    nanos = int32(t.nanos, 0, 999_999_999);
+  const date = `${pad(year, 4)}-${pad(month)}-${pad(day)}`;
+  return {
+    date,
+    wall: `${date}T${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${pad(Math.floor(nanos / 1e6), 3)}Z`,
+  };
+}
+/** Wall clock from civil time, else from the physical instant plus its UTC offset. */
+const wallClock = (physical: string, offset: number, civil?: { wall: string }): string =>
+  civil?.wall ?? new Date(Date.parse(physical) + offset).toISOString();
+
+const text = (v: unknown, max = 256): string => {
+  if (typeof v !== "string") return shape();
+  const ok =
+    v.length > 0 &&
+    v.length <= max &&
+    [...v].every((c) => {
+      const n = c.codePointAt(0) ?? 0;
+      return n >= 32 && (n < 0xd800 || n > 0xdfff);
+    });
+  return ok ? v : refuse();
+};
+const ENUM = /^[A-Z][A-Z0-9_]{0,63}$/;
+const SLEEP_STAGES = new Set(["AWAKE", "LIGHT", "DEEP", "REM", "ASLEEP", "RESTLESS"]);
 
 const MAX_SOURCE_CHARS = 1024;
 /**
  * Canonical, bounded identity of a point's `dataSource` object: its scalar leaves (two
  * levels deep) in sorted key order. Undefined when the member is malformed.
  */
-function dataSourceKey(value: unknown): string | undefined {
-  if (!record(value)) return undefined;
+function dataSourceKey(value: Record<string, unknown>): string | undefined {
   const parts: string[] = [];
   const visit = (node: Record<string, unknown>, prefix: string, depth: number): boolean => {
     const keys = Object.keys(node).sort();
@@ -204,118 +337,159 @@ export function nativeSource(value: string | undefined, type: HealthType): strin
   return match?.[1] === type ? value : undefined;
 }
 
-/** Normalise one provider point; undefined means permanently invalid (skipped). */
+/** Normalise one listed DataPoint, or say why it was refused. */
+export function parsePoint(type: HealthType, raw: unknown): HealthPoint | Invalid {
+  try {
+    return parse(type, raw);
+  } catch (error) {
+    if (error instanceof Refusal) return error.reason;
+    throw error;
+  }
+}
+/** Normalise one listed DataPoint; undefined means it was refused. */
 export function point(type: HealthType, raw: unknown): HealthPoint | undefined {
-  if (!record(raw)) return undefined;
-  const isSample = sample(type);
-  const rawStart = isSample ? raw.time : raw.startTime;
-  const start = timestamp(rawStart);
-  const end = timestamp(isSample ? raw.time : raw.endTime);
-  if (!start || !end || end < start || (!isSample && end === start)) return undefined;
+  const result = parsePoint(type, raw);
+  return typeof result === "string" ? undefined : result;
+}
+
+function parse(type: HealthType, raw: unknown): HealthPoint {
+  if (summary(type) || !record(raw)) return shape();
+  const payload = raw[PAYLOAD[type]];
+  if (!record(payload)) return shape();
   let nativeId: string | undefined;
   let sourceUrl: string | undefined;
   if (raw.name !== undefined && raw.name !== "") {
-    if (typeof raw.name !== "string" || raw.name.length > 512) return undefined;
-    const match = RESOURCE_NAME.exec(raw.name);
-    if (!match || match[1] !== type) return undefined;
+    if (typeof raw.name !== "string") return shape();
+    const match = raw.name.length <= 512 ? RESOURCE_NAME.exec(raw.name) : null;
+    if (!match || match[1] !== type) return refuse();
     nativeId = match[2];
     sourceUrl = `${API}/${raw.name}`;
   }
   let source = "";
   if (raw.dataSource !== undefined) {
-    const key = dataSourceKey(raw.dataSource);
-    if (key === undefined) return undefined;
-    source = key;
+    if (!record(raw.dataSource)) return shape();
+    source = dataSourceKey(raw.dataSource) ?? refuse();
   } else if (sourceUrl) source = `name=${raw.name as string}`;
-  let updateTime: string | undefined;
-  if (raw.updateTime !== undefined) {
-    updateTime = timestamp(raw.updateTime);
-    if (!updateTime) return undefined;
+  const updateTime = payload.updateTime === undefined ? undefined : instant(payload.updateTime);
+
+  if (sample(type)) {
+    const st = payload.sampleTime;
+    if (!record(st)) return shape();
+    const start = instant(st.physicalTime);
+    utcOffset(st.utcOffset);
+    civilDateTime(st.civilTime);
+    const value =
+      type === "heart-rate"
+        ? int64(payload.beatsPerMinute, 1, 300)
+        : double(payload.weightGrams, Number.MIN_VALUE, 1_000_000) / 1000;
+    return {
+      type,
+      start,
+      end: start,
+      source,
+      updateTime,
+      nativeId,
+      sourceUrl,
+      value,
+      key: `${type}-${start}-${start}-${sourceToken(source)}`,
+    };
   }
-  const field =
-    { "heart-rate": "heartRate", "exercise-session": "exerciseSession" }[
-      type as "heart-rate" | "exercise-session"
-    ] ?? type;
-  const payload = raw[field];
-  if (!record(payload)) return undefined;
-  const result: HealthPoint = {
-    type,
-    start,
-    end,
-    source,
-    updateTime,
-    nativeId,
-    sourceUrl,
-    key: `${type}-${start}-${end}-${sourceToken(source)}`,
+
+  const iv = payload.interval;
+  if (!record(iv)) return shape();
+  const start = instant(iv.startTime);
+  const end = instant(iv.endTime);
+  const startOffset = utcOffset(iv.startUtcOffset);
+  utcOffset(iv.endUtcOffset);
+  const civilStart = civilDateTime(iv.civilStartTime);
+  civilDateTime(iv.civilEndTime);
+  if (end <= start) return refuse();
+  const base = { type, start, end, source, updateTime, nativeId, sourceUrl };
+
+  if (type === "exercise") {
+    const activity = text(payload.displayName);
+    if (typeof payload.exerciseType !== "string") return shape();
+    const exerciseType = ENUM.test(payload.exerciseType) ? payload.exerciseType : refuse();
+    let distanceKm: number | undefined;
+    if (payload.metricsSummary !== undefined) {
+      if (!record(payload.metricsSummary)) return shape();
+      const mm = payload.metricsSummary.distanceMillimeters;
+      if (mm !== undefined) distanceKm = double(mm, 0, 1e12) / 1e6;
+    }
+    return {
+      ...base,
+      activity,
+      exerciseType,
+      distanceKm,
+      wallStart: wallClock(start, startOffset, civilStart),
+      // A named session updates in place; a nameless one is keyed by its start and type enum
+      // (displayName is localized). Numeric names are never assumed to be Fitbit logIds.
+      key: nativeId
+        ? `google-health-exercise-${nativeId}`
+        : `google-health-exercise-${start}-${exerciseType}`,
+    };
+  }
+
+  // Sleep.
+  if (payload.stages !== undefined && !Array.isArray(payload.stages)) return shape();
+  const rawStages = (payload.stages ?? []) as unknown[];
+  if (rawStages.length > MAX_STAGES) return refuse();
+  const stages: NonNullable<HealthPoint["stages"]> = [];
+  for (const stage of rawStages) {
+    if (!record(stage) || typeof stage.type !== "string") return shape();
+    const from = instant(stage.startTime);
+    const to = instant(stage.endTime);
+    utcOffset(stage.startUtcOffset);
+    utcOffset(stage.endUtcOffset);
+    if (!SLEEP_STAGES.has(stage.type) || from < start || to > end || to <= from) return refuse();
+    stages.push({ start: from, end: to, label: stage.type.toLowerCase() });
+  }
+  stages.sort((a, b) => a.start.localeCompare(b.start));
+  if (stages.some((s, i) => i > 0 && s.start < (stages[i - 1]?.end ?? ""))) return refuse();
+  if (payload.metadata !== undefined && !record(payload.metadata)) return shape();
+  const metadata = (payload.metadata ?? {}) as Record<string, unknown>;
+  if (metadata.processed !== undefined && typeof metadata.processed !== "boolean") return shape();
+  return {
+    ...base,
+    stages,
+    pending: metadata.processed === false,
+    key: nativeId ? `sleep-${nativeId}` : `sleep-${start}`,
   };
-  if (type === "exercise-session") {
-    if (!text(payload.activityName)) return undefined;
-    result.activity = payload.activityName;
-    result.wallStart = wallClock(rawStart as string);
-    // Numeric resource suffixes keep the legacy Fitbit key ONLY when supplied, never inferred;
-    // other resource names key the session so a revision updates in place.
-    result.key =
-      nativeId && /^\d{1,32}$/.test(nativeId)
-        ? nativeId
-        : nativeId
-          ? `google-health-exercise-${nativeId}`
-          : `google-health-exercise-${start}-${encodeURIComponent(payload.activityName)}`;
-    if (payload.distanceMeters !== undefined) {
-      if (!number(payload.distanceMeters, 1e9)) return undefined;
-      result.distanceKm = payload.distanceMeters / 1000;
-    }
-  } else if (type === "sleep") {
-    result.key = nativeId ? `sleep-${nativeId}` : `sleep-${start}`;
-    if (!Array.isArray(payload.stages) || payload.stages.length > MAX_STAGES) return undefined;
-    const stages: NonNullable<HealthPoint["stages"]> = [];
-    for (const stage of payload.stages) {
-      if (!record(stage) || !text(stage.stage)) return undefined;
-      const from = timestamp(stage.startTime),
-        to = timestamp(stage.endTime);
-      if (!from || !to || from < start || to > end || to <= from) return undefined;
-      stages.push({ start: from, end: to, label: stage.stage });
-    }
-    stages.sort((a, b) => a.start.localeCompare(b.start));
-    if (stages.some((s, i) => i > 0 && s.start < (stages[i - 1]?.end ?? ""))) return undefined;
-    result.stages = stages;
-  } else {
-    const [member, max] = {
-      steps: ["count", 1e9],
-      distance: ["meters", 1e9],
-      calories: ["kilocalories", 1e7],
-      "heart-rate": ["beatsPerMinute", 1000],
-      weight: ["kilograms", 2000],
-    }[type] as [string, number];
-    const value = payload[member];
-    if (!number(value, max) || (type === "steps" && !Number.isSafeInteger(value))) return undefined;
-    if (summary(type)) {
-      // A civil date in the provider's own offset; intervals crossing its midnight are refused
-      // (no undocumented allocation rules).
-      const date = (rawStart as string).slice(0, 10);
-      const offset = offsetOf(rawStart as string);
-      const civilStart = Date.parse(`${date}T00:00:00${offset}`);
-      const next = new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
-      const civilEnd = Date.parse(`${next}T00:00:00${offset}`);
-      if (!Number.isFinite(civilStart) || !Number.isFinite(civilEnd)) return undefined;
-      if (Date.parse(end) > civilEnd) return undefined;
-      Object.assign(result, { civilDate: date, civilStart, civilEnd });
-    }
-    result.value = value;
-  }
-  return result;
 }
 
-/** Civil date of a summary point that failed validation, when its start is still legible. */
-export function civilDateOf(raw: unknown): string | undefined {
-  if (!record(raw)) return undefined;
-  return timestamp(raw.startTime) ? (raw.startTime as string).slice(0, 10) : undefined;
+/**
+ * Normalise one DailyRollupDataPoint. `null` is a documented no-data day (no value member:
+ * "missing days are not zeros"); otherwise the total or the refusal reason.
+ */
+export function parseRollup(type: HealthType, raw: unknown): DailyTotal | Invalid | null {
+  try {
+    if (!summary(type) || !record(raw)) return shape();
+    const start = civilDateTime(raw.civilStartTime) ?? shape();
+    const end = civilDateTime(raw.civilEndTime);
+    const next = new Date(Date.parse(`${start.date}T00:00:00Z`) + DAY_MS).toISOString();
+    // One-day windows only: a bucket covering another span is not one civil day's total.
+    if (start.wall !== `${start.date}T00:00:00.000Z` || (end && end.wall !== next)) refuse();
+    const member = raw[PAYLOAD[type]];
+    if (member === undefined) return null;
+    if (!record(member)) return shape();
+    const value =
+      type === "steps"
+        ? int64(member.countSum ?? 0, 0, 1e9)
+        : type === "distance"
+          ? int64(member.millimetersSum ?? 0, 0, 1e12) / 1000
+          : double(member.kcalSum ?? 0, 0, 1e7);
+    return { type, date: start.date, value };
+  } catch (error) {
+    if (error instanceof Refusal) return error.reason;
+    throw error;
+  }
 }
 
 /**
  * Deterministic winner between two different points sharing a key from one source: the
  * latest update time, then the larger value, then the larger canonical serialisation.
  */
-export function preferred(a: HealthPoint, b: HealthPoint): HealthPoint {
+export function preferred<T extends { updateTime?: string; value?: number }>(a: T, b: T): T {
   if ((a.updateTime ?? "") !== (b.updateTime ?? ""))
     return (a.updateTime ?? "") > (b.updateTime ?? "") ? a : b;
   if ((a.value ?? -1) !== (b.value ?? -1)) return (a.value ?? -1) > (b.value ?? -1) ? a : b;
@@ -339,30 +513,69 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 
 const REAUTHORIZE =
   "Re-authorize Google Health with all requested read permissions; the checkpoint is unchanged.";
+const QUOTA_REASONS = new Set([
+  "rateLimitExceeded",
+  "userRateLimitExceeded",
+  "quotaExceeded",
+  "dailyLimitExceeded",
+  "RATE_LIMIT_EXCEEDED",
+]);
+/** Whether a 403 body names a rate or quota limit (Google API error conventions; VERIFY). */
+async function quotaDenied(res: Response): Promise<boolean> {
+  let body: unknown;
+  try {
+    body = await readJson(res, ID, "Google Health error", 16 * 1024);
+  } catch {
+    return false;
+  }
+  const error = record(body) && record(body.error) ? body.error : undefined;
+  if (!error) return false;
+  if (error.status === "RESOURCE_EXHAUSTED") return true;
+  const reasons = [error.errors, error.details].flatMap((list) =>
+    Array.isArray(list) ? list.slice(0, 16).map((e) => (record(e) ? e.reason : undefined)) : [],
+  );
+  return reasons.some((reason) => typeof reason === "string" && QUOTA_REASONS.has(reason));
+}
 
-async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise<unknown> {
+async function request(
+  ctx: ImportContext,
+  url: string,
+  budget: RunBudget,
+  body?: unknown,
+): Promise<unknown> {
   const resource = url.split("?", 1)[0] ?? API; // Never put opaque page tokens in diagnostics.
   for (let attempt = 0; ; attempt++) {
     ctx.signal?.throwIfAborted();
     budget.request();
-    const res = await ctx.api(url, { signal: ctx.signal, redirect: "error" });
+    const res = await ctx.api(url, {
+      signal: ctx.signal,
+      redirect: "error",
+      ...(body !== undefined && {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    });
     if (res.ok) return readJson(res, ID, resource, MAX_PAGE_BYTES, budget);
-    await res.body?.cancel();
-    // The host transport has already refreshed once on 401; a second 401 or any 403
-    // (withheld scope, unapproved Restricted access) needs the user to authorize again.
-    if (res.status === 401)
+    // The host transport has already refreshed once on 401; a second 401 or a 403 that is
+    // not a rate limit (withheld scope, unapproved Restricted access) needs re-authorization.
+    if (res.status === 401) {
+      await res.body?.cancel();
       throw new IntegrationAuthError(
         ID,
         "exchange-failed",
         `Google Health rejected the authorization (401). ${REAUTHORIZE}`,
       );
-    if (res.status === 403)
+    }
+    const throttled = res.status === 429 || (res.status === 403 && (await quotaDenied(res)));
+    if (res.status === 403 && !throttled)
       throw new IntegrationAuthError(
         ID,
         "exchange-failed",
         `Google Health denied access (403). ${REAUTHORIZE}`,
       );
-    if (res.status === 429 || res.status >= 500) {
+    await res.body?.cancel().catch(() => {});
+    if (throttled || res.status >= 500) {
       const raw = res.headers.get("retry-after");
       const seconds = raw && /^\d+$/.test(raw) ? Number(raw) : undefined;
       const ms = seconds === undefined ? 1000 * 2 ** attempt : seconds * 1000;
@@ -370,7 +583,7 @@ async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise
         await delay(ms, ctx.signal);
         continue;
       }
-      if (res.status === 429) throw new RateLimitedError(ID, resource, seconds);
+      if (throttled) throw new RateLimitedError(ID, resource, seconds);
     }
     throw new IntegrationSyncError(
       ID,
@@ -380,29 +593,76 @@ async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise
   }
 }
 
-/** One request window: [start, end) in epoch ms, at most one UTC day. */
+/** One request window: [start, end) in epoch ms. */
 export interface Window {
   readonly start: number;
   readonly end: number;
 }
 
+/** A window needed more pages than allowed; the caller splits it into smaller windows. */
+export class PageCapError extends IntegrationSyncError {
+  constructor(type: HealthType) {
+    super(ID, `Google Health exceeded its page cap for one window of ${type}.`);
+    this.name = "PageCapError";
+  }
+}
+export const UNRECOGNISED =
+  "unrecognised Google Health response shape; the checkpoint is unchanged.";
+/**
+ * More than a tenth of a window's points (or all of them) are not the documented shape: the
+ * API changed, so stop before writing anything rather than silently skip real data.
+ */
+function guardShape(received: number, unrecognised: number): void {
+  if (unrecognised > 0 && (unrecognised === received || unrecognised * 10 > received))
+    throw new IntegrationSyncError(ID, `The import found an ${UNRECOGNISED}`);
+}
+function validPage(raw: unknown, member: string, max: number): raw is Record<string, unknown[]> {
+  return (
+    record(raw) &&
+    (raw[member] === undefined ||
+      (Array.isArray(raw[member]) && (raw[member] as unknown[]).length <= max)) &&
+    (raw.nextPageToken === undefined ||
+      (typeof raw.nextPageToken === "string" && raw.nextPageToken.length <= MAX_TOKEN_CHARS))
+  );
+}
+const invalidPage = () =>
+  new IntegrationSyncError(ID, "Invalid Google Health page; checkpoint unchanged.");
+const rfc3339 = (ms: number) => new Date(ms).toISOString().replace(/\.000Z$/, "Z");
+const civilLiteral = (ms: number) => new Date(ms).toISOString().slice(0, 19);
+const range = (field: string, from: string, to: string) =>
+  `${field} >= "${from}" AND ${field} < "${to}"`;
+
+/** The documented list filter selecting every point this window owns (see the header). */
+export function listFilter(type: HealthType, window: Window): string {
+  if (sample(type))
+    return range(
+      `${type.replaceAll("-", "_")}.sample_time.physical_time`,
+      rfc3339(window.start),
+      rfc3339(window.end),
+    );
+  if (type === "sleep")
+    return range("sleep.interval.end_time", rfc3339(window.start), rfc3339(window.end));
+  // Exercise filters only on civil start time: widen by the largest offsets, then keep the
+  // sessions whose physical start lies in the window.
+  return range(
+    "exercise.interval.civil_start_time",
+    civilLiteral(window.start - MAX_OFFSET_MS),
+    civilLiteral(window.end + MAX_OFFSET_MS),
+  );
+}
+
 export interface WindowBatch {
   /** Valid, de-duplicated points belonging to this window. */
   points: HealthPoint[];
-  /** Permanently invalid points (the cursor still advances past them). */
+  /** Invalid points (the cursor still advances past them). */
   skipped: number;
-  /** Points ending after the run's upper bound: hold the type cursor at this window. */
+  /** Unfinished or still-processing points: hold the type cursor at this window. */
   transient: boolean;
   /** Same-key, same-source points with different contents resolved deterministically. */
   conflicts: number;
-  /** Summary civil dates with an invalid point; `all` when one could not be attributed. */
-  tainted: Set<string>;
-  taintedAll: boolean;
 }
 
-const iso = (ms: number) => new Date(ms).toISOString();
-
-/** Fetch every page of one window, validating each envelope and point before any write. */
+/** Fetch every page of one list window, validating each envelope and point before any write. */
 export async function fetchWindow(
   ctx: ImportContext,
   type: HealthType,
@@ -413,57 +673,42 @@ export async function fetchWindow(
 ): Promise<WindowBatch> {
   const points = new Map<string, HealthPoint>();
   const pagination = new Pagination(ID);
-  const batch: WindowBatch = {
-    points: [],
-    skipped: 0,
-    transient: false,
-    conflicts: 0,
-    tainted: new Set(),
-    taintedAll: false,
-  };
-  const filter = sample(type)
-    ? `time >= "${iso(window.start)}" AND time < "${iso(window.end)}"`
-    : `endTime > "${iso(window.start)}" AND endTime <= "${iso(window.end)}"`;
+  const batch: WindowBatch = { points: [], skipped: 0, transient: false, conflicts: 0 };
+  const size = pageSize(type);
+  let received = 0;
+  let unrecognised = 0;
   let token: string | undefined;
   for (let page = 0; page < maxPages; page++) {
     const url = new URL(endpoint(type));
-    url.searchParams.set("pageSize", String(MAX_PAGE_ITEMS));
+    url.searchParams.set("pageSize", String(size));
     if (token) url.searchParams.set("pageToken", token);
-    url.searchParams.set("filter", filter);
-    const raw = await json(ctx, url.href, budget);
-    if (
-      !record(raw) ||
-      !Array.isArray(raw.dataPoints) ||
-      raw.dataPoints.length > MAX_PAGE_ITEMS ||
-      (raw.nextPageToken !== undefined &&
-        (typeof raw.nextPageToken !== "string" || raw.nextPageToken.length > MAX_TOKEN_CHARS))
-    )
-      throw new IntegrationSyncError(ID, "Invalid Google Health page; checkpoint unchanged.");
-    budget.items(raw.dataPoints.length);
-    for (const value of raw.dataPoints) {
-      const normalized = point(type, value);
-      if (!normalized) {
+    url.searchParams.set("filter", listFilter(type, window));
+    const raw = await request(ctx, url.href, budget);
+    if (!validPage(raw, "dataPoints", size)) throw invalidPage();
+    const list = raw.dataPoints ?? [];
+    budget.items(list.length);
+    received += list.length;
+    for (const value of list) {
+      const normalized = parsePoint(type, value);
+      if (typeof normalized === "string") {
         batch.skipped++;
-        if (summary(type)) {
-          const date = civilDateOf(value);
-          if (date) batch.tainted.add(date);
-          else batch.taintedAll = true;
-        }
+        if (normalized === "shape") unrecognised++;
         continue;
       }
-      const at = Date.parse(sample(type) ? normalized.start : normalized.end);
-      const inWindow = sample(type)
-        ? at >= window.start && at < window.end
-        : at > window.start && at <= window.end;
-      if (!inWindow) {
-        // A point the provider will still revise or has not finished: retry it next run.
-        if (Date.parse(normalized.end) > until) {
-          batch.transient = true;
-          batch.skipped++;
-        }
-        // Otherwise it belongs to another window, which owns it.
+      // Samples and exercise belong to the window holding their start; sleep (filtered by
+      // its end) to the window holding its end.
+      const at = Date.parse(type === "sleep" ? normalized.end : normalized.start);
+      const owned = at >= window.start && at < window.end;
+      // A session this window owns that is still running at the run's clock, or a point the
+      // provider dates after the clock: retry it next run.
+      if ((owned && Date.parse(normalized.end) > until) || (!owned && at >= until)) {
+        batch.transient = true;
+        batch.skipped++;
         continue;
       }
+      // Otherwise a point outside the window belongs to another window, which owns it.
+      if (!owned) continue;
+      if (normalized.pending) batch.transient = true;
       budget.items(normalized.stages?.length ?? 0);
       const previous = points.get(normalized.key);
       if (previous && JSON.stringify(previous) !== JSON.stringify(normalized)) {
@@ -472,13 +717,79 @@ export async function fetchWindow(
       } else points.set(normalized.key, normalized);
     }
     if (!raw.nextPageToken) {
+      guardShape(received, unrecognised);
       batch.points = [...points.values()];
       return batch;
     }
-    token = pagination.next(raw.nextPageToken as string);
+    token = pagination.next(raw.nextPageToken as unknown as string);
   }
-  throw new IntegrationSyncError(
-    ID,
-    `Google Health exceeded its page cap for one day of ${type}; checkpoint unchanged.`,
-  );
+  throw new PageCapError(type);
+}
+
+export interface RollupBatch {
+  totals: DailyTotal[];
+  skipped: number;
+  conflicts: number;
+}
+const civilDate = (ms: number) => {
+  const d = new Date(ms);
+  return { date: { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() } };
+};
+
+/**
+ * Fetch one dailyRollUp range of civil days [window.start, window.end) (UTC-midnight epoch
+ * ms standing for civil dates), validating every bucket before any write.
+ */
+export async function fetchRollup(
+  ctx: ImportContext,
+  type: HealthType,
+  window: Window,
+  budget: RunBudget,
+  maxPages: number,
+): Promise<RollupBatch> {
+  const totals = new Map<string, DailyTotal>();
+  const pagination = new Pagination(ID);
+  const batch: RollupBatch = { totals: [], skipped: 0, conflicts: 0 };
+  const size = pageSize(type);
+  const [first, last] = [
+    new Date(window.start).toISOString().slice(0, 10),
+    new Date(window.end).toISOString().slice(0, 10),
+  ];
+  let received = 0;
+  let unrecognised = 0;
+  let token: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    const raw = await request(ctx, endpoint(type), budget, {
+      range: { start: civilDate(window.start), end: civilDate(window.end) },
+      windowSizeDays: 1,
+      pageSize: size,
+      ...(token && { pageToken: token }),
+    });
+    if (!validPage(raw, "rollupDataPoints", size)) throw invalidPage();
+    const list = raw.rollupDataPoints ?? [];
+    budget.items(list.length);
+    received += list.length;
+    for (const value of list) {
+      const total = parseRollup(type, value);
+      if (total === null) continue;
+      if (typeof total === "string") {
+        batch.skipped++;
+        if (total === "shape") unrecognised++;
+        continue;
+      }
+      if (total.date < first || total.date >= last) continue;
+      const previous = totals.get(total.date);
+      if (previous && previous.value !== total.value) {
+        batch.conflicts++;
+        totals.set(total.date, preferred(previous, total));
+      } else totals.set(total.date, total);
+    }
+    if (!raw.nextPageToken) {
+      guardShape(received, unrecognised);
+      batch.totals = [...totals.values()];
+      return batch;
+    }
+    token = pagination.next(raw.nextPageToken as unknown as string);
+  }
+  throw new PageCapError(type);
 }

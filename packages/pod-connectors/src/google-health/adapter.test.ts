@@ -33,6 +33,7 @@ import {
   point,
   SLEEP_SCOPE,
   SOURCE_ORIGIN,
+  summary,
   TYPES,
 } from "./api.js";
 import {
@@ -43,20 +44,23 @@ import {
   HEART_RATE,
   SLEEP,
   STEPS,
-  WEIGHT,
 } from "./fixtures.js";
 import { HealthMapper, healthDocuments } from "./mapping.js";
+import { syntheticHealthApi } from "./testing.js";
 import { HEALTH_VOCAB } from "./vocab-map.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/fitbit/`;
 const ACT = `${ROOT}health/activities.ttl`;
 const UNTIL = FIXTURE_NOW.toISOString();
+/** Daily totals are final once their civil date has ended in every offset (UTC+14). */
+const FINAL = "2026-06-09T00:00:00.000Z";
+const LIST_TYPES = TYPES.filter((t) => !summary(t));
 const adapterAt = (now: Date | string = FIXTURE_NOW, options: GoogleHealthOptions = {}) =>
   createGoogleHealthAdapter({ now: () => new Date(now), ...options });
 const gh = adapterAt();
-/** Version 2 checkpoint whose windows were read at their own end. */
+/** Version 3 checkpoint whose windows were read at their own end. */
 const checkpoint = (cursors: Partial<Record<HealthType, string>>) =>
-  JSON.stringify({ version: 2, cursors, fetchedAt: cursors });
+  JSON.stringify({ version: 3, cursors, fetchedAt: cursors });
 const cursorsOf = (cursor: string | undefined) =>
   (JSON.parse(cursor ?? "{}") as { cursors: Record<string, string> }).cursors;
 const prior: ConnectorState = {
@@ -70,63 +74,77 @@ const values = (pod: ReturnType<typeof createMemoryPod>, url: string, predicate:
   [...pod.dataset(url).match(null, DataFactory.namedNode(predicate), null)].map(
     (q) => q.object.value,
   );
+/** The demo fixtures with one type answered by `pages` in order. */
 const routes = (type: HealthType, pages: unknown[]): FixtureRoute[] => [
   ...GOOGLE_HEALTH_FIXTURES.filter((r) => r.url !== endpoint(type)),
-  ...pages.map((json) => ({ url: endpoint(type), json })),
+  ...pages.map((json) => ({ url: endpoint(type), json, ...(summary(type) && { method: "POST" }) })),
 ];
 
 type Raw = Record<string, unknown>;
-/**
- * A synthetic provider honouring the window filter and pageToken: each type's points are
- * answered only for the windows that contain them (by `time`, else `endTime`), in pages.
- * `extra` adds misplaced points to chosen windows (unattributable or future points).
- */
-function provider(
-  data: Partial<Record<HealthType, readonly Raw[]>>,
-  options: {
-    pageSize?: number;
-    extra?: (type: HealthType, from: number, to: number) => unknown[];
-  } = {},
-): typeof fetch {
-  const pageSize = options.pageSize ?? MAX_PAGE_ITEMS;
-  const indexed = new Map<string, { at: number[]; raw: Raw[] }>();
-  for (const [type, points] of Object.entries(data)) {
-    const sorted = [...(points ?? [])]
-      .map((raw) => ({ raw, at: Date.parse(String(raw.time ?? raw.endTime)) }))
-      .sort((a, b) => a.at - b.at);
-    indexed.set(type, { at: sorted.map((p) => p.at), raw: sorted.map((p) => p.raw) });
-  }
-  const lowerBound = (xs: number[], x: number, strict: boolean) => {
-    let lo = 0;
-    let hi = xs.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if ((xs[mid] as number) < x || (strict && xs[mid] === x)) lo = mid + 1;
-      else hi = mid;
-    }
-    return lo;
+const civil = (iso: string) => {
+  const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
+  return {
+    date: { year, month, day },
+    time: { hours: Number(iso.slice(11, 13)), minutes: Number(iso.slice(14, 16)) },
   };
-  return async (input) => {
-    const url = new URL(String(input));
-    const type = /\/dataTypes\/([a-z-]+)\/dataPoints/.exec(url.pathname)?.[1] as HealthType;
-    const filter = url.searchParams.get("filter") ?? "";
-    const m = /^(time|endTime) (>=|>) "([^"]+)" AND \1 (<|<=) "([^"]+)"$/.exec(filter);
-    if (!m) throw new Error(`Unexpected filter ${filter}`);
-    const from = Date.parse(m[3] as string);
-    const to = Date.parse(m[5] as string);
-    const series = indexed.get(type) ?? { at: [], raw: [] };
-    // Samples: [from, to); intervals: (from, to].
-    const lo = lowerBound(series.at, from, m[2] === ">");
-    const hi = lowerBound(series.at, to, m[4] === "<=");
-    const all = [...series.raw.slice(lo, hi), ...(options.extra?.(type, from, to) ?? [])];
-    const offset = Number(url.searchParams.get("pageToken")?.slice(1) ?? 0);
-    const page = all.slice(offset, offset + pageSize);
-    const more = offset + pageSize < all.length;
-    return new Response(
-      JSON.stringify({ dataPoints: page, nextPageToken: more ? `p${offset + pageSize}` : "" }),
-    );
+};
+const offsetText = (offset: string) => {
+  const sign = offset.startsWith("-") ? -1 : 1;
+  const [h, m] = offset.slice(1).split(":").map(Number);
+  return `${sign * ((h as number) * 3600 + (m as number) * 60)}s`;
+};
+/** A heart-rate DataPoint at `time` (UTC) with `bpm` and optional extra members. */
+const hr = (time: string, bpm: unknown = "72", extra: Raw = {}): Raw => ({
+  ...extra,
+  heartRate: { sampleTime: { physicalTime: time, utcOffset: "0s" }, beatsPerMinute: bpm },
+});
+const weightAt = (time: string, grams: number, extra: Raw = {}): Raw => ({
+  ...extra,
+  weight: { sampleTime: { physicalTime: time, utcOffset: "0s" }, weightGrams: grams },
+});
+/** An exercise at local wall-clock `local` in `offset` (e.g. "-05:00"), lasting 31 minutes. */
+const exerciseAt = (local: string, offset = "+00:00", extra: Raw = {}, payload: Raw = {}): Raw => {
+  const start = new Date(`${local}${offset}`);
+  const end = new Date(start.getTime() + 31 * 60_000);
+  const localEnd = new Date(Date.parse(`${local}Z`) + 31 * 60_000).toISOString();
+  return {
+    ...extra,
+    exercise: {
+      interval: {
+        startTime: start.toISOString().replace(".000Z", "Z"),
+        endTime: end.toISOString().replace(".000Z", "Z"),
+        startUtcOffset: offsetText(offset),
+        endUtcOffset: offsetText(offset),
+        civilStartTime: civil(local),
+        civilEndTime: civil(localEnd),
+      },
+      exerciseType: "RUNNING",
+      displayName: "Run",
+      metricsSummary: { distanceMillimeters: 5_200_000 },
+      ...payload,
+    },
   };
-}
+};
+type SleepPayload = typeof SLEEP.sleep;
+const sleepWith = (sleep: Partial<SleepPayload> & Raw, extra: Raw = {}): Raw => ({
+  ...SLEEP,
+  ...extra,
+  sleep: { ...SLEEP.sleep, ...sleep },
+});
+const sleepAt = (start: string, end: string, extra: Raw = {}): Raw =>
+  sleepWith(
+    {
+      interval: {
+        ...SLEEP.sleep.interval,
+        startTime: start,
+        endTime: end,
+        civilStartTime: civil(start),
+        civilEndTime: civil(end),
+      },
+      stages: [],
+    },
+    extra,
+  );
 
 function run(
   source: readonly FixtureRoute[] | typeof fetch = GOOGLE_HEALTH_FIXTURES,
@@ -163,8 +181,11 @@ function run(
 }
 const requests = (api: ReturnType<typeof vi.fn>, type: HealthType) =>
   api.mock.calls
-    .map(([url]) => new URL(String(url)))
+    .map(([url, init]) =>
+      Object.assign(new URL(String(url)), { init: init as RequestInit | undefined }),
+    )
     .filter((u) => u.pathname.includes(`/dataTypes/${type}/`));
+const rollupBody = (u: { init?: RequestInit }) => JSON.parse(String(u.init?.body)) as Raw;
 afterEach(() => vi.useRealTimers());
 
 describe("Google Health successor", () => {
@@ -192,36 +213,22 @@ describe("Google Health successor", () => {
     expect(adapterContainerUrl(TEST_POD_ROOT, "google-health")).toBe(ROOT);
   });
 
-  it("maps equivalent Fitbit exercises to exactly the same pod ids and exercise fields, preserving other legacy items", async () => {
+  it("updates an equivalent legacy Fitbit exercise in place with the same id and fields, preserving other legacy items", async () => {
     const { pod: legacy } = await demoImport(fitbitAdapter);
-    const { pod: fresh } = await demoImport(gh);
-    const before = new ExerciseAction(
-      `${ACT}#activity-51817963271`,
-      legacy.dataset(ACT),
-      DataFactory,
-    );
-    const after = new ExerciseAction(
-      `${ACT}#activity-51817963271`,
-      fresh.dataset(ACT),
-      DataFactory,
-    );
-    expect(after.types.has(CLASSES.ExerciseAction)).toBe(true);
-    expect([
-      after.name,
-      after.identifier,
-      after.exerciseType,
-      after.duration,
-      after.distance,
-      after.startTime,
-    ]).toEqual([
-      before.name,
-      before.identifier,
-      before.exerciseType,
-      before.duration,
-      before.distance,
-      before.startTime,
-    ]);
+    const fields = (ex: ExerciseAction) => [
+      ex.name,
+      ex.identifier,
+      ex.exerciseType,
+      ex.duration,
+      ex.distance,
+      ex.startTime,
+    ];
+    const iri = `${ACT}#activity-51817963271`;
+    const before = fields(new ExerciseAction(iri, legacy.dataset(ACT), DataFactory));
     await demoImport(gh, { pod: legacy });
+    const after = new ExerciseAction(iri, legacy.dataset(ACT), DataFactory);
+    expect(after.types.has(CLASSES.ExerciseAction)).toBe(true);
+    expect(fields(after)).toEqual(before);
     expect(
       new ExerciseAction(`${ACT}#activity-51817991042`, legacy.dataset(ACT), DataFactory).name,
     ).toBe("Walk");
@@ -235,19 +242,31 @@ describe("Google Health successor", () => {
         ),
     ]).toHaveLength(1);
     expect(legacy.urls().some((url) => url.includes("integrations/google-health/"))).toBe(false);
+    // Without a legacy row, a numeric Google id keeps its own subject.
+    const { pod: fresh } = await demoImport(gh);
+    const own = new ExerciseAction(
+      `${ACT}#activity-google-health-exercise-51817963271`,
+      fresh.dataset(ACT),
+      DataFactory,
+    );
+    expect([own.identifier, own.name, own.distance]).toEqual(["51817963271", "Run", "5.2 km"]);
   });
 
-  it("moves demo fixtures by whole days into the first-import lookback", async () => {
+  it("moves demo fixtures (instants and civil dates) by whole days into the first-import lookback", async () => {
     const now = new Date("2026-11-12T09:30:00Z");
     expect(demoFixtures(FIXTURE_NOW)).toBe(GOOGLE_HEALTH_FIXTURES);
     const shifted = JSON.stringify(demoFixtures(now));
     expect(shifted).toContain('"2026-11-10T07:12:00Z"');
+    expect(shifted).toContain('{"year":2026,"month":11,"day":10}');
     expect(shifted).not.toContain("2026-06-");
+    expect(shifted).not.toContain('"month":6');
     const { report } = await demoImport(adapterAt(now));
-    expect(report.written.map((d) => d.url)).toContain(`${ROOT}health/heart-rate/2026-11-10.ttl`);
+    const urls = report.written.map((d) => d.url);
+    expect(urls).toContain(`${ROOT}health/heart-rate/2026-11-10.ttl`);
+    expect(urls).toContain(`${ROOT}health/daily/2026-11-10/steps.ttl`);
   });
 
-  it("imports synthetic summaries, per-day samples, sleep stages and weight with provenance and stable re-imports", async () => {
+  it("imports daily totals, per-day samples, sleep stages and weight with provenance and stable re-imports", async () => {
     const first = run();
     const report = await first.result;
     expect(report.categories).toEqual(["health"]);
@@ -262,11 +281,14 @@ describe("Google Health successor", () => {
     );
     const cursors = cursorsOf(report.cursor);
     expect(Object.keys(cursors).sort()).toEqual([...TYPES].sort());
-    expect(Object.values(cursors).every((c) => c === UNTIL)).toBe(true);
+    for (const type of TYPES) expect(cursors[type]).toBe(summary(type) ? FINAL : UNTIL);
     const sleep = report.written.find((d) => d.url.includes("/sleep/"))!;
     expect(first.pod.get(sleep.url)).toContain("deep");
     expect(values(first.pod, sleep.url, `${SCHEMA}hasPart`)).toHaveLength(3);
     expect(first.pod.get(`${ROOT}health/heart-rate/2026-06-08.ttl`)).toContain("bpm");
+    expect(values(first.pod, `${ROOT}health/weight/2026-06-08.ttl`, `${SCHEMA}value`)).toEqual([
+      "70",
+    ]);
     expect(first.pod.get(`${ROOT}health/weight/2026-06-08.ttl`)).toContain("kg");
     const urls = first.pod.urls();
     const sizes = report.written.map((d) => first.pod.dataset(d.url).size);
@@ -279,10 +301,10 @@ describe("Google Health successor", () => {
 
   it.each([
     "",
-    "users/me/dataTypes/exercise-session/dataPoints/google-new-id",
+    "users/me/dataTypes/exercise/dataPoints/google-new-id",
   ])("retains a stored Fitbit id when Google supplies %j", async (name) => {
     const { pod } = await demoImport(fitbitAdapter);
-    const r = run(routes("exercise-session", [{ dataPoints: [{ ...EXERCISE, name }] }]), { pod });
+    const r = run(routes("exercise", [{ dataPoints: [{ ...EXERCISE, name }] }]), { pod });
     await r.result;
     const ds = pod.dataset(ACT);
     const ex = new ExerciseAction(`${ACT}#activity-51817963271`, ds, DataFactory);
@@ -291,32 +313,17 @@ describe("Google Health successor", () => {
   });
 
   describe("non-UTC Fitbit users (legacy rows hold local wall-clock time with a Z suffix)", () => {
-    const at = (offset: string) => ({
-      startTime: `2026-06-08T07:12:00${offset}`,
-      endTime: `2026-06-08T07:43:00${offset}`,
-      exerciseSession: { activityName: "Run", distanceMeters: 5200 },
-    });
     it.each([
       ["-05:00", "", "2026-06-08T12:12:00.000Z"],
       ["+10:00", "", "2026-06-07T21:12:00.000Z"],
-      [
-        "-05:00",
-        "users/me/dataTypes/exercise-session/dataPoints/51817963271",
-        "2026-06-08T12:12:00.000Z",
-      ],
-      [
-        "+10:00",
-        "users/me/dataTypes/exercise-session/dataPoints/51817963271",
-        "2026-06-07T21:12:00.000Z",
-      ],
-      [
-        "-05:00",
-        "users/me/dataTypes/exercise-session/dataPoints/opaque-77",
-        "2026-06-08T12:12:00.000Z",
-      ],
+      ["-05:00", "users/me/dataTypes/exercise/dataPoints/51817963271", "2026-06-08T12:12:00.000Z"],
+      ["+10:00", "users/me/dataTypes/exercise/dataPoints/51817963271", "2026-06-07T21:12:00.000Z"],
+      ["-05:00", "users/me/dataTypes/exercise/dataPoints/opaque-77", "2026-06-08T12:12:00.000Z"],
     ])("updates the legacy row in place for UTC%s with name %j, without duplicates", async (offset, name, utc) => {
       const { pod } = await demoImport(fitbitAdapter);
-      const source = provider({ "exercise-session": [{ ...at(offset), ...(name && { name }) }] });
+      const source = syntheticHealthApi({
+        points: { exercise: [exerciseAt("2026-06-08T07:12:00", offset, name ? { name } : {})] },
+      });
       for (let i = 0; i < 2; i++) {
         const report = await run(source, { pod }).result;
         expect(report.skipped).toBeUndefined();
@@ -333,42 +340,42 @@ describe("Google Health successor", () => {
       expect(ex.startTime?.toISOString()).toBe(utc);
     });
 
-    it("skips (never throws on) a numeric id colliding with an unrelated legacy activity", async () => {
+    it("imports a numeric id colliding with an unrelated legacy activity under its own subject", async () => {
       const { pod } = await demoImport(fitbitAdapter);
-      const onWarning = vi.fn();
-      const source = provider({
-        "exercise-session": [
-          {
-            ...at("-05:00"),
-            startTime: "2026-06-08T09:00:00-05:00",
-            endTime: "2026-06-08T09:30:00-05:00",
-            name: "users/me/dataTypes/exercise-session/dataPoints/51817991042",
-          },
-        ],
+      const source = syntheticHealthApi({
+        points: {
+          exercise: [
+            exerciseAt("2026-06-08T09:00:00", "-05:00", {
+              name: "users/me/dataTypes/exercise/dataPoints/51817991042",
+            }),
+          ],
+        },
       });
-      const report = await run(source, { pod, adapter: adapterAt(FIXTURE_NOW, { onWarning }) })
-        .result;
-      expect(report.skipped).toBe(1);
-      expect(onWarning).toHaveBeenCalledOnce();
+      const report = await run(source, { pod }).result;
+      expect(report.skipped).toBeUndefined();
       expect(
         new ExerciseAction(`${ACT}#activity-51817991042`, pod.dataset(ACT), DataFactory).name,
       ).toBe("Walk");
-      expect(cursorsOf(report.cursor)["exercise-session"]).toBe(UNTIL);
+      expect(
+        new ExerciseAction(
+          `${ACT}#activity-google-health-exercise-51817991042`,
+          pod.dataset(ACT),
+          DataFactory,
+        ).name,
+      ).toBe("Run");
+      expect(cursorsOf(report.cursor).exercise).toBe(UNTIL);
     });
   });
 
-  it("keeps an old complete daily total when its own civil date has a malformed point", async () => {
+  it("keeps an old daily total when its own civil date's rollup value is invalid", async () => {
     const first = run();
     const report = await first.result;
     const day = `${ROOT}health/daily/2026-06-08/steps.ttl`;
-    const next = { ...STEPS, startTime: "2026-06-09T00:00:00Z", endTime: "2026-06-10T00:00:00Z" };
     const r = run(
-      provider({
-        steps: [
-          { ...STEPS, steps: { count: 10 } },
-          { ...STEPS, startTime: "2026-06-08T01:00:00Z", steps: { count: -1 } },
-          { ...next, steps: { count: 4000 } },
-        ],
+      syntheticHealthApi({
+        rollups: {
+          steps: { "2026-06-08": { countSum: "-1" }, "2026-06-09": { countSum: "4000" } },
+        },
       }),
       { pod: first.pod, cursor: report.cursor },
     );
@@ -378,84 +385,51 @@ describe("Google Health successor", () => {
     expect(values(r.pod, `${ROOT}health/daily/2026-06-09/steps.ttl`, `${SCHEMA}value`)).toEqual([
       "4000",
     ]);
-    expect(cursorsOf(second.cursor).steps).toBe(UNTIL);
-    // Summaries re-read two extra UTC days so a civil date left pending is complete.
-    expect(requests(r.api, "steps")[0]?.searchParams.get("filter")).toBe(
-      'endTime > "2026-06-06T00:00:00.000Z" AND endTime <= "2026-06-07T00:00:00.000Z"',
-    );
+    expect(cursorsOf(second.cursor).steps).toBe(FINAL);
+    // Totals re-read from 48 h before the previous read, through UTC+14's civil today.
+    expect(rollupBody(requests(r.api, "steps")[0]!).range).toEqual({
+      start: { date: { year: 2026, month: 6, day: 8 } },
+      end: { date: { year: 2026, month: 6, day: 11 } },
+    });
   });
 
-  it("drops an unattributable malformed summary point's window dates only", async () => {
+  it("refuses a rollup bucket that is not one civil day and ignores buckets outside the range", async () => {
+    const outside = {
+      ...STEPS,
+      civilStartTime: { date: { year: 2026, month: 6, day: 1 } },
+      civilEndTime: { date: { year: 2026, month: 6, day: 2 } },
+    };
+    const twoDays = { ...STEPS, civilEndTime: { date: { year: 2026, month: 6, day: 10 } } };
     const r = run(
-      provider(
-        { steps: [STEPS, { ...STEPS, startTime: "2026-06-09T00:00:00Z", endTime: UNTIL }] },
+      routes("steps", [
         {
-          extra: (type, from) =>
-            type === "steps" && from === Date.parse("2026-06-08T00:00:00Z") ? [null] : [],
+          rollupDataPoints: [
+            outside,
+            twoDays,
+            {
+              ...STEPS,
+              civilStartTime: { date: { year: 2026, month: 6, day: 9 } },
+              civilEndTime: { date: { year: 2026, month: 6, day: 10 } },
+            },
+          ],
         },
-      ),
-    );
-    const report = await r.result;
-    expect(report.skipped).toBe(1);
-    expect(r.pod.get(`${ROOT}health/daily/2026-06-08/steps.ttl`)).toBeUndefined();
-    expect(r.pod.get(`${ROOT}health/daily/2026-06-09/steps.ttl`)).toBeDefined();
-  });
-
-  it("buckets civil-day summaries in the provider's offset (UTC-5) by their civil date", async () => {
-    const r = run(
-      provider({
-        steps: [
-          {
-            startTime: "2026-06-07T00:00:00-05:00",
-            endTime: "2026-06-08T00:00:00-05:00",
-            steps: { count: 9000 },
-          },
-          {
-            startTime: "2026-06-08T00:00:00-05:00",
-            endTime: "2026-06-08T12:00:00-05:00",
-            steps: { count: 300 },
-          },
-          {
-            startTime: "2026-06-08T12:00:00-05:00",
-            endTime: "2026-06-08T21:00:00-05:00",
-            steps: { count: 200 },
-          },
-        ],
-      }),
-    );
-    const report = await r.result;
-    expect(report.skipped).toBeUndefined();
-    // The 2026-06-08 civil date spans two UTC request windows and is summed whole.
-    expect(values(r.pod, `${ROOT}health/daily/2026-06-07/steps.ttl`, `${SCHEMA}value`)).toEqual([
-      "9000",
-    ]);
-    expect(values(r.pod, `${ROOT}health/daily/2026-06-08/steps.ttl`, `${SCHEMA}value`)).toEqual([
-      "500",
-    ]);
-    expect(values(r.pod, `${ROOT}health/daily/2026-06-07/steps.ttl`, `${SCHEMA}startTime`)).toEqual(
-      ["2026-06-07T05:00:00.000Z"],
-    );
-    expect(cursorsOf(report.cursor).steps).toBe(UNTIL);
-  });
-
-  it("never rebuilds a civil date that began before the re-read range", async () => {
-    const r = run(
-      provider({
-        steps: [
-          {
-            startTime: "2026-06-06T23:00:00+10:00",
-            endTime: "2026-06-07T00:00:00+10:00",
-            steps: { count: 5 },
-          },
-          STEPS,
-        ],
-      }),
+      ]),
       { cursor: checkpoint({ steps: UNTIL }) },
     );
     const report = await r.result;
-    expect(report.skipped).toBeUndefined();
-    expect(report.written.some((d) => d.url.includes("/daily/2026-06-06/"))).toBe(false);
-    expect(report.written.some((d) => d.url.includes("/daily/2026-06-08/"))).toBe(true);
+    expect(report.skipped).toBe(1);
+    expect(report.written.some((d) => d.url.includes("/daily/2026-06-01/"))).toBe(false);
+    expect(report.written.some((d) => d.url.includes("/daily/2026-06-08/"))).toBe(false);
+    expect(report.written.some((d) => d.url.includes("/daily/2026-06-09/"))).toBe(true);
+  });
+
+  it("names a daily total by its civil date without inventing a UTC instant", async () => {
+    const r = run(syntheticHealthApi({ rollups: { steps: { "2026-06-07": { countSum: 9000 } } } }));
+    await r.result;
+    const url = `${ROOT}health/daily/2026-06-07/steps.ttl`;
+    expect(values(r.pod, url, `${SCHEMA}value`)).toEqual(["9000"]);
+    expect(values(r.pod, url, `${SCHEMA}identifier`)).toEqual(["2026-06-07"]);
+    expect(values(r.pod, url, `${SCHEMA}startTime`)).toEqual([]);
   });
 
   it("preserves the checkpoint after conditional Pod write failure", async () => {
@@ -470,53 +444,60 @@ describe("Google Health successor", () => {
     expect(r.onState).toHaveBeenLastCalledWith({ ...prior, lastOutcome: "error" });
   });
 
-  it("follows 3 reconcile pages within one day and treats an empty token as completion, deduplicating repeated points", async () => {
-    const hour = (h: number, count: number) => ({
-      startTime: `2026-06-08T0${h}:00:00Z`,
-      endTime: `2026-06-08T0${h + 1}:00:00Z`,
-      steps: { count },
-    });
+  it("follows list and rollup pages, treats an absent token as completion and deduplicates repeated points", async () => {
     const r = run(
-      provider(
-        { steps: [hour(0, 100), hour(1, 200), hour(1, 200), hour(2, 300)] },
+      syntheticHealthApi(
+        {
+          points: {
+            "heart-rate": [
+              hr("2026-06-08T07:12:00Z", "70"),
+              hr("2026-06-08T07:12:30Z", "80"),
+              hr("2026-06-08T07:12:30Z", "80"),
+              hr("2026-06-08T07:13:00Z", "90"),
+            ],
+          },
+          rollups: { steps: { "2026-06-07": { countSum: "1" }, "2026-06-08": { countSum: "2" } } },
+        },
         { pageSize: 2 },
       ),
-      {
-        adapter: adapterAt(FIXTURE_NOW, { lookbackDays: 3 }),
-      },
+      { adapter: adapterAt(FIXTURE_NOW, { lookbackDays: 3 }) },
     );
     const report = await r.result;
-    const day = requests(r.api, "steps").filter((u) =>
-      u.searchParams.get("filter")?.startsWith('endTime > "2026-06-08T'),
+    const day = requests(r.api, "heart-rate").filter((u) =>
+      u.searchParams.get("filter")?.includes('>= "2026-06-08T'),
     );
     expect(day.map((u) => u.searchParams.get("pageToken"))).toEqual([null, "p2"]);
-    expect(requests(r.api, "steps").every((u) => u.searchParams.get("pageSize") === "1000")).toBe(
-      true,
-    );
-    expect(requests(r.api, "steps").every((u) => u.pathname.endsWith(":reconcile"))).toBe(true);
+    expect(
+      requests(r.api, "heart-rate").every(
+        (u) =>
+          u.searchParams.get("pageSize") === String(MAX_PAGE_ITEMS) && !u.pathname.includes(":"),
+      ),
+    ).toBe(true);
+    expect(requests(r.api, "steps").map((u) => rollupBody(u).pageToken)).toEqual([undefined, "r2"]);
     expect(report.skipped).toBeUndefined();
+    const url = `${ROOT}health/heart-rate/2026-06-08.ttl`;
+    expect(values(r.pod, url, `${SCHEMA}value`).sort()).toEqual(["75", "90"]);
+    expect(values(r.pod, url, HEALTH_VOCAB.sampleCount).sort()).toEqual(["1", "2"]);
     expect(values(r.pod, `${ROOT}health/daily/2026-06-08/steps.ttl`, `${SCHEMA}value`)).toEqual([
-      "600",
+      "2",
     ]);
   });
 
   it("uses per-type 48h overlap on one-day windows and updates replayed minutes in place", async () => {
     const initial = run();
     const first = await initial.result;
-    const source = provider({
-      "heart-rate": [
-        { ...HEART_RATE, heartRate: { beatsPerMinute: 75 } },
-        { ...HEART_RATE, time: "2026-06-09T07:12:00Z" },
-      ],
+    const source = syntheticHealthApi({
+      points: {
+        "heart-rate": [hr("2026-06-08T07:12:00Z", "75"), hr("2026-06-09T07:12:00Z", "72")],
+      },
     });
     const r = run(source, { cursor: first.cursor, pod: initial.pod });
     const report = await r.result;
-    const hr = requests(r.api, "heart-rate");
-    expect(hr.map((u) => u.searchParams.get("filter"))).toEqual([
-      'time >= "2026-06-08T00:00:00.000Z" AND time < "2026-06-09T00:00:00.000Z"',
-      'time >= "2026-06-09T00:00:00.000Z" AND time < "2026-06-10T00:00:00.000Z"',
+    const field = "heart_rate.sample_time.physical_time";
+    expect(requests(r.api, "heart-rate").map((u) => u.searchParams.get("filter"))).toEqual([
+      `${field} >= "2026-06-08T00:00:00Z" AND ${field} < "2026-06-09T00:00:00Z"`,
+      `${field} >= "2026-06-09T00:00:00Z" AND ${field} < "2026-06-10T00:00:00Z"`,
     ]);
-    expect(hr.every((u) => !u.pathname.includes(":reconcile"))).toBe(true);
     expect(values(r.pod, `${ROOT}health/heart-rate/2026-06-08.ttl`, `${SCHEMA}value`)).toEqual([
       "75",
     ]);
@@ -527,36 +508,21 @@ describe("Google Health successor", () => {
   });
 
   it("aggregates phone and watch samples at the same second into one minute, never throwing", async () => {
-    const phone = { platform: "ANDROID", device: { formFactor: "PHONE" } };
-    const watch = { platform: "FITBIT", device: { formFactor: "WATCH" } };
+    const phone = { dataSource: { platform: "HEALTH_CONNECT", device: { formFactor: "PHONE" } } };
+    const watch = { dataSource: { platform: "FITBIT", device: { formFactor: "WATCH" } } };
     const onWarning = vi.fn();
     const r = run(
-      provider({
-        "heart-rate": [
-          { ...HEART_RATE, dataSource: phone, heartRate: { beatsPerMinute: 72 } },
-          { ...HEART_RATE, dataSource: watch, heartRate: { beatsPerMinute: 74 } },
-          {
-            ...HEART_RATE,
-            time: "2026-06-08T07:12:30Z",
-            dataSource: watch,
-            heartRate: { beatsPerMinute: 80 },
-          },
-          // The same source sends two values for one instant: the latest update wins.
-          {
-            ...HEART_RATE,
-            time: "2026-06-08T07:13:00Z",
-            dataSource: watch,
-            updateTime: "2026-06-08T08:00:00Z",
-            heartRate: { beatsPerMinute: 60 },
-          },
-          {
-            ...HEART_RATE,
-            time: "2026-06-08T07:13:00Z",
-            dataSource: watch,
-            updateTime: "2026-06-08T07:30:00Z",
-            heartRate: { beatsPerMinute: 99 },
-          },
-        ],
+      syntheticHealthApi({
+        points: {
+          "heart-rate": [
+            hr("2026-06-08T07:12:00Z", "72", phone),
+            hr("2026-06-08T07:12:00Z", "74", watch),
+            hr("2026-06-08T07:12:30Z", "80", watch),
+            // The same source sends two values for one instant: the larger value wins.
+            hr("2026-06-08T07:13:00Z", "60", watch),
+            hr("2026-06-08T07:13:00Z", "99", watch),
+          ],
+        },
       }),
       { adapter: adapterAt(FIXTURE_NOW, { onWarning }) },
     );
@@ -574,18 +540,18 @@ describe("Google Health successor", () => {
     expect(get(minute, `${SCHEMA}minValue`)).toEqual(["72"]);
     expect(get(minute, `${SCHEMA}maxValue`)).toEqual(["80"]);
     expect(get(minute, HEALTH_VOCAB.sampleCount)).toEqual(["3"]);
-    expect(get(`${url}#minute-07-13`, `${SCHEMA}value`)).toEqual(["60"]);
+    expect(get(`${url}#minute-07-13`, `${SCHEMA}value`)).toEqual(["99"]);
     expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("1 conflicting"));
   });
 
   it("resolves same-key conflicts without a data source deterministically (larger value)", async () => {
     for (const order of [
-      [72, 74],
-      [74, 72],
+      ["72", "74"],
+      ["74", "72"],
     ]) {
       const r = run(
-        provider({
-          "heart-rate": order.map((bpm) => ({ ...HEART_RATE, heartRate: { beatsPerMinute: bpm } })),
+        syntheticHealthApi({
+          points: { "heart-rate": order.map((bpm) => hr("2026-06-08T07:12:00Z", bpm)) },
         }),
       );
       await expect(r.result).resolves.toBeDefined();
@@ -597,11 +563,13 @@ describe("Google Health successor", () => {
 
   it("keeps a sample keyed by data source for weight", async () => {
     const r = run(
-      provider({
-        weight: [
-          { ...WEIGHT, dataSource: { platform: "SCALE" } },
-          { ...WEIGHT, dataSource: { platform: "MANUAL" }, weight: { kilograms: 71 } },
-        ],
+      syntheticHealthApi({
+        points: {
+          weight: [
+            weightAt("2026-06-08T07:00:00Z", 70_000, { dataSource: { platform: "FITBIT" } }),
+            weightAt("2026-06-08T07:00:00Z", 71_000, { dataSource: { platform: "HEALTH_KIT" } }),
+          ],
+        },
       }),
     );
     await r.result;
@@ -613,11 +581,10 @@ describe("Google Health successor", () => {
 
   it("completes 200k heart-rate points over 5 days across several budgeted runs with no gap or duplicate", async () => {
     const start = Date.parse("2026-06-01T00:00:00Z");
-    const points = Array.from({ length: 200_000 }, (_, k) => ({
-      time: new Date(start + k * 2160).toISOString(),
-      heartRate: { beatsPerMinute: 50 + (k % 70) },
-    }));
-    const source = provider({ "heart-rate": points });
+    const points = Array.from({ length: 200_000 }, (_, k) =>
+      hr(new Date(start + k * 2160).toISOString(), 50 + (k % 70)),
+    );
+    const source = syntheticHealthApi({ points: { "heart-rate": points } });
     const adapter = adapterAt("2026-06-06T00:00:00Z", {
       lookbackDays: 5,
       limits: { maxRequests: 512, maxItems: 100_000 },
@@ -647,11 +614,10 @@ describe("Google Health successor", () => {
 
   it("keeps a 1 Hz heart-rate day imported twice under the 16 MiB read limit", async () => {
     const start = Date.parse("2026-06-08T00:00:00Z");
-    const points = Array.from({ length: 86_400 }, (_, k) => ({
-      time: new Date(start + k * 1000).toISOString(),
-      heartRate: { beatsPerMinute: 50 + (k % 90) },
-    }));
-    const source = provider({ "heart-rate": points });
+    const points = Array.from({ length: 86_400 }, (_, k) =>
+      hr(new Date(start + k * 1000).toISOString(), 50 + (k % 90)),
+    );
+    const source = syntheticHealthApi({ points: { "heart-rate": points } });
     const pod = createMemoryPod();
     const first = await run(source, { pod }).result;
     await run(source, { pod, cursor: first.cursor }).result;
@@ -666,9 +632,7 @@ describe("Google Health successor", () => {
     const first = run();
     await first.result;
     const r = run(
-      routes("sleep", [
-        { dataPoints: [{ ...SLEEP, sleep: { stages: SLEEP.sleep.stages.slice(0, 1) } }] },
-      ]),
+      routes("sleep", [{ dataPoints: [sleepWith({ stages: SLEEP.sleep.stages.slice(0, 1) })] }]),
       { pod: first.pod },
     );
     const report = await r.result;
@@ -679,26 +643,20 @@ describe("Google Health successor", () => {
   it("keys a named sleep session by its resource name so a revised session updates in place", async () => {
     const name = "users/me/dataTypes/sleep/dataPoints/night-1";
     const pod = createMemoryPod();
-    await run(provider({ sleep: [{ ...SLEEP, name }] }), { pod }).result;
-    const revised = { ...SLEEP, name, startTime: "2026-06-08T22:30:00Z", sleep: { stages: [] } };
-    await run(provider({ sleep: [revised] }), { pod }).result;
+    await run(syntheticHealthApi({ points: { sleep: [{ ...SLEEP, name }] } }), { pod }).result;
+    const revised = sleepAt("2026-06-08T22:30:00Z", "2026-06-09T06:00:00Z", { name });
+    await run(syntheticHealthApi({ points: { sleep: [revised] } }), { pod }).result;
     const sleepDocs = pod.urls().filter((u) => u.includes("/health/sleep/"));
     expect(sleepDocs).toEqual([`${ROOT}health/sleep/sleep-night-1.ttl`]);
     expect(values(pod, sleepDocs[0]!, `${SCHEMA}startTime`)).toEqual(["2026-06-08T22:30:00.000Z"]);
   });
 
-  it("skips a bad sleep point once and advances the cursor; later runs import later sessions", async () => {
-    const bad = {
-      ...SLEEP,
-      sleep: { stages: [{ ...SLEEP.sleep.stages[0], startTime: "2026-06-08T21:00:00Z" }] },
-    };
-    const later = {
-      ...SLEEP,
-      startTime: "2026-06-10T22:00:00Z",
-      endTime: "2026-06-11T06:00:00Z",
-      sleep: { stages: [] },
-    };
-    const source = provider({ sleep: [bad, later] });
+  it("skips an invalid sleep point once and advances the cursor; later runs import later sessions", async () => {
+    const bad = sleepWith({
+      stages: [{ ...SLEEP.sleep.stages[0]!, startTime: "2026-06-08T21:00:00Z" }],
+    });
+    const later = sleepAt("2026-06-10T22:00:00Z", "2026-06-11T06:00:00Z");
+    const source = syntheticHealthApi({ points: { sleep: [bad, later] } });
     const pod = createMemoryPod();
     const first = await run(source, { pod }).result;
     expect(first.skipped).toBe(1);
@@ -724,46 +682,63 @@ describe("Google Health successor", () => {
   });
 
   it.each([
-    null,
-    {},
-    { dataPoints: null },
-    { dataPoints: [], nextPageToken: null },
-    { dataPoints: [], nextPageToken: 7 },
-    { dataPoints: [], nextPageToken: "x".repeat(MAX_TOKEN_CHARS + 1) },
-    { dataPoints: Array(MAX_PAGE_ITEMS + 1).fill(null) },
-  ])("fails malformed page %j before writing that window and preserves the checkpoint", async (json) => {
-    const r = run(routes("steps", [json]), { state: prior });
+    ["heart-rate", null],
+    ["heart-rate", []],
+    ["heart-rate", { dataPoints: null }],
+    ["heart-rate", { dataPoints: [], nextPageToken: null }],
+    ["heart-rate", { dataPoints: [], nextPageToken: 7 }],
+    ["heart-rate", { dataPoints: [], nextPageToken: "x".repeat(MAX_TOKEN_CHARS + 1) }],
+    ["heart-rate", { dataPoints: Array(MAX_PAGE_ITEMS + 1).fill(null) }],
+    ["sleep", { dataPoints: Array(26).fill(null) }],
+    ["steps", { rollupDataPoints: {} }],
+    ["total-calories", { rollupDataPoints: Array(15).fill(null) }],
+  ] as const)("fails a malformed %s page %j before writing that window and preserves the checkpoint", async (type, json) => {
+    const r = run(routes(type, [json]), { state: prior });
     await expect(r.result).rejects.toThrow(/page/);
     expect(r.onState).toHaveBeenLastCalledWith({ ...prior, lastOutcome: "error" });
-    expect(r.pod.urls().some((u) => u.includes("/health/"))).toBe(false);
   });
 
-  it("bounds repeated and endless tokens within one day", async () => {
-    for (const source of [
-      [{ dataPoints: [], nextPageToken: "same" }],
-      [
-        { dataPoints: [], nextPageToken: "one" },
-        { dataPoints: [], nextPageToken: "two" },
-      ],
-    ]) {
-      const r = run(routes("steps", source), { adapter: adapterAt(FIXTURE_NOW, { maxPages: 2 }) });
-      await expect(r.result).rejects.toThrow(/cursor|page cap/);
-      expect(r.api).toHaveBeenCalledTimes(2);
-    }
-  });
-
-  it("ends each type gracefully at its last written day when its own budget runs out", async () => {
-    const r = run(GOOGLE_HEALTH_FIXTURES, {
-      adapter: adapterAt(FIXTURE_NOW, {
-        lookbackDays: 3,
-        limits: { maxRequests: 2, maxItems: 100 },
-      }),
-    });
+  it("accepts proto3 empty pages that omit their list and token", async () => {
+    const r = run(routes("heart-rate", [{}]), { state: prior });
     const report = await r.result;
-    // Windows 06-07 and 06-08 fit; 06-09 (sleep's day) does not.
+    expect(cursorsOf(report.cursor)["heart-rate"]).toBe(UNTIL);
+  });
+
+  it("fails on a repeated page token and stops a type at the page cap without failing the run", async () => {
+    const repeated = run(routes("steps", [{ nextPageToken: "same" }]), {
+      adapter: adapterAt(FIXTURE_NOW, { maxPages: 2 }),
+    });
+    await expect(repeated.result).rejects.toThrow(/repeated page cursor/);
+    expect(repeated.api).toHaveBeenCalledTimes(2);
+    let n = 0;
+    const onWarning = vi.fn();
+    const fixtures = fixtureFetch("google-health", GOOGLE_HEALTH_FIXTURES);
+    const endless = run(
+      async (input, init) =>
+        String(input).includes("/steps/")
+          ? new Response(JSON.stringify({ nextPageToken: `t${++n}` }))
+          : fixtures(input, init),
+      {
+        adapter: adapterAt(FIXTURE_NOW, { maxPages: 2, lookbackDays: 1, onWarning }),
+        state: prior,
+      },
+    );
+    const report = await endless.result;
+    // The two-day range splits into single days; the first one alone exceeds the cap.
+    expect(requests(endless.api, "steps")).toHaveLength(4);
+    expect(onWarning).toHaveBeenCalledWith(expect.stringMatching(/steps reached the 2-page cap/));
+    expect(cursorsOf(report.cursor).steps).toBeUndefined();
+    expect(cursorsOf(report.cursor).weight).toBe(UNTIL);
+  });
+
+  it("ends each type gracefully at its last written window when its own budget runs out", async () => {
+    const options = { lookbackDays: 3, limits: { maxRequests: 2, maxItems: 100 } };
+    const r = run(GOOGLE_HEALTH_FIXTURES, { adapter: adapterAt(FIXTURE_NOW, options) });
+    const report = await r.result;
+    // List windows 06-07 and 06-08 fit; 06-09 (sleep's day) does not. A rollup is one request.
     for (const type of TYPES) {
       expect(cursorsOf(report.cursor)[type]).toBe("2026-06-09T00:00:00.000Z");
-      expect(requests(r.api, type)).toHaveLength(2);
+      expect(requests(r.api, type)).toHaveLength(summary(type) ? 1 : 2);
     }
     expect(report.written.some((d) => d.url.includes("/sleep/"))).toBe(false);
     expect(report.written.some((d) => d.url.endsWith("/heart-rate/2026-06-08.ttl"))).toBe(true);
@@ -771,10 +746,7 @@ describe("Google Health successor", () => {
     const next = await run(GOOGLE_HEALTH_FIXTURES, {
       pod: r.pod,
       cursor: report.cursor,
-      adapter: adapterAt(FIXTURE_NOW, {
-        lookbackDays: 3,
-        limits: { maxRequests: 2, maxItems: 100 },
-      }),
+      adapter: adapterAt(FIXTURE_NOW, options),
     }).result;
     expect(cursorsOf(next.cursor)["heart-rate"]).toBe(UNTIL);
     expect(next.written.some((d) => d.url.includes("/sleep/"))).toBe(true);
@@ -790,8 +762,12 @@ describe("Google Health successor", () => {
     });
     const report = await r.result;
     const cursors = cursorsOf(report.cursor);
-    expect(cursors.steps).toBe(UNTIL);
-    expect(cursors.distance).toBe("2026-06-08T00:00:00.000Z");
+    expect([cursors.steps, cursors.distance, cursors["total-calories"]]).toEqual([
+      FINAL,
+      FINAL,
+      FINAL,
+    ]);
+    expect(cursors.exercise).toBe("2026-06-08T00:00:00.000Z");
     expect(cursors["heart-rate"]).toBe("2026-06-09T07:12:00.000Z");
     expect(cursors.sleep).toBeUndefined();
   });
@@ -800,22 +776,12 @@ describe("Google Health successor", () => {
     [{ limits: { maxRequests: 100, maxItems: 1 } }, /type budget/],
     [{ runLimits: { maxRequests: 100, maxItems: 1 } }, /run budget/],
     [{ limits: { maxRequests: 100, maxItems: 100, maxBytes: 1 } }, /type budget/],
-  ] as const)("fails when not even one day fits (%j)", async (options, message) => {
-    const day = {
-      startTime: "2026-06-09T00:00:00Z",
-      endTime: "2026-06-09T01:00:00Z",
-      steps: { count: 1 },
-    };
+  ] as const)("fails when not even one window fits (%j)", async (options, message) => {
     const r = run(
-      provider({
-        steps: [
-          day,
-          { ...day, startTime: "2026-06-09T01:00:00Z", endTime: "2026-06-09T02:00:00Z" },
-        ],
+      syntheticHealthApi({
+        points: { "heart-rate": [hr("2026-06-09T00:00:00Z"), hr("2026-06-09T01:00:00Z")] },
       }),
-      {
-        adapter: adapterAt(FIXTURE_NOW, { lookbackDays: 1, ...options }),
-      },
+      { adapter: adapterAt(FIXTURE_NOW, { lookbackDays: 1, ...options }) },
     );
     await expect(r.result).rejects.toThrow(message);
     expect(r.pod.urls().some((u) => u.includes("/health/"))).toBe(false);
@@ -834,8 +800,11 @@ describe("Google Health successor", () => {
   });
 
   it("charges sleep stages to the type's item budget", async () => {
-    const r = run(provider({ sleep: [SLEEP] }), {
-      adapter: adapterAt(FIXTURE_NOW, { limits: { maxRequests: 100, maxItems: 3 } }),
+    const r = run(syntheticHealthApi({ points: { sleep: [SLEEP] } }), {
+      adapter: adapterAt(FIXTURE_NOW, {
+        lookbackDays: 2,
+        limits: { maxRequests: 100, maxItems: 3 },
+      }),
     });
     const report = await r.result;
     expect(cursorsOf(report.cursor).sleep).toBe("2026-06-09T00:00:00.000Z");
@@ -845,13 +814,11 @@ describe("Google Health successor", () => {
   it("holds the cursor at the window of a future (transient) point; other windows advance", async () => {
     const now = "2026-06-11T07:12:00Z";
     const r = run(
-      provider(
-        { "heart-rate": [{ ...HEART_RATE, time: "2026-06-08T07:12:00Z" }] },
+      syntheticHealthApi(
+        { points: { "heart-rate": [hr("2026-06-08T07:12:00Z")] } },
         {
           extra: (type, _from, to) =>
-            type === "heart-rate" && to === Date.parse(now)
-              ? [{ ...HEART_RATE, time: "2026-06-11T07:12:01Z" }]
-              : [],
+            type === "heart-rate" && to === Date.parse(now) ? [hr("2026-06-11T07:12:01Z")] : [],
         },
       ),
       { cursor: checkpoint({ "heart-rate": "2026-06-09T07:12:00.000Z" }), adapter: adapterAt(now) },
@@ -890,7 +857,10 @@ describe("Google Health successor", () => {
     expect(r.api).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
     expect((await r.result).written).toHaveLength(5);
-    expect(r.api).toHaveBeenCalledTimes(TYPES.length * 3 + 1);
+    // Three one-day windows per list type, one rollup range per summary type, one retry.
+    expect(r.api).toHaveBeenCalledTimes(
+      LIST_TYPES.length * 3 + (TYPES.length - LIST_TYPES.length) + 1,
+    );
   });
 
   it("caps retries and keeps the prior checkpoint on persistent throttling", async () => {
@@ -920,27 +890,39 @@ describe("Google Health successor", () => {
     "x",
     checkpoint({ "heart-rate": "invalid" }),
     checkpoint({ steps: "2999-01-01T00:00:00Z" }),
-    JSON.stringify({ version: 2, cursors: { unknown: "2026-01-01T00:00:00Z" }, fetchedAt: {} }),
+    JSON.stringify({ version: 3, cursors: { unknown: "2026-01-01T00:00:00Z" }, fetchedAt: {} }),
+    JSON.stringify({ version: 3, cursors: { calories: "2026-06-09T00:00:00Z" }, fetchedAt: {} }),
     JSON.stringify({
-      version: 2,
+      version: 3,
       cursors: { steps: "2026-06-09T00:00:00Z" },
       fetchedAt: { steps: "2026-06-08T00:00:00Z" },
     }),
-    JSON.stringify({ version: 2, cursors: { steps: "2026-06-09T00:00:00Z" }, fetchedAt: {} }),
-    JSON.stringify({ version: 3, cursors: {}, fetchedAt: {} }),
+    JSON.stringify({ version: 3, cursors: { steps: "2026-06-09T00:00:00Z" }, fetchedAt: {} }),
+    JSON.stringify({ version: 3, cursors: {} }),
+    JSON.stringify({ version: 4, cursors: {}, fetchedAt: {} }),
   ])("rejects invalid stored cursor %s before source traffic", async (cursor) => {
     const r = run(undefined, { cursor });
     await expect(r.result).rejects.toThrow(/checkpoint/);
     expect(r.api).not.toHaveBeenCalled();
   });
 
-  it("continues a version 1 checkpoint from its end time", async () => {
-    const r = run(provider({}), {
-      cursor: JSON.stringify({ version: 1, cursors: { weight: "2026-06-09T12:00:00.000Z" } }),
+  it.each([
+    JSON.stringify({ version: 1, cursors: { weight: "2026-06-09T12:00:00.000Z" } }),
+    JSON.stringify({
+      version: 2,
+      cursors: { calories: "2026-06-09T00:00:00.000Z" },
+      fetchedAt: {},
+    }),
+  ])("restarts the pre-v3 checkpoint %s at the lookback window with a warning", async (cursor) => {
+    const onWarning = vi.fn();
+    const r = run(syntheticHealthApi({}), {
+      cursor,
+      adapter: adapterAt(FIXTURE_NOW, { lookbackDays: 2, onWarning }),
     });
     await r.result;
+    expect(onWarning).toHaveBeenCalledWith(expect.stringContaining("parser version 3"));
     expect(requests(r.api, "weight")[0]?.searchParams.get("filter")).toContain(
-      'time >= "2026-06-07T00:00:00.000Z"',
+      '>= "2026-06-08T00:00:00Z"',
     );
   });
 
@@ -951,80 +933,78 @@ describe("Google Health successor", () => {
     expect(api).not.toHaveBeenCalled();
   });
 
-  it("skips hostile individual payloads, reports the count and still advances that type cursor", async () => {
+  it("skips invalid sample values, reports the count and still advances that type cursor", async () => {
+    const good = Array.from({ length: 30 }, (_, i) => hr(`2026-06-08T07:${String(10 + i)}:00Z`));
     const r = run(
-      provider(
-        { "heart-rate": [HEART_RATE] },
+      syntheticHealthApi(
+        { points: { "heart-rate": good } },
         {
           extra: (type, from) =>
             type === "heart-rate" && from === Date.parse("2026-06-08T00:00:00Z")
-              ? [null, {}, { ...HEART_RATE, heartRate: { beatsPerMinute: -1 } }]
+              ? [
+                  hr("2026-06-08T09:00:00Z", "0"),
+                  hr("2026-06-08T09:01:00Z", "-1"),
+                  hr("2026-06-08T09:02:00Z", 301),
+                  { ...hr("2026-06-08T09:03:00Z"), name: "users/me/dataTypes/weight/dataPoints/1" },
+                ]
               : [],
         },
       ),
       { state: prior },
     );
     const report = await r.result;
-    expect(report.skipped).toBe(3);
+    expect(report.skipped).toBe(4);
     expect(cursorsOf(report.cursor)["heart-rate"]).toBe(UNTIL);
   });
 
-  it("resolves inconsistent reconciled duplicates deterministically and drops overlapping days only", async () => {
+  it("resolves conflicting rollup buckets for one date deterministically (larger value)", async () => {
     const onWarning = vi.fn();
-    const r = run(provider({ steps: [STEPS, { ...STEPS, steps: { count: 3 } }] }), {
-      adapter: adapterAt(FIXTURE_NOW, { onWarning }),
-    });
+    const r = run(
+      routes("steps", [{ rollupDataPoints: [STEPS, { ...STEPS, steps: { countSum: "3" } }] }]),
+      {
+        adapter: adapterAt(FIXTURE_NOW, { onWarning }),
+      },
+    );
     await r.result;
     expect(values(r.pod, `${ROOT}health/daily/2026-06-08/steps.ttl`, `${SCHEMA}value`)).toEqual([
       "6120",
     ]);
     expect(onWarning).toHaveBeenCalledOnce();
-    const p = point("steps", STEPS)!;
-    const other = point("steps", { ...STEPS, startTime: "2026-06-08T12:00:00Z" })!;
-    const mapper = new HealthMapper((s) => ROOT + s);
-    expect(healthDocuments([p, other], (s) => ROOT + s, undefined, mapper)).toEqual([]);
-    expect(mapper.skipped).toBe(2);
   });
 
   it("maps nameless points deterministically, keys named sessions by resource, bounds stages, and rejects unsafe names and invalid samples", () => {
-    const exercise = point("exercise-session", { ...EXERCISE, name: "" })!;
-    expect(exercise.key).toBe(point("exercise-session", { ...EXERCISE, name: "" })?.key);
+    const exercise = point("exercise", { ...EXERCISE, name: "" })!;
+    expect(exercise.key).toBe("google-health-exercise-2026-06-08T07:12:00.000Z-RUNNING");
+    expect(point("exercise", { ...EXERCISE, name: "" })?.key).toBe(exercise.key);
     expect(
-      point("exercise-session", {
-        ...EXERCISE,
-        name: "users/me/dataTypes/exercise-session/dataPoints/opaque-id",
-      })?.key,
+      point("exercise", { ...EXERCISE, name: "users/me/dataTypes/exercise/dataPoints/opaque-id" })
+        ?.key,
     ).toBe("google-health-exercise-opaque-id");
+    expect(point("exercise", EXERCISE)?.key).toBe("google-health-exercise-51817963271");
     expect(
-      point("sleep", {
-        ...SLEEP,
-        sleep: { stages: Array(MAX_STAGES + 1).fill(SLEEP.sleep.stages[0]) },
-      }),
+      point("sleep", sleepWith({ stages: Array(MAX_STAGES + 1).fill(SLEEP.sleep.stages[0]) })),
     ).toBeUndefined();
     expect(point("sleep", SLEEP)?.key).toBe("sleep-2026-06-08T22:00:00.000Z");
     expect(
       point("sleep", { ...SLEEP, name: "users/me/dataTypes/sleep/dataPoints/opaque-id" })?.key,
     ).toBe("sleep-opaque-id");
     expect(
-      point("sleep", {
-        ...SLEEP,
-        sleep: { stages: [SLEEP.sleep.stages[0], SLEEP.sleep.stages[0]] },
-      }),
+      point("sleep", sleepWith({ stages: [SLEEP.sleep.stages[0]!, SLEEP.sleep.stages[0]!] })),
     ).toBeUndefined();
-    expect(point("weight", { ...WEIGHT, time: "invalid" })).toBeUndefined();
+    expect(point("weight", weightAt("invalid", 70_000))).toBeUndefined();
     expect(
-      point("weight", { ...WEIGHT, weight: { kilograms: Number.POSITIVE_INFINITY } }),
+      point("weight", weightAt("2026-06-08T07:00:00Z", Number.POSITIVE_INFINITY)),
     ).toBeUndefined();
     expect(
-      point("exercise-session", {
+      point("exercise", {
         ...EXERCISE,
-        name: "users/me/dataTypes/exercise-session/dataPoints/../../bad",
+        name: "users/me/dataTypes/exercise/dataPoints/../../bad",
       }),
     ).toBeUndefined();
     expect(
-      point("exercise-session", {
+      point("exercise", {
         ...EXERCISE,
-        exerciseSession: { activityName: "a".repeat(257) },
+        exercise: { ...EXERCISE.exercise, displayName: "a".repeat(257) },
       }),
     ).toBeUndefined();
   });
@@ -1078,9 +1058,9 @@ describe("Google Health successor", () => {
     for (const id of ["1", "2"]) {
       const ex = new ExerciseAction(`${ACT}#activity-${id}`, ds, DataFactory).mark();
       ex.exerciseType = "Run";
-      ex.startTime = new Date(EXERCISE.startTime);
+      ex.startTime = new Date(EXERCISE.exercise.interval.startTime);
     }
-    const p = point("exercise-session", { ...EXERCISE, name: "" })!;
+    const p = point("exercise", { ...EXERCISE, name: "" })!;
     const ambiguous = new HealthMapper((s) => ROOT + s);
     expect(healthDocuments([p], (s) => ROOT + s, ds, ambiguous)).toEqual([]);
     expect(ambiguous.skipped).toBe(1);
@@ -1099,13 +1079,44 @@ describe("Google Health successor", () => {
     ).toEqual(["PT31M"]);
   });
 
-  it("protects legacy ids even when their stored start time is absent", () => {
-    const ds = new Store();
-    new ExerciseAction(`${ACT}#activity-51817963271`, ds, DataFactory).mark().name = "Legacy";
-    const p = point("exercise-session", EXERCISE)!;
-    const mapper = new HealthMapper((s) => ROOT + s);
-    expect(healthDocuments([p], (s) => ROOT + s, ds, mapper)).toEqual([]);
-    expect(mapper.skipped).toBe(1);
+  it("matches a numeric Google id to a legacy logId only with the same type within 14 h, never overwriting another row", () => {
+    const iri = `${ACT}#activity-51817963271`;
+    const own = `${ACT}#activity-google-health-exercise-51817963271`;
+    const p = point("exercise", EXERCISE)!;
+    const subjects = (legacy: (ex: ExerciseAction, ds: Store) => void) => {
+      const ds = new Store();
+      legacy(new ExerciseAction(iri, ds, DataFactory).mark(), ds);
+      const mapper = new HealthMapper((s) => ROOT + s);
+      const [doc] = healthDocuments([p], (s) => ROOT + s, ds, mapper);
+      expect(mapper.skipped).toBe(0);
+      return new Set([...doc!.dataset].map((q) => q.subject.value));
+    };
+    // No stored start, another type, too far apart, or a Google-derived row: a new subject.
+    expect(subjects((ex) => (ex.name = "Legacy"))).toEqual(new Set([own]));
+    for (const [type, start] of [
+      ["Walk", "2026-06-08T07:12:00Z"],
+      ["Run", "2026-06-07T07:12:00Z"],
+    ])
+      expect(
+        subjects((ex) => {
+          ex.exerciseType = type;
+          ex.startTime = new Date(start as string);
+        }),
+      ).toEqual(new Set([own]));
+    expect(
+      subjects((ex, ds) => {
+        ex.exerciseType = "Run";
+        ex.startTime = new Date("2026-06-07T21:12:00Z");
+        new Provenance(iri, ds, DataFactory).derivedFrom.add(SOURCE_ORIGIN);
+      }),
+    ).toEqual(new Set([own]));
+    // The same type within any civil offset of the legacy wall clock: the legacy row.
+    expect(
+      subjects((ex) => {
+        ex.exerciseType = "Run";
+        ex.startTime = new Date("2026-06-08T02:12:00Z");
+      }),
+    ).toEqual(new Set([iri]));
   });
 
   it("serializes Google Health and Fitbit imports against their shared container", async () => {
@@ -1128,38 +1139,19 @@ describe("Google Health successor", () => {
     }
   });
 
-  it("refuses a colliding numeric Google id until provenance establishes Google ownership", () => {
-    const ds = new Store();
-    const iri = `${ACT}#activity-51817963271`;
-    const ex = new ExerciseAction(iri, ds, DataFactory).mark();
-    ex.startTime = new Date("2026-06-07T07:12:00Z");
-    ex.exerciseType = "Walk";
-    const p = point("exercise-session", EXERCISE)!;
-    const mapper = new HealthMapper((s) => ROOT + s);
-    expect(healthDocuments([p], (s) => ROOT + s, ds, mapper)).toEqual([]);
-    expect(mapper.skipped).toBe(1);
-    new Provenance(iri, ds, DataFactory).derivedFrom.add(SOURCE_ORIGIN);
-    const [doc] = healthDocuments([p], (s) => ROOT + s, ds);
-    expect(new ExerciseAction(iri, doc!.dataset, DataFactory).startTime?.toISOString()).toBe(
-      p.start,
-    );
-  });
-
-  it("uses reconcile and existing typed measurement fields for distance and calories", async () => {
+  it("uses dailyRollUp and existing typed measurement fields for distance and total calories", async () => {
     const r = run(
-      provider({
-        distance: [
-          { startTime: STEPS.startTime, endTime: STEPS.endTime, distance: { meters: 5200 } },
-        ],
-        calories: [
-          { startTime: STEPS.startTime, endTime: STEPS.endTime, calories: { kilocalories: 432 } },
-        ],
+      syntheticHealthApi({
+        rollups: {
+          distance: { "2026-06-08": { millimetersSum: "5200000" } },
+          "total-calories": { "2026-06-08": { kcalSum: 432 } },
+        },
       }),
     );
     const report = await r.result;
     for (const [type, value, unit] of [
       ["distance", "5200", "m"],
-      ["calories", "432", "kcal"],
+      ["total-calories", "432", "kcal"],
     ]) {
       const doc = report.written.find((d) => d.url.endsWith(`/${type}.ttl`))!;
       expect(values(r.pod, doc.url, `${SCHEMA}value`)).toEqual([value]);
@@ -1214,11 +1206,13 @@ describe("Google Health successor", () => {
     expect(r.api).toHaveBeenCalledOnce();
   });
 
-  it("advances empty type cursors to the run's end and writes no empty documents", async () => {
-    const r = run(provider({}), { state: prior });
+  it("advances empty type cursors to the run's end (totals to their last final date) and writes no empty documents", async () => {
+    const r = run(syntheticHealthApi({}), { state: prior });
     const report = await r.result;
     expect(report.written).toHaveLength(0);
-    expect(Object.values(cursorsOf(report.cursor))).toEqual(TYPES.map(() => UNTIL));
+    expect(Object.values(cursorsOf(report.cursor))).toEqual(
+      TYPES.map((t) => (summary(t) ? FINAL : UNTIL)),
+    );
   });
 
   it("validates its options", () => {

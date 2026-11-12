@@ -7,7 +7,7 @@ import { createSourceAuth } from "../core/import-runner.js";
 import { grantedScope, scopeList } from "../core/oauth.js";
 import type { OAuthAppConfig, SourceAuth, TokenSet } from "../core/types.js";
 import { googleHealthAdapter } from "./adapter.js";
-import { API, ID, record } from "./api.js";
+import { API, ID, ROLLUP_PATH, record } from "./api.js";
 
 /** RFC 6750 bearer syntax also covers the Google refresh tokens in this profile. */
 const credential = (value: unknown): value is string =>
@@ -16,7 +16,20 @@ const credential = (value: unknown): value is string =>
   value.length <= 16_384 &&
   /^[A-Za-z0-9._~+/-]+=*$/.test(value);
 
-/** Host-owned, memory-only Google OAuth session. Retries a Health GET once after 401. */
+/**
+ * The one non-GET request forwarded: a dailyRollUp query (read-only, but a POST by the API's
+ * design) to the Health origin with no query string and a bounded JSON string body, which can
+ * be replayed after a refresh.
+ */
+function rollupQuery(input: string | Request, init: RequestInit | undefined): boolean {
+  if (typeof input !== "string" || typeof init?.body !== "string" || init.body.length > 4096)
+    return false;
+  if (!URL.canParse(input)) return false;
+  const url = new URL(input);
+  return url.origin === new URL(API).origin && !url.search && ROLLUP_PATH.test(url.pathname);
+}
+
+/** Host-owned, memory-only Google OAuth session. Retries a Health read once after 401. */
 export function createGoogleHealthSourceAuth(options: {
   config: OAuthAppConfig;
   token: TokenSet;
@@ -113,7 +126,8 @@ export function createGoogleHealthSourceAuth(options: {
       const signal = snapshot.init?.signal ?? request?.signal;
       signal?.throwIfAborted();
       // This adapter has no write operations. Fail before credentials leave the host.
-      if (method.toUpperCase() !== "GET")
+      const verb = method.toUpperCase();
+      if (verb !== "GET" && !(verb === "POST" && rollupQuery(snapshot.input, snapshot.init)))
         throw new IntegrationAuthError(
           ID,
           "not-configured",

@@ -9,17 +9,22 @@ import {
   DEFAULT_LIMITS,
   DEFAULT_LOOKBACK_DAYS,
   DEFAULT_RUN_LIMITS,
+  fetchRollup,
   fetchWindow,
   GOOGLE_HEALTH_SCOPES,
-  type HealthPoint,
   type HealthType,
+  HOUR_MS,
   ID,
+  MAX_OFFSET_MS,
   OVERLAP_MS,
+  PageCapError,
   record,
+  rollupDays,
   sample,
   summary,
   TYPES,
   timestamp,
+  type Window,
 } from "./api.js";
 import { demoFixtures } from "./fixtures.js";
 import { HealthMapper } from "./mapping.js";
@@ -31,12 +36,15 @@ export interface GoogleHealthOptions {
   readonly limits?: RunLimits;
   /** Whole run across all types (default 2,048 requests, 1,000,000 points/stages, 512 MiB). */
   readonly runLimits?: RunLimits;
-  /** Pages per one-day request window (1–100, default 100). */
+  /** Pages per request window (1–100, default 100); a capped window is split, down to 1 h. */
   readonly maxPages?: number;
   /** Days a first import (no checkpoint) reaches back (1–3,650, default 30). */
   readonly lookbackDays?: number;
   readonly now?: () => Date;
-  /** Non-personal diagnostics: resolved duplicate conflicts and skipped unmappable records. */
+  /**
+   * Non-personal diagnostics: resolved duplicate conflicts, skipped unmappable records, a type
+   * stopped at the page cap, and an older checkpoint restarted at the lookback window.
+   */
   readonly onWarning?: (message: string) => void;
 }
 
@@ -95,6 +103,11 @@ interface Cursor {
   at: number;
 }
 
+/** Checkpoint and parser version: a cursor written by an older parser restarts at the lookback. */
+const VERSION = 3;
+/** A capped list window splits into these spans; a capped 1 h window ends its type's run. */
+const SPLITS = [12, 6, 3, 1].map((h) => h * HOUR_MS);
+
 const limitsOf = (limits: RunLimits, fallback: Required<RunLimits>): Required<RunLimits> => {
   const result = { ...limits, maxBytes: limits.maxBytes ?? fallback.maxBytes };
   for (const n of [result.maxRequests, result.maxItems, result.maxBytes])
@@ -102,6 +115,21 @@ const limitsOf = (limits: RunLimits, fallback: Required<RunLimits>): Required<Ru
       throw new TypeError("Run limits must be positive safe integers.");
   return result;
 };
+
+/** Sub-windows of a capped window: list windows by SPLITS, rollup ranges by halves of days. */
+function split(window: Window, rollup: boolean): Window[] | undefined {
+  const span = window.end - window.start;
+  const step = rollup
+    ? span > DAY_MS
+      ? Math.ceil(span / DAY_MS / 2) * DAY_MS
+      : undefined
+    : SPLITS.find((s) => s < span);
+  if (step === undefined) return undefined;
+  const parts: Window[] = [];
+  for (let start = window.start; start < window.end; start += step)
+    parts.push({ start, end: Math.min(start + step, window.end) });
+  return parts;
+}
 
 /** Google Health successor; the standard writer retains the legacy Fitbit container. */
 export function createGoogleHealthAdapter({
@@ -128,7 +156,7 @@ export function createGoogleHealthAdapter({
       scopes: GOOGLE_HEALTH_SCOPES,
       categories: ["health"],
       whatYouGet:
-        "Exercise, daily activity, sleep, heart rate and weight saved into Health. Re-authorize to replace a legacy Fitbit connection.",
+        "Exercise, daily steps, distance and calories, sleep, heart rate and weight saved into Health. Re-authorize to replace a legacy Fitbit connection.",
       requirements: [
         "Google Health Restricted scopes require Google verification and security review for public use; an owner's test-user project may connect privately.",
         "Enable Google Health API in your Google OAuth project and confirm its requested read scopes before configuring a live connection.",
@@ -149,7 +177,12 @@ export function createGoogleHealthAdapter({
       const until = now().getTime();
       if (!Number.isFinite(until) || until < 0)
         throw new IntegrationSyncError(ID, "Invalid clock for Google Health import.");
-      const cursors = parseCursor(ctx.cursor, until);
+      const stored = parseCursor(ctx.cursor, until);
+      if (stored === "outdated")
+        onWarning(
+          `The Google Health checkpoint predates parser version ${VERSION}; re-reading the last ${lookbackDays} day(s).`,
+        );
+      const cursors = stored === "outdated" ? {} : stored;
       const next: Partial<Record<HealthType, Cursor>> = { ...cursors };
       const run = new RunBudget(ID, totalLimits);
       const mapper = new HealthMapper((slug) => ctx.resolve(slug));
@@ -163,81 +196,85 @@ export function createGoogleHealthAdapter({
         ctx.signal?.throwIfAborted();
         ctx.progress({ label: `Reading Health ${type}…`, done: i, total: TYPES.length });
         const previous = cursors[type];
-        let from = previous
-          ? floorDay(
-              Math.min(
-                previous.through,
-                Math.max(previous.through - OVERLAP_MS, previous.at - OVERLAP_MS),
-              ),
-            )
-          : floorDay(until - lookbackDays * DAY_MS);
-        // A civil date (UTC-12 … UTC+14) left unwritten at a previous stop began within the two
-        // UTC days before the checkpoint; re-read them so its total is complete.
-        if (previous && summary(type)) from -= 2 * DAY_MS;
-        from = Math.max(0, from);
+        const from = Math.max(
+          0,
+          previous
+            ? floorDay(
+                Math.min(
+                  previous.through,
+                  Math.max(previous.through - OVERLAP_MS, previous.at - OVERLAP_MS),
+                ),
+              )
+            : floorDay(until - lookbackDays * DAY_MS),
+        );
         const budget = new TypeBudget(typeLimits, run);
-        const pending = new Map<string, HealthPoint[]>();
-        const tainted = new Set<string>();
-        const flush = async (upTo: number) => {
-          for (const [date, group] of pending) {
-            const first = group[0];
-            if (!first || (first.civilEnd ?? 0) > upTo) continue;
-            pending.delete(date);
-            // Only a date whose every interval lay inside this run's windows is complete.
-            if (tainted.has(date) || (first.civilStart ?? -1) < from) continue;
-            for (const doc of mapper.daily(type, date, group)) await ctx.write(doc);
-          }
-        };
+        const rollup = summary(type);
         let through: number | undefined;
         let hold = Number.POSITIVE_INFINITY;
-        let stopped = false;
-        for (let start = from; start < until; start += DAY_MS) {
-          const window = { start, end: Math.min(start + DAY_MS, until) };
-          let batch: Awaited<ReturnType<typeof fetchWindow>>;
+
+        /** Read and write one window; false ends this type's run (budget or page cap). */
+        const visit = async (window: Window): Promise<boolean> => {
           try {
-            batch = await fetchWindow(ctx, type, window, budget, maxPages, until);
+            if (rollup) {
+              const batch = await fetchRollup(ctx, type, window, budget, maxPages);
+              skipped += batch.skipped;
+              conflicts += batch.conflicts;
+              for (const total of batch.totals.sort((a, b) => a.date.localeCompare(b.date)))
+                for (const doc of mapper.daily(total)) await ctx.write(doc);
+            } else {
+              const batch = await fetchWindow(ctx, type, window, budget, maxPages, until);
+              skipped += batch.skipped;
+              conflicts += batch.conflicts;
+              if (batch.transient) hold = Math.min(hold, window.start);
+              if (type === "exercise" && batch.points.length > 0 && !indexed) {
+                mapper.indexActivities(await ctx.read("health/activities.ttl"));
+                indexed = true;
+              }
+              const docs = sample(type)
+                ? mapper.samples(type, iso(window.start).slice(0, 10), batch.points)
+                : mapper.sessions(batch.points);
+              for (const doc of docs) await ctx.write(doc);
+            }
           } catch (error) {
+            if (error instanceof PageCapError) {
+              const parts = split(window, rollup);
+              if (parts) {
+                for (const part of parts) if (!(await visit(part))) return false;
+                return true;
+              }
+              onWarning(
+                `Google Health ${type} reached the ${maxPages}-page cap in one ${rollup ? "day" : "hour"} from ${iso(window.start)}; that type resumes there next run.`,
+              );
+              return false;
+            }
             if (!(error instanceof BudgetStop)) throw error;
             // No progress is possible when the very first window cannot fit: a real error.
             if (through === undefined && (error.scope === "type" || !completedAny))
               throw new IntegrationSyncError(
                 ID,
-                `One day of Google Health ${type} exceeds the import's ${error.scope} budget; raise its limits. Checkpoint unchanged.`,
+                `One window of Google Health ${type} exceeds the import's ${error.scope} budget; raise its limits. Checkpoint unchanged.`,
               );
-            stopped = true;
             runStopped = error.scope === "run";
-            break;
-          }
-          skipped += batch.skipped;
-          conflicts += batch.conflicts;
-          if (batch.transient) hold = Math.min(hold, window.start);
-          if (summary(type)) {
-            for (const date of batch.tainted) tainted.add(date);
-            for (const p of batch.points) {
-              const date = p.civilDate as string;
-              if (batch.taintedAll) tainted.add(date);
-              pending.set(date, [...(pending.get(date) ?? []), p]);
-            }
-            await flush(window.end);
-          } else {
-            if (type === "exercise-session" && batch.points.length > 0 && !indexed) {
-              mapper.indexActivities(await ctx.read("health/activities.ttl"));
-              indexed = true;
-            }
-            const docs = sample(type)
-              ? mapper.samples(
-                  type,
-                  new Date(window.start).toISOString().slice(0, 10),
-                  batch.points,
-                )
-              : mapper.sessions(batch.points);
-            for (const doc of docs) await ctx.write(doc);
+            return false;
           }
           through = window.end;
           completedAny = true;
+          return true;
+        };
+
+        if (rollup) {
+          // Civil dates as UTC-midnight instants: from the first re-read date through the civil
+          // "today" of the most eastern offset. A date is final once it has ended everywhere.
+          const last = floorDay(until + MAX_OFFSET_MS) + DAY_MS;
+          const final = Math.max(from, floorDay(until - MAX_OFFSET_MS));
+          for (let start = from; start < last; start += rollupDays(type) * DAY_MS)
+            if (!(await visit({ start, end: Math.min(start + rollupDays(type) * DAY_MS, last) })))
+              break;
+          if (through !== undefined) through = Math.min(through, final);
+        } else {
+          for (let start = from; start < until; start += DAY_MS)
+            if (!(await visit({ start, end: Math.min(start + DAY_MS, until) }))) break;
         }
-        // The ongoing civil day is written with its total so far, as the provider reports it.
-        if (!stopped) await flush(Number.POSITIVE_INFINITY);
         if (through !== undefined) next[type] = { through: Math.min(through, hold), at: until };
       }
       skipped += mapper.skipped;
@@ -263,31 +300,28 @@ function serializeCursor(cursors: Partial<Record<HealthType, Cursor>>): string |
     through[type] = iso(cursor.through);
     fetchedAt[type] = iso(cursor.at);
   }
-  return JSON.stringify({ version: 2, cursors: through, fetchedAt });
+  return JSON.stringify({ version: VERSION, cursors: through, fetchedAt });
 }
 
-/** Version 2 records, per type, the end of the last written window and when it was read. */
+/**
+ * Version 3 records, per type, the end of the last written window and when it was read.
+ * Versions 1 and 2 were written by the pre-v4-shape parser: "outdated" restarts every type
+ * at the lookback window instead of trusting what they skipped.
+ */
 function parseCursor(
   value: string | undefined,
   until: number,
-): Partial<Record<HealthType, Cursor>> {
+): Partial<Record<HealthType, Cursor>> | "outdated" {
   if (!value) return {};
   try {
     if (value.length > 4096) throw new Error();
     const json: unknown = JSON.parse(value);
+    if (record(json) && (json.version === 1 || json.version === 2)) return "outdated";
     const known = (o: unknown): o is Record<string, unknown> =>
       record(o) && Object.keys(o).every((key) => TYPES.includes(key as HealthType));
-    if (
-      !record(json) ||
-      (json.version !== 1 && json.version !== 2) ||
-      !known(json.cursors) ||
-      (json.version === 2 && !known(json.fetchedAt))
-    )
+    if (!record(json) || json.version !== VERSION || !known(json.cursors) || !known(json.fetchedAt))
       throw new Error();
-    const fetchedAt = (json.version === 2 ? json.fetchedAt : json.cursors) as Record<
-      string,
-      unknown
-    >;
+    const fetchedAt = json.fetchedAt;
     const result: Partial<Record<HealthType, Cursor>> = {};
     for (const type of TYPES) {
       if (json.cursors[type] === undefined && fetchedAt[type] === undefined) continue;

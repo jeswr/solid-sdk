@@ -7,6 +7,7 @@ import { Provenance } from "../core/provenance.js";
 import type { NormalisedDoc } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
 import {
+  type DailyTotal,
   type HealthPoint,
   type HealthType,
   ID,
@@ -29,8 +30,8 @@ interface Existing {
 
 /**
  * Maps validated Google Health points to pod documents. Permanently unmappable points
- * (ambiguous or colliding legacy matches, overlapping daily intervals) are counted in
- * `skipped` and `warnings` instead of failing the run, so they never hold a checkpoint.
+ * (ambiguous or repeated legacy matches) are counted in `skipped` and `warnings` instead of
+ * failing the run, so they never hold a checkpoint.
  */
 export class HealthMapper {
   skipped = 0;
@@ -64,7 +65,7 @@ export class HealthMapper {
           "Legacy Fitbit activities exceeded the reconciliation cap.",
         );
       const ex = new ExerciseAction(q.subject, existing, DataFactory);
-      const sourceUrl = nativeSource(ex.sourceUrl, "exercise-session");
+      const sourceUrl = nativeSource(ex.sourceUrl, "exercise");
       const identifier = ex.identifier;
       const google =
         !!sourceUrl ||
@@ -102,23 +103,25 @@ export class HealthMapper {
   private match(p: HealthPoint): Existing | undefined | null {
     const bySource = p.sourceUrl ? this.bySource.get(p.sourceUrl) : undefined;
     if (bySource !== undefined) return bySource;
-    const same = this.byKey.get(p.key);
-    // A numeric Google id equal to a legacy logId is the same activity when its type
-    // matches and its start lies within any civil offset of the stored wall-clock start.
+    // This session's own subject from an earlier run.
+    const own = this.byKey.get(p.key);
+    if (own) return own;
+    // A legacy Fitbit row whose logId equals a numeric Google id is the same activity only
+    // when its type matches and its stored wall-clock start lies within any civil offset;
+    // otherwise the Google session keeps its own `google-health-exercise-<id>` subject.
+    const legacy =
+      p.nativeId && /^\d{1,32}$/.test(p.nativeId) ? this.byKey.get(p.nativeId) : undefined;
     if (
-      same &&
-      (same.google ||
-        (same.exerciseType === p.activity &&
-          same.start !== undefined &&
-          Math.abs(same.start - Date.parse(p.start)) <= MAX_OFFSET_MS))
+      legacy &&
+      !legacy.google &&
+      legacy.exerciseType === p.activity &&
+      legacy.start !== undefined &&
+      Math.abs(legacy.start - Date.parse(p.start)) <= MAX_OFFSET_MS
     )
-      return same;
+      return legacy;
     const byTime = this.byTime.get(`${p.start}|${p.activity}`);
     if (byTime !== undefined) return byTime;
-    const byWall = p.wallStart ? this.byLegacyWall.get(`${p.wallStart}|${p.activity}`) : undefined;
-    if (byWall !== undefined) return byWall;
-    // An unrelated legacy record already owns this id: never overwrite it.
-    return same ? null : undefined;
+    return p.wallStart ? this.byLegacyWall.get(`${p.wallStart}|${p.activity}`) : undefined;
   }
 
   /** Exercise sessions into the legacy activities document; sleep sessions one per document. */
@@ -139,7 +142,7 @@ export class HealthMapper {
       return doc.dataset as Store;
     };
     for (const p of points) {
-      if (p.type === "exercise-session") {
+      if (p.type === "exercise") {
         const old = this.match(p);
         if (old === null) {
           this.unmapped();
@@ -246,29 +249,22 @@ export class HealthMapper {
     ];
   }
 
-  /** One civil date's reconciled total; overlapping intervals drop only that date. */
-  daily(type: HealthType, date: string, points: readonly HealthPoint[]): NormalisedDoc[] {
-    const group = [...points].sort((a, b) => a.start.localeCompare(b.start));
-    const first = group[0];
-    if (!first) return [];
-    if (group.some((p, i) => i > 0 && p.start < (group[i - 1]?.end ?? ""))) {
-      this.skipped += group.length;
-      this.warnings++;
-      return [];
-    }
+  /** One civil date's dailyRollUp total (the provider aggregates the civil day itself). */
+  daily({ type, date, value }: DailyTotal): NormalisedDoc[] {
     const slug = `health/daily/${date}/${type}.ttl`;
     const ds = new Store();
     const iri = `${this.resolve(slug)}#daily-${date}`;
     const ex = new HealthAction(iri, ds, DataFactory).mark();
     ex.name = `Daily ${type}`;
     ex.exerciseType = "Daily activity";
-    ex.startTime = new Date(first.civilStart ?? Date.parse(`${date}T00:00:00Z`));
+    // The rollup names a civil date without its UTC offset, so no instant is invented.
+    ex.identifier = date;
     const metricIri = `${iri}/${type}`;
     ex.metrics.add(metricIri);
     const metric = new HealthMetric(metricIri, ds, DataFactory);
     metric.types.add(HEALTH_VOCAB.PropertyValue);
     metric.name = type;
-    metric.measurement = group.reduce((sum, p) => sum + (p.value ?? 0), 0);
+    metric.measurement = value;
     metric.unit = type === "steps" ? "steps" : type === "distance" ? "m" : "kcal";
     return [
       {
@@ -283,31 +279,29 @@ export class HealthMapper {
 }
 
 /**
- * Map one batch of points (sessions, samples grouped by UTC day, summaries grouped by civil
- * date) in one go. The adapter drives the mapper window by window instead.
+ * Map one batch of points (sessions, samples grouped by UTC day) and daily totals in one go.
+ * The adapter drives the mapper window by window instead.
  */
 export function healthDocuments(
   points: readonly HealthPoint[],
   resolve: (slug: string) => string,
   existingActivities?: DatasetCore,
   mapper = new HealthMapper(resolve),
+  totals: readonly DailyTotal[] = [],
 ): NormalisedDoc[] {
   mapper.indexActivities(existingActivities);
   const docs = mapper.sessions(points);
   const groups = new Map<string, HealthPoint[]>();
   for (const p of points) {
-    if (p.type === "exercise-session" || p.type === "sleep") continue;
-    const key = `${p.type}|${p.civilDate ?? p.start.slice(0, 10)}`;
+    if (p.type === "exercise" || p.type === "sleep") continue;
+    const key = `${p.type}|${p.start.slice(0, 10)}`;
     groups.set(key, [...(groups.get(key) ?? []), p]);
   }
   for (const [key, group] of groups) {
     const [type, date] = key.split("|") as [HealthType, string];
-    docs.push(
-      ...(group[0]?.civilDate
-        ? mapper.daily(type, date, group)
-        : mapper.samples(type, date, group)),
-    );
+    docs.push(...mapper.samples(type, date, group));
   }
+  for (const total of totals) docs.push(...mapper.daily(total));
   return docs;
 }
 
