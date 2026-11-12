@@ -12,8 +12,11 @@ Spotify file import shares the `spotify` catalog id with its live adapter. Route
 Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
 CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
 Never persist IP, country, device, raw export or filename. Keep one merged
-`music/history/YYYY-MM.ttl` per month inside the connector container, with solid-listening's
-track/artist/album/instant scrobble vocabulary and SHA-256 timestamp/track-or-name ids.
+`music/history/YYYY-MM.ttl` per month inside the connector container, with SHA-256
+timestamp/track-or-name ids. Write each play through `@jeswr/solid-listening`'s `addScrobble`
+(the generated model) at `#scrobble-<id>` plus `-track/-artist/-album/-instant`; never add
+hand-written media accessors to `spotify/vocab.ts`. Canonicalize the built store with
+`canonicalizeJeswrDataset` before `ctx.write` (the model emits legacy w3id media/core terms).
 Keep short plays: the existing scrobble importer has no duration cutoff. All archive entries
 share row, retained-text and month budgets. Count invalid, oversized and duplicate rows.
 Suite Connect reads these shards in Music and saves personal public Spotify client IDs
@@ -54,7 +57,8 @@ build, typecheck and test, then the workspace gates before completing a change.
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
 especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
-reads (including custom PodWriter ports) and run provenance in the connector's own container.
+reads (including custom PodWriter ports), the Spotify file adapter's solid-listening output,
+and run provenance in the connector's own container.
 Build its result in one pass, adding each unchanged or transformed quad without deleting
 from a populated copy. Resolve suite aliases through `canonicalize()` before typed access
 and reconciliation; restrict changes to vocabulary predicates and class values, preserving

@@ -636,17 +636,26 @@ Spotify Account → Privacy settings → Download your data. Select the ZIP or a
 `StreamingHistory_music_*.json`. No Web API application is needed for file import.
 
 File history merges into `integrations/spotify/music/history/YYYY-MM.ttl`, registered as
-`media:PlaybackEvent`, inside the connector container. It uses solid-listening's titled
-`media:Track`, artist/album nodes, `core:atTime` → `time:Instant`, and `media:msPlayed`.
-Episodes use their title and show name in that history representation. Music reads these
-monthly documents alongside its scrobble imports and live Spotify history. SHA-256 ids
-derive from the UTC timestamp and valid track URI, falling back to artist/title names.
+`media:PlaybackEvent`, inside the connector container. Each play is written by
+`@jeswr/solid-listening`'s generated scrobble model (`addScrobble`): a `media:PlaybackEvent`
+with `media:msPlayed`, `media:playedWork` → a titled `media:Track`, `media:performedByArtist`
+→ a `foaf:name`d `media:Artist`, `media:inAlbum` → a titled `media:Album`, and
+`core:atTime` → `time:Instant`. Plays share the month document, so the five nodes sit at
+`#scrobble-<id>`, `-track`, `-artist`, `-album` and `-instant`. The model still emits the
+legacy `w3id.org/jeswr` media/core namespaces; the adapter stores them under the canonical
+`@jeswr/suite-vocab` namespaces with `canonicalizeJeswrDataset`. The adapter writes no
+hand-built accessors, `schema:` types, `media:playedVia` or Spotify track link (the generated
+profile leaves out `playedVia`). Episodes use their title and show name in that history
+representation. Music reads these monthly documents alongside its scrobble imports and live
+Spotify history. SHA-256 ids derive from the UTC timestamp and valid track URI, falling back
+to artist/title names; rows sharing an id within one import are one play (the last row wins).
 Basic `endTime` is interpreted as UTC at its exported minute precision. Duration is not
 subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
 matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
 and does not filter by duration. Spotify file import deduplicates exact natural keys only.
 
-Only timestamp, title, artist/show, album, validated track URI and milliseconds are kept.
+Only timestamp, title, artist/show, album and milliseconds are kept; a validated track URI
+only feeds the id.
 `ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
 Raw files and filenames are never written to the pod. Malformed rows count as skips.
 All selected input is verified before history writes; invalid JSON, CRC/size/DEFLATE

@@ -16,7 +16,7 @@ import {
 import { fileAdapterById } from "../file-adapters.js";
 import { SPOTIFY_FILE_LIMITS, spotifyFileAdapter } from "./file-adapter.js";
 import { BASIC_HISTORY, EXTENDED_HISTORY } from "./file-fixtures.js";
-import { MEDIA, MediaThing, TIME } from "./vocab.js";
+import { CORE, MEDIA, TIME } from "./vocab.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/spotify/`;
 const DOC = `${ROOT}music/history/2026-10.ttl`;
@@ -73,8 +73,25 @@ describe("Spotify history export", () => {
     const dataset = pod.dataset(DOC);
     const subject = plays(pod)[0];
     if (!subject) throw new Error("Missing playback");
-    const event = new MediaThing(subject, dataset, DataFactory);
-    expect(event.types.has(`${MEDIA}PlaybackEvent`)).toBe(true);
+    // solid-listening's scrobble shape, stored under the canonical suite namespaces.
+    const one = (s: string, p: string) => {
+      const objects = dataset.getObjects(DataFactory.namedNode(s), DataFactory.namedNode(p), null);
+      expect(objects).toHaveLength(1);
+      return objects[0]?.value;
+    };
+    const root = subject.value;
+    expect(root).toMatch(new RegExp(`^${DOC}#scrobble-[0-9a-f]{64}$`));
+    expect(one(root, `${MEDIA}playedWork`)).toBe(`${root}-track`);
+    expect(one(root, `${CORE}atTime`)).toBe(`${root}-instant`);
+    expect(one(root, `${MEDIA}msPlayed`)).toBe("120000");
+    expect(one(`${root}-track`, `${NS.RDF}type`)).toBe(`${MEDIA}Track`);
+    expect(one(`${root}-track`, `${NS.DCT}title`)).toBe("Synthetic Song");
+    expect(one(`${root}-track`, `${MEDIA}performedByArtist`)).toBe(`${root}-artist`);
+    expect(one(`${root}-track`, `${MEDIA}inAlbum`)).toBe(`${root}-album`);
+    expect(one(`${root}-artist`, `${NS.FOAF}name`)).toBe("Fixture Artist");
+    expect(one(`${root}-album`, `${NS.DCT}title`)).toBe("Fixture Album");
+    expect(one(`${root}-instant`, `${NS.RDF}type`)).toBe(`${TIME}Instant`);
+    expect(pod.get(DOC)).not.toContain("w3id.org");
     expect(pod.get(DOC)).toContain("Synthetic Song");
     expect(pod.get(DOC)).toContain("Fixture Artist");
     expect(pod.get(DOC)).toContain("Fixture Album");
@@ -175,6 +192,19 @@ describe("Spotify history export", () => {
       json([...BASIC_HISTORY, ...BASIC_HISTORY]),
     );
     expect(plays(names)).toHaveLength(1);
+  });
+  it("writes one play for rows sharing an id within an import, keeping the last row", async () => {
+    const { pod } = await fileImport(
+      spotifyFileAdapter,
+      json([BASIC_HISTORY[0], { ...BASIC_HISTORY[0], msPlayed: 7 }]),
+    );
+    expect(plays(pod)).toHaveLength(1);
+    expect(
+      pod
+        .dataset(DOC)
+        .getObjects(null, DataFactory.namedNode(`${MEDIA}msPlayed`), null)
+        .map((n) => n.value),
+    ).toEqual(["7"]);
   });
   it("skips malformed dates, names and durations, retaining valid rows", async () => {
     const good = BASIC_HISTORY[0];

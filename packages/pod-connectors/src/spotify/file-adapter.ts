@@ -1,5 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DataFactory, Store } from "n3";
+// AUTHORED-BY Claude Opus 5.5 (scrobble writes through @jeswr/solid-listening)
+import { addScrobble } from "@jeswr/solid-listening";
+import { Store } from "n3";
+import { canonicalizeJeswrDataset } from "../core/canonical-vocab.js";
 import type { FileImportAdapter, ImportFile } from "../core/file-import.js";
 import { MAX_FILE_BYTES } from "../core/file-import.js";
 import { jsonEntries } from "../core/file-json.js";
@@ -11,7 +14,7 @@ import {
   readZipEntry,
   zipDirectory,
 } from "../google-takeout/zip-reader.js";
-import { MEDIA, MediaThing, SCHEMA, TIME } from "./vocab.js";
+import { MEDIA } from "./vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
 /** Hard ceilings shared across every selected entry, including malformed/duplicate rows. */
@@ -215,42 +218,37 @@ export const spotifyFileAdapter: FileImportAdapter = {
     for (const [month, items] of months) {
       const slug = `music/history/${month}.ttl`;
       const doc = ctx.resolve(slug);
-      const dataset = new Store();
+      // Rows that share an id are one play; the last one read wins, as on re-import.
+      const unique = new Map<string, Play>();
       for (const item of items) {
         ctx.signal?.throwIfAborted();
         const identity = item.uri ?? JSON.stringify([item.artist ?? "", item.title]);
-        const id = await sha256(JSON.stringify([item.when, identity]));
-        const root = `${doc}#scrobble-${id}`;
-        const work = new MediaThing(`${root}-track`, dataset, DataFactory);
-        work.types.add(`${MEDIA}Track`);
-        work.types.add(`${MEDIA}CreativeWork`);
-        work.types.add(`${SCHEMA}MusicRecording`);
-        work.title = item.title;
-        work.name = item.title;
-        if (item.uri) work.sourceUrl = `https://open.spotify.com/track/${item.uri.slice(14)}`;
-        if (item.artist) {
-          const artist = new MediaThing(`${root}-artist`, dataset, DataFactory);
-          artist.types.add(`${MEDIA}Artist`);
-          artist.artistName = item.artist;
-          work.performedByArtist = artist.value;
-        }
-        if (item.album) {
-          const album = new MediaThing(`${root}-album`, dataset, DataFactory);
-          album.types.add(`${MEDIA}Album`);
-          album.title = item.album;
-          work.album = album.value;
-        }
-        const event = new MediaThing(root, dataset, DataFactory);
-        event.types.add(`${MEDIA}PlaybackEvent`);
-        event.types.add(`${SCHEMA}ListenAction`);
-        event.playedWork = work.value;
-        event.atTime = `${root}-instant`;
-        event.msPlayed = item.ms;
-        event.playedVia = "https://open.spotify.com/";
-        const instant = new MediaThing(`${root}-instant`, dataset, DataFactory);
-        instant.types.add(`${TIME}Instant`);
-        instant.instant = new Date(item.when);
+        unique.set(`${doc}#scrobble-${await sha256(JSON.stringify([item.when, identity]))}`, item);
       }
+      const scrobbles = new Store();
+      for (const [root, item] of unique) {
+        // The generated listening model writes every node; ids keep re-imports idempotent.
+        addScrobble(
+          scrobbles,
+          {
+            event: root,
+            track: `${root}-track`,
+            artist: `${root}-artist`,
+            album: `${root}-album`,
+            instant: `${root}-instant`,
+          },
+          {
+            trackTitle: item.title,
+            artistName: item.artist,
+            albumTitle: item.album,
+            playedAt: new Date(item.when),
+            msPlayed: item.ms,
+          },
+        );
+      }
+      // solid-listening still emits the legacy w3id media/core namespaces; connector
+      // documents store the canonical suite terms (CON-13), as Music reads both.
+      const dataset = canonicalizeJeswrDataset(scrobbles);
       ctx.progress({
         label: "Saving Spotify history to your pod…",
         done: done++,

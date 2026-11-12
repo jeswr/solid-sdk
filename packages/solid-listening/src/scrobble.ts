@@ -22,7 +22,7 @@
 
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
-import { entities, type ScrobbleData as GeneratedScrobbleData } from "./generated/model.js";
+import { entities, type ScrobbleData as GeneratedScrobbleData, nodes } from "./generated/model.js";
 import { httpIriOrUndefined } from "./iri.js";
 import { Scrobble } from "./nodes.js";
 
@@ -60,14 +60,22 @@ export function scrobbleSubject(resourceUrl: string): string {
   return scrobble.subject(resourceUrl);
 }
 
-/** The conventional subject IRIs of the nodes in a scrobble document. */
-export function scrobbleNodeIris(resourceUrl: string): {
+/** The subject IRIs of the five nodes of one scrobble. */
+export interface ScrobbleNodeIris {
+  /** The `media:PlaybackEvent`. */
   event: string;
+  /** The `media:Track`. */
   track: string;
+  /** The `media:Artist` (written only when the scrobble names an artist). */
   artist: string;
+  /** The `media:Album` (written only when the scrobble names an album). */
   album: string;
+  /** The played-at `time:Instant`. */
   instant: string;
-} {
+}
+
+/** The conventional subject IRIs of the nodes in a scrobble document. */
+export function scrobbleNodeIris(resourceUrl: string): ScrobbleNodeIris {
   return {
     event: `${resourceUrl}#it`,
     track: `${resourceUrl}#track`,
@@ -97,13 +105,9 @@ function integerMsOrRaw(value: number | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : value;
 }
 
-/**
- * Build the RDF `Store` for a scrobble from a plain {@link ScrobbleData} object via
- * the generated composite model, applying the three fork adaptations (default
- * `playedAt`, truncate `msPlayed`, single `listener` + drop-blank artist/album).
- */
-export function buildScrobble(resourceUrl: string, data: ScrobbleData): Store {
-  const adapted: GeneratedScrobbleData = {
+/** Apply the fork adaptations (default `playedAt`, truncate `msPlayed`, drop blank names). */
+function adapt(data: ScrobbleData): GeneratedScrobbleData {
+  return {
     trackTitle: data.trackTitle,
     playedAt: data.playedAt ?? new Date(),
     msPlayed: integerMsOrRaw(data.msPlayed),
@@ -112,14 +116,88 @@ export function buildScrobble(resourceUrl: string, data: ScrobbleData): Store {
     artistName: nameOrUndefined(data.artistName),
     albumTitle: nameOrUndefined(data.albumTitle),
   };
-  const store = scrobble.build(resourceUrl, adapted);
-  // The listener WebID is untrusted (it becomes a linkable WebID): drop anything
-  // that is not an absolute http(s) IRI, then compose it onto the event.
-  const listener = httpIriOrUndefined(data.listener);
-  if (listener !== undefined) {
-    new Scrobble(scrobbleNodeIris(resourceUrl).event, store, DataFactory).listener = listener;
-  }
+}
+
+/** The listener WebID is untrusted (it becomes a linkable WebID): compose only http(s). */
+function writeListener(event: string, dataset: DatasetCore, value: string | undefined): void {
+  const listener = httpIriOrUndefined(value);
+  if (listener !== undefined) new Scrobble(event, dataset, DataFactory).listener = listener;
+}
+
+/**
+ * Build the RDF `Store` for a scrobble from a plain {@link ScrobbleData} object via
+ * the generated composite model, applying the three fork adaptations (default
+ * `playedAt`, truncate `msPlayed`, single `listener` + drop-blank artist/album).
+ */
+export function buildScrobble(resourceUrl: string, data: ScrobbleData): Store {
+  const store = scrobble.build(resourceUrl, adapt(data));
+  writeListener(scrobbleNodeIris(resourceUrl).event, store, data.listener);
   return store;
+}
+
+/**
+ * Describe one scrobble at caller-chosen node subjects inside an existing dataset, for
+ * documents that hold many scrobbles (such as a monthly history shard), where the
+ * one-per-resource fragments of {@link buildScrobble} would collide.
+ *
+ * Every write goes through the GENERATED per-node views (`nodes.Scrobble`), with the
+ * same adaptations and node materialisation as the generated composite build:
+ * `addScrobble(store, scrobbleNodeIris(url), data)` adds exactly the quads of
+ * `buildScrobble(url, data)`. The five subjects must be distinct safe absolute IRIs that
+ * do not yet appear as subjects in `dataset`; otherwise it throws before writing.
+ */
+export function addScrobble(
+  dataset: DatasetCore,
+  iris: ScrobbleNodeIris,
+  data: ScrobbleData,
+): void {
+  const subjects = [iris.event, iris.track, iris.artist, iris.album, iris.instant];
+  if (new Set(subjects).size !== subjects.length)
+    throw new TypeError("scrobble node subjects must be distinct");
+  const view = nodes.Scrobble;
+  // Constructing each view validates its subject IRI before anything is written.
+  const event = new view.event.Wrapper(iris.event, dataset, DataFactory);
+  const track = new view.track.Wrapper(iris.track, dataset, DataFactory);
+  const artist = new view.artist.Wrapper(iris.artist, dataset, DataFactory);
+  const album = new view.album.Wrapper(iris.album, dataset, DataFactory);
+  const instant = new view.playedAt.Wrapper(iris.instant, dataset, DataFactory);
+  for (const subject of subjects)
+    if (dataset.match(DataFactory.namedNode(subject), null, null, null).size > 0)
+      throw new TypeError("scrobble node subjects must not already be described");
+
+  const adapted = adapt(data);
+  const hasArtist = adapted.artistName !== undefined;
+  const hasAlbum = adapted.albumTitle !== undefined;
+  const hasTrack =
+    adapted.trackTitle !== undefined ||
+    adapted.durationSeconds !== undefined ||
+    adapted.isrc !== undefined ||
+    hasArtist ||
+    hasAlbum;
+
+  event.mark();
+  event.msPlayed = adapted.msPlayed;
+  instant.mark();
+  instant.playedAt = adapted.playedAt;
+  event.atTime = instant.id;
+  if (hasTrack) {
+    track.mark();
+    track.trackTitle = adapted.trackTitle;
+    track.durationSeconds = adapted.durationSeconds;
+    track.isrc = adapted.isrc;
+    if (hasArtist) {
+      artist.mark();
+      artist.artistName = adapted.artistName;
+      track.performedByArtist = artist.id;
+    }
+    if (hasAlbum) {
+      album.mark();
+      album.albumTitle = adapted.albumTitle;
+      track.inAlbum = album.id;
+    }
+    event.playedWork = track.id;
+  }
+  writeListener(iris.event, dataset, data.listener);
 }
 
 /** Serialise a `Store` to Turtle with the model's prefixes. */
