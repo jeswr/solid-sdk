@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import {
   Command,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -174,6 +175,41 @@ it("CommandSeparator is presentational inside the listbox and hides while search
   await waitFor(() => expect(separator()).toBeNull());
   rerender(<Palette alwaysRender />);
   await waitFor(() => expect(separator()).not.toBeNull());
+});
+
+it.each([
+  false,
+  true,
+])("CommandEmpty keeps the filtered listbox accessible without becoming a keyboard target (asChild=%s)", async (asChild) => {
+  const select = vi.fn();
+  render(
+    <Command label="Find an action">
+      <CommandInput aria-label="Find an action" />
+      <CommandList>
+        <CommandEmpty asChild={asChild}>
+          {asChild ? <p>No actions found</p> : "No actions found"}
+        </CommandEmpty>
+        <CommandItem onSelect={select}>Drive</CommandItem>
+      </CommandList>
+    </Command>,
+  );
+  const input = screen.getByRole("combobox");
+  fireEvent.change(input, { target: { value: "unmatched" } });
+  const empty = await screen.findByRole("option", { name: "No actions found" });
+  expect(empty.getAttribute("aria-disabled")).toBe("true");
+  expect(empty.getAttribute("aria-selected")).toBe("false");
+  expect(await violations("aria-required-children")).toEqual([]);
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(select).not.toHaveBeenCalled();
+  expect(input.getAttribute("aria-activedescendant")).toBeNull();
+
+  fireEvent.change(input, { target: { value: "drive" } });
+  await waitFor(() => expect(screen.queryByText("No actions found")).toBeNull());
+  fireEvent.keyDown(input, { key: "ArrowDown" });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(select).toHaveBeenCalledOnce();
+  expect(await violations("aria-required-children")).toEqual([]);
 });
 
 it("a closed Select never makes another layer's hidden content inert", async () => {
