@@ -315,12 +315,13 @@ skipped individually and listed as `invalid-config`.
 
 Owner UIs that re-enable a connection must write `enabled: true`, drop `status` and set
 `enabledAt` to the current ISO instant; any daemon process then clears the needs-reauth
-latch. The job itself never enables connections.
+latch, because the value differs from the one the latch recorded (no clock comparison). The job itself never enables connections.
 
 The default `pendingVaultTokenSource` deliberately throws `ReauthoriseError`.
 It is the sst-3erb vault integration stub: enabled connections become disabled with
 `needs-reauth`, without provider traffic. A trusted host can later inject its
-vault-backed `TokenSource` (optionally with `invalidate`), registry and separate
+vault-backed `TokenSource` (optionally with `invalidate`, called only after two
+consecutive source 401s confirm an invalid access token), registry and separate
 pristine `sourceFetch`. The canonical `profileDocumentUrl` comes from the host's profile
 load; composition without it uses the configured owner's document and refuses redirects.
 

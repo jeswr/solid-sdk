@@ -14,15 +14,17 @@ export interface ConnectorHealthInput {
   readonly enabledAt?: string;
 }
 /**
- * True when a durable owner re-enable (`enabledAt`) is newer than the needs-reauth latch
- * (`lastRunEndedAt` of the latching run). An `enabledAt` more than five minutes in the
- * future is untrusted and never clears the latch.
+ * True when the owner re-enabled the connection after its needs-reauth latch: the row's
+ * `enabledAt` differs from the value the latch recorded (string comparison, so no clocks
+ * are compared). Latches written before that field existed fall back to "`enabledAt` newer
+ * than the latching run's `lastRunEndedAt`", ignoring values more than five minutes ahead.
  */
 export function connectorReenabled(
   enabledAt: string | undefined,
   latch: ConnectorRunHealth,
   now: number = Date.now(),
 ): boolean {
+  if (latch.latchedEnabledAt !== undefined) return (enabledAt ?? "") !== latch.latchedEnabledAt;
   if (enabledAt === undefined) return false;
   const at = Date.parse(enabledAt);
   return (

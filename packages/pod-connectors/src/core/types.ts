@@ -267,6 +267,7 @@ export type ConnectorErrorClass =
   | "reauthorise"
   | "rate-limited"
   | "unauthorised"
+  | "forbidden"
   | "conflict"
   | "source-or-pod"
   | "unexpected"
@@ -280,6 +281,11 @@ export interface ConnectorRunHealth {
   readonly errorClass?: ConnectorErrorClass;
   readonly consecutiveFailures: number;
   readonly nextRunAt?: string;
+  /**
+   * needs-reauth only: the connection row's `enabledAt` this latch was set against, or ""
+   * when the row had none. The latch clears when the row's value differs (string compare).
+   */
+  readonly latchedEnabledAt?: string;
   /** The effective interval used for stale classification. */
   readonly intervalMinutes: number;
 }
@@ -288,8 +294,9 @@ export interface ConnectorRunHealth {
 export interface TokenSource {
   accessToken(connectorId: string, account: string): Promise<string>;
   /**
-   * Optional: discard a cached grant after the source rejected it twice in a row
-   * (two consecutive 401/403 outcomes). Failures here never fail the run.
+   * Optional: discard a cached grant confirmed invalid — called only after two
+   * consecutive source 401 (access token rejected) outcomes, never for 403s, rate limits
+   * or other failures. Failures here never fail the run.
    */
   invalidate?(connection: {
     readonly connectorId: string;

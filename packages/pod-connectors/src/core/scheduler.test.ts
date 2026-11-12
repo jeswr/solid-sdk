@@ -344,6 +344,7 @@ describe("scheduler execution", () => {
   it.each([
     [new RateLimitedError("spotify", "https://secret.example", 30), "rate-limited"],
     [new IntegrationSyncError("spotify", "private", { status: 401 }), "unauthorised"],
+    [new IntegrationSyncError("spotify", "private", { status: 403 }), "forbidden"],
     [new IntegrationSyncError("spotify", "private", { status: 412 }), "conflict"],
     [new Error("private"), "unexpected"],
   ])("projects typed errors to stable codes (%s)", async (error, errorClass) => {
@@ -691,29 +692,75 @@ it("retains a durable reauth latch when the settings save fails", async () => {
   expect(h.runner).not.toHaveBeenCalled();
 });
 
-it("sees the owner's durable re-enable in a fresh process via a newer enabledAt", async () => {
-  const h = harness();
+it("sees the owner's durable re-enable in a fresh process via a changed enabledAt", async () => {
+  const h = harness([{ ...connection(), enabledAt: "2026-10-01T00:00:00.000Z" }]);
   h.tokenSource.accessToken.mockRejectedValueOnce(new ReauthoriseError());
   await h.scheduler.tick();
   expect(h.saveConnection).toHaveBeenCalledWith(
     expect.objectContaining({ enabled: false, status: "needs-reauth" }),
     expect.any(AbortSignal),
   );
-  h.setNow(AT + 120_000);
-  // An enabledAt more than five minutes ahead is untrusted and does not clear the latch.
-  const skewed = new ConnectorScheduler({
-    ...h.options,
-    connections: [{ ...connection(), enabledAt: iso(AT + 120_000 + 600_000) }],
+  // The latch records the enabledAt it latched against.
+  expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+    outcome: "needs-reauth",
+    latchedEnabledAt: "2026-10-01T00:00:00.000Z",
   });
-  await skewed.tick();
+  h.setNow(AT + 120_000);
+  // The same enabledAt (a failed settings save, or a flip without a new stamp) holds.
+  await new ConnectorScheduler({
+    ...h.options,
+    connections: [{ ...connection(), enabledAt: "2026-10-01T00:00:00.000Z" }],
+  }).tick();
   expect(h.runner).not.toHaveBeenCalled();
+  // A different value clears it, whatever either clock says: here the owner's UI clock
+  // is behind the latching run's clock, which a timestamp comparison would reject.
   const fresh = new ConnectorScheduler({
     ...h.options,
-    connections: [{ ...connection(), enabledAt: iso(AT + 60_000) }],
+    connections: [{ ...connection(), enabledAt: iso(AT - 3_600_000) }],
   });
   await fresh.tick();
   expect(h.runner).toHaveBeenCalledOnce();
   expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({ outcome: "ok" });
+});
+
+it("latches against an absent enabledAt as empty and clears when one appears", async () => {
+  const h = harness();
+  h.tokenSource.accessToken.mockRejectedValueOnce(new ReauthoriseError());
+  await h.scheduler.tick();
+  expect(h.states.get("spotify")?.accounts?.fixture?.health?.latchedEnabledAt).toBe("");
+  await new ConnectorScheduler({ ...h.options, connections: [connection()] }).tick();
+  expect(h.runner).not.toHaveBeenCalled();
+  // Even a UI clock far ahead clears it: no cross-clock ordering is involved.
+  await new ConnectorScheduler({
+    ...h.options,
+    connections: [{ ...connection(), enabledAt: iso(AT + 86_400_000) }],
+  }).tick();
+  expect(h.runner).toHaveBeenCalledOnce();
+});
+
+it("keeps the timestamp rule only for latches written without latchedEnabledAt", () => {
+  const latch: ConnectorRunHealth = {
+    lastRunStartedAt: iso(),
+    lastRunEndedAt: iso(),
+    outcome: "needs-reauth",
+    counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+    consecutiveFailures: 1,
+    intervalMinutes: 60,
+  };
+  const state = { ...legacy, health: latch };
+  const at = (enabledAt?: string) =>
+    connectorNextRunAt({ ...connection(), ...(enabledAt ? { enabledAt } : {}) }, state, 60, AT);
+  expect(at()).toBeUndefined();
+  expect(at(iso(AT - 1))).toBeUndefined();
+  expect(at(iso(AT + 1))).toBe(0);
+  expect(at(iso(AT + 600_000))).toBeUndefined();
+  expect(() =>
+    connectorState({ ...legacy, health: { ...latch, latchedEnabledAt: "not a date" } }),
+  ).toThrow();
+  expect(connectorState({ ...legacy, health: { ...latch, latchedEnabledAt: "" } }).health).toEqual({
+    ...latch,
+    latchedEnabledAt: "",
+  });
 });
 
 it("stamps enabledAt when setEnabled enables a connection", async () => {
@@ -864,7 +911,7 @@ describe("adversarial review fixes (CON-A2)", () => {
     await h.scheduler.tick();
     expect(reads.mock.calls.map(([id]) => id)).toEqual(["spotify"]);
   });
-  it("clamps skewed next-run times and distrusts timestamps more than five minutes ahead", () => {
+  it("treats a future-dated stored attempt as untrusted and runs it on the first tick", async () => {
     const health = (at: number, nextRunAt?: number) => ({
       lastRunStartedAt: iso(at),
       lastRunEndedAt: iso(at),
@@ -875,20 +922,101 @@ describe("adversarial review fixes (CON-A2)", () => {
       ...(nextRunAt === undefined ? {} : { nextRunAt: iso(nextRunAt) }),
     });
     const far = AT + 365 * 86_400_000;
+    const future = { ...legacy, lastSync: iso(far), health: health(far, far + 3_600_000) };
+    // Due now at any later instant: the horizon cannot move along with the clock.
+    for (const dt of [0, 86_400_000, 7 * 86_400_000, 30 * 86_400_000])
+      expect(connectorNextRunAt(connection(), future, 60, AT + dt)).toBe(0);
+    expect(connectorNextRunAt(connection(), { ...legacy, lastSync: iso(far) }, 60, AT)).toBe(0);
     expect(
-      connectorNextRunAt(connection(), { ...legacy, health: health(far, far + 3_600_000) }, 60, AT),
-    ).toBe(AT + MAX_CONNECTOR_BACKOFF_MS);
-    expect(connectorNextRunAt(connection(), { ...legacy, lastSync: iso(far) }, 60, AT)).toBe(
-      AT + MAX_CONNECTOR_BACKOFF_MS,
-    );
+      connectorNextRunAt(
+        connection(),
+        { ...legacy, health: health(AT, AT + 2 * 86_400_000) },
+        60,
+        AT,
+      ),
+    ).toBe(0);
+    // Within five minutes ahead, or a next run inside the horizon, is still trusted.
+    expect(
+      connectorNextRunAt(connection(), { ...legacy, lastSync: iso(AT + 60_000) }, 60, AT),
+    ).toBe(AT + 60_000 + 3_600_000);
     expect(
       connectorNextRunAt(
         { ...connection(), intervalMinutes: 2_880 },
-        { ...legacy, lastSync: iso(far) },
+        { ...legacy, health: health(AT, AT + 2_880 * 60_000) },
         60,
         AT,
       ),
     ).toBe(AT + 2_880 * 60_000);
+    // End to end: a state one year ahead runs on the first tick, then schedules normally.
+    const h = harness();
+    h.states.set("spotify", { ...legacy, accounts: { fixture: future } });
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledOnce();
+    expect(h.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "ok",
+      lastRunEndedAt: iso(AT),
+      nextRunAt: iso(AT + 3_600_000),
+    });
+    h.setNow(AT + 3_600_000 - 1);
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledOnce();
+    h.setNow(AT + 3_600_000);
+    await h.scheduler.tick();
+    expect(h.runner).toHaveBeenCalledTimes(2);
+  });
+  it("runs a future-dated state as fake time advances through the continuous loop", async () => {
+    vi.useFakeTimers({ now: AT });
+    try {
+      const far = Date.now() + 365 * 86_400_000;
+      const runs: number[] = [];
+      const h = harness(undefined, {
+        now: () => Date.now(),
+        sleep: undefined,
+        runner: async (o) => {
+          runs.push(Date.now());
+          return report(o);
+        },
+      });
+      h.states.set("spotify", {
+        ...legacy,
+        accounts: {
+          fixture: {
+            ...legacy,
+            lastSync: iso(far),
+            health: {
+              lastRunStartedAt: iso(far),
+              lastRunEndedAt: iso(far),
+              outcome: "ok",
+              counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+              consecutiveFailures: 0,
+              intervalMinutes: 60,
+              nextRunAt: iso(far + 3_600_000),
+            },
+          },
+        },
+      });
+      const controller = new AbortController();
+      const loop = h.scheduler.run(controller.signal);
+      await vi.advanceTimersByTimeAsync(10 * 86_400_000);
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      await loop;
+      expect(runs[0]).toBe(AT);
+      // Hourly thereafter for ten days (each within one 30-second poll).
+      expect(runs.length).toBeGreaterThanOrEqual(10 * 24 - 5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("distrusts timestamps more than five minutes ahead in health and merges", () => {
+    const health = (at: number) => ({
+      lastRunStartedAt: iso(at),
+      lastRunEndedAt: iso(at),
+      outcome: "ok" as const,
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+      consecutiveFailures: 0,
+      intervalMinutes: 60,
+    });
     // Future successes are untrusted: health reports stale, not ok.
     expect(connectorHealth({ state: { ...legacy, lastSync: iso(AT + 600_000) } }, AT)).toBe(
       "stale",
@@ -974,7 +1102,7 @@ describe("adversarial review fixes (CON-A2)", () => {
     expect(Date.parse(health?.nextRunAt ?? "") - (AT + 9_000_000)).toBe(MAX_CONNECTOR_BACKOFF_MS);
     expect(JSON.stringify(h.states.get("spotify"))).not.toContain("secret");
   });
-  it("latches needs-reauth after two consecutive source 401/403 outcomes and invalidates the grant", async () => {
+  it("latches needs-reauth after two consecutive source 401 outcomes and invalidates the grant", async () => {
     const invalidate = vi.fn(async () => {
       throw new Error("vault private");
     });
@@ -1005,7 +1133,7 @@ describe("adversarial review fixes (CON-A2)", () => {
     // A 401 after a non-401 failure is a first strike only.
     const other = harness(undefined, {
       runner: async () => {
-        throw new IntegrationSyncError("spotify", "private", { status: 403 });
+        throw new IntegrationSyncError("spotify", "private", { status: 401 });
       },
     });
     other.states.set("spotify", {
@@ -1017,7 +1145,7 @@ describe("adversarial review fixes (CON-A2)", () => {
             lastRunStartedAt: iso(AT - 10),
             lastRunEndedAt: iso(AT - 10),
             outcome: "failed",
-            errorClass: "source-or-pod",
+            errorClass: "forbidden",
             counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
             consecutiveFailures: 1,
             intervalMinutes: 60,
@@ -1027,7 +1155,51 @@ describe("adversarial review fixes (CON-A2)", () => {
       },
     });
     await other.scheduler.tick();
-    expect(other.states.get("spotify")?.accounts?.fixture?.health?.outcome).toBe("failed");
+    expect(other.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unauthorised",
+    });
+  });
+  it("keeps repeated source 403s (quota, rate limit, allowlist) as backed-off failures", async () => {
+    const invalidate = vi.fn();
+    const h = harness(undefined, {
+      tokenSource: { accessToken: vi.fn(async () => "synthetic-token"), invalidate },
+      runner: async () => {
+        throw new IntegrationSyncError("spotify", "private", { status: 403 });
+      },
+    });
+    for (let n = 1; n <= 4; n++) {
+      await h.scheduler.tick();
+      const health = h.states.get("spotify")?.accounts?.fixture?.health;
+      expect(health).toMatchObject({
+        outcome: "failed",
+        errorClass: "forbidden",
+        consecutiveFailures: n,
+      });
+      expect(Date.parse(health?.nextRunAt ?? "") - Date.parse(health?.lastRunEndedAt ?? "")).toBe(
+        Math.min(MAX_CONNECTOR_BACKOFF_MS, 900_000 * 2 ** (n - 1)),
+      );
+      h.setNow(Date.parse(health?.nextRunAt ?? ""));
+    }
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(h.saveConnection).not.toHaveBeenCalled();
+    expect(h.scheduler.list()[0]).toMatchObject({ enabled: true });
+    // A 401 after 403s is only a first strike.
+    const mixed = harness(undefined, {
+      tokenSource: { accessToken: vi.fn(async () => "synthetic-token"), invalidate },
+      runner: vi
+        .fn<(o: RunImportOptions) => Promise<ImportReport>>()
+        .mockRejectedValueOnce(new IntegrationSyncError("spotify", "private", { status: 403 }))
+        .mockRejectedValueOnce(new IntegrationSyncError("spotify", "private", { status: 401 })),
+    });
+    await mixed.scheduler.tick();
+    mixed.setNow(AT + 900_000);
+    await mixed.scheduler.tick();
+    expect(mixed.states.get("spotify")?.accounts?.fixture?.health).toMatchObject({
+      outcome: "failed",
+      errorClass: "unauthorised",
+    });
+    expect(invalidate).not.toHaveBeenCalled();
   });
   it("skips quietly when the connection was removed mid-run", async () => {
     const onRunError = vi.fn();
@@ -1130,4 +1302,50 @@ describe("adversarial review fixes (CON-A2)", () => {
     expect(aborted).toBe(true);
     expect(h.writes).not.toHaveBeenCalled();
   });
+});
+
+it("gives a waiting setEnabled priority over new pool claims and lets stop() await it", async () => {
+  const gates = [deferred(), deferred()],
+    entered = [deferred(), deferred()];
+  let calls = 0;
+  const h = harness([connection(), connection("spotify", "second")], {
+    concurrency: 2,
+    runner: async (o) => {
+      const i = calls++;
+      entered[i]?.resolve();
+      await gates[i]?.promise;
+      return report(o);
+    },
+  });
+  const order: string[] = [];
+  const pass = h.scheduler.tick();
+  await entered[0]?.promise;
+  // Another account in the same container is due; the waiting owner operation goes first.
+  const enabling = h.scheduler.setEnabled("spotify", "fixture", false).then(() => {
+    order.push("setEnabled");
+  });
+  gates[0]?.resolve();
+  await enabling;
+  order.push(`runs:${calls}`);
+  gates[1]?.resolve();
+  await pass;
+  expect(order).toEqual(["setEnabled", "runs:1"]);
+  // stop() also waits for exclusive work that is still pending.
+  const slow = deferred();
+  const waiting = harness([connection()], {
+    saveConnection: async () => {
+      await slow.promise;
+    },
+  });
+  let stopped = false;
+  const enable = waiting.scheduler.setEnabled("spotify", "fixture", false);
+  const stop = waiting.scheduler.stop().then(() => {
+    stopped = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  expect(stopped).toBe(false);
+  slow.resolve();
+  await enable;
+  await stop;
+  expect(stopped).toBe(true);
 });

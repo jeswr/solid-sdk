@@ -813,9 +813,13 @@ floored to 15; nonpositive/nonfinite values and intervals above one year are ref
 
 **`enabledAt`** is the durable re-enable signal. Every writer that enables a connection
 (the scheduler's `setEnabled`, and owner UIs) must set `enabled: true`, remove `status`,
-and set `enabledAt` to the current ISO instant. A needs-reauth latch clears in any
-process when `enabledAt` is newer than the latching run's `health.lastRunEndedAt`;
-an unchanged `enabledAt`, or one more than five minutes in the future, keeps the latch.
+and set `enabledAt` to the current ISO instant. When the scheduler latches needs-reauth
+it records the row's `enabledAt` in `health.latchedEnabledAt` (`""` when the row had
+none). The latch clears in any process as soon as the row's `enabledAt` differs from
+that recorded value — a string comparison, so the writer's and scheduler's clocks are
+never compared. An unchanged `enabledAt` keeps the latch. (Latches written before
+`latchedEnabledAt` existed fall back to "`enabledAt` newer than the latching run's
+`lastRunEndedAt`", ignoring values more than five minutes ahead.)
 
 The scheduler is a continuous worker pool (default cap two, maximum 16): whenever a
 worker frees up it starts the connection that is most overdue. It keeps single-flight
@@ -823,7 +827,9 @@ per connection, and accounts sharing a connector container run serially to prese
 the runner's reconciliation contract. `tick(signal?)` runs everything due (each
 connection at most once) and resolves when those runs drain; overlapping ticks join.
 `dispatch(signal?)` fills free workers without waiting, for hosts with their own poll
-loop; `idle()` waits for in-flight runs. `run(signal)` is a cancellable 30-second
+loop; `idle()` waits for in-flight runs and pending exclusive operations. A waiting
+`setEnabled` takes priority over new pool claims for its container, so it waits for at
+most the run already in flight; `stop()` also awaits it. `run(signal)` is a cancellable 30-second
 dispatch loop that drains workers on exit, with injectable `now`, `sleep` and
 `random` ports. Separate hosts still need an exclusive host lease or other external
 serialization for imports into the same connector container; conditional health
@@ -844,17 +850,26 @@ Successful/partial runs schedule the next interval from completion. Failures ret
 with exponential delays starting at 15 minutes, multiplied by random jitter in
 [1, 1.25], capped at 24 hours; a `RateLimitedError` delays at least its
 `retryAfterSeconds` (same cap). A success resets the failure counter.
-`ReauthoriseError`, or a second consecutive source 401/403 (`unauthorised`), persists
-`{ enabled: false, status: 'needs-reauth' }` and latches health without a next-run time,
-including across restart; for the 401/403 case the optional
-`TokenSource.invalidate({ connectorId, account })` is called (best effort). Explicit
+`ReauthoriseError`, or a second consecutive source 401 (`unauthorised`: the access token
+was rejected), persists `{ enabled: false, status: 'needs-reauth' }` and latches health
+without a next-run time, including across restart. Only for the double 401 is the
+optional `TokenSource.invalidate({ connectorId, account })` called (best effort); it is
+for a confirmed invalid access token only. Source errors carry no `WWW-Authenticate`
+header, so a 401 status alone qualifies. A 403 is `forbidden` and stays a backed-off
+`failed` run however often it repeats, because providers use it for rate limits,
+download quotas and developer allowlists (Google, Drive, Spotify dev mode) while the
+grant remains valid. Explicit
 `setEnabled(connectorId, account, true)` stamps `enabledAt`, clears the persisted latch
 and enables the host setting. `stop()` aborts and drains active work. Run signals reach
 both the runner and source/Pod transports. After cancellation no new state/config write
 starts; the previous checkpoint remains due for replay, as for a manually cancelled import.
 
-Clock skew: stored next-run times are clamped to at most `now + max(interval, 24 h)`.
-Timestamps more than five minutes ahead are untrusted: they lose `mergeAccountState`
+Clock skew: a stored attempt is untrusted, and the connection due immediately, when its
+`lastRunEndedAt` or `lastSync` is more than five minutes ahead of the scheduler's clock,
+or its `nextRunAt` lies beyond `now + max(interval, 24 h)`. A state stamped a year ahead
+therefore runs on the first tick; the run then schedules from its own clock. The
+needs-reauth latch is clock-independent and still holds. Timestamps more than five
+minutes ahead are also untrusted elsewhere: they lose `mergeAccountState`
 comparisons, and `connectorHealth` reports `stale` instead of `ok`. When the stored
 attempt is still the one a run started from, the run's own health and checkpoint win
 even if a backward clock jump makes the stored values look newer.
@@ -895,7 +910,8 @@ re-parse only on change; `revision` increments when new content is observed.
 Stores refuse redirects and bound response bytes; read/write accept a per-call signal.
 One store instance serves one read→write sequence at a time. Incidental
 fields, provider messages, URLs and tokens are never copied into health. Error
-codes are `reauthorise`, `rate-limited`, `unauthorised`, `conflict`, `source-or-pod`,
+codes are `reauthorise`, `rate-limited`, `unauthorised` (401), `forbidden` (403),
+`conflict`, `source-or-pod`,
 `unexpected` and `aborted` (reserved; cancelled runs start no health writes).
 
 `connectorHealthSummary(states, now)` returns counts `{ ok, stale, failing,

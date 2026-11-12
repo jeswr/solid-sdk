@@ -13,6 +13,7 @@ export const CONNECTOR_ERROR_CLASSES: readonly ConnectorErrorClass[] = [
   "reauthorise",
   "rate-limited",
   "unauthorised",
+  "forbidden",
   "conflict",
   "source-or-pod",
   "unexpected",
@@ -75,6 +76,9 @@ function health(value: unknown): ConnectorRunHealth {
     ...(h.errorClass === undefined ? {} : { errorClass: h.errorClass as ConnectorErrorClass }),
     consecutiveFailures: count(h.consecutiveFailures),
     ...(h.nextRunAt === undefined ? {} : { nextRunAt: date(h.nextRunAt) }),
+    ...(h.latchedEnabledAt === undefined
+      ? {}
+      : { latchedEnabledAt: h.latchedEnabledAt === "" ? "" : date(h.latchedEnabledAt) }),
     intervalMinutes: intervalMinutes(h.intervalMinutes),
   };
 }

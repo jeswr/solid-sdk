@@ -16,6 +16,7 @@ import {
   connectorAccountState,
   intervalMinutes,
   MAX_CONNECTIONS,
+  MAX_FUTURE_SKEW_MS,
   mergeAccountState,
   trustedTime,
   updateConnectorState,
@@ -204,9 +205,10 @@ export function connectorBackoffMs(failures: number, random: () => number = Math
   );
 }
 /**
- * Due instant in epoch ms (0 = now), or undefined when disabled/latched. Results are
- * clamped to at most `now + max(interval, 24 h)` so a skewed stored time cannot park a
- * connection indefinitely.
+ * Due instant in epoch ms (0 = now), or undefined when disabled/latched. A stored attempt
+ * is untrusted, and the connection due now, when its `lastRunEndedAt` or `lastSync` is
+ * more than five minutes ahead of `now`, or its `nextRunAt` lies beyond
+ * `now + max(interval, 24 h)`: a skewed clock can never park a connection.
  */
 export function connectorNextRunAt(
   connection: ConnectorConnection,
@@ -217,10 +219,19 @@ export function connectorNextRunAt(
   if (!connection.enabled || connection.status === "needs-reauth") return undefined;
   const interval = intervalMinutes(connection.intervalMinutes ?? effectiveInterval);
   const horizon = now + Math.max(interval * 60_000, MAX_CONNECTOR_BACKOFF_MS);
-  const clamp = (at: number) => Math.min(at, horizon);
   const health = state?.health;
+  // The auth latch is a durable owner decision, independent of any clock.
   if (health?.outcome === "needs-reauth" && !health.nextRunAt)
     return connectorReenabled(connection.enabledAt, health, now) ? 0 : undefined;
+  const ahead = (at: string | undefined) =>
+    at !== undefined && Date.parse(at) > now + MAX_FUTURE_SKEW_MS;
+  if (
+    ahead(health?.lastRunEndedAt) ||
+    ahead(state?.lastSync) ||
+    (health?.nextRunAt !== undefined && Date.parse(health.nextRunAt) > horizon)
+  )
+    return 0;
+  const clamp = (at: number) => Math.min(at, horizon);
   if (health?.nextRunAt) {
     if (
       (health.outcome === "ok" || health.outcome === "partial") &&
@@ -237,7 +248,10 @@ function errorClass(error: unknown, signal: AbortSignal): ConnectorErrorClass {
   if (error instanceof ReauthoriseError) return "reauthorise";
   if (error instanceof RateLimitedError) return "rate-limited";
   if (error instanceof IntegrationSyncError) {
-    if (error.status === 401 || error.status === 403) return "unauthorised";
+    // Only 401 means the access token was rejected. 403 also covers rate limits, quotas
+    // and allowlists (Google, Drive downloads, Spotify dev mode) with a valid grant.
+    if (error.status === 401) return "unauthorised";
+    if (error.status === 403) return "forbidden";
     if (error.status === 412) return "conflict";
     return "source-or-pod";
   }
@@ -280,6 +294,9 @@ export class ConnectorScheduler {
   private readonly containers = new Map<string, Promise<void>>();
   /** In-memory back-off for runs that failed outside the import (e.g. persistence). */
   private readonly faults = new Map<string, { failures: number; retryAt: number }>();
+  /** Connector containers with a pending exclusive (owner) operation. */
+  private readonly waiting = new Map<string, number>();
+  private readonly exclusives = new Set<Promise<void>>();
   /** Set by dispatch for host poll loops; a tick temporarily takes precedence. */
   private dispatchSignal: AbortSignal | undefined;
   private dispatchSource: AbortSignal | undefined;
@@ -353,7 +370,12 @@ export class ConnectorScheduler {
     let bestAt = Number.POSITIVE_INFINITY;
     for (const c of this.connections) {
       const k = key(c);
-      if (this.running.has(k) || this.containers.has(c.connectorId) || this.tickStarted?.has(k))
+      if (
+        this.running.has(k) ||
+        this.containers.has(c.connectorId) ||
+        this.waiting.has(c.connectorId) ||
+        this.tickStarted?.has(k)
+      )
         continue;
       const at = this.dueAt(c, now);
       if (at !== undefined && at <= now && at < bestAt) {
@@ -462,7 +484,7 @@ export class ConnectorScheduler {
         if (typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0)
           retryAfterMs = Math.min(MAX_CONNECTOR_BACKOFF_MS, seconds * 1_000);
       }
-      // A second consecutive source 401/403 is treated like a revoked grant.
+      // A second consecutive source 401 (token rejected) is treated like a revoked grant.
       const unauthorisedAgain =
         code === "unauthorised" &&
         previous?.health?.outcome === "failed" &&
@@ -491,8 +513,10 @@ export class ConnectorScheduler {
       ...(code ? { errorClass: code } : {}),
       consecutiveFailures: failures,
       intervalMinutes: interval,
+      // A latch records the row's enabledAt it latched against ("" for none); only a
+      // different value clears it, so no cross-clock ordering is involved.
       ...(outcome === "needs-reauth"
-        ? {}
+        ? { latchedEnabledAt: c.enabledAt ?? "" }
         : { nextRunAt: new Date(Date.parse(ended) + delay).toISOString() }),
     };
     if (outcome !== "needs-reauth") {
@@ -603,11 +627,11 @@ export class ConnectorScheduler {
     }
     this.pump();
   }
-  /** Resolve when no connection run is in flight. */
+  /** Resolve when no connection run or exclusive owner operation is in flight. */
   async idle(): Promise<void> {
-    while (this.running.size || this.ticking) {
+    while (this.running.size || this.ticking || this.exclusives.size) {
       await this.ticking;
-      await Promise.allSettled([...this.running.values()]);
+      await Promise.allSettled([...this.running.values(), ...this.exclusives]);
     }
   }
   /** A host may use tick/dispatch in its own loop, or this cancellable 30-second loop. */
@@ -639,21 +663,40 @@ export class ConnectorScheduler {
   invalid(): readonly InvalidConnectorConnection[] {
     return this.invalidRows.map((row) => ({ ...row }));
   }
-  /** Wait until no run holds the connector container, then hold it for `work`. */
-  private async exclusive<T>(connectorId: string, work: () => Promise<T>): Promise<T> {
-    while (this.containers.has(connectorId)) await this.containers.get(connectorId);
-    let release!: () => void;
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    this.containers.set(connectorId, held);
-    try {
-      return await work();
-    } finally {
-      if (this.containers.get(connectorId) === held) this.containers.delete(connectorId);
-      release();
-      this.pump();
-    }
+  /**
+   * Hold the connector container for `work`. A waiter takes priority over new pool claims
+   * for that container, so it waits for at most the run already in flight.
+   */
+  private exclusive<T>(connectorId: string, work: () => Promise<T>): Promise<T> {
+    const task = (async () => {
+      this.waiting.set(connectorId, (this.waiting.get(connectorId) ?? 0) + 1);
+      try {
+        while (this.containers.has(connectorId)) await this.containers.get(connectorId);
+      } finally {
+        const count = (this.waiting.get(connectorId) ?? 1) - 1;
+        if (count > 0) this.waiting.set(connectorId, count);
+        else this.waiting.delete(connectorId);
+      }
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      this.containers.set(connectorId, held);
+      try {
+        return await work();
+      } finally {
+        if (this.containers.get(connectorId) === held) this.containers.delete(connectorId);
+        release();
+        this.pump();
+      }
+    })();
+    const settled: Promise<void> = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.exclusives.add(settled);
+    void settled.then(() => this.exclusives.delete(settled));
+    return task;
   }
   /**
    * Explicit owner enable/disable. Enabling stamps a durable `enabledAt` and clears the
