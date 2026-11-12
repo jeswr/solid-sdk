@@ -7,6 +7,7 @@ import {
   isPartialScope,
   loadScopedSharing,
   loadSharing,
+  ScopedSharingIncompleteError,
   SharingConflictError,
   SharingRefreshError,
   type SharingSession,
@@ -28,15 +29,28 @@ import {
 const ROOT = "https://example.org/";
 const FOLDER = `${ROOT}drive/drop/`;
 
-/** A folder Alice owns on both scopes, whose items inside (only) Bob can read. */
-async function setup(webId = ALICE) {
+/** A rule that applies to the items inside the folder only. */
+function inside(doc: ReturnType<typeof document>, webId: string, modes: string[]) {
+  const rule = authorization(doc, webId, modes);
+  properties(rule).values(`${ACL}accessTo`).clear();
+  rule.default = FOLDER;
+}
+
+/**
+ * A folder Alice owns on both scopes, whose items inside (only) Bob can read, unless `rules`
+ * writes other access.
+ */
+async function setup(
+  webId = ALICE,
+  rules = (doc: ReturnType<typeof document>) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    inside(doc, BOB, ["Read"]);
+  },
+) {
   const pod = createDemoPod({ root: ROOT });
   await pod.fetch(FOLDER, { method: "PUT" });
   const doc = document("wac", false, FOLDER);
-  authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
-  const rule = authorization(doc, BOB, ["Read"]);
-  properties(rule).values(`${ACL}accessTo`).clear();
-  rule.default = FOLDER;
+  rules(doc);
   const write = async () =>
     pod.fetch(doc.source, {
       method: "PUT",
@@ -72,6 +86,7 @@ it("opens a WAC folder with different contents access per scope, and makes them 
   expect(isPartialScope(new SharingError("other"))).toBe(false);
   const scoped = await loadScopedSharing(env.session, FOLDER);
   expect(scoped.canManage).toBe(true);
+  expect(scoped.ownsContents).toBe(true);
   expect(roles(scoped.folder)).toEqual([[[ALICE, "owner"]], "none"]);
   expect(roles(scoped.contents)).toEqual([
     [
@@ -81,13 +96,14 @@ it("opens a WAC folder with different contents access per scope, and makes them 
     "none",
   ]);
   // Change one scope only: Carol edits the items inside.
-  const split = await applyScopedSharing(env.session, scoped, {
+  const { snapshot: split, changed } = await applyScopedSharing(env.session, scoped, {
     folder: scoped.folder,
     contents: {
       ...scoped.contents,
       people: [...scoped.contents.people, { webId: CAROL, role: "editor" }],
     },
   });
+  expect(changed).toBe(true);
   expect(roles(split.folder)).toEqual([[[ALICE, "owner"]], "none"]);
   expect(split.contents.people.map((p) => p.webId)).toEqual([ALICE, BOB, CAROL]);
   // An unchanged selection writes nothing.
@@ -98,10 +114,10 @@ it("opens a WAC folder with different contents access per scope, and makes them 
       folder: split.folder,
       contents: split.contents,
     }),
-  ).toBe(split);
+  ).toEqual({ snapshot: split, changed: false });
   expect(puts()).toBe(before);
   // Making the items inside match the folder returns it to the ordinary dialog.
-  const matched = await applyScopedSharing(env.session, split, {
+  const { snapshot: matched } = await applyScopedSharing(env.session, split, {
     folder: split.folder,
     contents: split.folder,
   });
@@ -115,18 +131,42 @@ it("opens a WAC folder with different contents access per scope, and makes them 
 it("shares general access on one scope and refuses removing the owner's Control", async () => {
   const env = await setup();
   const scoped = await loadScopedSharing(env.session, FOLDER);
-  const shared = await applyScopedSharing(env.session, scoped, {
+  const { snapshot: shared } = await applyScopedSharing(env.session, scoped, {
     folder: { ...scoped.folder, link: "viewer", public: "viewer" },
     contents: scoped.contents,
   });
   expect(shared.folder.link).toBe("viewer");
   expect(shared.contents.link).toBe("none");
-  await expect(
-    applyScopedSharing(env.session, shared, {
-      folder: shared.folder,
-      contents: { ...shared.contents, people: [{ webId: BOB, role: "viewer" }] },
-    }),
-  ).rejects.toThrow("You cannot remove your own owner access or Control");
+  const puts = () => env.fetch.mock.calls.filter(([, init]) => init?.method === "PUT").length;
+  const before = puts();
+  const refused = applyScopedSharing(env.session, shared, {
+    folder: shared.folder,
+    contents: { ...shared.contents, people: [{ webId: BOB, role: "viewer" }] },
+  });
+  await expect(refused).rejects.toThrow("You cannot remove your own owner access or Control");
+  // Refused before any request: an ordinary error, so the dialog keeps its controls.
+  await expect(refused).rejects.not.toBeInstanceOf(SharingRefreshError);
+  expect(puts()).toBe(before);
+});
+
+it("fails closed when one scope grants access its roles would drop", async () => {
+  // Read with Append inside has no role: showing Bob as a viewer would hide the Append.
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    authorization(doc, BOB, ["Read"]);
+    inside(doc, BOB, ["Read", "Append"]);
+  });
+  await expect(loadScopedSharing(env.session, FOLDER)).rejects.toThrow(UNMAPPED);
+});
+
+it("marks a folder whose items inside its owner doesn't own", async () => {
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]);
+    inside(doc, BOB, ["Read", "Write", "Control"]);
+  });
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  expect(scoped.canManage).toBe(true);
+  expect(scoped.ownsContents).toBe(false);
 });
 
 it("refuses a stale save, and a save by someone who can't manage the folder", async () => {
@@ -161,8 +201,13 @@ it("reports an unconfirmed save and one the pod did not apply as chosen", async 
   };
   await expect(
     applyScopedSharing(env.session, scoped, { folder: scoped.contents, contents: carol }),
-  ).rejects.toThrow(
-    `Sharing wasn't saved as chosen for ${BOB} (this folder), ${CAROL} (items inside)`,
+  ).rejects.toSatisfy(
+    (error) =>
+      error instanceof ScopedSharingIncompleteError &&
+      error.message.startsWith(
+        `Sharing wasn't saved as chosen for ${BOB} (this folder), ${CAROL} (items inside).`,
+      ) &&
+      roles(error.snapshot.contents).length === 2,
   );
   expect(await (await env.pod.fetch(env.doc.source)).text()).toBe(original);
   // The PUT lands, then access can't be read back.
@@ -172,9 +217,28 @@ it("reports an unconfirmed save and one the pod did not apply as chosen", async 
     else if (wrote && url === env.doc.source) return new Response(null, { status: 500 });
     return undefined;
   });
-  await expect(
-    applyScopedSharing(env.session, scoped, { folder: scoped.contents, contents: scoped.contents }),
-  ).rejects.toBeInstanceOf(SharingRefreshError);
+  const unconfirmed = applyScopedSharing(env.session, scoped, {
+    folder: scoped.contents,
+    contents: scoped.contents,
+  });
+  await expect(unconfirmed).rejects.toBeInstanceOf(SharingRefreshError);
+  await expect(unconfirmed).rejects.toMatchObject({ committed: true });
+});
+
+it("treats a failed write as an unknown outcome, never as nothing saved", async () => {
+  const env = await setup();
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  env.intercept((url, init) =>
+    url === env.doc.source && init?.method === "PUT"
+      ? new Response(null, { status: 500 })
+      : undefined,
+  );
+  const failed = applyScopedSharing(env.session, scoped, {
+    folder: scoped.contents,
+    contents: scoped.contents,
+  });
+  await expect(failed).rejects.toBeInstanceOf(SharingRefreshError);
+  await expect(failed).rejects.toMatchObject({ committed: false });
 });
 
 it("maps scoped load failures to the dialog's copy", async () => {

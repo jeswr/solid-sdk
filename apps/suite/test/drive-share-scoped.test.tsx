@@ -11,19 +11,21 @@ import {
   within,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { ShareDialog } from "../src/apps/drive/components/share-dialog";
-import { scopesMatch } from "../src/apps/drive/components/share-scoped";
+import { ScopedSharing, scopesMatch } from "../src/apps/drive/components/share-scoped";
 import {
   applyScopedSharing,
   loadScopedSharing,
   loadSharing,
+  ScopedSharingIncompleteError,
   type ScopedSharingSnapshot,
   SharingConflictError,
+  SharingRefreshError,
   type SharingSession,
   type SharingSnapshot,
 } from "../src/apps/drive/lib/sharing/adapter";
 import { SharingError } from "../src/apps/drive/lib/sharing/rdf";
 import type { SharingState } from "../src/apps/drive/lib/sharing/types";
-import { ALICE, BOB } from "./sharing-fixtures";
+import { ALICE, BOB, CAROL } from "./sharing-fixtures";
 
 vi.mock("../src/apps/drive/lib/sharing/adapter", async (original) => ({
   ...(await original<typeof import("../src/apps/drive/lib/sharing/adapter")>()),
@@ -68,19 +70,28 @@ function scoped(next: Partial<ScopedSharingSnapshot> = {}): ScopedSharingSnapsho
     contents: [],
     version: "t",
   } as unknown as ScopedGrantSnapshot;
-  return { resource: FOLDER, grants, folder, contents, canManage: true, ...next };
+  return {
+    resource: FOLDER,
+    grants,
+    folder,
+    contents,
+    canManage: true,
+    ownsContents: true,
+    ...next,
+  };
 }
 // Hoisted for the adapter mock: the SDK brands its partial-scope errors.
 const { partial } = vi.hoisted(() => ({ partial: new Error("different sharing") }));
 const session: SharingSession = { fetch, webId: ALICE, storageUrl: "https://example.org/" };
 const onSaved = vi.fn();
+const onClose = vi.fn();
 function show(disabledReason?: string) {
   return render(
     <ShareDialog
       item={{ name: "drop", url: FOLDER }}
       session={session}
       link="/drive/p/drop"
-      onClose={vi.fn()}
+      onClose={onClose}
       onSaved={onSaved}
       disabledReason={disabledReason}
     />,
@@ -110,18 +121,32 @@ const selected = (selection: { folder: unknown; contents: unknown }) =>
     folder: selection.folder as SharingState,
     contents: selection.contents as SharingState,
   });
+const saves = async (
+  _session: SharingSession,
+  _snapshot: ScopedSharingSnapshot,
+  selection: { folder: unknown; contents: unknown },
+) => ({ snapshot: selected(selection), changed: true });
+const ordinary = {
+  resource: FOLDER,
+  grants: { url: FOLDER, grants: [], version: "t" },
+  state: folder,
+  canManage: true,
+  contentsDiffer: false,
+} as unknown as SharingSnapshot;
 
 it("opens the scope-aware editor for a folder shared differently inside, and changes each scope", async () => {
-  apply.mockImplementation(async (_s, _snapshot, selection) => selected(selection));
+  apply.mockImplementation(saves);
   show();
   await editor();
   expect(screen.getByRole("note").textContent).toContain("shared differently");
   const inside = within(screen.getByRole("region", { name: "Items inside" }));
   const own = within(screen.getByRole("region", { name: "This folder" }));
   expect(inside.getByText(`${ALICE} (you)`)).toBeTruthy();
-  expect(
-    (inside.getByLabelText(`Role for ${ALICE} on items inside`) as HTMLSelectElement).disabled,
-  ).toBe(true);
+  const owner = inside.getByLabelText(`Role for ${ALICE} on items inside`) as HTMLSelectElement;
+  expect(owner.disabled).toBe(true);
+  // A locked row says why.
+  const why = document.getElementById(owner.getAttribute("aria-describedby") as string);
+  expect(why?.textContent).toBe("Owner access can't be changed here.");
   fireEvent.change(inside.getByLabelText(`Role for ${BOB} on items inside`), {
     target: { value: "editor" },
   });
@@ -132,30 +157,41 @@ it("opens the scope-aware editor for a folder shared differently inside, and cha
   });
   await screen.findByText("Sharing saved");
   expect(onSaved).toHaveBeenCalledTimes(1);
+  // Going public starts as viewer, with the public-link warning; editor is a second choice.
+  expect(own.queryByLabelText("Link role for this folder")).toBeNull();
   fireEvent.change(own.getByLabelText("General access for this folder"), {
-    target: { value: "viewer" },
+    target: { value: "anyone" },
   });
   await waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
   expect(apply.mock.calls[1]?.[2].folder).toMatchObject({ link: "viewer", public: "viewer" });
-  fireEvent.change(
-    within(screen.getByRole("region", { name: "Items inside" })).getByLabelText(
-      "General access for items inside",
-    ),
-    { target: { value: "none" } },
+  const shared = within(await screen.findByRole("region", { name: "This folder" }));
+  await waitFor(() =>
+    expect(shared.getByText(/Anyone can access this folder without signing in/)).toBeTruthy(),
   );
+  fireEvent.change(shared.getByLabelText("Link role for this folder"), {
+    target: { value: "editor" },
+  });
   await waitFor(() => expect(apply).toHaveBeenCalledTimes(3));
-  expect(apply.mock.calls[2]?.[2].contents).toMatchObject({ link: "none", public: "none" });
+  expect(apply.mock.calls[2]?.[2].folder).toMatchObject({ link: "editor", public: "viewer" });
+  fireEvent.change(
+    within(screen.getByRole("region", { name: "This folder" })).getByLabelText(
+      "General access for this folder",
+    ),
+    { target: { value: "restricted" } },
+  );
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(4));
+  expect(apply.mock.calls[3]?.[2].folder).toMatchObject({ link: "none", public: "none" });
   fireEvent.click(
     within(screen.getByRole("region", { name: "Items inside" })).getByRole("button", {
       name: `Remove access for ${BOB} on items inside`,
     }),
   );
-  await waitFor(() => expect(apply).toHaveBeenCalledTimes(4));
-  expect(apply.mock.calls[3]?.[2].contents.people).toEqual([person(ALICE, "owner")]);
+  await waitFor(() => expect(apply).toHaveBeenCalledTimes(5));
+  expect(apply.mock.calls[4]?.[2].contents.people).toEqual([person(ALICE, "owner")]);
 });
 
 it("makes the scopes match either way, then hands back to the ordinary dialog", async () => {
-  apply.mockImplementation(async (_s, _snapshot, selection) => selected(selection));
+  apply.mockImplementation(saves);
   show();
   await editor();
   fireEvent.click(screen.getByRole("button", { name: "Make this folder match items inside" }));
@@ -163,13 +199,7 @@ it("makes the scopes match either way, then hands back to the ordinary dialog", 
   expect(apply.mock.calls[0]?.[2]).toEqual({ folder: contents, contents });
   // Matching scopes reload the ordinary dialog.
   await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
-  load.mockResolvedValue({
-    resource: FOLDER,
-    grants: { url: FOLDER, grants: [], version: "t" },
-    state: folder,
-    canManage: true,
-    contentsDiffer: false,
-  } as unknown as SharingSnapshot);
+  load.mockResolvedValue(ordinary);
   cleanup();
   load.mockRejectedValueOnce(partial);
   show();
@@ -178,6 +208,8 @@ it("makes the scopes match either way, then hands back to the ordinary dialog", 
   await waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
   expect(apply.mock.calls[1]?.[2]).toEqual({ folder, contents: folder });
   await screen.findByRole("region", { name: "People with access" });
+  // The ordinary dialog carries on the editor's announcement.
+  expect(screen.getByText("Sharing saved")).toBeTruthy();
 });
 
 it("shows inherited access as read-only, and a viewer's read-only state", async () => {
@@ -225,41 +257,145 @@ it("reports load and save failures, and reloads on request", async () => {
   await screen.findByText("Couldn't load sharing. Try again.");
   fireEvent.click(screen.getByRole("button", { name: "Reload sharing" }));
   await editor();
+  const match = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
   apply.mockRejectedValueOnce(new SharingConflictError());
-  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
+  match();
   await screen.findByText(/Sharing changed since you opened it/);
+  expect(screen.getByText("Sharing not saved")).toBeTruthy();
   // A stale save changed nothing, so the listing isn't refreshed.
   expect(onSaved).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Reload sharing" }));
   await editor();
-  apply.mockRejectedValueOnce(new SharingError("Sharing wasn't saved as chosen."));
-  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
-  await screen.findByText("Sharing wasn't saved as chosen.");
+  // A refusal before any request keeps the controls and refreshes nothing.
+  apply.mockRejectedValueOnce(new SharingError("Owner rows are read-only"));
+  match();
+  await screen.findByText("Owner rows are read-only");
+  expect(screen.getByRole("region", { name: "Items inside" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Reload sharing" })).toBeNull();
+  expect(onSaved).not.toHaveBeenCalled();
+  apply.mockRejectedValueOnce("odd");
+  match();
+  await screen.findByText("Couldn't save sharing");
+  expect(onSaved).not.toHaveBeenCalled();
+  // A save that landed differently shows the reloaded access, never "saved".
+  apply.mockRejectedValueOnce(
+    new ScopedSharingIncompleteError(scoped({ folder: { ...folder, link: "viewer" } }), [
+      `${BOB} (items inside)`,
+    ]),
+  );
+  match();
+  await screen.findByText(/Sharing wasn't saved as chosen for .* \(items inside\)/);
+  expect(screen.getByText("Sharing not saved as chosen")).toBeTruthy();
   expect(onSaved).toHaveBeenCalledTimes(1);
+  expect(
+    (
+      within(screen.getByRole("region", { name: "This folder" })).getByLabelText(
+        "General access for this folder",
+      ) as HTMLSelectElement
+    ).value,
+  ).toBe("anyone");
+  // An unconfirmed save clears the controls until access is reloaded.
+  apply.mockRejectedValueOnce(new SharingRefreshError(new Error("offline")));
+  match();
+  await screen.findByText(/couldn't be reloaded to confirm it/);
+  expect(screen.getByText("Sharing not confirmed")).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Items inside" })).toBeNull();
+  expect(onSaved).toHaveBeenCalledTimes(2);
   fireEvent.click(screen.getByRole("button", { name: "Reload sharing" }));
   await editor();
-  apply.mockRejectedValueOnce("odd");
-  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
-  await screen.findByText("Couldn't save sharing");
+  apply.mockRejectedValueOnce(new SharingRefreshError(new Error("offline"), false));
+  match();
+  await screen.findByText("Sharing outcome unknown");
   loadScoped.mockRejectedValueOnce("odd");
   fireEvent.click(screen.getByRole("button", { name: "Reload sharing" }));
   await screen.findByText("Couldn't load sharing");
 });
 
-it("ignores a load that finishes after the dialog closed, and a second save while saving", async () => {
-  let finish: (value: ScopedSharingSnapshot) => void = () => {};
-  loadScoped.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
-  const first = show();
-  await waitFor(() => expect(loadScoped).toHaveBeenCalledTimes(1));
-  first.unmount();
-  finish(scoped());
-  loadScoped.mockRejectedValueOnce(new Error("late"));
-  const second = show();
-  await waitFor(() => expect(loadScoped).toHaveBeenCalledTimes(2));
-  second.unmount();
+it("never re-announces an earlier save after a later one fails", async () => {
+  apply.mockImplementationOnce(saves);
   show();
   await editor();
-  let done: (value: ScopedSharingSnapshot) => void = () => {};
+  fireEvent.change(screen.getByLabelText(`Role for ${BOB} on items inside`), {
+    target: { value: "editor" },
+  });
+  await screen.findByText("Sharing saved");
+  apply.mockRejectedValueOnce(new SharingError("Owner rows are read-only"));
+  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
+  await screen.findByText("Owner rows are read-only");
+  expect(screen.queryByText("Sharing saved")).toBeNull();
+});
+
+it("says when a save had nothing to change, without refreshing the listing", async () => {
+  apply.mockImplementationOnce(async (_s, snapshot) => ({ snapshot, changed: false }));
+  show();
+  await editor();
+  fireEvent.click(screen.getByRole("button", { name: "Make this folder match items inside" }));
+  await screen.findByText("Sharing already up to date");
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(screen.getByRole("region", { name: "Items inside" })).toBeTruthy();
+});
+
+it("keeps every edit disabled when the items inside belong to someone else", async () => {
+  loadScoped.mockResolvedValue(scoped({ ownsContents: false }));
+  show();
+  await editor();
+  expect(screen.getByText(/You don't own the items inside this folder/)).toBeTruthy();
+  for (const button of screen.getAllByRole("button", { name: /^Make / }))
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(
+    (screen.getByLabelText(`Role for ${BOB} on items inside`) as HTMLSelectElement).disabled,
+  ).toBe(true);
+});
+
+it("keeps the dialog open while a scoped save is in flight", async () => {
+  let done: (value: { snapshot: ScopedSharingSnapshot; changed: boolean }) => void = () => {};
+  apply.mockReturnValueOnce(new Promise((resolve) => (done = resolve)));
+  show();
+  await editor();
+  fireEvent.click(screen.getByRole("button", { name: "Make items inside match this folder" }));
+  await screen.findByText("Saving sharing…");
+  const finish = screen.getByRole("button", { name: "Done" }) as HTMLButtonElement;
+  expect(finish.disabled).toBe(true);
+  fireEvent.click(finish);
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(onClose).not.toHaveBeenCalled();
+  done({ snapshot: scoped(), changed: true });
+  await screen.findByText("Sharing saved");
+  await waitFor(() => expect(finish.disabled).toBe(false));
+  fireEvent.click(finish);
+  expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+it("shows only the latest load, and ignores a second save while saving", async () => {
+  // The first load finishes after a second one started for another folder.
+  let finish: (value: ScopedSharingSnapshot) => void = () => {};
+  loadScoped.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+  loadScoped.mockResolvedValueOnce(
+    scoped({
+      contents: { ...contents, people: [person(ALICE, "owner"), person(CAROL, "editor")] },
+    }),
+  );
+  const props = { session, onSaved, onMatched: vi.fn(), onSavingChange: vi.fn() };
+  const view = render(<ScopedSharing {...props} resource={FOLDER} />);
+  await waitFor(() => expect(loadScoped).toHaveBeenCalledTimes(1));
+  view.rerender(<ScopedSharing {...props} resource={`${FOLDER}inner/`} />);
+  await screen.findByText(CAROL);
+  finish(scoped());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(screen.getByText(CAROL)).toBeTruthy();
+  expect(screen.queryByText(BOB)).toBeNull();
+  // A load still running when the editor closes is dropped.
+  let late: (value: ScopedSharingSnapshot) => void = () => {};
+  loadScoped.mockReturnValueOnce(new Promise((resolve) => (late = resolve)));
+  view.rerender(<ScopedSharing {...props} resource={`${FOLDER}other/`} />);
+  await screen.findByText("Loading sharing…");
+  view.unmount();
+  late(scoped());
+  cleanup();
+  show();
+  await editor();
+  let done: (value: { snapshot: ScopedSharingSnapshot; changed: boolean }) => void = () => {};
   apply.mockReturnValueOnce(new Promise((resolve) => (done = resolve)));
   const match = screen.getByRole("button", { name: "Make items inside match this folder" });
   fireEvent.click(match);
@@ -270,6 +406,6 @@ it("ignores a load that finishes after the dialog closed, and a second save whil
     target: { value: "editor" },
   });
   expect(apply).toHaveBeenCalledTimes(1);
-  done(scoped());
+  done({ snapshot: scoped(), changed: true });
   await screen.findByText("Sharing saved");
 });

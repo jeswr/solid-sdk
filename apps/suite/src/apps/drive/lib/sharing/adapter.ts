@@ -466,11 +466,25 @@ export interface ScopedSharingSnapshot {
   readonly grants: ScopedGrantSnapshot;
   readonly folder: SharingState;
   readonly contents: SharingState;
+  /** The user owns the folder itself. */
   readonly canManage: boolean;
+  /** The user also owns the items inside; without it only aligning them to the folder works. */
+  readonly ownsContents: boolean;
 }
 export interface ScopedSharingSelection {
   readonly folder: SharingSelection;
   readonly contents: SharingSelection;
+}
+/** A per-scope save the pod took, but whose reloaded access differs from what was chosen. */
+export class ScopedSharingIncompleteError extends Error {
+  constructor(
+    readonly snapshot: ScopedSharingSnapshot,
+    readonly unchanged: readonly string[],
+  ) {
+    super(
+      `Sharing wasn't saved as chosen for ${unchanged.join(", ")}. The current access is shown; review it and try again.`,
+    );
+  }
 }
 
 /** Read a folder's access per scope; access the projection dropped fails closed. */
@@ -489,7 +503,14 @@ export async function loadScopedSharing(
   );
   const owns = (state: SharingState) =>
     state.people.some((p) => p.webId === session.webId && p.role === "owner");
-  return { resource, grants, folder, contents, canManage: owns(folder) };
+  return {
+    resource,
+    grants,
+    folder,
+    contents,
+    canManage: owns(folder),
+    ownsContents: owns(contents),
+  };
 }
 
 /** The full grant set for one scope: unchanged rows verbatim, changed ones re-planned. */
@@ -498,7 +519,7 @@ function scopeGrants(
   snapshot: ScopedSharingSnapshot,
   scope: "folder" | "contents",
   selection: SharingSelection,
-): { grants: RoleGrant[]; changed: boolean } {
+): RoleGrant[] {
   const view: SharingSnapshot = {
     resource: snapshot.resource,
     grants: {
@@ -511,25 +532,24 @@ function scopeGrants(
     contentsDiffer: true,
   };
   const plan = toGrants(session, view, selection);
-  // setScopedGrants takes the full set, so an omitted principal is removed directly.
-  return plan
-    ? { grants: plan.grants, changed: true }
-    : { grants: snapshot.grants[scope], changed: false };
+  // setScopedGrants takes the full set, so an omitted principal is removed directly. An
+  // unchanged scope is still sent: its raw modes may differ from its roles (Write without
+  // Append, say), and the SDK rewrites only rules whose modes differ from the roles given.
+  return plan ? plan.grants : snapshot.grants[scope];
 }
 
 /**
  * Apply a per-scope selection in one conditional write, and report success only when the
- * reloaded access matches both scopes.
+ * reloaded access matches both scopes. `changed` is whether anything was written.
  */
 export async function applyScopedSharing(
   session: SharingSession,
   snapshot: ScopedSharingSnapshot,
   selection: ScopedSharingSelection,
-): Promise<ScopedSharingSnapshot> {
+): Promise<{ snapshot: ScopedSharingSnapshot; changed: boolean }> {
   if (!snapshot.canManage) throw new SharingError("Only an owner can change sharing");
   const folder = scopeGrants(session, snapshot, "folder", selection.folder);
   const contents = scopeGrants(session, snapshot, "contents", selection.contents);
-  if (!folder.changed && !contents.changed) return snapshot;
   let writing = false;
   const fetch: typeof globalThis.fetch = (input, init) => {
     if (init?.method === "PUT") writing = true;
@@ -539,7 +559,7 @@ export async function applyScopedSharing(
   try {
     const result = await setScopedGrants(
       snapshot.resource,
-      { folder: folder.grants, contents: contents.grants },
+      { folder, contents },
       {
         ...options({ ...session, fetch }, snapshot.resource),
         webId: session.webId,
@@ -552,8 +572,12 @@ export async function applyScopedSharing(
   }
   if (failure !== undefined) {
     if (isRoleError(failure) && failure.code === "conflict") throw new SharingConflictError();
-    throw saveError(failure, writing);
+    // Once a write was sent, its outcome is unknown whatever the error says.
+    if (writing) throw new SharingRefreshError(failure, false);
+    throw saveError(failure, false);
   }
+  // Nothing to write: the snapshot passed the version check, so it is still current.
+  if (!writing) return { snapshot, changed: false };
   let fresh: ScopedSharingSnapshot;
   try {
     fresh = await loadScopedSharing(session, snapshot.resource);
@@ -564,9 +588,6 @@ export async function applyScopedSharing(
     ...unmet(fresh.folder, selection.folder).map((id) => `${id} (this folder)`),
     ...unmet(fresh.contents, selection.contents).map((id) => `${id} (items inside)`),
   ];
-  if (unchanged.length)
-    throw new SharingError(
-      `Sharing wasn't saved as chosen for ${unchanged.join(", ")}. Reload to see the current access.`,
-    );
-  return fresh;
+  if (unchanged.length) throw new ScopedSharingIncompleteError(fresh, unchanged);
+  return { snapshot: fresh, changed: true };
 }

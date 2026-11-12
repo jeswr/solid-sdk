@@ -100,6 +100,8 @@ export function ShareDialog({
   // A folder whose own and contents access differ opens the scope-aware editor.
   const [scoped, setScoped] = useState(false);
   const focusAfterSave = useRef<HTMLElement | null>(null);
+  // What the scope-aware editor announced as it handed back to this dialog.
+  const matched = useRef("");
   const done = useRef<HTMLButtonElement>(null);
   const generalId = useId();
   const generalRoleId = useId();
@@ -118,11 +120,13 @@ export function ShareDialog({
         if (live) {
           setSnapshot(value);
           setLoading(false);
-          setAnnouncement("");
+          setAnnouncement(matched.current);
+          matched.current = "";
         }
       },
       (reason: unknown) => {
         if (live) {
+          matched.current = "";
           if (isPartialScope(reason)) setScoped(true);
           else setError(reason instanceof Error ? reason.message : "Couldn't load sharing");
           setLoading(false);
@@ -245,7 +249,11 @@ export function ShareDialog({
             resource={item.url}
             disabledReason={disabledReason}
             onSaved={onSaved}
-            onMatched={() => setRetry((n) => n + 1)}
+            onMatched={(message) => {
+              matched.current = message;
+              setRetry((n) => n + 1);
+            }}
+            onSavingChange={setSaving}
           />
         )}
         {!loading && state && (
@@ -404,8 +412,9 @@ export function ShareDialog({
             </p>
           </div>
         )}
+        {/* The scope-aware editor announces its own saves. */}
         <p role="status" className="su-muted">
-          {saving ? "Saving sharing…" : announcement}
+          {scoped ? "" : saving ? "Saving sharing…" : announcement}
         </p>
         <DialogFooter>
           <Button

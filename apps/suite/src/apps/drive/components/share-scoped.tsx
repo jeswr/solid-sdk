@@ -10,9 +10,11 @@ import { useEffect, useId, useState } from "react";
 import {
   applyScopedSharing,
   loadScopedSharing,
+  ScopedSharingIncompleteError,
   type ScopedSharingSelection,
   type ScopedSharingSnapshot,
   SharingConflictError,
+  SharingRefreshError,
   type SharingSession,
 } from "../lib/sharing/adapter";
 import type { SharingRole, SharingState } from "../lib/sharing/types";
@@ -31,11 +33,13 @@ function RoleSelect({
   label,
   value,
   disabled,
+  describedBy,
   onChange,
 }: {
   label: string;
   value: SharingRole;
   disabled: boolean;
+  describedBy: string | undefined;
   onChange: (role: SharingRole) => void;
 }) {
   const id = useId();
@@ -49,6 +53,7 @@ function RoleSelect({
         id={id}
         value={value}
         disabled={disabled}
+        aria-describedby={describedBy}
         onChange={(event) => onChange(event.target.value as SharingRole)}
       >
         <option value="viewer">Viewer</option>
@@ -73,6 +78,9 @@ function ScopeSection({
   onChange: (next: SharingState) => void;
 }) {
   const generalId = useId();
+  const linkRoleId = useId();
+  const headingId = useId();
+  const noteId = useId();
   const title = TITLES[scope];
   const where = scope === "folder" ? "this folder" : "items inside";
   const person = (id: string, next?: SharingRole) =>
@@ -83,21 +91,25 @@ function ScopeSection({
       ),
     });
   return (
-    <section className="su-stack" aria-label={title}>
-      <h3>{title}</h3>
+    <section className="su-stack" aria-labelledby={headingId}>
+      <h3 id={headingId}>{title}</h3>
       {!state.people.length && <p className="su-muted">No people have access.</p>}
       <ul className="su-stack drv-share-people">
-        {state.people.map((p) => {
+        {state.people.map((p, index) => {
           const locked = blocked || p.inherited || p.role === "owner";
+          // Say why a row can't be changed; a save in progress explains itself.
+          const why = p.inherited || p.role === "owner" ? `${noteId}-${index}` : undefined;
           return (
             <li className="drv-share-person su-stack su-small-gap" key={p.webId}>
               <strong className="su-account-id">
                 {p.webId}
                 {p.webId === webId ? " (you)" : ""}
               </strong>
-              {p.inherited && (
-                <p className="su-muted">
-                  Inherited from {p.sources.join(", ")}. Change access at the source.
+              {why && (
+                <p className="su-muted" id={why}>
+                  {p.inherited
+                    ? `Inherited from ${p.sources.join(", ")}. Change access at the source.`
+                    : "Owner access can't be changed here."}
                 </p>
               )}
               <div className="su-wrap">
@@ -105,11 +117,13 @@ function ScopeSection({
                   label={`Role for ${p.webId} on ${where}`}
                   value={p.role}
                   disabled={locked}
+                  describedBy={why}
                   onChange={(next) => person(p.webId, next)}
                 />
                 <Button
                   variant="ghost"
                   disabled={locked}
+                  aria-describedby={why}
                   aria-label={`Remove access for ${p.webId} on ${where}`}
                   onClick={() => person(p.webId)}
                 >
@@ -123,20 +137,46 @@ function ScopeSection({
       <label className="su-label" htmlFor={generalId}>
         General access for {where}
       </label>
+      {/* Like the ordinary dialog: going public starts as viewer; editor is a second choice. */}
       <select
         className="su-input"
         id={generalId}
-        value={state.link}
+        value={state.link === "none" ? "restricted" : "anyone"}
         disabled={blocked || state.general.inherited}
         onChange={(event) => {
-          const link = event.target.value as SharingState["link"];
-          onChange({ ...state, link, public: link === "none" ? "none" : "viewer" });
+          const open = event.target.value === "anyone";
+          onChange({ ...state, link: open ? "viewer" : "none", public: open ? "viewer" : "none" });
         }}
       >
-        <option value="none">Restricted</option>
-        <option value="viewer">Anyone can view</option>
-        <option value="editor">Anyone can edit</option>
+        <option value="restricted">Restricted</option>
+        <option value="anyone">Anyone with the link</option>
       </select>
+      {state.link !== "none" && (
+        <>
+          <label className="su-label" htmlFor={linkRoleId}>
+            Link role for {where}
+          </label>
+          <select
+            className="su-input"
+            id={linkRoleId}
+            value={state.link}
+            disabled={blocked || state.general.inherited}
+            onChange={(event) =>
+              onChange({
+                ...state,
+                link: event.target.value as "viewer" | "editor",
+                public: "viewer",
+              })
+            }
+          >
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+          </select>
+          <p className="su-muted">
+            Anyone can access {where} without signing in. The link is public, not a secret.
+          </p>
+        </>
+      )}
       {state.general.inherited && (
         <p className="su-muted">
           Inherited from {state.general.sources.join(", ")}. Change general access at the source.
@@ -152,13 +192,16 @@ export function ScopedSharing({
   disabledReason,
   onSaved,
   onMatched,
+  onSavingChange,
 }: {
   session: SharingSession;
   resource: string;
   disabledReason?: string | undefined;
   onSaved: () => void;
-  /** Both scopes now match: the ordinary sharing dialog can take over. */
-  onMatched: () => void;
+  /** Both scopes now match: the ordinary sharing dialog can take over and announce `message`. */
+  onMatched: (message: string) => void;
+  /** Lets the dialog keep every dismissal route closed while a save is in flight. */
+  onSavingChange: (saving: boolean) => void;
 }) {
   const [snapshot, setSnapshot] = useState<ScopedSharingSnapshot>();
   const [error, setError] = useState("");
@@ -171,6 +214,7 @@ export function ScopedSharing({
     let live = true;
     setSnapshot(undefined);
     setError("");
+    setAnnouncement("");
     loadScopedSharing(session, resource).then(
       (value) => live && setSnapshot(value),
       (reason: unknown) =>
@@ -181,28 +225,47 @@ export function ScopedSharing({
     };
   }, [session, resource, retry]);
 
+  const show = (fresh: ScopedSharingSnapshot, message: string) => {
+    if (scopesMatch(fresh)) onMatched(message);
+    else setSnapshot(fresh);
+    setAnnouncement(message);
+  };
   const save = async (selection: ScopedSharingSelection) => {
     if (!snapshot || saving || disabledReason) return;
     setSaving(true);
+    onSavingChange(true);
     setError("");
+    setAnnouncement("");
     try {
-      const fresh = await applyScopedSharing(session, snapshot, selection);
-      setAnnouncement("Sharing saved");
-      onSaved();
-      if (scopesMatch(fresh)) onMatched();
-      else setSnapshot(fresh);
+      const { snapshot: fresh, changed } = await applyScopedSharing(session, snapshot, selection);
+      if (changed) onSaved();
+      show(fresh, changed ? "Sharing saved" : "Sharing already up to date");
     } catch (reason) {
-      // A conflict, a partly applied save or an unconfirmed one: show nothing stale.
-      setSnapshot(undefined);
-      // Anything but a refused-as-stale save may have changed access.
-      if (!(reason instanceof SharingConflictError)) onSaved();
       setError(reason instanceof Error ? reason.message : "Couldn't save sharing");
+      if (reason instanceof ScopedSharingIncompleteError) {
+        // Part of the selection may be stored: show the reloaded access, never "saved".
+        onSaved();
+        show(reason.snapshot, "Sharing not saved as chosen");
+      } else if (reason instanceof SharingRefreshError) {
+        setSnapshot(undefined);
+        onSaved();
+        setAnnouncement(reason.committed ? "Sharing not confirmed" : "Sharing outcome unknown");
+      } else if (reason instanceof SharingConflictError) {
+        setSnapshot(undefined);
+        setAnnouncement("Sharing not saved");
+      } else {
+        // Refused before any request: nothing changed, so keep the current controls.
+        setAnnouncement("Sharing not saved");
+      }
     } finally {
       setSaving(false);
+      onSavingChange(false);
     }
   };
 
-  const blocked = saving || !!disabledReason || !snapshot?.canManage;
+  // The SDK keeps the caller's Control on both scopes, and owner rows are read-only here, so
+  // without ownership of the items inside no save can succeed.
+  const blocked = saving || !!disabledReason || !snapshot?.canManage || !snapshot.ownsContents;
   return (
     <div className="su-stack" aria-busy={saving}>
       <p role="note" className="su-muted">
@@ -229,6 +292,12 @@ export function ScopedSharing({
           {!snapshot.canManage && (
             <p className="su-muted" role="status">
               You can view access. Only an owner with Control can change sharing.
+            </p>
+          )}
+          {snapshot.canManage && !snapshot.ownsContents && (
+            <p className="su-muted" role="status">
+              You don't own the items inside this folder, so its sharing can't be changed here. Ask
+              an owner of those items.
             </p>
           )}
           <div className="su-wrap">
