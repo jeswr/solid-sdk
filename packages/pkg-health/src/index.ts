@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+export { type AssistantTurtleOptions, importAssistantTurtle } from "./assistant-import.js";
 export { type BodySystem, classifyBodySystem } from "./body-system.js";
 export { healthTimeline, observationSeries } from "./charts.js";
 export { importHealthExport } from "./import.js";

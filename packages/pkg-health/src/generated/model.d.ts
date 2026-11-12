@@ -65,6 +65,274 @@ export interface InstantEntity {
   ): Promise<InstantData | undefined>;
 }
 
+export interface AssistantAnnotationData {
+  "hasTarget"?: string;
+}
+
+export interface AssistantAnnotationWrapper extends EntityWrapper {
+  "hasTarget"?: string;
+}
+
+export interface AssistantAnnotationEntity {
+  readonly name: "AssistantAnnotation";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantAnnotationWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantAnnotationData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantAnnotationData | undefined;
+  serialize(resourceUrl: string, data: AssistantAnnotationData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantAnnotationData | undefined>;
+}
+
+export interface AssistantEvidenceTargetData {
+  "hasSelector"?: string;
+  "hasSource"?: string;
+}
+
+export interface AssistantEvidenceTargetWrapper extends EntityWrapper {
+  "hasSelector"?: string;
+  "hasSource"?: string;
+}
+
+export interface AssistantEvidenceTargetEntity {
+  readonly name: "AssistantEvidenceTarget";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantEvidenceTargetWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantEvidenceTargetData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantEvidenceTargetData | undefined;
+  serialize(resourceUrl: string, data: AssistantEvidenceTargetData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantEvidenceTargetData | undefined>;
+}
+
+export interface AssistantQuoteSelectorData {
+  "exact"?: string;
+}
+
+export interface AssistantQuoteSelectorWrapper extends EntityWrapper {
+  "exact"?: string;
+}
+
+export interface AssistantQuoteSelectorEntity {
+  readonly name: "AssistantQuoteSelector";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantQuoteSelectorWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantQuoteSelectorData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantQuoteSelectorData | undefined;
+  serialize(resourceUrl: string, data: AssistantQuoteSelectorData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantQuoteSelectorData | undefined>;
+}
+
+export interface AssistantDateFieldsData {
+  "effectiveTime"?: Date;
+  "validFrom"?: Date;
+  "validThrough"?: Date;
+}
+
+export interface AssistantDateFieldsWrapper extends EntityWrapper {
+  "effectiveTime"?: Date;
+  "validFrom"?: Date;
+  "validThrough"?: Date;
+}
+
+export interface AssistantDateFieldsEntity {
+  readonly name: "AssistantDateFields";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantDateFieldsWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantDateFieldsData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantDateFieldsData | undefined;
+  serialize(resourceUrl: string, data: AssistantDateFieldsData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantDateFieldsData | undefined>;
+}
+
+export interface AssistantDateTimeFieldsData {
+  "effectiveTime"?: Date;
+  "validFrom"?: Date;
+  "validThrough"?: Date;
+}
+
+export interface AssistantDateTimeFieldsWrapper extends EntityWrapper {
+  "effectiveTime"?: Date;
+  "validFrom"?: Date;
+  "validThrough"?: Date;
+}
+
+export interface AssistantDateTimeFieldsEntity {
+  readonly name: "AssistantDateTimeFields";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantDateTimeFieldsWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantDateTimeFieldsData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantDateTimeFieldsData | undefined;
+  serialize(resourceUrl: string, data: AssistantDateTimeFieldsData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantDateTimeFieldsData | undefined>;
+}
+
+export interface AssistantOwnerData {
+  "additionalProperty"?: string;
+}
+
+export interface AssistantOwnerWrapper extends EntityWrapper {
+  "additionalProperty"?: string;
+}
+
+export interface AssistantOwnerEntity {
+  readonly name: "AssistantOwner";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantOwnerWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantOwnerData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantOwnerData | undefined;
+  serialize(resourceUrl: string, data: AssistantOwnerData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantOwnerData | undefined>;
+}
+
+export interface AssistantSourceMetadataData {
+  "dateCreated"?: Date;
+  "instrument"?: string;
+}
+
+export interface AssistantSourceMetadataWrapper extends EntityWrapper {
+  "dateCreated"?: Date;
+  "instrument"?: string;
+}
+
+export interface AssistantSourceMetadataEntity {
+  readonly name: "AssistantSourceMetadata";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantSourceMetadataWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantSourceMetadataData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantSourceMetadataData | undefined;
+  serialize(resourceUrl: string, data: AssistantSourceMetadataData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantSourceMetadataData | undefined>;
+}
+
+export interface AssistantTextFieldsData {
+  "description"?: string;
+  "doseSchedule"?: string;
+  "name"?: string;
+}
+
+export interface AssistantTextFieldsWrapper extends EntityWrapper {
+  "description"?: string;
+  "doseSchedule"?: string;
+  "name"?: string;
+}
+
+export interface AssistantTextFieldsEntity {
+  readonly name: "AssistantTextFields";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantTextFieldsWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantTextFieldsData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantTextFieldsData | undefined;
+  serialize(resourceUrl: string, data: AssistantTextFieldsData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantTextFieldsData | undefined>;
+}
+
+export interface AssistantTextValueData {
+  "textValue"?: string;
+}
+
+export interface AssistantTextValueWrapper extends EntityWrapper {
+  "textValue"?: string;
+}
+
+export interface AssistantTextValueEntity {
+  readonly name: "AssistantTextValue";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => AssistantTextValueWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: AssistantTextValueData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore): AssistantTextValueData | undefined;
+  serialize(resourceUrl: string, data: AssistantTextValueData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<AssistantTextValueData | undefined>;
+}
+
 export interface CodeableConceptData {
   "exactMatch"?: string;
   "codeValue"?: string;
@@ -496,11 +764,13 @@ export interface DigitalDocumentEntity {
 }
 
 export interface PropertyValueData {
+  "name"?: string;
   "propertyID"?: string;
   "textValue"?: string;
 }
 
 export interface PropertyValueWrapper extends EntityWrapper {
+  "name"?: string;
   "propertyID"?: string;
   "textValue"?: string;
 }
@@ -533,6 +803,15 @@ export interface GeneratedModel {
   readonly entities: {
   readonly AllergyIntolerance: AllergyIntoleranceEntity;
   readonly Instant: InstantEntity;
+  readonly AssistantAnnotation: AssistantAnnotationEntity;
+  readonly AssistantEvidenceTarget: AssistantEvidenceTargetEntity;
+  readonly AssistantQuoteSelector: AssistantQuoteSelectorEntity;
+  readonly AssistantDateFields: AssistantDateFieldsEntity;
+  readonly AssistantDateTimeFields: AssistantDateTimeFieldsEntity;
+  readonly AssistantOwner: AssistantOwnerEntity;
+  readonly AssistantSourceMetadata: AssistantSourceMetadataEntity;
+  readonly AssistantTextFields: AssistantTextFieldsEntity;
+  readonly AssistantTextValue: AssistantTextValueEntity;
   readonly CodeableConcept: CodeableConceptEntity;
   readonly Condition: ConditionEntity;
   readonly Encounter: EncounterEntity;

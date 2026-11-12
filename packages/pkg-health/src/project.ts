@@ -127,7 +127,7 @@ function project(
       const property = node.text(`${S}propertyID`);
       const value = node.text(`${S}value`);
       if (property === undefined || value === undefined) return undefined;
-      return { ...result, kind, property, value, label: humanise(property) };
+      return { ...result, kind, property, value, label: node.label ?? humanise(property) };
     }
     case "document": {
       const created = node.literal(`${S}dateCreated`);
@@ -155,6 +155,7 @@ function project(
         label: node.label ?? product?.label ?? result.label,
         product: { name: name ?? product?.label ?? "Medication", atcCode },
         dose: node.dose,
+        doseSchedule: node.text(`${S}doseSchedule`),
         code: base.code ?? (atcCode ? { value: atcCode, system: "atc" } : undefined),
       };
     }

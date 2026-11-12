@@ -284,3 +284,20 @@ describe("projection and ownership", () => {
     log.mockRestore();
   });
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps an owned fact whose schema:about names a topic, and refuses a foreign schema:patient", async () => {
+  const topical = claim("topical", condition("Fictional topical condition", "topical"));
+  new FixtureNode("https://example.org/entities/topical", topical.assertion).link(
+    "https://schema.org/about",
+    "https://example.org/topics/iron",
+  );
+  const foreign = claim("foreign", condition("Fictional foreign condition", "foreign"));
+  new FixtureNode("https://example.org/entities/foreign", foreign.assertion).link(
+    "http://schema.org/patient",
+    other,
+  );
+  const view = projectHealthFacts(await batch([topical, foreign]), { owner });
+  expect(view.facts.map((f) => f.label)).toEqual(["Fictional topical condition"]);
+  expect(view.excludedOtherSubjects).toBe(1);
+});
