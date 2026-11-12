@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * THE P0 EXIT CRITERION — the build-time FIDELITY ASSERTION (design §7.2). model.json
  * is a VERIFIED PROJECTION of shapes.ttl, not a bespoke schema: at generation time
@@ -619,6 +620,18 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
         ?.properties.find((p) => p.pathIri === field.predicate);
       if (field.ordered !== undefined && !c?.ordered)
         throw new FidelityError(`unsourced ordered field ${field.name}`);
+      // A flat (non-nested) field must never silently drop a node/class constraint:
+      // sh:node is projected only by an ordered field (composite links are `nested`),
+      // and a fail-closed sh:class only by an ordered field or a concept enum.
+      if (field.kind === "nested" || c === undefined || field.collection === "ordered") continue;
+      if (c.node !== undefined)
+        throw new FidelityError(`flat field ${field.name} drops sh:node ${c.node}`);
+      if (
+        c.hasClass !== undefined &&
+        c.conceptIris === undefined &&
+        propertySources(c).some((source) => isFailClosedSeverity(source.severity))
+      )
+        throw new FidelityError(`flat field ${field.name} drops sh:class ${c.hasClass}`);
     }
   for (const shape of shapes.nodeShapes)
     for (const c of shape.properties) {

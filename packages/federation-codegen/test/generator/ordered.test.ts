@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import {
   defineModel,
   isCompositeEntity,
@@ -662,5 +663,102 @@ shapes:9a251c98b7418c80a1e73c5b513ea327dd57babbd25d229ffae73677acbf24f6-HowToSte
     expect(entity.parse(url, good)).toEqual({ instructions: ["a", "a"] });
     good.removeQuads(good.getQuads(`${url}#instructions-1`, `${S}position`, null, null));
     expect(entity.parse(url, good)).toBeUndefined();
+  });
+});
+
+describe("ordered admission hardening (PR 520 review)", () => {
+  const shared = (menuOrdered: boolean) => {
+    const source = `${P}
+ex:Instr a sh:PropertyShape; sh:name "instructions"; sh:path schema:recipeInstructions;
+  sh:node ex:StepShape; sh:minCount 1 .
+ex:RecipeShape a sh:NodeShape; sh:targetClass schema:Recipe; sh:property ex:Instr .
+ex:MenuShape a sh:NodeShape; sh:targetClass ex:Menu; sh:property ex:Instr .
+ex:StepShape a sh:NodeShape; sh:targetClass schema:HowToStep;
+  sh:property [ sh:path schema:position; sh:datatype xsd:integer; sh:minCount 1; sh:maxCount 1; sh:minInclusive 1 ],
+    [ sh:path schema:text; sh:datatype xsd:string; sh:minCount 1; sh:maxCount 1 ] .`;
+    const cfg = structuredClone(config);
+    cfg.entities.push({
+      name: "Menu",
+      targetClass: "https://recipe.test/Menu",
+      subject: { convention: "hash-it" },
+      ...(menuOrdered
+        ? { fields: { instructions: { ordered: { position: `${S}position`, value: `${S}text` } } } }
+        : {}),
+    });
+    return { source, cfg };
+  };
+  it("rejects an ordered property shape shared with a plain owner", () => {
+    const { source, cfg } = shared(false);
+    expect(() => generate(source, cfg)).toThrow(/shared with a non-ordered/);
+    const report = admit(
+      owlRdfsAdapter.adapt(parseTurtle(ontologyTtl)),
+      normalize(source, cfg),
+      S,
+      cfg,
+    );
+    expect(report.violations.find((v) => v.code === "invalid-ordered")?.subject).toBe(
+      "https://recipe.test/Instr",
+    );
+    // Control: without any ordered opt-in the same profile is already rejected.
+    const plain = structuredClone(cfg);
+    plain.entities = plain.entities.filter((e) => e.name === "Menu");
+    expect(() => generate(source, plain)).toThrow(/sh:node requires a projected composite link/);
+  });
+  it("fidelity rejects a flat field that drops a shared sh:node, even without admission", () => {
+    const { source, cfg } = shared(false);
+    const shapes = normalize(source, cfg);
+    const compiled = compileManifest(shapes, cfg);
+    expect(() => assertFidelity(shapes, compiled)).toThrow(/flat field instructions drops sh:node/);
+  });
+  it("admits a property shape shared by owners with the same ordered descriptor", () => {
+    const { source, cfg } = shared(true);
+    const result = generate(source, cfg);
+    for (const entity of result.manifest.entities)
+      expect((entity as ManifestEntity).fields[0]?.collection).toBe("ordered");
+  });
+  it("fidelity rejects a fail-closed flat sh:class that the manifest does not enforce", () => {
+    const source = `${profile}
+ex:MenuShape a sh:NodeShape; sh:targetClass ex:Menu;
+  sh:property [ sh:name "dish"; sh:path ex:dish; sh:class schema:Recipe; sh:nodeKind sh:IRI; sh:maxCount 1 ] .`;
+    const cfg = structuredClone(config);
+    cfg.entities.push({
+      name: "Menu",
+      targetClass: "https://recipe.test/Menu",
+      subject: { convention: "hash-it" },
+    });
+    const shapes = normalize(source, cfg);
+    const compiled = compileManifest(shapes, cfg);
+    expect(() => assertFidelity(shapes, compiled)).toThrow(/flat field dish drops sh:class/);
+    // An advisory hint keeps its documented omission policy.
+    const advisory = normalize(
+      source.replace("sh:class schema:Recipe;", "sh:class schema:Recipe; sh:severity sh:Warning;"),
+      cfg,
+    );
+    expect(() => assertFidelity(advisory, compileManifest(advisory, cfg))).not.toThrow();
+  });
+  it.each([
+    ["minCount", "sh:minCount 257"],
+    ["maxCount", "sh:minCount 1; sh:maxCount 257"],
+  ])("rejects an outer %s above the runtime item cap", (_name, bound) => {
+    expect(() => generate(profile.replace("sh:minCount 1 ]", `${bound} ]`))).toThrow(
+      /must not exceed 256/,
+    );
+  });
+  it("admits an outer maxCount equal to the runtime item cap", () => {
+    expect(
+      generate(profile.replace("sh:minCount 1 ]", "sh:minCount 1; sh:maxCount 256 ]")).admission.ok,
+    ).toBe(true);
+  });
+  it.each([
+    ["position", "Warning", "sh:minInclusive 1 ]"],
+    ["value", "Info", 'sh:pattern "\\\\S" ]'],
+  ])("rejects a non-Violation severity on the item %s property", (_name, severity, anchor) => {
+    const source = profile.replace(anchor, anchor.replace(" ]", `; sh:severity sh:${severity} ]`));
+    expect(source).not.toBe(profile);
+    expect(() => generate(source)).toThrow(/non-Violation sh:severity/);
+    expect(
+      generate(profile.replace(anchor, anchor.replace(" ]", "; sh:severity sh:Violation ]")))
+        .admission.ok,
+    ).toBe(true);
   });
 });

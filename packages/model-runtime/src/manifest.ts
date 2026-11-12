@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The compiled shape-manifest — the runtime's ONLY input schema, and the
  * data-not-code boundary (design §7.1/§7.2). A manifest is pure data: flag / enum
@@ -559,6 +560,12 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   ) {
     fail(`field.minCount (${field.minCount}) exceeds field.maxCount (${field.maxCount})`);
   }
+  // An ordered field above the item cap could never be read or written.
+  if (
+    field.collection === "ordered" &&
+    ((field.minCount ?? 0) > MAX_ORDERED_ITEMS || (field.maxCount ?? 0) > MAX_ORDERED_ITEMS)
+  )
+    fail(`ordered field.minCount / field.maxCount must not exceed ${MAX_ORDERED_ITEMS}`);
 
   if (raw.default !== undefined) field.default = checkScalar(raw.default, "field.default");
   if (raw.defaultNow !== undefined)

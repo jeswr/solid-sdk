@@ -76,12 +76,13 @@ ex:StepShape a sh:NodeShape; sh:targetClass schema:HowToStep;
 | Input | Admission |
 |---|---|
 | Ordered config | Exactly `{ position, value }`, distinct safe absolute IRIs, distinct from the owning predicate and `rdf:type`; matching field and named `sh:node` required. |
-| Owning property | Direct, unaliased node link; optional `sh:nodeKind sh:IRI`, cardinality and severity. An explicit `sh:class` must equal the item's target class. Scalar constraints on the link reject. |
+| Owning property | Direct, unaliased node link; optional `sh:nodeKind sh:IRI`, cardinality and severity. An explicit `sh:class` must equal the item's target class. Scalar constraints on the link reject, as do outer `sh:minCount`/`sh:maxCount` above 256 (`MAX_ORDERED_ITEMS`). A named property shape shared by several NodeShapes must be ordered with the same `{ position, value }` on every owner; sharing it with a plain or differently ordered owner rejects. |
 | Item NodeShape | Exactly one target class and exactly the two configured properties; no target aliases, merged item shapes, competing flat/composite ownership, or extra node constraints. Metadata is allowed. Item shapes are consumed by ordered fields, not emitted as separate entities. |
 | Position property | Exactly `xsd:integer`, `minCount 1`, `maxCount 1`; optional `nodeKind Literal` and `minInclusive` (safe integer ≤ 1 so writes starting at 1 conform). Other constraints reject. |
+| Item property severity | Optional `sh:severity` on the position or value property must be `sh:Violation`: the runtime enforces item properties at the outer severity, so an advisory item severity rejects instead of yielding laxer SHACL. |
 | Value property | Exactly one value (`minCount 1`, `maxCount 1`); an existing validated literal datatype or explicit `sh:IRI`, with the existing enum, pattern, length and numeric guards. Class/node links, aliases and extra properties reject. |
 | Config policies | Existing value `iriScheme`, `nonBlank`, `sanitizeText`, outer `requiredFailClosed`, and composite `rename` are supported. Defaults, set sorting/trimming/dropping, and unknown keys reject. |
-| Unsupported/missing/ambiguous encoding | `AdmissionError`; diagnostics identify the ordered field and item shape. Compilation and fidelity recheck the complete item contract. |
+| Unsupported/missing/ambiguous encoding | `AdmissionError`; diagnostics identify the ordered field and item shape. Compilation and fidelity recheck the complete item contract; fidelity also rejects any non-nested field compiled from a constraint carrying `sh:node`, or a fail-closed non-concept `sh:class`, unless that field is ordered. |
 
 The manifest uses `collection: "ordered"`; its `kind`, `datatype`, `in`, and scalar
 guards constrain the item value. `ordered` records `itemClass`, `position`, `value`,
@@ -107,7 +108,10 @@ Replacement clears links and only removes the item class, position and value tri
 safe same-document nodes explicitly typed with the item class, whose fragments match exactly
 `<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner
 subjects, and exclusively referenced by that owner/field. Other nodes and unrelated predicates/types
-survive. Minting skips occupied unrelated/shared IRIs. Composite node fragments matching any
+survive, and a cleaned-up item IRI that keeps any other triple is not reused. Minting skips
+occupied unrelated/shared IRIs. A setter refuses (`TypeError`) to replace present links that
+fail validation, because the getter cannot distinguish them from an absent field; the
+runtime's `resetOrderedField(wrapper, name, values = [])` is the explicit discard. Composite node fragments matching any
 ordered field's resolved item-fragment pattern on that entity are rejected during generation.
 
 Two deliberate refinements keep the encoding interoperable: normalized SHACL adds explicit

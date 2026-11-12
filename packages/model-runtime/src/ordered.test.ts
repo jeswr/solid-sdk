@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ import {
   type ManifestOrdered,
   validateManifest,
 } from "./manifest.js";
-import { defineModel, MigrationError } from "./model.js";
+import { defineModel, type EntityWrapper, MigrationError, resetOrderedField } from "./model.js";
 
 const S = "http://schema.org/";
 const X = "http://www.w3.org/2001/XMLSchema#";
@@ -157,7 +158,15 @@ describe("ordered item nodes", () => {
     const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
       instructions: string[];
     };
-    wrapper.instructions = ["a"];
+    // Invalid existing data is only discarded explicitly; valid data replaces as usual.
+    if (wrapper.instructions === undefined) {
+      const before = [...store];
+      expect(() => {
+        wrapper.instructions = ["a"];
+      }).toThrow(/invalid ordered data/);
+      expect([...store]).toEqual(before);
+      resetOrderedField(wrapper as unknown as EntityWrapper, "instructions", ["a"]);
+    } else wrapper.instructions = ["a"];
     expect(wrapper.instructions).toEqual(["a"]);
     for (const quad of original) {
       if (quad.predicate.value !== `${S}recipeInstructions`) expect(store.has(quad)).toBe(true);
@@ -198,7 +207,9 @@ describe("ordered item nodes", () => {
     const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as {
       instructions: string[];
     };
-    wrapper.instructions = ["a"];
+    if (wrapper.instructions === undefined)
+      resetOrderedField(wrapper as unknown as EntityWrapper, "instructions", ["a"]);
+    else wrapper.instructions = ["a"];
     expect(wrapper.instructions).toEqual(["a"]);
     expect(store.getQuads(`${URL}#instructions-1`, null, null, null)).toEqual(original);
     expect(
@@ -349,8 +360,12 @@ describe("ordered item nodes", () => {
     const oversized = [...store];
     expect(() => {
       wrapper.instructions = ["replace"];
-    }).toThrow(/cap/);
+    }).toThrow(/invalid ordered data/);
     expect([...store]).toEqual(oversized);
+    // An explicit reset stays possible past the stored-link cap (no repair deadlock).
+    resetOrderedField(wrapper as unknown as EntityWrapper, "instructions", ["replace"]);
+    expect(entity.parse(URL, store)).toEqual({ instructions: ["replace"] });
+    expect(store.countQuads(entity.subject(URL), `${S}recipeInstructions`, null, null)).toBe(1);
   });
 
   it.each([
@@ -457,7 +472,7 @@ describe("ordered item nodes", () => {
       DataFactory.namedNode(`${S}text`),
       DataFactory.literal("remote"),
     );
-    wrapper.instructions = ["replacement"];
+    resetOrderedField(wrapper as unknown as EntityWrapper, "instructions", ["replacement"]);
     expect(store.countQuads("https://remote.test/doc#item", `${S}text`, null, null)).toBe(1);
   });
 
@@ -589,6 +604,8 @@ describe("ordered item nodes", () => {
     { defaultNow: false },
     { guards: { sortOnRead: false } },
     { guards: { trim: false } },
+    { minCount: MAX_ORDERED_ITEMS + 1 },
+    { minCount: 0, maxCount: MAX_ORDERED_ITEMS + 1 },
     {
       ordered: {
         itemClass: `${S}HowToStep`,
@@ -601,5 +618,119 @@ describe("ordered item nodes", () => {
     expect(() => validateManifest(manifest("Violation", patch as Partial<ManifestField>))).toThrow(
       ManifestError,
     );
+  });
+});
+
+describe("ordered writes over present-but-invalid data (PR 520 review)", () => {
+  type Steps = { instructions: readonly string[] | undefined };
+  const appendBadLink = (store: Store, entity: ReturnType<typeof model>) =>
+    store.addQuad(
+      DataFactory.namedNode(entity.subject(URL)),
+      DataFactory.namedNode(`${S}recipeInstructions`),
+      DataFactory.namedNode("https://evil.test/x"),
+    );
+  it.each([
+    "Violation",
+    "Warning",
+  ] as const)("an append-then-edit snapshot cannot wipe valid items at %s", (severity) => {
+    const entity = model(severity);
+    const store = entity.build(URL, { instructions: ["boil", "add pasta", "drain"] });
+    appendBadLink(store, entity);
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as Steps;
+    expect(wrapper.instructions).toBeUndefined();
+    const before = [...store];
+    for (const next of [[...(wrapper.instructions ?? []), "serve"], [], undefined]) {
+      expect(() => {
+        wrapper.instructions = next;
+      }).toThrow(/invalid ordered data.*resetOrderedField/);
+      expect([...store]).toEqual(before);
+    }
+    for (const text of ["boil", "add pasta", "drain"])
+      expect(store.countQuads(null, `${S}text`, DataFactory.literal(text), null)).toBe(1);
+  });
+  it("a second position on one item also blocks the implicit replacement", () => {
+    const entity = model();
+    const store = entity.build(URL, { instructions: ["a", "b"] });
+    store.addQuad(
+      DataFactory.namedNode(`${URL}#instructions-1`),
+      DataFactory.namedNode(`${S}position`),
+      DataFactory.literal("9", DataFactory.namedNode(`${X}integer`)),
+    );
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as Steps;
+    expect(() => {
+      wrapper.instructions = ["serve"];
+    }).toThrow(/invalid ordered data/);
+  });
+  it("absent fields (even below a required minimum) remain writable", () => {
+    const entity = model();
+    const store = new Store();
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as Steps;
+    expect(wrapper.instructions).toBeUndefined();
+    wrapper.instructions = ["first"];
+    expect(wrapper.instructions).toEqual(["first"]);
+  });
+  it("resetOrderedField explicitly discards invalid data, flooded links included", () => {
+    const entity = model();
+    const store = entity.build(URL, { instructions: ["boil", "drain"] });
+    for (let i = 0; i <= MAX_ORDERED_ITEMS; i++)
+      store.addQuad(
+        DataFactory.namedNode(entity.subject(URL)),
+        DataFactory.namedNode(`${S}recipeInstructions`),
+        DataFactory.namedNode(`https://evil.test/x${i}`),
+      );
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory);
+    expect(() => {
+      (wrapper as unknown as Steps).instructions = ["serve"];
+    }).toThrow(/invalid ordered data/);
+    // Required outer minimum still applies to the explicit reset, before mutation.
+    const before = [...store];
+    expect(() => resetOrderedField(wrapper, "instructions")).toThrow(/minCount/);
+    expect(() => resetOrderedField(wrapper, "instructions", "x" as never)).toThrow(/array/);
+    expect([...store]).toEqual(before);
+    resetOrderedField(wrapper, "instructions", ["serve"]);
+    expect(entity.parse(URL, store)).toEqual({ instructions: ["serve"] });
+    expect(store.countQuads(entity.subject(URL), `${S}recipeInstructions`, null, null)).toBe(1);
+    expect(store.countQuads(null, `${S}text`, DataFactory.literal("boil"), null)).toBe(0);
+    // An optional field may be cleared outright.
+    const optional = model("Violation", { minCount: 0, guards: {} });
+    const s2 = optional.build(URL, { instructions: ["a"] });
+    appendBadLink(s2, optional);
+    const w2 = new optional.Wrapper(optional.subject(URL), s2, DataFactory);
+    resetOrderedField(w2, "instructions");
+    expect((w2 as unknown as Steps).instructions).toEqual([]);
+  });
+  it("resetOrderedField rejects non-ordered or unknown field names", () => {
+    const entity = model();
+    const wrapper = new entity.Wrapper(entity.subject(URL), new Store(), DataFactory);
+    for (const name of ["missing", "id", "__proto__", "constructor"])
+      expect(() => resetOrderedField(wrapper, name, ["a"])).toThrow(/not an ordered field/);
+  });
+  it("never reuses an item IRI that keeps unrelated triples after cleanup", () => {
+    const entity = model();
+    const store = entity.build(URL, { instructions: ["boil", "drain"] });
+    store.addQuad(
+      DataFactory.namedNode(`${URL}#instructions-1`),
+      DataFactory.namedNode(`${S}comment`),
+      DataFactory.literal("about boil"),
+    );
+    const wrapper = new entity.Wrapper(entity.subject(URL), store, DataFactory) as unknown as Steps;
+    wrapper.instructions = ["drain", "boil"];
+    expect(wrapper.instructions).toEqual(["drain", "boil"]);
+    // The annotated node is no longer an item; it keeps only its annotation.
+    expect(
+      store.getQuads(`${URL}#instructions-1`, null, null, null).map((q) => q.predicate.value),
+    ).toEqual([`${S}comment`]);
+    expect(
+      store.countQuads(
+        entity.subject(URL),
+        `${S}recipeInstructions`,
+        `${URL}#instructions-1`,
+        null,
+      ),
+    ).toBe(0);
+    // An item IRI that is fully cleaned up is reused.
+    expect(
+      store.countQuads(`${URL}#instructions-2`, `${S}text`, DataFactory.literal("drain"), null),
+    ).toBe(1);
   });
 });

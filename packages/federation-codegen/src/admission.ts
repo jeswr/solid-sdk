@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * L1 (tier-a) — the STRUCTURAL admission validator (design §4). Pure JS,
  * FAIL-CLOSED, run on every generation: it refuses to generate from an ontology /
@@ -153,14 +154,31 @@ export function admit(
     ),
   );
   const nestedShapeIris = new Set<string>();
-  const orderedShapeIris = new Set(
-    shapes.nodeShapes.flatMap((s) =>
-      s.properties
-        .filter((c) => c.ordered)
-        .flatMap(propertySources)
-        .map((c) => c.shapeIri),
-    ),
-  );
+  // The sh:node / sh:class exemption below is decided per property-shape subject,
+  // but a named property shape can be referenced by several NodeShapes. Exempt it
+  // only when EVERY referencing constraint is ordered with the same descriptor;
+  // a shape shared with a plain owner would otherwise compile that owner's field
+  // without its sh:node / sh:class constraint.
+  const orderedUses = new Map<string, Set<string>>();
+  for (const s of shapes.nodeShapes)
+    for (const c of s.properties)
+      for (const source of propertySources(c)) {
+        const uses = orderedUses.get(source.shapeIri) ?? new Set<string>();
+        uses.add(c.ordered ? JSON.stringify([c.ordered.position, c.ordered.value]) : "");
+        orderedUses.set(source.shapeIri, uses);
+      }
+  const orderedShapeIris = new Set<string>();
+  for (const [shapeIri, uses] of orderedUses) {
+    if (![...uses].some((use) => use !== "")) continue;
+    if (uses.size === 1) orderedShapeIris.add(shapeIri);
+    else
+      add(
+        "invalid-ordered",
+        "error",
+        shapeIri,
+        "ordered property shape is shared with a non-ordered or differently ordered owner",
+      );
+  }
   for (const entity of config?.entities ?? []) {
     if (!isCompositeConfig(entity)) continue;
     for (const node of Object.values(entity.nodes)) {

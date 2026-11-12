@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The interpreter — `defineModel(manifest)` turns a validated shape-manifest into
  * a typed model over `@rdfjs/wrapper`: a `Wrapper` class with per-field accessors,
@@ -729,12 +730,22 @@ function readOrdered(doc: TermWrapper, plan: FieldPlan): unknown[] | undefined {
   return values.sort((a, b) => a.position - b.position).map(({ value }) => value);
 }
 
-/** Stage replacement before migration/mutation; no raw quad construction or foreign deletion. */
+/**
+ * Stage replacement before migration/mutation; no raw quad construction or foreign deletion.
+ *
+ * The getter returns `undefined` both for an absent field and for a present but invalid
+ * one, so a snapshot edit (`w.x = [...(w.x ?? []), item]`) after an untrusted append
+ * would silently discard every valid item. An ordinary write therefore refuses to replace
+ * a field whose current links fail {@link readOrdered}; only {@link resetOrderedField}
+ * (`discardInvalid`) explicitly discards them (and skips the stored-link cap, so a field
+ * flooded past {@link MAX_ORDERED_ITEMS} links stays repairable).
+ */
 function writeOrdered(
   doc: TermWrapper,
   plan: FieldPlan,
   raw: unknown,
   beforeWrite = () => {},
+  discardInvalid = false,
 ): void {
   const { field } = plan;
   const ordered = field.ordered;
@@ -750,15 +761,26 @@ function writeOrdered(
   const members: unknown[] = raw ?? [];
   if (members.length > MAX_ORDERED_ITEMS)
     throw new TypeError(`field ${field.name} exceeds the ${MAX_ORDERED_ITEMS}-item cap`);
+  if (!discardInvalid) {
+    const present = !matchObjects(
+      doc.dataset,
+      doc as unknown as Term,
+      doc.factory.namedNode(field.predicate),
+    ).next().done;
+    if (present && readOrdered(doc, plan) === undefined)
+      throw new TypeError(
+        `field ${field.name} holds invalid ordered data; refusing to replace it implicitly ` +
+          `(use resetOrderedField to discard it explicitly)`,
+      );
+  }
   const output = new Store([...doc.dataset.match()]);
   const focus = new TermWrapper(doc as unknown as Term, output, doc.factory);
   const links = SetFrom.subjectPredicate(focus, field.predicate, TermAs.term, TermFrom.itself);
-  const owned = new Set<string>();
   const documentIri = doc.value.split("#", 1)[0] as string;
   const itemPrefix = `${documentIri}#${field.name}-`;
   let oldItems = 0;
   for (const term of links) {
-    if (++oldItems > MAX_ORDERED_ITEMS)
+    if (++oldItems > MAX_ORDERED_ITEMS && !discardInvalid)
       throw new TypeError(`field ${field.name} exceeds the ${MAX_ORDERED_ITEMS}-item cap`);
     if (
       !orderedItemIri(doc, term) ||
@@ -774,7 +796,6 @@ function writeOrdered(
         (q) => q.subject.equals(doc as unknown as Term) && q.predicate.value === field.predicate,
       );
     if (!exclusive) continue;
-    owned.add(term.value);
     for (const quad of output.getQuads(term.value, null, null, null)) {
       if (
         [ordered.position, ordered.value].includes(quad.predicate.value) ||
@@ -796,11 +817,12 @@ function writeOrdered(
       term = doc.factory.namedNode(iri);
       if (!/^https?:\/\//i.test(iri))
         throw new TypeError("ordered item requires a same-document http(s) subject");
+      // A cleaned-up item IRI is reused only once nothing remains on it: leftover
+      // annotations (or planted triples) must not migrate onto a different member.
     } while (
       term.value === doc.value ||
-      (!owned.has(term.value) &&
-        (output.countQuads(term.value, null, null, null) ||
-          output.countQuads(null, null, term.value, null)))
+      output.countQuads(term.value, null, null, null) ||
+      output.countQuads(null, null, term.value, null)
     );
     const item = new TermWrapper(term, output, doc.factory);
     writeSingle(item, valuePlan, member);
@@ -834,6 +856,37 @@ function writeOrdered(
   beforeWrite();
   for (const quad of removed) doc.dataset.delete(quad);
   for (const quad of added) doc.dataset.add(quad);
+}
+
+/** Per Wrapper prototype: the explicit discarding writer of each ordered field. */
+const orderedResetters = new WeakMap<
+  object,
+  Map<string, (doc: TermWrapper, values: unknown) => void>
+>();
+
+/**
+ * Explicitly replace an ordered field EVEN WHEN its current data is invalid, discarding
+ * every existing owner link (and cleaning up genuine minted items exactly as an ordinary
+ * replacement does). The ordinary setter refuses to replace a present-but-invalid field,
+ * because its getter returns `undefined` and a snapshot edit would silently delete the
+ * valid items. Call this only after deciding the stored list may be lost. `values`
+ * defaults to `[]` (clear) and obeys the same cap, array and outer-cardinality checks.
+ */
+export function resetOrderedField(
+  wrapper: EntityWrapper,
+  fieldName: string,
+  values: readonly unknown[] = [],
+): void {
+  let proto: object | null = Object.getPrototypeOf(wrapper);
+  for (let depth = 0; proto !== null && depth < 32; depth++) {
+    const reset = orderedResetters.get(proto)?.get(fieldName);
+    if (reset) {
+      reset(wrapper, values);
+      return;
+    }
+    proto = Object.getPrototypeOf(proto);
+  }
+  throw new TypeError(`${fieldName} is not an ordered field of this wrapper`);
 }
 
 /**
@@ -885,9 +938,14 @@ function makeWrapperClass(
     }
   }
 
+  const resetters = new Map<string, (doc: TermWrapper, values: unknown) => void>();
+  orderedResetters.set(Wrapper.prototype, resetters);
   for (const plan of plans) {
     const { field } = plan;
     if (field.collection === "ordered") {
+      resetters.set(field.name, (doc, values) =>
+        writeOrdered(doc, plan, values, () => beforeWrite(doc, field), true),
+      );
       Object.defineProperty(Wrapper.prototype, field.name, {
         get(this: TermWrapper) {
           return readOrdered(this, plan);
