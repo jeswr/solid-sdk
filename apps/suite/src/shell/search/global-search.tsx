@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   type AppSlug,
   Button,
@@ -53,6 +54,7 @@ function SearchBox({
   const [expanded, setExpanded] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   const [hintDismissed, setHintDismissed] = useState(true);
+  const t = useT();
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -173,7 +175,7 @@ function SearchBox({
         if (!event.currentTarget.contains(event.relatedTarget)) setExpanded(false);
       }}
     >
-      <Label htmlFor={`${id}-input`}>Search</Label>
+      <Label htmlFor={`${id}-input`}>{t("search.label")}</Label>
       <div className={styles.field}>
         {scope ? (
           <Button
@@ -210,7 +212,7 @@ function SearchBox({
           }
           value={query}
           autoComplete="off"
-          placeholder="Search your storage"
+          placeholder={t("search.placeholder")}
           onChange={(event) => {
             setQuery(event.target.value);
             setExpanded(true);
@@ -374,6 +376,7 @@ function SearchBox({
 }
 
 export function GlobalSearch(props: GlobalSearchProps) {
+  const t = useT();
   const [mobile, setMobile] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [scopeEnabled, setScopeEnabled] = useState(true);
@@ -407,7 +410,7 @@ export function GlobalSearch(props: GlobalSearchProps) {
   return mobile ? (
     <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
       <SheetTrigger asChild>
-        <IconButton ref={trigger} data-global-search label="Search" variant="ghost">
+        <IconButton ref={trigger} data-global-search label={t("search.label")} variant="ghost">
           <Search aria-hidden="true" />
         </IconButton>
       </SheetTrigger>
@@ -427,7 +430,7 @@ export function GlobalSearch(props: GlobalSearchProps) {
           trigger.current?.focus();
         }}
       >
-        <SheetTitle>Search your storage</SheetTitle>
+        <SheetTitle>{t("search.placeholder")}</SheetTitle>
         <SheetDescription>Find files, documents, tasks, people, and data.</SheetDescription>
         <div className={styles.mobile}>{box}</div>
       </SheetContent>

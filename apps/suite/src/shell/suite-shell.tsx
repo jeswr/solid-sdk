@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   AppRail,
   type AppSlug,
@@ -62,6 +63,7 @@ function Frame({
   searchSource,
   children,
 }: SuiteShellProps) {
+  const t = useT();
   // The registry compares slash-free routes; the native export adds a trailing slash.
   const pathname = useRoutePathname();
   const router = useRouter();
@@ -71,7 +73,9 @@ function Frame({
   const { active } = useAccounts();
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
-  const app = appRegistry.find((item) => item.slug === slug);
+  const app = appRegistry
+    .map((item) => ({ ...item, name: t(`apps.${item.slug}`) }))
+    .find((item) => item.slug === slug);
   const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
   useEffect(() => {
     if (title) document.title = title;
@@ -112,7 +116,10 @@ function Frame({
     }
   };
   const account = active && <AccountMenu />;
-  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
+  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS).map((item) => ({
+    ...item,
+    name: t(`apps.${item.slug}`),
+  }));
   return (
     <RailPreferencesProvider
       value={{ value: rail, update: updateRail, status: "ready", retry: () => {} }}
@@ -140,7 +147,10 @@ function Frame({
           />
         }
         sidebar={
-          sidebar ?? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
+          sidebar ?? {
+            label: t("shell.sections", { name: app.name }),
+            sections: app.sidebar?.({ pathname }) ?? [],
+          }
         }
         {...(details ? { details } : {})}
         topBar={{
@@ -150,7 +160,7 @@ function Frame({
             <>
               {actions}
               <a className="suite-feedback-link" href="/feedback">
-                Give feedback
+                {t("shell.feedback")}
               </a>
             </>
           ),

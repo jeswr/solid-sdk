@@ -103,6 +103,21 @@
 .shell-public-note {
   margin: 0;
 }
+/* AUTHORED-BY Claude Opus 5.5: the signed-out language picker. */
+.shell-language {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--foreground-muted);
+}
+.shell-language select {
+  min-height: 44px;
+  padding-inline: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+}
 
 /* AUTHORED-BY Claude Opus 5.5 */
 /* /offline: the recent items saved on this device. */

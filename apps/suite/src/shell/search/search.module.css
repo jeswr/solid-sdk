@@ -25,7 +25,7 @@
 .panel {
   position: absolute;
   top: 100%;
-  left: 0;
+  inset-inline-start: 0;
   width: max(100%, 340px);
   max-width: calc(100vw - 32px);
   z-index: 40;

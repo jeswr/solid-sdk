@@ -102,11 +102,11 @@ html[data-motion="reduce"] *::after {
 }
 .settings-table {
   width: 100%;
-  text-align: left;
+  text-align: start;
   border-collapse: collapse;
 }
 .settings-table caption {
-  text-align: left;
+  text-align: start;
   font-weight: 600;
   margin-bottom: var(--space-4);
 }

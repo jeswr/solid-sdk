@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import type { en } from "@jeswr/suite-i18n";
+import { useT } from "@jeswr/suite-i18n/react";
 /**
  * /signin (02-suite-shell §8.1) on the suite-ui SignInCard: Account ID first,
  * then provider buttons (home provider first), another provider, and the
@@ -26,7 +28,7 @@ import { hintForField, rememberedIssuer } from "@/shell/lib/sign-in-hint";
 import { DemoButton } from "@/shell/public/demo-button";
 import { PodExplainer } from "@/shell/public/pod-explainer";
 import {
-  SIGNUP_UNAVAILABLE_NOTE,
+  SIGNUP_UNAVAILABLE_KEY,
   SIGNUP_UNAVAILABLE_PARAM,
   useRegistration,
 } from "@/shell/registration/use-registration";
@@ -42,8 +44,14 @@ export default function Page() {
 }
 
 type Pending = { kind: "webid" | "provider" | "account" | "custom"; key: string } | null;
+/** A message key, translated at render so a language change re-renders an open error. */
+type Failure =
+  | `signin.errors.${keyof typeof en.signin.errors}`
+  | "signin.failed"
+  | "signin.extensionFailed";
 
 function SignIn() {
+  const t = useT();
   const env = useSuiteEnvironment();
   const { signIn, signInWith, backendKinds, accounts, active, status } = useAccounts();
   const extension = useSolidExtension();
@@ -71,7 +79,7 @@ function SignIn() {
   }, [next, router]);
   const registration = useRegistration();
   const [recent, setRecent] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
   const [pending, setPending] = useState<Pending>(null);
   const attempt = useRef<AbortController | null>(null);
   useEffect(() => () => attempt.current?.abort(), []);
@@ -122,9 +130,7 @@ function SignIn() {
       if (issuer) remember(issuer);
       finishSignIn();
     } catch (cause) {
-      if (cause instanceof SignInError) {
-        setError(cause.message);
-      } else setError("We couldn't sign you in. Please try again.");
+      setError(cause instanceof SignInError ? `signin.errors.${cause.code}` : "signin.failed");
     } finally {
       attempt.current = null;
       setPending(null);
@@ -133,30 +139,30 @@ function SignIn() {
   const useExtension = extension.present && backendKinds.includes("extension");
   return (
     <>
-      <h1 className="suite-sr-only">Sign in to Solid Suite</h1>
+      <h1 className="suite-sr-only">{t("signin.title")}</h1>
       {adding && (
         <p role="status" className="shell-public-note">
-          Adding another account — you stay signed in as {active.name}.
+          {t("signin.adding", { name: active.name })}
         </p>
       )}
       {params.get(SIGNUP_UNAVAILABLE_PARAM) === "unavailable" && (
         <p role="status" className="shell-public-note">
-          {SIGNUP_UNAVAILABLE_NOTE}
+          {t(SIGNUP_UNAVAILABLE_KEY)}
         </p>
       )}
       <fieldset
         disabled={status === "loading"}
         style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}
       >
-        <legend className="suite-sr-only">Sign-in methods</legend>
+        <legend className="suite-sr-only">{t("signin.methods")}</legend>
         <SignInCard
-          title="Sign in to Solid Suite"
-          subtitle="Use your Account ID, or choose where your account lives."
+          title={t("signin.title")}
+          subtitle={t("signin.subtitle")}
           providers={providers}
           recentProviders={recent}
           recentAccounts={recentAccounts}
           pending={pending}
-          error={error}
+          error={error && t(error)}
           onCancel={() => attempt.current?.abort()}
           onWebId={(input) =>
             void submit(hintForField("webid", input), { kind: "webid", key: input })
@@ -180,11 +186,11 @@ function SignIn() {
                       await signInWith("extension", { webId: extension.webId ?? "" });
                       finishSignIn();
                     } catch {
-                      setError("The Solid browser extension didn't sign you in. Please try again.");
+                      setError("signin.extensionFailed");
                     }
                   }}
                 >
-                  Use the Solid extension
+                  {t("signin.extension")}
                 </Button>
               )}
               <DemoButton next={next} />
@@ -192,7 +198,7 @@ function SignIn() {
                 {registration.available && (
                   <>
                     <span>
-                      New here? <a href="/signup">Create an account</a>
+                      {t("signin.newHere")} <a href="/signup">{t("signin.create")}</a>
                     </span>
                     <span aria-hidden="true"> · </span>
                   </>

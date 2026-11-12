@@ -8,6 +8,7 @@ import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
 import { NativeShareLaunch } from "@/components/native-share-launch";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
+import { SuiteI18nProvider } from "@/shell/i18n";
 import type { SuiteEnv } from "@/shell/lib/env";
 import { NotificationsProvider } from "@/shell/notifications/provider";
 import { ShellSearchProvider } from "@/shell/search/search-context";
@@ -43,12 +44,14 @@ export function Providers({
           {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
           <OutboxSessionProvider>
             <PreferencesProvider>
-              <AppearanceEffect />
-              <ShellSearchProvider>
-                <NotificationsProvider>
-                  <WalkthroughProvider>{children}</WalkthroughProvider>
-                </NotificationsProvider>
-              </ShellSearchProvider>
+              <SuiteI18nProvider>
+                <AppearanceEffect />
+                <ShellSearchProvider>
+                  <NotificationsProvider>
+                    <WalkthroughProvider>{children}</WalkthroughProvider>
+                  </NotificationsProvider>
+                </ShellSearchProvider>
+              </SuiteI18nProvider>
             </PreferencesProvider>
           </OutboxSessionProvider>
         </AccountsProvider>

@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { useState } from "react";
 import { AppIcon } from "../components/atoms/app-icon.js";
+import { useDirection } from "../components/direction.js";
 import type { AppSlug, NavigationApp } from "./apps.js";
 
 export function AppGrid({
@@ -19,6 +21,8 @@ export function AppGrid({
   typeFilter: (key: string) => void;
 }) {
   const [active, setActive] = useState<AppSlug | undefined>();
+  // The grid's columns follow the reading direction, so the horizontal arrows swap in RTL.
+  const rtl = useDirection() === "rtl";
   const selected = apps.some((app) => app.slug === active) ? active : apps[0]?.slug;
   const rows = Array.from({ length: Math.ceil(apps.length / 3) }, (_, i) =>
     apps.slice(i * 3, i * 3 + 3),
@@ -34,7 +38,13 @@ export function AppGrid({
         const index = links.indexOf(event.target as HTMLAnchorElement);
         if (index < 0) return;
         let next = index;
-        switch (event.key) {
+        const key =
+          rtl && event.key === "ArrowLeft"
+            ? "ArrowRight"
+            : rtl && event.key === "ArrowRight"
+              ? "ArrowLeft"
+              : event.key;
+        switch (key) {
           case "ArrowRight":
             next = index % 3 < 2 ? Math.min(index + 1, apps.length - 1) : index;
             break;

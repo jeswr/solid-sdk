@@ -572,7 +572,7 @@ export function PreviewDialog() {
                 variant="secondary"
                 onClick={() => step(-1)}
               >
-                <ChevronLeft aria-hidden="true" size={20} />
+                <ChevronLeft className="suite-rtl-mirror" aria-hidden="true" size={20} />
               </IconButton>
             ) : null}
             <PreviewBody
@@ -588,7 +588,7 @@ export function PreviewDialog() {
                 variant="secondary"
                 onClick={() => step(1)}
               >
-                <ChevronRight aria-hidden="true" size={20} />
+                <ChevronRight className="suite-rtl-mirror" aria-hidden="true" size={20} />
               </IconButton>
             ) : null}
           </div>
@@ -640,7 +640,7 @@ export function PreviewPage({
               if (!mayLeavePreview()) event.preventDefault();
             }}
           >
-            <ArrowLeft aria-hidden="true" size={18} />
+            <ArrowLeft className="suite-rtl-mirror" aria-hidden="true" size={18} />
           </Link>
         }
       />

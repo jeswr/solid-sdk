@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import type { ReactNode } from "react";
 import {
   Tooltip,
@@ -9,7 +11,7 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip.js";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, suiteApps, visibleNavigationApps } from "./apps.js";
+import { AppGlyph, suiteApps, useNavigationApps, visibleNavigationApps } from "./apps.js";
 import { usePreferences } from "./preferences.js";
 
 export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
@@ -19,12 +21,14 @@ export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
 }
 export function AppRail({
   currentApp,
-  apps = suiteApps,
+  apps: suppliedApps = suiteApps,
   showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
   notifications,
   offline,
   account,
 }: AppRailProps) {
+  const t = useT();
+  const apps = useNavigationApps(suppliedApps);
   const preferences = usePreferences("rail");
   const visible = visibleNavigationApps(apps, showBacklog);
   const pinned = [...new Set(preferences.value.pinned)]
@@ -32,7 +36,7 @@ export function AppRail({
     .filter((app) => app !== undefined)
     .slice(0, 6);
   return (
-    <nav className="suite-rail" aria-label="Apps">
+    <nav className="suite-rail" aria-label={t("navigation.apps")}>
       <AppLauncher
         currentApp={currentApp}
         apps={visible}
@@ -40,7 +44,11 @@ export function AppRail({
         trigger="brand"
       />
       {preferences.status === "loading" ? (
-        <div className="suite-rail-skeleton" role="status" aria-label="Loading pinned apps">
+        <div
+          className="suite-rail-skeleton"
+          role="status"
+          aria-label={t("navigation.loadingPinned")}
+        >
           <span />
           <span />
           <span />

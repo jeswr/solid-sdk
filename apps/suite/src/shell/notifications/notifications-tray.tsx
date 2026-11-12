@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { Button, EmptyState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { Bell } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -15,6 +16,7 @@ export function NotificationsTray({
   onOpenSync?: (() => void) | undefined;
   page?: boolean;
 }) {
+  const t = useT();
   const { items, loading, error, refresh, markAllRead, markRead, dismiss, decide } =
     useNotifications();
   const list = useRef<HTMLDivElement>(null);
@@ -44,41 +46,50 @@ export function NotificationsTray({
   return (
     <div className={styles.tray}>
       <header className={styles.header}>
-        <h2>Notifications</h2>
+        <h2>{t("notifications.title")}</h2>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => void markAllRead()}
           disabled={!items.some((item) => !item.read)}
         >
-          Mark all read
+          {t("notifications.markAll")}
         </Button>
       </header>
       <div className={styles.list} ref={list} tabIndex={-1} aria-busy={loading}>
         {loading && !items.length ? (
-          <LoadingSkeleton preset="list" label="Loading notifications" count={3} />
+          <LoadingSkeleton preset="list" label={t("notifications.loading")} count={3} />
         ) : null}
         {error && (
           <div role="alert" className={styles.error}>
             <p>{error}</p>
             <Button variant="outline" onClick={() => void refresh()}>
-              Retry
+              {t("common.retry")}
             </Button>
           </div>
         )}
         {!loading && !error && !items.length && (
           <EmptyState
-            title="You're all caught up"
-            body="New notifications will appear here."
+            title={t("notifications.empty")}
+            body={t("notifications.emptyBody")}
             icon={<Bell size={24} aria-hidden="true" />}
           />
         )}
         {groupNotifications(items, now).map((group) => (
-          <section key={group.label} aria-label={group.label}>
+          <section
+            key={group.label}
+            aria-label={t(
+              group.label === "Today" ? "notifications.today" : "notifications.earlier",
+            )}
+          >
             {page ? (
-              <h2 className={styles.group}>{group.label}</h2>
+              <h2 className={styles.group}>
+                {t(group.label === "Today" ? "notifications.today" : "notifications.earlier")}
+              </h2>
             ) : (
-              <h3 className={styles.group}>{group.label}</h3>
+              <h3 className={styles.group}>
+                {t(group.label === "Today" ? "notifications.today" : "notifications.earlier")}
+              </h3>
             )}
             <ul>
               {group.items.map((item) => (

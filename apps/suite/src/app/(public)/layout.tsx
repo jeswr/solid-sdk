@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { ReactNode } from "react";
+import { LanguagePicker } from "@/shell/i18n";
 export default function PublicLayout({ children }: { children: ReactNode }) {
   return (
     <main id="main-content" className="shell-public">
@@ -10,6 +12,7 @@ export default function PublicLayout({ children }: { children: ReactNode }) {
         Solid Suite
       </a>
       <div className="shell-public-card">{children}</div>
+      <LanguagePicker />
     </main>
   );
 }

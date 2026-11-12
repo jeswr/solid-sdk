@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { CountBadge, IconButton, Popover, PopoverContent, PopoverTrigger } from "@jeswr/suite-ui";
 import { Bell } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +17,7 @@ export function NotificationsBell({
   mobile?: boolean;
   onOpenSync?: (() => void) | undefined;
 }) {
+  const t = useT();
   const { unread, loading } = useNotifications();
   const [open, setOpen] = useState(false);
   const [announcement, setAnnouncement] = useState("");
@@ -23,12 +25,12 @@ export function NotificationsBell({
   useEffect(() => {
     if (!loading) {
       if (previous.current !== null && unread > previous.current)
-        setAnnouncement(`${unread - previous.current} new notifications`);
+        setAnnouncement(t("notifications.new", { count: unread - previous.current }));
       else setAnnouncement("");
       previous.current = unread;
     }
-  }, [unread, loading]);
-  const label = `Notifications, ${unread} unread`;
+  }, [unread, loading, t]);
+  const label = t("notifications.unread", { count: unread });
   const content = (
     <>
       <Bell size={20} strokeWidth={1.75} aria-hidden="true" />
@@ -67,7 +69,7 @@ export function NotificationsBell({
           className={styles.panel}
           side="right"
           align="end"
-          aria-label="Notifications"
+          aria-label={t("notifications.title")}
         >
           <NotificationsTray
             onOpenSync={() => {

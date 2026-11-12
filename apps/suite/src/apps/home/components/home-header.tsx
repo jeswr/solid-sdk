@@ -1,12 +1,19 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { Button, LoadingSkeleton, PodMeter } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { AppHeading } from "@/shell/app-frame";
 import type { DomainItem } from "../lib/model/discovery";
 import { sortItems } from "../lib/model/discovery";
-import { asOfTime, greeting, itemTitle, relativeTime } from "../state/presentation";
+import {
+  asOfTime,
+  firstName,
+  greetingPeriod,
+  itemTitle,
+  relativeTime,
+} from "../state/presentation";
 import type { HomeAccess } from "../state/use-home-access";
 
 export interface HomeHeaderProps {
@@ -36,16 +43,19 @@ export function HomeHeader({
   asOf,
   onRetry,
 }: HomeHeaderProps) {
+  const t = useT();
+  const period = greetingPeriod(new Date(now));
+  const name = firstName(displayName);
   const latest = sortItems(items.filter((item) => item.modified))[0];
   return (
     <header className="hm-header">
-      <AppHeading>{greeting(new Date(now), displayName)}</AppHeading>
-      <p className="hm-muted">Here's what's in your pod and who can see it.</p>
+      <AppHeading>{name ? t(`home.${period}`, { name }) : t(`home.${period}NoName`)}</AppHeading>
+      <p className="hm-muted">{t("home.intro")}</p>
       {offline && asOf !== undefined ? (
         <p className="hm-muted">You're offline. This is your pod as of {asOfTime(asOf)}.</p>
       ) : null}
-      <section className="hm-pod" aria-label="Your pod">
-        <h2>Your pod</h2>
+      <section className="hm-pod" aria-label={t("home.pod")}>
+        <h2>{t("home.pod")}</h2>
         {status === "loading" ? (
           <LoadingSkeleton preset="detail" count={3} label="Loading your pod" />
         ) : (

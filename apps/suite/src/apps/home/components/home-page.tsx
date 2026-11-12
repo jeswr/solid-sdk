@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   Button,
   EmptyState,
@@ -35,8 +36,11 @@ import { HomeHeader } from "./home-header";
 import { AddManuallySheet } from "./item/add-manually-sheet";
 import { itemShortcut } from "./item/shortcuts";
 import { useItemActions } from "./item/use-item-actions";
+import { useHomeLabels } from "./use-home-labels";
 
 export function HomePage({ domain }: { domain: string }) {
+  const t = useT();
+  const labels = useHomeLabels();
   const session = useHomeSession();
   const loaded = useDomainItems(session);
   const access = useHomeAccess(session, loaded.updated);
@@ -59,7 +63,10 @@ export function HomePage({ domain }: { domain: string }) {
   const [page, setPage] = useState({ domain, filter: search.get("types"), limit: 24 });
   const limit = page.domain === domain && page.filter === search.get("types") ? page.limit : 24;
   const items = data.items.filter((item) => item.domain.id === entry.id);
-  const sections = sectionsFor(entry, items, selected, limit);
+  const sections = sectionsFor(entry, items, selected, limit).map((section) => ({
+    ...section,
+    label: labels.type(section),
+  }));
   const sources = connectedSources(items, session.storageUrl);
   const [online, setOnline] = useState(true);
   const [now, setNow] = useState(Date.now);
@@ -133,7 +140,7 @@ export function HomePage({ domain }: { domain: string }) {
         <div className="hm-domain-heading">
           <h2 id="hm-domain-heading">
             <DomainIcon name={entry.icon} size={24} />
-            {entry.label}
+            {labels.domain(entry)}
           </h2>
           {canAdd ? (
             <Button ref={addButton} variant="outline" onClick={openAdd} disabled={!online}>
@@ -147,7 +154,7 @@ export function HomePage({ domain }: { domain: string }) {
           </p>
         ) : null}
         <FilterChips
-          label={`${entry.label} data types`}
+          label={t("home.dataTypes", { domain: labels.domain(entry) })}
           options={entry.dataTypes}
           value={selected}
           onChange={filter}
@@ -210,7 +217,7 @@ export function HomePage({ domain }: { domain: string }) {
             ) : null}
             {!items.length ? (
               <EmptyState
-                title="Nothing here yet"
+                title={t("home.empty")}
                 body="Connect a service or add something yourself."
                 icon={<DomainIcon name={entry.icon} size={32} />}
                 primaryAction={
@@ -229,7 +236,7 @@ export function HomePage({ domain }: { domain: string }) {
             ) : !sections.length ? (
               <EmptyState
                 variant="filtered-empty"
-                title="No items match these filters"
+                title={t("home.noMatches")}
                 onClearFilters={() => filter(entry.dataTypes.map((type) => type.id))}
               />
             ) : (

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { CapabilityProvider } from "@jeswr/suite-ui/sync";
 import type { ReactNode } from "react";
 import { useRoutePathname } from "@/lib/route-params";
@@ -11,37 +12,39 @@ import { SuiteShell } from "../suite-shell";
 import { AutosaveStatus } from "./preferences";
 
 const sections = [
-  ["account", "Account"],
-  ["appearance", "Appearance"],
-  ["storage", "Storage"],
-  ["notifications", "Notifications"],
-  ["offline", "Offline"],
-  ["shortcuts", "Shortcuts"],
-  ["advanced", "Advanced"],
+  ["account", "settings.account"],
+  ["appearance", "settings.appearance"],
+  ["storage", "settings.storage"],
+  ["notifications", "settings.notifications"],
+  ["offline", "settings.offline"],
+  ["shortcuts", "settings.shortcuts"],
+  ["advanced", "settings.advanced"],
 ] as const;
 
 export function SettingsLayout({ children }: { children: ReactNode }) {
+  const t = useT();
   const pathname = useRoutePathname();
   const { active } = useAccounts();
   const env = useSuiteEnvironment();
-  const page = sections.find(([slug]) => pathname === `/settings/${slug}`)?.[1] ?? "Account";
+  const page =
+    sections.find(([slug]) => pathname === `/settings/${slug}`)?.[1] ?? "settings.account";
   return (
     <CapabilityProvider
       capabilities={active?.kind === "demo" ? demoCapabilitiesWith(env.SUITE_TEST_CAPS) : {}}
     >
       <SuiteShell
         app="home"
-        pageTitle={page}
+        pageTitle={t(page)}
         sidebar={{
-          label: "Settings sections",
-          header: <h2>Settings</h2>,
+          label: t("settings.sections"),
+          header: <h2>{t("settings.title")}</h2>,
           sections: [
             {
               id: "settings",
-              label: "Settings",
+              label: t("settings.title"),
               items: sections.map(([slug, label]) => ({
                 id: slug,
-                label,
+                label: t(label),
                 href: `/settings/${slug}`,
                 current: pathname === `/settings/${slug}`,
               })),

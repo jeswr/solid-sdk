@@ -2,12 +2,20 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import { Grid2X2, MoreHorizontal, Plus, X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { useId, useRef, useState } from "react";
+import { useDirection } from "../components/direction.js";
 import { IconButton } from "../components/ui/icon-button.js";
 import { AppGrid } from "./app-grid.js";
-import { type AppSlug, type NavigationApp, suiteApps, visibleNavigationApps } from "./apps.js";
+import {
+  type AppSlug,
+  type NavigationApp,
+  suiteApps,
+  useNavigationApps,
+  visibleNavigationApps,
+} from "./apps.js";
 import { CustomiseRail } from "./customise-rail.js";
 import { usePreferences } from "./preferences.js";
 import { LauncherSkeleton, NavigationErrorState } from "./states.js";
@@ -20,10 +28,13 @@ export interface AppLauncherProps {
 }
 export function AppLauncher({
   currentApp,
-  apps = suiteApps,
+  apps: suppliedApps = suiteApps,
   showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
   trigger = "button",
 }: AppLauncherProps) {
+  const t = useT();
+  const rtl = useDirection() === "rtl";
+  const apps = useNavigationApps(suppliedApps);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [customise, setCustomise] = useState(false);
@@ -76,7 +87,11 @@ export function AppLauncher({
                   ? "suite-tab size-auto"
                   : "suite-action size-auto"
           }
-          label={trigger === "brand" || trigger === "button" ? "Apps" : "More apps"}
+          label={
+            trigger === "brand" || trigger === "button"
+              ? t("navigation.apps")
+              : t("navigation.moreApps")
+          }
         >
           {trigger === "brand" ? (
             <span className="suite-app-icon suite-brand-mark">
@@ -96,25 +111,25 @@ export function AppLauncher({
             <Grid2X2 size={20} strokeWidth={1.75} aria-hidden="true" />
           )}
           {(trigger === "tab" || trigger === "button") && (
-            <span>{trigger === "tab" ? "More" : "Apps"}</span>
+            <span>{trigger === "tab" ? t("navigation.more") : t("navigation.apps")}</span>
           )}
         </IconButton>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           className="suite-launcher"
-          side={trigger === "tab" ? "top" : "right"}
+          side={trigger === "tab" ? "top" : rtl ? "left" : "right"}
           align="start"
           sideOffset={8}
           collisionPadding={8}
-          aria-label="Apps"
+          aria-label={t("navigation.apps")}
           onOpenAutoFocus={(event) => {
             event.preventDefault();
             input.current?.focus();
           }}
         >
           <header className="suite-launcher-heading">
-            <h2>Apps</h2>
+            <h2>{t("navigation.apps")}</h2>
             <Popover.Close asChild>
               <IconButton
                 variant="ghost"
@@ -122,14 +137,14 @@ export function AppLauncher({
                 type="button"
                 data-slot="navigation-icon-button"
                 className="suite-icon-button"
-                label="Close apps"
+                label={t("navigation.closeApps")}
               >
                 <X size={20} aria-hidden="true" />
               </IconButton>
             </Popover.Close>
           </header>
           <label className="suite-filter" htmlFor={id}>
-            Filter apps
+            {t("navigation.filter")}
           </label>
           <input
             ref={input}
@@ -159,51 +174,51 @@ export function AppLauncher({
                 <div
                   className="suite-refresh"
                   role="status"
-                  aria-label="Refreshing app preferences"
+                  aria-label={t("navigation.refreshing")}
                 />
               )}
               {available.length === 0 && backlog.length === 0 ? (
                 <div className="suite-navigation-state">
-                  <p>No apps available</p>
+                  <p>{t("navigation.noneAvailable")}</p>
                   <button
                     type="button"
                     data-slot="navigation-action"
                     className="suite-action"
                     onClick={preferences.retry}
                   >
-                    Retry
+                    {t("common.retry")}
                   </button>
                 </div>
               ) : (
                 <>
                   {preferences.value.pinned.length === 0 && (
                     <div className="suite-navigation-state">
-                      <p>No apps pinned yet</p>
+                      <p>{t("navigation.nonePinned")}</p>
                       <button
                         type="button"
                         data-slot="navigation-action"
                         className="suite-action"
                         onClick={() => setCustomise(true)}
                       >
-                        Choose apps
+                        {t("navigation.chooseApps")}
                       </button>
                     </div>
                   )}
                   <p role="status" className="suite-sr-only">
-                    {matching.length + comingSoon.length} apps found
+                    {t("navigation.found", { count: matching.length + comingSoon.length })}
                   </p>
                   {matching.length > 0 && (
                     <AppGrid
                       apps={matching}
                       currentApp={currentApp}
-                      label="Available apps"
+                      label={t("navigation.available")}
                       close={close}
                       typeFilter={typeFilter}
                     />
                   )}
                   {matching.length + comingSoon.length === 0 && (
                     <div className="suite-navigation-state">
-                      <p>No results for &apos;{filter}&apos;</p>
+                      <p>{t("navigation.noResults", { filter })}</p>
                       <button
                         type="button"
                         data-slot="navigation-action"
@@ -213,23 +228,23 @@ export function AppLauncher({
                           input.current?.focus();
                         }}
                       >
-                        Clear filters
+                        {t("navigation.clearFilters")}
                       </button>
                     </div>
                   )}
                   {backlog.length > 0 && (
                     <details className="suite-coming-soon">
-                      <summary>Coming soon</summary>
+                      <summary>{t("navigation.comingSoon")}</summary>
                       {comingSoon.length > 0 ? (
                         <AppGrid
                           apps={comingSoon}
                           currentApp={currentApp}
-                          label="Coming soon apps"
+                          label={t("navigation.comingSoonApps")}
                           close={close}
                           typeFilter={typeFilter}
                         />
                       ) : (
-                        <p>No coming-soon apps match this filter.</p>
+                        <p>{t("navigation.noComingSoon")}</p>
                       )}
                     </details>
                   )}
@@ -238,8 +253,8 @@ export function AppLauncher({
             </>
           )}
           {actions.length > 0 && (
-            <section className="suite-create" aria-label="Create">
-              <h3>Create</h3>
+            <section className="suite-create" aria-label={t("navigation.create")}>
+              <h3>{t("navigation.create")}</h3>
               <div>
                 {actions.map((action) => (
                   <button
@@ -269,7 +284,7 @@ export function AppLauncher({
               disabled={preferences.status === "loading" || Boolean(preferences.error)}
               onClick={() => setCustomise((value) => !value)}
             >
-              Customise rail
+              {t("navigation.customise")}
             </button>
           </footer>
           {customise && (
