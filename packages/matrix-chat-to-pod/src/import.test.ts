@@ -10,6 +10,7 @@
  */
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { ownerPolicy, writeAcp, writeWac } from "@jeswr/pod-access";
 import { longChatToCanonical } from "@jeswr/solid-chat-interop";
 import { describe, expect, it } from "vitest";
 import {
@@ -45,7 +46,7 @@ function fakeWriteFetch(): { fetch: typeof globalThis.fetch; writes: CapturedWri
       return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
     }
     if (init?.method !== "PUT")
-      return new Response(await buildOwnerOnlyAclTurtle(target, OWNER), {
+      return new Response(await writeWac(ownerPolicy(OWNER), target, `${target}.acl`), {
         headers: { "content-type": "text/turtle", etag: '"acl-v1"' },
       });
     const url = typeof input === "string" ? input : input.toString();
@@ -521,4 +522,57 @@ describe("importRoom private access migration", () => {
       expect(guarded.reads).toEqual([]);
     }
   });
+});
+
+it("refuses re-sync of a shared container, supports explicit replace and repeats without a strong ETag", async () => {
+  let installed: string | undefined;
+  let etag = '"shared"';
+  const writes: string[] = [];
+  const writeFetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<?ext=acr>; rel="acl"' } });
+    if (init?.method === "PUT") {
+      expect(new Headers(init.headers).get("if-match")).toBe('"shared"');
+      installed = String(init.body);
+      writes.push(url);
+      return new Response(null, { status: 204 });
+    }
+    const resource = url.slice(0, url.indexOf("?"));
+    const body =
+      resource === CONTAINER && installed !== undefined
+        ? installed
+        : await writeAcp(
+            ownerPolicy(
+              resource === CONTAINER ? "https://other.example/#me" : OWNER,
+              resource === CONTAINER,
+            ),
+            resource,
+            url,
+            "ess",
+          );
+    return new Response(body, { headers: { "content-type": "text/turtle", etag } });
+  };
+  const root = "https://alice.pod.example/chat/";
+  const guarded = fakeGuardedFetch([{ chunk: [] }]);
+  const run = (replace?: boolean) =>
+    importRoom({
+      homeserverUrl: HOMESERVER,
+      accessToken: TOKEN,
+      roomId: ROOM,
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      guardedFetch: guarded.fetch,
+      root,
+      implementation: "ess",
+      ...(replace === undefined ? {} : { replace }),
+    });
+  await expect(run()).rejects.toMatchObject({ code: "unsupported" });
+  expect(writes).toEqual([]);
+  await run(true);
+  expect(writes).toEqual([`${CONTAINER}?ext=acr`]);
+  etag = 'W/"weak"';
+  await run();
+  expect(writes).toHaveLength(1);
 });

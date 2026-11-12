@@ -29,7 +29,7 @@
 
 import { createNodeGuardedFetch, type NodePinningOptions } from "@jeswr/guarded-fetch/node";
 import { ownerPolicy, writeWac } from "@jeswr/pod-access";
-import { makeOwnerOnly } from "@jeswr/pod-access/roles";
+import { makeOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access/roles";
 import {
   type CanonicalMessage,
   longChatMessageSubject,
@@ -45,7 +45,8 @@ import {
 } from "./transform.js";
 
 /** Options for {@link importRoom}. */
-export interface ImportRoomOptions {
+export interface ImportRoomOptions
+  extends Pick<OwnerOnlyOptions, "root" | "implementation" | "replace"> {
   /**
    * The Matrix homeserver base URL (e.g. `https://matrix.example.org`). A
    * user-configured remote → all reads against it are SSRF-guarded. Must be https.
@@ -307,7 +308,13 @@ export async function importRoom(options: ImportRoomOptions): Promise<ImportRoom
   // Optionally write the owner-only ACL first so the container is locked down
   // BEFORE any message lands in it.
   if (writeAcl && ownerWebId) {
-    await makeOwnerOnly(container, ownerWebId, { fetch: writeFetch, inherit: true });
+    await makeOwnerOnly(container, ownerWebId, {
+      ...(options.root === undefined ? {} : { root: options.root }),
+      ...(options.implementation === undefined ? {} : { implementation: options.implementation }),
+      ...(options.replace === undefined ? {} : { replace: options.replace }),
+      fetch: writeFetch,
+      inherit: true,
+    });
   }
 
   let skipped = 0;

@@ -12,6 +12,7 @@
  */
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { describe, expect, it } from "vitest";
 import { plainMessage } from "../test/fixtures/events.js";
 import { buildOwnerOnlyAclTurtle, importRoom } from "./import.js";
@@ -41,7 +42,7 @@ function fakeWriteFetch(responder: () => Response = () => new Response(null, { s
       return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
     }
     if (init?.method !== "PUT")
-      return new Response(await buildOwnerOnlyAclTurtle(target, OWNER), {
+      return new Response(await writeWac(ownerPolicy(OWNER), target, `${target}.acl`), {
         headers: { "content-type": "text/turtle", etag: '"acl-v1"' },
       });
     writes.push({

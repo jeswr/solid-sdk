@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { ownerPolicy, scopePolicy } from "../policy.js";
+import { ownerPolicy, policiesEqual, scopePolicy } from "../policy.js";
 import { ACL, ACP, RDF, safeIri } from "../rdf.js";
 import { writeAcp } from "../systems/acp.js";
 import { writeWac } from "../systems/wac.js";
@@ -12,7 +12,7 @@ import type { RolesOptions } from "./types.js";
 
 /** Install private access. Replacing foreign grants requires explicit consent. */
 export interface OwnerOnlyOptions extends Pick<RolesOptions, "fetch" | "root" | "implementation"> {
-  /** Include container members; requires a trailing-slash resource URL. Default false. */
+  /** Include members; defaults true for trailing-slash containers. Explicit false removes defaults. */
   inherit?: boolean;
   /** Remove existing own-document foreign grants. Ancestor grants still refuse. Default false. */
   replace?: boolean;
@@ -36,10 +36,17 @@ export async function makeOwnerOnly(
   options: OwnerOnlyOptions,
 ): Promise<void> {
   // Snapshot mutable caller options before the first await.
-  const { fetch, root, implementation = "css", inherit = false, replace = false } = options;
+  const {
+    fetch,
+    root,
+    implementation = "css",
+    inherit: requestedInheritance,
+    replace = false,
+  } = options;
   if (!["css", "ess", "nss"].includes(implementation))
     throw roleError("unsupported", resourceUrl, "Unknown access-control implementation");
   const resource = httpUrl(resourceUrl);
+  const inherit = requestedInheritance ?? resource.endsWith("/");
   const owner = httpUrl(ownerWebId);
   if (owner.startsWith(ACP))
     throw roleError("unsupported", owner, "Reserved ACP agents are not owner WebIDs");
@@ -54,7 +61,8 @@ export async function makeOwnerOnly(
   if (endpoints.length !== 1)
     throw roleError("unsupported", resource, "Exactly one advertised access document is required");
   const endpoint = endpoints[0] as string;
-  scoped(endpoint, io.root);
+  const accessQuery = implementation === "ess" ? "?ext=acr" : false;
+  scoped(endpoint, io.root, accessQuery);
   if (endpoint === resource)
     throw roleError("scope", endpoint, "An access document cannot replace the protected resource");
   // An ACP relation/type is explicit evidence even on create. An acl relation alone
@@ -62,10 +70,10 @@ export async function makeOwnerOnly(
   const model =
     acpLinks.length || links(head.headers, resource, "type").includes(`${ACP}AccessControlResource`)
       ? "acp"
-      : (await detectModel(resource, io)).model;
+      : (await detectModel(resource, io, accessQuery)).model;
   if (model === "unknown" || (model === "acp" && implementation === "nss"))
     throw roleError("unsupported", resource, "Unsupported or unknown access-control model");
-  const snapshot = await load(resource, { ...io, model }, model);
+  const snapshot = await load(resource, { ...io, model }, model, accessQuery);
   if (snapshot.ownUrl !== endpoint)
     throw roleError("conflict", resource, "Access discovery changed");
   // ACP inheritance is additive. Replacing the child's ACR cannot remove it.
@@ -104,11 +112,34 @@ export async function makeOwnerOnly(
         if (node.iris(namespace + name).some((target) => target !== resource))
           throw roleError("scope", resource, "Access document also protects another resource");
     }
+    if (
+      !inherit &&
+      requestedInheritance !== false &&
+      scopePolicy(existing.policy, "members").grants.some((grant) =>
+        grant.who.some((clause) =>
+          clause.some((subject) => subject.kind === "agent" && subject.webId === owner),
+        ),
+      )
+    )
+      throw roleError(
+        "unsupported",
+        resource,
+        "Removing owner member access requires inherit: false",
+      );
   }
+  const policy = ownerPolicy(owner, inherit);
+  // Semantic equality includes both scopes and management, and treats Write as
+  // including Append. A verified no-op needs neither a validator nor a PUT.
+  if (
+    existing &&
+    (["resource", "members"] as const).every((scope) =>
+      policiesEqual(scopePolicy(existing.policy, scope), scopePolicy(policy, scope)),
+    )
+  )
+    return;
   const etag = existing?.etag;
   if (existing && (etag == null || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag)))
     throw roleError("precondition-required", endpoint, "Replacement requires a strong ETag");
-  const policy = ownerPolicy(owner, inherit);
   const body =
     model === "wac"
       ? await writeWac(policy, resource, endpoint)
@@ -135,7 +166,7 @@ export async function makeOwnerOnly(
       state.own ? state.own.etag : false,
       state.documents.map((document) => [document.resource, document.url, document.etag]),
     ]);
-  if (version(await load(resource, { ...io, model }, model)) !== version(snapshot))
+  if (version(await load(resource, { ...io, model }, model, accessQuery)) !== version(snapshot))
     throw roleError("conflict", resource, "Access validators or discovery changed");
   const response = await request(endpoint, io, {
     method: "PUT",

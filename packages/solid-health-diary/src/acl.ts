@@ -21,7 +21,7 @@
  */
 
 import { ownerPolicy, writeWac } from "@jeswr/pod-access";
-import { makeOwnerOnly } from "@jeswr/pod-access/roles";
+import { makeOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access/roles";
 import { httpIriOrUndefined } from "./iri.js";
 
 /**
@@ -118,8 +118,10 @@ export async function writeOwnerOnlyAcl(
   resourceUrl: string,
   ownerWebId: string,
   authedFetch: typeof globalThis.fetch,
+  options: Pick<OwnerOnlyOptions, "root" | "implementation" | "replace"> = {},
 ): Promise<void> {
   await makeOwnerOnly(resourceUrl, ownerWebId, {
+    ...options,
     fetch: authedFetch,
     inherit: new URL(resourceUrl).pathname.endsWith("/"),
   });

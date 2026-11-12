@@ -534,8 +534,9 @@ await makeOwnerOnly(resourceUrl, ownerWebId, {
 `makeOwnerOnly(resourceUrl, ownerWebId, options: OwnerOnlyOptions): Promise<void>`
 installs `ownerPolicy` through the existing WAC/ACP writers. The owner receives
 Read, Write, Append and management (WAC/CSS Control; ESS ACR Read+Write).
-`inherit` defaults to false (resource only); true requires a trailing-slash container
-and includes WAC defaults or ACP member controls and ESS member management.
+`inherit` defaults to true for trailing-slash containers and false for files. True
+includes WAC defaults or ACP member controls and ESS member management. Dropping an
+existing owner member grant requires explicit `inherit: false`, including on a file.
 Descendants with their own access documents are not changed.
 
 The authenticated injected fetch, `root` scope and `implementation` assertion follow
@@ -549,9 +550,18 @@ An explicit ACP relation/type establishes ACP for creation; an `acl` relation al
 requires a nonempty own or ancestor document establishing WAC or ACP. Missing links,
 unknown/mixed systems, unsupported policy shapes and unreadable RDF fail closed.
 CSS is the default dialect; ESS requires `implementation: "ess"`; NSS supports WAC.
-As with other role writers, query-addressed access documents are refused.
+Owner-only ESS setup supports server-advertised query-addressed ACR endpoints with
+exactly `?ext=acr`, on the same origin and inside `root`. Extra parameters, encodings,
+credentials and fragments refuse. Other role writers continue to refuse query endpoints.
+The shared Link parser ignores malformed unrelated entries; malformed entries carrying
+the requested `acl` or ACP access-control relation still refuse.
 
-Creation uses `If-None-Match: *`. Replacement requires the existing document's **strong**
+If the existing policy already grants exactly the owner all required modes and scopes,
+the helper returns without PUT, including with weak or missing ETags. This checks own
+permissions and additive ACP ancestors first. Re-sync after sharing a container refuses
+unless `replace: true` explicitly approves removing its foreign own-document grants.
+
+Creation uses `If-None-Match: *`. A policy change requires the existing document's **strong**
 ETag and uses it verbatim in `If-Match`. Missing, weak, wildcard and malformed validators
 refuse. Existing own-document selectors for another WebID, public/authenticated agents,
 groups or clients require **`replace: true`**; the default is false. This explicit option

@@ -26,10 +26,9 @@ export interface Snapshot {
 }
 /**
  * Refuses (`scope`) a URL outside `root` or not in canonical form. `query` admits a query string,
- * which only read-only model detection allows on an access document (ESS addresses its ACRs as
- * `?ext=acr`); every path that writes keeps refusing it.
+ * for read-only detection. Owner-only ESS setup admits only the exact `?ext=acr` query.
  */
-export function scoped(url: string, root: string, query = false): string {
+export function scoped(url: string, root: string, query: boolean | "?ext=acr" = false): string {
   safeIri(url);
   const parsed = new URL(url);
   const base = new URL(root);
@@ -37,7 +36,7 @@ export function scoped(url: string, root: string, query = false): string {
     !/^https?:$/.test(parsed.protocol) ||
     parsed.username ||
     parsed.password ||
-    (parsed.search && !query) ||
+    (parsed.search && query !== true && parsed.search !== query) ||
     parsed.hash ||
     /%(?:2f|5c|2e|25|00)/i.test(parsed.pathname) ||
     parsed.href !== url ||
@@ -57,25 +56,47 @@ export function links(headers: Headers, base: string, rel: string): string[] {
       /^\s*<([^<>]*)>((?:\s*;\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+\s*(?:=\s*(?:"(?:[^"\\]|\\.)*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?)*)\s*(?:,|$)/.exec(
         remaining,
       );
+    // A valid entry consumes commas within its target and quoted parameters.
+    // For malformed entries recover at the next comma, then decide whether the
+    // broken entry actually carries the requested relation before refusing it.
+    const length = link ? link[0].length : remaining.indexOf(",") + 1 || remaining.length;
+    const entry = remaining.slice(0, length);
+    remaining = remaining.slice(length);
+    const parameters = [
+      ...entry
+        .slice(entry.indexOf(">") + 1)
+        .matchAll(
+          /;\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*(?:"|$)|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?/g,
+        ),
+    ];
+    const value = (raw: string) =>
+      raw.startsWith('"')
+        ? raw.slice(1, raw.endsWith('"') ? -1 : undefined).replace(/\\(.)/g, "$1")
+        : raw;
+    if (
+      !parameters.some(
+        (param) =>
+          (param[1] as string).toLowerCase() === "rel" &&
+          value(param[2] ?? "")
+            .toLowerCase()
+            .split(/\s+/)
+            .includes(rel.toLowerCase()),
+      )
+    )
+      continue;
     if (!link) throw roleError("invalid-response", base, "Invalid access Link header");
-    remaining = remaining.slice(link[0].length);
     const params = new Map<string, string>();
-    for (const param of (link[2] as string).matchAll(
-      /;\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?/g,
-    )) {
+    for (const param of parameters) {
       const name = (param[1] as string).toLowerCase();
       const raw = param[2] ?? "";
       if (name === "rel" && params.has(name))
         throw roleError("invalid-response", base, "Ambiguous access Link relation");
-      if (!params.has(name))
-        params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
+      if (!params.has(name)) params.set(name, value(raw));
     }
     if (params.has("anchor"))
       throw roleError("invalid-response", base, "Anchored access links are ambiguous");
-    if ((params.get("rel") ?? "").toLowerCase().split(/\s+/).includes(rel.toLowerCase())) {
-      if (!link[1]) throw roleError("invalid-response", base, "Empty access Link target");
-      result.push(new URL(link[1], base).href);
-    }
+    if (!link[1]) throw roleError("invalid-response", base, "Empty access Link target");
+    result.push(new URL(link[1], base).href);
   }
   return [...new Set(result)];
 }
@@ -146,9 +167,16 @@ export async function load(
   resource: string,
   options: RolesOptions,
   establishedModel?: "wac" | "acp",
+  accessQuery: false | "?ext=acr" = false,
 ): Promise<Snapshot> {
   // Outside detection the resource's own advertised document always sets the model.
-  const snapshot = (await discover(resource, options, false, establishedModel)) as Snapshot;
+  const snapshot = (await discover(
+    resource,
+    options,
+    false,
+    establishedModel,
+    accessQuery,
+  )) as Snapshot;
   if (options.model !== undefined && snapshot.model !== options.model) {
     const error = roleError(
       "unsupported",
@@ -167,12 +195,14 @@ export async function load(
  * document decides the model, so a missing or empty one never counts as WAC, and a walk that
  * finds no deciding document reports "unknown". Refuses `unsupported` when the resource advertises
  * no access document; every other failure (including mixed models, see `isMixedModel`) is thrown.
+ * Owner-only setup restricts `accessQuery` throughout the walk, including before model detection.
  */
 export async function detectModel(
   resource: string,
   options: Pick<RolesOptions, "fetch" | "root">,
+  accessQuery: boolean | "?ext=acr" = true,
 ): Promise<{ model: "wac" | "acp" | "unknown"; ownUrl: string }> {
-  const { model, ownUrl } = await discover(resource, options, true);
+  const { model, ownUrl } = await discover(resource, options, true, undefined, accessQuery);
   return { model: model ?? "unknown", ownUrl };
 }
 async function discover(
@@ -180,6 +210,7 @@ async function discover(
   options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
   detecting: boolean,
   establishedModel?: "wac" | "acp",
+  accessQuery: boolean | "?ext=acr" = false,
 ): Promise<Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined }> {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
@@ -208,7 +239,7 @@ async function discover(
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
-      scoped(endpoint, root, detecting);
+      scoped(endpoint, root, accessQuery);
       const response = await request(endpoint, options, {
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });

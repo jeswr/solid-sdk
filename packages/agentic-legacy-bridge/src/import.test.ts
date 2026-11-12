@@ -1,9 +1,9 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { ownerPolicy, writeAcp, writeWac } from "@jeswr/pod-access";
 import { Parser } from "n3";
 import { describe, expect, it, vi } from "vitest";
-import { buildOwnerOnlyAclTurtle } from "./acl.js";
 import { InMemoryChannelAdapter } from "./channel.js";
 import { importInbound } from "./import.js";
 
@@ -27,7 +27,7 @@ function recordingFetch(
     if (init?.method === "HEAD")
       return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
     if ((init?.method ?? "GET") === "GET")
-      return new Response(await buildOwnerOnlyAclTurtle(CONTAINER, OWNER), {
+      return new Response(await writeWac(ownerPolicy(OWNER), CONTAINER, `${CONTAINER}.acl`), {
         headers: { "content-type": "text/turtle", etag: '"v1"' },
       });
     const ov = overrides?.(url);
@@ -369,4 +369,53 @@ describe("importInbound ACL discovery privacy gate", () => {
       `${CONTAINER}.acr`,
     );
   });
+});
+
+it("refuses re-sync of a shared container, supports explicit replace and repeats without a strong ETag", async () => {
+  let installed: string | undefined;
+  let etag = '"shared"';
+  const writes: string[] = [];
+  const writeFetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<?ext=acr>; rel="acl"' } });
+    if (init?.method === "PUT") {
+      expect(new Headers(init.headers).get("if-match")).toBe('"shared"');
+      installed = String(init.body);
+      writes.push(url);
+      return new Response(null, { status: 204 });
+    }
+    const resource = url.slice(0, url.indexOf("?"));
+    const body =
+      resource === CONTAINER && installed !== undefined
+        ? installed
+        : await writeAcp(
+            ownerPolicy(
+              resource === CONTAINER ? "https://other.example/#me" : OWNER,
+              resource === CONTAINER,
+            ),
+            resource,
+            url,
+            "ess",
+          );
+    return new Response(body, { headers: { "content-type": "text/turtle", etag } });
+  };
+  const root = "https://pod.example/";
+  const run = (replace?: boolean) =>
+    importInbound({
+      adapter: new InMemoryChannelAdapter("email", []),
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      root,
+      implementation: "ess",
+      ...(replace === undefined ? {} : { replace }),
+    });
+  await expect(run()).rejects.toMatchObject({ code: "unsupported" });
+  expect(writes).toEqual([]);
+  await run(true);
+  expect(writes).toEqual([`${CONTAINER}?ext=acr`]);
+  etag = 'W/"weak"';
+  await run();
+  expect(writes).toHaveLength(1);
 });

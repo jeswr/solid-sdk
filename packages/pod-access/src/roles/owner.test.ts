@@ -2,7 +2,10 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { ownerPolicy } from "../policy.js";
 import { ACL, ACP } from "../rdf.js";
+import { writeAcp } from "../systems/acp.js";
+import { writeWac } from "../systems/wac.js";
 import { isRoleError } from "./errors.js";
 import { makeOwnerOnly, type OwnerOnlyOptions } from "./owner.js";
 
@@ -19,7 +22,24 @@ const acp = (agent = owner, target = resource, ess = false) => `${prefixes}
  <> a acp:AccessControlResource; acp:resource <${target}>; acp:accessControl <#c>.
  <#c> acp:apply <#p>. <#p> acp:allow ${ess ? "acp" : "acl"}:Read; acp:allOf <#m>.
  <#m> acp:agent <${agent}>.`;
+async function privateDocument(
+  model: "wac" | "acp",
+  target = resource,
+  inherit = true,
+  full = true,
+  ess = false,
+  url = endpoint,
+) {
+  const policy = ownerPolicy(owner, inherit);
+  if (!full) policy.grants[0]?.modes.delete("control");
+  return model === "wac"
+    ? writeWac(policy, target, url)
+    : writeAcp(policy, target, url, ess ? "ess" : "css");
+}
 interface Fixture {
+  endpoint?: string;
+  target?: string;
+  ancestorLink?: string;
   model?: "wac" | "acp";
   own?: string | number;
   ancestor?: string | number;
@@ -28,18 +48,21 @@ interface Fixture {
   fail?: { method: string; status: number };
 }
 function pod(f: Fixture = {}) {
-  const link = f.link ?? `<policy>; rel="${f.model === "acp" ? `${ACP}accessControl` : "acl"}"`;
+  const accessUrl = f.endpoint ?? endpoint;
+  const target = f.target ?? resource;
+  const link =
+    f.link ?? `<${accessUrl}>; rel="${f.model === "acp" ? `${ACP}accessControl` : "acl"}"`;
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (f.fail?.method === method) return new Response(null, { status: f.fail.status });
     if (method === "HEAD")
       return new Response(null, {
-        headers: { link: url === resource ? link : '<root-policy>; rel="acl"' },
+        headers: { link: url === target ? link : (f.ancestorLink ?? '<root-policy>; rel="acl"') },
       });
     if (method === "PUT") return new Response(null, { status: 204 });
     const content =
-      url === endpoint
+      url === accessUrl
         ? (f.own ?? wac())
         : (f.ancestor ??
           (f.model === "acp"
@@ -54,8 +77,8 @@ function pod(f: Fixture = {}) {
           },
         });
   });
-  const run = (options: Partial<OwnerOnlyOptions> = {}, target = resource, webId = owner) =>
-    makeOwnerOnly(target, webId, { fetch, ...options });
+  const run = (options: Partial<OwnerOnlyOptions> = {}, resourceUrl = target, webId = owner) =>
+    makeOwnerOnly(resourceUrl, webId, { fetch, ...options });
   const puts = () => fetch.mock.calls.filter(([, init]) => init?.method === "PUT");
   return { fetch, run, puts };
 }
@@ -64,6 +87,122 @@ async function objects(body: BodyInit | null | undefined, predicate: string) {
   return [...ds.match(null, DataFactory.namedNode(predicate))].map((q) => q.object.value);
 }
 describe("makeOwnerOnly", () => {
+  it.each(["wac", "acp"] as const)("defaults to member access for %s containers", async (model) => {
+    const p = pod({ model, own: await privateDocument(model, resource, false) });
+    await p.run();
+    expect(p.puts()).toHaveLength(1);
+    expect(
+      await objects(
+        p.puts()[0]?.[1]?.body,
+        model === "wac" ? `${ACL}default` : `${ACP}memberAccessControl`,
+      ),
+    ).toHaveLength(1);
+  });
+  it.each([
+    "wac",
+    "acp",
+    "ess",
+  ] as const)("preserves existing %s member grants without needing an ETag", async (dialect) => {
+    const model = dialect === "wac" ? "wac" : "acp";
+    for (const etag of [null, 'W/"weak"']) {
+      const p = pod({
+        model,
+        own: await privateDocument(model, resource, true, true, dialect === "ess"),
+        etag,
+      });
+      await p.run({ implementation: dialect === "ess" ? "ess" : "css" });
+      expect(p.puts()).toEqual([]);
+    }
+  });
+  it.each(["wac", "acp"] as const)("defaults files to resource-only %s access", async (model) => {
+    const target = `${root}file`;
+    const p = pod({ model, target, own: await privateDocument(model, target, false), etag: null });
+    await p.run();
+    expect(p.puts()).toEqual([]);
+  });
+  it.each([
+    "wac",
+    "acp",
+  ] as const)("refuses implicit removal of %s defaults on a file", async (model) => {
+    const target = `${root}file`;
+    const p = pod({ model, target, own: await privateDocument(model, target, true) });
+    await expect(p.run()).rejects.toMatchObject({
+      code: "unsupported",
+      message: expect.stringContaining("inherit: false"),
+    });
+    expect(p.puts()).toEqual([]);
+    await p.run({ inherit: false });
+    expect(p.puts()).toHaveLength(1);
+  });
+  it.each([
+    false,
+    true,
+  ])("writes a real ESS query endpoint (create=%s) with conditional persistence", async (create) => {
+    const accessUrl = `${resource}?ext=acr`;
+    const p = pod({
+      model: "acp",
+      endpoint: accessUrl,
+      link: `<?ext=acr>; rel="acl"`,
+      ancestorLink: '<?ext=acr>; rel="acl"',
+      own: create ? 404 : await privateDocument("acp", resource, false, true, true, accessUrl),
+      ancestor: await privateDocument("acp", root, false, true, true, `${root}?ext=acr`),
+    });
+    await p.run({ implementation: "ess" });
+    const [url, init] = p.puts()[0] ?? [];
+    expect(url).toBe(accessUrl);
+    expect(new Headers(init?.headers).get(create ? "if-none-match" : "if-match")).toBe(
+      create ? "*" : '"v1"',
+    );
+    const ds = await parseRdf(String(init?.body), "text/turtle", { baseIRI: accessUrl });
+    expect(
+      ds.match(DataFactory.namedNode(accessUrl), DataFactory.namedNode(`${ACP}accessControl`)).size,
+    ).toBe(1);
+    expect(await objects(init?.body, `${ACP}allow`)).toContain(`${ACP}Write`);
+  });
+  it.each([
+    "?ext=acr&extra=1",
+    "?ext=acr&ext=acr",
+    "?ext=other",
+    "?EXT=acr",
+    "?ext=%61cr",
+    "https://foreign.example/private/?ext=acr",
+    "https://pod.example/outside/?ext=acr",
+    "https://u:p@pod.example/private/?ext=acr",
+    "?ext=acr#fragment",
+  ])("refuses unsafe ESS query endpoint %s before reading it", async (target) => {
+    const p = pod({ model: "acp", link: `<${target}>; rel="${ACP}accessControl"` });
+    await expect(p.run({ implementation: "ess", root: resource })).rejects.toMatchObject({
+      code: "scope",
+    });
+    expect(p.fetch).toHaveBeenCalledTimes(1);
+  });
+  it("keeps CSS query-addressed writes refused", async () => {
+    const p = pod({ model: "acp", link: `<?ext=acr>; rel="${ACP}accessControl"` });
+    await expect(p.run()).rejects.toMatchObject({ code: "scope" });
+    expect(p.fetch).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    "css",
+    "ess",
+  ] as const)("bounds %s model-detection ancestor queries before fetching", async (implementation) => {
+    const forbidden = `${root}?ext=acr&extra=1`;
+    const p = pod({ own: 404, ancestorLink: `<${forbidden}>; rel="acl"` });
+    await expect(p.run({ implementation })).rejects.toMatchObject({ code: "scope" });
+    expect(p.fetch.mock.calls.some(([url]) => url === forbidden)).toBe(false);
+    expect(p.puts()).toEqual([]);
+  });
+  it.each([
+    '<metadata>; rel="describedby"; broken=',
+    '<metadata>; rel="describedby"; anchor; rel="next"',
+    'broken; rel="describedby"',
+    '<metadata>; rel="describedby"; title="unclosed',
+  ])("ignores malformed unrelated link %s", async (unrelated) => {
+    for (const link of [`${unrelated}, <policy>; rel="acl"`, `<policy>; rel="acl", ${unrelated}`]) {
+      const p = pod({ link });
+      await p.run();
+      expect(p.puts()).toEqual([]);
+    }
+  });
   it.each([
     "wac",
     "acp",
@@ -87,9 +226,9 @@ describe("makeOwnerOnly", () => {
   it.each([
     "wac",
     "acp",
-  ] as const)("replaces owner-only %s with strong If-Match and resource-only scope", async (model) => {
-    const p = pod({ model, own: model === "acp" ? acp() : wac(), etag: '"exact"' });
-    await p.run();
+  ] as const)("removes owner member grants only with explicit inherit: false for %s", async (model) => {
+    const p = pod({ model, own: await privateDocument(model), etag: '"exact"' });
+    await p.run({ inherit: false });
     const init = p.puts()[0]?.[1];
     expect(new Headers(init?.headers).get("if-match")).toBe('"exact"');
     expect(new Headers(init?.headers).has("if-none-match")).toBe(false);
@@ -138,7 +277,7 @@ describe("makeOwnerOnly", () => {
     "unquoted",
     '"a", "b"',
   ])("refuses unsafe ETag %s", async (etag) => {
-    const p = pod({ etag });
+    const p = pod({ etag, own: await privateDocument("wac", resource, true, false) });
     await expect(p.run()).rejects.toMatchObject({ code: "precondition-required" });
     expect(p.puts()).toEqual([]);
   });
@@ -148,7 +287,10 @@ describe("makeOwnerOnly", () => {
     "PUT",
   ])("propagates auth/conflict failures on %s without retry", async (method) => {
     for (const status of [401, 403, 412]) {
-      const p = pod({ fail: { method, status } });
+      const p = pod({
+        fail: { method, status },
+        own: await privateDocument("wac", resource, true, false),
+      });
       const error = await p.run().catch((e: unknown) => e);
       expect(isRoleError(error)).toBe(true);
       expect(error).toMatchObject({ code: status === 412 ? "conflict" : "invalid-response" });
@@ -161,14 +303,21 @@ describe("makeOwnerOnly", () => {
     "",
     '<one>; rel="acl", <two>; rel="acl"',
     '<policy>; rel="acl"; rel="acl"',
+    '<policy>; rel; rel="acl"',
     '<policy>; rel="acl"; anchor',
     "broken",
     '<>; rel="acl"',
     '<policy>; rel="acl"; extension=',
     '<policy>; rel="acl"; title="unclosed',
+    '<policy>; rel="acl',
   ])("refuses missing/ambiguous/malformed Link (%s)", async (link) => {
     const p = pod({ link });
-    await expect(p.run()).rejects.toThrow();
+    await expect(p.run()).rejects.toMatchObject({
+      code:
+        ["", "broken"].includes(link) || link.includes("<one>")
+          ? "unsupported"
+          : "invalid-response",
+    });
     expect(p.puts()).toEqual([]);
   });
   it.each([
@@ -179,7 +328,7 @@ describe("makeOwnerOnly", () => {
     '<./>; rel="acl"',
   ])("refuses unsafe access URL (%s)", async (link) => {
     const p = pod({ link });
-    await expect(p.run()).rejects.toThrow();
+    await expect(p.run()).rejects.toMatchObject({ code: "scope" });
     expect(p.puts()).toEqual([]);
   });
   it.each([
@@ -189,7 +338,12 @@ describe("makeOwnerOnly", () => {
     404,
   ])("refuses unknown/malformed systems (%s)", async (own) => {
     const p = pod({ own, ancestor: 404 });
-    await expect(p.run()).rejects.toThrow();
+    if (own === "not RDF")
+      await expect(p.run()).rejects.toMatchObject({
+        name: "RdfFetchError",
+        message: expect.stringContaining("Failed to parse"),
+      });
+    else await expect(p.run()).rejects.toMatchObject({ code: "unsupported" });
     expect(p.puts()).toEqual([]);
   });
   it("never treats a suffix as model evidence", async () => {
@@ -203,7 +357,7 @@ describe("makeOwnerOnly", () => {
   ])("refuses foreign additive inheritance even with replace=%s", async (replace) => {
     const p = pod({
       model: "acp",
-      own: acp(),
+      own: await privateDocument("acp"),
       ancestor: acp(other, root).replace("acp:accessControl", "acp:memberAccessControl"),
     });
     await expect(p.run({ replace })).rejects.toMatchObject({ code: "inherited-grant" });
@@ -225,22 +379,31 @@ describe("makeOwnerOnly", () => {
   });
   it("preserves annotations and refuses mixed or unsupported RDF", async () => {
     const p = pod({ own: `${wac()} <#a> <https://example.org/note> "keep".` });
-    await p.run();
+    await p.run({ inherit: false });
     expect(await objects(p.puts()[0]?.[1]?.body, "https://example.org/note")).toEqual(["keep"]);
-    for (const own of [
-      `${wac()} <#p> a acp:Policy.`,
-      `${wac()} <#a> acl:unknown <#x>.`,
-      `${wac()} <#a> acl:agent "literal".`,
-      `${wac()} <#a> acl:defaultForNew <${resource}>.`,
-    ]) {
+    for (const [own, message, code] of [
+      [`${wac()} <#p> a acp:Policy.`, "Mixed access-control vocabularies", "invalid-response"],
+      [`${wac()} <#a> acl:unknown <#x>.`, "Unknown access-control construct", undefined],
+      [`${wac()} <#a> acl:agent "literal".`, "must be NamedNode", undefined],
+      [`${wac()} <#a> acl:defaultForNew <${resource}>.`, "acl:defaultForNew", undefined],
+    ] as const) {
       const p = pod({ own });
-      await expect(p.run({ replace: true })).rejects.toThrow();
+      if (code)
+        await expect(p.run({ replace: true })).rejects.toMatchObject({
+          code,
+          message: expect.stringContaining(message),
+        });
+      else await expect(p.run({ replace: true })).rejects.toThrow(message);
       expect(p.puts()).toEqual([]);
     }
   });
   it("normalizes resource and owner URLs", async () => {
     const p = pod();
-    await p.run({}, "https://POD.example:443/other/../private/", "https://ID.example:443/card#me");
+    await p.run(
+      { inherit: false },
+      "https://POD.example:443/other/../private/",
+      "https://ID.example:443/card#me",
+    );
     expect(p.fetch.mock.calls[0]?.[0]).toBe(resource);
     expect(await objects(p.puts()[0]?.[1]?.body, `${ACL}agent`)).toEqual([owner]);
   });
@@ -254,13 +417,20 @@ describe("makeOwnerOnly", () => {
     "https://pod.example/a>bad/",
   ])("rejects unsafe resource before I/O (%s)", async (target) => {
     const p = pod();
-    await expect(p.run({}, target)).rejects.toThrow();
+    if (target === "relative" || target.includes(">"))
+      await expect(p.run({}, target)).rejects.toThrow("Unsafe RDF IRI");
+    else await expect(p.run({}, target)).rejects.toMatchObject({ code: "scope" });
     expect(p.fetch).not.toHaveBeenCalled();
   });
   it("rejects invalid owner, file inheritance and unknown implementations before I/O", async () => {
     const p = pod();
-    await expect(p.run({}, resource, "mailto:owner@example.org")).rejects.toThrow();
-    await expect(p.run({ inherit: true }, `${root}file`)).rejects.toThrow(/container/);
+    await expect(p.run({}, resource, "mailto:owner@example.org")).rejects.toMatchObject({
+      code: "scope",
+    });
+    await expect(p.run({ inherit: true }, `${root}file`)).rejects.toMatchObject({
+      code: "scope",
+      message: expect.stringContaining("container"),
+    });
     await expect(p.run({ implementation: "unknown" as "css" })).rejects.toMatchObject({
       code: "unsupported",
     });
@@ -371,7 +541,10 @@ describe("makeOwnerOnly", () => {
       );
       expect(await objects(p.puts()[0]?.[1]?.body, `${ACL}agent`)).toEqual([owner]);
     } else {
-      await expect(p.run()).rejects.toThrow();
+      await expect(p.run()).rejects.toMatchObject({
+        name: "RdfFetchError",
+        message: expect.stringContaining("Failed to parse"),
+      });
       expect(p.puts()).toEqual([]);
     }
   });

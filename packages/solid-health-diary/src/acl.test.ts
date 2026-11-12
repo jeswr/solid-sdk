@@ -6,6 +6,7 @@
 // Read/Write/Control over the container + descendants, with NO public grant.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { ownerPolicy, writeAcp, writeWac } from "@jeswr/pod-access";
 import { describe, expect, it, vi } from "vitest";
 import { aclUrlFor, buildOwnerOnlyAcl, writeOwnerOnlyAcl } from "./acl.js";
 
@@ -96,9 +97,12 @@ describe("writeOwnerOnlyAcl — discovered, conditional private access", () => {
     return vi.fn<typeof fetch>(async (_url, init) => {
       if (init?.method === "HEAD") return new Response(null, { headers: { link } });
       if (init?.method !== "PUT")
-        return new Response(await buildOwnerOnlyAcl(CONTAINER, existingOwner), {
-          headers: { "content-type": "text/turtle", etag: '"current"' },
-        });
+        return new Response(
+          await writeWac(ownerPolicy(existingOwner), CONTAINER, `${CONTAINER}owner-policy`),
+          {
+            headers: { "content-type": "text/turtle", etag: '"current"' },
+          },
+        );
       return new Response(null, { status });
     });
   }
@@ -141,4 +145,40 @@ describe("writeOwnerOnlyAcl — discovered, conditional private access", () => {
     const ds = await parseRdf(body, "text/turtle");
     expect(ds.match(null, { termType: "NamedNode", value: `${ACL}default` } as never).size).toBe(0);
   });
+});
+
+it("forwards storage root, ESS dialect and replace for a sub-path pod", async () => {
+  const root = "https://host/alice/";
+  const target = `${root}private/`;
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+    const url = String(input);
+    expect(url.startsWith(root)).toBe(true);
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<?ext=acr>; rel="acl"' } });
+    if (init?.method !== "PUT") {
+      const resource = url.slice(0, url.indexOf("?"));
+      return new Response(
+        await writeAcp(
+          ownerPolicy(
+            resource === target ? "https://other.example/#me" : OWNER,
+            resource === target,
+          ),
+          resource,
+          url,
+          "ess",
+        ),
+        {
+          headers: { "content-type": "text/turtle", etag: '"shared"' },
+        },
+      );
+    }
+    return new Response(null, { status: 204 });
+  });
+  await writeOwnerOnlyAcl(target, OWNER, fetch, { root, implementation: "ess", replace: true });
+  expect(fetch.mock.calls.some(([url, init]) => url === root && init?.method === "HEAD")).toBe(
+    true,
+  );
+  expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT").map(([url]) => url)).toEqual(
+    [`${target}?ext=acr`],
+  );
 });

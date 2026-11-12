@@ -383,16 +383,16 @@ by codex via roborev (`.roborev.toml`). MIT.
 ## Owner-only access changes (sst-9ku5)
 
 Online owner-only writes now delegate to `@jeswr/pod-access/roles` `makeOwnerOnly`.
-They discover the server's ACL/ACR Link, support WAC and CSS ACP, and refuse missing
+They discover the server's ACL/ACR Link, support WAC and CSS/ESS ACP, and refuse missing
 or ambiguous Links, unknown/mixed models, malformed/unsupported policies, unsafe URLs
 and foreign resource bindings. Targets must exist and support HEAD discovery; an
 `acl`-only Link requires model evidence in readable own or ancestor RDF. Credentialed
 URLs, resource queries/fragments and ambiguous encoded paths now refuse. The wrappers
-use the default trusted CSS dialect;
-ESS deployments should call `makeOwnerOnly` with `implementation: "ess"` directly.
+use the default trusted CSS dialect; pass `implementation: "ess"` for ESS, including
+server-advertised `?ext=acr` endpoints (only that exact query is accepted).
 Creation uses `If-None-Match: *`; replacement requires a strong ETag and `If-Match`.
 An existing document naming other principals now refuses instead of silently removing
-their access; explicit removal requires a direct helper call with `replace: true`.
+their access; explicit removal requires `replace: true`.
 Foreign inherited ACP member grants always refuse. No error is swallowed and 412 is
 never retried. Access transport now refuses redirects and disables caching; failures
 use pod-access's typed role errors (parser errors propagate).
@@ -411,8 +411,17 @@ conditional writes plus foreign-grant refusal. Its separate public `discoverWacA
 compatibility API retains its existing strict WAC-only validation contract. The
 multi-identity `buildBridgeAclTurtle` privilege split is unchanged.
 
-Discovered endpoints use the helper's origin-root scope (or an explicit root on a direct
-helper call), rather than the old importer's container-only restriction. Advertised names
+Discovered endpoints use the helper's origin-root scope (or the wrapper's explicit `root`), rather than the old importer's container-only restriction. Advertised names
 are independent of their model: a `.acr` filename can hold established WAC. Missing own
 WAC documents now need readable ancestor model evidence; all scope and policy checks run
 again before the conditional write.
+
+`importInbound(options)` accepts `root`, `implementation` and `replace` alongside its existing options.
+Set `root` to the pod's storage root (for example `https://host/alice/`) when the pod
+lives at a sub-path; discovery stops there. Without it, discovery uses the origin root.
+An already owner-only document with the required direct/member permissions sends no PUT,
+so repeated imports also work with weak or absent ETags. Containers inherit by default;
+removing existing owner member grants through the helper requires explicit `inherit: false`.
+If the user has since shared the container, re-sync refuses unless `replace: true` explicitly
+approves removing those own-document grants. A write that changes a policy still needs a
+strong ETag; foreign additive ACP ancestor grants remain a refusal.
