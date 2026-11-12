@@ -3,7 +3,7 @@
 import { CredentialStore } from "@jeswr/agent-credentials";
 import { canonicalJson } from "@jeswr/agent-model";
 import { randomUUID } from "crypto";
-import { constants } from "fs";
+import { constants, lstatSync } from "fs";
 import { lstat, open, rename, unlink } from "fs/promises";
 import { join } from "path";
 import { checkedProposalResult, proposalResultKey } from "./proposal-results.js";
@@ -40,6 +40,8 @@ async function readPrivate(path: string): Promise<string | undefined> {
     await file.close();
   }
 }
+/** HALT records its stop time so Resume freshness doesn't rest on the file's mtime alone. */
+const haltRecord = () => `halted ${new Date().toISOString()}\n`;
 async function writePrivate(directory: string, name: string, text: string) {
   const temporary = join(directory, `${randomUUID()}.tmp`);
   const file = await open(temporary, "wx", 0o600);
@@ -97,6 +99,44 @@ export function createProcessLease(directory: string): ProcessLease {
 }
 export function createLocalState(directory: string) {
   new CredentialStore({ dir: directory });
+  // Only Resume takes the lock. Halt must work even after a crashed lock holder.
+  // The dispatch fence treats the lock as stopped while HALT is being removed.
+  const mutateHalt = async (work: () => Promise<void>) => {
+    const path = join(directory, "halt.lock");
+    let lock: Awaited<ReturnType<typeof open>> | undefined;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      try {
+        lock = await open(path, "wx", 0o600);
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code !== "EEXIST") throw error;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+    }
+    if (!lock) throw new Error("Local stop is locked");
+    let release = false;
+    try {
+      // Persist the dispatch fence before temporarily moving HALT.
+      await syncDirectory(directory);
+      await work();
+      release = true;
+    } finally {
+      await lock.close();
+      if (!release) {
+        try {
+          await lstat(join(directory, "HALT"));
+          await syncDirectory(directory);
+          release = true;
+        } catch {
+          // Recovery could not establish a durable HALT. Retain the lock fence.
+        }
+      }
+      if (release) {
+        await unlink(path);
+        await syncDirectory(directory);
+      }
+    }
+  };
   const proposalResults: ProposalResults = {
     async get(key) {
       const text = await readPrivate(join(directory, `proposal-${proposalResultKey(key)}.json`));
@@ -125,20 +165,94 @@ export function createLocalState(directory: string) {
     },
   };
   const halted = async () => {
-    try {
-      await lstat(join(directory, "HALT"));
-      return true;
-    } catch (error) {
-      if (missing(error)) return false;
-      throw error;
+    for (const name of ["HALT", "halt.lock"]) {
+      try {
+        await lstat(join(directory, name));
+        return true;
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
     }
+    return false;
   };
   return {
     checkpoints,
     proposalResults,
     halted,
+    assertNotHalted() {
+      for (const name of ["HALT", "halt.lock"]) {
+        try {
+          lstatSync(join(directory, name));
+        } catch (error) {
+          if (missing(error)) continue;
+          throw error;
+        }
+        throw new Error("Local stop active");
+      }
+    },
     async halt() {
-      await writePrivate(directory, "HALT", "halted\n");
+      await writePrivate(directory, "HALT", haltRecord());
+    },
+    /**
+     * The trusted host verifies a fresh owner Resume before removing the local stop. The
+     * check runs under halt.lock (the dispatch fence), against the stop time recorded in
+     * HALT and its mtime, whichever is later; a HALT without a readable time is kept.
+     */
+    async resume(authorize: (haltedAt: number) => Promise<boolean>) {
+      const path = join(directory, "HALT");
+      try {
+        await lstat(path);
+      } catch (error) {
+        if (missing(error)) return false;
+        throw error;
+      }
+      await mutateHalt(async () => {
+        const halted = await lstat(path);
+        if (!halted.isFile()) throw new Error("A fresh signed Resume is required");
+        const recorded = /^halted (\S+)\n$/.exec((await readPrivate(path)) ?? "")?.[1];
+        const at = Date.parse(recorded ?? "");
+        if (!Number.isFinite(at))
+          throw new Error("This local stop has no recorded time, so it was kept");
+        if (!(await authorize(Math.max(at, halted.mtimeMs))))
+          throw new Error("A fresh signed Resume is required");
+        const current = await lstat(path);
+        if (
+          current.ino !== halted.ino ||
+          current.dev !== halted.dev ||
+          current.mtimeMs !== halted.mtimeMs ||
+          current.ctimeMs !== halted.ctimeMs
+        )
+          throw new Error("HALT changed during resume");
+        // Rename first so we can inspect the identity actually removed. A Halt
+        // can replace the file between the identity check above and this rename.
+        const removed = join(directory, `${randomUUID()}.halt`);
+        await rename(path, removed);
+        try {
+          const moved = await lstat(removed);
+          if (
+            moved.ino !== halted.ino ||
+            moved.dev !== halted.dev ||
+            moved.mtimeMs !== halted.mtimeMs
+          )
+            throw new Error("HALT changed during resume");
+          await unlink(removed);
+          try {
+            await lstat(path);
+          } catch (error) {
+            if (!missing(error)) throw error;
+            await syncDirectory(directory);
+            return;
+          }
+          throw new Error("HALT changed during resume");
+        } catch (error) {
+          // Keep any new Halt, or restore one if the renamed file was newer or
+          // a filesystem failure prevented us from establishing absence.
+          await writePrivate(directory, "HALT", haltRecord());
+          await unlink(removed).catch(() => {});
+          throw error;
+        }
+      });
+      return true;
     },
     async status() {
       let leasePresent = false;

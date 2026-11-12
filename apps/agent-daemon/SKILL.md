@@ -36,6 +36,19 @@ host composition explicit. No credentials, provider implementations or account
 permissions may be inferred from model output or unverified pod statements.
 Executor controls/approvals/mandates must verify owner proofs; structural parsing
 never grants authority. Channel send imports remain executor-only.
+Wire local.halted and local.assertNotHalted into the executor's asynchronous gate and
+synchronous dispatch fence. CLI resume uses the same verified control adapter and
+removes HALT only after a fresh signed owner Resume; never parse a control as authority.
+The Resume must be signed after the local stop: compare its browser timestamp strictly
+with the later of HALT's recorded `halted <ISO time>` and its modification time, check
+authorisation again under halt.lock, keep a HALT with no readable time, and reject
+future statements. HALT stops new dispatches once visible; it is not atomic with an
+in-flight send in another process (do not claim otherwise).
+Clock skew between devices can delay or refuse resume; refusal is the safe direction.
+Halt atomically writes mode-0600 HALT without a lock. Only Resume takes halt.lock;
+both local fences treat that lock as stopped during removal. Preserve a racing Halt
+by checking the removed identity and rechecking after unlink. A crashed Resume lock
+requires operator recovery after establishing quiescence; it must never block Halt.
 
 Keep owner-only ACLs before content, bounded ingestion, per-account cursor commits
 after persistence, deterministic-first Reader extraction, and Proposer eligibility

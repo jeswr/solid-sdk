@@ -295,11 +295,12 @@ export class PodWorkspace {
     resource.iri(`${AGENT}describes`, agent);
     await this.put(resource.value, await turtle(store));
   }
-  async heartbeat(at: Date): Promise<void> {
+  async heartbeat(at: Date, state: "running" | "paused" | "stopped" = "running"): Promise<void> {
     const store = new Store();
     const resource = node(store, this.url("control/heartbeat.ttl"));
     resource.iri(`${RDF}type`, `${AGENT}Heartbeat`);
     resource.text("http://www.w3.org/ns/prov#generatedAtTime", at.toISOString());
+    resource.text(`${AGENT}state`, state);
     await this.put(resource.value, await turtle(store));
   }
   private async register() {
