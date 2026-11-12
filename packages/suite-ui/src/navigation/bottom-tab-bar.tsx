@@ -5,22 +5,26 @@
 
 import { useT } from "@jeswr/suite-i18n/react";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, mobileApps, suiteApps, useNavigationApps } from "./apps.js";
+import {
+  AppGlyph,
+  mobileApps,
+  suiteApps,
+  useNavigationApps,
+  visibleNavigationApps,
+} from "./apps.js";
 
 export function BottomTabBar({
   currentApp,
   apps: suppliedApps = suiteApps,
+  showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
 }: Omit<AppLauncherProps, "trigger">) {
   const t = useT();
   const apps = useNavigationApps(suppliedApps);
+  const visible = visibleNavigationApps(apps, showBacklog);
   return (
     <nav className="suite-bottom-tabs" aria-label={t("navigation.apps")}>
       {mobileApps.map((slug) => {
-        const app = apps.find(
-          (item) =>
-            item.slug === slug &&
-            (item.status !== "backlog" || process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1"),
-        );
+        const app = visible.find((item) => item.slug === slug);
         return app ? (
           <a
             className="suite-tab"
@@ -35,7 +39,7 @@ export function BottomTabBar({
           <span key={slug} />
         );
       })}
-      <AppLauncher currentApp={currentApp} apps={apps} trigger="tab" />
+      <AppLauncher currentApp={currentApp} apps={visible} showBacklog={showBacklog} trigger="tab" />
     </nav>
   );
 }

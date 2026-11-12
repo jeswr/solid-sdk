@@ -17,6 +17,7 @@ export const en = {
     music: "Music",
     money: "Money",
     health: "Health",
+    agent: "Agent",
   },
   settings: {
     title: "Settings",

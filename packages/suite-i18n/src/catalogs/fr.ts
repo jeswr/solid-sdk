@@ -20,6 +20,7 @@ export const fr = {
     music: "Musique",
     money: "Finances",
     health: "Santé",
+    agent: "Agent",
   },
   settings: {
     title: "Paramètres",

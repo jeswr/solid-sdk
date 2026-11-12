@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from "../components/ui/tooltip.js";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
-import { AppGlyph, suiteApps, useNavigationApps } from "./apps.js";
+import { AppGlyph, suiteApps, useNavigationApps, visibleNavigationApps } from "./apps.js";
 import { usePreferences } from "./preferences.js";
 
 export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
@@ -22,6 +22,7 @@ export interface AppRailProps extends Omit<AppLauncherProps, "trigger"> {
 export function AppRail({
   currentApp,
   apps: suppliedApps = suiteApps,
+  showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
   notifications,
   offline,
   account,
@@ -29,16 +30,19 @@ export function AppRail({
   const t = useT();
   const apps = useNavigationApps(suppliedApps);
   const preferences = usePreferences("rail");
-  const visible = apps.filter(
-    (app) => app.status !== "backlog" || process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
-  );
+  const visible = visibleNavigationApps(apps, showBacklog);
   const pinned = [...new Set(preferences.value.pinned)]
     .map((slug) => visible.find((app) => app.slug === slug))
     .filter((app) => app !== undefined)
     .slice(0, 6);
   return (
     <nav className="suite-rail" aria-label={t("navigation.apps")}>
-      <AppLauncher currentApp={currentApp} apps={apps} trigger="brand" />
+      <AppLauncher
+        currentApp={currentApp}
+        apps={visible}
+        showBacklog={showBacklog}
+        trigger="brand"
+      />
       {preferences.status === "loading" ? (
         <div
           className="suite-rail-skeleton"
@@ -69,7 +73,12 @@ export function AppRail({
           </TooltipProvider>
         ))
       )}
-      <AppLauncher currentApp={currentApp} apps={apps} trigger="more" />
+      <AppLauncher
+        currentApp={currentApp}
+        apps={visible}
+        showBacklog={showBacklog}
+        trigger="more"
+      />
       <div className="suite-rail-bottom">
         {notifications}
         {offline}

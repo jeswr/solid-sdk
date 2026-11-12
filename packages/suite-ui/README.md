@@ -151,7 +151,7 @@ focusable with `aria-disabled` so the label stays discoverable, and suppress act
 The package's AST lint test rejects literal icon-size Button usages without both a name
 and Tooltip. Prefer IconButton for dynamically selected icon sizes as well.
 
-Atoms: `AppIcon app size` (15 apps, 32/40/48); `FileTypeIcon contentType name size`
+Atoms: `AppIcon app size` (16 apps including Agent, 32/40/48); `FileTypeIcon contentType name size`
 (with optional `thumbnailSrc`); `ProvenanceBadge source logoSrc` (root-relative local
 logos, letter fallback on absence/error); native `Kbd`; labelled live `StatusDot`; and
 `CountBadge count` (nonnegative safe integers, visible zero, 99+ cap, full accessible count).
@@ -346,6 +346,10 @@ Upload and preview components use the separately exported `SurfaceState`.
 Import `@jeswr/suite-ui/styles/navigation.css` after the token, theme and density styles.
 `AppRail`, `AppLauncher`, and `BottomTabBar` take `currentApp` and an optional `apps`
 registry. Each registry entry supplies its native navigation path and optional Create actions.
+`suiteApps` includes every implemented suite app, including Agent. All three components use
+`visibleNavigationApps(apps, showBacklog)` for admission; `showBacklog` defaults to
+`NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1"` and can be passed explicitly by the host shell.
+Visible backlog apps retain the launcher's separate Coming soon group.
 The desktop rail is 56px from 768px; the mobile bar uses Home, Drive, Docs, Tasks and More.
 Bell, offline and account controls are named slots on `AppRail`; the account menu itself
 belongs to the shell lane.

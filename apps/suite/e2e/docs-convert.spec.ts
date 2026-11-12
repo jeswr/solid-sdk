@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Claude Opus 5.5
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { openArrayBuffer } from "mammoth/lib/zipfile.js";
+import { seedDemoSession } from "./demo-session";
 
 async function audit(page: Page) {
   const results = await new AxeBuilder({ page }).analyze();
@@ -40,6 +42,11 @@ async function readDownload(page: Page, label: string) {
   for await (const chunk of stream) chunks.push(Buffer.from(chunk));
   return { name: download.suggestedFilename(), bytes: Buffer.concat(chunks) };
 }
+
+// App routes sit behind the shell session guard; start signed in to the demo account.
+test.beforeEach(async ({ page }) => {
+  await seedDemoSession(page);
+});
 
 test("DOCX import keeps headings, lists, tables and an image and reports its footnote", async ({
   page,

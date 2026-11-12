@@ -91,7 +91,8 @@ it("translates the launcher, customise panel and navigation landmarks", () => {
   expect(within(dialog).getByRole("button", { name: "Fermer les applications" })).toBeTruthy();
   expect(within(dialog).getByRole("searchbox", { name: "Filtrer les applications" })).toBeTruthy();
   expect(within(dialog).getByRole("grid", { name: "Applications disponibles" })).toBeTruthy();
-  expect(within(dialog).getByText("5 applications trouvées")).toBeTruthy();
+  // Every built-in app is admitted now that none is in the backlog.
+  expect(within(dialog).getByText(`${suiteApps.length} applications trouvées`)).toBeTruthy();
   fireEvent.change(within(dialog).getByRole("searchbox"), { target: { value: "zz" } });
   expect(within(dialog).getByText("Aucun résultat pour « zz »")).toBeTruthy();
   expect(within(dialog).getByRole("button", { name: "Effacer les filtres" })).toBeTruthy();

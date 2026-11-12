@@ -9,7 +9,13 @@ import { useId, useRef, useState } from "react";
 import { useDirection } from "../components/direction.js";
 import { IconButton } from "../components/ui/icon-button.js";
 import { AppGrid } from "./app-grid.js";
-import { type AppSlug, type NavigationApp, suiteApps, useNavigationApps } from "./apps.js";
+import {
+  type AppSlug,
+  type NavigationApp,
+  suiteApps,
+  useNavigationApps,
+  visibleNavigationApps,
+} from "./apps.js";
 import { CustomiseRail } from "./customise-rail.js";
 import { usePreferences } from "./preferences.js";
 import { LauncherSkeleton, NavigationErrorState } from "./states.js";
@@ -17,11 +23,13 @@ import { LauncherSkeleton, NavigationErrorState } from "./states.js";
 export interface AppLauncherProps {
   currentApp: AppSlug;
   apps?: readonly NavigationApp[];
+  showBacklog?: boolean;
   trigger?: "brand" | "more" | "tab" | "button";
 }
 export function AppLauncher({
   currentApp,
   apps: suppliedApps = suiteApps,
+  showBacklog = process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1",
   trigger = "button",
 }: AppLauncherProps) {
   const t = useT();
@@ -33,11 +41,9 @@ export function AppLauncher({
   const input = useRef<HTMLInputElement>(null);
   const id = useId();
   const preferences = usePreferences("rail");
-  const available = apps.filter((app) => app.status !== "backlog");
-  const backlog =
-    process.env.NEXT_PUBLIC_SHOW_BACKLOG_APPS === "1"
-      ? apps.filter((app) => app.status === "backlog")
-      : [];
+  const visible = visibleNavigationApps(apps, showBacklog);
+  const available = visible.filter((app) => app.status !== "backlog");
+  const backlog = visible.filter((app) => app.status === "backlog");
   const matching = available.filter((app) =>
     app.name.toLocaleLowerCase().includes(filter.toLocaleLowerCase()),
   );

@@ -20,6 +20,7 @@ export const ar = {
     music: "الموسيقى",
     money: "الأموال",
     health: "الصحة",
+    agent: "الوكيل",
   },
   settings: {
     title: "الإعدادات",
