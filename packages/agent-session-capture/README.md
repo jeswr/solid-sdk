@@ -137,6 +137,22 @@ failure. They run outside the hook watchdog and do not queue export snapshots;
 after an interrupted/failed upload, re-run the same export to complete it safely.
 The library accepts an `AbortSignal` to cancel file reads and requests.
 
+## Repairing chats stored before redaction (sst-5ax.39)
+
+```sh
+solid-capture redact-archive --dry-run   # count what would change; read-only config is enough
+solid-capture redact-archive             # fix it; needs the writable owner configuration
+```
+
+Runs `ChatWriter.migrateRedaction` over every conversation in the pod's chat archive with
+the same MCP configuration and DPoP login as imports. It re-redacts titles and messages
+stored before every save path redacted (or before a newer rule), and deletes the
+unredacted originals that a later replay duplicated. Every write and delete uses
+`If-Match`. It prints one JSON line of counts (`conversations`, `titles`,
+`messagesRewritten`, `messagesReplaced`, `conflicts`) and nothing from the chats. On
+`conflicts` above 0, run it again. Exit status is **0** on success or **1** with a fixed,
+content-free message.
+
 ## Content and opt-out
 
 Capture retains user/assistant text and tool names. Claude Code `tool_result`,
