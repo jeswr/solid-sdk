@@ -1,0 +1,18 @@
+# AUTHORED-BY Claude Opus 5.5
+# Shaped like the CON-A8 MailMarkupWriter (see flight.ttl for the layout). Item content is
+# EMAIL_MARKUP_FIXTURES[6] (EventReservation), sent without receiver authentication
+# evidence so every node is flagged unverified.
+@prefix s: <http://schema.org/> .
+@prefix f: <https://jeswr.org/fedcon#> .
+@prefix p: <http://www.w3.org/ns/prov#> .
+@prefix x: <http://www.w3.org/2001/XMLSchema#> .
+<#it> a s:EventReservation ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ;
+  s:reservationNumber "TEST-EVENT-42" ; s:provider <#node-0> ;
+  s:reservationFor <#node-1> ; s:reservedTicket <#node-3> ;
+  s:dateModified "2026-11-20T08:00:00.000Z"^^x:dateTime .
+<#node-0> a s:Organization ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ; s:name "Example Tickets" .
+<#node-1> a s:Event ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ;
+  s:name "Example Concert" ; s:startDate "2026-12-01T20:00:00Z" ; s:location <#node-2> .
+<#node-2> a s:Place ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ; s:name "Example Hall" .
+<#node-3> a s:Ticket ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ; s:ticketNumber "TEST-TICKET-42" ; s:ticketedSeat <#node-4> .
+<#node-4> a s:Seat ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ; s:seatRow "A" ; s:seatNumber "12" .
