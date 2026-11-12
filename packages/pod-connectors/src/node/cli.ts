@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
@@ -21,7 +22,7 @@ import { readNodeConfig } from "./config.js";
 import { NodeRuntimeError } from "./errors.js";
 import { authorizeLoopback } from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
-import { createStateStore } from "./state.js";
+import { type CliConnectorState, createStateStore } from "./state.js";
 
 const USAGE = "Usage: pod-connectors import <id> [--file <path>] [--since]\n";
 
@@ -136,6 +137,17 @@ export async function importFile(path: string, adapter: FileImportAdapter): Prom
   }
 }
 
+/** Split a checkpoint into its API and file cursor slots. A checkpoint written before the
+ * file slot existed held one shared cursor: classify it by shape, since only a WHOOP file
+ * batch cursor is a `{"file":…}` object. */
+function cursorSlots(state: CliConnectorState | undefined): { api?: string; file?: string } {
+  const legacyFile = state?.cursor?.startsWith('{"file":') ?? false;
+  return {
+    api: legacyFile ? undefined : state?.cursor,
+    file: state?.fileCursor ?? (legacyFile ? state?.cursor : undefined),
+  };
+}
+
 /** Execute one import, persisting successful or failed outcomes without printing arbitrary errors. */
 export async function runCli(args: readonly string[], options: CliOptions = {}): Promise<number> {
   const stdout = options.stdout ?? ((message) => nodeStdout.write(message));
@@ -202,9 +214,18 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         createSourceAuth(command.id, adapter, token, sourceFetch);
     }
     let next: ConnectorState | undefined;
-    const pendingWhoopBatch = command.id === "whoop" && previous?.cursor?.startsWith('{"v":1,');
-    const resume = command.since || file !== undefined || pendingWhoopBatch;
-    const state = previous && !resume ? { ...previous, cursor: undefined } : previous;
+    const slots = cursorSlots(previous);
+    const pendingWhoopBatch = command.id === "whoop" && slots.api?.startsWith('{"v":1,');
+    // File runs always continue their own content-bound batch; API runs resume only with
+    // --since or a pending WHOOP batch. Each path sees only its own cursor slot.
+    const resume = command.since || pendingWhoopBatch;
+    const state = previous && {
+      connectedAt: previous.connectedAt,
+      ...(previous.lastSync === undefined ? {} : { lastSync: previous.lastSync }),
+      cursor: file ? slots.file : resume ? slots.api : undefined,
+      lastOutcome: previous.lastOutcome,
+      counts: previous.counts,
+    };
     const shared = {
       podWriter,
       state,
@@ -234,7 +255,14 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       );
     }
     if (!next) throw new NodeRuntimeError("import", "Import did not return connector state.");
-    await stateStore.write(next);
+    const { cursor, ...rest } = next;
+    const api = file ? slots.api : cursor;
+    const fileCursor = file ? cursor : slots.file;
+    await stateStore.write({
+      ...rest,
+      ...(api === undefined ? {} : { cursor: api }),
+      ...(fileCursor === undefined ? {} : { fileCursor }),
+    });
     stdout(
       `Imported ${command.id}: ${next.counts.documents} documents, ${next.counts.items} items, ${next.counts.skipped} skipped.\n`,
     );

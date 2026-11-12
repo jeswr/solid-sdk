@@ -1279,6 +1279,114 @@ describe("CLI import", () => {
       "Running",
     );
   });
+  // AUTHORED-BY Claude Opus 5.5
+  describe("WHOOP file and API cursor slots", () => {
+    const stateUrl = `${TEST_POD_ROOT}integrations/whoop/state.json`;
+    const sleeps = (days: number[]) =>
+      "Sleep onset,Wake onset,Asleep duration (min)\n" +
+      days.map((day) => `2026-06-0${day}T22:00:00Z,2026-06-0${day + 1}T06:00:00Z,450`).join("\n");
+    async function setup() {
+      const { pod, transport } = fixturePod();
+      const path = await configPath();
+      const file = join(path, "..", "sleeps.csv");
+      await writeFile(file, sleeps([1, 2, 3]));
+      const requests: URL[] = [];
+      const fixtures = fixtureFetch("whoop", whoopAdapter.fixtures());
+      const opts = {
+        configPath: path,
+        podTransport: transport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+        sourceAuth: {
+          fetch: (async (input, init) => {
+            requests.push(new URL(String(input)));
+            return String(input).endsWith("/cycle/101")
+              ? Response.json(CYCLE)
+              : fixtures(input, init);
+          }) as typeof fetch,
+        },
+      };
+      const saved = () => JSON.parse(pod.get(stateUrl) ?? "null");
+      return { pod, file, opts, requests, saved };
+    }
+
+    it("resumes --since from the API high-water mark after a file import", async () => {
+      const { file, opts, requests, saved } = await setup();
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toMatch(/^\{"file":/);
+      const fileCursor = saved().fileCursor;
+      requests.length = 0;
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      expect(opts.stderr).not.toHaveBeenCalledWith("Import failed.\n");
+      expect(requests.length).toBeGreaterThan(0);
+      expect(
+        requests
+          .filter((url) => !/\/cycle\/\d+$/.test(url.pathname))
+          .every((url) => url.searchParams.get("start") === "2026-06-01T08:00:00.000Z"),
+      ).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(fileCursor);
+    });
+
+    it("keeps each path's pending batch cursor when runs interleave", async () => {
+      const { pod, file, opts, saved } = await setup();
+      const api = createWhoopAdapter({ maxItems: 1, maxRequests: 50 });
+      const files = createWhoopFileAdapter(2);
+      const apiSeen: (string | undefined)[] = [];
+      const fileSeen: (string | undefined)[] = [];
+      vi.spyOn(whoopAdapter, "import").mockImplementation((ctx) => {
+        apiSeen.push(ctx.cursor);
+        return api.import(ctx);
+      });
+      vi.spyOn(whoopFileAdapter, "importFile").mockImplementation((input, ctx) => {
+        fileSeen.push(ctx.cursor);
+        return files.importFile(input, ctx);
+      });
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      const pendingApi = saved().cursor;
+      expect(pendingApi).toMatch(/^\{"v":1,/);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      const pendingFile = saved().fileCursor;
+      expect(pendingFile).toMatch(/^\{"file":/);
+      expect(JSON.parse(pendingFile).before).not.toBe("");
+      expect(saved().cursor).toBe(pendingApi);
+      expect(await runCli(["import", "whoop"], opts)).toBe(0);
+      expect(saved().fileCursor).toBe(pendingFile);
+      expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
+      expect(JSON.parse(saved().fileCursor).before).toBe("");
+      expect(apiSeen).toEqual([undefined, pendingApi]);
+      expect(fileSeen).toEqual([undefined, pendingFile]);
+      const data = pod.dataset(
+        `${TEST_POD_ROOT}integrations/whoop/health/observations/2026-06.ttl`,
+      );
+      expect(
+        data.getQuads(null, "http://www.w3.org/1999/02/22-rdf-syntax-ns#type", HEALTH.Sleep, null),
+      ).toHaveLength(3);
+    });
+
+    it("classifies a legacy single file cursor into the file slot", async () => {
+      const { pod, opts, requests, saved } = await setup();
+      const legacy = JSON.stringify({ file: "0".repeat(64), before: "" });
+      await pod.fetch(stateUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          connectedAt: "2026-06-01T00:00:00.000Z",
+          cursor: legacy,
+          lastOutcome: "success",
+          counts: { documents: 1, items: 1, skipped: 0 },
+        }),
+      });
+      expect(await runCli(["import", "whoop", "--since"], opts)).toBe(0);
+      // No API cursor yet: a full traversal, not a failure on the file cursor.
+      expect(requests.every((url) => !url.searchParams.has("start"))).toBe(true);
+      expect(saved().cursor).toBe("2026-06-08T08:00:00.000Z");
+      expect(saved().fileCursor).toBe(legacy);
+    });
+  });
   it("imports an export file through the same writer without source login", async () => {
     const { pod, transport } = fixturePod();
     const path = await configPath();

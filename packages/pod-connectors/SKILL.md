@@ -4,6 +4,7 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Maintain Pod connectors
 
@@ -264,11 +265,21 @@ independently, including duplicate and malformed rows. Stage all source parsing 
 One RunBudget covers every API page. Item/request exhaustion commits a bounded batch and
 returns a warning plus an opaque collection/page/offset cursor; only a completed traversal
 returns the ISO start cursor, which replays seven days rather than an updated-since feed.
+A resumed page shorter than its saved offset replays from row 0; a 400/404 on the resumed
+token restarts that collection once per run with no token (never on fresh tokens).
 File batches use content-bound host-owned cursors and select newest-first with a bounded
 heap; preserve the byte caps while scanning sort keys and the row/record caps while parsing
-selected rows, including duplicates and malformed rows. Physiological rows remain atomic. Never invent a recovery time when its cycle is missing.
+selected rows, including duplicates and malformed rows. A finished traversal returns the
+distinct `before: ""` completion cursor; the next run of that export starts afresh (never
+return no cursor, or the session keeps an older partial one). Scan-time malformed records
+are counted only in a traversal's first batch. The CLI keeps file and API cursors in separate
+state slots (`fileCursor`/`cursor`), classifying a legacy shared cursor by shape. Physiological rows remain atomic. Never invent a recovery time when its cycle is missing.
 
-Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments.
+Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments;
+their container is registered for ExerciseAction and (via `additionalClasses`) Observation.
+Shards must stay within solid-health's exported `MAX_OBSERVATION_QUADS`/`MAX_OBSERVATIONS`,
+including session provenance. Generated wrappers validate their whole store: never `mark()`
+one on a populated shard; build in a small store and merge, like `buildObservation`.
 Health observations are built only through `@jeswr/solid-health`'s `buildObservation`;
 `METRICS` holds the WHOOP mapping policy and `vocab.ts` only the schema:Dataset record
 marker. Never add a health accessor class. A unit outside the profile's QUDT inventory

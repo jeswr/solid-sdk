@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
@@ -82,17 +83,38 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
         ctx.progress({ label: `Reading WHOOP ${kind} records…`, done: records.length });
         let token = index === saved.position.index ? saved.position.token : undefined;
         let offset = index === saved.position.index ? saved.position.offset : 0;
+        // Only the saved collection's first page can carry a resumed token. WHOOP may expire
+        // or reject it; restart that collection once from the saved start instead of failing
+        // every later run. Rows are keyed by kind and native id, so a replay is idempotent.
+        let resumed = token !== undefined;
         const seen = new Set<string>(token ? [token] : []);
-        do {
+        for (;;) {
           position = { index, token, offset };
           if (consumed >= itemLimit || (requests > 0 && requests >= limits.maxRequests)) {
             partial = true;
             break traversal;
           }
           requests++;
-          const page = await collection(kind, start, token, ctx, budget, seen);
-          if (offset > page.rows.length)
-            throw new IntegrationSyncError("whoop", "Invalid WHOOP page offset.");
+          let page: Awaited<ReturnType<typeof collection>>;
+          try {
+            page = await collection(kind, start, token, ctx, budget, seen);
+          } catch (error) {
+            if (
+              !resumed ||
+              !(error instanceof IntegrationSyncError) ||
+              (error.status !== 400 && error.status !== 404)
+            )
+              throw error;
+            resumed = false;
+            token = undefined;
+            offset = 0;
+            seen.clear();
+            continue;
+          }
+          resumed = false;
+          // A resumed page that shrank since the cursor was saved has shifted rows. Replay it
+          // from its start rather than skipping rows or failing every later run.
+          if (offset > page.rows.length) offset = 0;
           for (let rowIndex = offset; rowIndex < page.rows.length; rowIndex++) {
             if (consumed >= itemLimit) {
               position = { index, token, offset: rowIndex };
@@ -200,7 +222,8 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
           }
           token = page.next;
           offset = 0;
-        } while (token);
+          if (!token) break;
+        }
       }
       await writeRecords(records, ctx);
       return {

@@ -35,7 +35,9 @@ pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. P
 auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
 fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
-`{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
+`{ ifNoneMatch: '*' }`, and registers Type Index entries. A document's `forClass`, plus any
+`additionalClasses` it holds, is registered for its container; the runner takes the extra
+classes from the document, so a custom port need not echo them. The fetch-backed implementation
 confines document reads, writes and every redirect hop to the connector container. Type
 Index operations separately validate the profile-selected index against the WebID's advertised
 `pim:storage` and `solid:storage` roots, independently of the import destination,
@@ -262,7 +264,10 @@ Only scored records are imported. After traversal completes, the ISO cursor is t
 imported start time. A batch stopped by the item or request budget saves an opaque cursor
 with its collection, page token, row offset, original start filter and high-water time.
 Pass `report.cursor` (or `report.state`) into the next run until traversal completes;
-the high-water timestamp alone would skip older pages. Resumed recoveries resolve missing
+the high-water timestamp alone would skip older pages. A resumed page that now has fewer
+rows than the saved offset is replayed from its first row. If WHOOP rejects or has expired
+the saved page token (HTTP 400/404), that collection restarts once per run from the saved
+start without a token; records are keyed by kind and native id, so the replay is idempotent. Resumed recoveries resolve missing
 cycle dates through the [documented `cycle/<id>` endpoint](https://developer.whoop.com/api/);
 absent cycles are skipped, never assigned invented dates.
 With `ctx.scopes`, only granted collections are requested; recovery also requires cycles
@@ -273,9 +278,10 @@ unmatched recoveries outside that overlap, require a cursor-free import. Full an
 imports both preserve unrelated historical records; source deletions are not inferred.
 
 The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts/YYYY-MM.ttl`,
-inside the WHOOP connector container. The Type Index registers the observation and workout
-classes against `health/observations/` and `health/workouts/`, respectively, so readers can
-discover all monthly documents. Observations are written and validated by the generated
+inside the WHOOP connector container. The Type Index registers health:Observation against
+`health/observations/`, and both schema:ExerciseAction and health:Observation (each workout's
+energy and heart-rate observations) against `health/workouts/`, so readers can discover all
+monthly documents. Observations are written and validated by the generated
 `@jeswr/solid-health` model (`buildObservation`), like Garmin; `src/whoop/model.ts` keeps
 only the WHOOP mapping policy (field → name, code, UCUM unit, optional QUDT unit, subtype).
 Observation values, CodeableConcepts, OWL-Time instants, UCUM codes and local person
@@ -329,13 +335,21 @@ All writes use retained ETags and the shared bounded provenance pipeline.
 
 WHOOP limits are 64 MiB per upload, 16 MiB per archive CSV, 100 ZIP entries, 10,000
 processed source rows per batch and 10,000 normalized records (a physiological row may yield
-two), and 500,000 RDF quads per destination. Byte-bounded CSV contents are scanned for sort
+two). Every monthly shard stays within `@jeswr/solid-health`'s reader limits
+(`MAX_OBSERVATION_QUADS`, 100,000 quads, and `MAX_OBSERVATIONS`, 5,000 observations),
+counting the provenance links the import session adds: a run that would write a larger shard
+fails before writing that shard, and a stored shard above the limit is refused. Byte-bounded CSV contents are scanned for sort
 keys; a bounded heap selects the newest rows first, then they are parsed and written in
 monthly groups. The file path saves a SHA-256 content-bound cursor in `report.cursor` and
 `report.state`; pass either to the next `runFileImport` with the same export. Re-selecting it
-in Suite resumes automatically. The Node CLI also resumes pending WHOOP batches on ordinary
-reruns and prints their warning; a completed API traversal retains the normal `--since`
-behavior. Duplicate and malformed rows consume the batch's row budget;
+in Suite resumes automatically. A finished traversal returns a distinct completion cursor;
+importing the same export again then starts a fresh traversal from its newest rows, so a
+re-import restores removed shards (rewrites are idempotent). The Node CLI keeps file and API
+progress in separate `fileCursor` and `cursor` slots of `state.json`, so neither path
+overwrites or misreads the other's checkpoint; an older single shared cursor is classified by
+shape on read. It resumes pending WHOOP batches on ordinary reruns and prints their warning;
+a completed API traversal retains the normal `--since` behavior. Duplicate and malformed rows consume the batch's row budget; malformed source records found
+while scanning sort keys are counted as skipped once per traversal, not once per batch;
 physiological rows stay atomic when only one record slot remains. A changed export restarts
 from its newest rows. Both API and file reports include a **“WHOOP import partial, re-run to
 continue.”** warning when another batch remains. `createWhoopFileAdapter(maxRecords)` accepts

@@ -7,21 +7,31 @@ import {
   HEALTH,
   HealthPatient,
   loincCode,
+  MAX_OBSERVATION_QUADS,
+  MAX_OBSERVATIONS,
   type ObservationType,
   UNITS,
 } from "@jeswr/solid-health";
 import { NS } from "@jeswr/suite-vocab";
-import { DataFactory, type Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { IntegrationSyncError } from "../core/errors.js";
 import { SectorThing } from "../core/file-vocab-map.js";
 import { copyDataset } from "../core/incremental.js";
+import { PROV } from "../core/provenance.js";
 import type { ImportContext } from "../core/types.js";
 import { CLASSES, ExerciseAction, PodThing } from "../core/vocab.js";
 import { RecordMarker } from "./vocab.js";
 
 export const API = "https://api.prod.whoop.com/developer/v2";
 export const MAX_RECORDS = 10_000;
-export const MAX_STORED_QUADS = 500_000;
+/** Every shard must stay readable by `@jeswr/solid-health`'s `parseObservations`, which
+ * rejects a document above its quad or observation budget. */
+export const MAX_STORED_QUADS = MAX_OBSERVATION_QUADS;
+export const MAX_STORED_OBSERVATIONS = MAX_OBSERVATIONS;
+/** Document-level provenance the import session may add (generation plus one derivation
+ * per source collection URL and the connector fallback). */
+const DOCUMENT_PROVENANCE_QUADS = 8;
+const READER_LIMIT = "WHOOP document would exceed the Health reader limit.";
 export type Kind = "cycle" | "recovery" | "sleep" | "workout";
 
 /** WHOOP mapping policy only: display name, code, UCUM unit, optional QUDT unit and
@@ -219,21 +229,28 @@ export async function writeRecords(
       if (record.id) entry.hasApi = true;
       else entry.csvRoots.add(root);
       aliases.set(alias, entry);
-      if (dataset.size > MAX_STORED_QUADS)
-        throw new IntegrationSyncError("whoop", "WHOOP document exceeds the reconciliation limit.");
+      // Cheap early stop for hostile input; the exact projection runs once before writing.
+      if (dataset.size > MAX_STORED_QUADS) throw new IntegrationSyncError("whoop", READER_LIMIT);
     }
     for (const shard of dirty) {
       const { dataset, doc, carried } = shard;
       const healthRecord = new SectorThing(doc, dataset, DataFactory);
       healthRecord.types.add(HEALTH.Record);
       healthRecord.dataSubject = `${doc}#subject`;
-      new HealthPatient(`${doc}#subject`, dataset, DataFactory).mark();
-      if (dataset.size > MAX_STORED_QUADS)
-        throw new IntegrationSyncError("whoop", "WHOOP document exceeds the reconciliation limit.");
+      // Generated wrappers validate alias migration across their whole store, within a
+      // 10,000-read budget a populated monthly shard exceeds. Mark the patient in its own
+      // store and merge it, as buildObservation does for each observation.
+      const patient = new Store();
+      new HealthPatient(`${doc}#subject`, patient, DataFactory).mark();
+      dataset.addQuads([...patient]);
+      if (exceedsReaderLimits(dataset)) throw new IntegrationSyncError("whoop", READER_LIMIT);
+      const workouts = shard.slug.startsWith("health/workouts/");
       await ctx.write({
         slug: shard.slug,
         category: "health",
-        forClass: slug.startsWith("health/workouts/") ? CLASSES.ExerciseAction : HEALTH.Observation,
+        // Workout shards also hold the workouts' energy and heart-rate observations.
+        forClass: workouts ? CLASSES.ExerciseAction : HEALTH.Observation,
+        ...(workouts ? { additionalClasses: [HEALTH.Observation] } : {}),
         dataset,
         writeMode: "replace",
         sourceUrl: source === "api" ? API : undefined,
@@ -248,7 +265,7 @@ async function loadShard(slug: string, ctx: Pick<ImportContext, "read" | "resolv
   if ((previous?.size ?? 0) > MAX_STORED_QUADS)
     throw new IntegrationSyncError(
       "whoop",
-      "Stored WHOOP document exceeds the reconciliation limit.",
+      "Stored WHOOP document exceeds the Health reader limit.",
     );
   const dataset = copyDataset(previous);
   const doc = ctx.resolve(slug);
@@ -272,6 +289,21 @@ async function loadShard(slug: string, ctx: Pick<ImportContext, "read" | "resolv
     aliases.set(key, entries);
   }
   return { slug, doc, dataset, aliases, carried };
+}
+
+/** Fail before a write that `parseObservations` could not read back. The import session
+ * gives each named subject it writes a derivation link (at most one new one) and replaces
+ * its generation link, so bound the stored size by that overhead, not the staged size. */
+function exceedsReaderLimits(dataset: Store): boolean {
+  if (dataset.countQuads(null, `${NS.RDF}type`, HEALTH.Observation, null) > MAX_STORED_OBSERVATIONS)
+    return true;
+  let projected = dataset.size + DOCUMENT_PROVENANCE_QUADS;
+  for (const subject of dataset.getSubjects(null, null, null)) {
+    if (subject.termType !== "NamedNode") continue;
+    projected += dataset.countQuads(subject, `${PROV}wasGeneratedBy`, null, null) ? 1 : 2;
+    if (projected > MAX_STORED_QUADS) return true;
+  }
+  return false;
 }
 
 function* ownedSubjects(root: string): Generator<string> {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { freshRdf } from "../pod/rdf-read.js";
@@ -150,7 +151,8 @@ export function registrationsFor(written: readonly import("./types.js").WrittenD
   for (const doc of written) {
     if (doc.skipRegistration) continue;
     const container = doc.registrationContainer ?? doc.url.slice(0, doc.url.lastIndexOf("/") + 1);
-    out.set(`${doc.forClass}|${container}`, { forClass: doc.forClass, container });
+    for (const forClass of [doc.forClass, ...(doc.additionalClasses ?? [])])
+      out.set(`${forClass}|${container}`, { forClass, container });
   }
   return [...out.values()];
 }

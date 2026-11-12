@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseCsv, parseCsvRows } from "../core/csv.js";
 import type { FileImportContext } from "../core/file-import.js";
 import { csvRecords } from "../core/file-stream.js";
@@ -41,11 +42,17 @@ export async function newestRows(sources: CsvSource[], ctx: FileImportContext, l
   if (ctx.cursor?.startsWith('{"file":')) {
     try {
       const saved = JSON.parse(ctx.cursor) as Cursor;
-      if (saved.file === file && typeof saved.before === "string") before = saved.before;
+      // `before: ""` marks a finished traversal of this export. Re-importing it starts a
+      // fresh traversal: rewrites are idempotent and restore shards removed since.
+      if (saved.file === file && typeof saved.before === "string" && saved.before)
+        before = saved.before;
     } catch {
       throw new Error("Invalid WHOOP file cursor.");
     }
   }
+  // Every batch rescans the whole export. Count malformed source records only in the
+  // traversal's first batch, so resumed batches do not inflate the skip total.
+  const firstBatch = before === undefined;
   // A min heap keeps the newest `limit + 1` rows in O(rows * log(limit)) work.
   const heap: Row[] = [];
   const retain = (row: Row) => {
@@ -81,7 +88,9 @@ export async function newestRows(sources: CsvSource[], ctx: FileImportContext, l
   for (const source of sources) {
     let header: string | undefined;
     let headers: string[] = [];
-    for await (const text of csvRecords(oneText(source.text), () => ctx.skip())) {
+    for await (const text of csvRecords(oneText(source.text), () => {
+      if (firstBatch) ctx.skip();
+    })) {
       ctx.signal?.throwIfAborted();
       if (header === undefined) {
         header = text;
@@ -111,6 +120,8 @@ export async function newestRows(sources: CsvSource[], ctx: FileImportContext, l
   return {
     rows: heap.sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0)),
     cursor: (key: string) => JSON.stringify({ file, before: key } satisfies Cursor),
+    // A distinct completion value: returning no cursor would let the import session keep
+    // an older partial cursor. The next run of the same export starts fresh from it.
     complete: JSON.stringify({ file, before: "" } satisfies Cursor),
   };
 }

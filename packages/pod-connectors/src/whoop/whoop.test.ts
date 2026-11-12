@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   HEALTH,
   HealthCode,
   HealthInstant,
   HealthObservation,
+  MAX_OBSERVATION_QUADS,
+  MAX_OBSERVATIONS,
   parseObservations,
 } from "@jeswr/solid-health";
 import { NS } from "@jeswr/suite-vocab";
@@ -34,6 +37,7 @@ import { CLASSES, ExerciseAction } from "../core/vocab.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { zipDirectory } from "../google-takeout/zip-reader.js";
 import { writeResource } from "../pod/resource.js";
+import { TypeIndexDataset } from "../pod/type-index.js";
 import { createRegistry } from "../registry.js";
 import { createWhoopAdapter, whoopAdapter } from "./adapter.js";
 import { createWhoopFileAdapter, MAX_WHOOP_FILE_BYTES, whoopFileAdapter } from "./file-adapter.js";
@@ -45,7 +49,15 @@ import {
   WHOOP_FIXTURES,
   WORKOUT,
 } from "./fixtures.js";
-import { API, MAX_RECORDS, METRICS, sourceId, timestamp } from "./model.js";
+import {
+  API,
+  MAX_RECORDS,
+  MAX_STORED_OBSERVATIONS,
+  MAX_STORED_QUADS,
+  METRICS,
+  sourceId,
+  timestamp,
+} from "./model.js";
 import { RecordMarker } from "./vocab.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/whoop/`;
@@ -1053,8 +1065,11 @@ describe("WHOOP review regressions", () => {
         );
       }
     }
-    const done = await runFileImport({ adapter, file, podWriter: writer(pod), state });
-    expect(done.written).toHaveLength(0);
+    // A finished traversal starts afresh on the next run; rewrites are idempotent.
+    const again = await runFileImport({ adapter, file, podWriter: writer(pod), state });
+    expect(again.written).toHaveLength(1);
+    expect(again.warnings?.length).toBe(1);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(5);
     // A different export must start fresh, even when its filename and size match.
     const changed = await runFileImport({
       adapter,
@@ -1184,4 +1199,272 @@ describe("WHOOP legacy duplicate cleanup", () => {
     expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(1);
     expect(pod.get(MONTH)).not.toContain("#sleep-csv-");
   });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("WHOOP review round-two regressions", () => {
+  const sleepRows = (days: number[], month = "06") =>
+    `${SLEEPS_CSV.split("\n")[0]}\n${days
+      .map((day) =>
+        SLEEPS_CSV.split("\n")[1]
+          ?.replace("2026-06-07", `2026-${month}-0${day}`)
+          .replace("2026-06-08", `2026-${month}-0${day + 1}`),
+      )
+      .join("\n")}`;
+  const sleepCursor = (position: Record<string, unknown>) =>
+    JSON.stringify({ v: 1, position: { index: 2, ...position } });
+  const sleeps = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({
+      ...SLEEP,
+      id: `night-${index}`,
+      start: `2026-06-0${index + 1}T22:00:00.000Z`,
+      end: `2026-06-0${index + 2}T06:00:00.000Z`,
+    }));
+
+  it("re-imports a finished export from the start, restoring a deleted shard and removing legacy helpers", async () => {
+    const pod = createMemoryPod();
+    const file = memoryFile(
+      "sleeps.csv",
+      `${sleepRows([1, 2])}\n${sleepRows([3], "07").split("\n")[1]}`,
+    );
+    const july = `${ROOT}health/observations/2026-07.ttl`;
+    const first = await runFileImport({ adapter: whoopFileAdapter, file, podWriter: writer(pod) });
+    expect(first.warnings).toBeUndefined();
+    // The completion value is distinct, so the session cannot fall back to an older cursor.
+    expect(JSON.parse(first.cursor ?? "{}").before).toBe("");
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(2);
+    await pod.fetch(MONTH, { method: "DELETE" });
+    const legacy = pod.dataset(july);
+    const [julySleep] = typed(pod, july, HEALTH.Sleep);
+    new HealthCode(`${julySleep}/code`, legacy, DataFactory).mark().codeValue = "93832-4";
+    new HealthInstant(`${julySleep}/time`, legacy, DataFactory).mark().dateTime = new Date(
+      "2026-07-03T22:00:00Z",
+    );
+    await writeResource(july, legacy, { fetchImpl: pod.fetch });
+    const again = await runFileImport({
+      adapter: whoopFileAdapter,
+      file,
+      podWriter: writer(pod),
+      state: first.state,
+    });
+    expect(again.cursor).toBe(first.cursor);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(2);
+    const data = pod.dataset(july);
+    expect(data.countQuads(`${julySleep}/code`, null, null, null)).toBe(0);
+    expect(data.countQuads(`${julySleep}/time`, null, null, null)).toBe(0);
+  });
+
+  it("ends a bounded traversal with the completion value rather than an earlier partial cursor", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopFileAdapter(2);
+    const file = memoryFile("sleeps.csv", sleepRows([1, 2, 3]));
+    const first = await runFileImport({ adapter, file, podWriter: writer(pod) });
+    expect(JSON.parse(first.cursor ?? "{}").before).not.toBe("");
+    const second = await runFileImport({
+      adapter,
+      file,
+      podWriter: writer(pod),
+      state: first.state,
+    });
+    expect(second.warnings).toBeUndefined();
+    expect(JSON.parse(second.state?.cursor ?? "{}").before).toBe("");
+  });
+
+  it("counts malformed source records once per traversal, not once per batch", async () => {
+    const pod = createMemoryPod();
+    const adapter = createWhoopFileAdapter(2);
+    const oversized = `${SLEEPS_CSV.split("\n")[1]}${"x".repeat(4 * 1024 * 1024)}`;
+    const file = memoryFile("sleeps.csv", `${sleepRows([1, 2, 3, 4, 5])}\n${oversized}`);
+    let state: ConnectorState | undefined;
+    const skipped: (number | undefined)[] = [];
+    for (let run = 0; run < 3; run++) {
+      const report = await runFileImport({ adapter, file, podWriter: writer(pod), state });
+      state = report.state;
+      skipped.push(report.skipped);
+    }
+    expect(skipped).toEqual([1, undefined, undefined]);
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(5);
+    // A new traversal after completion counts the malformed record again, once.
+    const fresh = await runFileImport({ adapter, file, podWriter: writer(pod), state });
+    expect(fresh.skipped).toBe(1);
+  });
+
+  it("replays a resumed API page that shrank below the saved offset instead of failing", async () => {
+    const pod = createMemoryPod();
+    const report = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor: sleepCursor({ offset: 20 }),
+      sourceAuth: {
+        fetch: async (input) =>
+          Response.json({
+            records: new URL(String(input)).pathname.endsWith("/sleep") ? sleeps(3) : [],
+          }),
+      },
+    });
+    expect(report.warnings).toBeUndefined();
+    expect(report.cursor).toBe("2026-06-03T22:00:00.000Z");
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(3);
+  });
+
+  it.each([
+    400, 404,
+  ])("restarts a collection once when WHOOP rejects a resumed token (%s)", async (status) => {
+    const pod = createMemoryPod();
+    const requests: URL[] = [];
+    const report = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      cursor: sleepCursor({ token: "expired", offset: 3 }),
+      sourceAuth: {
+        fetch: async (input) => {
+          const url = new URL(String(input));
+          requests.push(url);
+          if (url.searchParams.get("nextToken") === "expired")
+            return new Response(null, { status });
+          return Response.json({ records: url.pathname.endsWith("/sleep") ? sleeps(3) : [] });
+        },
+      },
+    });
+    expect(report.warnings).toBeUndefined();
+    expect(typed(pod, MONTH, HEALTH.Sleep)).toHaveLength(3);
+    const sleepRequests = requests.filter((url) => url.pathname.endsWith("/sleep"));
+    expect(sleepRequests.map((url) => url.searchParams.get("nextToken"))).toEqual([
+      "expired",
+      null,
+    ]);
+  });
+
+  it("does not restart for a fresh token, a second rejection or a server error", async () => {
+    const run = (fetch: typeof globalThis.fetch, cursor?: string) =>
+      runImport({
+        adapter: whoopAdapter,
+        mode: "live",
+        podWriter: writer(createMemoryPod()),
+        cursor,
+        sourceAuth: { fetch },
+      });
+    const rejectTokens: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      if (url.searchParams.has("nextToken")) return new Response(null, { status: 400 });
+      return Response.json({
+        records: url.pathname.endsWith("/sleep") ? sleeps(1) : [],
+        ...(url.pathname.endsWith("/sleep") ? { next_token: "fresh" } : {}),
+      });
+    };
+    // The restarted traversal's own next token is not a resumed token.
+    await expect(run(rejectTokens, sleepCursor({ token: "expired", offset: 0 }))).rejects.toThrow(
+      /400/,
+    );
+    await expect(run(rejectTokens)).rejects.toThrow(/400/);
+    await expect(
+      run(async () => new Response(null, { status: 500 }), sleepCursor({ token: "t", offset: 0 })),
+    ).rejects.toThrow(/500/);
+  });
+
+  it("registers health observations for the workouts container too", async () => {
+    const { pod, report } = await demoImport(whoopAdapter);
+    expect(typed(pod, WORKOUTS, HEALTH.Observation).length).toBeGreaterThan(0);
+    const containers = new TypeIndexDataset(pod.dataset(report.indexUrl), DataFactory)
+      .locate(HEALTH.Observation)
+      .map((location) => location.container);
+    expect(containers).toEqual(
+      expect.arrayContaining([`${ROOT}health/observations/`, `${ROOT}health/workouts/`]),
+    );
+  });
+
+  it("round-trips a full API month through solid-health parseObservations", {
+    timeout: 30_000,
+  }, async () => {
+    const pod = createMemoryPod();
+    const day = (d: number) => String(d).padStart(2, "0");
+    const days = Array.from({ length: 29 }, (_, i) => i + 1);
+    const data: Record<string, unknown[]> = {
+      cycle: days.map((d) => ({
+        ...CYCLE,
+        id: d,
+        start: `2026-06-${day(d)}T06:00:00Z`,
+        end: `2026-06-${day(d + 1)}T06:00:00Z`,
+      })),
+      recovery: days.map((d) => ({ ...RECOVERY, cycle_id: d })),
+      sleep: days.map((d) => ({
+        ...SLEEP,
+        id: `night-${d}`,
+        start: `2026-06-${day(d)}T22:00:00Z`,
+        end: `2026-06-${day(d + 1)}T05:30:00Z`,
+      })),
+      workout: days.flatMap((d) =>
+        [8, 18].map((hour) => ({
+          ...WORKOUT,
+          id: `workout-${d}-${hour}`,
+          start: `2026-06-${day(d)}T${day(hour)}:00:00Z`,
+          end: `2026-06-${day(d)}T${day(hour)}:45:00Z`,
+        })),
+      ),
+    };
+    const transport: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      const kind = url.pathname.split("/").at(-1) as string;
+      const offset = Number(url.searchParams.get("nextToken") ?? 0);
+      const rows = data[kind] ?? [];
+      return Response.json({
+        records: rows.slice(offset, offset + 25),
+        ...(offset + 25 < rows.length ? { next_token: String(offset + 25) } : {}),
+      });
+    };
+    const report = await runImport({
+      adapter: whoopAdapter,
+      mode: "live",
+      podWriter: writer(pod),
+      sourceAuth: { fetch: transport },
+    });
+    expect(report.warnings).toBeUndefined();
+    for (const [url, expected] of [
+      [MONTH, 29 * (3 + 4 + 5)],
+      [WORKOUTS, 58 * 3],
+    ] as const) {
+      const shard = pod.dataset(url);
+      expect(shard.size).toBeLessThan(MAX_OBSERVATION_QUADS);
+      const parsed = parseObservations(shard);
+      expect(parsed).toHaveLength(expected);
+      expect(parsed).toHaveLength(typed(pod, url, HEALTH.Observation).length);
+    }
+    const resting = parseObservations(pod.dataset(MONTH)).find(
+      (observation) => observation.id === `${MONTH}#recovery-15/metric/restingHR`,
+    );
+    expect(resting?.measuredValue).toBe(52);
+    expect(resting?.dateTime.toISOString()).toBe("2026-06-15T06:00:00.000Z");
+  });
+
+  it("refuses a shard whose stored form would exceed the Health reader limits", async () => {
+    expect(MAX_STORED_QUADS).toBe(MAX_OBSERVATION_QUADS);
+    expect(MAX_STORED_OBSERVATIONS).toBe(MAX_OBSERVATIONS);
+    // Unrelated records already in the shard, without provenance yet: four quads each.
+    const seeded = async (markers: number) => {
+      const pod = createMemoryPod();
+      const dataset = pod.dataset(MONTH);
+      for (let i = 0; i < markers; i++) {
+        const marker = new RecordMarker(`${MONTH}#other-${i}`, dataset, DataFactory);
+        marker.types.add(CLASSES.Dataset);
+        marker.description = "other";
+        marker.source = "Other";
+        marker.startTime = new Date(Date.UTC(2026, 5, 1, 0, 0, i % 60));
+      }
+      await writeResource(MONTH, dataset, { fetchImpl: pod.fetch });
+      return pod;
+    };
+    // 60k staged quads: the session's provenance keeps the stored document readable.
+    const fits = await seeded(15_000);
+    await csv(SLEEPS_CSV, "sleeps.csv", fits);
+    const stored = fits.dataset(MONTH);
+    expect(stored.size).toBeLessThanOrEqual(MAX_OBSERVATION_QUADS);
+    expect(parseObservations(stored).filter((o) => o.id.includes("#sleep-"))).toHaveLength(5);
+    // 80k staged quads fit, but the provenance links the session adds would not.
+    const refused = await seeded(20_000);
+    const before = refused.get(MONTH);
+    await expect(csv(SLEEPS_CSV, "sleeps.csv", refused)).rejects.toThrow(/Health reader limit/);
+    expect(refused.get(MONTH)).toBe(before);
+  }, 60_000);
 });
