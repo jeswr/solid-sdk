@@ -9,11 +9,14 @@
  * preconditions — enough to exercise the real write path (writeResource,
  * type-index bootstrap, idempotent re-import) without any network.
  */
+import type { StorageClient } from "@jeswr/storage-client";
 import { Parser, Store } from "n3";
 import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-import.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createSourceAuth, type ImportReport, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
+import { createStoragePodWriter } from "./storage-pod-writer.js";
+import { storageMemoryPod } from "./storage-testing.js";
 import type { FixtureRoute, IntegrationAdapter } from "./types.js";
 
 export const TEST_POD_ROOT = "https://pod.test/alice/";
@@ -38,6 +41,8 @@ interface StoredResource {
 }
 
 export interface MemoryPod {
+  /** Present on the strict storage-client memory fixture. */
+  readonly storage?: StorageClient;
   /** Pass as `podFetch`/`fetchImpl` into the code under test. */
   fetch: typeof fetch;
   /** Raw Turtle of a stored resource. */
@@ -116,7 +121,8 @@ export function createMemoryPod(): MemoryPod {
           return new Response("Precondition failed", { status: 412 });
         }
         const version = (existing?.version ?? 0) + 1;
-        const raw = init?.body;
+        const raw =
+          init?.body instanceof Blob ? new Uint8Array(await init.body.arrayBuffer()) : init?.body;
         if (raw instanceof Uint8Array) {
           const contentType = headers.get("content-type") ?? "application/octet-stream";
           resources.set(url, { body: "", bytes: new Uint8Array(raw), contentType, version });
@@ -187,16 +193,10 @@ export async function demoImport(
   adapter: IntegrationAdapter,
   opts?: { pod?: MemoryPod; cursor?: string },
 ): Promise<{ pod: MemoryPod; report: ImportReport }> {
-  const pod = opts?.pod ?? createMemoryPod();
+  const pod = opts?.pod ?? (await createStorageMemoryPod());
   const report = await runImport({
     adapter,
-    podWriter: createFetchPodWriter({
-      adapterId: adapter.metadata.id,
-      webId: TEST_WEBID,
-      profileDocumentUrl: TEST_PROFILE_DOC,
-      podRoot: TEST_POD_ROOT,
-      fetch: pod.fetch,
-    }),
+    podWriter: testPodWriter(pod, adapter.metadata.id),
     mode: "demo",
     cursor: opts?.cursor,
   });
@@ -218,16 +218,10 @@ export async function sparseImport(
   routes: readonly FixtureRoute[],
   opts?: { pod?: MemoryPod; cursor?: string },
 ): Promise<{ pod: MemoryPod; report: ImportReport }> {
-  const pod = opts?.pod ?? createMemoryPod();
+  const pod = opts?.pod ?? (await createStorageMemoryPod());
   const report = await runImport({
     adapter,
-    podWriter: createFetchPodWriter({
-      adapterId: adapter.metadata.id,
-      webId: TEST_WEBID,
-      profileDocumentUrl: TEST_PROFILE_DOC,
-      podRoot: TEST_POD_ROOT,
-      fetch: pod.fetch,
-    }),
+    podWriter: testPodWriter(pod, adapter.metadata.id),
     mode: "live",
     sourceAuth: createSourceAuth(
       adapter.metadata.id,
@@ -275,17 +269,11 @@ export async function fileImport(
   file: ImportFile,
   opts?: { pod?: MemoryPod },
 ): Promise<{ pod: MemoryPod; report: ImportReport }> {
-  const pod = opts?.pod ?? createMemoryPod();
+  const pod = opts?.pod ?? (await createStorageMemoryPod());
   const report = await runFileImport({
     adapter,
     file,
-    podWriter: createFetchPodWriter({
-      adapterId: adapter.metadata.id,
-      webId: TEST_WEBID,
-      profileDocumentUrl: TEST_PROFILE_DOC,
-      podRoot: TEST_POD_ROOT,
-      fetch: pod.fetch,
-    }),
+    podWriter: testPodWriter(pod, adapter.metadata.id),
   });
   return { pod, report };
 }
@@ -303,3 +291,26 @@ export {
   fakeSyncDocument,
   fakeSyncName,
 } from "./sync/fake-platform.js";
+
+/** Strict storage-client memory backend; every shared adapter fixture import uses this. */
+export function createStorageMemoryPod(): Promise<MemoryPod> {
+  return storageMemoryPod(TEST_POD_ROOT, TEST_PROFILE_DOC, PROFILE_TURTLE);
+}
+
+/** Keep legacy HTTP fault-injection fixtures available alongside the storage backend. */
+export function testPodWriter(pod: MemoryPod, adapterId: string) {
+  return pod.storage
+    ? createStoragePodWriter({
+        storage: pod.storage,
+        container: new URL(`integrations/${adapterId}/`, TEST_POD_ROOT).href,
+        webId: TEST_WEBID,
+        typeIndex: { profileDocumentUrl: TEST_PROFILE_DOC },
+      })
+    : createFetchPodWriter({
+        adapterId,
+        webId: TEST_WEBID,
+        profileDocumentUrl: TEST_PROFILE_DOC,
+        podRoot: TEST_POD_ROOT,
+        fetch: pod.fetch,
+      });
+}

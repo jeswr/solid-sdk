@@ -9,6 +9,8 @@ export * from "./core/file-import.js";
 export * from "./core/import-runner.js";
 /** Fetch-backed Pod writer factory. */
 export * from "./core/pod-writer.js";
+/** Conditional storage-client-backed Pod writer. */
+export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
 /** Opt-in two-way sync contracts, host ports and runner. */
 export * from "./core/sync/index.js";
 export * from "./core/types.js";
