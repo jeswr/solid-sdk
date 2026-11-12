@@ -64,6 +64,24 @@ function brokerFixture(
 }
 
 describe("Solid-OIDC pod broker", () => {
+  it("verifies the profile binding once with RDF negotiation and retains it on refresh", async () => {
+    const profiles: Request[] = [];
+    const f = brokerFixture((op) => async (input, init) => {
+      const request = new Request(input instanceof Request ? input.clone() : input, init);
+      if (request.url === "https://alice.example/profile") {
+        expect(request.headers.get("accept")).toContain("application/ld+json");
+        profiles.push(request);
+      }
+      return op.fetch(input, init);
+    });
+    const { session } = await f.login();
+    expect(profiles).toHaveLength(1);
+    f.advance(601);
+    const restored = createPodSessionProvider(f.options);
+    expect((await (await restored.fetchFor(session.id))(`${POD_ROOT}notes`)).status).toBe(200);
+    expect(profiles).toHaveLength(1);
+  });
+
   it("authenticates private LWS reads through the default broker and refreshes after restore", async () => {
     let lws!: ReturnType<typeof lwsStorage>;
     const f = brokerFixture(
@@ -533,7 +551,7 @@ describe("Solid-OIDC pod broker", () => {
   });
 
   it("validates the authenticated WebID against the requested identity and profile issuer", async () => {
-    for (const variant of ["identity", "profile", "refresh", "type"]) {
+    for (const variant of ["identity", "profile", "refresh", "type"] as const) {
       const f = brokerFixture();
       const begin = await f.provider.begin(POD_WEBID, POD_CALLBACK);
       if (variant === "identity") f.op.controls.webId = "https://other.example/profile#me";
@@ -542,7 +560,16 @@ describe("Solid-OIDC pod broker", () => {
       if (variant === "type") f.op.controls.tokenType = "Bearer";
       await expect(
         f.provider.complete(f.op.callback(begin.authorizeUrl), begin.state),
-      ).rejects.toThrow();
+      ).rejects.toThrow(
+        new Error(
+          {
+            identity: "Pod WebID mismatch",
+            profile: "WebID issuer mismatch",
+            refresh: "offline_access was not granted",
+            type: "DPoP tokens required",
+          }[variant],
+        ),
+      );
     }
   });
 
@@ -834,7 +861,10 @@ describe("Solid-OIDC pod broker", () => {
       if (variant === "identity") f.op.controls.refreshWebId = "https://other.example/profile#me";
       if (variant === "claim") vi.spyOn(f.vault, "compareAndSwap").mockResolvedValueOnce(false);
       if (variant === "lifetime") await fetcher(`${POD_ROOT}notes`);
-      else await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow();
+      else
+        await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow(
+          new Error(variant === "identity" ? "Refreshed WebID mismatch" : "Pod session conflict"),
+        );
       vi.restoreAllMocks();
     }
   });
