@@ -1,23 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
-import type { DatasetCore } from "@rdfjs/types";
-import { DataFactory } from "n3";
+import type { BlankNode, DatasetCore, Quad, Quad_Graph, Quad_Subject, Term } from "@rdfjs/types";
+import { DataFactory, Store } from "n3";
 import { abortablePodWriter } from "../abort.js";
-import { RunBudget } from "../budget.js";
-import { IntegrationSyncError } from "../errors.js";
+import { RunBudget, RunBudgetExceededError } from "../budget.js";
+import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../errors.js";
 import type { ImportReport } from "../import-runner.js";
 import { createImportSession, MAX_RUN_SOURCES } from "../import-session.js";
 import { copyDataset } from "../incremental.js";
+import { Provenance } from "../provenance.js";
 import type { BinaryDoc, NormalisedDoc, PodWriter, WrittenDoc } from "../types.js";
 import { resolveConflict } from "./conflict.js";
 import { scanWriteBack } from "./detection.js";
-import { canonicalHash, datasetBytes, sha256 } from "./hash.js";
+import { canonicalHash, datasetBytes, sha256, syncItemSlug } from "./hash.js";
 import {
   accountKey,
   checkedText,
   createLinkStore,
+  DuplicateSyncIdentityError,
+  LinkCapError,
+  MAX_PENDING_ITEMS,
   MAX_SYNC_LINKS,
   strongEtag,
+  TOMBSTONE_RETENTION_MS,
+  WeakEtagError,
 } from "./link-store.js";
 import { syncSourceFetch } from "./transport.js";
 import type {
@@ -28,6 +35,8 @@ import type {
   SyncPodWriter,
   SyncPorts,
   SyncResource,
+  SyncSkip,
+  SyncSkipReason,
   TwoWayAdapter,
 } from "./types.js";
 import { SyncMetadata } from "./vocab.js";
@@ -35,6 +44,14 @@ import { SyncMetadata } from "./vocab.js";
 export interface TwoWaySyncReport extends ImportReport {
   readonly conflicts: number;
   readonly pendingDeletes: number;
+  /** Items skipped with a fixed error class; inbound ones are retried next run. */
+  readonly failed: number;
+  /** Items imported by this connector without a link; never created at the provider. */
+  readonly unlinkedImports: number;
+  /** Items waiting on an unresolved create intent. */
+  readonly deferred: number;
+  /** Links re-pointed to a renamed/moved pod resource this run. */
+  readonly moved: number;
   readonly outbound: {
     readonly created: number;
     readonly updated: number;
@@ -42,8 +59,38 @@ export interface TwoWaySyncReport extends ImportReport {
   };
   /** Owner-only link records carry the URLs, versions and resolution for the health UI. */
   readonly issues: readonly SyncLink[];
+  /** Skipped/deferred items with their fixed reason class (bounded). */
+  readonly skippedItems: readonly SyncSkip[];
 }
 type Stored = NonNullable<Awaited<ReturnType<PodWriter["read"]>>>;
+type Stage = { value: SyncSkipReason };
+
+/** Most skipped items listed in one report; counts stay exact. */
+export const MAX_REPORTED_SKIPS = 1_000;
+const NOT_FAILURES: ReadonlySet<SyncSkipReason> = new Set<SyncSkipReason>([
+  "deferred",
+  "unlinked-import",
+  "unsupported-resource",
+]);
+
+/** Abort, budget, rate-limit and authorization failures end the run; anything else is per item. */
+function runLevel(error: unknown, signal: AbortSignal | undefined): boolean {
+  if (signal?.aborted) return true;
+  if (
+    error instanceof RunBudgetExceededError ||
+    error instanceof RateLimitedError ||
+    error instanceof IntegrationAuthError
+  )
+    return true;
+  const status = (error as { status?: unknown } | null)?.status;
+  return status === 401 || status === 403;
+}
+function reasonOf(error: unknown, stage: SyncSkipReason): SyncSkipReason {
+  if (error instanceof WeakEtagError) return "weak-etag";
+  if (error instanceof DuplicateSyncIdentityError) return "duplicate-identity";
+  if (error instanceof LinkCapError) return "link-cap";
+  return stage;
+}
 
 /** Inbound then outbound under the SAME import-session claim, checkpoint and abort boundary. */
 export async function runTwoWaySync<Op>(
@@ -67,7 +114,13 @@ export async function runTwoWaySync<Op>(
   const maxResources = ports.maxResources ?? MAX_SYNC_LINKS;
   if (!Number.isSafeInteger(maxResources) || maxResources < 1 || maxResources > MAX_SYNC_LINKS)
     throw new RangeError("Invalid sync resource cap.");
-  resolveConflict(settings.conflictPolicy, undefined, undefined, settings.skewGuardMs);
+  const policy = settings.conflictPolicy ?? "lww";
+  resolveConflict(policy, undefined, undefined, settings.skewGuardMs);
+  if (
+    adapter.deduplicatesCreateKeys !== undefined &&
+    typeof adapter.deduplicatesCreateKeys !== "boolean"
+  )
+    throw new Error("Invalid create deduplication declaration.");
   if (!adapter.writeBackContainers.length || adapter.writeBackContainers.length > 32)
     throw new Error("Declare 1–32 write-back containers.");
   const containers = adapter.writeBackContainers.map((c) => {
@@ -155,22 +208,96 @@ export async function runTwoWaySync<Op>(
       (c) => url.startsWith(c) && !url.slice(c.length).includes("/") && url !== c,
     );
   }
-  const links = createLinkStore(writer, account, id);
+  const links = createLinkStore(writer, account, id, { maxLinks: ports.maxLinks });
   let linksLoaded = false;
+  const now = ports.now ?? (() => new Date());
+
+  // Per-item outcomes. Keys are (direction, identity); the last outcome in a run wins.
+  const skips = new Map<string, SyncSkip>();
+  const resolvedInbound = new Set<string>();
+  let unkeyed = 0;
+  const skipKey = (item: Pick<SyncSkip, "direction" | "remoteId" | "podUrl">) =>
+    JSON.stringify([item.direction, item.direction === "inbound" ? item.remoteId : item.podUrl]);
+  function skip(item: SyncSkip): void {
+    if (item.direction === "inbound" ? !item.remoteId : !item.podUrl) {
+      unkeyed++;
+      return;
+    }
+    if (item.remoteId && item.direction === "inbound") resolvedInbound.delete(item.remoteId);
+    skips.set(skipKey(item), item);
+  }
+  function succeeded(remoteId: string): void {
+    skips.delete(skipKey({ direction: "inbound", remoteId }));
+    resolvedInbound.add(remoteId);
+  }
+  /** Run one item; a non-run-level failure is recorded with a fixed class and the run continues. */
+  async function isolate(
+    item: Omit<SyncSkip, "reason">,
+    stage: Stage,
+    fn: () => Promise<void>,
+  ): Promise<boolean> {
+    try {
+      await fn();
+      return true;
+    } catch (error) {
+      if (runLevel(error, signal)) throw error;
+      skip({ ...item, reason: reasonOf(error, stage.value) });
+      return false;
+    }
+  }
+  function pendingAfterRun(): SyncSkip[] {
+    const result = new Map<string, SyncSkip>();
+    if (linksLoaded)
+      for (const item of links.pending())
+        if (item.direction === "inbound" && item.remoteId && !resolvedInbound.has(item.remoteId))
+          result.set(skipKey(item), item);
+    for (const [key, item] of skips) result.set(key, item);
+    // Inbound items carry retry state; list them first so a cap never drops one silently.
+    return [...result.values()].sort((a, b) =>
+      a.direction === b.direction ? 0 : a.direction === "inbound" ? -1 : 1,
+    );
+  }
   function health() {
     const issues = links.all().filter((link) => link.conflict || link.pendingDelete);
+    const pending = pendingAfterRun();
     return {
       issues,
+      pending,
       conflicts: issues.filter((link) => link.conflict).length,
       pendingDeletes: issues.filter((link) => link.pendingDelete).length,
+      failed: pending.filter((item) => !NOT_FAILURES.has(item.reason)).length + unkeyed,
+      unlinkedImports: pending.filter((item) => item.reason === "unlinked-import").length,
+      deferred: pending.filter((item) => item.reason === "deferred").length,
     };
   }
+  const healthCounts = (h: ReturnType<typeof health>) => ({
+    conflicts: h.conflicts,
+    pendingDeletes: h.pendingDeletes,
+    failed: h.failed,
+    unlinkedImports: h.unlinkedImports,
+    deferred: h.deferred,
+  });
+
   const session = createImportSession(
     writer,
     id,
     `urn:solid:connector:${encodeURIComponent(id)}:source`,
     ports,
   );
+  const importSource = `urn:solid:connector:${encodeURIComponent(id)}:source`;
+  const runPrefix = `${writer.resolve("_provenance.ttl")}#run-`;
+  /** This connector's import provenance (source derivation or a connector run Activity). */
+  function importedByConnector(dataset: DatasetCore): boolean {
+    const subjects = new Set<string>();
+    for (const quad of dataset)
+      if (quad.subject.termType === "NamedNode") subjects.add(quad.subject.value);
+    for (const subject of subjects) {
+      const prov = new Provenance(subject, dataset, DataFactory);
+      if (prov.derivedFrom.has(importSource)) return true;
+      for (const activity of prov.generatedBy) if (activity.startsWith(runPrefix)) return true;
+    }
+    return false;
+  }
   // Hash the final mapped representation. Snapshots preserve the actual losing dataset
   // and must not be remapped a second time by the session.
   function normalize(doc: NormalisedDoc): NormalisedDoc {
@@ -182,7 +309,7 @@ export async function runTwoWaySync<Op>(
     return mappedDoc;
   }
   const outbound = { created: 0, updated: 0, deleted: 0 };
-  const now = ports.now ?? (() => new Date());
+  let moved = 0;
   let outboundStarted: Date | undefined;
   const outboundSlug = `${account}/outbound-${crypto.randomUUID()}.ttl`;
   const outboundActivity = `${writer.resolve(outboundSlug)}#activity`;
@@ -194,9 +321,9 @@ export async function runTwoWaySync<Op>(
   }
   async function recordOutbound() {
     if (!outboundStarted || outboundRecorded) return;
-    const { Provenance, PROV } = await import("../provenance.js");
+    const { Provenance: Activity, PROV } = await import("../provenance.js");
     const dataset = copyDataset();
-    const activity = new Provenance(outboundActivity, dataset, DataFactory);
+    const activity = new Activity(outboundActivity, dataset, DataFactory);
     activity.types.add(`${PROV}Activity`);
     activity.startedAt = outboundStarted;
     activity.endedAt = now();
@@ -216,7 +343,9 @@ export async function runTwoWaySync<Op>(
     );
     outboundRecorded = true;
   }
-  const hash = (dataset: DatasetCore) => canonicalHash(dataset, adapter.fieldsForHash);
+  /** Location-independent: the document URL and its fragments hash relative to `url`. */
+  const hash = (dataset: DatasetCore, url: string) =>
+    canonicalHash(dataset, adapter.fieldsForHash, url);
   const resultIdentity = (result: RemoteResult): RemoteResult => ({
     remoteId: checkedText(result.remoteId),
     remoteVersion: checkedText(result.remoteVersion),
@@ -230,9 +359,84 @@ export async function runTwoWaySync<Op>(
   async function writtenEtag(written: WrittenDoc, expectedHash: string): Promise<string> {
     if (written.etag) return strongEtag(written.etag);
     const stored = await current(written.url);
-    if (!stored || (await hash(stored.dataset)) !== expectedHash)
+    if (!stored || (await hash(stored.dataset, written.url)) !== expectedHash)
       throw new Error("Pod resource changed during sync write.");
     return strongEtag(stored.etag);
+  }
+  /**
+   * Replace only the adapter's mapped quads (fieldsForHash, plus blank-node structure reached
+   * through them); every other stored triple stays. Unmapped incoming facts are added only for
+   * a (subject, predicate) the pod lacks. The mapped projection equals the incoming one, so
+   * the canonical hash of the result is the incoming hash.
+   */
+  function mergeMapped(stored: DatasetCore, incoming: DatasetCore): Store {
+    const fields = new Set(adapter.fieldsForHash);
+    const isMapped = (q: Quad) => fields.has(q.predicate.value);
+    const owned = (dataset: DatasetCore) => {
+      const result = new Set<string>();
+      const queue: string[] = [];
+      for (const q of dataset)
+        if (isMapped(q) && q.object.termType === "BlankNode" && !result.has(q.object.value)) {
+          result.add(q.object.value);
+          queue.push(q.object.value);
+        }
+      while (queue.length) {
+        const label = queue.pop() as string;
+        for (const q of dataset.match(DataFactory.blankNode(label), null, null))
+          if (q.object.termType === "BlankNode" && !result.has(q.object.value)) {
+            result.add(q.object.value);
+            queue.push(q.object.value);
+          }
+      }
+      return result;
+    };
+    const storedOwned = owned(stored);
+    const result = new Store();
+    const pairs = new Set<string>();
+    const labels = new Set<string>();
+    for (const q of stored) {
+      if (isMapped(q) || (q.subject.termType === "BlankNode" && storedOwned.has(q.subject.value)))
+        continue;
+      result.add(q);
+      pairs.add(JSON.stringify([q.subject.value, q.predicate.value]));
+      for (const term of [q.subject, q.object, q.graph])
+        if (term.termType === "BlankNode") labels.add(term.value);
+    }
+    const incomingOwned = owned(incoming);
+    const fresh = new Map<string, BlankNode>();
+    let serial = 0;
+    const relabel = <T extends Term>(term: T): T | BlankNode => {
+      if (term.termType !== "BlankNode") return term;
+      let next = fresh.get(term.value);
+      if (!next) {
+        let label: string;
+        do label = `sync${serial++}`;
+        while (labels.has(label));
+        next = DataFactory.blankNode(label);
+        fresh.set(term.value, next);
+      }
+      return next;
+    };
+    for (const q of incoming) {
+      const structural =
+        isMapped(q) || (q.subject.termType === "BlankNode" && incomingOwned.has(q.subject.value));
+      if (
+        !structural &&
+        (q.subject.termType !== "NamedNode" ||
+          q.object.termType === "BlankNode" ||
+          pairs.has(JSON.stringify([q.subject.value, q.predicate.value])))
+      )
+        continue;
+      result.add(
+        DataFactory.quad(
+          relabel(q.subject) as Quad_Subject,
+          q.predicate,
+          relabel(q.object) as Quad["object"],
+          relabel(q.graph) as Quad_Graph,
+        ),
+      );
+    }
+    return result;
   }
   function snapshotPayload(dataset: DatasetCore, snapshotUrl: string, originalUrl: string) {
     if (new SyncMetadata(snapshotUrl, dataset, DataFactory).revisionOf !== originalUrl)
@@ -253,7 +457,8 @@ export async function runTwoWaySync<Op>(
     version: string,
     expiry?: Date,
   ): Promise<string> {
-    const target = await snapshotSlug(url, version, await hash(dataset), expiry !== undefined);
+    const digest = await hash(dataset, url);
+    const target = await snapshotSlug(url, version, digest, expiry !== undefined);
     const snapshotUrl = writer.resolve(target);
     for (const quad of dataset)
       if (quad.subject.termType === "NamedNode" && quad.subject.value === snapshotUrl)
@@ -282,58 +487,136 @@ export async function runTwoWaySync<Op>(
         },
         { ifNoneMatch: "*" },
       );
-    } else if (
-      (await hash(snapshotPayload(existing.dataset, snapshotUrl, url))) !== (await hash(dataset))
-    )
+    } else if ((await hash(snapshotPayload(existing.dataset, snapshotUrl, url), url)) !== digest)
       throw new Error("Snapshot identity mismatch.");
     return snapshotUrl;
   }
-  async function preserveSnapshotLinks(url: string, incoming: DatasetCore, stored?: Stored) {
-    if (!stored) return;
-    const target = new SyncMetadata(url, incoming, DataFactory);
-    for (const previous of new SyncMetadata(url, stored.dataset, DataFactory).snapshots)
-      target.snapshots.add(previous);
+  async function readSnapshot(snapshotUrl: string, url: string): Promise<DatasetCore> {
+    await writer.ensureOwnerOnly(slug(snapshotUrl));
+    const stored = await writer.read(slug(snapshotUrl));
+    if (!stored) throw new Error("Missing sync snapshot.");
+    return snapshotPayload(stored.dataset, snapshotUrl, url);
   }
+  /** Duplicate identities never wedge: keep the pod resource as a manual conflict-only record. */
+  async function recordDuplicate(link: SyncLink, remote: RemoteResult): Promise<void> {
+    let snapshotUrl = link.pendingCreate?.resourceUrl;
+    if (!snapshotUrl) {
+      const stored = await current(link.podUrl);
+      if (!stored) {
+        await links.delete(link.podUrl);
+        return;
+      }
+      snapshotUrl = await snapshot(link.podUrl, stored.dataset, strongEtag(stored.etag));
+    }
+    await links.put({
+      podUrl: link.podUrl,
+      pendingCreate: link.pendingCreate,
+      conflict: {
+        snapshotUrl,
+        remoteVersion: remote.remoteVersion,
+        remoteId: remote.remoteId,
+        resolution: "manual",
+      },
+    });
+    skip({ direction: "outbound", podUrl: link.podUrl, reason: "duplicate-identity" });
+  }
+  /** Pod URLs of create intents not yet confirmed at the provider. */
+  const unresolvedCreates = new Set<string>();
+  const isOpenCreate = (link: SyncLink | undefined) =>
+    !!link?.pendingCreate && !link.remoteId && link.conflict?.resolution !== "manual";
+
   async function upsert(item: RemoteItem): Promise<void> {
     check();
     budget.items(1);
+    const remoteId = typeof item?.remoteId === "string" ? item.remoteId : undefined;
+    const stage: Stage = { value: "mapping-failed" };
+    let deferred = false;
+    const ok = await isolate({ direction: "inbound", remoteId }, stage, async () => {
+      deferred = await upsertItem(item, stage);
+    });
+    if (ok && !deferred && remoteId) succeeded(remoteId);
+  }
+  /** Returns true when the item was deferred rather than mapped. */
+  async function upsertItem(item: RemoteItem, stage: Stage): Promise<boolean> {
     const identity = resultIdentity(item);
     const document = normalize(item.document);
     const url = writer.resolve(document.slug);
-    const link = links.byRemoteId(identity.remoteId);
+    let link = links.byRemoteId(identity.remoteId);
+    let adopted = false;
+    if (!link && item.idempotencyKey !== undefined) {
+      const intent = links.byCreateKey(checkedText(item.idempotencyKey));
+      if (intent?.pendingCreate && isOpenCreate(intent)) {
+        // The provider echoes our key: adopt the create intent instead of minting a new item.
+        link = {
+          ...intent,
+          ...identity,
+          podEtag: intent.pendingCreate.podEtag,
+          lastSyncedHash: intent.pendingCreate.hash,
+          pendingCreate: undefined,
+          needsInbound: undefined,
+        };
+        adopted = true;
+      }
+    }
     if (link && link.podUrl !== url)
       throw new Error("Resolve linked pod URL before mapping the remote item.");
-    if (!link && links.byPodUrl(url)) throw new Error("Pod URL belongs to another sync identity.");
+    if (!link) {
+      if (links.byPodUrl(url)) throw new Error("Pod URL belongs to another sync identity.");
+      // A lagging key lookup must not let our own create be mapped as a second resource.
+      // An item whose provider-stored key matches no intent is provably not ours.
+      if (unresolvedCreates.size && item.idempotencyKey === undefined) {
+        skip({ direction: "inbound", remoteId: identity.remoteId, reason: "deferred" });
+        return true;
+      }
+    }
+    stage.value = "read-failed";
     const stored = await current(url);
-    const incomingHash = await hash(document.dataset);
-    const localHash = stored ? await hash(stored.dataset) : undefined;
+    stage.value = "hash-failed";
+    const incomingHash = await hash(document.dataset, url);
+    const localHash = stored ? await hash(stored.dataset, url) : undefined;
+    stage.value = "write-failed";
+    if (link?.status) {
+      // Tombstones are durable: activity on one becomes a manual conflict for the owner.
+      if (link.status === "remote-deleted") return false;
+      if (identity.remoteVersion === link.remoteVersion && incomingHash === link.lastSyncedHash)
+        return false;
+      const snapshotUrl = writer.resolve(
+        await snapshotSlug(url, identity.remoteVersion, incomingHash),
+      );
+      if (link.conflict?.resolution === "manual" && link.conflict.snapshotUrl === snapshotUrl)
+        return false;
+      await snapshot(url, document.dataset, identity.remoteVersion);
+      await links.put({
+        ...link,
+        conflict: { snapshotUrl, remoteVersion: identity.remoteVersion, resolution: "manual" },
+      });
+      return false;
+    }
     const resolvingManual =
-      link?.conflict?.resolution === "manual" &&
-      ["remote-wins", "pod-wins"].includes(settings.conflictPolicy ?? "lww");
+      link?.conflict?.resolution === "manual" && ["remote-wins", "pod-wins"].includes(policy);
     // A key lookup may return a version edited AFTER our create. Verify mapped content
     // before treating that recovered/current version as our own echo.
     // Unmapped provider changes must not compete with a local mapped edit either.
-    if (link && !link.status && !resolvingManual && incomingHash === link.lastSyncedHash) {
-      if (link.needsInbound || link.remoteVersion !== identity.remoteVersion)
+    if (link && !resolvingManual && incomingHash === link.lastSyncedHash) {
+      if (adopted || link.needsInbound || link.remoteVersion !== identity.remoteVersion)
         await links.put({
           ...link,
           remoteVersion: identity.remoteVersion,
           needsInbound: undefined,
         });
-      return;
+      if (adopted) unresolvedCreates.delete(url);
+      return false;
     }
     // A retained manual conflict can be replayed without rewriting the item. Compare
     // content as well as version: providers may use coarse updated_at timestamps.
     if (
       link?.conflict?.resolution === "manual" &&
       !link.needsInbound &&
-      !link.status &&
       !resolvingManual &&
       link.conflict.snapshotUrl ===
         writer.resolve(await snapshotSlug(url, identity.remoteVersion, incomingHash))
     )
-      return;
-    if (link?.status) return; // Tombstones are durable; recreation requires explicit host intervention.
+      return false;
     if (link && !stored) {
       const snapshotUrl = await snapshot(url, document.dataset, identity.remoteVersion);
       await links.put({
@@ -342,7 +625,8 @@ export async function runTwoWaySync<Op>(
         pendingDelete: true,
         needsInbound: undefined,
       });
-      return;
+      if (adopted) unresolvedCreates.delete(url);
+      return false;
     }
     if (stored && localHash === incomingHash) {
       await links.put({
@@ -355,7 +639,8 @@ export async function runTwoWaySync<Op>(
         needsInbound: undefined,
         conflict: undefined,
       });
-      return;
+      if (adopted) unresolvedCreates.delete(url);
+      return false;
     }
     let conflict: SyncLink["conflict"];
     if (stored && (!link || localHash !== link.lastSyncedHash)) {
@@ -364,12 +649,7 @@ export async function runTwoWaySync<Op>(
       const resolution =
         link?.conflict?.resolution === "manual" && !resolvingManual
           ? "manual"
-          : resolveConflict(
-              settings.conflictPolicy,
-              item.modifiedAt,
-              stored.lastModified,
-              settings.skewGuardMs,
-            );
+          : resolveConflict(policy, item.modifiedAt, stored.lastModified, settings.skewGuardMs);
       const snapshotUrl = await snapshot(
         url,
         resolution === "remote" ? stored.dataset : document.dataset,
@@ -380,12 +660,25 @@ export async function runTwoWaySync<Op>(
         const copy = copyDataset(stored.dataset);
         new SyncMetadata(url, copy, DataFactory).snapshots.add(snapshotUrl);
         await writer.write({ ...document, dataset: copy }, { ifMatch: strongEtag(stored.etag) });
-        await links.put({ ...link, ...identity, podUrl: url, conflict, needsInbound: undefined });
-        return;
+        // Without write-back, a pod win adopts the remote state as the baseline so the item
+        // is not re-conflicted every run; the pod's edit stays pending outbound. The stale
+        // podEtag keeps it detectable once write-back is enabled.
+        await links.put({
+          ...link,
+          ...identity,
+          podUrl: url,
+          conflict,
+          pendingCreate: undefined,
+          needsInbound: undefined,
+          ...(resolution === "pod" && !settings.writeBack ? { lastSyncedHash: incomingHash } : {}),
+        });
+        if (adopted) unresolvedCreates.delete(url);
+        return false;
       }
     }
-    const copy = copyDataset(document.dataset);
-    await preserveSnapshotLinks(url, copy, stored);
+    const copy = stored
+      ? mergeMapped(stored.dataset, document.dataset)
+      : copyDataset(document.dataset);
     if (conflict) new SyncMetadata(url, copy, DataFactory).snapshots.add(conflict.snapshotUrl);
     const written = await session.write(
       { ...document, dataset: copy, writeMode: "replace" },
@@ -401,38 +694,48 @@ export async function runTwoWaySync<Op>(
       pendingCreate: undefined,
       needsInbound: undefined,
     });
+    if (adopted) unresolvedCreates.delete(url);
+    return false;
   }
   async function remoteDelete(remoteId: string, remoteVersion: string): Promise<void> {
     check();
     budget.items(1);
-    checkedText(remoteVersion);
-    let link = links.byRemoteId(checkedText(remoteId));
-    if (!link || link.status === "trashed" || link.status === "pod-deleted") return;
-    const stored = await current(link.podUrl);
-    if (!stored) {
-      await links.put({ ...link, status: "trashed", pendingDelete: false });
-      return;
-    }
-    const trashUrl = await snapshot(
-      link.podUrl,
-      stored.dataset,
-      strongEtag(stored.etag),
-      new Date(now().getTime() + 30 * 86_400_000),
-    );
-    link = {
-      ...link,
-      remoteVersion,
-      status: "remote-deleted",
-      trashUrl,
-      pendingDelete: true,
-      needsInbound: undefined,
-    };
-    await links.put(link);
-    await writer.remove?.(slug(link.podUrl), { ifMatch: strongEtag(stored.etag) });
-    await links.put({ ...link, status: "trashed", pendingDelete: false });
+    const stage: Stage = { value: "mapping-failed" };
+    const id = typeof remoteId === "string" ? remoteId : undefined;
+    const ok = await isolate({ direction: "inbound", remoteId: id }, stage, async () => {
+      checkedText(remoteVersion);
+      let link = links.byRemoteId(checkedText(remoteId));
+      if (!link || link.status === "trashed" || link.status === "pod-deleted") return;
+      stage.value = "read-failed";
+      const stored = await current(link.podUrl);
+      stage.value = "write-failed";
+      const deletedAt = now().toISOString();
+      if (!stored) {
+        await links.put({ ...link, status: "trashed", pendingDelete: false, deletedAt });
+        return;
+      }
+      const trashUrl = await snapshot(
+        link.podUrl,
+        stored.dataset,
+        strongEtag(stored.etag),
+        new Date(now().getTime() + 30 * 86_400_000),
+      );
+      link = {
+        ...link,
+        remoteVersion,
+        status: "remote-deleted",
+        trashUrl,
+        pendingDelete: true,
+        needsInbound: undefined,
+      };
+      await links.put(link);
+      await writer.remove?.(slug(link.podUrl), { ifMatch: strongEtag(stored.etag) });
+      await links.put({ ...link, status: "trashed", pendingDelete: false, deletedAt });
+    });
+    if (ok && id) succeeded(id);
   }
   async function settleCreate(link: SyncLink): Promise<SyncLink> {
-    if (!link.pendingCreate) return link;
+    if (!isOpenCreate(link) || !link.pendingCreate) return link;
     request();
     const found = await adapter.findByIdempotencyKey(
       link.pendingCreate.key,
@@ -440,30 +743,90 @@ export async function runTwoWaySync<Op>(
     );
     check();
     if (!found) return link;
+    const identity = resultIdentity(found);
+    const other = links.byRemoteId(identity.remoteId);
+    if (other && other.podUrl !== link.podUrl) {
+      await recordDuplicate(link, identity);
+      unresolvedCreates.delete(link.podUrl);
+      return links.byPodUrl(link.podUrl) ?? link;
+    }
     const updated: SyncLink = {
       ...link,
-      ...resultIdentity(found),
+      ...identity,
       podEtag: link.pendingCreate.podEtag,
       lastSyncedHash: link.pendingCreate.hash,
       pendingCreate: undefined,
       needsInbound: true,
     };
     await links.put(updated);
+    unresolvedCreates.delete(link.podUrl);
     return updated;
   }
+  /** Remote-wins resolution of a retained manual conflict from its remote snapshot. */
+  async function resolveFromSnapshot(link: SyncLink, stage: Stage): Promise<void> {
+    const conflict = link.conflict;
+    if (!conflict) return;
+    stage.value = "read-failed";
+    const stored = await current(link.podUrl);
+    if (!stored) return;
+    const payload = await readSnapshot(conflict.snapshotUrl, link.podUrl);
+    stage.value = "hash-failed";
+    const payloadHash = await hash(payload, link.podUrl);
+    stage.value = "write-failed";
+    const written = await writer.write(
+      {
+        slug: slug(link.podUrl),
+        dataset: mergeMapped(stored.dataset, payload),
+        category: "sync-resolution",
+        forClass: `${NS.PROV}Entity`,
+        skipRegistration: true,
+      },
+      { ifMatch: strongEtag(stored.etag) },
+    );
+    await links.put({
+      ...link,
+      podEtag: await writtenEtag(written, payloadHash),
+      lastSyncedHash: payloadHash,
+      conflict: { ...conflict, resolution: "remote" },
+    });
+  }
+  const resolvesManual = (link: SyncLink | undefined) =>
+    link?.conflict?.resolution === "manual" &&
+    !!link.remoteId &&
+    !link.status &&
+    (policy === "pod-wins" || policy === "remote-wins");
   async function execute(url: string): Promise<void> {
+    const stage: Stage = { value: "read-failed" };
+    await isolate({ direction: "outbound", podUrl: url }, stage, () => executeItem(url, stage));
+  }
+  async function executeItem(url: string, stage: Stage): Promise<void> {
     let link = links.byPodUrl(url);
-    if (link?.status || link?.conflict?.resolution === "manual") return;
-    if (link?.needsInbound)
-      throw new Error(
-        "Remote write must be verified by inbound mapping before another outbound write.",
-      );
-    if (link?.pendingCreate) link = await settleCreate(link);
-    if (link?.needsInbound) throw new Error("Recovered remote write needs inbound mapping.");
+    if (link?.status) return; // Tombstone activity is recorded by the tombstone pass.
+    let resolving = false;
+    if (link?.conflict?.resolution === "manual") {
+      if (!resolvesManual(link)) return;
+      if (policy === "remote-wins") return resolveFromSnapshot(link, stage);
+      resolving = true;
+    }
+    if (link?.needsInbound) return; // Awaiting inbound verification; its failure is recorded.
+    if (link?.pendingCreate) {
+      const intent = link.pendingCreate;
+      stage.value = "remote-failed";
+      link = await settleCreate(link);
+      if (link.conflict?.resolution === "manual" || link.needsInbound) return;
+      if (link.pendingCreate === intent && adapter.deduplicatesCreateKeys === false) {
+        // A provider that cannot deduplicate keys never sees an unconfirmed create twice.
+        skip({ direction: "outbound", podUrl: url, reason: "deferred" });
+        return;
+      }
+    }
+    stage.value = "read-failed";
     const stored = await current(url);
     if (!stored) return;
-    const localHash = await hash(stored.dataset);
-    if (link?.lastSyncedHash === localHash) {
+    stage.value = "hash-failed";
+    const localHash = await hash(stored.dataset, url);
+    stage.value = "write-failed";
+    if (!resolving && link?.lastSyncedHash === localHash) {
       if (link.podEtag !== stored.etag)
         await links.put({ ...link, podEtag: strongEtag(stored.etag) });
       return;
@@ -476,6 +839,11 @@ export async function runTwoWaySync<Op>(
       remoteId: link?.remoteId,
     };
     if (!link?.remoteId && !link?.pendingCreate) {
+      // Enabling write-back after a one-way import must never duplicate those items.
+      if (importedByConnector(stored.dataset)) {
+        skip({ direction: "outbound", podUrl: url, reason: "unlinked-import" });
+        return;
+      }
       const resourceUrl = await snapshot(url, stored.dataset, resource.etag);
       link = {
         podUrl: url,
@@ -490,12 +858,9 @@ export async function runTwoWaySync<Op>(
     }
     let sentHash = localHash;
     if (link?.pendingCreate) {
-      await writer.ensureOwnerOnly(slug(link.pendingCreate.resourceUrl));
-      const original = await writer.read(slug(link.pendingCreate.resourceUrl));
-      const payload = original
-        ? snapshotPayload(original.dataset, link.pendingCreate.resourceUrl, url)
-        : undefined;
-      if (!payload || (await hash(payload)) !== link.pendingCreate.hash)
+      stage.value = "read-failed";
+      const payload = await readSnapshot(link.pendingCreate.resourceUrl, url);
+      if ((await hash(payload, url)) !== link.pendingCreate.hash)
         throw new Error("Missing pending create snapshot.");
       resource = {
         ...resource,
@@ -505,8 +870,10 @@ export async function runTwoWaySync<Op>(
       sentHash = link.pendingCreate.hash;
     }
     check();
+    stage.value = "mapping-failed";
     const op = await adapter.toRemote(resource);
     check();
+    stage.value = "remote-failed";
     request();
     startOutbound(url);
     const result = resultIdentity(
@@ -516,8 +883,14 @@ export async function runTwoWaySync<Op>(
       ),
     );
     check();
+    stage.value = "write-failed";
     if (link?.remoteId && result.remoteId !== link.remoteId)
       throw new Error("Remote update changed identity.");
+    const other = links.byRemoteId(result.remoteId);
+    if (link && !link.remoteId && other && other.podUrl !== url) {
+      await recordDuplicate(link, result);
+      return;
+    }
     if (link?.remoteId) outbound.updated++;
     else outbound.created++;
     await links.put({
@@ -529,23 +902,178 @@ export async function runTwoWaySync<Op>(
       pendingCreate: undefined,
       needsInbound: true,
       pendingDelete: false,
+      ...(resolving && link?.conflict ? { conflict: { ...link.conflict, resolution: "pod" } } : {}),
     });
+  }
+  /** Re-point links whose pod resource was renamed/moved, so it is neither created nor deleted. */
+  async function detectMoves(listing: ReadonlyMap<string, string | null | undefined>) {
+    const candidates = [...listing.keys()].filter((url) => !links.byPodUrl(url));
+    if (!candidates.length) return;
+    const vanished = new Map<string, SyncLink[]>();
+    for (const link of links.all()) {
+      if (
+        !link.remoteId ||
+        link.status ||
+        link.pendingCreate ||
+        link.needsInbound ||
+        !link.lastSyncedHash ||
+        link.conflict?.resolution === "manual" ||
+        listing.has(link.podUrl)
+      )
+        continue;
+      try {
+        if (await current(link.podUrl)) continue;
+      } catch (error) {
+        if (runLevel(error, signal)) throw error;
+        continue;
+      }
+      vanished.set(link.lastSyncedHash, [...(vanished.get(link.lastSyncedHash) ?? []), link]);
+    }
+    if (!vanished.size) return;
+    const arrived = new Map<string, { url: string; etag: string }[]>();
+    for (const url of candidates) {
+      try {
+        const stored = await current(url);
+        if (!stored) continue;
+        const digest = await hash(stored.dataset, url);
+        if (!vanished.has(digest)) continue;
+        arrived.set(digest, [
+          ...(arrived.get(digest) ?? []),
+          { url, etag: strongEtag(stored.etag) },
+        ]);
+      } catch (error) {
+        if (runLevel(error, signal)) throw error;
+        // The outbound pass reads it again and records the failure.
+      }
+    }
+    for (const [digest, olds] of vanished) {
+      const news = arrived.get(digest);
+      const [old] = olds;
+      const [target] = news ?? [];
+      // Only an unambiguous one-to-one pairing is a move.
+      if (olds.length !== 1 || news?.length !== 1 || !old || !target) continue;
+      const done = await isolate(
+        { direction: "outbound", podUrl: target.url },
+        { value: "write-failed" },
+        () =>
+          links.move(old.podUrl, {
+            ...old,
+            podUrl: target.url,
+            podEtag: target.etag,
+            pendingDelete: false,
+          }),
+      );
+      if (done) moved++;
+    }
+  }
+  /** A pod resource recreated over a tombstone becomes a manual conflict, never a create. */
+  async function tombstoneActivity(url: string): Promise<void> {
+    const link = links.byPodUrl(url);
+    if (!link || (link.status !== "trashed" && link.status !== "pod-deleted")) return;
+    const stage: Stage = { value: "read-failed" };
+    await isolate({ direction: "outbound", podUrl: url }, stage, async () => {
+      const stored = await current(url);
+      if (!stored) return;
+      stage.value = "hash-failed";
+      const digest = await hash(stored.dataset, url);
+      stage.value = "write-failed";
+      const version = strongEtag(stored.etag);
+      const snapshotUrl = writer.resolve(await snapshotSlug(url, version, digest));
+      if (link.conflict?.resolution === "manual" && link.conflict.snapshotUrl === snapshotUrl)
+        return;
+      await snapshot(url, stored.dataset, version);
+      await links.put({
+        ...link,
+        conflict: {
+          snapshotUrl,
+          remoteVersion: link.remoteVersion ?? version,
+          resolution: "manual",
+        },
+      });
+    });
+  }
+  /** Link-store housekeeping before inbound: interrupted moves, duplicates and tombstone GC. */
+  async function housekeeping(): Promise<void> {
+    for (const stale of [...links.staleMoves()])
+      await isolate(
+        { direction: "outbound", podUrl: stale.podUrl },
+        { value: "write-failed" },
+        async () => {
+          const mover = stale.remoteId ? links.byRemoteId(stale.remoteId) : undefined;
+          await links.delete(stale.podUrl);
+          links.resolved(stale.podUrl);
+          if (mover?.movedFrom) await links.put({ ...mover, movedFrom: undefined });
+        },
+      );
+    for (const duplicate of [...links.duplicates()]) {
+      const stage: Stage = { value: "read-failed" };
+      await isolate({ direction: "outbound", podUrl: duplicate.podUrl }, stage, async () => {
+        const stored = await current(duplicate.podUrl);
+        stage.value = "write-failed";
+        if (!stored) await links.delete(duplicate.podUrl);
+        else {
+          const snapshotUrl = await snapshot(
+            duplicate.podUrl,
+            stored.dataset,
+            strongEtag(stored.etag),
+          );
+          await links.put({
+            podUrl: duplicate.podUrl,
+            pendingCreate: duplicate.pendingCreate,
+            conflict: {
+              snapshotUrl,
+              remoteVersion: duplicate.remoteVersion ?? strongEtag(stored.etag),
+              ...(duplicate.remoteId ? { remoteId: duplicate.remoteId } : {}),
+              resolution: "manual",
+            },
+          });
+        }
+        links.resolved(duplicate.podUrl);
+      });
+    }
+    const cutoff = now().getTime() - TOMBSTONE_RETENTION_MS;
+    for (const link of links.all()) {
+      if (link.status !== "trashed" && link.status !== "pod-deleted") continue;
+      if (link.conflict?.resolution === "manual") continue; // The owner still has to decide.
+      await isolate(
+        { direction: "outbound", podUrl: link.podUrl },
+        { value: "write-failed" },
+        async () => {
+          if (!link.deletedAt) await links.put({ ...link, deletedAt: now().toISOString() });
+          else if (Date.parse(link.deletedAt) <= cutoff) await links.delete(link.podUrl);
+        },
+      );
+    }
   }
   try {
     check();
-    await hash(copyDataset()); // Validate the field declaration even on an empty run.
+    await hash(copyDataset(), root); // Validate the field declaration even on an empty run.
     await links.load();
     linksLoaded = true;
+    await housekeeping();
     // Recover remote identities before inbound mapping, avoiding a second pod copy after a crash.
-    for (const link of links.all()) if (link.pendingCreate) await settleCreate(link);
+    for (const link of links.all()) {
+      if (!isOpenCreate(link)) continue;
+      unresolvedCreates.add(link.podUrl);
+      await isolate(
+        { direction: "outbound", podUrl: link.podUrl },
+        { value: "remote-failed" },
+        async () => {
+          await settleCreate(link);
+        },
+      );
+    }
     for (const link of links.all())
       if (link.status === "remote-deleted" && link.remoteId)
         await remoteDelete(link.remoteId, link.remoteVersion as string);
+    // First two-way run of a connection: a full inbound without the delta cursor links the
+    // items an earlier one-way import wrote, before any outbound create could duplicate them.
+    const adopting = links.adoptedAt === undefined;
     const outcome = await adapter.import({
       api,
       signal,
       scopes: ports.scopes,
-      cursor: ports.cursor ?? ports.state?.cursor,
+      cursor: adopting ? undefined : (ports.cursor ?? ports.state?.cursor),
       resolve: writer.resolve,
       read: session.read,
       progress: (progress) => {
@@ -569,21 +1097,57 @@ export async function runTwoWaySync<Op>(
         return session.remove(value);
       },
       sync: {
-        pendingRemoteIds: () =>
-          links
-            .all()
-            .filter((link) => link.needsInbound && !link.status && link.remoteId)
-            .map((link) => link.remoteId as string),
-        resolve: async (remoteId, fallback) => {
+        pendingRemoteIds: () => {
+          const ids = new Set<string>();
+          for (const link of links.all())
+            if (
+              link.remoteId &&
+              !link.status &&
+              (link.needsInbound || link.conflict?.resolution === "manual")
+            )
+              ids.add(link.remoteId);
+          for (const item of pendingAfterRun())
+            if (item.direction === "inbound" && item.remoteId) ids.add(item.remoteId);
+          return [...ids];
+        },
+        resolve: async (remoteId, prefix, idempotencyKey) => {
           check();
-          return links.byRemoteId(remoteId)?.podUrl ?? writer.resolve(fallback);
+          checkedText(remoteId);
+          if (typeof prefix !== "string" || prefix.length > 512)
+            throw new Error("Invalid sync item prefix.");
+          if (!containerUrls.includes(writer.resolve(`${prefix.replace(/\/$/, "")}/`)))
+            throw new Error("Sync item prefix must be a declared write-back container.");
+          const linked = links.byRemoteId(remoteId);
+          if (linked) return linked.podUrl;
+          if (idempotencyKey !== undefined) {
+            const intent = links.byCreateKey(checkedText(idempotencyKey));
+            if (isOpenCreate(intent) && intent) return intent.podUrl;
+          }
+          return writer.resolve(await syncItemSlug(prefix, remoteId));
         },
         upsert,
         delete: remoteDelete,
+        fail: (remoteId) => {
+          skip({
+            direction: "inbound",
+            remoteId: typeof remoteId === "string" && remoteId ? remoteId : undefined,
+            reason: "mapping-failed",
+          });
+        },
       },
     });
     check();
-    if (links.all().some((link) => link.needsInbound && !link.status))
+    if (
+      links
+        .all()
+        .some(
+          (link) =>
+            link.needsInbound &&
+            !link.status &&
+            link.remoteId &&
+            !skips.has(skipKey({ direction: "inbound", remoteId: link.remoteId })),
+        )
+    )
       throw new Error(
         "Inbound adapter must fetch pending remote identities before advancing its checkpoint.",
       );
@@ -593,51 +1157,92 @@ export async function runTwoWaySync<Op>(
       maxResources,
       signal,
       ports.notifications,
+      (url) => skip({ direction: "outbound", podUrl: url, reason: "unsupported-resource" }),
     );
+    await detectMoves(listing);
+    for (const url of listing.keys()) await tombstoneActivity(url);
     if (settings.writeBack) {
       for (const [url, etag] of listing) {
         const link = links.byPodUrl(url);
-        if (!link?.pendingCreate && link?.podEtag === etag) continue;
+        // Skip only when both validators are known and equal (and nothing else is pending).
+        if (
+          link &&
+          !link.pendingCreate &&
+          !resolvesManual(link) &&
+          link.podEtag !== undefined &&
+          etag != null &&
+          link.podEtag === etag
+        )
+          continue;
         await execute(url);
       }
     }
     for (const link of links.all()) {
-      if (link.status || !link.remoteId) continue;
-      if (listing.has(link.podUrl)) {
-        if (link.pendingDelete && (await current(link.podUrl)))
-          await links.put({ ...link, pendingDelete: false });
-        continue;
-      }
-      if (await current(link.podUrl)) {
-        if (link.pendingDelete) await links.put({ ...link, pendingDelete: false });
-        continue;
-      } // Listing omission alone is never a delete.
-      if (
-        !settings.writeBack ||
-        !settings.propagateDeletes ||
-        link.conflict?.resolution === "manual"
-      ) {
-        if (!link.pendingDelete) await links.put({ ...link, pendingDelete: true });
-        continue;
-      }
-      request();
-      startOutbound(link.podUrl);
-      await adapter.deleteRemote(
-        link.remoteId,
-        remoteOptions({ ifMatch: checkedText(link.remoteVersion) }),
-      );
-      check();
-      outbound.deleted++;
-      await links.put({ ...link, status: "pod-deleted", pendingDelete: false });
+      if (link.status) continue;
+      const stage: Stage = { value: "read-failed" };
+      await isolate({ direction: "outbound", podUrl: link.podUrl }, stage, async () => {
+        if (!link.remoteId) {
+          // A conflict-only duplicate whose pod resource is gone has nothing left to resolve.
+          if (!link.pendingCreate && link.conflict && !listing.has(link.podUrl))
+            if (!(await current(link.podUrl))) await links.delete(link.podUrl);
+          return;
+        }
+        if (listing.has(link.podUrl)) {
+          if (link.pendingDelete && (await current(link.podUrl)))
+            await links.put({ ...link, pendingDelete: false });
+          return;
+        }
+        if (await current(link.podUrl)) {
+          if (link.pendingDelete) await links.put({ ...link, pendingDelete: false });
+          return;
+        } // Listing omission alone is never a delete.
+        stage.value = "write-failed";
+        if (
+          !settings.writeBack ||
+          !settings.propagateDeletes ||
+          link.conflict?.resolution === "manual"
+        ) {
+          if (!link.pendingDelete) await links.put({ ...link, pendingDelete: true });
+          return;
+        }
+        stage.value = "remote-failed";
+        request();
+        startOutbound(link.podUrl);
+        await adapter.deleteRemote(
+          link.remoteId,
+          remoteOptions({ ifMatch: checkedText(link.remoteVersion) }),
+        );
+        check();
+        outbound.deleted++;
+        stage.value = "write-failed";
+        await links.put({
+          ...link,
+          status: "pod-deleted",
+          pendingDelete: false,
+          deletedAt: now().toISOString(),
+        });
+      });
     }
     // Exactly one Activity for the outbound batch, in addition to the import Activity.
     await recordOutbound();
-    const { issues: healthLinks, conflicts, pendingDeletes } = health();
+    const finalHealth = health();
+    const inboundPending = finalHealth.pending.filter((item) => item.direction === "inbound");
+    // Never let a cursor advance lose an inbound item the manifest could not retain.
+    const cursorHeld = inboundPending.length > MAX_PENDING_ITEMS;
+    await links.saveManifest({
+      ...(adopting && !cursorHeld ? { adoptedAt: now() } : {}),
+      pending: finalHealth.pending,
+    });
     check();
     const { indexUrl } = await writer.registerType(session.registrations());
     await session.finish();
     check();
-    const state = { ...session.state(outcome), sync: { conflicts, pendingDeletes } };
+    const sessionState = session.state(outcome);
+    const state = {
+      ...sessionState,
+      ...(cursorHeld ? { cursor: ports.state?.cursor } : {}),
+      sync: healthCounts(finalHealth),
+    };
     ports.onState?.(state);
     return {
       adapterId: id,
@@ -654,10 +1259,15 @@ export async function runTwoWaySync<Op>(
       skipped: outcome.skipped,
       indexUrl,
       state,
-      conflicts,
-      pendingDeletes,
+      conflicts: finalHealth.conflicts,
+      pendingDeletes: finalHealth.pendingDeletes,
+      failed: finalHealth.failed,
+      unlinkedImports: finalHealth.unlinkedImports,
+      deferred: finalHealth.deferred,
+      moved,
       outbound,
-      issues: healthLinks,
+      issues: finalHealth.issues,
+      skippedItems: finalHealth.pending.slice(0, MAX_REPORTED_SKIPS),
     };
   } catch (error) {
     if (signal?.aborted) session.release();
@@ -672,9 +1282,7 @@ export async function runTwoWaySync<Op>(
     const failedHealth = linksLoaded ? health() : undefined;
     ports.onState?.({
       ...session.state(),
-      sync: failedHealth
-        ? { conflicts: failedHealth.conflicts, pendingDeletes: failedHealth.pendingDeletes }
-        : ports.state?.sync,
+      sync: failedHealth ? healthCounts(failedHealth) : ports.state?.sync,
     });
     throw signal?.aborted ? signal.reason : error;
   }

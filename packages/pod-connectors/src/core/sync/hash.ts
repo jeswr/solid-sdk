@@ -1,10 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { safeIri } from "../vocab.js";
 
 export async function sha256(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Framework-owned slug for a remote item: `<prefix>/<first 32 hex chars of sha-256(id)>.ttl`.
+ * Raw provider ids never reach a pod path.
+ */
+export async function syncItemSlug(prefix: string, remoteId: string): Promise<string> {
+  if (typeof prefix !== "string" || !/^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\/?$/.test(prefix))
+    throw new Error("Invalid sync item prefix.");
+  if (typeof remoteId !== "string" || !remoteId || remoteId.length > 2048)
+    throw new Error("Invalid sync remote identity.");
+  return `${prefix.replace(/\/$/, "")}/${(await sha256(remoteId)).slice(0, 32)}.ttl`;
 }
 
 /** Enforce per-document bounds even on injected/custom ports, before copying anything. */
@@ -37,10 +50,13 @@ export function datasetBytes(dataset: DatasetCore): number {
  * and graph identity. Blank labels are minimized over all bijections, with a hard work cap;
  * complex graphs fail closed rather than using a collision-prone approximate graph hash.
  * Fields select predicates throughout this one-item document, including linked blank nodes.
+ * With `documentUrl`, the document URL and its fragment IRIs hash relative to it, so a resource
+ * moved to another URL keeps its hash; all other IRIs stay absolute.
  */
 export async function canonicalHash(
   dataset: DatasetCore,
   fields: readonly string[],
+  documentUrl?: string,
 ): Promise<string> {
   datasetBytes(dataset);
   if (!fields.length || fields.length > 128 || fields.some((f) => !safeIri(f)))
@@ -62,6 +78,11 @@ export async function canonicalHash(
   const termKey = (term: Term): unknown => {
     switch (term.termType) {
       case "NamedNode":
+        if (
+          documentUrl !== undefined &&
+          (term.value === documentUrl || term.value.startsWith(`${documentUrl}#`))
+        )
+          return ["rel", term.value.slice(documentUrl.length)];
         return ["iri", term.value];
       case "BlankNode":
         return ["blank", mapping.get(term.value)];

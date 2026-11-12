@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { NS } from "@jeswr/suite-vocab";
+// AUTHORED-BY Claude Opus 5.5
+import { CONNECTOR_SYNC, NS } from "@jeswr/suite-vocab";
 import {
   LiteralAs,
   LiteralFrom,
@@ -10,31 +11,56 @@ import {
   SetFrom,
 } from "@rdfjs/wrapper";
 import { PodThing } from "../vocab.js";
-import type { SyncLink } from "./types.js";
+import type { SyncLink, SyncSkip, SyncSkipReason } from "./types.js";
 
-/** Framework metadata; all suite term bases come from suite-vocab. */
+/**
+ * Framework metadata. Connector sync terms come from @jeswr/suite-vocab (CONNECTOR_SYNC);
+ * the two standard terms keep their published namespaces.
+ */
 export const SYNC = {
-  Link: `${NS.CORE}ConnectorSyncLink`,
-  podUrl: `${NS.CORE}connectorPodUrl`,
-  remoteId: `${NS.CORE}connectorRemoteId`,
-  remoteVersion: `${NS.CORE}connectorRemoteVersion`,
-  podEtag: `${NS.CORE}connectorPodEtag`,
-  lastSyncedHash: `${NS.CORE}connectorLastSyncedHash`,
-  needsInbound: `${NS.CORE}connectorNeedsInbound`,
-  createKey: `${NS.CORE}connectorPendingCreateKey`,
-  createHash: `${NS.CORE}connectorPendingCreateHash`,
-  createEtag: `${NS.CORE}connectorPendingCreateEtag`,
-  createResource: `${NS.CORE}connectorPendingCreateResource`,
-  conflictResource: `${NS.CORE}connectorConflictResource`,
-  conflictVersion: `${NS.CORE}connectorConflictVersion`,
-  conflictResolution: `${NS.CORE}connectorConflictResolution`,
-  pendingDelete: `${NS.CORE}connectorPendingDelete`,
-  status: `${NS.CORE}connectorSyncStatus`,
-  trashUrl: `${NS.CORE}connectorTrashUrl`,
-  snapshot: `${NS.CORE}connectorConflictSnapshot`,
+  ...CONNECTOR_SYNC,
   revisionOf: `${NS.PROV}wasRevisionOf`,
   expires: `${NS.SCHEMA}expires`,
 } as const;
+
+/** Predicates a link record may carry; everything else in a shard is rejected. */
+export const LINK_RECORD_PREDICATES: ReadonlySet<string> = new Set([
+  `${NS.RDF}type`,
+  SYNC.podUrl,
+  SYNC.remoteId,
+  SYNC.remoteVersion,
+  SYNC.podEtag,
+  SYNC.lastSyncedHash,
+  SYNC.needsInbound,
+  SYNC.createKey,
+  SYNC.createHash,
+  SYNC.createEtag,
+  SYNC.createResource,
+  SYNC.conflictResource,
+  SYNC.conflictVersion,
+  SYNC.conflictRemoteId,
+  SYNC.conflictResolution,
+  SYNC.pendingDelete,
+  SYNC.status,
+  SYNC.deletedAt,
+  SYNC.movedFrom,
+  SYNC.trashUrl,
+]);
+/** Predicates of a base shard's header subject. */
+export const LINK_SHARD_PREDICATES: ReadonlySet<string> = new Set([
+  `${NS.RDF}type`,
+  SYNC.overflowCount,
+]);
+/** Predicates of the manifest and its pending-item subjects. */
+export const LINK_MANIFEST_PREDICATES: ReadonlySet<string> = new Set([
+  `${NS.RDF}type`,
+  SYNC.shardSalt,
+  SYNC.adoptedAt,
+  SYNC.remoteId,
+  SYNC.podUrl,
+  SYNC.errorClass,
+  SYNC.direction,
+]);
 
 /** Typed access to every stored link field. No JSON blobs or untyped triple construction. */
 export class LinkRecord extends PodThing {
@@ -60,16 +86,20 @@ export class LinkRecord extends PodThing {
     const snapshotUrl = this.iri(SYNC.conflictResource);
     const version = this.text(SYNC.conflictVersion);
     const resolution = this.text(SYNC.conflictResolution);
+    const conflictRemoteId = this.text(SYNC.conflictRemoteId);
     if (
       [key, hash, etag, resourceUrl].some((v) => v !== undefined) &&
       !(key && hash && etag && resourceUrl)
     )
       throw new Error("Incomplete create intent.");
     if (
-      [snapshotUrl, version, resolution].some((v) => v !== undefined) &&
+      [snapshotUrl, version, resolution, conflictRemoteId].some((v) => v !== undefined) &&
       !(snapshotUrl && version && resolution)
     )
       throw new Error("Incomplete conflict record.");
+    const deletedAt = OptionalFrom.subjectPredicate(this, SYNC.deletedAt, LiteralAs.date);
+    if (deletedAt && !Number.isFinite(deletedAt.getTime()))
+      throw new Error("Invalid sync deletion time.");
     return {
       podUrl,
       remoteId: this.text(SYNC.remoteId),
@@ -85,10 +115,13 @@ export class LinkRecord extends PodThing {
             snapshotUrl,
             remoteVersion: version as string,
             resolution: resolution as NonNullable<SyncLink["conflict"]>["resolution"],
+            ...(conflictRemoteId === undefined ? {} : { remoteId: conflictRemoteId }),
           }
         : undefined,
       pendingDelete: OptionalFrom.subjectPredicate(this, SYNC.pendingDelete, LiteralAs.boolean),
       status: this.text(SYNC.status) as SyncLink["status"],
+      deletedAt: deletedAt?.toISOString(),
+      movedFrom: this.iri(SYNC.movedFrom),
       trashUrl: this.iri(SYNC.trashUrl),
     };
   }
@@ -103,6 +136,7 @@ export class LinkRecord extends PodThing {
       [SYNC.createHash, value?.pendingCreate?.hash],
       [SYNC.createEtag, value?.pendingCreate?.podEtag],
       [SYNC.conflictVersion, value?.conflict?.remoteVersion],
+      [SYNC.conflictRemoteId, value?.conflict?.remoteId],
       [SYNC.conflictResolution, value?.conflict?.resolution],
       [SYNC.status, value?.status],
     ] as const;
@@ -112,12 +146,67 @@ export class LinkRecord extends PodThing {
       [SYNC.createResource, value?.pendingCreate?.resourceUrl],
       [SYNC.conflictResource, value?.conflict?.snapshotUrl],
       [SYNC.trashUrl, value?.trashUrl],
+      [SYNC.movedFrom, value?.movedFrom],
     ] as const)
       OptionalAs.object(this, predicate, iri, NamedNodeFrom.string);
     OptionalAs.object(this, SYNC.pendingDelete, value?.pendingDelete, LiteralFrom.boolean);
     OptionalAs.object(this, SYNC.needsInbound, value?.needsInbound, LiteralFrom.boolean);
+    OptionalAs.object(
+      this,
+      SYNC.deletedAt,
+      value?.deletedAt === undefined ? undefined : new Date(value.deletedAt),
+      LiteralFrom.dateTime,
+    );
   }
 }
+
+/** Header of a base link shard: how many overflow documents follow it. */
+export class LinkShardHeader extends PodThing {
+  get overflowCount(): number | undefined {
+    return OptionalFrom.subjectPredicate(this, SYNC.overflowCount, LiteralAs.number);
+  }
+  set overflowCount(value: number | undefined) {
+    OptionalAs.object(this, SYNC.overflowCount, value, LiteralFrom.integer);
+  }
+}
+
+/** Owner-only per-connection manifest: HMAC shard salt and the adoption marker. */
+export class LinkManifest extends PodThing {
+  get salt(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, SYNC.shardSalt, LiteralAs.string);
+  }
+  set salt(value: string | undefined) {
+    OptionalAs.object(this, SYNC.shardSalt, value, LiteralFrom.string);
+  }
+  get adoptedAt(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, SYNC.adoptedAt, LiteralAs.date);
+  }
+  set adoptedAt(value: Date | undefined) {
+    OptionalAs.object(this, SYNC.adoptedAt, value, LiteralFrom.dateTime);
+  }
+}
+
+/** One skipped/deferred item retained by the manifest; carries only a fixed reason class. */
+export class PendingItemRecord extends PodThing {
+  get item(): SyncSkip | undefined {
+    const direction = OptionalFrom.subjectPredicate(this, SYNC.direction, LiteralAs.string);
+    const reason = OptionalFrom.subjectPredicate(this, SYNC.errorClass, LiteralAs.string);
+    if (!direction || !reason) return undefined;
+    return {
+      direction: direction as SyncSkip["direction"],
+      reason: reason as SyncSkipReason,
+      remoteId: OptionalFrom.subjectPredicate(this, SYNC.remoteId, LiteralAs.string),
+      podUrl: OptionalFrom.subjectPredicate(this, SYNC.podUrl, NamedNodeAs.string),
+    };
+  }
+  set item(value: SyncSkip | undefined) {
+    OptionalAs.object(this, SYNC.direction, value?.direction, LiteralFrom.string);
+    OptionalAs.object(this, SYNC.errorClass, value?.reason, LiteralFrom.string);
+    OptionalAs.object(this, SYNC.remoteId, value?.remoteId, LiteralFrom.string);
+    OptionalAs.object(this, SYNC.podUrl, value?.podUrl, NamedNodeFrom.string);
+  }
+}
+
 export class SyncMetadata extends PodThing {
   get snapshots(): Set<string> {
     return SetFrom.subjectPredicate(this, SYNC.snapshot, NamedNodeAs.string, NamedNodeFrom.string);

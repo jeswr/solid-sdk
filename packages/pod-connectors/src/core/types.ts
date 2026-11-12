@@ -248,8 +248,17 @@ export interface ConnectorState {
   readonly cursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
-  /** Two-way health; details remain in the owner-only sync links. */
-  readonly sync?: { readonly conflicts: number; readonly pendingDeletes: number };
+  /** Two-way health; details remain in the owner-only sync links and manifest. */
+  readonly sync?: {
+    readonly conflicts: number;
+    readonly pendingDeletes: number;
+    /** Items skipped this run with a fixed error class (retried or re-detected later). */
+    readonly failed?: number;
+    /** Imported items without a link; never created at the provider. */
+    readonly unlinkedImports?: number;
+    /** Items waiting on an unresolved create intent. */
+    readonly deferred?: number;
+  };
 }
 
 export interface ConnectorStateOptions {

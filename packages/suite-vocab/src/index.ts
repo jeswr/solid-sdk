@@ -77,6 +77,47 @@ export const NS = {
   GUFO: "http://purl.org/nemo/gufo#",
 } as const;
 
+/**
+ * Connector two-way sync terms (@jeswr/pod-connectors `./sync`). Owner-only link-store
+ * metadata; never published as item data. Standard terms (prov:wasRevisionOf, schema:expires)
+ * stay in their own namespaces.
+ */
+export const CONNECTOR_SYNC = {
+  /** One sync link record: a pod resource paired with its platform item. */
+  Link: `${NS.CORE}ConnectorSyncLink`,
+  /** A base link shard document's header (overflow chain length). */
+  LinkShard: `${NS.CORE}ConnectorSyncLinkShard`,
+  /** The per-connection link-store manifest (shard salt, adoption marker, pending items). */
+  LinkManifest: `${NS.CORE}ConnectorSyncManifest`,
+  /** An item the runner skipped or deferred and retries or reports on later runs. */
+  PendingItem: `${NS.CORE}ConnectorSyncPendingItem`,
+  podUrl: `${NS.CORE}connectorPodUrl`,
+  remoteId: `${NS.CORE}connectorRemoteId`,
+  remoteVersion: `${NS.CORE}connectorRemoteVersion`,
+  podEtag: `${NS.CORE}connectorPodEtag`,
+  lastSyncedHash: `${NS.CORE}connectorLastSyncedHash`,
+  needsInbound: `${NS.CORE}connectorNeedsInbound`,
+  createKey: `${NS.CORE}connectorPendingCreateKey`,
+  createHash: `${NS.CORE}connectorPendingCreateHash`,
+  createEtag: `${NS.CORE}connectorPendingCreateEtag`,
+  createResource: `${NS.CORE}connectorPendingCreateResource`,
+  conflictResource: `${NS.CORE}connectorConflictResource`,
+  conflictVersion: `${NS.CORE}connectorConflictVersion`,
+  conflictRemoteId: `${NS.CORE}connectorConflictRemoteId`,
+  conflictResolution: `${NS.CORE}connectorConflictResolution`,
+  pendingDelete: `${NS.CORE}connectorPendingDelete`,
+  status: `${NS.CORE}connectorSyncStatus`,
+  deletedAt: `${NS.CORE}connectorDeletedAt`,
+  movedFrom: `${NS.CORE}connectorMovedFrom`,
+  trashUrl: `${NS.CORE}connectorTrashUrl`,
+  snapshot: `${NS.CORE}connectorConflictSnapshot`,
+  overflowCount: `${NS.CORE}connectorOverflowCount`,
+  shardSalt: `${NS.CORE}connectorShardSalt`,
+  adoptedAt: `${NS.CORE}connectorAdoptedAt`,
+  errorClass: `${NS.CORE}connectorErrorClass`,
+  direction: `${NS.CORE}connectorSyncDirection`,
+} as const;
+
 /** Read-only aliases. Writers use NS; schema.org always canonicalizes to HTTPS. */
 export const LEGACY_NAMESPACES: Readonly<Record<string, string>> = {
   "https://w3id.org/jeswr/core#": NS.CORE,

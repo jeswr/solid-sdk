@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory } from "n3";
 import { ResourceWriteError } from "../../pod/resource.js";
+import { createImportSession } from "../import-session.js";
 import { copyDataset } from "../incremental.js";
 import type { NormalisedDoc, WriteConditions } from "../types.js";
 import { CLASSES, PodThing, SCHEMA } from "../vocab.js";
@@ -17,6 +19,15 @@ export interface FakeRemoteItem {
   readonly modifiedAt: string;
   readonly deleted?: boolean;
   readonly key?: string;
+  /** Change serial for the delta-only mode's cursor. */
+  readonly serial?: number;
+}
+export interface FakeTwoWayOptions {
+  /** Delta-only inbound: with a `cursor-N` checkpoint only later changes (and the framework's
+   * pendingRemoteIds) are delivered, as a provider sync token would. */
+  readonly delta?: boolean;
+  /** false models a provider whose creates cannot be deduplicated by key. */
+  readonly deduplicatesCreateKeys?: boolean;
 }
 /** Typed one-item document used by the synthetic reference platform. */
 export function fakeSyncDocument(url: string, name: string): NormalisedDoc {
@@ -27,6 +38,30 @@ export function fakeSyncDocument(url: string, name: string): NormalisedDoc {
 }
 export function fakeSyncName(resource: Pick<SyncResource, "url" | "dataset">): string {
   return new PodThing(`${resource.url}#item`, resource.dataset, DataFactory).name ?? "";
+}
+
+/**
+ * Write `name` at `url` exactly as an earlier one-way import of `adapterId` would have: through
+ * the shared import session, so it carries that connector's import provenance and no sync link.
+ */
+export async function fakeOneWayImport(
+  writer: SyncPodWriter,
+  adapterId: string,
+  url: string,
+  name: string,
+): Promise<void> {
+  const session = createImportSession(
+    writer,
+    adapterId,
+    `urn:solid:connector:${encodeURIComponent(adapterId)}:source`,
+    {},
+  );
+  try {
+    await session.write(fakeSyncDocument(url, name));
+    await session.finish();
+  } finally {
+    session.release();
+  }
 }
 
 /** Bounded-memory fixture host with real validator checks, owner protection and complete lists. */
@@ -112,25 +147,39 @@ export function createMemorySyncPod() {
 }
 
 /** No network: models conditional versions, durable idempotency and a post-create crash. */
-export function createFakeTwoWayAdapter(account = "account") {
+export function createFakeTwoWayAdapter(account = "account", config: FakeTwoWayOptions = {}) {
   const items = new Map<string, FakeRemoteItem>();
   const calls = { apply: 0, create: 0, update: 0, delete: 0, find: 0 };
   let serial = 0;
   let version = 0;
+  let changes = 0;
+  const dedupe = config.deduplicatesCreateKeys !== false;
   const platform = {
     items,
     calls,
     crashAfterCreate: false,
     afterApply: undefined as (() => void) | undefined,
     set(name: string, id = "remote-1", modifiedAt = "2026-01-01T00:00:00Z") {
-      const item = { id, name, modifiedAt, version: `remote-${++version}` };
+      const item = {
+        ...(items.get(id)?.key ? { key: items.get(id)?.key } : {}),
+        id,
+        name,
+        modifiedAt,
+        version: `remote-${++version}`,
+        serial: ++changes,
+      };
       items.set(id, item);
       return item;
     },
     remove(id = "remote-1") {
       const previous = items.get(id);
       if (!previous) throw new Error("Missing fixture item.");
-      items.set(id, { ...previous, version: `remote-${++version}`, deleted: true });
+      items.set(id, {
+        ...previous,
+        version: `remote-${++version}`,
+        deleted: true,
+        serial: ++changes,
+      });
     },
   };
   const adapter: TwoWayAdapter<FakeOperation> = {
@@ -148,21 +197,27 @@ export function createFakeTwoWayAdapter(account = "account") {
     fieldsForHash: [`${SCHEMA}name`],
     writeBackContainers: ["items/"],
     requiredWriteScopes: ["fake:write"],
+    ...(dedupe ? {} : { deduplicatesCreateKeys: false }),
     async import(ctx) {
+      const since = config.delta ? Number(/^cursor-(\d+)$/.exec(ctx.cursor ?? "")?.[1] ?? 0) : 0;
+      const wanted = new Set(config.delta && since ? ctx.sync.pendingRemoteIds() : []);
       for (const item of items.values()) {
         ctx.signal?.throwIfAborted();
+        if (since && (item.serial ?? 0) <= since && !wanted.has(item.id)) continue;
         if (item.deleted) await ctx.sync.delete(item.id, item.version);
         else {
-          const url = await ctx.sync.resolve(item.id, `${account}/items/${item.id}.ttl`);
+          // Framework-owned slug; the provider key lets inbound adopt our own create.
+          const url = await ctx.sync.resolve(item.id, `${account}/items`, item.key);
           await ctx.sync.upsert({
             remoteId: item.id,
             remoteVersion: item.version,
             modifiedAt: item.modifiedAt,
+            ...(item.key ? { idempotencyKey: item.key } : {}),
             document: fakeSyncDocument(url, item.name),
           });
         }
       }
-      return { cursor: `cursor-${version}` };
+      return { cursor: `cursor-${changes}` };
     },
     toRemote(resource) {
       return { remoteId: resource.remoteId, name: fakeSyncName(resource) };
@@ -181,11 +236,12 @@ export function createFakeTwoWayAdapter(account = "account") {
           name: op.name,
           version: `remote-${++version}`,
           modifiedAt: new Date().toISOString(),
+          serial: ++changes,
         };
       } else {
         if (!options.idempotencyKey) throw new Error("Missing create key.");
         const found = [...items.values()].find((item) => item.key === options.idempotencyKey);
-        if (found) return { remoteId: found.id, remoteVersion: found.version };
+        if (found && dedupe) return { remoteId: found.id, remoteVersion: found.version };
         calls.create++;
         item = {
           id: `created-${++serial}`,
@@ -193,6 +249,7 @@ export function createFakeTwoWayAdapter(account = "account") {
           version: `remote-${++version}`,
           modifiedAt: new Date().toISOString(),
           key: options.idempotencyKey,
+          serial: ++changes,
         };
       }
       items.set(item.id, item);

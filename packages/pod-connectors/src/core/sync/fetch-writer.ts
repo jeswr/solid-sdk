@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
@@ -100,7 +101,13 @@ export function createFetchSyncPodWriter(options: FetchPodWriterOptions): SyncPo
       }
       for (const member of new Container(url, dataset, DataFactory).contains) {
         const resource = new ListedResource(member.id, dataset, DataFactory);
-        yield { url: resource.id, etag: resource.etag };
+        // Sub-containers end in "/" and are skipped by the scanner; typed non-RDF members are
+        // flagged so they are skipped without a body read.
+        yield {
+          url: resource.id,
+          etag: resource.etag,
+          ...(resource.type.has(`${NS.LDP}NonRDFSource`) ? { nonRdf: true } : {}),
+        };
       }
     },
   };

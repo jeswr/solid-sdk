@@ -1,30 +1,43 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { ResourceWriteError } from "../../pod/resource.js";
 import { runImport } from "../import-runner.js";
 import { copyDataset } from "../incremental.js";
-import { fnv1a } from "../slug.js";
 import { PodThing, SCHEMA } from "../vocab.js";
 import { resolveConflict } from "./conflict.js";
 import { twoWayConformanceSuite } from "./conformance.js";
 import { scanWriteBack } from "./detection.js";
-import { createFakeTwoWayAdapter, createMemorySyncPod, fakeSyncDocument } from "./fake-platform.js";
-import { canonicalHash, sha256 } from "./hash.js";
-import { createLinkStore, MAX_LINKS_PER_SHARD } from "./link-store.js";
-import { runTwoWaySync } from "./runner.js";
-import type { ConflictPolicy, SyncConnection, SyncLink, SyncPorts } from "./types.js";
-import { LinkRecord, SYNC, SyncMetadata } from "./vocab.js";
+import {
+  createFakeTwoWayAdapter,
+  createMemorySyncPod,
+  type FakeTwoWayOptions,
+  fakeOneWayImport,
+  fakeSyncDocument,
+} from "./fake-platform.js";
+import { canonicalHash, syncItemSlug } from "./hash.js";
+import { createLinkStore, MAX_LINKS_PER_SHARD, MAX_SYNC_LINKS } from "./link-store.js";
+import { runTwoWaySync, type TwoWaySyncReport } from "./runner.js";
+import type {
+  ConflictPolicy,
+  SyncConnection,
+  SyncLink,
+  SyncPorts,
+  SyncSkipReason,
+} from "./types.js";
+import { SyncMetadata } from "./vocab.js";
 
 function present<T>(value: T | undefined | null): T {
   if (value == null) throw new Error("Missing expected fixture value.");
   return value;
 }
-const ITEM = "account/items/remote-1.ttl";
-function fixture(connection: Partial<SyncConnection> = {}) {
+/** Framework-owned slug of the fake platform's default remote item. */
+const ITEM = await syncItemSlug("account/items", "remote-1");
+function fixture(connection: Partial<SyncConnection> = {}, fake: FakeTwoWayOptions = {}) {
   const pod = createMemorySyncPod();
-  const { adapter, platform } = createFakeTwoWayAdapter();
+  const { adapter, platform } = createFakeTwoWayAdapter("account", fake);
   const ports: SyncPorts = {
     podWriter: pod.writer,
     sourceAuth: { fetch: vi.fn() },
@@ -40,43 +53,92 @@ function fixture(connection: Partial<SyncConnection> = {}) {
       runTwoWaySync(adapter, { ...options, ...settings }, { ...ports, ...extra }),
   };
 }
+/** The run continued past the item and recorded exactly this fixed failure class for it. */
+function expectSkipped(report: TwoWaySyncReport, reason: SyncSkipReason, direction = "outbound") {
+  expect(report.failed).toBeGreaterThan(0);
+  expect(report.skippedItems).toContainEqual(expect.objectContaining({ reason, direction }));
+  expect(report.state?.sync?.failed).toBe(report.failed);
+  // Fixed classes only: no provider text, tokens or stack traces reach health.
+  expect(JSON.stringify(report.skippedItems)).not.toMatch(/crash|transport|unavailable|Error/);
+}
 async function readLinks(f: ReturnType<typeof fixture>) {
   const links = createLinkStore(f.pod.writer, "account");
   await links.load();
   return links;
 }
 
+type FakeFixture = ReturnType<typeof createFakeTwoWayAdapter>;
+function conformanceFixture(
+  options: FakeTwoWayOptions = {},
+  wrap: (
+    adapter: FakeFixture["adapter"],
+    platform: FakeFixture["platform"],
+  ) => FakeFixture["adapter"] = (adapter) => adapter,
+) {
+  const f = fixture({}, options);
+  let local = ITEM;
+  return {
+    adapter: wrap(f.adapter, f.platform),
+    connection: { account: "account" },
+    ports: f.ports,
+    seedRemote: (name: string, modifiedAt?: string) => {
+      f.platform.set(name, "remote-1", modifiedAt);
+    },
+    seedOneWayImport: async (name: string) => {
+      f.platform.set(name, "remote-1");
+      await fakeOneWayImport(f.pod.writer, f.adapter.metadata.id, f.pod.writer.resolve(ITEM), name);
+    },
+    editPod: async (name: string, modifiedAt?: string) => {
+      if (!f.platform.items.size) local = "account/items/new.ttl";
+      await f.pod.put(local, name, modifiedAt);
+    },
+    deletePod: async () => {
+      await f.pod.writer.remove?.(local);
+    },
+    deleteAtPlatform: () => {
+      f.platform.remove();
+    },
+    podName: () => f.pod.name(local),
+    remoteName: () => [...f.platform.items.values()][0]?.name,
+    remoteCount: () => [...f.platform.items.values()].filter((item) => !item.deleted).length,
+    remoteWrites: () => f.platform.calls.apply,
+    crashAfterCreate: () => {
+      f.platform.crashAfterCreate = true;
+    },
+  };
+}
+
 describe("two-way reference conformance", () => {
   it("runs the public provider conformance suite over the fake platform", async () => {
-    await twoWayConformanceSuite(() => {
-      const f = fixture();
-      let local = ITEM;
-      return {
-        adapter: f.adapter,
-        connection: { account: "account" },
-        ports: f.ports,
-        seedRemote: (name: string, modifiedAt?: string) => {
-          f.platform.set(name, "remote-1", modifiedAt);
-        },
-        editPod: async (name: string, modifiedAt?: string) => {
-          if (!f.platform.items.size) local = "account/items/new.ttl";
-          await f.pod.put(local, name, modifiedAt);
-        },
-        deletePod: async () => {
-          await f.pod.writer.remove?.(local);
-        },
-        deleteAtPlatform: () => {
-          f.platform.remove();
-        },
-        podName: () => f.pod.name(local),
-        remoteName: () => [...f.platform.items.values()][0]?.name,
-        remoteCount: () => [...f.platform.items.values()].filter((item) => !item.deleted).length,
-        remoteWrites: () => f.platform.calls.apply,
-        crashAfterCreate: () => {
-          f.platform.crashAfterCreate = true;
-        },
-      };
-    });
+    await twoWayConformanceSuite(() => conformanceFixture());
+  });
+  it("runs the suite over a delta-only inbound adapter", async () => {
+    await twoWayConformanceSuite(() => conformanceFixture({ delta: true }));
+  });
+  it("runs the suite over a provider that cannot deduplicate create keys", async () => {
+    await twoWayConformanceSuite(() => conformanceFixture({ deduplicatesCreateKeys: false }));
+  });
+  it("fails an adapter that ignores ifMatch on update and delete", async () => {
+    await expect(
+      twoWayConformanceSuite(() =>
+        conformanceFixture({}, (adapter, platform) => {
+          const apply = adapter.applyRemote;
+          return {
+            ...adapter,
+            // Overwrites whatever the provider holds: the precondition is ignored.
+            applyRemote: (op, options) =>
+              apply(op, {
+                ...options,
+                ifMatch: op.remoteId ? platform.items.get(op.remoteId)?.version : undefined,
+              }),
+            deleteRemote: async (remoteId) => {
+              if (platform.items.has(remoteId) && !platform.items.get(remoteId)?.deleted)
+                platform.remove(remoteId);
+            },
+          };
+        }),
+      ),
+    ).rejects.toThrow("stale ifMatch update rejected");
   });
   it("imports, stores protected links, suppresses echo, and records an outbound Activity", async () => {
     const f = fixture({ writeBack: true });
@@ -102,7 +164,7 @@ describe("two-way reference conformance", () => {
     const local = "account/items/new.ttl";
     await f.pod.put(local, "new");
     f.platform.crashAfterCreate = true;
-    await expect(f.run()).rejects.toThrow("Synthetic crash");
+    expectSkipped(await f.run(), "remote-failed");
     const pending = (await readLinks(f)).all()[0];
     expect(pending?.pendingCreate?.key).toBeTruthy();
     expect(f.platform.items.size).toBe(1);
@@ -125,7 +187,7 @@ describe("two-way reference conformance", () => {
       .fn()
       .mockRejectedValueOnce(new Error("transport down"))
       .mockImplementation(apply);
-    await expect(f.run()).rejects.toThrow("transport down");
+    expectSkipped(await f.run(), "remote-failed");
     await f.pod.put(local, "later edit");
     await f.run();
     expect([...f.platform.items.values()][0]?.name).toBe("original");
@@ -138,7 +200,7 @@ describe("two-way reference conformance", () => {
     const local = "account/items/new.ttl";
     await f.pod.put(local, "new");
     f.platform.crashAfterCreate = true;
-    await expect(f.run()).rejects.toThrow("Synthetic crash");
+    expectSkipped(await f.run(), "remote-failed");
     await f.run({}, { writeBack: false });
     expect(f.platform.calls.create).toBe(1);
     expect([...f.pod.documents.keys()].filter((url) => url.includes("/items/"))).toEqual([
@@ -150,7 +212,7 @@ describe("two-way reference conformance", () => {
     const local = "account/items/new.ttl";
     await f.pod.put(local, "created");
     f.platform.crashAfterCreate = true;
-    await expect(f.run()).rejects.toThrow("Synthetic crash");
+    expectSkipped(await f.run(), "remote-failed");
     const item = present([...f.platform.items.values()][0]);
     f.platform.items.set(item.id, {
       ...item,
@@ -345,7 +407,7 @@ describe("two-way reference conformance", () => {
       .fn()
       .mockRejectedValueOnce(new Error("interrupted delete"))
       .mockImplementation(remove);
-    await expect(f.run()).rejects.toThrow("interrupted delete");
+    expectSkipped(await f.run(), "write-failed", "inbound");
     const link = present((await readLinks(f)).all()[0]);
     expect(link.status).toBe("remote-deleted");
     expect(link.pendingDelete).toBe(true);
@@ -366,7 +428,7 @@ describe("two-way reference conformance", () => {
       await f.pod.put(ITEM, "racing edit");
       return remove(value, conditions);
     };
-    await expect(f.run()).rejects.toMatchObject({ status: 412 });
+    expectSkipped(await f.run(), "write-failed", "inbound");
     expect(f.pod.name(ITEM)).toBe("racing edit");
     f.pod.writer.remove = remove;
     await f.run();
@@ -405,14 +467,32 @@ describe("two-way reference conformance", () => {
     await expect(f.run()).rejects.toThrow("incomplete");
     expect(f.platform.calls.delete).toBe(0);
   });
-  it("remote write failures keep the last checkpoint", async () => {
+  it("isolates a remote write failure and retries the item on the next run", async () => {
     const f = fixture({ writeBack: true });
     f.platform.set("old");
     const initial = await f.run();
     await f.pod.put(ITEM, "pod");
+    const apply = f.adapter.applyRemote;
     f.adapter.applyRemote = vi.fn().mockRejectedValue(new Error("provider unavailable"));
     const onState = vi.fn();
-    await expect(f.run({ state: initial.state, onState })).rejects.toThrow("provider unavailable");
+    // Outbound is rescanned every run, so the inbound checkpoint may advance.
+    const report = await f.run({ state: initial.state, onState });
+    expectSkipped(report, "remote-failed");
+    expect(onState.mock.calls[0]?.[0]).toMatchObject({ lastOutcome: "success" });
+    f.adapter.applyRemote = apply;
+    const retry = await f.run();
+    expect(retry.failed).toBe(0);
+    expect(f.platform.items.get("remote-1")?.name).toBe("pod");
+  });
+  it("run-level failures keep the last checkpoint", async () => {
+    const f = fixture({ writeBack: true });
+    f.platform.set("old");
+    const initial = await f.run();
+    f.adapter.import = async () => {
+      throw new Error("provider listing unavailable");
+    };
+    const onState = vi.fn();
+    await expect(f.run({ state: initial.state, onState })).rejects.toThrow("listing unavailable");
     expect(onState.mock.calls[0]?.[0]).toMatchObject({
       lastOutcome: "error",
       cursor: initial.cursor,
@@ -429,7 +509,7 @@ describe("two-way reference conformance", () => {
       f.platform.set("racing");
       return apply(op, options);
     };
-    await expect(f.run()).rejects.toMatchObject({ status: 412 });
+    expectSkipped(await f.run(), "remote-failed");
     expect(f.platform.items.get("remote-1")?.name).toBe("racing");
   });
   it("a racing pod edit after outbound remains detectable next run", async () => {
@@ -585,7 +665,7 @@ describe("two-way reference conformance", () => {
     await f.pod.put("account/items/new.ttl", "original");
     const apply = f.adapter.applyRemote;
     f.adapter.applyRemote = vi.fn().mockRejectedValue(new Error("transport down"));
-    await expect(f.run()).rejects.toThrow("transport down");
+    expectSkipped(await f.run(), "remote-failed");
     const intent = present((await readLinks(f)).all()[0]?.pendingCreate);
     f.pod.protectedUrls.clear();
     const read = f.pod.writer.read;
@@ -756,21 +836,24 @@ describe("bounded owner-only link shards", () => {
     await store.put({ ...first, remoteVersion: "new" });
     expect(store.byRemoteId("remote")?.remoteVersion).toBe("new");
   });
+  async function sameShardUrl(
+    store: Awaited<ReturnType<typeof readLinks>>,
+    url: string,
+    tag: string,
+  ) {
+    const shard = await store.shardOf(url);
+    for (let i = 0; i < 5000; i++) {
+      const candidate = url.replace(/[^/]+$/, `${tag}-${i}.ttl`);
+      if ((await store.shardOf(candidate)) === shard) return candidate;
+    }
+    throw new Error("No same-shard fixture URL.");
+  }
   it("merges an unrelated concurrent record in the same shard after a real 412", async () => {
     const f = fixture();
     const store = await readLinks(f);
     const first = link(f.pod.writer.resolve(ITEM));
     await store.put(first);
-    const shard = Number.parseInt(fnv1a(first.podUrl), 16) % 64;
-    let otherUrl = "";
-    for (let i = 0; i < 1000; i++) {
-      const candidate = f.pod.writer.resolve(`account/items/other-${i}.ttl`);
-      if (Number.parseInt(fnv1a(candidate), 16) % 64 === shard) {
-        otherUrl = candidate;
-        break;
-      }
-    }
-    expect(otherUrl).toBeTruthy();
+    const otherUrl = await sameShardUrl(store, first.podUrl, "other");
     const write = f.pod.writer.write;
     let raced = false;
     f.pod.writer.write = async (doc, conditions) => {
@@ -789,20 +872,11 @@ describe("bounded owner-only link shards", () => {
     const f = fixture();
     const store = await readLinks(f);
     const first = link(f.pod.writer.resolve(ITEM));
-    const shard = Number.parseInt(fnv1a(first.podUrl), 16) % 64;
-    let otherUrl = "";
-    for (let i = 0; i < 1000; i++) {
-      const candidate = f.pod.writer.resolve(`account/items/race-${i}.ttl`);
-      if (Number.parseInt(fnv1a(candidate), 16) % 64 === shard) {
-        otherUrl = candidate;
-        break;
-      }
-    }
-    expect(otherUrl).toBeTruthy();
+    const otherUrl = await sameShardUrl(store, first.podUrl, "race");
     const write = f.pod.writer.write;
     let raced = false;
     f.pod.writer.write = async (doc, conditions) => {
-      if (!raced) {
+      if (!raced && doc.slug.includes("/links/") && !doc.slug.endsWith("manifest.ttl")) {
         raced = true;
         const concurrent = await readLinks(f);
         await concurrent.put(link(otherUrl));
@@ -814,30 +888,74 @@ describe("bounded owner-only link shards", () => {
     expect(fresh.all()).toHaveLength(1);
     expect(fresh.byRemoteId("remote")?.podUrl).toBe(otherUrl);
   });
-  it("enforces the bounded per-shard record ceiling", async () => {
+  it("salts shard placement per connection so ids cannot be ground into one shard", async () => {
+    const fa = fixture();
+    const a = await readLinks(fa);
+    const b = await readLinks(fixture());
+    const urls = Array.from({ length: 32 }, (_, i) => `https://x.test/${i}`);
+    const shardsA = await Promise.all(urls.map((url) => a.shardOf(url)));
+    const shardsB = await Promise.all(urls.map((url) => b.shardOf(url)));
+    expect(shardsA).not.toEqual(shardsB);
+    // The salt lives only in the owner-only manifest and survives reloads.
+    const manifestUrl = fa.pod.writer.resolve("account/links/manifest.ttl");
+    expect(fa.pod.protectedUrls.has(manifestUrl)).toBe(true);
+    const again = await readLinks(fa);
+    expect(await Promise.all(urls.map((url) => again.shardOf(url)))).toEqual(shardsA);
+  });
+  it("spills a full shard into overflow documents instead of refusing links", async () => {
     const f = fixture();
+    const store = await readLinks(f);
+    const base = f.pod.writer.resolve("account/items/cap-0.ttl");
+    const shard = await store.shardOf(base);
     const urls: string[] = [];
     for (let i = 0; urls.length <= MAX_LINKS_PER_SHARD; i++) {
       const url = f.pod.writer.resolve(`account/items/cap-${i}.ttl`);
-      if (Number.parseInt(fnv1a(url), 16) % 64 === 0) urls.push(url);
+      if ((await store.shardOf(url)) === shard) urls.push(url);
     }
-    const shardSlug = "account/links/00.ttl";
-    const dataset = copyDataset();
-    for (const [i, url] of urls.slice(0, MAX_LINKS_PER_SHARD).entries()) {
-      const record = new LinkRecord(
-        `${f.pod.writer.resolve(shardSlug)}#${await sha256(url)}`,
-        dataset,
-        DataFactory,
-      );
-      record.types.add(SYNC.Link);
-      record.record = link(url, `r-${i}`);
-    }
-    await f.pod.writer.write({ slug: shardSlug, dataset, category: "links", forClass: SYNC.Link });
-    const store = await readLinks(f);
-    await expect(store.put(link(present(urls[MAX_LINKS_PER_SHARD]), "overflow"))).rejects.toThrow(
-      "full",
+    for (const [i, url] of urls.entries()) await store.put(link(url, `r-${i}`));
+    const overflowUrl = present(urls[MAX_LINKS_PER_SHARD]);
+    expect(store.documentOf(overflowUrl)).toMatch(/-1\.ttl$/);
+    const fresh = await readLinks(f);
+    expect(fresh.all()).toHaveLength(MAX_LINKS_PER_SHARD + 1);
+    expect(fresh.byRemoteId(`r-${MAX_LINKS_PER_SHARD}`)?.podUrl).toBe(overflowUrl);
+    // The overflow record stays updatable in place.
+    await fresh.put({ ...link(overflowUrl, `r-${MAX_LINKS_PER_SHARD}`), remoteVersion: "v2" });
+    expect((await readLinks(f)).byPodUrl(overflowUrl)?.remoteVersion).toBe("v2");
+    expect(MAX_SYNC_LINKS).toBe(50_000);
+  });
+  it("skips and reports items beyond the hard link cap without failing the run", async () => {
+    const f = fixture();
+    f.platform.set("one", "remote-1");
+    f.platform.set("two", "remote-2");
+    f.platform.set("three", "remote-3");
+    const report = await f.run({ maxLinks: 2 });
+    expect((await readLinks(f)).all()).toHaveLength(2);
+    expect(report.skippedItems.filter((item) => item.reason === "link-cap")).toHaveLength(1);
+    expect(report.failed).toBe(1);
+    // The skipped item is retried, and still skipped, on later runs.
+    const again = await f.run({ maxLinks: 2 });
+    expect(again.skippedItems.filter((item) => item.reason === "link-cap")).toHaveLength(1);
+  });
+  it("garbage-collects trashed and pod-deleted tombstones 30 days after deletion", async () => {
+    const f = fixture({ writeBack: true, propagateDeletes: true });
+    f.platform.set("trashed", "remote-1");
+    f.platform.set("deleted", "remote-2");
+    await f.run();
+    const deletedAt = new Date("2026-04-01T00:00:00Z");
+    f.platform.remove("remote-1");
+    await present(f.pod.writer.remove)(await syncItemSlug("account/items", "remote-2"));
+    await f.run({ now: () => deletedAt });
+    const statuses = (await readLinks(f)).all().map((l) => [l.status, l.deletedAt]);
+    expect(statuses).toEqual(
+      expect.arrayContaining([
+        ["trashed", deletedAt.toISOString()],
+        ["pod-deleted", deletedAt.toISOString()],
+      ]),
     );
-    expect((await readLinks(f)).all()).toHaveLength(MAX_LINKS_PER_SHARD);
+    await f.run({ now: () => new Date(deletedAt.getTime() + 29 * 86_400_000) });
+    expect((await readLinks(f)).all()).toHaveLength(2);
+    await f.run({ now: () => new Date(deletedAt.getTime() + 30 * 86_400_000) });
+    expect((await readLinks(f)).all()).toHaveLength(0);
   });
   it("fails closed when owner protection fails, before reading link bodies", async () => {
     const f = fixture();

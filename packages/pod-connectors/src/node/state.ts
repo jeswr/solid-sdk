@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
@@ -32,6 +33,12 @@ export function connectorState(value: unknown): ConnectorState {
       throw new Error("Invalid state count");
     return value;
   };
+  const optionalCounts = (sync: Record<string, unknown>) =>
+    Object.fromEntries(
+      (["failed", "unlinkedImports", "deferred"] as const)
+        .filter((key) => sync[key] !== undefined)
+        .map((key) => [key, count(sync[key])]),
+    );
   if (state.lastOutcome !== "success" && state.lastOutcome !== "error")
     throw new Error("Invalid state outcome");
   return {
@@ -45,6 +52,7 @@ export function connectorState(value: unknown): ConnectorState {
           sync: {
             conflicts: count(object(state.sync).conflicts),
             pendingDeletes: count(object(state.sync).pendingDeletes),
+            ...optionalCounts(object(state.sync)),
           },
         }),
     counts: {

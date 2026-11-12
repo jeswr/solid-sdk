@@ -288,6 +288,8 @@ export { type TwoWayConformanceFixture, twoWayConformanceSuite } from "./sync/co
 export {
   createFakeTwoWayAdapter,
   createMemorySyncPod,
+  type FakeTwoWayOptions,
+  fakeOneWayImport,
   fakeSyncDocument,
   fakeSyncName,
 } from "./sync/fake-platform.js";

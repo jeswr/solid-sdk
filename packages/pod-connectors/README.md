@@ -125,93 +125,194 @@ const report = await runTwoWaySync(adapter, {
 
 Hosts obtain incremental consent for `adapter.requiredWriteScopes` before turning on
 write-back; the runner checks explicit grants before any I/O. `TwoWayAdapter<Op>` extends
-`IntegrationAdapter` with `fieldsForHash` (mapped predicate IRIs), account-relative leaf
-`writeBackContainers`, `requiredWriteScopes`, `toRemote(resource)`, `applyRemote(op, options)`,
-`findByIdempotencyKey(key, options)` and `deleteRemote(id, options)`. Remote methods receive
-the separate, bounded `options.api` transport and the run signal. Creates MUST deduplicate
-`options.idempotencyKey`; updates and deletes MUST enforce `options.ifMatch` using the
-provider's equivalent conditional-write mechanism. A deleted remote item is an idempotent
-success for `deleteRemote`. `applyRemote` and key lookup return `{ remoteId, remoteVersion }`.
+`IntegrationAdapter` with `fieldsForHash`, account-relative leaf `writeBackContainers`,
+`requiredWriteScopes`, `toRemote(resource)`, `applyRemote(op, options)`,
+`findByIdempotencyKey(key, options)`, `deleteRemote(id, options)` and an optional
+`deduplicatesCreateKeys` (default `true`). Remote methods receive the separate, bounded
+`options.api` transport and the run signal. Creates MUST deduplicate `options.idempotencyKey`;
+a provider that cannot declares `deduplicatesCreateKeys: false`, and the framework then never
+re-sends an unconfirmed create: it stays `deferred` until the key lookup finds it. Updates and
+deletes MUST enforce `options.ifMatch` using the provider's conditional-write mechanism. A
+deleted remote item is an idempotent success for `deleteRemote`. `applyRemote` and key lookup
+return `{ remoteId, remoteVersion }`.
 
-Inbound adapters use `ctx.sync.resolve(remoteId, fallbackSlug)` **before mapping RDF subjects**,
-then `ctx.sync.upsert({ remoteId, remoteVersion, modifiedAt, document })`. This keeps a
-pod-created item's URL when the platform echoes it back. Use `ctx.sync.delete(id, version)`
-only for explicit tombstones.
-`ctx.sync.pendingRemoteIds()` lists writes whose first mapped echo must be fetched even if
-the provider delta omits the connector's own writes. The runner verifies that echo before
-advancing the next checkpoint, so a recovered version cannot hide later platform edits.
-Mapped resources are one item per document; existing aggregate
-collection adapters need a separate item-layout migration. Their mapped writes/removals may
-not bypass `ctx.sync` through `ctx.write`/`ctx.remove`. Unmapped companion documents can use
-the ordinary import ports. Provider timestamps must be server timestamps; pod timestamps
-come from `Last-Modified`. Missing timestamps or differences of at most the default
-120,000 ms skew guard preserve both versions for manual resolution. Explicit policies can
-resolve a retained manual conflict on a subsequent inbound replay; until then it stays manual,
-including when the platform changes again. Canonical content remains authoritative when a
-provider's version or coarse `updated_at` timestamp does not advance.
-Concurrent pod-delete/remote-edit disputes retain the remote snapshot for manual resolution;
-the owner must restore the item or explicitly reset its link before resolving that dispute.
+### Mapped predicates and inbound updates
 
-Each account has 64 fixed hash shards under `<account>/links/`, at most 128 links per shard
-(8,192 retained links total, including tombstones). Every record uses typed RDF accessors
-for remote identity/version, pod URL/ETag, canonical baseline, durable create intent, conflict
-and deletion state. Both identity indexes are built in one bounded scan. A shard 412 re-reads
-and merges unrelated record changes, with four attempts; a concurrent change to the same
-record fails closed. Hosts must still serialize runs across processes. Strong ETags are
-required on existing sync resources and link shards. New documents are create-only.
-Sync resource reads use the import session's metadata-preserving `readResource()` seam
-without retaining its precondition cache, so legacy suite vocabulary aliases are normalized
-before canonical hashing and typed outbound access.
+`fieldsForHash` is the adapter's single declaration of its **mapped predicates**: the canonical
+hash covers exactly these, and an inbound update replaces exactly these. A non-conflict inbound
+update removes the stored mapped quads (and blank-node structure reached only through them) and
+adds the incoming ones; every other triple in the pod resource stays, so owner annotations such
+as a pod-added `schema:description` survive remote edits. Incoming unmapped facts are added
+only for a (subject, predicate) the resource lacks; they never overwrite pod values. Hash and
+conflict logic are unchanged by the merge: the merged resource's mapped projection equals the
+incoming one.
+
+### Inbound contract
+
+Slugs are framework-owned. Adapters call `ctx.sync.resolve(remoteId, prefix, idempotencyKey?)`
+**before mapping RDF subjects**, where `prefix` is an account-qualified write-back container
+slug (`account/items`). It returns the linked pod URL, the URL of a pending create carrying
+`idempotencyKey`, or `<prefix>/<first 32 hex chars of sha-256(remoteId)>.ttl`; raw provider
+ids never reach pod paths. Then call `ctx.sync.upsert({ remoteId, remoteVersion, modifiedAt,
+idempotencyKey?, document })`. When the provider stores our create key (iCalendar UID, body
+marker, ...), pass it as `idempotencyKey`: inbound then adopts the pending-create link instead
+of minting a second pod resource. While any create intent is unresolved, unlinked inbound items
+without a key are deferred (retried next run); an item whose key matches no intent is provably
+not ours and maps normally. Use `ctx.sync.delete(id, version)` only for explicit tombstones,
+and `ctx.sync.fail(id)` to record an adapter-side mapping failure for retry.
+
+`ctx.sync.pendingRemoteIds()` lists identities the adapter must fetch even when a provider
+delta omits them: echoes of our own writes, retained manual conflicts, and previously failed or
+deferred inbound items. The runner verifies first echoes before advancing the checkpoint, so a
+recovered version cannot hide later platform edits. Mapped resources are one item per document;
+existing aggregate collection adapters need a separate item-layout migration. Their mapped
+writes/removals may not bypass `ctx.sync` through `ctx.write`/`ctx.remove`. Unmapped companion
+documents can use the ordinary import ports.
+
+### Adopting a one-way import
+
+The first two-way run of a connection (no adoption marker in the link-store manifest) performs
+a full inbound pass **without** the delta cursor and links existing pod items at their
+framework-owned slugs by remote id; a successful run then sets the marker and later runs resume
+the cursor. Outbound never creates a resource that carries this connector's import provenance
+(`prov:wasDerivedFrom` the connector source or `prov:wasGeneratedBy` a connector run Activity)
+and has no link; such resources are reported as `unlinked-import`. Provider lanes converting an
+existing import-only adapter must therefore write imports at the framework-owned slugs.
+
+### Per-item failure isolation
+
+An item whose mapping, hashing, pod read or write, or provider call fails is skipped with a
+fixed reason class and the run continues: `mapping-failed`, `hash-failed`, `read-failed`,
+`write-failed`, `remote-failed`, `weak-etag`, `duplicate-identity`, `link-cap`, plus the
+non-failure classes `deferred`, `unlinked-import` and `unsupported-resource` (sub-containers
+and members a listing types as non-RDF, which are never read). Health carries only these
+classes, never provider text or tokens. Inbound skips are kept in the owner-only manifest
+(at most 2,048 pending items) and returned by `pendingRemoteIds()`, so a cursor advance cannot
+lose them; if the pending list would overflow, the run keeps the previous cursor instead.
+Abort, run-budget exhaustion (`RunBudgetExceededError`), rate limiting and 401/403
+authorization failures still end the run. A weak ETag fails only its item.
+
+### Conflicts, tombstones and moves
+
+Provider timestamps must be server timestamps; pod timestamps come from `Last-Modified`.
+Missing timestamps or differences of at most the default 120,000 ms skew guard preserve both
+versions for manual resolution. The storage-client writer forwards `Last-Modified` only when
+its backend exposes one on RDF reads; storage-client's `readRdf` does not today, so `lww` on
+that writer falls back to `manual`. The fetch writer reads the header.
+
+Manual conflicts are listed in `pendingRemoteIds()`. Switching the connection to `pod-wins`
+or `remote-wins` resolves them on the next inbound replay or, when the provider omits the
+item, in the outbound pass (pod-wins pushes the pod version under the conflict's remote
+version; remote-wins restores the retained remote snapshot). Without write-back, a pod win
+records the remote state as the baseline, so the item is not re-conflicted every run, and the
+pod edit is pushed once write-back is enabled. Canonical content remains authoritative when a
+provider's version or coarse `updated_at` timestamp does not advance. Concurrent
+pod-delete/remote-edit disputes retain the remote snapshot for manual resolution.
+
+Tombstones are durable: a remote restore of a trashed or pod-deleted item, or a pod resource
+recreated at a tombstoned URL, becomes a manual conflict counted in health, never a silent
+skip or an automatic recreate. A provider identity already linked to another pod resource
+(for example a lagging lookup, or a cross-process race) never wedges the connection: that pod
+resource keeps a conflict-only manual record naming the duplicate remote id.
+
+Within one run, a newly listed unlinked resource whose canonical hash equals the
+`lastSyncedHash` of a link whose pod resource just vanished is a move: the link is re-pointed
+(no remote create, no remote delete) regardless of `propagateDeletes`. Canonical hashes are
+location-independent for this: the document URL and its fragment IRIs hash relative to the
+document. Only unambiguous one-to-one pairings move. A move writes the new record first; an
+interrupted move is completed on the next load.
+
+### Link store
+
+Links live in an owner-only store under `<account>/links/`: a manifest plus 64 base shards
+placed by HMAC-SHA-256 (WebCrypto) keyed with a random per-connection salt held only in the
+manifest, so remote ids cannot be ground into one shard. Each document holds at most 128
+records; a full shard spills into overflow documents (`NN-1.ttl`, ...) recorded in the base
+shard's header. A hard cap of 50,000 links per connection (`MAX_SYNC_LINKS`; `ports.maxLinks`
+may lower it) skips and reports further items as `link-cap` instead of failing the run.
+Trashed and pod-deleted tombstones are garbage-collected 30 days after deletion (unless they
+carry an open manual conflict). Records use typed RDF accessors for remote identity/version,
+pod URL/ETag, canonical baseline, durable create intent, conflict, deletion state and time,
+and move markers. A document 412 re-reads and merges unrelated record changes, with four
+attempts; a concurrent change to the same record fails that item. Hosts must still serialize
+runs across processes. Strong ETags are required on existing sync resources and link
+documents. New documents are create-only. Sync resource reads use the import session's
+metadata-preserving `readResource()` seam without retaining its precondition cache, so legacy
+suite vocabulary aliases are normalized before canonical hashing and typed outbound access.
+
+The link-store terms come from `CONNECTOR_SYNC` in `@jeswr/suite-vocab` (all under `NS.CORE`):
+`ConnectorSyncLink`, `ConnectorSyncLinkShard`, `ConnectorSyncManifest` and
+`ConnectorSyncPendingItem` classes; per-link `connectorPodUrl`, `connectorRemoteId`,
+`connectorRemoteVersion`, `connectorPodEtag`, `connectorLastSyncedHash`,
+`connectorNeedsInbound`, `connectorPendingCreate{Key,Hash,Etag,Resource}`,
+`connectorConflict{Resource,Version,RemoteId,Resolution}`, `connectorPendingDelete`,
+`connectorSyncStatus`, `connectorDeletedAt`, `connectorMovedFrom`, `connectorTrashUrl`; the
+item link `connectorConflictSnapshot`; shard `connectorOverflowCount`; manifest
+`connectorShardSalt` and `connectorAdoptedAt`; pending-item `connectorErrorClass` and
+`connectorSyncDirection`. Snapshots also use `prov:wasRevisionOf` and `schema:expires`.
+
+### Host ports
 
 `SyncPodWriter` adds finite complete direct-child `list()` and `ensureOwnerOnly()` ports.
 The fetch implementation reads listings through `@solid/object`, consumes advertised
-`solid:etag` values and falls back to resource reads when missing. It requires an advertised
-WAC ACL at the exact resource URL plus `.acl`, then installs owner-only grants **before**
-link/snapshot bodies are read or created; unsupported ACL discovery fails closed. Hosts with
-other permission systems supply an equally strict protection port. Both owner protection
-and full listing completeness are security contracts for custom hosts. The fetch implementation
-refuses partial responses and advertised pagination; hosts needing paged containers supply a
-bounded complete listing port.
-Pass the same signal to the writer and runner so every HTTP request within a port is
+`solid:etag` values, flags members typed `ldp:NonRDFSource`, and falls back to resource reads
+when an ETag is missing. A listing entry is skipped as unchanged only when both its ETag and
+the link's are known and equal. The fetch writer requires an advertised WAC ACL at the exact
+resource URL plus `.acl`, then installs owner-only grants **before** link/snapshot bodies are
+read or created; unsupported ACL discovery fails closed. Hosts with other permission systems
+supply an equally strict protection port. Both owner protection and full listing completeness
+are security contracts for custom hosts. The fetch implementation refuses partial responses
+and advertised pagination; hosts needing paged containers supply a bounded complete listing
+port. Pass the same signal to the writer and runner so every HTTP request within a port is
 cancelled and checked, including the ACL PUT following its discovery HEAD.
+
+### Writes, deletes and health
 
 Creates persist their key and an immutable original payload snapshot before the remote call.
 An interrupted create is recovered by key before inbound mapping, including when write-back
 has since been disabled. Later pod edits remain detectable. Successful remote writes update
 the link's remote version and exact submitted pod baseline, suppressing echoes without
 absorbing a racing local edit. Remote deletes first copy into protected `<account>/trash/`,
-mark a 30-day expiry and `prov:wasRevisionOf`, durably record the move, and conditionally
-remove the original. The expiry marker is for host cleanup; the runner never silently purges
-trash. Interrupted trash moves remain counted as pending deletes until removal completes.
-Pod deletions produce health warnings until propagation is explicitly enabled.
-Tombstones prevent automatic resurrection; resetting a deleted link is an explicit host action.
+mark a 30-day expiry and `prov:wasRevisionOf`, durably record the move, conditionally remove
+the original, and leave a `trashed` tombstone. The expiry marker is for host cleanup; the
+runner never silently purges trash. Interrupted trash moves remain counted as pending deletes
+until removal completes. Pod deletions produce health warnings until propagation is
+explicitly enabled.
 
 Conflict losers live in protected `<account>/conflicts/`, carry `prov:wasRevisionOf`, and are
 linked from the surviving item. `report.issues` exposes retained links with conflict snapshots
-or pending deletes; `report.conflicts`, `report.pendingDeletes` and `state.sync` expose counts
-for health pages. Manual conflicts block outbound execution. One PROV Activity describes each
-outbound batch, alongside the existing import activity. Failed runs retain the prior checkpoint;
+or pending deletes; `report.skippedItems` lists skipped items with their class (bounded to
+1,000). `report.conflicts`, `pendingDeletes`, `failed`, `unlinkedImports`, `deferred` and
+`moved`, and the same counts in `state.sync`, feed health pages. Manual conflicts block
+outbound execution unless the policy resolves them. One PROV Activity describes each outbound
+batch, alongside the existing import activity. Failed runs retain the prior checkpoint;
 cancelled runs start no further I/O and retain durable intents for recovery.
 
 One `RunBudget` covers Pod operations, remote operations and source transport requests;
 source response bytes are charged as read (32 MiB per response). Documents are capped at
 10,000 quads, 4 MiB of term text and 65,536 characters per term. Exact canonical mapped-field
 hashes retain datatype, language and graph identity while ignoring serialization, triple
-order and blank labels. Nested RDF triple terms and other unsupported term kinds are refused
-throughout the document, including outside the mapped projection. Complex blank graphs fail
-closed: seven blank nodes, 100,000 quad visits and 32 MiB of canonical comparison text are the
-limits. `maxResources` may lower the
-8,192-entry scan bound. Finite injected notification hints are bounded and validated, and
-force current resource reads even when a listing's ETag lags an edit. They never replace
-complete scans; hosts own subscription lifecycle and missed-event recovery. Companion binary
-writes share the request/byte budgets; mapped item documents must use the RDF sync ports.
+order, blank labels and the document's own URL. Nested RDF triple terms and other unsupported
+term kinds are refused throughout the document, including outside the mapped projection.
+Complex blank graphs fail closed: seven blank nodes, 100,000 quad visits and 32 MiB of
+canonical comparison text are the limits. `maxResources` may lower the 50,000-entry scan
+bound. Finite injected notification hints are bounded and validated, and force current
+resource reads even when a listing's ETag lags an edit. They never replace complete scans;
+hosts own subscription lifecycle and missed-event recovery. Companion binary writes share the
+request/byte budgets; mapped item documents must use the RDF sync ports.
+
+### Conformance
 
 Later provider tests call `await twoWayConformanceSuite(makeAdapter)` from `./testing` with
-the documented `TwoWayConformanceFixture` controls over recorded/synthetic transports. It
-checks import/update, crash recovery, no duplicates, echo suppression, all conflict policies,
-skew, delete opt-in and remote deletion. `createFakeTwoWayAdapter()` and `createMemorySyncPod()`
-provide the reference implementation; targeted framework tests exercise validators, bounds,
-abort, shard races and hostile inputs. No production provider APIs are used.
+the documented `TwoWayConformanceFixture` controls (including `seedOneWayImport`) over
+recorded/synthetic transports. It checks import/update, crash recovery, a create retry with
+the key lookup forced to miss, stale-`ifMatch` update and delete rejection, echo suppression,
+all conflict policies, skew, delete opt-in, remote deletion leaving a trash snapshot and
+tombstone, and the one-way-import adoption migration. `createFakeTwoWayAdapter(account,
+{ delta?, deduplicatesCreateKeys? })`, `createMemorySyncPod()` and `fakeOneWayImport()`
+provide the reference implementation; the package runs the suite over the full-listing,
+delta-only and non-deduplicating variants. Targeted framework tests exercise validators,
+bounds, abort, shard races and hostile inputs. No production provider APIs are used.
 
 ## Binary resources
 

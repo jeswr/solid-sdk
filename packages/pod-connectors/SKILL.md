@@ -78,23 +78,38 @@ adapter mappings remain owned by their follow-on connector tasks.
 
 CON-A3.1 adds `./sync`: read the README's two-way section and `src/core/sync/types.ts` before
 extending it. Existing adapters remain import-only. TwoWayAdapter inbound mapping resolves
-the existing pod URL with `ctx.sync.resolve` before constructing subjects, then uses
-`ctx.sync.upsert`/`delete` with explicit remote versions/tombstones. One mapped item per
-document; never silently treat a collection document as an item. Keep the single shared
-import-session claim until outbound completes. Write-back and delete propagation default off;
-explicit write grants gate execution. Remote methods use their injected `options.api`,
-enforce conditional versions, and deduplicate durable create keys. Preserve original create
-payload snapshots through retries and later local edits. Never absorb a later pod ETag into
-the baseline of an earlier outbound write. Owner protection precedes sensitive body access;
-read sync resources through the session's `readResource(slug, false)` seam to preserve ETags
-and normalize legacy aliases without retaining a run-long resource cache.
-Unsupported ACL discovery, absent strong validators, incomplete listings, malformed links
-and exceeded bounds fail closed. Link shards are fixed at 64 × 128 records. Canonical hashing
-is exact and complexity-capped, including blank nodes. Keep loser snapshots and 30-day trash
-markers, resume interrupted moves, and never infer a remote deletion from a missing delta
-item. Notifications are finite hints; full scans remain authoritative. Keep health details
-in owner-only links and counts in report/state.sync. Export reference fixtures and the async
-`twoWayConformanceSuite(makeAdapter)` only through ./testing, not the production catalog.
+the pod URL with `ctx.sync.resolve(remoteId, prefix, idempotencyKey?)` before constructing
+subjects; slugs are framework-owned (`<prefix>/<32 hex of sha-256(id)>.ttl`), never built
+from raw ids. Then use `ctx.sync.upsert`/`delete`/`fail` with explicit remote versions,
+tombstones and any provider-echoed create key. One mapped item per document; never silently
+treat a collection document as an item. `fieldsForHash` is the single mapped-predicate
+declaration: inbound updates replace only those quads and keep every other pod triple.
+Keep the single shared import-session claim until outbound completes. Write-back and delete
+propagation default off; explicit write grants gate execution. Remote methods use their
+injected `options.api`, enforce conditional versions, and deduplicate durable create keys
+(or declare `deduplicatesCreateKeys: false`, which defers unconfirmed creates). Preserve
+original create payload snapshots through retries and later local edits. Never absorb a later
+pod ETag into the baseline of an earlier outbound write. Owner protection precedes sensitive
+body access; read sync resources through the session's `readResource(slug, false)` seam to
+preserve ETags and normalize legacy aliases without retaining a run-long resource cache.
+Isolate item failures with the fixed `SyncSkipReason` classes (never provider text); only
+abort, budget, rate-limit and 401/403 errors end a run. Failed and deferred inbound items stay
+in the owner-only manifest and in `pendingRemoteIds()`, which also lists manual conflicts.
+The first two-way run (no adoption marker) does a full inbound without the cursor; outbound
+never creates an unlinked resource carrying this connector's import provenance. Unresolved
+create intents defer keyless unlinked inbound items. Duplicate identities become manual
+conflict-only records; tombstone activity becomes a manual conflict; a vanished link plus a new
+resource with the same location-independent hash is a move. Unsupported ACL discovery, absent
+strong validators (per item), incomplete listings and malformed links fail closed;
+sub-containers and non-RDF members are skipped. Link shards: 64 HMAC-salted base shards of 128
+records with overflow documents, a 50,000-link hard cap that skips (never throws), and
+tombstone GC after 30 days. Sync terms come from `CONNECTOR_SYNC` in `@jeswr/suite-vocab`.
+Canonical hashing is exact and complexity-capped, including blank nodes. Keep loser snapshots
+and 30-day trash markers, resume interrupted moves, and never infer a remote deletion from a
+missing delta item. Notifications are finite hints; full scans remain authoritative. Keep
+health details in owner-only links and the manifest, and counts in report/state.sync. Export
+reference fixtures and the async `twoWayConformanceSuite(makeAdapter)` only through
+./testing, not the production catalog; run it over full-listing and delta-only adapters.
 
 Keep item accounting bounded by written documents: retain document counters, never run-long
 subject identifiers. Replacement resets a document's count to its adapter-supplied local subjects
