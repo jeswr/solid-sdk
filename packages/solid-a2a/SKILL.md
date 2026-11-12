@@ -57,7 +57,11 @@ This package is security-critical. Read [README.md](README.md) for the public co
 - `validationTransfer.ts` uses N3 Writer/Parser N-Quads, including literal language AND
   RDF 1.2 direction. Relabel ALL blank nodes to safe `b<n>` identifiers with a single
   map shared by data and shapes. Parse with `blankNodePrefix: ""` to preserve that
-  cross-graph identity. N3 `fromTerm`/`fromQuad` drop direction and must not be used on the
+  cross-graph identity. Reports must name the caller's blank nodes, not `b<n>`: the
+  worker lists blank-node term fields in an internal `blankNodes` marker, and the client
+  maps only those fields back through the job's own request map (never shared or cached),
+  strips the marker, and retires the worker on a malformed marker or unknown label.
+  N3 `fromTerm`/`fromQuad` drop direction and must not be used on the
   transfer path. Preserve named graphs, datatype IRIs and literal values.
   Namespace normalization must preserve direction too and remain confined to disposable
   validation views; hashing and serialization retain the original graph.
@@ -70,7 +74,8 @@ This package is security-critical. Read [README.md](README.md) for the public co
 
 Validate changes with the existing conformance, alias and hardening tests plus
 `test/validation-timeout.test.ts`, `test/validation-pool.test.ts` and
-`test/validation-round2.test.ts` and `test/validation-round3.test.ts`. These suites simulate
+`test/validation-round2.test.ts`, `test/validation-round3.test.ts` and
+`test/validation-identity.test.ts`. These suites simulate
 an infinitely busy synchronous validator, check actual termination and parent responsiveness, and cover timeout options,
 concurrency, queue admission/expiry, shutdown, resource limits, worker configuration,
 direction preservation, messageerror, crash replacement, syntax injection, cache invalidation,

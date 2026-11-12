@@ -547,9 +547,25 @@ function meteredFactory(budget: Budget): ValidatorFactory {
   return factory as unknown as ValidatorFactory;
 }
 
+/** Report fields that carry an RDF term, and so may name a blank node. */
+export const REPORT_TERM_FIELDS = ["focusNode", "path", "value"] as const;
+export type ReportTermField = (typeof REPORT_TERM_FIELDS)[number];
+/**
+ * The worker's report entry: which term fields are blank nodes, so the client can
+ * map the transfer's b<n> labels back to the caller's own (never part of the public report).
+ */
+export type WorkerResultEntry = ValidationResultEntry & {
+  readonly blankNodes?: readonly ReportTermField[];
+};
+
+/**
+ * `markBlankNodes` is for the worker only: it lists each blank-node term field
+ * in `blankNodes`, since a projected string cannot tell `_:b0` from a literal "b0".
+ */
 export async function validateGraphs(
   intent: readonly Quad[],
   shape: readonly Quad[],
+  markBlankNodes = false,
 ): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
@@ -582,7 +598,10 @@ export async function validateGraphs(
     const validator = new SHACLValidator(shapeGraph, { factory: meteredFactory(budget) });
     const report = await validator.validate(meter(dataGraph as Store, budget));
     // Reading the results also matches over the metered report.
-    return { conforms: report.conforms, results: report.results.map(projectResult) };
+    return {
+      conforms: report.conforms,
+      results: report.results.map((result) => projectResult(result, markBlankNodes)),
+    };
   } catch (error) {
     if (error instanceof BudgetSpent) {
       return {
@@ -605,16 +624,24 @@ function toDataset(quads: readonly Quad[]): Store {
   return store;
 }
 
+type ResultTerm = { termType: string; value: string } | null | undefined;
+
 /** Project a `rdf-validate-shacl` ValidationResult to a plain entry. */
-function projectResult(result: {
-  message: { value: string }[];
-  path?: { value: string } | null;
-  focusNode?: { value: string } | null;
-  severity?: { value: string } | null;
-  sourceConstraintComponent?: { value: string } | null;
-  value?: { value: string } | null;
-}): ValidationResultEntry {
+function projectResult(
+  result: {
+    message: { value: string }[];
+    path?: ResultTerm;
+    focusNode?: ResultTerm;
+    severity?: { value: string } | null;
+    sourceConstraintComponent?: { value: string } | null;
+    value?: ResultTerm;
+  },
+  markBlankNodes: boolean,
+): WorkerResultEntry {
   const message = result.message.map((m) => m.value).join("; ");
+  const blankNodes = markBlankNodes
+    ? REPORT_TERM_FIELDS.filter((field) => result[field]?.termType === "BlankNode")
+    : [];
   return {
     message: message.length > 0 ? message : "SHACL constraint violation",
     ...(result.sourceConstraintComponent?.value !== undefined && {
@@ -624,5 +651,6 @@ function projectResult(result: {
     ...(result.path?.value !== undefined && { path: result.path.value }),
     ...(result.value?.value !== undefined && { value: result.value.value }),
     ...(result.severity?.value !== undefined && { severity: result.severity.value }),
+    ...(blankNodes.length > 0 && { blankNodes }),
   };
 }

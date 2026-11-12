@@ -10,7 +10,12 @@ port.on("message", async ({ id, data, shapes }: ValidationWorkerRequest) => {
   try {
     port.postMessage({
       id,
-      report: await validateGraphs(decodeValidationQuads(data), decodeValidationQuads(shapes)),
+      // Mark blank-node fields: the client maps their b<n> labels to the caller's.
+      report: await validateGraphs(
+        decodeValidationQuads(data),
+        decodeValidationQuads(shapes),
+        true,
+      ),
     });
   } catch (error) {
     port.postMessage({

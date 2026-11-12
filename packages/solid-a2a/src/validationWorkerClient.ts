@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Worker, WorkerOptions } from "node:worker_threads";
 import type { BlankNode, Quad } from "@rdfjs/types";
-import type { ValidationReport } from "./types.js";
+import type { ValidationReport, ValidationResultEntry } from "./types.js";
+import { REPORT_TERM_FIELDS, type ReportTermField } from "./validationCore.js";
 import { checkedQuads } from "./validationLimits.js";
 import { encodeValidationQuads } from "./validationTransfer.js";
 
@@ -34,6 +35,8 @@ type Job = {
   deadline: number;
   timeoutMs: number;
   posted: boolean;
+  /** This job's caller label → safe b<n> map, set when its request is encoded. */
+  blankNodes: ReadonlyMap<string, BlankNode>;
   timer: ReturnType<typeof setTimeout>;
   resolve: (report: ValidationReport) => void;
   reject: (error: Error) => void;
@@ -77,6 +80,39 @@ function shapeTerms(quads: readonly Quad[]): string[] {
     }
   }
   return terms;
+}
+
+const termFields = new Set<unknown>(REPORT_TERM_FIELDS);
+/**
+ * Restore the caller's blank-node labels in a worker report, or undefined when
+ * the report is malformed. Only fields the worker marked as blank nodes are
+ * mapped, through this job's own inverse map (bounded by its data and shapes);
+ * unmarked fields pass through, so a literal "b0" stays "b0". A marked field
+ * whose label this job never sent fails closed: the worker is misbehaving.
+ */
+function restoreReport(
+  report: { conforms: boolean; results: readonly unknown[] },
+  blankNodes: ReadonlyMap<string, BlankNode>,
+): ValidationReport | undefined {
+  let labels: Map<string, string> | undefined;
+  const results: ValidationResultEntry[] = [];
+  for (const entry of report.results) {
+    if (typeof entry !== "object" || entry === null) return undefined;
+    const { blankNodes: marked, ...rest } = entry as Record<string, unknown>;
+    if (marked !== undefined) {
+      if (!Array.isArray(marked) || new Set(marked).size !== marked.length) return undefined;
+      labels ??= new Map([...blankNodes].map(([caller, safe]) => [safe.value, caller]));
+      for (const field of marked as unknown[]) {
+        if (!termFields.has(field)) return undefined;
+        const value = rest[field as ReportTermField];
+        const caller = typeof value === "string" ? labels.get(value) : undefined;
+        if (caller === undefined) return undefined;
+        rest[field as ReportTermField] = caller;
+      }
+    }
+    results.push(rest as unknown as ValidationResultEntry);
+  }
+  return { conforms: report.conforms, results };
 }
 
 /** Lazily warmed, bounded workers. Retired slots count until termination or exit. */
@@ -172,6 +208,7 @@ export class ValidationWorkerPool {
         deadline,
         timeoutMs,
         posted: false,
+        blankNodes: new Map(),
         resolve,
         reject,
         timer: setTimeout(() => this.expire(job), Math.max(0, deadline - performance.now())),
@@ -249,12 +286,14 @@ export class ValidationWorkerPool {
         return;
       }
       const job = slot.job;
-      if (
-        !job ||
-        message?.id !== job.id ||
-        typeof message.report?.conforms !== "boolean" ||
-        !Array.isArray(message.report.results)
-      ) {
+      const report =
+        job &&
+        message?.id === job.id &&
+        typeof message.report?.conforms === "boolean" &&
+        Array.isArray(message.report.results)
+          ? restoreReport(message.report, job.blankNodes)
+          : undefined;
+      if (!job || !report) {
         void this.retire(slot, new Error("Validation worker sent an invalid message"));
       } else if (performance.now() >= job.deadline) {
         this.expire(job);
@@ -262,7 +301,7 @@ export class ValidationWorkerPool {
         clearTimeout(job.timer);
         slot.job = undefined;
         worker.unref();
-        job.resolve(message.report);
+        job.resolve(report);
         this.pump();
       }
     });
@@ -330,6 +369,8 @@ export class ValidationWorkerPool {
         data: encodeValidationQuads(job.data, blankNodes),
         shapes: shapes.encoded,
       };
+      // Per job: this map is the request's own clone, never shared or cached.
+      job.blankNodes = blankNodes;
       // Serialization and a delayed parent timer must never admit a late success.
       if (performance.now() >= job.deadline) {
         this.expire(job);

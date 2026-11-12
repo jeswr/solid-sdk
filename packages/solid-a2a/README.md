@@ -118,7 +118,12 @@ const protocol = await buildProtocolDocument({
   whitespace, controls or IRIREF delimiters (`<>"{}|^` plus backtick and backslash), relative
   IRIs and malformed BCP 47 language tags. RDF 1.2 direction is a separate `ltr`/`rtl` field.
   Transfer uses N3 Writer/Parser N-Quads and relabels **all** blank nodes to safe `b<n>`
-  labels, sharing one map across data and shapes so identity is preserved. Original graphs
+  labels, sharing one map across data and shapes so identity is preserved. Reports name
+  the caller's own blank-node labels in `focusNode`, `path` and `value`, as in-process
+  validation does: the worker marks which fields are blank nodes and each call restores them
+  through its own inverse map, so concurrent calls never see each other's labels and a
+  literal such as `"b0"` is never rewritten. A worker report naming a blank node the call
+  never sent fails closed as an invalid worker message. Original graphs
   and protocol hashes stay unchanged. Named graphs, datatypes, languages and direction
   are preserved. Encoded shapes are weakly cached by their input document/array/dataset.
   Each call still checks the limits and compares all term fields to invalidate changed shapes.
