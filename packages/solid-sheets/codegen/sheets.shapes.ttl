@@ -1,0 +1,39 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# No matching federation sector exists. Profile derived from Suite Sheets' original IRIs.
+# Repeated hasPart/variableMeasured nodes are generated flat entities and composed in the
+# facade: composite links support exactly one child, not arbitrary-size collections.
+# Dataset fields are optional because workbooks are also Dataset instances; descriptor
+# presence, contiguous positions, type+format correlation and URL equality are
+# checked by the facade. Workbook's additional Dataset type is also facade policy.
+# encoding remains optional and unchecked on read, matching the original app.
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix shapes: <https://jeswr.org/ns/sheets/shapes#> .
+
+shapes:Workbook a sh:NodeShape ; sh:targetClass schema:SpreadsheetDigitalDocument ;
+  sh:property [ sh:path dct:title ; sh:name "title" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:creator ; sh:name "creator" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:encoding ; sh:name "encoding" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:hasPart ; sh:name "hasPart" ; sh:nodeKind sh:IRI ] .
+
+shapes:Download a sh:NodeShape ; sh:targetClass schema:DataDownload ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:encodingFormat ; sh:name "encodingFormat" ; sh:datatype xsd:string ; sh:in ( "text/csv" ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:contentUrl ; sh:name "contentUrl" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:subjectOf ; sh:name "subjectOf" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] .
+
+shapes:Descriptor a sh:NodeShape ; sh:targetClass schema:Dataset ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:distribution ; sh:name "distribution" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:variableMeasured ; sh:name "variableMeasured" ; sh:nodeKind sh:IRI ] .
+
+shapes:Column a sh:NodeShape ; sh:targetClass schema:PropertyValue ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:additionalType ; sh:name "additionalType" ; sh:nodeKind sh:IRI ; sh:in ( xsd:string xsd:double xsd:dateTime ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:encodingFormat ; sh:name "encodingFormat" ; sh:datatype xsd:string ; sh:in ( "text" "number" "date-time" ) ; sh:minCount 1 ; sh:maxCount 1 ] .
