@@ -4,6 +4,7 @@ export {
   buildObservationDay,
   type DayObservation,
   DEFAULT_MAX_OBSERVATIONS,
+  type ObservationParseResult,
   type ParseOptions,
   parseObservations,
   parseObservationsTurtle,

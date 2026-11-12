@@ -26,7 +26,10 @@ const day = buildObservationDay(documentUrl, sensor, "2026-11-11", [{
   unit: UNITS.PPM, featureOfInterest: room, resultTime: "2026-11-11T12:00:00Z",
 }]);
 const turtle = await storeToTurtle(day);
-const readings = await parseObservationsTurtle(documentUrl, turtle);
+const readings = await parseObservationsTurtle(documentUrl, turtle, {
+  expectedSensor: sensor, expectedDay: "2026-11-11",
+});
+console.log(readings.length, readings.skipped);
 ```
 
 `buildObservation(subjectIri, input)` returns an N3 Store for one observation and
@@ -40,9 +43,18 @@ air in a room. The hosting platform is a separate physical support for a sensor.
 `parseObservations(documentUrl, dataset, options?)` returns records with `iri`,
 `sensor`, `property`, `featureOfInterest`, `resultTime` (UTC ISO string), `value` and
 `unit`. It selects explicitly typed SOSA Observation roots at the document IRI or inside its
-fragment namespace. Unrelated roots are omitted. Malformed observations are skipped;
+fragment namespace. The return value remains an array, with a read-only,
+non-enumerable `skipped` count of omitted typed roots (malformed, off-document or
+filtered), counted once per root. Callers reading day documents should pass
+`expectedSensor` (the exact sensor IRI) and `expectedDay` (a valid `YYYY-MM-DD` UTC date)
+in `options`; records from other sensors or UTC days are skipped. Both filters are
+optional and independent; timestamps are normalized to UTC before comparison.
+Unrelated roots are omitted. Malformed observations are skipped;
 a cap violation throws and never returns a partial result. Foreign sensor and feature
-links need not have their descriptions in the observation document.
+links need not have their descriptions in the observation document. Each `sosa:hasResult`
+must identify a typed quantity at that document URL or within its `#` fragment namespace.
+All observations sharing a result are dropped, including when another owner is malformed
+or off-document.
 
 All public builders reject invalid required fields. Numbers must be finite; units
 must match properties. Timestamps require an explicit timezone and valid XSD calendar
@@ -58,6 +70,14 @@ Invalid optional sensor values follow the runtime's drop-on-read policy.
 | `AirTemperature` | `DEG_C` | `Temperature` |
 | `RelativeHumidity` | `PERCENT` | `RelativeHumidity` |
 | `FilterLifeRemaining` | `PERCENT` | `DimensionlessRatio` |
+
+Plausibility bounds are inclusive: `RelativeHumidity` and `FilterLifeRemaining` must
+be **0–100 %**, and `AirTemperature` must be **−60–100 °C**. Concentrations
+(`CO2Concentration`, `PM2_5MassConcentration`, `PM10MassConcentration`), indices
+(`VOCIndex`, `AirQualityIndex`) and `FanSpeedLevel` must be **nonnegative**, with no
+upper bound beyond finiteness. Builders throw `RangeError` for values outside these
+ranges; parsers skip the observation and increment `skipped`. Decimal values are
+written without exponents; exponent-form `xsd:decimal` literals are skipped on read.
 
 `PROPERTY` and `UNITS` contain full IRIs; `PROPERTY_UNITS` is the frozen compatibility
 map. QUDT's microgram unit is `http://qudt.org/vocab/unit/MicroGM-PER-M3`. CO2 uses the
@@ -86,6 +106,9 @@ generated. The facade adds property/unit and ISO-time policy.
 
 `buildObservationDay(documentUrl, sensorIri, date, readings, options?)` validates every
 entry against that sensor and UTC day, rejects duplicate ids, and returns one Store.
+The sensor IRI must use `sensorDocPath(slug)` (with an optional fragment), and
+`documentUrl` must end with `observationDocPath(slug, date)` resolved under a base URL.
+Mismatched paths, dates or document query strings throw `TypeError`, even for empty days.
 Ids follow the slug rules and become `#observation-<id>`; quantities get `--result`
 appended to their observation IRI. Stable ids should include the source timestamp and
 property; connectors own deduplication and conditional whole-document writes. Do not

@@ -5,7 +5,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { OptionalFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { entities, nodes } from "./generated/model.js";
-import { httpIri, isoTime, validateReading } from "./policy.js";
+import { httpIri, inDocument, isoTime, validateReading } from "./policy.js";
 import { type ObservableProperty, type ObservationUnit, SOSA_RESULT_TIME } from "./vocab.js";
 
 export interface ObservationInput {
@@ -69,7 +69,8 @@ export function readObservation(iri: string, dataset: DatasetCore): Observation 
       property === undefined ||
       featureOfInterest === undefined ||
       resultTime === undefined ||
-      hasResult === undefined
+      hasResult === undefined ||
+      !inDocument(hasResult, iri.split("#", 1)[0] ?? iri)
     )
       return undefined;
     const result = new nodes.Observation.result.Wrapper(httpIri(hasResult), dataset, DataFactory);
