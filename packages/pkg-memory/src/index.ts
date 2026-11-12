@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** PKG nanopublication model, fact templates, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
@@ -10,7 +11,14 @@ export {
   UnsupportedLiteralDatatypeError,
   UnsupportedLiteralLexicalFormError,
 } from "./errors.js";
-export { canonicalizeAssertion, messageId, PKG_NAMESPACE_UUID, pkgId } from "./ids.js";
+export {
+  canonicalizeAssertion,
+  messageId,
+  PKG_NAMESPACE_UUID,
+  pkgId,
+  validateAssertionTerms,
+} from "./ids.js";
+export { mergeNanopublications } from "./merge.js";
 export type {
   Batch,
   BuildOptions,

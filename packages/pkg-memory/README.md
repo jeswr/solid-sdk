@@ -334,7 +334,9 @@ Parsing constructs one reference-aware N3 store through fetch-rdf, preserving la
 spelling without replaying the document. When tolerant import drops any graph, it
 returns a new compact store holding only the retained graphs (N3's term index would
 otherwise keep skipped terms); otherwise it returns the parsed store unchanged. Read paths use `readNamedGraph(dataset, name)`: a read-only
-snapshot with a compact subject index, retaining the original graph names. Nested
+snapshot with compact subject and object indexes (an object-only match, such as
+finding the records that link to a node, does not scan the graph), retaining the
+original graph names. Nested
 matches share its quads; `add` and `delete` throw. Take a fresh snapshot after edits.
 The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
 this changes index allocation only, and retains the N3 Store API and reference
@@ -344,6 +346,34 @@ language deduplication. No RDF terms, canonicalization or hash inputs change.
 `parseReferenceRdf(body, "text/turtle" | "application/trig", baseIRI?)` exposes the existing
 suite parser without requiring nanopub envelopes or applying literal/term validation.
 It preserves the parser's reference language-tag spelling. Structured importers can
-validate separate records with `canonicalizeAssertion` before passing generated assertions
-to `buildNanopublications`; unvalidated parser output must never be stored or displayed.
+validate separate records with `validateAssertionTerms(quads)` before passing generated
+assertions to `buildNanopublications`; unvalidated parser output must never be stored or
+displayed. `validateAssertionTerms` runs exactly canonicalization's per-quad term-safety
+and literal-parity checks, linearly. Do not call `canonicalizeAssertion` on untrusted
+records to validate them: canonical labelling of many tied blank nodes is
+super-polynomial, so a few kilobytes of input can take minutes.
 This export adds no parsing, normalization, canonicalization or hashing behavior.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Merging
+
+`mergeNanopublications(a, b)` unions two parsed `Nanopublications` values. Use it
+instead of concatenating TriG, which merges unrelated blank nodes that share a label
+and lets one input add records to the other's batch graphs: batch graph names derive
+from the batch ID alone, so a foreign export that reuses a batch ID could otherwise
+rewrite a source's kind or thread ID, or make its provenance ambiguous. The helper:
+
+- keeps one copy of a graph present in both inputs only when the copies are identical
+  (quad sets for blank-free graphs; canonical labelling, after a linear shape check,
+  otherwise);
+- refuses a graph that one input's nanopubs read (head, assertion, provenance, pubinfo,
+  or a batch source/entity graph, including `pkg:correspondenceBatch` context) when only
+  the other input supplies it;
+- refuses a private envelope graph (head, provenance or pubinfo) claimed by two
+  nanopub IDs, and a dropped duplicate whose blank nodes are referenced elsewhere;
+- relabels blank nodes per input, never matches default or blank-named graphs across
+  inputs, and returns nanopubs sorted by ID with `affected` as the union of both lists.
+
+Every refusal throws `Error("Conflicting nanopublication merge")`, with no values.
+Splitting one batch across two exports therefore requires identical batch graphs in
+both. The result is an ordinary value that serializes and parses atomically.

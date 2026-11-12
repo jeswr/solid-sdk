@@ -10,6 +10,13 @@ description: Use when building, serializing, parsing or classifying PKG nanopubl
 
 Use `createFactAssertion` for structured facts, `buildNanopublications` for batches,
 `serializeNanopublications` for TriG, and `parseNanopublications` to read it back.
+Merge parsed values with `mergeNanopublications(a, b)`, never by concatenating TriG: it
+refuses (fixed error, no values) shared graphs whose copies differ, graphs one input's
+nanopubs read but only the other supplies (a reused batch ID), and private envelope
+graphs claimed by two nanopubs; it relabels blanks per input and unions `affected`.
+Validate untrusted parser output with `validateAssertionTerms(quads)` (linear); never
+canonicalize untrusted records to validate them. `readNamedGraph` indexes subjects and
+objects.
 For imported exports, use `parseNanopublicationsTolerant(text, { baseIRI? })` for an
 explicit `Promise<TolerantNanopublications>` return type. The existing
 `parseNanopublications(text, { invalid: "skip", baseIRI? })` overload stays compatible.

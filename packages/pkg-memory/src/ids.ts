@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { NS, normalizeLiteral, ReferenceStore as Store, validateTermSafety } from "./rdf.js";
 
@@ -188,18 +189,28 @@ export function canonicalizeAssertionWithLabels(
   options: { maxWork?: number } = {},
 ): { id: string; dataset: Store; labels: Map<string, string> } {
   const normalized = new Store();
-  for (const q of dataset) {
-    for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
-    normalized.addQuad(
-      df.quad(
-        q.subject,
-        q.predicate,
-        q.object.termType === "Literal" ? normalizeLiteral(q.object) : q.object,
-        q.graph,
-      ),
-    );
-  }
+  for (const q of dataset) normalized.addQuad(checkedQuad(q));
   return canonicalizeGraphWithLabels(normalized, options);
+}
+
+/** The per-quad term-safety and literal-parity checks of canonicalization. */
+function checkedQuad(q: Quad): Quad {
+  for (const t of [q.subject, q.predicate, q.object]) validateTermSafety(t);
+  return df.quad(
+    q.subject,
+    q.predicate,
+    q.object.termType === "Literal" ? normalizeLiteral(q.object) : q.object,
+    q.graph,
+  );
+}
+
+/**
+ * Run canonicalization's term-safety and literal-parity checks without
+ * canonicalizing. Linear in the quad count, so it is safe on untrusted input;
+ * canonical labelling itself can be super-polynomial on tied blank nodes.
+ */
+export function validateAssertionTerms(quads: Iterable<Quad>): void {
+  for (const q of quads) checkedQuad(q);
 }
 
 /** Internal graph comparison preserves RDF terms; only blank-node labels change. */

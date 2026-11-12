@@ -58,3 +58,21 @@ it("intersects graph snapshots without copying indexes or exposing another graph
     insert.mockRestore();
   }
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("answers object-only matches from an index, in graph order", async () => {
+  const value = await parseNanopublications(
+    await readFile(new URL("./fixtures/synthetic.expected.trig", import.meta.url), "utf8"),
+  );
+  const np = value.nanopubs[0];
+  if (!np) throw new Error("Missing fictional nanopub");
+  const view = readNamedGraph(value.dataset, np.provenanceId);
+  const all = value.dataset.getQuads(null, null, null, np.provenanceId);
+  for (const q of all) {
+    const expected = all.filter((other) => other.object.equals(q.object));
+    expect([...view.match(null, null, q.object)]).toEqual(expected);
+    expect([...view.match(null, q.predicate, q.object)]).toEqual(
+      expected.filter((other) => other.predicate.equals(q.predicate)),
+    );
+  }
+});
