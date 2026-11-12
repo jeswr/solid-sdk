@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -45,6 +46,12 @@ import {
   type ModelManifest,
   validateManifest,
 } from "./manifest.js";
+import {
+  checkParseScope,
+  hasScopedDatasetClass,
+  type ParseOptions,
+  type ParseScope,
+} from "./parse-scope.js";
 import { serializeTurtle } from "./rdf.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -89,8 +96,8 @@ export interface ModelEntity {
   subject(resourceUrl: string): string;
   /** Build an n3 `Store` from a plain data object (writes through the guards). */
   build(resourceUrl: string, data: EntityData): Store;
-  /** Read a data object back from an RDF dataset, or `undefined` if non-conforming. */
-  parse(resourceUrl: string, dataset: DatasetCore): EntityData | undefined;
+  /** Read data fail-closed; an optional scope shares class work over an unchanged dataset. */
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): EntityData | undefined;
   /** Serialise built RDF to Turtle with the manifest prefixes. */
   serialize(resourceUrl: string, data: EntityData): Promise<string>;
   /** Serialise an existing store to Turtle with the manifest prefixes. */
@@ -872,6 +879,24 @@ function migrateBeforeWrite(
   context: MigrationContext,
   request: MigrationRequest,
 ): void {
+  // With no aliases to migrate, the copy and whole-dataset preservation audit are
+  // unnecessary. Be conservative about other owners (including every override):
+  // co-typing and data-graph subclasses prevent assuming their focuses disjoint.
+  const ownAliases = request.field ? request.field.aliasPredicates : request.owner.aliasTypeIris;
+  if (
+    !ownAliases?.length &&
+    ![context.manifest, ...context.checkAlso].some((manifest) =>
+      manifest.entities.some((entity) =>
+        (isCompositeEntity(entity) ? entity.nodes : [entity]).some(
+          (node) =>
+            node !== request.owner &&
+            (node.aliasTypeIris?.length ||
+              node.fields.some((field) => field.aliasPredicates?.length)),
+        ),
+      ),
+    )
+  )
+    return;
   const output = canonicalizeAliases(doc.dataset, context, doc.factory, request);
   // Snapshot both sides before mutating: a DatasetCore's match() may be live.
   const current = [...doc.dataset.match()];
@@ -1154,7 +1179,11 @@ function assembleEntity(
     Wrapper: EntityWrapperConstructor;
     subject: (resourceUrl: string) => string;
     build: (resourceUrl: string, data: EntityData) => Store;
-    parse: (resourceUrl: string, dataset: DatasetCore) => EntityData | undefined;
+    parse: (
+      resourceUrl: string,
+      dataset: DatasetCore,
+      options?: ParseOptions,
+    ) => EntityData | undefined;
   },
   context: MigrationContext,
   factory: DataFactory,
@@ -1217,12 +1246,28 @@ function makeEntity(
     return store;
   };
 
-  const parse = (resourceUrl: string, dataset: DatasetCore): EntityData | undefined => {
+  const parse = (
+    resourceUrl: string,
+    dataset: DatasetCore,
+    options: ParseOptions = {},
+  ): EntityData | undefined => {
+    if (options.scope !== undefined) checkParseScope(options.scope, dataset);
     if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
     const iri = entity.subject.convention === "hash-it" ? `${resourceUrl}#it` : resourceUrl;
     if (!isSafeAbsoluteIri(iri)) return undefined;
     const doc = new Wrapper(subject(resourceUrl), dataset, factory);
-    if (!doc.isInstance) return undefined;
+    if (
+      !(options.scope === undefined
+        ? doc.isInstance
+        : hasDatasetClass(
+            doc,
+            iri,
+            [...entity.typeIris, ...(entity.aliasTypeIris ?? [])],
+            undefined,
+            options.scope,
+          ))
+    )
+      return undefined;
     return parseShapeAt(entity, iri, dataset, factory);
   };
 
@@ -1270,7 +1315,10 @@ function hasDatasetClass(
   subject: string,
   required: readonly string[],
   budget?: MigrationBudget,
+  scope?: ParseScope,
 ): boolean {
+  if (scope !== undefined)
+    return hasScopedDatasetClass(scope, doc.dataset, doc.factory, subject, required, matchObjects);
   const accepted = new Set(required);
   const pending: Term[] = [];
   const seen = new Set<string>();
@@ -1357,7 +1405,7 @@ function parseShapeAt(
   factory: DataFactory,
   byName: ReadonlyMap<string, ManifestNode> = new Map(),
   strict = false,
-  budget: { visits: number; migration?: MigrationBudget } = { visits: 0 },
+  budget: { visits: number; migration?: MigrationBudget; scope?: ParseScope } = { visits: 0 },
 ): EntityData | undefined {
   if (budget.migration) migrationRead(budget.migration);
   if (++budget.visits > MAX_NODE_VISITS || !isSafeAbsoluteIri(iri)) return undefined;
@@ -1379,7 +1427,7 @@ function parseShapeAt(
     const childData =
       link.target !== undefined &&
       (field.hasClass === undefined ||
-        hasDatasetClass(doc, link.target, [field.hasClass], budget.migration))
+        hasDatasetClass(doc, link.target, [field.hasClass], budget.migration, budget.scope))
         ? // An sh:node child must conform, so any present violation rejects it (strict).
           // A class-only (sh:class) child is its own class-targeted focus node: its
           // optional Warning/Info failures degrade exactly as they do at the root, and
@@ -1478,19 +1526,38 @@ function makeCompositeEntity(
     return store;
   };
 
-  const parse = (resourceUrl: string, dataset: DatasetCore): EntityData | undefined => {
+  const parse = (
+    resourceUrl: string,
+    dataset: DatasetCore,
+    options: ParseOptions = {},
+  ): EntityData | undefined => {
+    if (options.scope !== undefined) checkParseScope(options.scope, dataset);
     if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
     const rootIri = `${resourceUrl}#${rootRt.node.fragment}`;
     if (!isSafeAbsoluteIri(rootIri)) return undefined;
     // Target classes select root resources; sh:node applies child property constraints
     // without making the child shape's target classes an additional constraint.
-    if (!new rootRt.Wrapper(rootIri, dataset, factory).isInstance) return undefined;
+    const doc = new rootRt.Wrapper(rootIri, dataset, factory);
+    if (
+      !(options.scope === undefined
+        ? doc.isInstance
+        : hasDatasetClass(
+            doc,
+            rootIri,
+            [...rootRt.node.typeIris, ...(rootRt.node.aliasTypeIris ?? [])],
+            undefined,
+            options.scope,
+          ))
+    )
+      return undefined;
     return parseShapeAt(
       rootRt.node,
       rootIri,
       dataset,
       factory,
       new Map(entity.nodes.map((node) => [node.name, node])),
+      false,
+      { visits: 0, scope: options.scope },
     );
   };
 
