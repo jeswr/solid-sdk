@@ -1004,6 +1004,61 @@ describe('guard validation', () => {
     expect(JSON.stringify(outbox.pending())).not.toContain('private-');
   });
 
+  it.each([
+    ['id', { private: 'private-object' }],
+    ['op', 'patch'],
+    ['url', 42],
+    ['size', Number.NaN],
+    ['size', -1],
+    ['createdAt', Number.POSITIVE_INFINITY],
+    ['createdAt', undefined],
+  ])('fails a stored item whose %s is %s and withholds it from pending()', async (key, value) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      Object.assign(record.item, { [key]: value });
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toEqual([]);
+    let status: unknown;
+    await stored((record) => {
+      status = record.item.status;
+    });
+    expect(status).toBe('failed');
+    const client = storage();
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()).toEqual([]);
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('fails a stored item with an unknown status on hydration instead of skipping it', async () => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      record.item.status = 'bogus';
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: '[solid-offline] invalid stored item', guard: { tag } },
+    ]);
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(delegate).not.toHaveBeenCalled();
+    const reopened = box();
+    await reopened.ready;
+    expect(reopened.pending()).toMatchObject([{ status: 'failed' }]);
+  });
+
   it('accepts 64-character tags and rejects longer ones', async () => {
     const longest = `a${'b'.repeat(63)}`;
     await expect(enqueue(box(), { guard: { tag: longest } })).resolves.toMatchObject({
@@ -1176,26 +1231,54 @@ describe('guarded conflicts', () => {
     expect(enumerated).toEqual([]);
   });
 
-  it('copies stored conflicts by field and type, without extra keys or references', async () => {
+  it('copies stored conflicts by field, without enumerating or exposing extra keys', async () => {
     const original = box();
     await guardedConflict(original);
+    const expected = original.conflicts();
     original.close();
     const extras = Object.fromEntries(
       Array.from({ length: 20_000 }, (_, i) => [`extra${i}`, 'private-extra']),
     );
     await stored((record) => {
-      Object.assign(record.conflict as object, extras, {
-        kind: 'other',
-        remoteEtag: { private: 'private-object' },
-      });
+      Object.assign(record.conflict as object, extras);
     });
     const outbox = box();
     await outbox.ready;
-    const [conflict] = outbox.conflicts();
-    expect(Object.keys(conflict as object)).toEqual(
-      conflictFields.filter((key) => key !== 'kind' && key !== 'remoteEtag'),
-    );
+    expect(outbox.conflicts()).toEqual(expected);
+    expect(Object.keys(outbox.conflicts()[0] as object)).toEqual(conflictFields);
     expect(JSON.stringify(outbox.conflicts())).not.toContain('private-');
+  });
+
+  it.each([
+    ['id', 42],
+    ['kind', 'other'],
+    ['remoteEtag', { private: 'private-object' }],
+    ['localEtag', undefined],
+    ['contentType', null],
+  ])('withholds a stored conflict whose %s is invalid', async (key, value) => {
+    const original = box();
+    await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record.conflict as object, { [key]: value });
+    });
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.conflicts()).toEqual([]);
+    expect(outbox.pending()).toMatchObject([{ status: 'conflict' }]);
+  });
+
+  it('withholds a stored conflict that is not an object', async () => {
+    const original = box();
+    await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record, { conflict: 'private-string' });
+    });
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.conflicts()).toEqual([]);
+    expect(outbox.pending()).toMatchObject([{ status: 'conflict' }]);
   });
 
   it.each([
