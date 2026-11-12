@@ -13,6 +13,7 @@ import {
 } from "@jeswr/suite-ui";
 import { useId, useState } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { prepareTemplateContent } from "@/lib/templates/content";
 import { templatesForSession } from "@/lib/templates/store";
 export function SaveTemplateDialog({
   session,
@@ -61,10 +62,10 @@ export function SaveTemplateDialog({
                     description,
                     app,
                     category: category.trim(),
-                    previewText: title,
                     author: session.webId,
                   },
-                  content,
+                  content: async (resource, assets) =>
+                    prepareTemplateContent(session, app, resource, await content(resource), assets),
                 }),
               )
               .then(() => {

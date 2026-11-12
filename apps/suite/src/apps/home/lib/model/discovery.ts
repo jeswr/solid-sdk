@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // Container orchestration ported from PM pod-data.ts; no app or SDK runtime imports.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { TEMPLATE_CLASS } from "@jeswr/suite-templates";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
@@ -137,6 +138,7 @@ export async function discoverDomainItems(
   };
 
   for (const location of options.typeIndex ?? []) {
+    if (location.forClass === TEMPLATE_CLASS) continue;
     if (!["all", "other"].includes(category.id) && !category.classes.includes(location.forClass))
       continue;
     const files =

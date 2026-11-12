@@ -46,8 +46,9 @@ it("opens every seeded Docs document through the editor loader with its title an
   // Inspect the seed itself so a document silently omitted from list() cannot escape testing.
   const documents = [];
   for (const file of seed) {
+    // Template content snapshots are Docs-shaped but are not documents (sst-3yw7).
     if (
-      !file.path.startsWith("docs/") ||
+      file.path.startsWith("templates/") ||
       file.contentType !== "text/turtle" ||
       file.path.endsWith("/")
     )

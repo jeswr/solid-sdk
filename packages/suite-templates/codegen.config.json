@@ -6,7 +6,7 @@
   },
   "entities": [
     {
-      "targetClass": "http://schema.org/CreativeWork",
+      "targetClass": "https://jeswr.org/ns/templates#Template",
       "name": "Template",
       "subject": {
         "convention": "hash-it"

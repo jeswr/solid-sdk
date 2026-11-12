@@ -33,9 +33,33 @@ test("demo Docs creates Meeting notes, saves a pod template and reuses it", asyn
   await expect(
     gallery.getByRole("button", { name: "Use My meeting starter", exact: true }),
   ).toBeVisible();
+  await expect(
+    gallery.getByRole("button", { name: "Use My meeting starter", exact: true }),
+  ).toHaveAccessibleDescription(/Attendees/);
   await gallery.getByRole("button", { name: "Use My meeting starter", exact: true }).click();
   await expect(page).toHaveURL(/\/docs\/d\//);
   await expect(body).toContainText("Attendees");
   await page.reload();
   await expect(body).toContainText("Action items");
+  await page.goto("/docs");
+  await page.getByRole("button", { name: "From template…", exact: true }).click();
+  await gallery.getByLabel("Template source", { exact: true }).selectOption("user");
+  await gallery
+    .getByRole("button", { name: "Delete template My meeting starter", exact: true })
+    .click();
+  await expect(gallery.getByRole("button", { name: "Confirm delete", exact: true })).toBeFocused();
+  await gallery.getByRole("button", { name: "Cancel deletion", exact: true }).click();
+  await expect(
+    gallery.getByRole("button", { name: "Delete template My meeting starter", exact: true }),
+  ).toBeFocused();
+  await gallery
+    .getByRole("button", { name: "Delete template My meeting starter", exact: true })
+    .click();
+  await gallery.getByRole("button", { name: "Confirm delete", exact: true }).click();
+  await expect(
+    gallery.getByRole("button", { name: "Use My meeting starter", exact: true }),
+  ).toBeHidden();
+  await expect(
+    gallery.getByRole("button", { name: "Use Team standup", exact: true }),
+  ).toBeFocused();
 });

@@ -750,3 +750,9 @@ The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vo
 accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n3.Writer`.
 Access Manager imports shared vocabulary and
 canonicalisation; its UI-specific request/approval interfaces remain deprecated compatibility code.
+
+`ensurePrivateContainerAccess(session, target)` from `./roles` provisions and verifies
+owner-only access for an empty container before private contents are written.
+`verifyPrivateDemoAccess(session, target, owner)` checks the isolated demo backend;
+real storage cannot pass that demo check. Both accept an injected fetch and storageUrl,
+webId and mode; unsupported access models fail closed.

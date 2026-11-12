@@ -17,7 +17,7 @@ const manifest = {
     {
       "name": "Template",
       "typeIris": [
-        "http://schema.org/CreativeWork"
+        "https://jeswr.org/ns/templates#Template"
       ],
       "subject": {
         "convention": "hash-it"

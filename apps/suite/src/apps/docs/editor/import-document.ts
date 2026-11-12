@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import { SolidPersistence } from "@jeswr/y-solid";
-import { generateHTML, getSchema } from "@tiptap/react";
+import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { clearDocument, IndexeddbPersistence, storeState } from "y-indexeddb";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -80,6 +80,12 @@ export async function importDocument(
   file: File,
   session: PodSession,
   progress: (value: ImportProgress) => void,
+  options: {
+    prepare?: (
+      json: JSONContent,
+      upload: (data: ArrayBuffer, type: string) => Promise<string>,
+    ) => Promise<JSONContent>;
+  } = {},
 ) {
   validateImportFile(file);
   const transaction = importTransaction(session);
@@ -106,6 +112,12 @@ export async function importDocument(
       async (data, type) => uploadImportImage(session, (await ensureTarget()).url, data, type),
       progress,
     );
+    if (options.prepare) {
+      result.json = await options.prepare(result.json, async (data, type) =>
+        uploadImportImage(session, (await ensureTarget()).url, data, type),
+      );
+      result.html = generateHTML(result.json, baseExtensions(session.fetch));
+    }
     const snapshot = {
       body: result.html,
       format: "text/html",

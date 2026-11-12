@@ -1,11 +1,12 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
 # A template is a CreativeWork profile. No sector defines reusable app templates.
 # schema:about is narrowed to the four suite app slugs; schema:url links the content.
+@prefix template: <https://jeswr.org/ns/templates#> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix schema: <http://schema.org/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-[] a sh:NodeShape ; sh:targetClass schema:CreativeWork ;
+[] a sh:NodeShape ; sh:targetClass template:Template ;
   sh:property [ sh:path schema:name ; sh:name "name" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:pattern "\\S" ] ;
   sh:property [ sh:path schema:description ; sh:name "description" ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
   sh:property [ sh:path schema:about ; sh:name "app" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ( "docs" "sheets" "notes" "tasks" ) ] ;

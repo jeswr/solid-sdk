@@ -3,64 +3,64 @@
 @prefix sh: <http://www.w3.org/ns/shacl#>.
 @prefix shapes: <https://jeswr.org/ns/templates/shapes#>.
 
-shapes:262e899f7019cf11d95edc2aad9903ab70d6f2151302b46355b51a5698ed185a-CreativeWorkShape a sh:NodeShape;
-    sh:property shapes:3aae8084a37195680eec6ea2faeeecaa7b9c47124dd84a42f4b541dd102bf242-CreativeWork-creator, shapes:5ee36971552794483e456a8610f24e2f8d1c9d9c49819b5c3dbbf61468996e2f-CreativeWork-description, shapes:67dbf0ff450303f187ce2e4d5078b710b8e2933f796d2fddfd1e3f6dd79297c5-CreativeWork-name, shapes:6c41a41b3c554de65f6f2d1f2630bd7ed4079f0fdadcf53da78187f4fa22c658-CreativeWork-image, shapes:7212061d42b0bbe16e9c89b2ea90620ce4e3e82bb3928aad0753aaac97ad6a0a-CreativeWork-text, shapes:8ae2381741e055304c3e46f734e8c4b8c0cdd244d3957ea43817a93e22c6cb37-CreativeWork-modified, shapes:8fbbc89bc45aa16c5783ede423afe074a33518f17bfb80f505d0fff4841943ea-CreativeWork-created, shapes:a3b69d2b968d66b409c57d450e353900d0859ed62dcd7bf46770404078b1e081-CreativeWork-url, shapes:d813469651547b695333e0f21406c01ec320325628de4222cf475675e5a1181c-CreativeWork-genre, shapes:dd5d54afb875385186ecd5fb92f9f11ddcf9e14752ee6e040038260c42c4b6b5-CreativeWork-about;
-    sh:targetClass schema:CreativeWork.
-shapes:2f7782274bb74d088c66ad9d25ffc293fa47de9590cb4730a92f681bba0a8dc2-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "tasks";
+shapes:012ee7a22079948dcdedf9256c30cd03e10520195a79933b528d8cf43eb372ca-n2 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "notes";
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:1ad0ad5415fdd724cae870d5df4c2a23b6358b7ef19475494d1bb5bee98aa300-n3.
+shapes:0b1f2d9d419c8084901bc2d7335fb016b1e22760ba71841f510d1ecd58127ecf-Template-modified sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:name "modified";
+    sh:path dct:modified.
+shapes:1ad0ad5415fdd724cae870d5df4c2a23b6358b7ef19475494d1bb5bee98aa300-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "tasks";
     <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> <http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>.
-shapes:3aae8084a37195680eec6ea2faeeecaa7b9c47124dd84a42f4b541dd102bf242-CreativeWork-creator sh:maxCount 1;
+shapes:1e0187e36de8e9cf4fb96a8d663e76b39279746f4dfe6d8b5c363a455bc34f1e-Template-image sh:maxCount 1;
+    sh:name "previewImage";
+    sh:nodeKind sh:IRI;
+    sh:path schema:image;
+    sh:pattern "^https?://".
+shapes:30c82c419d0fc34711c41e32d3e937894716a4529c7dbd8cfb5c571f7a1ece2d-Template-creator sh:maxCount 1;
     sh:name "author";
     sh:nodeKind sh:IRI;
     sh:path dct:creator;
     sh:pattern "^https?://".
-shapes:44db9fad694f08dcf5303a883481425093b961215fe67e783b358491c2f96fa5-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "notes";
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:2f7782274bb74d088c66ad9d25ffc293fa47de9590cb4730a92f681bba0a8dc2-n2.
-shapes:5ee36971552794483e456a8610f24e2f8d1c9d9c49819b5c3dbbf61468996e2f-CreativeWork-description sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+shapes:362cea99c7c600ceca39fede9ef6cb98a47b5483b5b97c4f25fb509eb7aea1c3-Template-about sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:in shapes:6837985206a8e541b49f131889489972851b35dddc7303c5bf497610bcdfce96-n0;
     sh:maxCount 1;
-    sh:name "description";
-    sh:path schema:description.
-shapes:67dbf0ff450303f187ce2e4d5078b710b8e2933f796d2fddfd1e3f6dd79297c5-CreativeWork-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:minCount 1;
+    sh:name "app";
+    sh:path schema:about.
+shapes:41d2b2d4251e6c3e2833b5037811c4c38708e63944efdbab9cc2c6b03317993d-n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "sheets";
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:012ee7a22079948dcdedf9256c30cd03e10520195a79933b528d8cf43eb372ca-n2.
+shapes:472905904e170400734bf9bf2d845aadec23090606cb606c61eb62be18fba3e7-Template-created sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
+    sh:maxCount 1;
+    sh:name "created";
+    sh:path dct:created.
+shapes:5408d995bcb7941258900c2a31b695f6b792176a0a0f18707dc4b8efdebb5436-Template-name sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "name";
     sh:path schema:name;
     sh:pattern "\\S".
-shapes:6c41a41b3c554de65f6f2d1f2630bd7ed4079f0fdadcf53da78187f4fa22c658-CreativeWork-image sh:maxCount 1;
-    sh:name "previewImage";
-    sh:nodeKind sh:IRI;
-    sh:path schema:image;
-    sh:pattern "^https?://".
-shapes:7212061d42b0bbe16e9c89b2ea90620ce4e3e82bb3928aad0753aaac97ad6a0a-CreativeWork-text sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
-    sh:maxCount 1;
-    sh:name "previewText";
-    sh:path schema:text.
-shapes:8ae2381741e055304c3e46f734e8c4b8c0cdd244d3957ea43817a93e22c6cb37-CreativeWork-modified sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
-    sh:maxCount 1;
-    sh:name "modified";
-    sh:path dct:modified.
-shapes:8fbbc89bc45aa16c5783ede423afe074a33518f17bfb80f505d0fff4841943ea-CreativeWork-created sh:datatype <http://www.w3.org/2001/XMLSchema#dateTime>;
-    sh:maxCount 1;
-    sh:name "created";
-    sh:path dct:created.
-shapes:a3b69d2b968d66b409c57d450e353900d0859ed62dcd7bf46770404078b1e081-CreativeWork-url sh:maxCount 1;
-    sh:minCount 1;
-    sh:name "content";
-    sh:nodeKind sh:IRI;
-    sh:path schema:url;
-    sh:pattern "^https?://".
-shapes:b0764198ae12dfb8eff1ed6dac78bc9980952bae1892e70ccd0a87a18ef52333-n1 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "sheets";
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:44db9fad694f08dcf5303a883481425093b961215fe67e783b358491c2f96fa5-n0.
-shapes:be7a22b2e49119e6b5b3b2d82d9d808451affbeb2d4350b312f308841cefa752-n3 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "docs";
-    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:b0764198ae12dfb8eff1ed6dac78bc9980952bae1892e70ccd0a87a18ef52333-n1.
-shapes:d813469651547b695333e0f21406c01ec320325628de4222cf475675e5a1181c-CreativeWork-genre sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+shapes:66bbe7a014dd58a2fb033a45991ed520c595b239690f5f990140c5ec822c1eeb-Template-genre sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
     sh:minCount 1;
     sh:name "category";
     sh:path schema:genre;
     sh:pattern "\\S".
-shapes:dd5d54afb875385186ecd5fb92f9f11ddcf9e14752ee6e040038260c42c4b6b5-CreativeWork-about sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
-    sh:in shapes:be7a22b2e49119e6b5b3b2d82d9d808451affbeb2d4350b312f308841cefa752-n3;
+shapes:6837985206a8e541b49f131889489972851b35dddc7303c5bf497610bcdfce96-n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#first> "docs";
+    <http://www.w3.org/1999/02/22-rdf-syntax-ns#rest> shapes:41d2b2d4251e6c3e2833b5037811c4c38708e63944efdbab9cc2c6b03317993d-n1.
+shapes:6e4bf37c07826b101da9a7b46a516cb29b190dcc7c101d57a008fe426a82f139-TemplateShape a sh:NodeShape;
+    sh:property shapes:0b1f2d9d419c8084901bc2d7335fb016b1e22760ba71841f510d1ecd58127ecf-Template-modified, shapes:1e0187e36de8e9cf4fb96a8d663e76b39279746f4dfe6d8b5c363a455bc34f1e-Template-image, shapes:30c82c419d0fc34711c41e32d3e937894716a4529c7dbd8cfb5c571f7a1ece2d-Template-creator, shapes:362cea99c7c600ceca39fede9ef6cb98a47b5483b5b97c4f25fb509eb7aea1c3-Template-about, shapes:472905904e170400734bf9bf2d845aadec23090606cb606c61eb62be18fba3e7-Template-created, shapes:5408d995bcb7941258900c2a31b695f6b792176a0a0f18707dc4b8efdebb5436-Template-name, shapes:66bbe7a014dd58a2fb033a45991ed520c595b239690f5f990140c5ec822c1eeb-Template-genre, shapes:b16508adcad0e1248663af73d23a0abf4f0f01459ce1169d9509bbd5bd8fe2d9-Template-description, shapes:cb8aaefa398d1f4df08f21d11d0d832fee25ca81e5507d7189b22f4a3d33fb0c-Template-text, shapes:d7a2fe9a866e2b84f9d2a9b17125312f79adf3d6e9f769883241a51e669eab4f-Template-url;
+    sh:targetClass <https://jeswr.org/ns/templates#Template>.
+shapes:b16508adcad0e1248663af73d23a0abf4f0f01459ce1169d9509bbd5bd8fe2d9-Template-description sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
     sh:maxCount 1;
+    sh:name "description";
+    sh:path schema:description.
+shapes:cb8aaefa398d1f4df08f21d11d0d832fee25ca81e5507d7189b22f4a3d33fb0c-Template-text sh:datatype <http://www.w3.org/2001/XMLSchema#string>;
+    sh:maxCount 1;
+    sh:name "previewText";
+    sh:path schema:text.
+shapes:d7a2fe9a866e2b84f9d2a9b17125312f79adf3d6e9f769883241a51e669eab4f-Template-url sh:maxCount 1;
     sh:minCount 1;
-    sh:name "app";
-    sh:path schema:about.
+    sh:name "content";
+    sh:nodeKind sh:IRI;
+    sh:path schema:url;
+    sh:pattern "^https?://".

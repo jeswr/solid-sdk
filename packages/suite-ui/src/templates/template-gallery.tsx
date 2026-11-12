@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../components/ui/button.js";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog.js";
 export interface TemplateGalleryItem {
@@ -38,6 +38,22 @@ export function TemplateGallery({
   const [category, setCategory] = useState("");
   const [source, setSource] = useState("all");
   const id = useId();
+  const [pendingDelete, setPendingDelete] = useState<string>();
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const categoryRef = useRef<HTMLSelectElement>(null);
+  const gridRef = useRef<HTMLUListElement>(null);
+  const deleteTrigger = useRef<HTMLButtonElement | null>(null);
+  const removed = useRef<{ id: string; index: number } | undefined>(undefined);
+  useEffect(() => {
+    if (pendingDelete) confirmRef.current?.focus();
+  }, [pendingDelete]);
+  useEffect(() => {
+    const previous = removed.current;
+    if (busy || !previous || items.some((item) => item.id === previous.id)) return;
+    const choices = gridRef.current?.querySelectorAll<HTMLButtonElement>("[data-template-choice]");
+    (choices?.[Math.min(previous.index, choices.length - 1)] ?? categoryRef.current)?.focus();
+    removed.current = undefined;
+  }, [items, busy]);
   const categories = [...new Set(items.map((item) => item.category))].sort();
   const filtered = items.filter(
     (item) =>
@@ -58,6 +74,7 @@ export function TemplateGallery({
           <label htmlFor={`${id}-category`}>
             Category
             <select
+              ref={categoryRef}
               id={`${id}-category`}
               value={category}
               onChange={(event) => setCategory(event.target.value)}
@@ -93,7 +110,11 @@ export function TemplateGallery({
           </div>
         )}
         {busy && <p role="status">Preparing your template…</p>}
+        <span id={`${id}-use`} className="sr-only">
+          Use
+        </span>
         <ul
+          ref={gridRef}
           className="su-template-grid"
           aria-label="Templates"
           onKeyDown={(event) => {
@@ -123,39 +144,71 @@ export function TemplateGallery({
             buttons[next]?.focus();
           }}
         >
-          {filtered.map((item) => (
+          {filtered.map((item, index) => (
             <li key={item.id} className="su-template-card">
               <button
                 type="button"
                 data-template-choice
                 disabled={busy}
                 onClick={() => onChoose(item)}
-                aria-label={`Use ${item.name}`}
+                aria-labelledby={`${id}-use ${id}-title-${index}`}
+                aria-describedby={`${id}-preview-${index} ${id}-description-${index}`}
               >
                 {item.previewImage && /^https?:\/\//.test(item.previewImage) ? (
                   // biome-ignore lint/performance/noImgElement: pod-owned preview URLs cannot use a Next image proxy
                   <img src={item.previewImage} alt="" loading="lazy" referrerPolicy="no-referrer" />
                 ) : (
-                  <span className="su-template-preview" aria-hidden="true">
+                  <span id={`${id}-preview-${index}`} className="su-template-preview">
                     {item.previewText || item.description}
                   </span>
                 )}
-                <strong>{item.name}</strong>
-                <span>{item.description}</span>
-                <small>
-                  {item.app} · {item.category} ·{" "}
-                  {item.source === "user" ? "My templates" : "Built-in"}
-                </small>
+                <strong id={`${id}-title-${index}`}>{item.name}</strong>
+                <span id={`${id}-description-${index}`}>
+                  <span>{item.description}</span>
+                  <small>
+                    {item.app} · {item.category} ·{" "}
+                    {item.source === "user" ? "My templates" : "Built-in"}
+                  </small>
+                </span>
               </button>
               {item.source === "user" && onDelete && (
                 <Button
                   variant="ghost"
                   disabled={busy}
-                  onClick={() => onDelete(item)}
+                  onClick={(event) => {
+                    deleteTrigger.current = event.currentTarget;
+                    setPendingDelete(item.id);
+                  }}
                   aria-label={`Delete template ${item.name}`}
                 >
                   Delete
                 </Button>
+              )}
+              {pendingDelete === item.id && onDelete && (
+                <fieldset aria-label={`Confirm deletion of ${item.name}`}>
+                  <p>Delete this template? Documents already created from it will be kept.</p>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => {
+                      setPendingDelete(undefined);
+                      deleteTrigger.current?.focus();
+                    }}
+                  >
+                    Cancel deletion
+                  </Button>
+                  <Button
+                    ref={confirmRef}
+                    disabled={busy}
+                    onClick={() => {
+                      removed.current = { id: item.id, index };
+                      setPendingDelete(undefined);
+                      onDelete(item);
+                    }}
+                  >
+                    Confirm delete
+                  </Button>
+                </fieldset>
               )}
             </li>
           ))}

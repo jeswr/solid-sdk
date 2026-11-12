@@ -2,6 +2,7 @@
 import type { BuiltinTemplate, TemplateBody, UserTemplate } from "@jeswr/suite-templates";
 import { encodeRef } from "../refs";
 import type { PodSession } from "../session/pod-session";
+import { importTemplateImages } from "./content";
 export type SuiteTemplate = BuiltinTemplate | UserTemplate;
 /** App-specific conversion stays with the app's own models and import paths. */
 export async function createFromTemplate(
@@ -34,6 +35,9 @@ export async function createFromTemplate(
       new File([body], `${name}.${extension}`),
       session,
       () => {},
+      template.source === "user"
+        ? { prepare: (json, upload) => importTemplateImages(session, json, upload) }
+        : {},
     );
     return `/docs/d/${encodeRef(result.url)}`;
   }
@@ -91,6 +95,20 @@ export async function createFromTemplate(
       body = note.body;
       labels = note.labels;
     }
+    if (template.source === "user") {
+      const { generateHTML, generateJSON } = await import("@tiptap/react");
+      const { notesExtensions } = await import("../../apps/notes/editor/extensions");
+      const { baseExtensions } = await import("../../apps/docs/editor/extensions");
+      const extensions = notesExtensions(session.fetch, session.storageUrl);
+      body = generateHTML(
+        await importTemplateImages(
+          session,
+          generateJSON(body, baseExtensions(session.fetch)),
+          (data, type) => store.uploadImage(new Blob([data], { type })),
+        ),
+        extensions,
+      );
+    }
     const result = await store.create({ title: name, body, labels });
     return `/notes/n/${encodeRef(result.url)}`;
   }
@@ -115,7 +133,6 @@ export async function createFromTemplate(
     if (task) sections = [{ name: "Tasks", titles: [task.title ?? name] }];
     else {
       const { parseRdf } = await import("@jeswr/fetch-rdf");
-      const { assertWithinPodScope } = await import("@jeswr/guarded-fetch");
       const { DataFactory } = await import("n3");
       const { TaskTracker } = await import("../../apps/tasks/lib/model/tracker");
       const dataset = await parseRdf(content.body, content.contentType, {
@@ -123,7 +140,8 @@ export async function createFromTemplate(
       });
       const tracker = new TaskTracker(`${template.data.content}#this`, dataset, DataFactory);
       if (!tracker.isTracker || !tracker.stateStore) throw new Error("Invalid task template");
-      assertWithinPodScope(new URL("templates/", session.storageUrl).href, tracker.stateStore);
+      const { templatesForSession } = await import("./store");
+      await (await templatesForSession(session)).assertContains(tracker.stateStore);
       const tasks = await store.listTasks(tracker.stateStore, { strict: true });
       sections = tracker.sections.map((section) => ({
         name: section.name,

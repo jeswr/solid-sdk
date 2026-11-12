@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { ensurePrivateContainerAccess } from "@jeswr/pod-access/roles";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
 import { createTemplateStore } from "@jeswr/suite-templates";
@@ -14,7 +15,12 @@ export function templatesForSession(session: PodSession) {
       capabilities: createMemoryCache(),
     })
       .then(({ storage }) =>
-        createTemplateStore({ storage, profile: session.webId, fetch: session.fetch }),
+        createTemplateStore({
+          storage,
+          profile: session.webId,
+          fetch: session.fetch,
+          ensurePrivateAccess: (url) => ensurePrivateContainerAccess(session, url),
+        }),
       )
       .catch((error) => {
         stores.delete(session);

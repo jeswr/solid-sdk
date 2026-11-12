@@ -322,3 +322,10 @@ whole verified destination and any remaining source items. Never recreate data o
 Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
 lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
 and final-check races; never promise transactional visibility.
+
+`./roles` exports `verifyPrivateDemoAccess(session, target, owner)`, the shared fail-closed
+check for the isolated demo backend, and `ensurePrivateContainerAccess(session, target)`.
+Call the latter only for an empty private container before writing any contents. Real
+sessions provision owner manager grants for both resource and members using `setGrants`
+and read them back. Unsupported models, inherited grants and verification failures refuse
+private writes. The session supplies fetch, storageUrl, webId and mode.

@@ -84,6 +84,9 @@ describe("template gallery", () => {
     expect(screen.getByRole("status").textContent).toContain("Loading");
     expect(screen.getAllByRole("button", { name: /^Delete template/ })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
+    expect(remove).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Confirm delete" }));
+    await user.click(screen.getByRole("button", { name: "Confirm delete" }));
     expect(remove).toHaveBeenCalledWith(items[2]);
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(retry).toHaveBeenCalledOnce();
@@ -122,4 +125,46 @@ describe("template gallery", () => {
     rerender(<TemplateGallery open onOpenChange={() => {}} items={[]} onChoose={() => {}} />);
     await waitFor(() => expect(screen.getByText("No templates match these filters.")).toBeTruthy());
   });
+});
+
+it("preserves card names, describes previews, confirms deletion and restores focus", async () => {
+  const user = userEvent.setup();
+  const remove = vi.fn();
+  const { rerender } = setup({ onDelete: remove });
+  const meeting = screen.getByRole("button", { name: "Use Meeting notes" });
+  expect(
+    meeting
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .map((id) => document.getElementById(id)?.textContent)
+      .join(" "),
+  ).toContain("Agenda");
+  await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
+  await user.click(screen.getByRole("button", { name: "Cancel deletion" }));
+  expect(remove).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Delete template My checklist" }),
+  );
+  await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
+  await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+  rerender(
+    <TemplateGallery
+      open
+      onOpenChange={() => {}}
+      items={items.slice(0, 2)}
+      onChoose={() => {}}
+      onDelete={remove}
+    />,
+  );
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Use Journal entry" })),
+  );
+});
+it("focuses the filter when the last visible card is removed", async () => {
+  const user = userEvent.setup();
+  const { rerender } = setup({ items: [items[2] as TemplateGalleryItem], onDelete: () => {} });
+  await user.click(screen.getByRole("button", { name: "Delete template My checklist" }));
+  await user.click(screen.getByRole("button", { name: "Confirm delete" }));
+  rerender(<TemplateGallery open onOpenChange={() => {}} items={[]} onChoose={() => {}} />);
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Category")));
 });

@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
-import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createMemoryStorage as actualMemoryStorage } from "@jeswr/storage-client/memory";
 import { assert, describe, expect, it, vi } from "vitest";
 import {
+  createTemplateStore as actualCreateTemplateStore,
   BUILTIN_TEMPLATES,
   builtinsForApp,
-  createTemplateStore,
   parseTemplateDocument,
   serializeTemplate,
   TEMPLATE_APPS,
@@ -14,6 +14,43 @@ import {
   templateModel,
 } from "../src/index.js";
 
+// The Solid memory backend drops creation type hints. Preserve them in this transport fixture,
+// as a server supporting the collection type link does; production Solid also registers the index.
+function createMemoryStorage(options: Parameters<typeof actualMemoryStorage>[0]) {
+  const storage = actualMemoryStorage(options);
+  const types = new Map<string, string[]>();
+  const create = storage.create.bind(storage);
+  const head = storage.head.bind(storage);
+  storage.create = async (...args) => {
+    const result = await create(...args);
+    types.set(
+      result.url,
+      args[2]?.links?.filter((link) => link.rel === "type").map((link) => link.target) ?? [],
+    );
+    return result;
+  };
+  storage.head = async (...args) => {
+    const result = await head(...args);
+    const links = new Map(result.links);
+    links.set("type", [
+      ...(links.get("type") ?? []),
+      ...(types.get(result.url) ?? []).map((target) => ({ params: {}, target })),
+    ]);
+    return { ...result, links };
+  };
+  return storage;
+}
+function createTemplateStore(
+  options: Omit<Parameters<typeof actualCreateTemplateStore>[0], "ensurePrivateAccess"> & {
+    ensurePrivateAccess?: (url: string) => Promise<boolean>;
+  },
+) {
+  return actualCreateTemplateStore({
+    ensurePrivateAccess: async () => true,
+    onEntryError: () => {},
+    ...options,
+  });
+}
 const root = "https://pod.example/alice/";
 const metadata = {
   name: "Meeting",
@@ -103,7 +140,7 @@ for (const protocol of ["solid", "lws"] as const)
       expect(await store.read(`${root}templates/missing`)).toBeUndefined();
       expect(create).not.toHaveBeenCalled();
     });
-    it("saves independent snapshots, recovers the container, filters, reads, validates and deletes metadata", async () => {
+    it("saves independent snapshots, recovers the container, filters, reads, validates and deletes metadata and content", async () => {
       const storage = createMemoryStorage({ root, protocol, pageSize: 1 });
       const store = createTemplateStore({ storage, now });
       const saved = await store.save(input);
@@ -126,7 +163,7 @@ for (const protocol of ["solid", "lws"] as const)
       await reopened.delete(saved);
       expect(await reopened.read(saved.id)).toBeUndefined();
       await reopened.delete(saved);
-      expect(await storage.read(saved.data.content)).toBeDefined();
+      await expect(storage.read(saved.data.content)).rejects.toMatchObject({ code: "not-found" });
     });
     it("rejects invalid metadata before writing and propagates content failures without publishing metadata", async () => {
       const storage = createMemoryStorage({ root, protocol });
@@ -233,11 +270,18 @@ it("rejects foreign, self-referential and fragment content links before fetching
       ifMatch: latest.etag ?? "",
     });
     await expect(store.read(saved.id)).rejects.toThrow();
+    await expect(store.delete(saved)).rejects.toThrow();
+    expect(await storage.head(saved.id)).toBeDefined();
   }
   await expect(store.read("https://attacker.example/meta")).rejects.toThrow();
   await expect(store.read(`${root}templates/`)).rejects.toThrow("resource");
 });
-it.each([null, 'W/"weak"'])("refuses missing/weak validators (%s)", async (etag) => {
+it.each([
+  null,
+  'W/"weak"',
+  "*",
+  "unquoted",
+])("refuses missing/weak validators (%s)", async (etag) => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   const store = createTemplateStore({
     storage: override(storage, {
@@ -292,8 +336,8 @@ it("bounds collection scans instead of silently truncating", async () => {
       async *listAll() {
         for (let i = 0; i <= 1000; i++)
           yield {
-            url: `${root}templates/folder/`,
-            kind: "container" as const,
+            url: `${root}templates/${i}.template.ttl`,
+            kind: "resource" as const,
             contentType: null,
             size: null,
             modified: null,
@@ -362,7 +406,7 @@ it("lists context-free JSON-LD metadata and ignores malformed RDF siblings", asy
   const store = createTemplateStore({ storage });
   const saved = await store.save(input);
   const jsonld = await storage.create(`${root}templates/`, null, {
-    name: "jsonld",
+    name: "jsonld.template.ttl",
     contentType: "application/ld+json",
   });
   await storage.writeRdf(
@@ -370,7 +414,10 @@ it("lists context-free JSON-LD metadata and ignores malformed RDF siblings", asy
     templateModel.build(jsonld.url, { ...saved.data, name: "JSON-LD template" }),
     { contentType: "application/ld+json", ifMatch: jsonld.etag ?? "" },
   );
-  await storage.create(`${root}templates/`, "not valid turtle", { contentType: "text/turtle" });
+  await storage.create(`${root}templates/`, "not valid turtle", {
+    name: "bad.template.ttl",
+    contentType: "text/turtle",
+  });
   expect((await store.list()).map((item) => item.data.name)).toEqual([
     "JSON-LD template",
     "Meeting",
@@ -392,4 +439,311 @@ it("returns the generated model's normalized metadata rather than untrusted inpu
   expect(saved.data.author).toBeUndefined();
   expect(saved.data.previewImage).toBeUndefined();
   expect((await store.read(saved.id))?.data).toEqual(saved.data);
+});
+it("skips and reports corrupt records while reading only metadata with one collection lookup", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const saved = await createTemplateStore({ storage }).save(input);
+  await storage.create(`${root}templates/`, "{}", {
+    name: "orphan.content",
+    contentType: "application/json",
+  });
+  const bad = await storage.create(
+    `${root}templates/`,
+    await serializeTemplate(`${root}templates/bad.template.ttl`, {
+      ...saved.data,
+      content: "https://evil.example/content",
+    }),
+    { name: "bad.template.ttl", contentType: "text/turtle" },
+  );
+  const weak = await storage.create(
+    `${root}templates/`,
+    await serializeTemplate(`${root}templates/weak.template.ttl`, saved.data),
+    { name: "weak.template.ttl", contentType: "text/turtle" },
+  );
+  const readRdf = vi.fn<StorageClient["readRdf"]>().mockImplementation(async (...args) => {
+    const result = await storage.readRdf(...args);
+    return args[0] === weak.url ? { ...result, etag: 'W/"weak"' } : result;
+  });
+  const head = vi.fn(storage.head);
+  const onEntryError = vi.fn();
+  const store = createTemplateStore({
+    storage: override(storage, { head, readRdf }),
+    onEntryError,
+  });
+  expect(await store.list()).toEqual([saved]);
+  expect(onEntryError.mock.calls.map(([url]) => url).sort()).toEqual([bad.url, weak.url].sort());
+  expect(head).toHaveBeenCalledTimes(1);
+  expect(readRdf).toHaveBeenCalledTimes(3);
+  await store.list();
+  expect(head).toHaveBeenCalledTimes(1);
+});
+it("does not count a failed-save orphan or other content against the metadata limit", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const store = createTemplateStore({ storage });
+  await expect(
+    store.save({
+      ...input,
+      content: () => {
+        throw new Error("conversion");
+      },
+    }),
+  ).rejects.toThrow("conversion");
+  const saved = await store.save(input);
+  const entry = (await storage.list(`${root}templates/`)).items.find(
+    (item) => item.url !== saved.id,
+  );
+  assert(entry);
+  const readRdf = vi.fn(storage.readRdf);
+  const listed = createTemplateStore({
+    storage: override(storage, {
+      readRdf,
+      async *listAll() {
+        for (let i = 0; i < 1500; i++) yield entry;
+        yield { ...entry, url: saved.id };
+      },
+    }),
+  });
+  expect(await listed.list()).toEqual([saved]);
+  expect(readRdf).toHaveBeenCalledExactlyOnceWith(saved.id);
+});
+it("refuses to save private content if access provisioning fails, and retries verification", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const ensurePrivateAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+  const content = vi.fn(input.content);
+  const store = createTemplateStore({ storage, ensurePrivateAccess });
+  await expect(store.save({ metadata, content })).rejects.toThrow("private templates access");
+  expect(content).not.toHaveBeenCalled();
+  expect((await storage.list(`${root}templates/`)).items).toEqual([]);
+  await store.save({ metadata, content });
+  expect(ensurePrivateAccess).toHaveBeenCalledTimes(2);
+});
+it("never adopts an LWS container just because it is named templates or typed CreativeWork", async () => {
+  const storage = createMemoryStorage({ root, protocol: "lws" });
+  const other = await storage.create(root, null, {
+    name: "templates",
+    kind: "container",
+    links: [{ rel: "type", target: "http://schema.org/CreativeWork" }],
+  });
+  const store = createTemplateStore({ storage });
+  expect(await store.list()).toEqual([]);
+  const saved = await store.save(input);
+  expect(await store.container()).not.toBe(other.url);
+  expect(await createTemplateStore({ storage }).list()).toEqual([saved]);
+});
+it("preflights paired content scope and validators before any deletion", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const saved = await createTemplateStore({ storage }).save(input);
+  const remove = vi.fn(storage.delete);
+  const weak = createTemplateStore({
+    storage: override(storage, {
+      delete: remove,
+      head: async (url) => {
+        const result = await storage.head(url);
+        return url === saved.data.content ? { ...result, etag: 'W/"weak"' } : result;
+      },
+    }),
+  });
+  await expect(weak.delete(saved)).rejects.toThrow("strong ETag");
+  expect(remove).not.toHaveBeenCalled();
+  const raced = createTemplateStore({
+    storage: override(storage, {
+      delete: async (url, options) => {
+        if (url === saved.data.content)
+          await storage.write(url, "new", {
+            contentType: "text/plain",
+            ifMatch: options?.ifMatch ?? "",
+          });
+        return storage.delete(url, options);
+      },
+    }),
+  });
+  await expect(raced.delete(saved)).rejects.toMatchObject({ code: "precondition-failed" });
+  expect(await (await storage.read(saved.data.content)).text()).toBe("new");
+});
+it.each([
+  "solid",
+  "lws",
+] as const)("deletes %s metadata whose paired content was already removed", async (protocol) => {
+  const storage = createMemoryStorage({ root, protocol });
+  const store = createTemplateStore({ storage });
+  const saved = await store.save(input);
+  await storage.delete(saved.data.content, {
+    ifMatch: (await storage.head(saved.data.content)).etag ?? "",
+  });
+  await store.delete(saved);
+  expect(await store.list()).toEqual([]);
+});
+it("recovers typed LWS containers when the server has no Type Search Service", async () => {
+  const storage = createMemoryStorage({ root, protocol: "lws" });
+  const created = await storage.create(root, null, {
+    name: "opaque-library",
+    kind: "container",
+    links: [{ rel: "type", target: TEMPLATE_CLASS }],
+  });
+  const store = createTemplateStore({ storage, profile: `${root}profile#me` });
+  expect(await store.container()).toBe(created.url);
+  await store.save(input);
+  expect(await store.list()).toHaveLength(1);
+});
+it("preserves metadata names when LWS chooses opaque resource identifiers", async () => {
+  const storage = createMemoryStorage({ root, protocol: "lws" });
+  let id = 0;
+  const opaque = override(storage, {
+    create: (parent, body, options) =>
+      storage.create(parent, body, { ...options, name: `opaque-${++id}` }),
+  });
+  const store = createTemplateStore({ storage: opaque });
+  const saved = await store.save(input);
+  expect(saved.id).not.toMatch(/\.template\.ttl$/);
+  expect(await store.list()).toEqual([saved]);
+  await store.assertContains(saved.data.content);
+  await expect(store.assertContains(`${root}outside`)).rejects.toThrow();
+});
+it("refuses an untyped conventional Solid container, including create conflicts", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  await storage.create(root, null, { kind: "container", name: "templates" });
+  const store = createTemplateStore({ storage });
+  expect(await store.list()).toEqual([]);
+  await expect(store.save(input)).rejects.toMatchObject({ code: "conflict" });
+});
+it("copies images into sibling resources before publishing metadata and normalizes previews", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const asset = await storage.create(root, new Uint8Array([1, 2, 3]), {
+    name: "source.png",
+    contentType: "image/png",
+  });
+  const store = createTemplateStore({ storage });
+  const saved = await store.save({
+    ...input,
+    content: async (_url, { copyImages }) => {
+      const json = await copyImages({ type: "image", attrs: { src: asset.url } });
+      return {
+        body: JSON.stringify(json),
+        contentType: "application/json",
+        previewText: "A copied image",
+      };
+    },
+  });
+  const content = JSON.parse((await store.content(saved)).body);
+  expect(await storage.parentOf(content.attrs.src)).toBe(await store.container());
+  await storage.delete(asset.url, { ifMatch: asset.etag ?? "" });
+  expect([...(await (await storage.read(content.attrs.src)).bytes())]).toEqual([1, 2, 3]);
+  expect(saved.data.previewText).toBe("A copied image");
+});
+// AUTHORED-BY Claude Opus 5.5 (tests below)
+it.each([
+  "solid",
+  "lws",
+  "opaque lws",
+] as const)("deletes a %s template's copied images but no other sibling", async (kind) => {
+  const storage = createMemoryStorage({ root, protocol: kind === "solid" ? "solid" : "lws" });
+  let id = 0;
+  const backend =
+    kind === "opaque lws"
+      ? override(storage, {
+          create: (parent, body, options) =>
+            storage.create(parent, body, { ...options, name: `opaque-${++id}` }),
+        })
+      : storage;
+  const source = await storage.create(root, new Uint8Array([1]), {
+    name: "source.png",
+    contentType: "image/png",
+  });
+  const store = createTemplateStore({ storage: backend });
+  const withImages = (name: string) => ({
+    metadata: { ...metadata, name },
+    content: async (_url: string, { copyImages }: { copyImages: <T>(value: T) => Promise<T> }) => ({
+      body: JSON.stringify(await copyImages({ type: "image", attrs: { src: source.url } })),
+      contentType: "application/json",
+    }),
+  });
+  const removed = await store.save(withImages("Removed"));
+  const kept = await store.save(withImages("Kept"));
+  const image = async (template: typeof kept) =>
+    JSON.parse((await store.content(template)).body).attrs.src as string;
+  const removedImage = await image(removed);
+  const keptImage = await image(kept);
+  const container = await store.container();
+  assert(container);
+  const unrelated = await storage.create(container, "x", {
+    name: "notes.asset.txt",
+    contentType: "text/plain",
+  });
+  await store.delete(removed);
+  await expect(storage.head(removedImage)).rejects.toMatchObject({ code: "not-found" });
+  await expect(storage.head(removed.data.content)).rejects.toMatchObject({ code: "not-found" });
+  expect((await storage.head(keptImage)).kind).toBe("resource");
+  expect((await storage.head(unrelated.url)).kind).toBe("resource");
+  expect((await storage.head(source.url)).kind).toBe("resource");
+  expect(await store.list()).toEqual([kept]);
+});
+it("refuses to delete a changed copied image and tolerates one already removed", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  const source = await storage.create(root, new Uint8Array([1]), {
+    name: "source.png",
+    contentType: "image/png",
+  });
+  const second = await storage.create(root, new Uint8Array([2]), {
+    name: "second.png",
+    contentType: "image/png",
+  });
+  const store = createTemplateStore({ storage });
+  const save = () =>
+    store.save({
+      metadata,
+      content: async (_url, { copyImages }) => ({
+        body: JSON.stringify(
+          await copyImages({
+            type: "doc",
+            content: [
+              { type: "image", attrs: { src: source.url } },
+              { type: "image", attrs: { src: second.url } },
+            ],
+          }),
+        ),
+        contentType: "application/json",
+      }),
+    });
+  const images = async (template: Awaited<ReturnType<typeof save>>) =>
+    JSON.parse((await store.content(template)).body).content.map(
+      (node: { attrs: { src: string } }) => node.attrs.src,
+    ) as string[];
+  const first = await save();
+  const [gone, other] = await images(first);
+  assert(gone && other);
+  await storage.delete(gone, { ifMatch: (await storage.head(gone)).etag ?? "" });
+  await store.delete(first);
+  await expect(storage.head(other)).rejects.toMatchObject({ code: "not-found" });
+  const again = await save();
+  const [changed] = await images(again);
+  assert(changed);
+  const weak = createTemplateStore({
+    storage: override(storage, {
+      head: async (url) => {
+        const result = await storage.head(url);
+        return url === changed ? { ...result, etag: 'W/"weak"' } : result;
+      },
+    }),
+  });
+  await expect(weak.delete(again)).rejects.toThrow("strong ETag");
+  expect((await storage.head(changed)).kind).toBe("resource");
+});
+it("recovers a created Solid collection that loses its type link after access verification fails", async () => {
+  // The real Solid memory backend, like Solid servers, ignores the creation type link.
+  const storage = actualMemoryStorage({ root, protocol: "solid" });
+  const profile = await storage.create(
+    root,
+    await serializeTemplate(`${root}profile`, { ...metadata, content: `${root}content` }),
+    { name: "profile", contentType: "text/turtle" },
+  );
+  const ensurePrivateAccess = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+  const options = { storage, profile: `${profile.url}#me`, ensurePrivateAccess };
+  await expect(createTemplateStore(options).save(input)).rejects.toThrow(
+    "private templates access",
+  );
+  const store = createTemplateStore(options);
+  const saved = await store.save(input);
+  expect(await store.container()).toBe(`${root}templates/`);
+  expect(await createTemplateStore(options).list()).toEqual([saved]);
+  expect(ensurePrivateAccess).toHaveBeenCalledTimes(2);
 });
