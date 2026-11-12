@@ -12,11 +12,16 @@ including after reload. A custom window can narrow the scan, and is capped at 24
 true only for the first caller. The IndexedDB implementation reads and writes in one
 readwrite transaction, resolving after commit, so independent tabs/connections deduplicate.
 Known fired keys are cached in the tab; retention is pruned once per tick instead of per claim.
-The memory implementation uses a Set scoped to its instance. Keys use the task URL, trigger
+The memory implementation uses a Map scoped to its instance. Keys use the task URL, trigger
 instant or offset, due instant and fire time. Changes to scheduling inputs allow a new claim;
 unrelated edits and RDF node identity changes retain the same claim. IndexedDB claims expire after
 30 days. When IndexedDB is unavailable, a localStorage record survives reloads; memory is the
 last fallback when browser storage is blocked. The localStorage fallback is not atomic across tabs.
+
+Legacy claims from before due instants were added to keys remain effective after an upgrade.
+For the same task URL, move identity or named reminder, they suppress triggers at or before
+the claim's recorded delivery time. Later triggers remain eligible. IndexedDB collects legacy
+records during its once-per-tick retention scan; direct claims also load them when needed.
 
 ## Runner and app wiring
 
@@ -37,7 +42,9 @@ retried by the next tick while the task retains the same scheduling inputs and f
 claims. The active check also runs before every claim so stopping during a tick leaves subsequent
 reminders unclaimed. `fallbackFiredStore` merges durable fallback claims into the primary before
 accepting new claims, consults both across reloads, mirrors successful primary claims into the
-fallback, and reports the first storage failure only. IndexedDB decides the atomic winner before
+fallback, and reports the first storage failure only. Legacy fallback records retain their original
+delivery times in that store instead of being re-created in the primary with a later timestamp.
+IndexedDB decides the atomic winner before
 the fallback is updated.
 
 `state/reminders.ts` mounts it from the Tasks chrome with `useReminderScheduler`. It shares

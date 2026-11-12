@@ -69,7 +69,7 @@ export class TasksSharingAdapter implements SharingAdapter {
   private readonly io: RdfIO;
   private readonly tracker: WacSharingAdapter;
   private tail: Promise<unknown> = Promise.resolve();
-  // A failed write may still commit. Only its intended state at a newer revision settles it.
+  // A failed write may still commit. Keep access narrow until its intent is confirmed.
   private unconfirmedChange = false;
   private pendingEtag: string | undefined;
   private pendingPeople: People | undefined;
@@ -316,11 +316,26 @@ export class TasksSharingAdapter implements SharingAdapter {
       )
         throw new ShareError("unsupported");
       const signal = new AbortController().signal;
+      let retrying = false;
       if (this.unconfirmedChange) {
         await this.readState(url, signal, "settle");
-        // A rejected fetch can leave a server write in flight. Refuse a second change
-        // until a fresh read settles the first, including its recovery and member sync.
-        if (this.unconfirmedChange) throw new ShareError("network");
+        if (this.unconfirmedChange) {
+          const acl = await this.acl(url, signal);
+          const current = acl && this.state(url, acl);
+          const retry = current?.people.filter((person) => person.webId !== webId);
+          if (role) retry?.push({ webId, role });
+          // An unchanged base allows the same mutation to retry conditionally. If the
+          // original PUT is still in flight, only one can win its If-Match. Other
+          // mutations remain blocked, and loads stay narrow until a write is confirmed.
+          if (
+            acl?.etag !== this.pendingEtag ||
+            !retry ||
+            !this.pendingPeople ||
+            !this.samePeople(retry, this.pendingPeople)
+          )
+            throw new ShareError("network");
+          retrying = true;
+        }
       }
       // Reading for a change must not widen the folder before its narrowing step.
       const before = await this.readState(url, signal, "none");
@@ -351,8 +366,12 @@ export class TasksSharingAdapter implements SharingAdapter {
         try {
           await this.tracker.setPerson(url, webId, role, opts);
         } catch (error) {
-          // A definitive rejection has no outstanding tracker PUT to recover.
-          if (error instanceof ShareError && ["conflict", "forbidden"].includes(error.code))
+          // Rejecting a retry does not settle the original outstanding PUT.
+          if (
+            !retrying &&
+            error instanceof ShareError &&
+            ["conflict", "forbidden"].includes(error.code)
+          )
             this.unconfirmedChange = false;
           throw error;
         }

@@ -1,13 +1,34 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { computeFireTimes, type Reminder } from "../model/reminders";
 
+export interface LegacyReminderClaim {
+  /** Task URL, move identity, or named reminder prefixes used by the previous version. */
+  prefixes: readonly string[];
+  fireTime: Date;
+}
 export interface FiredReminderStore {
   /** Atomically record a new fire key; true only for the caller that claims it first. */
-  claim(key: string): Promise<boolean>;
+  claim(key: string, legacy?: LegacyReminderClaim): Promise<boolean>;
   /** Claims to merge into a recovered primary store before it accepts new claims. */
   keys?(): Promise<string[]>;
   /** Called once per scheduler tick, outside the individual claim transactions. */
   prune?(): Promise<void>;
+}
+
+/** Legacy keys end at the fire instant; current keys also carry the due instant. */
+export function isLegacyReminderKey(key: string): boolean {
+  return /@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(key);
+}
+function legacyClaimed(claims: ReadonlyMap<string, number>, legacy?: LegacyReminderClaim) {
+  if (!legacy) return false;
+  for (const [key, at] of claims)
+    if (
+      at >= legacy.fireTime.getTime() &&
+      isLegacyReminderKey(key) &&
+      legacy.prefixes.some((prefix) => key.startsWith(prefix))
+    )
+      return true;
+  return false;
 }
 
 /** Device identity uses scheduling inputs, independent of RDF node ids or task edits. */
@@ -23,14 +44,14 @@ export function reminderKey(
 }
 
 export function createMemoryFiredStore(): FiredReminderStore {
-  const keys = new Set<string>();
+  const keys = new Map<string, number>();
   return {
     async keys() {
-      return [...keys];
+      return [...keys.keys()];
     },
-    async claim(key) {
-      if (keys.has(key)) return false;
-      keys.add(key);
+    async claim(key, legacy) {
+      if (keys.has(key) || legacyClaimed(keys, legacy)) return false;
+      keys.set(key, Date.now());
       return true;
     },
   };
@@ -58,9 +79,9 @@ export function createLocalStorageFiredStore(storage: Storage): FiredReminderSto
     async keys() {
       return [...read().keys()];
     },
-    async claim(key) {
+    async claim(key, legacy) {
       const keys = read();
-      if (keys.has(key)) return false;
+      if (keys.has(key) || legacyClaimed(keys, legacy)) return false;
       keys.set(key, Date.now());
       write(keys);
       return true;
@@ -77,6 +98,7 @@ export function createLocalStorageFiredStore(storage: Storage): FiredReminderSto
 export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderStore {
   let database: Promise<IDBDatabase> | undefined;
   const known = new Map<string, number>();
+  let legacyClaims: Map<string, number> | undefined;
   function open(version?: number): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open("tasks", version);
@@ -116,7 +138,7 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
     });
     return database;
   }
-  async function claim(key: string): Promise<boolean> {
+  async function claim(key: string, legacy?: LegacyReminderClaim): Promise<boolean> {
     if (known.has(key)) return false;
     const database = await db();
     return new Promise((resolve, reject) => {
@@ -124,17 +146,36 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
       const store = tx.objectStore(STORE);
       const now = new Date();
       let claimed = false;
+      let previous = legacyClaims;
       tx.oncomplete = () => {
+        legacyClaims = previous;
         known.set(key, now.getTime());
         resolve(claimed);
       };
       tx.onerror = tx.onabort = () => reject(tx.error);
       const request = store.get(key);
       request.onsuccess = () => {
-        if (request.result === undefined) {
-          store.put(now.toISOString(), key);
-          claimed = true;
-        }
+        if (request.result !== undefined) return;
+        const accept = () => {
+          if (!legacyClaimed(previous ?? new Map(), legacy)) {
+            store.put(now.toISOString(), key);
+            claimed = true;
+          }
+        };
+        // Scheduler pruning normally loads these once per tick. Direct claims also
+        // consult persisted legacy records before accepting their first new key.
+        if (legacy && !previous) {
+          previous = new Map();
+          const scan = store.openCursor();
+          scan.onsuccess = () => {
+            const cursor = scan.result;
+            if (cursor) {
+              if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
+                previous?.set(cursor.key, Date.parse(cursor.value));
+              cursor.continue();
+            } else accept();
+          };
+        } else accept();
       };
     });
   }
@@ -145,13 +186,19 @@ export function createIndexedDbFiredStore(indexedDB: IDBFactory): FiredReminderS
     return new Promise((resolve, reject) => {
       const tx = database.transaction(STORE, "readwrite");
       const store = tx.objectStore(STORE);
-      tx.oncomplete = () => resolve();
+      const previous = new Map<string, number>();
+      tx.oncomplete = () => {
+        legacyClaims = previous;
+        resolve();
+      };
       tx.onerror = tx.onabort = () => reject(tx.error);
       const scan = store.openCursor();
       scan.onsuccess = () => {
         const cursor = scan.result;
         if (cursor) {
           if (cursor.value < cutoff.toISOString()) cursor.delete();
+          else if (typeof cursor.key === "string" && isLegacyReminderKey(cursor.key))
+            previous.set(cursor.key, Date.parse(cursor.value));
           cursor.continue();
         }
       };

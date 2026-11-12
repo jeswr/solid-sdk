@@ -70,14 +70,27 @@ export async function collectDueReminders(
   }
   for (const task of tasks) {
     if (task.state !== "open" || !task.due) continue;
+    const legacyPrefixes = [
+      `${task.url}/reminder-`,
+      `${task.url}#`,
+      ...task.reminders.flatMap((reminder) => (reminder.id ? [`${reminder.id}@`] : [])),
+      ...(task.identity ? [`${task.identity}|`] : []),
+    ];
     for (const reminder of task.reminders) {
       try {
         const times = pendingReminders(reminderFireTimes(task, reminder), now, new Set());
         for (const time of times) {
           if (!active()) break;
+          const legacy = {
+            prefixes: legacyPrefixes,
+            fireTime: time.at,
+          };
           if (
             time.at.getTime() <= lower ||
-            !(await store.claim(reminderKey(task.url, reminder, time.at, reminderDue(task))))
+            !(await store.claim(
+              reminderKey(task.url, reminder, time.at, reminderDue(task)),
+              legacy,
+            ))
           )
             continue;
           // A moved task's new URL claims afresh; its identity key still records the fire.
@@ -87,6 +100,7 @@ export async function collectDueReminders(
             active() &&
             !(await store.claim(
               `${task.identity}|${trigger}@${time.at.toISOString()}|due=${reminderDue(task)?.toISOString()}`,
+              legacy,
             ))
           )
             continue;

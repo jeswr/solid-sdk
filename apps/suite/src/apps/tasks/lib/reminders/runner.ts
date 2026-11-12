@@ -2,7 +2,11 @@
 import { formatDue } from "../format/due";
 import type { StoredTask } from "../model/store";
 import type { TaskView } from "../views/types";
-import { createMemoryFiredStore, type FiredReminderStore } from "./fired-store";
+import {
+  createMemoryFiredStore,
+  type FiredReminderStore,
+  isLegacyReminderKey,
+} from "./fired-store";
 import {
   collectDueReminders,
   type DueReminder,
@@ -180,7 +184,7 @@ export function fallbackFiredStore(
     }
   }
   return {
-    async claim(key) {
+    async claim(key, legacy) {
       if (known.has(key)) return false;
       // Reserve synchronously so overlapping callers in this tab cannot both win.
       known.add(key);
@@ -193,10 +197,13 @@ export function fallbackFiredStore(
         } catch (error) {
           report(error);
         }
-        for (const previous of previousKeys) await primary.claim(previous);
-        if (!(await primary.claim(key))) return false;
+        // Legacy suppression depends on its original recorded time. Keep consulting
+        // those records in the fallback rather than recreating them with today's time.
+        for (const previous of previousKeys)
+          if (!isLegacyReminderKey(previous)) await primary.claim(previous);
+        if (!(await primary.claim(key, legacy))) return false;
         try {
-          return await fallback.claim(key);
+          return await fallback.claim(key, legacy);
         } catch (error) {
           report(error);
           return true;
@@ -204,7 +211,7 @@ export function fallbackFiredStore(
       } catch (error) {
         report(error);
         try {
-          return await fallback.claim(key);
+          return await fallback.claim(key, legacy);
         } catch (error) {
           known.delete(key);
           throw error;

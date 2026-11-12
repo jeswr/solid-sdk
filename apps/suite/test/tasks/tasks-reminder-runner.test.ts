@@ -472,6 +472,35 @@ describe("reminder tick", () => {
 });
 
 describe("fallback fired store", () => {
+  it.each([
+    false,
+    true,
+  ])("preserves legacy fallback claim times across upgrade and reload (primary unavailable: %s)", async (unavailable) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const claimedAt = new Date(now.getTime() - 3600000);
+    const legacyKey = `${url}#it/reminder--PT1H@${claimedAt.toISOString()}`;
+    const values = new Map([
+      ["tasks.firedReminders", JSON.stringify({ [legacyKey]: claimedAt.getTime() })],
+    ]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    } as Storage;
+    const primary = createMemoryFiredStore();
+    if (unavailable) vi.spyOn(primary, "claim").mockRejectedValue(new Error("Unavailable"));
+    const makeStore = () =>
+      fallbackFiredStore(primary, vi.fn(), createLocalStorageFiredStore(storage));
+    const later = new Date(claimedAt.getTime() + 1);
+    const data = snapshot([view()], [stored(url, [{ time: claimedAt }, { time: later }])]);
+    const result = await runReminderTick(data, now, makeStore(), vi.fn());
+    expect(result.errors).toEqual([]);
+    expect(result.delivered.map((event) => event.fireTime)).toEqual([later]);
+    expect((await runReminderTick(data, now, makeStore(), vi.fn())).delivered).toEqual([]);
+  });
+
   it("honours an existing fallback claim even when that store cannot enumerate keys", async () => {
     const primary = createMemoryFiredStore();
     const store = fallbackFiredStore(primary, vi.fn(), { claim: async () => false });

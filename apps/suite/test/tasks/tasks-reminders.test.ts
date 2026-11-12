@@ -21,9 +21,46 @@ const task = (extra: Partial<ReminderTask> = {}): ReminderTask => ({
   reminders: [{ offset: "-PT1H" }],
   ...extra,
 });
+const legacyClaimTime = new Date(now.getTime() - 3600000);
+function legacyFixture(kind: "url" | "identity" | "named") {
+  const identity = "2026-10-01T00:00:00.000Z|Task";
+  const oldFire = new Date(legacyClaimTime.getTime() - 3600000).toISOString();
+  const oldKey =
+    kind === "identity"
+      ? `${identity}|-PT3H@${oldFire}`
+      : kind === "named"
+        ? `https://pod.test/alarm@${oldFire}`
+        : `${task().url}#it/reminder--PT3H@${oldFire}`;
+  const times = [-1, 0, 1].map((delta) => new Date(legacyClaimTime.getTime() + delta));
+  return {
+    oldKey,
+    times,
+    task: task({
+      ...(kind === "identity" ? { url: "https://pod.test/moved", identity } : {}),
+      reminders: times.map((time, index) => ({
+        time,
+        ...(kind === "named"
+          ? { id: index === 0 ? "https://pod.test/alarm" : `https://pod.test/alarm-${index}` }
+          : {}),
+      })),
+    }),
+  };
+}
 afterEach(() => vi.useRealTimers());
 
 describe("reminder identity and memory store", () => {
+  it("honours legacy claims when merging into a memory store", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(legacyClaimTime);
+    const previous = legacyFixture("url");
+    const store = createMemoryFiredStore();
+    await store.claim(previous.oldKey);
+    vi.setSystemTime(now);
+    const result = await collectDueReminders([previous.task], now, store);
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2]]);
+  });
+
   it("keys suppression on scheduling inputs for anonymous, named and absolute triggers", async () => {
     for (const reminder of [
       { offset: "-PT1H" },
@@ -58,6 +95,30 @@ describe("localStorage fired store", () => {
       },
     } as Storage;
   }
+  it.each([
+    "url",
+    "identity",
+    "named",
+  ] as const)("honours persisted legacy %s claims through their recorded time after upgrade", async (kind) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const previous = legacyFixture(kind);
+    const storage = local();
+    storage.setItem(
+      "tasks.firedReminders",
+      JSON.stringify({ [previous.oldKey]: legacyClaimTime.getTime() }),
+    );
+    const result = await collectDueReminders(
+      [previous.task, task({ url: "https://pod.test/unrelated" })],
+      now,
+      createLocalStorageFiredStore(storage),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2], now]);
+    expect(
+      await collectDueReminders([previous.task], now, createLocalStorageFiredStore(storage)),
+    ).toEqual({ due: [], errors: [] });
+  });
   it("retains claims across reloads and prunes only records older than 30 days", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
@@ -362,6 +423,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
                         key === undefined
                           ? null
                           : {
+                              key,
                               value: values.get(key),
                               delete: () =>
                                 schedule(() => {
@@ -414,6 +476,47 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
 }
 
 describe("IndexedDB fired store", () => {
+  it.each([
+    true,
+    false,
+  ])("checks persisted legacy claims before a direct claim without pruning (already fired: %s)", async (fired) => {
+    const fake = fakeIndexedDB(true);
+    const previous = legacyFixture("url");
+    fake.values.set(previous.oldKey, legacyClaimTime.toISOString());
+    fake.values.set(1, now.toISOString());
+    fake.values.set("unrelated", now.toISOString());
+    const store = createIndexedDbFiredStore(fake.factory);
+    const at = new Date(legacyClaimTime.getTime() + (fired ? 0 : 1));
+    const key = reminderKey(previous.task.url, { time: at }, at, previous.task.due);
+    const legacy = { prefixes: [`${previous.task.url}#`], fireTime: at };
+    expect(await store.claim(key, legacy)).toBe(!fired);
+    expect(await store.claim(key, legacy)).toBe(false);
+    expect(await store.claim(`${key}-other`, legacy)).toBe(!fired);
+    expect(fake.scans).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "url",
+    "identity",
+    "named",
+  ] as const)("honours persisted legacy %s claims through their recorded time after upgrade", async (kind) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const previous = legacyFixture(kind);
+    const fake = fakeIndexedDB(true);
+    fake.values.set(previous.oldKey, legacyClaimTime.toISOString());
+    const result = await collectDueReminders(
+      [previous.task, task({ url: "https://pod.test/unrelated" })],
+      now,
+      createIndexedDbFiredStore(fake.factory),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2], now]);
+    expect(
+      await collectDueReminders([previous.task], now, createIndexedDbFiredStore(fake.factory)),
+    ).toEqual({ due: [], errors: [] });
+  });
+
   it("atomically claims reminders across concurrent store instances", async () => {
     const fake = fakeIndexedDB();
     const a = createIndexedDbFiredStore(fake.factory);

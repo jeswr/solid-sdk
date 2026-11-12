@@ -90,6 +90,94 @@ const puts = (f: Awaited<ReturnType<typeof fixture>>) =>
   f.requests.filter((request) => request.init.method === "PUT");
 
 describe("Tasks named sharing", () => {
+  it("keeps the original revoke pending when its conditional retry is rejected", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    let delayed: (() => Promise<Response>) | undefined;
+    f.intercept((url, init) => {
+      if (url === `${f.project.url}.acl` && init.method === "PUT") {
+        delayed = () => f.pod.fetch(url, init);
+        throw new Error("Lost response");
+      }
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    f.intercept((url, init) =>
+      url === `${f.project.url}.acl` && init.method === "PUT"
+        ? new Response(null, { status: 403 })
+        : undefined,
+    );
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    expect((await f.load()).pendingAccess).toBe(true);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect((await delayed?.())?.ok).toBe(true);
+    expect((await f.load()).pendingAccess).toBe(false);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+  });
+
+  it.each([
+    "original",
+    "retry",
+  ])("keeps a delayed revoke narrow when the %s conditional write wins", async (winner) => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, bob, "editor");
+    let delayed: (() => Promise<Response>) | undefined;
+    f.intercept((url, init) => {
+      if (url === `${f.project.url}.acl` && init.method === "PUT") {
+        delayed = () => f.pod.fetch(url, init);
+        throw new Error("Lost response while the write remains in flight");
+      }
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, null)).rejects.toBeDefined();
+    f.intercept(async (url, init) => {
+      if (url !== `${f.project.url}.acl` || init.method !== "PUT") return;
+      expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+      if (winner === "original") expect((await delayed?.())?.status).toBe(205);
+    });
+    const retry = f.adapter.setPerson(f.project.url, bob, null);
+    if (winner === "original") await expect(retry).rejects.toMatchObject({ code: "conflict" });
+    else {
+      await retry;
+      expect((await delayed?.())?.status).toBe(412);
+    }
+    expect((await f.load()).pendingAccess).toBe(false);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    expect((await f.grants(f.project.url)).some((grant) => grant.agents.includes(bob))).toBe(false);
+  });
+
+  it.each([
+    "editor",
+    null,
+  ] as const)("retries an unchanged tracker write for %s without widening before confirmation", async (role) => {
+    const f = await fixture();
+    if (role === null) await f.adapter.setPerson(f.project.url, bob, "editor");
+    else await f.load();
+    const aclUrl = `${f.project.url}.acl`;
+    const etag = (await f.pod.fetch(aclUrl)).headers.get("etag");
+    f.intercept((url, init) => {
+      if (url === aclUrl && init.method === "PUT") throw new Error("Connection failed");
+    });
+    await expect(f.adapter.setPerson(f.project.url, bob, role)).rejects.toBeDefined();
+    expect((await f.pod.fetch(aclUrl)).headers.get("etag")).toBe(etag);
+    expect((await f.load()).pendingAccess).toBe(true);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+
+    let retries = 0;
+    f.intercept(async (url, init) => {
+      if (url !== aclUrl || init.method !== "PUT") return;
+      retries++;
+      expect(new Headers(init.headers).get("if-match")).toBe(etag);
+      expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(false);
+    });
+    await f.adapter.setPerson(f.project.url, bob, role);
+    expect(retries).toBe(1);
+    expect((await f.load()).pendingAccess).toBe(false);
+    expect((await f.grants(f.folder)).some((grant) => grant.agents.includes(bob))).toBe(
+      role !== null,
+    );
+  });
+
   it("stops if the tracker ACL disappears after narrowing the folder", async () => {
     const f = await fixture();
     await f.load();
