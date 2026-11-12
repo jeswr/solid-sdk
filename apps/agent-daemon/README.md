@@ -14,6 +14,36 @@ an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
 
+`PodWorkspace` requires an injected Solid `storage: StorageClient` alongside `io` and
+`root`. Composition shares the one `createPodClient` result with notifications.
+Workspace reads, writes and container creation use that client; `io` remains the
+scope-checked transport seam for the legacy inbound importer. Snapshot writes keep
+their unconditional semantics (`ifMatch: '*'`), while index edits use the observed
+ETag and proposals use conditional creation. Non-Solid storage is refused at construction.
+Fixed destinations use the shared `createAt` helper, which rejects URL spellings that
+would change on name encoding before any create request (for example `x:y.ttl` and
+`x%3ay.ttl`; `x%3Ay.ttl` is accepted). Proposal IDs must pass the shared
+`isExactChildUrl` predicate for a direct `.ttl` child of `proposals/`; other IDs use a
+deterministic digest location. Cached IDs from older runs are repaired and saved before
+outbox projection, preserving replay without another Proposer call, but only when no
+earlier pass reached projection. Older releases accepted any `proposals/**.ttl` ID and
+projected into the outbox before auditing or publishing, so ledger evidence for the
+result's model calls or proposals, or a resource already at the legacy URL, means the
+outbox holds that legacy ID. The daemon then keeps it end to end (idempotent outbox
+replay, read-only confirmation of the published resource, same audit evidence) rather
+than adding a second outbox entry. If such a legacy proposal was never published it
+fails closed with `Legacy proposal already projected; manual migration needed`.
+A projection interrupted before any audit append or publication leaves no such evidence
+and cannot be detected from the daemon's side; recover it by reconciling the outbox.
+Only a taken name reported as Solid's remapped
+412 permits proposal replay or index-create retry; a real 409 remains a write failure.
+After a container-create conflict, a fresh HEAD must confirm the container exists.
+Read bounds and existing CLI error messages are retained.
+`createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
+that state, with request records and resource snapshots for offline assertions.
+Its named-create adapter forwards the SDK memory backend's name-taken 412 directly;
+collisions between resource and container paths retain 409.
+
 The deployment supplies the owner-discovered private Type Index URL (already linked
 from the owner's preferences document). Registration preserves existing RDF and
 uses ETags, retries at most three conflicts, and refuses unreadable indexes or
