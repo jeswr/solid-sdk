@@ -50,12 +50,16 @@ mutation lock, immediately before the attempt publishes a new grant owner and ag
 the pointer, pod-auth checks that the pointer and the stored grant owner are unchanged since the
 attempt began. If another tab signed in meanwhile, the attempt discards only its own new grant and
 rejects with `OwnershipChangedError`. A pointer another tab already wrote for this attempt's own
-renewed grant (same WebID, issuer and context) is not a conflict. `reauthorize: true` (WebID hints
-only) authorizes interactively without redeeming any stored refresh credential: use it when a grant
+renewed grant (same WebID, issuer and context) is not a conflict, and nor is a pointer write by
+another upgrade in the same instance. `reauthorize: true` (WebID hints only) authorizes
+interactively without redeeming the stored refresh credential of its own login context; other
+contexts still refresh, and logout or retirement during the attempt still revokes it. Use it when a grant
 persistently fails refresh with an error other than `invalid_grant`, such as `invalid_client`, which
 restore and a plain login retry without reaching authorization. It rejects with
 `OwnershipChangedError` if the pointer or stored owner names another account. The new grant replaces
-the old one for that context; the old one stays catalogued so logout revokes it. A discarded grant is
+the old one for that context; the old one stays catalogued so logout revokes it, also when the new
+grant has no refresh token. A rejected attempt restores the owner its own write replaced, and only
+while the stored owner is still that attempt's grant. A discarded grant is
 removed locally but not revoked, because per-grant revocation would supersede the shared fence.
 Ownership-guarded attempts are never shared with concurrent logins.
 

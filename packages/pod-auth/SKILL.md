@@ -70,7 +70,8 @@ sign-in decision used: pod-auth refuses before authorization if the pointer diff
 pointer and stored grant owner again under the namespace mutation lock before publishing the grant
 owner and the pointer, rejecting with `OwnershipChangedError` after discarding only that attempt's new
 grant. Use `reauthorize: true` (WebID hints only, same account only) to replace a grant whose refresh
-persistently fails with something other than `invalid_grant`. A rejected identity also discards only
+persistently fails with something other than `invalid_grant`; it bypasses only its own context's
+stored credential, and logout/retirement keep reading (and revoking) every credential. A rejected identity also discards only
 the attempt's own new grant, never other contexts' grants, the owner or the pointer. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 

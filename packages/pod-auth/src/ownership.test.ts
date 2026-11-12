@@ -11,7 +11,10 @@ afterEach(() => {
 // The mock profile document lists the OP for its own URL, so this WebID has no fragment.
 const bob = "https://id.example/bob";
 
-function fixture(config: Parameters<typeof createMockOp>[0] = {}) {
+/** A second storage context, protected by the same OP. */
+const other = "https://pod.example/other/";
+
+function fixture(config: Parameters<typeof createMockOp>[0] = {}, roots: string[] = []) {
   const op = createMockOp({ refreshTokens: true, revocation: true, ...config });
   vi.stubGlobal("fetch", op.fetch);
   const values = new Map<string, {}>();
@@ -28,7 +31,7 @@ function fixture(config: Parameters<typeof createMockOp>[0] = {}) {
     clientId: op.clientId,
     redirectUri: op.redirectUri,
     storage: { sessions, caches: createMemoryStore() },
-    boundary: { roots: [op.root], automatic: false },
+    boundary: { roots: [op.root, ...roots], automatic: false },
     ui: { getWebId: async () => op.webId!, getCode: op.getCode },
   };
   const load = (ui: Partial<PodAuthOptions["ui"]> = {}) =>
@@ -380,4 +383,121 @@ test("guarded logins are never shared with a concurrent login", async () => {
   const guarded = auth.login({ webId }, { reauthorize: true });
   await expect(auth.login({ webId })).rejects.toThrow("Another login is in progress");
   await guarded;
+});
+
+/** Alice's grant for the pod root, plus a second grant for another storage context. */
+async function twoContexts() {
+  const f = fixture({ protectedUrls: [other] }, [other]);
+  const first = f.load();
+  await first.login({ webId: f.op.webId! });
+  expect((await first.fetch(`${other}resource`)).status).toBe(200);
+  expect(f.records()).toHaveLength(2);
+  return f;
+}
+
+test.each([
+  "reauthorization",
+  "plain login",
+])("logout during a held-open %s revokes every stored grant", async (kind) => {
+  const f = await twoContexts();
+  const popup = pausedCode(f.op);
+  const auth = f.load({ getCode: popup.getCode });
+  const signingIn =
+    kind === "reauthorization"
+      ? auth.login({ webId: f.op.webId! }, { reauthorize: true })
+      : auth.login({ issuer: f.op.issuer });
+  const settled = signingIn.then(
+    () => "signed in",
+    () => "rejected",
+  );
+  await popup.opened;
+  await auth.logout();
+  // Revocation reads every stored credential, including the one the reauthorization bypasses.
+  expect(f.op.stats.revocations).toBe(2);
+  expect(f.records()).toEqual([]);
+  popup.release();
+  expect(await settled).toBe("rejected");
+  expect(f.records()).toEqual([]);
+});
+
+test("a refresh for another context during a reauthorization redeems its own refresh token", async () => {
+  const f = await twoContexts();
+  const popup = pausedCode(f.op);
+  const auth = f.load({ getCode: popup.getCode });
+  const signingIn = auth.login({ webId: f.op.webId! }, { reauthorize: true });
+  await popup.opened;
+  const refreshes = f.op.stats.refreshes;
+  expect((await auth.fetch(`${other}resource`)).status).toBe(200);
+  expect(f.op.stats.refreshes).toBe(refreshes + 1);
+  expect(popup.getCode).toHaveBeenCalledOnce();
+  popup.release();
+  // That upgrade's pointer write in this instance is not a conflicting sign-in.
+  await expect(signingIn).resolves.toMatchObject({ webId: f.op.webId });
+  expect(popup.getCode).toHaveBeenCalledOnce();
+  expect((await auth.fetch(`${f.op.root}private`)).status).toBe(200);
+});
+
+test("a rejected unguarded login restores the owner it replaced, not one seen when it began", async () => {
+  const f = fixture();
+  const popup = pausedCode(f.op);
+  const auth = f.load({ getCode: popup.getCode });
+  // The OP will authenticate Alice for this sign-in that named Bob.
+  const signingIn = auth.login({ webId: bob });
+  const failure = expect(signingIn).rejects.toThrow("selected account");
+  await popup.opened;
+  const newer = await f.load().login({ issuer: f.op.issuer });
+  popup.release();
+  await failure;
+  expect(f.named("owner")).toMatchObject({ grantId: newer.grantId });
+  await expect(f.load().retireIfOwnedBy(newer)).resolves.toEqual({ retired: true });
+});
+
+/** The OP stops issuing refresh tokens for new authorizations from now on. */
+function withoutNewRefreshTokens(f: ReturnType<typeof fixture>) {
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const body = request.url === `${f.op.issuer}token` ? await request.clone().text() : "";
+    const response = await f.op.fetch(request);
+    if (!new URLSearchParams(body).has("code")) return response;
+    const { refresh_token: _dropped, ...tokens } = await response.json();
+    return Response.json(tokens);
+  });
+}
+
+test("a reauthorization without a refresh token keeps the grant it replaced revocable", async () => {
+  const f = fixture();
+  const webId = f.op.webId!;
+  await f.load().login({ webId });
+  f.op.failRefresh("invalid_client");
+  withoutNewRefreshTokens(f);
+  const auth = f.load();
+  expect(await auth.restore()).toBeNull();
+  await expect(auth.login({ webId }, { reauthorize: true })).resolves.toMatchObject({ webId });
+  expect((await auth.fetch(`${f.op.root}private`)).status).toBe(200);
+  // The replaced grant is kept under its cleanup alias, so logout revokes it.
+  expect(f.records()).toHaveLength(1);
+  expect(f.named("accounts")).toEqual([expect.objectContaining({ superseded: true })]);
+  await auth.logout();
+  expect(f.op.stats.revocations).toBe(1);
+  expect(f.records()).toEqual([]);
+});
+
+test("a rejected reauthorization without a refresh token restores the grant it displaced", async () => {
+  const f = fixture();
+  const webId = f.op.webId!;
+  const alice = await f.load().login({ webId });
+  withoutNewRefreshTokens(f);
+  const saved = structuredClone([...f.values]);
+  const popup = pausedCode(f.op);
+  const auth = f.load({ getCode: popup.getCode });
+  const signingIn = auth.login({ webId }, { reauthorize: true });
+  await popup.opened;
+  // Another account's pointer write while the popup is open: this attempt's owner publication fails.
+  const pointer = f.keyOf("active")!;
+  setPointer(f, bob);
+  popup.release();
+  await expect(signingIn).rejects.toBeInstanceOf(OwnershipChangedError);
+  f.values.set(pointer, saved.find(([key]) => key === pointer)![1]);
+  expect([...f.values]).toEqual(saved);
+  await expect(f.load().restore()).resolves.toMatchObject({ grantId: alice.grantId });
 });

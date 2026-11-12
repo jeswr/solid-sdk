@@ -45,20 +45,27 @@ export interface LoginOwnership {
   reauthorize?: string;
 }
 
-/** A grant this attempt installed, with what it displaced, so a rejection can restore exactly that. */
+/**
+ * A grant this attempt installed, or a stored grant its reauthorization displaced without a
+ * replacement record, with what it displaced, so a rejection can restore exactly that.
+ */
 interface Install {
   key: string;
-  grantId: string;
+  grantId?: string;
   credential?: string;
   previous?: Account;
   alias?: string;
 }
 interface Attempt {
+  /** Whether publications are checked against the observed pointer and owner. */
+  guarded: boolean;
   /** Serialized pointer and owner the attempt may still commit over. */
-  expected?: { pointer: string; owner: string };
-  reauthorize: boolean;
+  expected: { pointer: string; owner: string };
+  /** The engine key whose stored credential a reauthorization authorizes instead of redeeming. */
+  bypass?: string;
   installs: Install[];
-  priorOwner: unknown;
+  /** The owner each grant this attempt owned replaced, captured immediately before its write. */
+  owners: Map<string, unknown>;
 }
 
 export interface ActiveAccount {
@@ -91,13 +98,15 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
   const claimsGrants = new WeakMap<Claims, string>();
   const exclusive = <T>(work: () => Promise<T>) => withLock(namespace + ":mutation", work);
   let attempt: Attempt | undefined;
+  /** Logout and retirement read every stored credential, including one a reauthorization bypasses. */
+  let rawReads = 0;
   const pointerKey = (value: { webId: string; issuer: string } | null | undefined) =>
     JSON.stringify(value ? [value.webId, value.issuer] : null);
   /** Records a grant this attempt installed; a reauthorization's bypass ends with its new grant. */
   const installed = (install: Install) => {
     if (attempt === undefined) return;
     attempt.installs.push(install);
-    attempt.reauthorize = false;
+    delete attempt.bypass;
   };
   const ownerKey = async () => JSON.stringify((await store.getItem("owner")) ?? null);
   /**
@@ -105,8 +114,8 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
    * the pointer. On a mismatch, it discards only what this attempt installed.
    */
   const check = async (writing?: ActiveAccount) => {
-    const expected = attempt?.expected;
-    if (expected === undefined) return;
+    if (!attempt?.guarded) return;
+    const expected = attempt.expected;
     const pointer = await active();
     // Another tab renewing this attempt's own grant may already have written the identical pointer.
     const written =
@@ -141,8 +150,15 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       issuer: record.authorizationServer.issuer,
       grantId,
     };
+    // A rejection restores exactly this value, never one observed when the attempt began.
+    const replaced = (await store.getItem("owner")) ?? null;
     await store.setItem("owner", owner);
-    if (attempt?.expected !== undefined) attempt.expected.owner = JSON.stringify(owner);
+    if (attempt !== undefined) {
+      // knownGrants makes each grant's ownership write happen at most once per instance, so the
+      // replaced value never names this grant and the rejection walk below cannot cycle.
+      attempt.owners.set(grantId, replaced);
+      attempt.expected.owner = JSON.stringify(owner);
+    }
   };
   const credentials: KvStore<DPoPTokenCacheEntry> = {
     ...cache,
@@ -226,8 +242,8 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
   };
   const sessions: KvStore<RefreshSessionRecord> = {
     getItem: async (key) => {
-      // Reauthorization authorizes instead of redeeming the stored credential it replaces.
-      if (attempt?.reauthorize) return null;
+      // Reauthorization authorizes instead of redeeming the one stored credential it replaces.
+      if (rawReads === 0 && attempt?.bypass === key) return null;
       const memory = transient.get(key);
       if (memory !== undefined) return memory;
       const account = (await catalog()).find((a) => a.key === key);
@@ -295,22 +311,34 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       }),
     removeItem: async (key) => {
       transient.delete(key);
-      const account = (await catalog()).find((a) => a.key === key);
-      if (account !== undefined) await store.removeItem(account.credential);
+      const accounts = await catalog();
+      const account = accounts.find((a) => a.key === key);
+      if (account === undefined) return;
+      if (attempt?.bypass === key) {
+        // A reauthorization without a refresh token replaces this grant: keep it catalogued under a
+        // cleanup alias so logout still revokes it, instead of deleting its record unrevoked.
+        const alias = "superseded:" + account.credential;
+        const next = new Map(accounts.map((a) => [a.key, a]));
+        next.delete(key);
+        next.set(alias, { ...account, key: alias, superseded: true });
+        await store.setItem("accounts", [...next.values()]);
+        attempt.installs.push({ key, previous: account, alias });
+        return;
+      }
+      await store.removeItem(account.credential);
     },
   };
   /** Removes only this attempt's grants and restores what they displaced. Caller holds the lock. */
   async function discardLocked() {
-    const installs = attempt!.installs;
-    if (installs.length === 0) return;
-    const ours = new Set(installs.map((install) => install.grantId));
+    const current = attempt!;
+    if (current.installs.length === 0) return;
     const accounts = new Map((await catalog()).map((a) => [a.key, a]));
-    for (const install of [...installs].reverse()) {
+    for (const install of [...current.installs].reverse()) {
       // Memory copies only; a durable record the attempt displaced is restored below.
       transient.delete(install.key);
       await cache.removeItem(install.key);
-      if (install.credential !== undefined) {
-        await store.removeItem(install.credential);
+      if (install.credential !== undefined) await store.removeItem(install.credential);
+      if (install.credential !== undefined || install.previous !== undefined) {
         // Another context may have replaced this key since; never restore over its newer grant.
         // The displaced grant's cleanup alias goes only once the grant is reachable by its key again.
         if (accounts.get(install.key)?.credential === install.credential) {
@@ -320,16 +348,24 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         }
         accounts.delete("superseded:" + install.credential);
       }
-      knownGrants.delete(install.grantId);
+      if (install.grantId !== undefined) knownGrants.delete(install.grantId);
     }
     if (accounts.size === 0) await store.removeItem("accounts");
     else await store.setItem("accounts", [...accounts.values()]);
-    const owner = (await store.getItem("owner")) as { grantId?: unknown } | null;
-    if (typeof owner?.grantId === "string" && ours.has(owner.grantId)) {
-      if (attempt!.priorOwner === null) await store.removeItem("owner");
-      else await store.setItem("owner", attempt!.priorOwner as {});
+    // Walk back through owners this attempt wrote, only while the stored owner is still one of them;
+    // another tab's later owner stays. Each value predates the write that replaced it, so this ends.
+    let owner = (await store.getItem("owner")) as { grantId?: unknown } | null;
+    let restored = false;
+    while (typeof owner?.grantId === "string" && current.owners.has(owner.grantId)) {
+      owner = current.owners.get(owner.grantId) as { grantId?: unknown } | null;
+      restored = true;
     }
-    attempt!.installs = [];
+    if (restored) {
+      if (owner === null) await store.removeItem("owner");
+      else await store.setItem("owner", owner);
+    }
+    current.installs = [];
+    current.owners.clear();
   }
 
   return {
@@ -354,13 +390,23 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       )
         throw new OwnershipChangedError();
       attempt = {
-        reauthorize: replacing !== undefined,
+        guarded: expected !== undefined || replacing !== undefined,
+        expected: { pointer: pointerKey(pointer), owner: JSON.stringify(owner) },
         installs: [],
-        priorOwner: owner,
-        ...(expected === undefined && replacing === undefined
-          ? {}
-          : { expected: { pointer: pointerKey(pointer), owner: JSON.stringify(owner) } }),
+        owners: new Map(),
       };
+    },
+    /** Scopes a reauthorization's bypass to the engine key of its own login context. */
+    bypass: (key: string) => {
+      attempt!.bypass = key;
+    },
+    raw: async <T>(work: () => Promise<T>) => {
+      ++rawReads;
+      try {
+        return await work();
+      } finally {
+        --rawReads;
+      }
     },
     end: () => {
       attempt = undefined;
@@ -395,9 +441,14 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       }
       return false;
     },
-    remember: async (value: ActiveAccount) => {
-      await check(value);
+    /**
+     * `publishing` is false for another upgrade in this instance during a login attempt (same
+     * account): it is not checked, and it moves the pointer the attempt may commit over.
+     */
+    remember: async (value: ActiveAccount, publishing = true) => {
+      if (publishing) await check(value);
       await store.setItem("active", value);
+      if (!publishing) attempt!.expected.pointer = pointerKey(value);
     },
     forgetPointer: async () => await store.removeItem("active"),
     keys: async () => (await catalog()).map((a) => a.key),

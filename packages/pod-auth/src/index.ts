@@ -120,13 +120,16 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       await providers.fence.commit(
         generation,
         async () =>
-          await providers.persistence.remember({
-            webId,
-            issuer: claims.issuer,
-            selected: expected,
-            requestUrl: request.url,
-            context,
-          }),
+          await providers.persistence.remember(
+            {
+              webId,
+              issuer: claims.issuer,
+              selected: expected,
+              requestUrl: request.url,
+              context,
+            },
+            providers.publishing(request),
+          ),
         request.signal,
       );
     if (started !== epoch) throw new Error("Session changed during authentication");

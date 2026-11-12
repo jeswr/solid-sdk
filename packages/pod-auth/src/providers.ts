@@ -12,6 +12,7 @@ import {
   type ContextKey,
   type CredentialRequest,
   type CredentialSource,
+  contextKey,
   createBrowserCaches,
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
@@ -441,6 +442,8 @@ export function createProviders(
       ? new ClientIdClientProvider(new URL(options.clientId), http)
       : new DynamicRegistrationClientProvider(http),
   );
+  /** The running login's synthetic request, whose pointer write is that attempt's publication. */
+  let loginRequest: Request | undefined;
   /** Told when a running login hands an authorization code on to the token exchange. */
   let codeRedeemed: (() => void) | undefined;
   /** The running login's cancellation; UI hooks without a signal of their own are raced against it. */
@@ -701,6 +704,8 @@ export function createProviders(
      * Rejects an authenticated identity. During a login attempt only that attempt's new grants are
      * removed, restoring what they displaced; other contexts' grants, the owner and the pointer stay.
      */
+    /** Whether a pointer write is the running login's own publication (or no login is running). */
+    publishing: (request: Request) => loginRequest === undefined || loginRequest === request,
     reject: async () => {
       if (!persistence.attempting()) return await persistence.exclusive(forget);
       boundary.clear();
@@ -726,7 +731,7 @@ export function createProviders(
       loginSignal = signal;
       try {
         await persistence.exclusive(async () => await persistence.begin(ownership));
-        await loginAttempt(value, signal, grant);
+        await loginAttempt(value, signal, grant, ownership.reauthorize !== undefined);
       } catch (error) {
         // Nothing was granted, or the rejected grant was discarded: forget the attempt's account choice.
         if ((signal.aborted && !obtained) || error instanceof OwnershipChangedError) {
@@ -738,6 +743,7 @@ export function createProviders(
       } finally {
         // Logins are serialized by the caller, so this attempt owns both hooks until it ends.
         persistence.end();
+        loginRequest = undefined;
         codeRedeemed = undefined;
         loginSignal = undefined;
       }
@@ -750,7 +756,11 @@ export function createProviders(
       await persistence.clear();
     }
   }
+  /** Revocation and cleanup read every stored credential, including one a reauthorization bypasses. */
   async function logout() {
+    await persistence.raw(purge);
+  }
+  async function purge() {
     boundary.clear();
     const failures: unknown[] = [];
     // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
@@ -777,7 +787,12 @@ export function createProviders(
     authorizationServers.clear();
     if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
   }
-  async function loginAttempt(value: LoginHint, signal: AbortSignal, granted: () => void) {
+  async function loginAttempt(
+    value: LoginHint,
+    signal: AbortSignal,
+    granted: () => void,
+    reauthorizing: boolean,
+  ) {
     restoredContext = undefined;
     loginContext = undefined;
     hint = value;
@@ -790,8 +805,24 @@ export function createProviders(
       signal: AbortSignal.any([signal, fence.signalFor(generation)]),
     });
     request.signal.throwIfAborted();
+    loginRequest = request;
     const selected = await selectionFor(request);
     const context = await contextFor(request, selected);
+    if (reauthorizing) {
+      // Bypass only this context's stored credential: the engine's OidcSession key for the namespace,
+      // default account, issuer, callback, scopes and context. Other contexts still refresh normally.
+      const as = await asProvider.getAuthorizationServer(request);
+      persistence.bypass(
+        await contextKey("oidc", [
+          namespace,
+          "default",
+          as.issuer,
+          redirectUri,
+          sessionOptions.scopes.join(" "),
+          context,
+        ]),
+      );
+    }
     await solidProvider.upgrade(request);
     granted();
     const claims = await solidProvider.identity(request);
