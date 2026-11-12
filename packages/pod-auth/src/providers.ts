@@ -366,6 +366,10 @@ export function createProviders(
   };
   const sessionContext: ContextKey = async (request) =>
     await contextFor(request, await selectionFor(request));
+  // RPTs remain storage-scoped even when restore aliases every request to one OIDC session.
+  // Retain the captured account selection so the shared-session read cannot adopt a later hint.
+  const umaContext: ContextKey = async (request) =>
+    JSON.stringify([await boundary.contextKey(request), await selectionFor(request)]);
   const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
   const asFor = (selected: LoginHint) => {
     const key = JSON.stringify(selected);
@@ -487,22 +491,16 @@ export function createProviders(
     get(target, property) {
       if (property === "get")
         return async (...args: Parameters<typeof target.get>) => {
+          const [url, selected] = JSON.parse(args[1]) as [string, LoginHint];
+          args[1] = await contextFor(new Request(url), selected);
           const entry = await target.get(...args);
           if (entry?.identity === undefined)
             throw new Error("Authentication did not establish an identity");
-          const [url, webId, issuer] = JSON.parse(args[1]) as [
-            string,
-            string | null,
-            string | null,
-          ];
           await hooks.session(
             new Request(url, { signal: fence.signalFor(entry.generation!) }),
             entry.identity,
             "solid-oidc",
-            {
-              ...(webId === null ? {} : { webId }),
-              ...(issuer === null ? {} : { issuer }),
-            },
+            selected,
           );
           return entry;
         };
@@ -518,9 +516,11 @@ export function createProviders(
     clientProvider,
     {
       ...sessionOptions,
+      context: umaContext,
       http: boundary.exchangeHttp,
       session: umaSession,
-      trustAuthorizationServer: boundary.trustAuthorizationServer,
+      // Another learned storage's origin is not authority for this resource's UMA exchange.
+      trustAuthorizationServer: boundary.trustUmaAuthorizationServer,
     },
   );
   const lwsContexts = new Map<

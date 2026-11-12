@@ -69,13 +69,21 @@ load during `login()` and `restore()`; call one before fetching when no static r
 Without a WebID, configure roots explicitly. Neither the WebID document's origin nor the OIDC issuer's
 origin is implicitly a resource grant. Profile-linked non-container storage identifiers may resolve to
 LWS descriptions (`id`, `Storage`, `StorageRoot.serviceEndpoint`) or Solid descriptions (`pim:Storage`).
+An advertised root must be a container on the storage identifier's origin and confirm itself through
+an unauthenticated, non-redirected HEAD: a Solid `pim:Storage` type Link or exactly one LWS storage Link
+back to that identifier. This includes roots above the identifier; an unconfirmed broader same-origin
+root grants nothing. Invalid, foreign-origin and non-container roots are silently dropped.
 Description requests omit credentials and reject redirects. Profile redirects locate the public
 document; assertions must still name the original WebID. Invalid assertions grant nothing.
 
 A target's `Link` headers, `pim:Storage` type, ancestor responses, storage description, or
-`WWW-Authenticate` challenge never adds a credential root. UMA/LWS authorization servers and exchange
-endpoints must use an already granted storage origin or an explicitly configured AS origin; configure
-such an AS using `boundary.roots`. LWS realms must fit a grant, or identify a description whose root
+`WWW-Authenticate` challenge never adds a credential root. UMA authorization servers must be on the
+requested storage's origin or an explicitly configured root's origin (`boundary.roots`); a storage
+learned from the WebID never authorizes its AS for another storage. UMA RPTs
+are cached per storage and account selection, including after `restore()` reuses one OIDC session
+across storages. LWS authorization servers and exchange endpoints must use an already granted storage
+origin or an explicitly configured AS origin; configure such an AS using `boundary.roots`.
+LWS realms must fit a grant, or identify a description whose root
 contains the resource within that grant. A challenge cannot expand the token audience beyond it.
 These checks apply to both OIDC ID-token and CID subject-token exchanges. An untrusted target receives
 no SDK Authorization header, token-bound DPoP proof, UMA claim token, or LWS subject token.

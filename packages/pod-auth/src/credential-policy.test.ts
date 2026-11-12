@@ -250,11 +250,13 @@ test.each([
     ],
   },
 ])("LWS identity descriptions validate id, type, service and endpoint: %#", async (document) => {
-  const boundary = policy(async (input) =>
-    String(input).startsWith("https://id.example")
+  const boundary = policy(async (input, init) => {
+    if (new Request(input, init).method === "HEAD")
+      return new Response(null, { headers: { link: storageType } });
+    return String(input).startsWith("https://id.example")
       ? profile("https://pod.example/description")
-      : Response.json(document),
-  );
+      : Response.json(document);
+  });
   await boundary.learn("https://id.example/alice#me", signal());
   expect(boundary.allows("https://pod.example/alice/private")).toBe(Array.isArray(document?.type));
 });
@@ -267,7 +269,9 @@ test.each([
   "turtle",
   "no-content-type",
 ])("identity descriptions fail closed or parse Solid roots: %s", async (kind) => {
-  const boundary = policy(async (input) => {
+  const boundary = policy(async (input, init) => {
+    if (new Request(input, init).method === "HEAD")
+      return new Response(null, { headers: { link: storageType } });
     if (String(input).startsWith("https://id.example"))
       return profile("https://pod.example/description");
     if (kind === "failure") throw new Error("offline");

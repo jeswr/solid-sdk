@@ -5,8 +5,11 @@ import {
   CredentialBoundary,
   describes,
   type HttpOptions,
+  head,
   isWithin,
+  parseLinks,
   secureDocumentFetch,
+  selfIdentifiedSolidRoot,
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
@@ -140,6 +143,16 @@ export function createBoundary(
     // No response-driven discovery, including ancestor HEADs or self-asserted pim:Storage types.
     isCandidate: (_url: string | URL) => false,
     trustAuthorizationServer,
+    /**
+     * A UMA authorization server for this resource: on the resource's own origin, or an
+     * explicitly configured root's origin. Another learned storage's origin never qualifies.
+     */
+    trustUmaAuthorizationServer: (binding: { authorizationServer: URL; resource: URL }) =>
+      trustAuthorizationServer(binding) &&
+      (binding.authorizationServer.origin === binding.resource.origin ||
+        fixed.entries.some(
+          (root) => eligible(root) && new URL(root).origin === binding.authorizationServer.origin,
+        )),
     trustLws,
     exchangeHttp: {
       ...http,
@@ -177,8 +190,25 @@ export function createBoundary(
       for (const storage of storages) {
         add(next, storage);
         // Solid roots are containers. Non-container identifiers may be LWS/Solid descriptions.
-        if (next.allows(storage) && !storage.endsWith("/"))
-          for (const root of await descriptionRoots(storage, signal)) add(next, root);
+        if (next.allows(storage) && !storage.endsWith("/")) {
+          const candidates = new CredentialBoundary([], { allowInsecureHttp: insecure });
+          for (const root of await descriptionRoots(storage, signal)) add(candidates, root);
+          for (const root of candidates.entries) {
+            if (!root.endsWith("/") || new URL(root).origin !== new URL(storage).origin) continue;
+            // A description cannot grant an ancestor or sibling by itself. The same-origin
+            // container must identify itself as Solid storage or bind back to this LWS identifier.
+            const confirmation = await head(root, { http, signal });
+            if (confirmation === undefined || !describes(confirmation, root)) continue;
+            const links = parseLinks(confirmation.headers.get("link"), root).filter(
+              (link) => link.rel === "https://www.w3.org/ns/lws#storage",
+            );
+            if (
+              selfIdentifiedSolidRoot(root, confirmation) !== undefined ||
+              (links.length === 1 && links[0]!.href === storage)
+            )
+              add(next, root);
+          }
+        }
       }
       const nextEndpoints = new Map<string, string>();
       const verified = [...next.entries];
