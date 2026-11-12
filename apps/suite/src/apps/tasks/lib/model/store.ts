@@ -98,10 +98,13 @@ export class TaskStore {
         (url) => url.endsWith(".ttl") && (!collection || new URL("./", url).href === collection),
       ),
     );
-    if (!collection && this.options.typeIndex !== false)
+    if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
-        if (reg.kind === "instance") urls.add(documentUrl(reg.location));
-        else {
+        if (reg.kind === "instance") {
+          // Directly registered trackers need not end in .ttl; keep those in this family.
+          const url = documentUrl(reg.location);
+          if (!collection || new URL("./", url).href === collection) urls.add(url);
+        } else if (!collection) {
           try {
             const listed = await this.io.list(reg.location, { strict });
             for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
