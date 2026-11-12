@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ import {
   type TaskData,
   taskSubject,
 } from "../src/task.js";
-import { dct, prov, schema, TASK_CLASS, WF_CLOSED, WF_OPEN, wf } from "../src/vocab.js";
+import { dct, prov, RDF_TYPE, schema, TASK_CLASS, WF_CLOSED, WF_OPEN, wf } from "../src/vocab.js";
 
 const RES = "https://pod.example/tasks/1";
 const PREFIXES = `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
@@ -414,4 +415,99 @@ it("does not rewrite an existing valid completion literal when re-closing a task
   expect(dataset.getQuads(taskSubject(RES), prov("endedAtTime"), null, null)[0]?.object.value).toBe(
     lexical,
   );
+});
+
+it("keeps the original direct-accessor reads of ill-typed dates and unparseable http IRIs", () => {
+  const dates = {
+    created: dct("created"),
+    modified: dct("modified"),
+    endedAt: prov("endedAtTime"),
+    dueDate: wf("dateDue"),
+  } as const;
+  for (const [field, predicate] of Object.entries(dates)) {
+    const key = field as keyof typeof dates;
+    const read = (object: string) =>
+      new Task(
+        taskSubject(RES),
+        store(`<#it> a wf:Task ; dct:title "T" ; <${predicate}> ${object} .`),
+        DataFactory,
+      )[key];
+    // An ill-typed xsd:dateTime surfaces as an Invalid Date (as @rdfjs/wrapper's
+    // LiteralAs.date did) so consumers can reject it; plain-data parse still drops it.
+    for (const object of ['"invalid"^^xsd:dateTime', '"2026-02-30T00:00:00Z"^^xsd:dateTime']) {
+      const value = read(object);
+      expect(value).toBeInstanceOf(Date);
+      expect(Number.isNaN(value?.getTime())).toBe(true);
+      expect(parse(`dct:title "T" ; <${predicate}> ${object}`)).toEqual({
+        title: "T",
+        state: "open",
+      });
+    }
+    // Absent, ambiguous, or other-datatype values keep the generated drop.
+    for (const object of [
+      '"2026-01-01"^^xsd:date',
+      '"invalid"',
+      '"invalid"^^xsd:dateTime, "2026-01-01T00:00:00Z"^^xsd:dateTime',
+    ]) {
+      expect(read(object)).toBeUndefined();
+    }
+    expect(read('"2026-01-01T00:00:00Z"^^xsd:dateTime')).toEqual(new Date("2026-01-01T00:00:00Z"));
+  }
+
+  const iris = {
+    creator: dct("creator"),
+    assignee: wf("assignee"),
+    project: wf("tracker"),
+    parent: dct("isPartOf"),
+    duplicateOf: dct("isReplacedBy"),
+    clonedFrom: prov("wasDerivedFrom"),
+  } as const;
+  const { namedNode, quad, literal } = DataFactory;
+  for (const [field, predicate] of Object.entries(iris)) {
+    const key = field as keyof typeof iris;
+    const read = (...objects: string[]) => {
+      const subject = namedNode(taskSubject(RES));
+      const dataset = new Store([
+        quad(subject, namedNode(RDF_TYPE), namedNode(TASK_CLASS)),
+        quad(subject, namedNode(dct("title")), literal("T")),
+        ...objects.map((object) => quad(subject, namedNode(predicate), namedNode(object))),
+      ]);
+      return { view: new Task(subject, dataset, DataFactory)[key], data: parseTask(RES, dataset) };
+    };
+    // A lone, lexically safe http(s) IRI that WHATWG URL cannot parse keeps its exact
+    // spelling on the direct accessor; plain-data parse still requires a parseable URL.
+    expect(read("http://a%zz/")).toEqual({
+      view: "http://a%zz/",
+      data: { title: "T", state: "open" },
+    });
+    for (const unsafe of [
+      ["http://a%zz/", "https://ok.example/"],
+      ["javascript:a%zz"],
+      ["https:a%zz"],
+      ["http:///a%zz"],
+      ["http://a%zz/<x>"],
+      ["http://a%zz/\u0001"],
+      ["http://a%zz/\u0085"],
+    ]) {
+      expect(read(...unsafe).view).toBeUndefined();
+    }
+  }
+});
+
+it("drops stored http(s) IRIs with control characters or an empty authority on plain-data parse", () => {
+  const { namedNode, quad, literal } = DataFactory;
+  const subject = namedNode(taskSubject(RES));
+  for (const iri of [
+    "https://a.example/\u0001x",
+    "https://a.example/\u0085x",
+    "http:///a.example/x",
+  ]) {
+    const dataset = new Store([
+      quad(subject, namedNode(RDF_TYPE), namedNode(TASK_CLASS)),
+      quad(subject, namedNode(dct("title")), literal("T")),
+      quad(subject, namedNode(wf("assignee")), namedNode(iri)),
+      quad(subject, namedNode(dct("requires")), namedNode(iri)),
+    ]);
+    expect(parseTask(RES, dataset)).toEqual({ title: "T", state: "open" });
+  }
 });

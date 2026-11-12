@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/solid-task-model
 
@@ -37,8 +38,8 @@ const task: TaskData | undefined = await parseTaskTtl(resourceUrl, turtle, "text
 Pod data is untrusted. `buildTask` drops object-property values that are not absolute
 http(s) IRIs, and `parseTask` applies the same scheme check on read: a `javascript:` or
 `data:` creator, assignee, project, parent, duplicate-of, cloned-from, blocked-by or
-relates-to IRI is left out, as is any value with characters an IRI cannot contain or
-without the `//` after the scheme. Accepted IRIs come back exactly as stored, not
+relates-to IRI is left out, as is any value with characters an IRI cannot contain, a
+control character, no authority after the `//`, or a form WHATWG `URL` cannot parse. Accepted IRIs come back exactly as stored, not
 canonicalised. A malformed value, such as a literal where an IRI belongs or an invalid
 date, drops only that value instead of aborting the parse; a single-valued IRI field
 takes the first acceptable IRI among its values.
@@ -133,6 +134,17 @@ in `test/compatibility.test.ts`:
   plain-data parsers retain the hardened IRI contract: read each object, keep exact stored
   spelling (including uppercase schemes), select the first valid scalar and retain every
   valid set member. These reads never mutate the dataset.
+- **Retained direct reads:** to keep consumer validation working, a scalar date
+  accessor returns an Invalid Date for a lone literal typed `xsd:dateTime` whose value is
+  not valid, as `LiteralAs.date` did. An impossible calendar date such as
+  `2026-02-30T00:00:00Z` now also reads as an Invalid Date. Previously it rolled over
+  to 2 March. A scalar IRI accessor returns the exact spelling of a lone http(s) IRI
+  that `URL` cannot parse, such as `http://a%zz/`. The IRI must have an authority and
+  no forbidden or control characters. Plain-data `parseTask` still drops both values.
+  Ambiguous, otherwise-typed, non-http(s) and lexically unsafe values stay dropped.
+- **Plain-data IRI reads:** besides the scheme and IRIREF checks, a stored http(s) IRI
+  with a C0/C1 control character, an empty authority (`http:///x`) or a form `URL`
+  cannot parse is dropped. The original parser returned the raw value.
 
 The remaining generator/runtime gaps are explicit: `rdf:type` is reserved and cannot
 project the qualified exactly-one-state constraint; aliases write canonical-only and

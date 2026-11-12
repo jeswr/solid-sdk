@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 /** Public Task API over the SHACL-generated core; only cross-field policy lives here. */
 import { isSafeAbsoluteIri, tryRead } from "@jeswr/model-runtime";
 import { serialize } from "@jeswr/rdf-serialize";
@@ -7,7 +8,15 @@ import type { TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
 import { entities, type TaskWrapper } from "./generated/model.js";
 import { httpIriOrUndefined, isHttpIri } from "./iri.js";
-import { httpObjects, normalizePriority, orderTaskStore, scalarIris } from "./task-policy.js";
+import {
+  httpObjects,
+  malformedDate,
+  normalizePriority,
+  orderTaskStore,
+  scalarDates,
+  scalarIris,
+  unparseableHttpIri,
+} from "./task-policy.js";
 import type { TaskData, TaskPriority, TaskState } from "./task-types.js";
 import { dct, PREFIXES, WF_CLOSED, WF_OPEN } from "./vocab.js";
 
@@ -68,6 +77,30 @@ export class Task extends Wrapper {
   get isOpen(): boolean {
     return this.state === "open";
   }
+}
+
+// Direct accessors keep the original wrapper's observable reads where the generated guard
+// would silently drop a value consumers rely on detecting: an ill-typed xsd:dateTime reads
+// as an Invalid Date, and an unparseable but lexically safe http(s) IRI keeps its spelling.
+// Writes stay the generated guarded setters; parseTask keeps its own stricter policy.
+function restoreRead(name: string, fallback: (doc: TermWrapper) => unknown): void {
+  const generated = Object.getOwnPropertyDescriptor(task.Wrapper.prototype, name);
+  const { get, set } = generated ?? {};
+  if (!get || !set) throw new TypeError(`missing generated Task accessor: ${name}`);
+  Object.defineProperty(Task.prototype, name, {
+    get(this: Task) {
+      return get.call(this) ?? fallback(this);
+    },
+    set,
+    enumerable: false,
+    configurable: true,
+  });
+}
+for (const [name, predicate] of Object.entries(scalarIris)) {
+  restoreRead(name, (doc) => unparseableHttpIri(doc, predicate));
+}
+for (const [name, predicate] of Object.entries(scalarDates)) {
+  restoreRead(name, (doc) => malformedDate(doc, predicate));
 }
 
 export function taskSubject(resourceUrl: string): string {

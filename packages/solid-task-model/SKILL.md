@@ -3,6 +3,7 @@ name: solid-task-model
 description: Use when reading or writing shared wf:Task data, regenerating the Task core, maintaining the public Task facade or hardened IRI reads, or distinguishing the generated Task from hand-written tracker and contacts models.
 ---
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Shared Task model
 
@@ -27,7 +28,10 @@ guard every dataset read. Do not replace this with generated scalar IRI reads: t
 normalize spelling and drop ambiguous values. Generated literal parsing enforces the
 profile, including exactly one string title. README "Exact divergences" and
 `test/compatibility.test.ts` pin the edge behavior. Direct generated wrapper accessors
-follow their stricter datatype/cardinality/IRI guards.
+follow their stricter datatype/cardinality/IRI guards, with two consumer-facing
+exceptions. A lone ill-typed `xsd:dateTime` reads as an Invalid Date, and a lone
+lexically safe http(s) IRI that `URL` cannot parse keeps its stored spelling. Consumers
+such as the suite's Tasks views reject or display these values instead of losing them.
 
 All RDF writes go through the generated entity/accessors. State uses its live type set
 and timestamp fields; descriptions use two independently generated properties, because
