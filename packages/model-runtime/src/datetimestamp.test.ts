@@ -92,6 +92,8 @@ const VALID: [string, string][] = [
   ["-0001-06-01T12:00:00Z", "-000001-06-01T12:00:00.000Z"],
   ["-12345-01-01T00:00:00+14:00", "-012346-12-31T10:00:00.000Z"],
   ["0000-02-29T00:00:00Z", "0000-02-29T00:00:00.000Z"],
+  ["-0000-01-01T00:00:00Z", "0000-01-01T00:00:00.000Z"], // signed zero is year zero
+  ["0123-01-01T00:00:00Z", "0123-01-01T00:00:00.000Z"],
   ["275760-09-13T00:00:00Z", "+275760-09-13T00:00:00.000Z"],
   ["-271821-04-20T00:00:00Z", "-271821-04-20T00:00:00.000Z"],
 ];
@@ -128,6 +130,12 @@ const MALFORMED = [
   "2026-13-01T00:00:00Z",
   "2026-01-00T00:00:00Z",
   "+012026-01-01T00:00:00Z",
+  // XSD 1.1 yearFrag: a leading zero only in a four-digit year.
+  "02026-01-01T00:00:00Z",
+  "-02026-01-01T00:00:00Z",
+  "00000-01-01T00:00:00Z",
+  "-000001-01-01T00:00:00.000Z", // legacy toISOString form; xsd:dateTime only
+  "026-01-01T00:00:00Z",
   "2026-11-11Z",
   "January 1 2026",
   "",
@@ -176,7 +184,6 @@ describe("xsd:dateTimeStamp strict reads and severity grading", () => {
     "-271821-04-20T00:00:00+00:01",
     "275761-01-01T00:00:00Z",
     "9007199254740992-01-01T00:00:00Z",
-    "-0000-01-01T00:00:00Z",
   ])("drops lexically valid but unrepresentable %s", (lexical) => {
     expect(isXsdDateTimeStamp(lexical)).toBe(true);
     expect(() => readLiteral(term(lexical))).toThrow();
