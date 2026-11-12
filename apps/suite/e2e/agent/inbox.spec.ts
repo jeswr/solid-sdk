@@ -47,9 +47,17 @@ test("archive signs one Archive control outside control/ and holds after reload"
   await expect(page.getByRole("button", { name: "Calendar invitation", exact: true })).toHaveCount(
     0,
   );
-  // Authority controls are untouched; the archive is one signed record in archive/.
+  // Authority controls are untouched; the archive is one signed record in its UTC month.
   expect(await daemon.client.list(daemon.client.paths.control)).toEqual(controlsBefore);
-  const archives = await daemon.client.list(daemon.client.paths.archive);
+  const partitions = await daemon.client.list(daemon.client.paths.archive);
+  expect(partitions).toHaveLength(1);
+  const [partition] = partitions;
+  expect(partition).toMatchObject({
+    url: expect.stringMatching(/\/archive\/\d{4}-\d{2}\/$/),
+    container: true,
+  });
+  if (!partition) throw new Error("Missing archive partition");
+  const archives = await daemon.client.list(partition.url);
   expect(archives).toHaveLength(1);
   expect(archives[0]?.url).toMatch(/-Archive-[0-9a-f-]+\.trig$/);
   await agentScreenshot(page, info, "inbox-archived");

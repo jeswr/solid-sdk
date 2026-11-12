@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * Details pane (04-drive §2.8): who has access, the item's facts and, under
@@ -9,7 +10,7 @@
 import { Button, IconButton } from "@jeswr/suite-ui";
 import { Copy, X } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { type MouseEventHandler, useId, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { type DriveItem, parentOf } from "../lib/client/client";
 import { formatFileSize } from "../lib/files";
@@ -25,6 +26,10 @@ import { ProtectionBanner } from "./protection-banner";
 
 function Location({ url }: { url: string }) {
   const { driveRoot } = useDrive();
+  const { mayLeavePreview } = useDriveUi();
+  const guardNavigation: MouseEventHandler<HTMLAnchorElement> = (event) => {
+    if (!mayLeavePreview()) event.preventDefault();
+  };
   const parent = parentOf(url);
   if (!parent || !driveRoot) return <>—</>;
   let trail: { label: string; url: string }[] = [];
@@ -35,11 +40,15 @@ function Location({ url }: { url: string }) {
   }
   return (
     <span className="drv-details-location">
-      <Link href="/drive/my">My Drive</Link>
+      <Link href="/drive/my" onClick={guardNavigation}>
+        My Drive
+      </Link>
       {trail.map((segment) => (
         <span key={segment.url}>
           {" › "}
-          <Link href={`/drive/f/${encodeRef(segment.url)}`}>{segment.label}</Link>
+          <Link href={`/drive/f/${encodeRef(segment.url)}`} onClick={guardNavigation}>
+            {segment.label}
+          </Link>
         </span>
       ))}
     </span>
