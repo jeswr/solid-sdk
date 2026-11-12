@@ -14,7 +14,7 @@ import { sequenceConversation } from "./queue.js";
 
 /** Explicit export import boundaries, using the same config and guarded transport as hooks. */
 export interface ExportImportOptions
-  extends Pick<CaptureOptions, "home" | "cwd" | "env" | "fetch"> {
+  extends Pick<CaptureOptions, "home" | "cwd" | "env" | "fetch" | "account"> {
   /** Cancel file processing and requests; imports are not subject to the hook's ten-second watchdog. */
   signal?: AbortSignal;
 }
@@ -42,9 +42,12 @@ export async function runExportImport(
     const projects = [cwd, dirname(path)];
     if (await isIgnored(projects, signal)) throw new Error("Export opted out");
     const text = await readExportJson(path, command === "chatgpt-export", signal);
-    const conversations =
-      command === "chatgpt-export" ? parseChatgptExport(text) : parseClaudeExport(text);
     const config = await loadCliConfig(options.env ?? process.env, home);
+    const account = options.account === undefined ? config.account : options.account;
+    const conversations =
+      command === "chatgpt-export"
+        ? parseChatgptExport(text, { account })
+        : parseClaudeExport(text, { account });
     if (config.readOnly || !config.clientId || !config.webId)
       throw new Error("Export requires writable config");
     const httpTransport =
