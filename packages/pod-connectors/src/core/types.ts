@@ -81,6 +81,11 @@ export interface TokenSet {
   readonly refreshToken?: string;
   /** Epoch ms when the access token expires, when the platform said. */
   readonly expiresAt?: number;
+  /**
+   * Space-delimited scopes the platform granted (RFC 6749 §5.1 `scope`), when it said.
+   * Source auth exposes them as `SourceAuth.scopes`, which runImport passes on as `ctx.scopes`.
+   */
+  readonly scope?: string;
 }
 
 /** One normalised document the adapter wants written into the pod. */
@@ -201,7 +206,8 @@ export interface ImportContext {
   readonly signal?: AbortSignal;
   /**
    * Source permissions the user granted for this run; undefined means every `metadata.scopes`
-   * entry. Advisory: only adapters that opt in read it. Spotify omits playlists of a withheld
+   * entry. runImport takes `RunImportOptions.scopes`, else the live `SourceAuth.scopes` (the
+   * token's granted `scope`). Advisory: only adapters that opt in read it. Spotify omits playlists of a withheld
    * kind and keeps what earlier runs imported under it. Google Health requires every requested
    * Health scope and refuses partial grants before a source request. Other adapters ignore it,
    * so hosts that let users withhold scopes must gate their requests and documents themselves.
@@ -307,4 +313,6 @@ export interface PodWriter {
 /** Host-owned source API transport, already authenticated for this source. */
 export interface SourceAuth {
   readonly fetch: typeof fetch;
+  /** Scopes the token was granted, when the token response listed them (`ImportContext.scopes`). */
+  readonly scopes?: readonly string[];
 }

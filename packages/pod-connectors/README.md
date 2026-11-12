@@ -59,6 +59,9 @@ Hosts own cache policy; the Node transport forces revalidation.
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
+`exchangeCodeForToken` keeps the token response's granted `scope` string in `TokenSet.scope`;
+source auth exposes it as `SourceAuth.scopes`, and `runImport` passes it on as `ctx.scopes`
+unless the host supplies `RunImportOptions.scopes` (live mode only). The CLI follows the same path.
 The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
 and refuses redirects; pass a fifth argument to supply additional API origins explicitly.
 Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
@@ -330,7 +333,10 @@ After source login, the CLI selects the adapter's optional `createSourceAuth` fa
 falling back to the generic bearer transport. Spotify refreshes expired access tokens in
 memory through this factory. An explicit `options.sourceAuth` bypasses login and the factory.
 
-The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
+The CLI stores `<podRoot>integrations/<id>/state.json` (a successor connector writing into its
+predecessor's container keeps its own `state-<id>.json` there: Google Health uses
+`integrations/fitbit/state-google-health.json`, leaving Fitbit's `state.json` untouched and
+creating no `integrations/google-health/` container), including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
@@ -613,18 +619,20 @@ snapshots cover these paths without Google accounts or production traffic.
 ## Google Health (CON-A4)
 
 `./adapters/google-health` exports `googleHealthAdapter` and
-`createGoogleHealthAdapter({ limits?, maxPages?, now? })`. The catalog offers this Tier B
-live API successor instead of Fitbit. Enable the Google Health API in a Google OAuth
-project, configure its client through `createRegistry({ 'google-health': { clientId,
-tokenProxyUrl } })`, and re-authorize with Google. Fitbit tokens cannot migrate. All four
-requested Health scopes are Restricted: public access needs Google's verification and
-security review; the owner's own project can use configured test users. Only activity,
-sleep, health metrics and body measurements are requested, all readonly; no nutrition.
-The exact scope constants, endpoints, payload/time fields, units and filter assumptions
-are isolated in `src/google-health/api.ts`, with the supplied Google documentation facts
-and explicit **verify against developers.google.com/health/scopes** notes. Fixtures are
-synthetic; neither field assumptions nor scope spellings have been verified against a
-live service. Unsupported shapes are skipped and hold that type's cursor.
+`createGoogleHealthAdapter({ limits?, runLimits?, maxPages?, lookbackDays?, now?, onWarning? })`.
+The catalog offers this Tier B live API successor instead of Fitbit. Enable the Google Health
+API in a Google OAuth project, configure its client through `createRegistry({ 'google-health':
+{ clientId, tokenProxyUrl } })`, and re-authorize with Google. Fitbit tokens cannot migrate.
+It requests three readonly scopes, all Restricted (public access needs Google's verification
+and security review; the owner's own project can use configured test users):
+`googlehealth.activity_and_fitness.readonly` (steps, distance, calories, exercise),
+`googlehealth.sleep.readonly` and `googlehealth.health_metrics_and_measurements.readonly`
+(heart rate, weight), each under `https://www.googleapis.com/auth/`. Nutrition is not imported
+or requested. The spellings were confirmed only through search extracts of
+developers.google.com/health/scopes. The page itself was unreachable, so they keep a
+**VERIFY** marker. Endpoints, payload/time fields, units and filter assumptions are isolated in
+`src/google-health/api.ts`. Fixtures are synthetic. No field assumption has been verified
+against a live service. The adapter refuses a token whose granted `scope` lacks any of the three.
 
 OAuth uses `createGoogleOAuthConfig('health')` with offline access and S256 PKCE.
 Use `adapter.createSourceAuth(config, token, pristineSourceFetch)` (or
@@ -633,54 +641,87 @@ hosts to refresh once after a 401. The Node CLI selects this hook automatically.
 The transport refuses redirects and non-HTTPS/non-Health credential destinations,
 keeps tokens in memory, and preserves cancellation through refresh and replay.
 Web clients refresh through their configured token proxy; Desktop clients use the
-Google token endpoint and their locally supplied client secret when needed.
+Google token endpoint and their locally supplied client secret when needed. A refresh keeps
+the token's granted scopes current. A 401 that survives the refresh, or any 403, fails the run
+with `IntegrationAuthError` and re-authorisation guidance.
 
 The standard `createFetchPodWriter({ adapterId: 'google-health', ... })` and
 `adapterContainerUrl` intentionally retain `integrations/fitbit/`. Custom PodWriter
 hosts must bind Google Health to that existing container too. Native exercise ids retain
 `health/activities.ttl#activity-<id>` and the existing schema.org ExerciseAction vocabulary.
-When Google omits or changes the id, an unambiguous stored Fitbit activity with the same
-start instant and exercise type keeps its old subject and identifier; ambiguous matches
-fail before writes. Google supplies no cross-provider identity guarantee; the legacy
-adapter also assumed UTC for local timestamps. Without a retained id, a changed start
-instant or exercise type cannot be safely matched. A numeric Google id colliding with
-an unrelated legacy record fails before writes; Google-derived records can subsequently
-accept corrections under their established ids. New exercises with opaque or omitted
-native ids use their start/type as a deterministic key, so an optional Google name appearing
-or disappearing does not create a second resource. Numeric ids retain the Fitbit key.
-Other legacy exercises survive increments.
-There was no Fitbit file importer in this package. The deprecated `fitbit` entry remains
-resolvable for existing connections and fixture demos, is excluded from new-connection
-catalogs, and refuses live runs with Google Health guidance.
+Fitbit stored each activity's local wall-clock start with a `Z` suffix. A Google session
+therefore updates a stored Fitbit activity in place, keeping its subject and identifier, when
+any of these hold:
+- it carries the stored Google resource URL;
+- its numeric Google id equals the Fitbit `logId`, with the same exercise type and starts at
+  most 14 hours apart;
+- its true UTC start and type match;
+- its start, rendered in Google's own offset as a `Z`-suffixed wall-clock time, and its type
+  match a legacy (non-Google) row.
 
-Daily steps, distance and calories use reconciled points and existing Fit typed
-`schema:additionalProperty` measurements on ExerciseAction, under
-`health/daily/<UTC-day>/<type>.ttl`. No multi-day totals are apportioned. Heart rate and
-weight use typed PropertyValue samples in `health/heart-rate.ttl` and `health/weight.ttl`;
-sleep sessions and their stages use named ExerciseAction subjects under `health/sleep/`.
-Replacing one sleep document removes obsolete stages. This checkout's old Fitbit adapter
-only imported exercise sessions, so these requested same-shape additions have no earlier
-Fitbit ids to migrate. Other Google Health types are omitted.
+Ambiguous matches, and numeric ids that collide with an unrelated legacy activity, are skipped
+and counted, never guessed and never fatal. Google-derived records accept corrections under
+their established ids. Other exercises and sleep sessions are keyed by Google's resource
+name when present (`google-health-exercise-<id>`, `sleep-<id>`), so a revised session updates
+in place. Without a name, the key falls back to the start time (plus type for exercises).
+Other legacy exercises survive increments. There was no Fitbit file importer in this package.
+The deprecated `fitbit` entry remains resolvable for existing connections and fixture demos,
+is excluded from new-connection catalogs, and refuses live runs with Google Health guidance.
 
-The versioned JSON checkpoint stores the latest imported end time independently for each
-type. Incremental queries overlap it by 48 hours; daily queries start at UTC midnight to
-rebuild complete totals. Empty types keep their previous cursor. Invalid items count as
-skipped and hold that type's cursor; malformed summary batches also keep previous totals.
-All types and pages validate before data writes. Repeated tokens, conflicting duplicate
-points, overlapping summary intervals and malformed envelopes fail closed. Upserts retain
-unseen subjects and conditional ETags; failures preserve the host's successful checkpoint.
-An interrupted multi-document write is replayed on retry. Source deletions are not inferred.
-Stored activity reconciliation also refuses more than 100,000 subjects or 1,000,000
-quads, ambiguous stored times and numeric collisions with incomplete legacy records.
+Documents are partitioned by day so that each merge touches only the days it reads:
+- **Daily steps, distance and calories** use reconciled points and existing Fit typed
+  `schema:additionalProperty` measurements on ExerciseAction, under
+  `health/daily/<civil-date>/<type>.ttl`. The civil date is the interval's start date in the
+  provider's own UTC offset; a UTC-5 day is one document, not refused. Intervals crossing a
+  civil midnight are skipped; no multi-day totals are apportioned.
+- **Heart rate** is stored at one-minute resolution in `health/heart-rate/<UTC-date>.ttl`.
+  Each `#minute-HH-MM` PropertyValue carries the mean (`schema:value`, two decimals),
+  `schema:minValue`, `schema:maxValue`, the sample count (`health:sampleCount`, from
+  `@jeswr/suite-vocab`'s health namespace) and `schema:dateMeasured` (minute start, UTC).
+  Samples from every data source in that minute are aggregated together, so a day holds at
+  most 1,440 entries. A 1 Hz day imported twice stays well under the 16 MiB read limit.
+- **Weight** keeps every sample in `health/weight/<UTC-date>.ttl`.
+- **Sleep sessions** and their stages use named ExerciseAction subjects, one replaced document
+  per session under `health/sleep/`.
 
-One run budget bounds all types, retries and response bytes: 1,024 adapter transport calls, 100,000
-points/stages and 64 MiB by default. Each type has at most 100 pages; each page has at
-most 1,000 points and 2 MiB JSON, with 2,048-character tokens and 500 stages per sleep.
-429/5xx retry at most three times with bounded backoff (maximum 60 seconds per wait),
-respecting Retry-After seconds. The authenticated session separately caps HTTP traffic,
-including refresh and replay, at 4,096 requests. Cancellation ends waits immediately. Synthetic tests
-cover three-page empty-token termination, overlaps, compatibility, refresh, backoff,
-budgets, malformed inputs, provenance and stable re-imports without provider traffic.
+This checkout's old Fitbit adapter only imported exercise sessions, so these same-shape
+additions have no earlier Fitbit ids to migrate. Other Google Health types are omitted.
+
+Sample keys include the data source: the point's `dataSource` object, else its resource name.
+Two different points sharing a key from one source resolve deterministically: the later
+`updateTime` wins, then the larger value. The adapter reports this through `onWarning` and
+never throws.
+
+Sync walks one UTC day per request window, per type, in chronological order. A first import
+(no checkpoint) reaches back `lookbackDays` (default 30). The versioned checkpoint stores, per
+type, the end of the last fully written window and when it was read. The next run re-reads 48
+hours before that end, or before the read time when catching up, so data arriving late is
+picked up. **Points that reach Google more than 48 hours after the previous sync are missed by
+design.** Daily summaries re-read two further UTC days, so a civil date left unwritten at a
+stop is rebuilt whole. A civil date that began before the re-read range is never rewritten from
+a fragment. Permanently invalid points are counted as `skipped`; the cursor still advances past
+them. Invalid points include malformed shapes, over-limit stages, names over 256 characters and
+stages outside their session. Only a point ending after the run's clock holds its type's cursor
+at that window. An invalid summary point drops only its own civil date, or the dates in its
+window when its date is illegible; the previous total stays. Each window validates every page
+before its documents are written, and conditional ETags are preserved. Source deletions are not
+inferred. Stored activity reconciliation refuses more than 100,000 subjects or 1,000,000 quads.
+
+Budgets are per type and per run. By default each type gets 512 transport calls, 250,000
+points/stages and 128 MiB per run; the run gets 2,048, 1,000,000 and 512 MiB. When a budget runs
+out, the run stops after the last fully written window and **succeeds**. Each type's cursor
+records its last completed window, and the next run continues from there. For example, 200,000
+heart-rate points over five days complete across three runs with no gap or duplicate. A
+failure is raised only when not even the first window of a type fits, and for real errors. Each
+one-day window has at most `maxPages` (default 100) pages. Each page has at most 1,000 points
+and 2 MiB of JSON, 2,048-character tokens and 500 stages per sleep session. A single day beyond
+the page cap fails rather than truncating. 429/5xx retry at most three times with bounded
+backoff (at most 60 seconds per wait), respecting Retry-After seconds. The authenticated session
+separately caps HTTP traffic, including refresh and replay, at 4,096 requests. Cancellation ends
+waits immediately. Demo fixtures are shifted by whole days into the lookback window, so the
+fixture demo shows data at any date. Synthetic tests cover pagination, overlaps,
+compatibility, refresh, backoff, budgets, malformed inputs, provenance and stable re-imports
+without provider traffic.
 
 ## Google Drive
 
@@ -805,7 +846,8 @@ Spotify also leaves withheld kinds out of `/me/playlists`, so while either playl
 withheld every previously imported playlist this run does not describe (with its list items
 and tracks) carries forward into the replaced `music/playlists.ttl` without counting as an
 imported item; only a run with both playlist scopes drops playlists the source no longer lists.
-Google Health requires every requested scope; the remaining adapters ignore `scopes`. Other playlists retain their metadata
+Google Health requires every requested scope; the remaining adapters ignore `scopes`.
+A granted `scope` in the token response now reaches `ctx.scopes` automatically. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
 ## Tier A sync behavior

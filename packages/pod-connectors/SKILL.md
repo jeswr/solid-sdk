@@ -58,25 +58,40 @@ against fetch, Solid HTTP and strict memory backends. Use ./testing for consumer
 build, typecheck and test, then the workspace gates before completing a change.
 
 CON-A4 adds `google-health` as Fitbit's Google OAuth successor. Read its README section
-and `src/google-health/api.ts` before changing it: all Health endpoint, filter, field,
-unit and exact scope assumptions stay in that one module and cite the supplied docs;
-scope spellings remain marked for verification. Shared Google OAuth accepts `health`.
-Keep only readonly scopes for imported categories; never reuse Fitbit tokens. Hosts use
-the adapter's `createSourceAuth` hook for one 401 refresh; preserve transport isolation,
-redirect refusal, byte caps, abort signals and memory-only tokens.
-The standard writer and `adapterContainerUrl` deliberately resolve Google Health into
-the legacy `integrations/fitbit/` container, preserving run exclusion and existing URLs;
-custom writers must do the same. Exercise subjects retain Fitbit ids, matching an
-unambiguous stored start/type when Google omits/changes its native id. Never guess an
-ambiguous match. Fitbit remains a deprecated fixture/demo oracle, excluded from the
-new-connection catalog and refused by live runner/CLI. No Fitbit file path existed here.
-Stage and validate every source page before data writes; retain a versioned per-type
-end-time cursor with 48h overlap, aligned to midnight for daily reconciled summaries.
-Invalid items hold that type cursor; malformed summary batches must preserve old totals.
-Preserve shared RunBudget, response/point/stage/token/page caps, bounded 429/5xx backoff,
-abortable waits, deterministic upserts, conditional ETags and failure checkpoints.
-Daily/sample/sleep fields reuse the existing Fit/schema.org typed shapes. Other Health
-types and source deletions are outside this import. All fixtures remain synthetic.
+and `src/google-health/api.ts` before changing it. All Health endpoint, filter, field,
+unit and exact scope assumptions stay in that one module and cite their sources. The three
+readonly scopes (`activity_and_fitness`, `sleep`, `health_metrics_and_measurements`) keep the
+VERIFY marker. Shared Google OAuth accepts `health`; never reuse Fitbit tokens.
+`TokenSet.scope` keeps the granted scope string; `SourceAuth.scopes` carries it to
+`ctx.scopes` through runImport, and the adapter refuses partial grants. Hosts use the adapter's
+`createSourceAuth` hook for one 401 refresh. Map a 401 that survives the refresh, and any 403,
+to `IntegrationAuthError` with re-authorise guidance. Preserve transport isolation, redirect
+refusal, byte caps, abort signals and memory-only tokens.
+The standard writer, `adapterContainerUrl` and the Node state store (`connectorStorageId`)
+deliberately resolve Google Health into the legacy `integrations/fitbit/` container. The
+checkpoint lives in `state-google-health.json` beside Fitbit's untouched `state.json`; custom
+writers must do the same. Exercise subjects retain Fitbit ids. Fitbit stored local wall-clock
+time with a Z suffix, so match on Google's start rendered in its own offset as a Z time. Also
+accept a numeric Google id equal to a legacy logId with the same type and starts within 14 h.
+Ambiguous or colliding matches are skipped and counted with an `onWarning` note; never guess
+them, and never throw for them. Key sleep and non-numeric exercise sessions by resource name
+when present. Fitbit remains a deprecated fixture/demo oracle, excluded from the new-connection
+catalog and refused by live runner/CLI. No Fitbit file path existed here.
+Sync walks one UTC day per window per type, chronologically, writing after each window. First
+imports reach back `lookbackDays` (30). The v2 checkpoint keeps per-type `through` (last written
+window end) and `fetchedAt`, re-reading 48 h; summaries re-read two further days. Points more
+than 48 h late are missed by design. Per-type and per-run RunBudgets end the run successfully at
+the last written window; only a type whose first window cannot fit, or a real error, fails.
+Permanently invalid points are skipped and the cursor advances; only a point ending after the run
+clock holds its type at that window. Documents are day-partitioned. Heart rate is aggregated per
+minute (mean/min/max/`health:sampleCount`, all sources), at most 1,440 entries per UTC day.
+Weight keeps per-source samples per UTC day. Daily summaries use their civil date in the
+provider's offset; overlapping or invalid points drop only their own date. Sample keys include
+the data source. Same-key conflicts resolve by latest `updateTime`, then the larger value,
+never throwing. Preserve response/point/stage/token/page caps, bounded 429/5xx backoff, abortable
+waits, deterministic upserts and conditional ETags. Demo fixtures shift by whole days into the
+lookback. Other Health types and source deletions are outside this import. All fixtures remain
+synthetic.
 
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,

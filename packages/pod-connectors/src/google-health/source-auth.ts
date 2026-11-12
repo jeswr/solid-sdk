@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { RunBudget, readJson } from "../core/budget.js";
 import { IntegrationAuthError } from "../core/errors.js";
 import { createSourceAuth } from "../core/import-runner.js";
+import { grantedScope, scopeList } from "../core/oauth.js";
 import type { OAuthAppConfig, SourceAuth, TokenSet } from "../core/types.js";
 import { googleHealthAdapter } from "./adapter.js";
 import { API, ID, record } from "./api.js";
@@ -94,10 +96,16 @@ export function createGoogleHealthSourceAuth(options: {
         json.expires_in <= 365 * 86400
           ? Date.now() + json.expires_in * 1000
           : undefined,
+      // Google repeats the granted scopes on refresh; otherwise the original grant stands.
+      scope: grantedScope(json.scope) ?? token.scope,
     };
     options.onToken?.(token);
   }
   return {
+    /** Granted scopes of the current token, when Google listed them (`ImportContext.scopes`). */
+    get scopes() {
+      return scopeList(token.scope);
+    },
     fetch: async (input, init) => {
       const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "direct" });
       const request = typeof snapshot.input === "string" ? undefined : snapshot.input;

@@ -224,4 +224,25 @@ describe("Google Health source authentication", () => {
     ).rejects.toThrow(/too large/);
     expect(cancel).toHaveBeenCalledOnce();
   });
+
+  it("exposes the granted scopes and keeps them current across a refresh", async () => {
+    const transport = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === config.tokenEndpoint)
+        return response(200, { access_token: "fixture-new", scope: "a b c" });
+      return response(
+        new Headers(init?.headers).get("authorization") === "Bearer fixture-old" ? 401 : 200,
+      );
+    });
+    const auth = createGoogleHealthSourceAuth({
+      config,
+      token: { ...token, scope: "a b" },
+      fetch: transport,
+    });
+    expect(auth.scopes).toEqual(["a", "b"]);
+    expect((await auth.fetch(endpoint("steps"))).status).toBe(200);
+    expect(auth.scopes).toEqual(["a", "b", "c"]);
+    expect(
+      createGoogleHealthSourceAuth({ config, token, fetch: transport }).scopes,
+    ).toBeUndefined();
+  });
 });

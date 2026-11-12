@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Provider assumptions live here. Source: Google's Health REST v4 / scopes docs
  * (developers.google.com/health), supplied with sst-uqit CON-A4; no live verification.
@@ -9,19 +10,32 @@
  * summary types, list sessions/samples. Google OAuth + offline PKCE; Fitbit tokens
  * cannot migrate. All Health scopes are Restricted.
  *
- * VERIFY against developers.google.com/health/scopes: category spellings below.
+ * VERIFY against https://developers.google.com/health/scopes (unreachable from the
+ * authoring sandbox; confirmed on 2026-11-12 only through search-result extracts of that
+ * page and developers.google.cn/health/scopes): every scope is the
+ * `https://www.googleapis.com/auth/googlehealth` prefix plus `.<category>.readonly|writeonly`,
+ * with categories `activity_and_fitness`, `health_metrics_and_measurements`, `sleep` and
+ * `nutrition`. Access tokens carry only the scopes the user consented to. Nutrition is not
+ * imported, so it is not requested.
+ *
  * The supplied facts do not specify payload members, time member spellings, units,
  * exercise-session type or filter grammar. The deliberately narrow synthetic profile
  * below assumes startTime/endTime or time, steps.count, distance.meters,
  * calories.kilocalories, heartRate.beatsPerMinute, weight.kilograms,
- * sleep.stages[{startTime,endTime,stage}], exerciseSession.{activityName,distanceMeters}.
- * Filters assume `endTime >= "RFC3339"` for intervals, `time >= ...` for samples.
- * Unknown/malformed points are skipped and hold that type's checkpoint. No guessing
- * of units, local time zones, native Fitbit identifiers, or multi-day allocations.
- * Named resources retain API/name as identity/provenance only; these URLs are never fetched.
+ * sleep.stages[{startTime,endTime,stage}], exerciseSession.{activityName,distanceMeters},
+ * an optional `dataSource` object and an optional `updateTime`. RFC 3339 times keep the
+ * provider's own UTC offset; a daily summary's civil date is its start date in that offset.
+ * Search extracts of the v4 reference suggest real points nest times (for example
+ * `sampleTime.physicalTime`, `civilTime`, `utcOffset`) and describe `dataSource` with
+ * `recordingMethod`, `device`, `application` and `platform`; VERIFY before a live client.
+ * Filters assume `endTime > "A" AND endTime <= "B"` for intervals and
+ * `time >= "A" AND time < "B"` for samples: one UTC day per request window.
+ * Permanently invalid points are skipped. No guessing of units, native Fitbit identifiers,
+ * or multi-day allocations. Named resources retain API/name as identity/provenance only;
+ * these URLs are never fetched.
  */
 import { type RunBudget, readJson } from "../core/budget.js";
-import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
+import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import { Pagination } from "../core/pagination.js";
 import type { ImportContext } from "../core/types.js";
 
@@ -29,18 +43,14 @@ export const ID = "google-health";
 export const API = "https://health.googleapis.com/v4";
 /** The shared import session's source fallback, also used to recognise migrated records. */
 export const SOURCE_ORIGIN = `${new URL(API).origin}/`;
-// verify against developers.google.com/health/scopes before enabling a live client.
-export const ACTIVITY_SCOPE =
-  "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly";
-export const SLEEP_SCOPE = "https://www.googleapis.com/auth/googlehealth.sleep.readonly";
-export const METRICS_SCOPE = "https://www.googleapis.com/auth/googlehealth.health_metrics.readonly";
-export const BODY_SCOPE = "https://www.googleapis.com/auth/googlehealth.body_measurements.readonly";
-export const GOOGLE_HEALTH_SCOPES = [
-  ACTIVITY_SCOPE,
-  SLEEP_SCOPE,
-  METRICS_SCOPE,
-  BODY_SCOPE,
-] as const;
+const SCOPE_PREFIX = "https://www.googleapis.com/auth/googlehealth";
+/** Steps, distance, calories and exercise sessions. */
+export const ACTIVITY_SCOPE = `${SCOPE_PREFIX}.activity_and_fitness.readonly`;
+/** Sleep sessions and stages. */
+export const SLEEP_SCOPE = `${SCOPE_PREFIX}.sleep.readonly`;
+/** Heart rate and weight. */
+export const METRICS_SCOPE = `${SCOPE_PREFIX}.health_metrics_and_measurements.readonly`;
+export const GOOGLE_HEALTH_SCOPES = [ACTIVITY_SCOPE, SLEEP_SCOPE, METRICS_SCOPE] as const;
 export const TYPES = [
   "steps",
   "distance",
@@ -51,14 +61,26 @@ export const TYPES = [
   "weight",
 ] as const;
 export type HealthType = (typeof TYPES)[number];
+export const DAY_MS = 24 * 60 * 60 * 1000;
 export const OVERLAP_MS = 48 * 60 * 60 * 1000;
+/** Largest civil UTC offset the provider may render (UTC-12 … UTC+14). */
+export const MAX_OFFSET_MS = 14 * 60 * 60 * 1000;
+export const DEFAULT_LOOKBACK_DAYS = 30;
 export const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 export const MAX_PAGE_ITEMS = 1000;
 export const MAX_STAGES = 500;
 export const MAX_TOKEN_CHARS = 2048;
-export const DEFAULT_LIMITS = { maxRequests: 1024, maxItems: 100_000, maxBytes: 64 * 1024 * 1024 };
+/** Per data type, per run. Exceeding it ends that type at its last fully written day. */
+export const DEFAULT_LIMITS = { maxRequests: 512, maxItems: 250_000, maxBytes: 128 * 1024 * 1024 };
+/** Whole run, across all types. Exceeding it ends the run at the last fully written day. */
+export const DEFAULT_RUN_LIMITS = {
+  maxRequests: 2048,
+  maxItems: 1_000_000,
+  maxBytes: 512 * 1024 * 1024,
+};
 export const summary = (type: HealthType): boolean =>
   ["steps", "distance", "calories"].includes(type);
+export const sample = (type: HealthType): boolean => type === "heart-rate" || type === "weight";
 export const endpoint = (type: HealthType): string =>
   `${API}/users/me/dataTypes/${type}/dataPoints${summary(type) ? ":reconcile" : ""}`;
 
@@ -68,22 +90,29 @@ export interface HealthPoint {
   start: string;
   end: string;
   key: string;
+  /** Canonical data-source identity (dataSource object, else resource name, else ""). */
+  source: string;
+  updateTime?: string;
   nativeId?: string;
   sourceUrl?: string;
   value?: number;
   activity?: string;
   distanceKm?: number;
+  /** Start wall-clock time in the provider's offset, rendered with a Z suffix (Fitbit's legacy form). */
+  wallStart?: string;
+  /** Summary types: civil date (YYYY-MM-DD) in the provider's offset, and that date's UTC span. */
+  civilDate?: string;
+  civilStart?: number;
+  civilEnd?: number;
   stages?: { start: string; end: string; label: string }[];
 }
 export const record = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
 export function timestamp(v: unknown): string | undefined {
-  if (
-    typeof v !== "string" ||
-    v.length > 40 ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(v)
-  )
-    return undefined;
+  if (typeof v !== "string" || v.length > 40) return undefined;
+  const match = RFC3339.exec(v);
+  if (!match) return undefined;
   const ms = Date.parse(v);
   const [year, month, day] = v.slice(0, 10).split("-").map(Number);
   const [hour, minute, second] = v.slice(11, 19).split(":").map(Number);
@@ -97,21 +126,74 @@ export function timestamp(v: unknown): string | undefined {
     new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) !== v.slice(0, 10)
   )
     return undefined;
+  const offset = match[1] as string;
+  if (offset !== "Z") {
+    const [h, m] = offset.slice(1).split(":").map(Number);
+    if ((h ?? 99) * 60 + (m ?? 99) > MAX_OFFSET_MS / 60_000 || (m ?? 60) > 59) return undefined;
+  }
   // Keep normalized dates within the fixed-width range used by cursor comparisons.
   if (!Number.isFinite(ms) || ms < 0) return undefined;
   const normalized = new Date(ms).toISOString();
   return normalized.length === 24 ? normalized : undefined;
 }
-const text = (v: unknown): v is string =>
+/** The provider's own offset of a validated RFC 3339 string, as `±HH:MM`. */
+function offsetOf(v: string): string {
+  const offset = RFC3339.exec(v)?.[1] ?? "Z";
+  return offset === "Z" ? "+00:00" : offset;
+}
+/** Local wall-clock time of a validated RFC 3339 string, re-labelled as UTC. */
+function wallClock(v: string): string | undefined {
+  return timestamp(v.replace(/(?:Z|[+-]\d{2}:\d{2})$/, "Z"));
+}
+const text = (v: unknown, max = 256): v is string =>
   typeof v === "string" &&
   v.length > 0 &&
-  v.length <= 256 &&
+  v.length <= max &&
   [...v].every((c) => {
     const n = c.codePointAt(0) ?? 0;
     return n >= 32 && (n < 0xd800 || n > 0xdfff);
   });
 const number = (v: unknown, max: number): v is number =>
   typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= max;
+
+const MAX_SOURCE_CHARS = 1024;
+/**
+ * Canonical, bounded identity of a point's `dataSource` object: its scalar leaves (two
+ * levels deep) in sorted key order. Undefined when the member is malformed.
+ */
+function dataSourceKey(value: unknown): string | undefined {
+  if (!record(value)) return undefined;
+  const parts: string[] = [];
+  const visit = (node: Record<string, unknown>, prefix: string, depth: number): boolean => {
+    const keys = Object.keys(node).sort();
+    if (keys.length > 32) return false;
+    for (const key of keys) {
+      if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(key)) return false;
+      const leaf = node[key];
+      if (typeof leaf === "string" || typeof leaf === "number" || typeof leaf === "boolean") {
+        if (typeof leaf === "string" && leaf.length > 256) return false;
+        parts.push(`${prefix}${key}=${JSON.stringify(leaf)}`);
+      } else if (record(leaf) && depth < 2) {
+        if (!visit(leaf, `${prefix}${key}.`, depth + 1)) return false;
+      } else if (leaf !== null && leaf !== undefined) return false;
+    }
+    return true;
+  };
+  if (!visit(value, "", 1)) return undefined;
+  const key = parts.join(";");
+  return key.length <= MAX_SOURCE_CHARS ? key : undefined;
+}
+/** Short deterministic IRI-safe token for a source identity (FNV-1a, 2 × 32 bits). */
+export function sourceToken(source: string): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193 ^ source.length;
+  for (let i = 0; i < source.length; i++) {
+    const c = source.charCodeAt(i);
+    a = Math.imul(a ^ c, 0x01000193);
+    b = Math.imul(b ^ c, 0x01000197);
+  }
+  return `${(a >>> 0).toString(16).padStart(8, "0")}${(b >>> 0).toString(16).padStart(8, "0")}`;
+}
 
 const RESOURCE_NAME =
   /^users\/[A-Za-z0-9_-]{1,128}\/dataTypes\/([a-z-]+)\/dataPoints\/([A-Za-z0-9_-]{1,128})$/;
@@ -122,12 +204,14 @@ export function nativeSource(value: string | undefined, type: HealthType): strin
   return match?.[1] === type ? value : undefined;
 }
 
+/** Normalise one provider point; undefined means permanently invalid (skipped). */
 export function point(type: HealthType, raw: unknown): HealthPoint | undefined {
   if (!record(raw)) return undefined;
-  const sample = type === "heart-rate" || type === "weight";
-  const start = timestamp(sample ? raw.time : raw.startTime);
-  const end = timestamp(sample ? raw.time : raw.endTime);
-  if (!start || !end || end < start || (!sample && end === start)) return undefined;
+  const isSample = sample(type);
+  const rawStart = isSample ? raw.time : raw.startTime;
+  const start = timestamp(rawStart);
+  const end = timestamp(isSample ? raw.time : raw.endTime);
+  if (!start || !end || end < start || (!isSample && end === start)) return undefined;
   let nativeId: string | undefined;
   let sourceUrl: string | undefined;
   if (raw.name !== undefined && raw.name !== "") {
@@ -136,6 +220,17 @@ export function point(type: HealthType, raw: unknown): HealthPoint | undefined {
     if (!match || match[1] !== type) return undefined;
     nativeId = match[2];
     sourceUrl = `${API}/${raw.name}`;
+  }
+  let source = "";
+  if (raw.dataSource !== undefined) {
+    const key = dataSourceKey(raw.dataSource);
+    if (key === undefined) return undefined;
+    source = key;
+  } else if (sourceUrl) source = `name=${raw.name as string}`;
+  let updateTime: string | undefined;
+  if (raw.updateTime !== undefined) {
+    updateTime = timestamp(raw.updateTime);
+    if (!updateTime) return undefined;
   }
   const field =
     { "heart-rate": "heartRate", "exercise-session": "exerciseSession" }[
@@ -147,24 +242,30 @@ export function point(type: HealthType, raw: unknown): HealthPoint | undefined {
     type,
     start,
     end,
+    source,
+    updateTime,
     nativeId,
     sourceUrl,
-    key: `${type}-${start}-${end}`,
+    key: `${type}-${start}-${end}-${sourceToken(source)}`,
   };
   if (type === "exercise-session") {
     if (!text(payload.activityName)) return undefined;
     result.activity = payload.activityName;
-    // Numeric resource suffixes are used verbatim ONLY when supplied, never inferred.
+    result.wallStart = wallClock(rawStart as string);
+    // Numeric resource suffixes keep the legacy Fitbit key ONLY when supplied, never inferred;
+    // other resource names key the session so a revision updates in place.
     result.key =
       nativeId && /^\d{1,32}$/.test(nativeId)
         ? nativeId
-        : `google-health-exercise-${start}-${encodeURIComponent(payload.activityName)}`;
+        : nativeId
+          ? `google-health-exercise-${nativeId}`
+          : `google-health-exercise-${start}-${encodeURIComponent(payload.activityName)}`;
     if (payload.distanceMeters !== undefined) {
       if (!number(payload.distanceMeters, 1e9)) return undefined;
       result.distanceKm = payload.distanceMeters / 1000;
     }
   } else if (type === "sleep") {
-    result.key = `sleep-${start}`;
+    result.key = nativeId ? `sleep-${nativeId}` : `sleep-${start}`;
     if (!Array.isArray(payload.stages) || payload.stages.length > MAX_STAGES) return undefined;
     const stages: NonNullable<HealthPoint["stages"]> = [];
     for (const stage of payload.stages) {
@@ -187,15 +288,38 @@ export function point(type: HealthType, raw: unknown): HealthPoint | undefined {
     }[type] as [string, number];
     const value = payload[member];
     if (!number(value, max) || (type === "steps" && !Number.isSafeInteger(value))) return undefined;
-    // Refuse intervals crossing a UTC day: no undocumented allocation rules.
-    if (
-      summary(type) &&
-      start.slice(0, 10) !== new Date(Date.parse(end) - 1).toISOString().slice(0, 10)
-    )
-      return undefined;
+    if (summary(type)) {
+      // A civil date in the provider's own offset; intervals crossing its midnight are refused
+      // (no undocumented allocation rules).
+      const date = (rawStart as string).slice(0, 10);
+      const offset = offsetOf(rawStart as string);
+      const civilStart = Date.parse(`${date}T00:00:00${offset}`);
+      const next = new Date(Date.parse(`${date}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+      const civilEnd = Date.parse(`${next}T00:00:00${offset}`);
+      if (!Number.isFinite(civilStart) || !Number.isFinite(civilEnd)) return undefined;
+      if (Date.parse(end) > civilEnd) return undefined;
+      Object.assign(result, { civilDate: date, civilStart, civilEnd });
+    }
     result.value = value;
   }
   return result;
+}
+
+/** Civil date of a summary point that failed validation, when its start is still legible. */
+export function civilDateOf(raw: unknown): string | undefined {
+  if (!record(raw)) return undefined;
+  return timestamp(raw.startTime) ? (raw.startTime as string).slice(0, 10) : undefined;
+}
+
+/**
+ * Deterministic winner between two different points sharing a key from one source: the
+ * latest update time, then the larger value, then the larger canonical serialisation.
+ */
+export function preferred(a: HealthPoint, b: HealthPoint): HealthPoint {
+  if ((a.updateTime ?? "") !== (b.updateTime ?? ""))
+    return (a.updateTime ?? "") > (b.updateTime ?? "") ? a : b;
+  if ((a.value ?? -1) !== (b.value ?? -1)) return (a.value ?? -1) > (b.value ?? -1) ? a : b;
+  return JSON.stringify(a) >= JSON.stringify(b) ? a : b;
 }
 
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
@@ -213,6 +337,9 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+const REAUTHORIZE =
+  "Re-authorize Google Health with all requested read permissions; the checkpoint is unchanged.";
+
 async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise<unknown> {
   const resource = url.split("?", 1)[0] ?? API; // Never put opaque page tokens in diagnostics.
   for (let attempt = 0; ; attempt++) {
@@ -221,6 +348,20 @@ async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise
     const res = await ctx.api(url, { signal: ctx.signal, redirect: "error" });
     if (res.ok) return readJson(res, ID, resource, MAX_PAGE_BYTES, budget);
     await res.body?.cancel();
+    // The host transport has already refreshed once on 401; a second 401 or any 403
+    // (withheld scope, unapproved Restricted access) needs the user to authorize again.
+    if (res.status === 401)
+      throw new IntegrationAuthError(
+        ID,
+        "exchange-failed",
+        `Google Health rejected the authorization (401). ${REAUTHORIZE}`,
+      );
+    if (res.status === 403)
+      throw new IntegrationAuthError(
+        ID,
+        "exchange-failed",
+        `Google Health denied access (403). ${REAUTHORIZE}`,
+      );
     if (res.status === 429 || res.status >= 500) {
       const raw = res.headers.get("retry-after");
       const seconds = raw && /^\d+$/.test(raw) ? Number(raw) : undefined;
@@ -239,33 +380,56 @@ async function json(ctx: ImportContext, url: string, budget: RunBudget): Promise
   }
 }
 
-export async function fetchPoints(
+/** One request window: [start, end) in epoch ms, at most one UTC day. */
+export interface Window {
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface WindowBatch {
+  /** Valid, de-duplicated points belonging to this window. */
+  points: HealthPoint[];
+  /** Permanently invalid points (the cursor still advances past them). */
+  skipped: number;
+  /** Points ending after the run's upper bound: hold the type cursor at this window. */
+  transient: boolean;
+  /** Same-key, same-source points with different contents resolved deterministically. */
+  conflicts: number;
+  /** Summary civil dates with an invalid point; `all` when one could not be attributed. */
+  tainted: Set<string>;
+  taintedAll: boolean;
+}
+
+const iso = (ms: number) => new Date(ms).toISOString();
+
+/** Fetch every page of one window, validating each envelope and point before any write. */
+export async function fetchWindow(
   ctx: ImportContext,
   type: HealthType,
-  cursor: string | undefined,
+  window: Window,
   budget: RunBudget,
   maxPages: number,
-  until: string,
-): Promise<{ points: HealthPoint[]; skipped: number; latest?: string }> {
+  until: number,
+): Promise<WindowBatch> {
   const points = new Map<string, HealthPoint>();
   const pagination = new Pagination(ID);
+  const batch: WindowBatch = {
+    points: [],
+    skipped: 0,
+    transient: false,
+    conflicts: 0,
+    tainted: new Set(),
+    taintedAll: false,
+  };
+  const filter = sample(type)
+    ? `time >= "${iso(window.start)}" AND time < "${iso(window.end)}"`
+    : `endTime > "${iso(window.start)}" AND endTime <= "${iso(window.end)}"`;
   let token: string | undefined;
-  let skipped = 0;
-  let latest = cursor;
-  let from = cursor
-    ? new Date(Math.max(0, Date.parse(cursor) - OVERLAP_MS)).toISOString()
-    : undefined;
-  // Summaries need a complete UTC day when the overlap begins part-way through it.
-  if (from && summary(type)) from = `${from.slice(0, 10)}T00:00:00.000Z`;
   for (let page = 0; page < maxPages; page++) {
     const url = new URL(endpoint(type));
     url.searchParams.set("pageSize", String(MAX_PAGE_ITEMS));
     if (token) url.searchParams.set("pageToken", token);
-    const time = type === "heart-rate" || type === "weight" ? "time" : "endTime";
-    url.searchParams.set(
-      "filter",
-      `${from ? `${time} >= "${from}" AND ` : ""}${time} <= "${until}"`,
-    );
+    url.searchParams.set("filter", filter);
     const raw = await json(ctx, url.href, budget);
     if (
       !record(raw) ||
@@ -278,26 +442,43 @@ export async function fetchPoints(
     budget.items(raw.dataPoints.length);
     for (const value of raw.dataPoints) {
       const normalized = point(type, value);
-      // An inclusive end filter can return the previous day's final interval.
-      // Do not replace that day's full total using this boundary fragment alone.
-      if (normalized && from && summary(type) && normalized.start < from) continue;
-      if (!normalized || normalized.end > until || (from && normalized.end < from)) {
-        skipped++;
+      if (!normalized) {
+        batch.skipped++;
+        if (summary(type)) {
+          const date = civilDateOf(value);
+          if (date) batch.tainted.add(date);
+          else batch.taintedAll = true;
+        }
+        continue;
+      }
+      const at = Date.parse(sample(type) ? normalized.start : normalized.end);
+      const inWindow = sample(type)
+        ? at >= window.start && at < window.end
+        : at > window.start && at <= window.end;
+      if (!inWindow) {
+        // A point the provider will still revise or has not finished: retry it next run.
+        if (Date.parse(normalized.end) > until) {
+          batch.transient = true;
+          batch.skipped++;
+        }
+        // Otherwise it belongs to another window, which owns it.
         continue;
       }
       budget.items(normalized.stages?.length ?? 0);
       const previous = points.get(normalized.key);
-      if (previous && JSON.stringify(previous) !== JSON.stringify(normalized))
-        throw new IntegrationSyncError(
-          ID,
-          "Conflicting Google Health points; checkpoint unchanged.",
-        );
-      points.set(normalized.key, normalized);
-      if (!latest || normalized.end > latest) latest = normalized.end;
+      if (previous && JSON.stringify(previous) !== JSON.stringify(normalized)) {
+        batch.conflicts++;
+        points.set(normalized.key, preferred(previous, normalized));
+      } else points.set(normalized.key, normalized);
     }
-    if (!raw.nextPageToken)
-      return { points: [...points.values()], skipped, latest: skipped ? cursor : latest };
+    if (!raw.nextPageToken) {
+      batch.points = [...points.values()];
+      return batch;
+    }
     token = pagination.next(raw.nextPageToken as string);
   }
-  throw new IntegrationSyncError(ID, "Google Health exceeded its page cap; checkpoint unchanged.");
+  throw new IntegrationSyncError(
+    ID,
+    `Google Health exceeded its page cap for one day of ${type}; checkpoint unchanged.`,
+  );
 }

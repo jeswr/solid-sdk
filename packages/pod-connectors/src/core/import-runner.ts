@@ -17,6 +17,7 @@ import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { scopeList } from "./oauth.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -57,7 +58,10 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * that rewrites those documents or items links them to its own activity.
    */
   signal?: AbortSignal;
-  /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
+  /**
+   * Granted source permissions when the user withheld some (`ImportContext.scopes`). Defaults
+   * to the live `sourceAuth.scopes`, which `createSourceAuth` derives from `TokenSet.scope`.
+   */
   scopes?: readonly string[];
 }
 
@@ -125,7 +129,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       writeBinary: checked(session.writeBinary),
       remove: checked(session.remove),
       signal,
-      scopes: opts.scopes,
+      // Hosts may narrow explicitly; otherwise the token's granted scopes, when it listed them.
+      scopes: opts.scopes ?? (mode === "live" ? opts.sourceAuth?.scopes : undefined),
     });
     signal?.throwIfAborted();
     const { indexUrl } = await podWriter.registerType(session.registrations());
@@ -212,5 +217,6 @@ export function createSourceAuth(
     const next: RequestInit = { ...snapshot.init, headers };
     return sourceFetch(snapshot.input, next);
   };
-  return { fetch: impl as typeof fetch };
+  const scopes = scopeList(token.scope);
+  return { fetch: impl as typeof fetch, ...(scopes && { scopes }) };
 }
