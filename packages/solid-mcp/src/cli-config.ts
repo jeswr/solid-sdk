@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { normalizeChatAccount } from "@jeswr/solid-chat-interop";
 import { assertEndpointTransport, assertIssuerTransport } from "@jeswr/solid-dpop";
 import { normalizePodRoot } from "./auth.js";
 
@@ -15,6 +16,8 @@ export interface CliConfig {
   clientSecret?: string;
   oidcIssuer?: string;
   tokenUrl?: string;
+  /** Optional owner-chosen conversation account label used by capture/import callers. */
+  account?: string;
 }
 
 async function readConfig(path: string): Promise<Record<string, unknown>> {
@@ -59,6 +62,9 @@ export async function loadCliConfig(
   home: string = homedir(),
 ): Promise<CliConfig> {
   const file = await readConfig(join(home, ".config", "solid-mcp", "config.json"));
+  const account = normalizeChatAccount(
+    (env.SOLID_MCP_ACCOUNT ?? file.account) as string | undefined,
+  );
   const podRoot = stringValue(env.SOLID_MCP_POD_ROOT ?? file.podRoot, "SOLID_MCP_POD_ROOT");
   if (!podRoot) throw new Error("SOLID_MCP_POD_ROOT (or config podRoot) is required.");
   const webId = stringValue(env.SOLID_MCP_WEBID ?? file.webId, "SOLID_MCP_WEBID");
@@ -102,5 +108,14 @@ export async function loadCliConfig(
   } catch {
     throw new Error("Invalid pod/auth URL; authenticated URLs require HTTPS or HTTP loopback.");
   }
-  return { podRoot, webId, readOnly, clientId, clientSecret, oidcIssuer, tokenUrl };
+  return {
+    podRoot,
+    webId,
+    readOnly,
+    clientId,
+    clientSecret,
+    oidcIssuer,
+    tokenUrl,
+    ...(account === undefined ? {} : { account }),
+  };
 }

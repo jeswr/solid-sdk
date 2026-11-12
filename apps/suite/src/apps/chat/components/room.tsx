@@ -25,8 +25,9 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { Copy, Info, MessageSquare } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
-import { decodeRef } from "@/lib/refs";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
+import { decodeIdentifierRef, decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
@@ -135,7 +136,7 @@ function MemberAvatar({ webId }: { webId: string }) {
     </li>
   );
 }
-export function RoomView({ url }: { url: string }) {
+export function RoomView({ url, messageId }: { url: string; messageId?: string | undefined }) {
   const room = useRoom(url);
   const joined = useRooms();
   const messages = useMessages(url, room.data?.created);
@@ -149,11 +150,36 @@ export function RoomView({ url }: { url: string }) {
   const [deleteError, setDeleteError] = useState("");
   const read = useRef(0);
   const [renderedAt, setRenderedAt] = useState(0);
+  const [messageNotice, setMessageNotice] = useState("");
+  const historyRequest = useRef(false);
+  const jump = useRef({ messageId, pages: 0, cursor: "" });
   const member = room.data?.members.includes(session.webId);
   const isJoined = joined.data?.some((room) => room.url === url);
   useEffect(() => {
     setCurrentRoom(url);
   }, [url, setCurrentRoom]);
+  useEffect(() => {
+    if (jump.current.messageId !== messageId) {
+      jump.current = { messageId, pages: 0, cursor: "" };
+      setMessageNotice("");
+    }
+    if (!messageId || !messages.data || messages.status !== "ready") return;
+    if (messages.data.messages.some((message) => message.id === messageId)) {
+      setMessageNotice("");
+      return;
+    }
+    const cursor = messages.data.next?.toISOString();
+    if (!cursor || jump.current.pages >= 4) {
+      setMessageNotice("This message couldn't be found in the loaded history.");
+      return;
+    }
+    // A paging render can still expose the previous snapshot. Consume each cursor once.
+    if (jump.current.cursor === cursor) return;
+    jump.current.cursor = cursor;
+    jump.current.pages++;
+    historyRequest.current = true;
+    messages.loadOlder();
+  }, [messageId, messages.data, messages.status, messages.loadOlder]);
   // Only mark the visible snapshot read while this tab has the user's attention.
   // A monotonic local fence prevents preference notifications causing a write loop.
   useEffect(() => {
@@ -188,11 +214,22 @@ export function RoomView({ url }: { url: string }) {
       () => toast.error("Couldn't copy invite link"),
     );
   };
+  const notice = (
+    <p key="message-notice" className="chat-message-notice" role="status" aria-atomic="true">
+      {messageNotice}
+    </p>
+  );
   if (!room.data && room.status === "loading")
-    return <LoadingSkeleton preset="list" label="Opening conversation" />;
+    return (
+      <div className="chat-room">
+        {notice}
+        <LoadingSkeleton preset="list" label="Opening conversation" />
+      </div>
+    );
   if (!room.data)
     return (
       <div className="chat-state">
+        {notice}
         <ChatFailure error={room.error} retry={room.retry} />
         <Composer
           url={url}
@@ -242,6 +279,7 @@ export function RoomView({ url }: { url: string }) {
       </header>
       {room.status === "error" && <ChatFailure error={room.error} retry={room.retry} />}
       {messages.status === "error" && <ChatFailure error={messages.error} retry={messages.retry} />}
+      {notice}
       {!messages.data && messages.status === "error" ? (
         <div className="chat-timeline" />
       ) : !messages.data ? (
@@ -250,6 +288,8 @@ export function RoomView({ url }: { url: string }) {
         <Timeline
           url={url}
           messages={list}
+          messageId={messageId}
+          historyLoading={historyRequest}
           outgoing={send.data}
           loading={messages.status === "loading"}
           hasOlder={!!messages.data.next}
@@ -357,8 +397,17 @@ export function RoomPageRoute() {
   return <RoomRoute reference={params.ref} />;
 }
 export function RoomRoute({ reference }: { reference: string }) {
+  return (
+    <Suspense>
+      <RoomRouteContent reference={reference} />
+    </Suspense>
+  );
+}
+function RoomRouteContent({ reference }: { reference: string }) {
+  const messageReference = useSearchParams().get("message");
   const { client } = useChat();
   let url: string;
+  let messageId: string | undefined;
   try {
     url = roomContainer(decodeRef(reference));
   } catch {
@@ -369,6 +418,12 @@ export function RoomRoute({ reference }: { reference: string }) {
         <a href="/chat">Back to Chat</a>
       </div>
     );
+  }
+  // A malformed message hint must never invalidate an otherwise usable room link.
+  try {
+    if (messageReference) messageId = decodeIdentifierRef(messageReference);
+  } catch {
+    messageId = undefined;
   }
   if (!client.canOpen(url))
     return (
@@ -381,5 +436,5 @@ export function RoomRoute({ reference }: { reference: string }) {
         <a href="/chat">Back to Chat</a>
       </div>
     );
-  return <RoomView key={url} url={url} />;
+  return <RoomView key={url} url={url} messageId={messageId} />;
 }
