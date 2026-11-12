@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { feedbackApps } from "../src/feedback/apps";
 import { interviewPlan, questions, readWalkthrough, stages } from "../src/feedback/guide";
 import { buildModelRequest, buildPrompt } from "../src/feedback/prompt";
-import { coerceUpdates, validateSubmission, validateTurn } from "../src/feedback/validation";
+import {
+  coerceUpdates,
+  validateAnswers,
+  validateSubmission,
+  validateTurn,
+} from "../src/feedback/validation";
 
 const turn = {
   pathway: "guided",
@@ -39,6 +44,24 @@ it("has eight ordered stages, unique ids, and registry app options with SEQ and 
       (q) => q.app && q.type === "scale",
     ),
   ).toHaveLength(1);
+});
+it("accepts every registered app and its debrief answers through server validation", () => {
+  for (const { slug } of suiteApps) {
+    const answers = {
+      apps: [slug],
+      debrief_apps: [slug],
+      [`recall_${slug}`]: "I tried this app",
+      [`seq_${slug}`]: 6,
+      [`seq_reason_${slug}`]: "It was easy to use",
+    };
+    expect(validateAnswers(answers)).toEqual(answers);
+    expect(coerceUpdates([{ id: "apps", value: slug }])).toEqual({ apps: [slug] });
+    expect(
+      interviewPlan(answers)
+        .filter((q) => q.app)
+        .map((q) => q.id),
+    ).toEqual([`recall_${slug}`, `seq_${slug}`, `seq_reason_${slug}`]);
+  }
 });
 it("reads only the agreed walkthrough shape, filters slugs and tolerates unavailable or corrupt storage", () => {
   expect(readWalkthrough('{"done":["drive","drive","missing"]}')).toEqual(["drive"]);

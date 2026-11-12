@@ -26,6 +26,10 @@ the public Solid Client ID Document, and HTTP composition.
   ownership before contacting the issuer. Crashed refreshes fail closed and require new login.
 - Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
   MCP revocation/reuse retires the pod session and invalidates all grants bound to it.
+- Pass `verifyWebId: false` to the Node engine: the broker owns the single guarded fetch-rdf
+  profile binding check at completion, alongside storage discovery and content negotiation.
+  Refresh retains that binding and verifies subject/nonce/WebID without another profile fetch
+  after refresh rotation.
 - Resolve profiles through fetch-rdf + wrapper accessors, require profile issuer trust, scope
   authenticated fetch to advertised storage roots, refuse caller credentials and redirects.
 - Require PKCE S256, nonempty state, exact redirects, and an exact configured resource.
@@ -37,6 +41,13 @@ the public Solid Client ID Document, and HTTP composition.
   test/composition seam and must already enforce SSRF protection.
 - `authorize(request, session)` is trusted completion, never an unauthenticated HTTP route.
   The composition authenticates the browser and validates consent/CSRF before calling it.
+- Await `grantCreated({grant, client, redirectUri, issuedAt})` after durable grant storage and
+  before code storage. It receives independent readonly-typed snapshots and seconds since epoch;
+  denial skips it. Hook failure must prevent a code, attempt session-wide revocation and return
+  a trusted `server_error` redirect with state/iss, including if credential cleanup fails.
+- `revokeGrant(grantId)` is a trusted server-only API: unknown IDs are no-ops, retries remain
+  irreversible and retry cleanup, and every grant on that pod session must fail verification
+  and code/refresh exchange. Propagate storage/broker failures to the caller.
 - Pluggable stores require durable atomic consume and irreversible revoke; memory stores are
   single-process fixtures. `./testing` exposes these stores to dependent tests.
 - Use fixtures only. Exercise signature verification, replay races, audience/expiry failures,
