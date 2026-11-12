@@ -1,0 +1,38 @@
+{
+  "shapesBase": "https://jeswr.org/ns/sheets/shapes#",
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Workbook",
+      "targetClass": "https://schema.org/SpreadsheetDigitalDocument",
+      "subject": {
+        "convention": "hash-it"
+      }
+    },
+    {
+      "name": "Download",
+      "targetClass": "https://schema.org/DataDownload",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Descriptor",
+      "targetClass": "https://schema.org/Dataset",
+      "subject": {
+        "convention": "hash-it"
+      }
+    },
+    {
+      "name": "Column",
+      "targetClass": "https://schema.org/PropertyValue",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}
