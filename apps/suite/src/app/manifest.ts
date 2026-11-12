@@ -2,6 +2,9 @@
 import { oklchToHex, tokens } from "@jeswr/suite-ui/tokens";
 import type { MetadataRoute } from "next";
 
+// The native build is a static export; the manifest has no request-time inputs.
+export const dynamic = "force-static";
+
 export default function manifest(): MetadataRoute.Manifest {
   // Manifests and PWA tooling do not all accept CSS Color 4 values.
   const light = tokens.find((token) => token.name === "--background")?.light;

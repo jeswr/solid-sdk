@@ -9,17 +9,18 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 const background = tokens.find((token) => token.name === "--background");
+if (!background) throw new Error("suite-ui tokens lack --background");
 export const viewport: Viewport = {
   colorScheme: "light dark",
   themeColor: [
     // Hex: older browsers drop an oklch() theme-color.
     {
       media: "(prefers-color-scheme: light)",
-      color: oklchToHex(background?.light ?? "oklch(1 0 0)"),
+      color: oklchToHex(background.light),
     },
     {
       media: "(prefers-color-scheme: dark)",
-      color: oklchToHex(background?.dark ?? "oklch(0 0 0)"),
+      color: oklchToHex(background.dark),
     },
   ],
 };
