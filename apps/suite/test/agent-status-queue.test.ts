@@ -27,6 +27,20 @@ describe("agent verified status table", () => {
     { heartbeatAt: at(1), controls: [], state: "offline" },
     { heartbeatAt: at(-120000), controls: [], state: "running" },
     { heartbeatAt: at(-30000), controls: [], state: "running" },
+    { heartbeatAt: at(-30000), heartbeatState: "paused" as const, controls: [], state: "paused" },
+    { heartbeatAt: at(-30000), heartbeatState: "stopped" as const, controls: [], state: "stopped" },
+    {
+      heartbeatAt: at(-120001),
+      heartbeatState: "stopped" as const,
+      controls: [],
+      state: "offline",
+    },
+    {
+      heartbeatAt: at(-30000),
+      heartbeatState: "running" as const,
+      controls: [control("Halt", -1)],
+      state: "stopped",
+    },
     { heartbeatAt: undefined, controls: [control("Halt", -1)], state: "stopped" },
     {
       heartbeatAt: at(-30000),
@@ -92,6 +106,27 @@ describe("agent verified status table", () => {
         owner: exampleRecords["control-statement"].attributedTo,
       }).state,
     ).toBe("stopped");
+  });
+  it("uses only the newest verified owner control to select Resume, independently of heartbeat state", () => {
+    const input = {
+      now,
+      heartbeatAt: at(-1),
+      heartbeatState: "stopped" as const,
+      owner: exampleRecords["control-statement"].attributedTo,
+    };
+    for (const controls of [
+      [],
+      [{ ...control("Halt", -1), verification: "unchecked" as const }],
+      [{ ...control("Halt", -1), attributedTo: "urn:another-owner" }],
+      [control("Halt", -3), control("Resume", -2)],
+    ]) {
+      const status = agentStatus({ ...input, controls });
+      expect(status.state).toBe("stopped");
+      expect(status.ownerHalted).not.toBe(true);
+    }
+    expect(
+      agentStatus({ ...input, controls: [control("Resume", -3), control("Halt", -2)] }),
+    ).toMatchObject({ state: "stopped", ownerHalted: true });
   });
 });
 const proposal: ActionProposal = {
