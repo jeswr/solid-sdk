@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import { generateKeyPair, SignJWT } from "jose";
 import { test, vi } from "vitest";
@@ -19,7 +20,7 @@ const metadata = {
 };
 const deferred = () => Promise.withResolvers();
 
-async function fixture(revoke) {
+async function fixture(revoke, options = {}) {
   const namespace = `revocation-${crypto.randomUUID()}`;
   const generations = createMemoryStore();
   const fence = new SessionFence(namespace, { store: generations, broadcast: false });
@@ -48,6 +49,7 @@ async function fixture(revoke) {
         cache,
         sessionStore,
         fence,
+        ...options,
         http: {
           fetch: async (url, init) => {
             if (new URL(url).pathname === "/revoke") return await revoke(init);
@@ -294,6 +296,57 @@ for (const store of ["cache", "sessionStore"]) {
       );
       assert.equal(await f.peer.commit(generation + 1, async () => "fresh"), "fresh");
     } finally {
+      f.fence.close();
+      f.peer.close();
+    }
+  });
+}
+
+for (const stage of ["before revocation", "transport", "response body"]) {
+  test(`owner disposal cancels revocation deadlines at ${stage}`, async () => {
+    const lifetime = new AbortController();
+    const ready = deferred();
+    let signal;
+    let calls = 0;
+    const f = await fixture(
+      (init) => {
+        calls++;
+        signal = init.signal;
+        ready.resolve();
+        return stage === "response body"
+          ? new Response(new ReadableStream(), {
+              status: 400,
+              headers: { "content-type": "application/json" },
+            })
+          : new Promise(() => {});
+      },
+      { revocationSignal: lifetime.signal },
+    );
+    await f.get("second");
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      if (stage === "before revocation") lifetime.abort(new Error("disposed"));
+      const rejected = assert.rejects(f.session.forget(), (error) => {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.errors.length, 2);
+        assert.equal(error.errors[0].message, "disposed");
+        return true;
+      });
+      if (stage !== "before revocation") {
+        await ready.promise;
+        assert.equal(vi.getTimerCount(), 1);
+        lifetime.abort(new Error("disposed"));
+        assert.equal(vi.getTimerCount(), 0);
+      }
+      await rejected;
+      assert.equal(calls, stage === "before revocation" ? 0 : 1);
+      assert.equal(vi.getTimerCount(), 0);
+      if (signal) {
+        assert.equal(signal.aborted, true);
+        assert.equal(getEventListeners(signal, "abort").length, 0);
+      }
+    } finally {
+      vi.useRealTimers();
       f.fence.close();
       f.peer.close();
     }
