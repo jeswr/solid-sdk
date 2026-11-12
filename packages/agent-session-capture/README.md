@@ -150,7 +150,11 @@ export parsers pass `{ chunks }` in message order, leaving raw-chunk checking,
 newline assembly, trimming and final conversation redaction to that helper. Existing markers
 stay byte-for-byte stable across repeated passes. URL password detection includes the
 trailing `@` across a join only while the left field still ends in userinfo; a complete
-authority or numeric port cannot absorb a later `@mention`. An orphan private-key END
+authority with existing userinfo cannot absorb a later `@mention`. Undelimited
+host:port-looking suffixes redact conservatively when the following field supplies
+`@`, even for numeric password continuations or ambiguous @mentions. Delimited
+host:port URLs stay intact. Completed quoted assignments keep their quotes when a
+turn is appended, preserving their content-derived IDs. An orphan private-key END
 line redacts only its own field prefix. Recognized BEGIN headers (including PGP PRIVATE
 KEY BLOCK) carry redaction through entire later fields to their first END or the
 conversation end, even for long bodies without END. Other adjacent-pair checks cannot

@@ -60,8 +60,12 @@ Chat save/export use the shared normalization and adjacent-field boundary rules 
 before that conversation-aware pass, since a marker can hide a split token's prefix.
 Boundary replacement preserves per-field markers, keeping IDs stable on incremental
 saves when the earlier message was already fully detected. URL password context
-includes `@` only while the left field remains in userinfo; complete authorities and
-numeric ports cannot absorb later @mentions. Orphan private-key END lines redact their
+includes `@` only while the left field remains in userinfo; authorities already
+containing userinfo cannot absorb later @mentions. Undelimited host:port-looking
+suffixes redact conservatively when the next field supplies `@`, including numeric
+password continuations. Delimited host:port URLs stay intact. Completed quoted
+assignments retain their quotes at field boundaries, keeping incremental-save IDs
+stable. Orphan private-key END lines redact their
 own field prefix only. Recognized PEM BEGIN headers, including PGP PRIVATE KEY BLOCK,
 carry through arbitrary body lengths and later fields until END or conversation end. Windows
 stop at code-point boundaries, lone surrogates are stripped, and flag tags follow

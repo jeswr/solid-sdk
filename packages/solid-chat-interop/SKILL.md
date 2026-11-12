@@ -41,16 +41,23 @@ After per-field redaction it inspects each adjacent 512-code-unit suffix/prefix 
 separator, snapping edges inward to code-point boundaries. Replace only values covered
 by detections whose full context spans the join (including a URL password's trailing `@`,
 even when its value is wholly on the left). A right-hand `@` cannot extend a left
-authority already containing a userinfo `@`. Dotted hostnames, localhost
-and bracketed IPv6 ending in ports (1–5 digits, 0–65535) are complete authorities
-at a join too; larger numeric credentials still redact. It also checks normalized
+authority already containing a userinfo `@`. A host:port-looking suffix without an
+authority delimiter is ambiguous: a following field's `@` establishes userinfo,
+including numeric passwords wholly on the left or continued on the right. Redact
+these conservatively even if the right field could be an @mention. Unambiguous
+host:port URLs ending in `/` or followed by whitespace or a path stay intact.
+It also checks normalized
 source windows, because an earlier per-field marker can hide a token prefix.
 Carry source ranges through existing replacements; never reconstruct plaintext from an
 already-redacted value. Collect all boundary ranges before applying them.
 Ignore zero-width boundary spans. Preserve existing markers byte-for-byte, including
 when a span lies entirely inside/on one; absorb touching newly exposed fragments into
 their coverage rather than rewriting or duplicating markers. Appending a neighbour must
-not change a fully detected message's text or its derived ID. Require F(F(fields)) = F(fields).
+not change a fully detected message's text or its derived ID. A closing quote at the
+field boundary completes a shell word; preserve its quotes instead of treating the
+next field as word continuation. Redacting a conversation prefix must match its
+fields in the whole result, except that later context completing an unresolved
+secret may add redaction, never remove existing coverage. Require F(F(fields)) = F(fields).
 A marker-only left value ends boundary continuation, so replay cannot advance the
 512-unit window through the next field. Original source windows still cover fragments.
 Recheck edited fields with the per-field detectors: removing a boundary fragment can

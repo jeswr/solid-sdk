@@ -57,7 +57,13 @@ type ValueSyntax = "code" | "shell" | "query";
  * the end of its line: an unterminated or ambiguous quote redacts to end of line and scanning
  * resumes on the next line, so a value can never swallow a later key while leaving its value.
  */
-function valueSpan(text: string, offset: number, syntax: ValueSyntax, multiline: boolean) {
+function valueSpan(
+  text: string,
+  offset: number,
+  syntax: ValueSyntax,
+  multiline: boolean,
+  join?: number,
+) {
   const quote = text[offset];
   let quoted = quote === '"' || quote === "'";
   let start = quoted ? offset + 1 : offset;
@@ -70,7 +76,9 @@ function valueSpan(text: string, offset: number, syntax: ValueSyntax, multiline:
       // A shell word continues straight after a closing quote (`'abc\'123'` is one word), so
       // redact the whole word, quotes included, instead of leaving its tail.
       const after = text[end + 1] ?? "";
-      if (syntax !== "shell" || after === "" || /[\s;|&]/.test(after)) {
+      // A completed quote at the field boundary ends this shell word. The next
+      // message cannot turn it into a concatenated word and remove its quotes.
+      if (syntax !== "shell" || end + 1 === join || after === "" || /[\s;|&]/.test(after)) {
         return { start, end, next: end + 1 };
       }
       quoted = false;
@@ -231,7 +239,6 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void, join?:
     previousName = name;
     previousEnd = offset;
     if (scheme) {
-      const authorityStart = offset;
       let colon = -1;
       let at = -1;
       for (; offset < text.length; offset += 1) {
@@ -250,16 +257,10 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void, join?:
           at = offset;
         }
       }
-      // A hostname followed by a numeric port is already an authority. With no
-      // delimiter between messages, a following @mention is not userinfo context.
-      const portBeforeJoin =
-        join !== undefined && colon >= 0 && colon < join && at >= join
-          ? /^(?:[^/:@]*\.[^/:@]*|localhost|\[[^\]]+\]):(\d{1,5})$/i.exec(
-              text.slice(authorityStart, join),
-            )
-          : null;
-      if (colon >= 0 && colon < at && !(portBeforeJoin && Number(portBeforeJoin[1]) <= 65535))
-        replace(colon + 1, at, match.index, at + 1);
+      // A numeric suffix can be either a port or a split password. If the following
+      // field supplies @ before an authority delimiter, conservatively redact it.
+      // Delimited host:port URLs and authorities already containing @ stay intact.
+      if (colon >= 0 && colon < at) replace(colon + 1, at, match.index, at + 1);
       candidates.lastIndex = offset;
       previousEnd = offset;
       continue;
@@ -311,7 +312,7 @@ function redactValues(text: string, inspect?: (span: SecretSpan) => void, join?:
       } else if (!flag || offset === nameEnd) continue;
       while (text[offset] === " " || text[offset] === "\t") offset += 1;
     }
-    const span = valueSpan(text, offset, syntax, Boolean(env));
+    const span = valueSpan(text, offset, syntax, Boolean(env), join);
     replace(span.start, span.end, match.index, span.next);
     candidates.lastIndex = span.next;
     previousEnd = span.next;

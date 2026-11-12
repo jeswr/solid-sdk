@@ -248,7 +248,7 @@ describe("ChatWriter", () => {
   it.each([
     ["prose ".repeat(156), "-----END PRIVATE KEY-----\nAfter"],
     ["connect to https://bob:pw@db.example.com", "@alice can you check?"],
-    ["see https://example.com:8080", "@alice thanks"],
+    ["see https://example.com:8080/", "@alice thanks"],
   ])("keeps IDs stable before appended footer/mention: %s", async (text, next) => {
     const writer = new ChatWriter(new MemoryPod());
     const first = { role: "user" as const, text, createdAt: DAY1 };
@@ -265,6 +265,33 @@ describe("ChatWriter", () => {
     expect(after.title).toBe("My title");
     expect(after.messages).toHaveLength(2);
     expect(after.messages[0]).toEqual(before.messages[0]);
+  });
+
+  it.each([
+    'export API_KEY="fixture"',
+    "export API_KEY='fixture'",
+  ])("keeps completed assignment text and IDs identical when Thanks is appended: %s", async (text) => {
+    const pod = new MemoryPod();
+    const writer = new ChatWriter(pod);
+    const first = { role: "user" as const, text, createdAt: DAY1 };
+    const input = conversation({ messages: [first] });
+    expect(await writer.save(input)).toMatchObject({ saved: 1, skipped: 0 });
+    const before = (await writer.get("claude", "thread-1")).messages[0];
+    const expected = text.replace("fixture", "[REDACTED]");
+    expect(before?.text).toBe(expected);
+    const appended = {
+      ...input,
+      messages: [first, { role: "assistant" as const, text: "Thanks", createdAt: DAY2 }],
+    };
+    expect(await writer.save(appended)).toMatchObject({ saved: 1, skipped: 1 });
+    const after = await writer.get("claude", "thread-1");
+    expect(after.messages).toHaveLength(2);
+    expect(after.messages[0]?.text).toBe(expected);
+    expect(after.messages[0]?.id).toBe(before?.id);
+    expect(after.messages[0]).toEqual(before);
+    expect(after.messages[1]?.text).toBe("Thanks");
+    expect([...pod.resources.keys()].filter((url) => /\/m-[^/]+\.ttl$/.test(url))).toHaveLength(2);
+    expect(await writer.save(appended)).toMatchObject({ saved: 0, skipped: 2 });
   });
 
   it.each([

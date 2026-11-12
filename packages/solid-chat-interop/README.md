@@ -187,10 +187,17 @@ extend that marker's coverage without duplicating it. Zero-width boundary spans 
 ignored. A URL's trailing `@` counts as context even when its password is wholly in
 the preceding field, provided that field still ends in userinfo. An existing userinfo
 `@` completes the left authority; a later message's `@mention`
-cannot extend it. A dotted hostname, `localhost` or bracketed IPv6 authority ending
-in a port (1–5 digits, 0–65535) is also treated as complete at a join; larger numeric
-credentials still redact. Appending a neighbour preserves already detected
-messages' text and content-derived IDs. The field-array operation is idempotent.
+cannot extend it. An undelimited host:port-looking suffix is ambiguous: a following
+field's `@` establishes userinfo even when the password is numeric and wholly on
+the left or continues on the right. These values redact conservatively, including
+when the right field could be an @mention. Unambiguous host:port URLs ending in `/`
+or followed by whitespace or a path stay intact. Appending a neighbour preserves
+already detected messages' text and content-derived IDs. A closing quote at a field
+boundary completes a shell word and keeps its delimiters: appending `Thanks` after
+`export API_KEY="fixture"` leaves `export API_KEY="[REDACTED]"` unchanged. Prefixes
+retain the same redacted text as the full conversation, except that later context
+completing an unresolved secret may add redaction, never remove existing coverage.
+The field-array operation is idempotent.
 A left value already consisting only of markers ends boundary continuation, preventing
 repeated passes from consuming another window of the next field. Source windows still
 detect plaintext continuations on the initial pass.

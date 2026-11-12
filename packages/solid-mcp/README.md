@@ -460,8 +460,12 @@ conservative join can include the next field's first word after a token-ending f
 Existing per-field markers keep their spelling during boundary replacement, so
 appending a turn preserves an already detected message's content-derived ID.
 A trailing `@` in the next field can prove a URL password wholly in the previous
-field only while that field still ends in userinfo. Complete authorities and numeric
-ports cannot absorb a later `@mention`. Orphan private-key END lines redact their own
+field only while that field still ends in userinfo. Authorities already containing
+userinfo cannot absorb a later `@mention`. Undelimited host:port-looking suffixes
+redact conservatively when a later field supplies `@`, including numeric password
+continuations and ambiguous @mentions; delimited host:port URLs stay intact.
+Completed quoted assignments keep their quotes at field boundaries, preserving
+their content-derived IDs when a turn is appended. Orphan private-key END lines redact their own
 field prefix only. Recognized BEGIN headers, including PGP PRIVATE KEY BLOCK, carry
 redaction through entire later fields until their first END or the conversation end,
 covering long or truncated bodies. Variation selectors are removed except FE0E/FE0F

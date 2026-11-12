@@ -37,7 +37,11 @@ checks the whole snapshot before one-message saves; export imports check before
 100-message batches. Preserve existing redaction coverage when mapping boundary ranges.
 Boundary checks preserve marker text and ignore empty spans; URL `@` context can
 redact a password wholly on the left while that field is still inside userinfo; existing
-authorities and numeric ports cannot absorb a later @mention. Orphan private-key END
+userinfo authorities cannot absorb a later @mention. Undelimited host:port-looking
+suffixes are ambiguous and redact when a following field supplies `@`, including
+numeric password continuations. Delimited host:port URLs stay intact. Completed
+quoted assignments keep their quotes at field boundaries and their IDs on replay.
+Orphan private-key END
 lines redact from their own field start, never a preceding field. Recognized BEGIN
 headers carry redaction through arbitrarily long bodies and subsequent fields to
 the first END or conversation end, including PGP PRIVATE KEY BLOCK. Other detectors
