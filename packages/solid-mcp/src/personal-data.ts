@@ -90,7 +90,8 @@ function auxiliaryGovernsPrefix(path: string, prefix: string): boolean {
 /** Per-mutation discovery, including absent areas and shared inheritance ancestors. */
 export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<string>> {
   try {
-    if (!pod.head) throw new Error();
+    const head = pod.head;
+    if (!head) throw new Error();
     const root = new URL(pod.root);
     const profile = pod.webId && podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId);
     const areas = [
@@ -111,8 +112,10 @@ export async function governingAuxiliaries(pod: PodPort): Promise<ReadonlySet<st
     }
     const auxiliaries = new Set<string>();
     const rootPaths = pathAliases(root);
-    for (const target of targets) {
-      const metadata = await pod.head(target);
+    // Issue the HEADs together: each mutation still rediscovers every association, but the
+    // latency is one round trip rather than one per target. Any failure denies the mutation.
+    const responses = await Promise.all([...targets].map((target) => head.call(pod, target)));
+    for (const metadata of responses) {
       // A successful HEAD alone cannot establish the governing auxiliary resources.
       if (!metadata.acl && !metadata.describedby?.length) throw new Error();
       for (const association of [metadata.acl, ...(metadata.describedby ?? [])]) {
