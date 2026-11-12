@@ -85,7 +85,7 @@ export const HUMAN_TEXT_HEADING = "What the recipient sees:";
 /** The proposal record's renderedPreview limit (agent-model `text`, 16384 characters). */
 export const MAX_PREVIEW_LENGTH = 16384;
 
-function bounded(preview: string): string {
+export function bounded(preview: string): string {
   if (preview.length > MAX_PREVIEW_LENGTH)
     throw new ChannelParseError("preview exceeds the proposal record limit");
   return preview;

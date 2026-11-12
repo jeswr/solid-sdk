@@ -3,6 +3,7 @@
 import { decodeEventContent, ENVELOPE_KEY } from "../envelope.js";
 import { ChannelParseError } from "../errors.js";
 import {
+  bounded,
   exactKeys,
   previewJson,
   previewObject,
@@ -26,6 +27,6 @@ export async function preview(wire: Wire): Promise<string> {
     throw new ChannelParseError("unsupported Matrix preview content");
   const body = previewText(content.body);
   return bridged
-    ? body
+    ? bounded(body)
     : withSignedMessage(body, decodeEventContent(content), MATRIX_CONTENT.maxBytes);
 }

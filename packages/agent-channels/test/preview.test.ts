@@ -378,6 +378,19 @@ it("Teams previews one text block whose HTML body matches it, plus the envelope"
     await expect(f.send.preview(edited(f.wire, value))).rejects.toBeInstanceOf(ChannelParseError);
 });
 
+it("bridged Matrix previews are capped at the proposal record limit", async () => {
+  const s = await fixture("signal");
+  const plan = JSON.parse(s.wire.bytes);
+  await expect(
+    s.send.preview(
+      edited(s.wire, {
+        ...plan,
+        content: { ...plan.content, body: "x".repeat(MAX_PREVIEW_LENGTH + 1) },
+      }),
+    ),
+  ).rejects.toBeInstanceOf(ChannelParseError);
+});
+
 it("Mastodon refuses missing or non-text statuses and any field beyond a direct status", async () => {
   const f = await fixture("mastodon");
   const plan = JSON.parse(f.wire.bytes);

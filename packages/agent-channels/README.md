@@ -25,7 +25,10 @@ Matrix), the preview starts with `Signed message sent to the recipient's agent:\
 canonical JSON of the raw JWS payload on one line, then `\n\nWhat the recipient sees:\n`
 and the human text, so the owner approves everything that is sent, not only the summary.
 Human text containing either heading refuses, so it can't imitate the signed section.
-A preview longer than the proposal record's 16384-character `renderedPreview` limit refuses.
+Any preview longer than the proposal record's 16384-character `renderedPreview` limit
+refuses. Character classes come from the runtime's Unicode tables, so run the proposer and
+the executor on the same Node version: otherwise a newly assigned emoji can preview on one
+side and refuse on the other, which the executor records as preview-mismatch.
 Proposals queued before this format change fail the executor's preview check
 (preview-mismatch); drain or re-propose them when deploying.
 

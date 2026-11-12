@@ -2,7 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { canonicalJson } from "@jeswr/agent-model";
 import { ChannelParseError } from "../errors.js";
-import { exactKeys, previewJson, previewObject, previewText } from "../preview.js";
+import { bounded, exactKeys, previewJson, previewObject, previewText } from "../preview.js";
 import { DISCORD_FOOTER } from "../profiles.js";
 import type { Wire } from "../types.js";
 
@@ -27,5 +27,5 @@ export async function preview(wire: Wire): Promise<string> {
   const content = previewText(plan.content);
   if (content.length > 2000 || footer.length > 2048)
     throw new ChannelParseError("Discord preview exceeds text limit");
-  return `${content}\n${footer}`;
+  return bounded(`${content}\n${footer}`);
 }

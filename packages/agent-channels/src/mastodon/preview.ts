@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { ChannelParseError } from "../errors.js";
-import { exactKeys, previewJson, previewObject, previewText } from "../preview.js";
+import { bounded, exactKeys, previewJson, previewObject, previewText } from "../preview.js";
 import type { Wire } from "../types.js";
 
 /** Closed world: a direct status with no spoiler, poll, media or other request fields. */
@@ -12,5 +12,5 @@ export async function preview(wire: Wire): Promise<string> {
   exactKeys(request, ["status", "visibility"], "Mastodon request");
   if (request.visibility !== "direct")
     throw new ChannelParseError("unsupported Mastodon preview visibility");
-  return previewText(request.status);
+  return bounded(previewText(request.status));
 }
