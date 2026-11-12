@@ -47,13 +47,20 @@ const BLACK_FLAG = 0x1f3f4;
 const CANCEL_TAG = 0xe007f;
 const code = (char: string | undefined) => char?.codePointAt(0) ?? -1;
 const isTag = (char: string | undefined) => code(char) >= 0xe0020 && code(char) <= CANCEL_TAG;
+/** A subdivision flag spells its code in 2–6 tag digits or lowercase tag letters. */
+const MIN_FLAG_TAGS = 2;
+const MAX_FLAG_TAGS = 6;
+const isFlagTag = (char: string | undefined) =>
+  (code(char) >= 0xe0030 && code(char) <= 0xe0039) ||
+  (code(char) >= 0xe0061 && code(char) <= 0xe007a);
 const isShapingLetter = (char: string | undefined) =>
   char !== undefined && NON_LATIN_LETTER.test(char) && !LATIN_LIKE.test(char);
 
 /**
  * Keeps a joiner or tag character only where it does visible work: ZWJ between emoji
  * (a family or profession sequence), ZWNJ between letters of a script that shapes with it
- * (Persian, Indic), and tags inside a well-formed subdivision flag (U+1F3F4, tags, U+E007F).
+ * (Persian, Indic), and tags inside a well-formed subdivision flag (U+1F3F4, 2–6 tag digits or lowercase
+ * tag letters, U+E007F).
  * Elsewhere they are invisible and could split one account into look-alike folders or carry
  * hidden text, so they are dropped. Their neighbours are never dropped, so one pass is stable.
  */
@@ -61,10 +68,11 @@ function dropStrayJoinersAndTags(chars: readonly string[]): string[] {
   const kept: string[] = [];
   for (let i = 0; i < chars.length; i++) {
     const char = chars[i] ?? "";
-    if (code(char) === BLACK_FLAG && isTag(chars[i + 1])) {
+    if (code(char) === BLACK_FLAG && isFlagTag(chars[i + 1])) {
       let end = i + 1;
-      while (end < chars.length && isTag(chars[end]) && code(chars[end]) !== CANCEL_TAG) end++;
-      if (code(chars[end]) === CANCEL_TAG && end > i + 1) {
+      while (end < chars.length && end - i <= MAX_FLAG_TAGS && isFlagTag(chars[end])) end++;
+      const tags = end - i - 1;
+      if (code(chars[end]) === CANCEL_TAG && tags >= MIN_FLAG_TAGS && tags <= MAX_FLAG_TAGS) {
         kept.push(...chars.slice(i, end + 1));
         i = end;
         continue;

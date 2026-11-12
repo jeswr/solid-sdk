@@ -287,7 +287,8 @@ hashed into the account folder name and stored as the account's `skos:prefLabel`
   cleaned, because what it shows would differ from what is stored.
 - Other control and format characters (`Cc`, `Cf`) are removed. A joiner or tag character is
   kept only where it does visible work: ZWJ between emoji, ZWNJ between letters of a script
-  that shapes with it (Persian, Indic), and tags inside a well-formed subdivision flag. Stray
+  that shapes with it (Persian, Indic), and tags inside a well-formed subdivision flag (2–6 tag digits or lowercase tag
+  letters). Stray
   ones would split one account into look-alike folders or carry hidden text.
 - The rest is put in NFC, every whitespace run (tabs, line breaks, no-break spaces) becomes
   one space, and the ends are trimmed.
