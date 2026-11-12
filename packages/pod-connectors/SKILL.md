@@ -4,6 +4,7 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Maintain Pod connectors
 
@@ -279,3 +280,11 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+The Letterboxd, Pocket, StoryGraph and Telegram file adapters (see the README section) take
+every field bound from `core/export-fields.ts` and Goodreads/StoryGraph book identity from
+`core/books.ts`; do not fork either. Letterboxd reuses the Takeout ZIP reader with an entry
+allowlist and its own entry/inflation caps; keep it from inflating unselected entries.
+Pocket writes the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`), never
+`PodThing.sourceUrl`, so provenance stays on the export. Telegram reads JSON keys as own
+properties and records attachment names only; never open or resolve an export path.

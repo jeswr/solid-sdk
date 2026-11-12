@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { ChunkSlices } from "./chunk-slices.js";
 import { MAX_CSV_HEADER_CHARS, parseCsv, parseCsvRows } from "./csv.js";
 import { type ImportFile, MAX_FILE_BYTES } from "./file-import.js";
@@ -51,7 +52,7 @@ type OnSkip = () => void;
 /** Count UTF-8 bytes before slicing or retaining input. Overflow releases all
  * earlier slices; the scanner continues only to find a safe unit boundary.
  */
-class BoundedUnit {
+export class BoundedUnit {
   private readonly slices = new ChunkSlices();
   private bytes = 0;
   chars = 0;

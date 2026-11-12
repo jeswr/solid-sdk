@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * A minimal, dependency-free reader for the *flat, attribute-only* XML that
  * Apple Health's `export.xml` is built from. It is **not** a general XML
@@ -32,7 +33,10 @@ export function decodeXmlEntities(s: string): string {
         body[1] === "x" || body[1] === "X"
           ? Number.parseInt(body.slice(2), 16)
           : Number.parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : whole;
+      // Out-of-range or surrogate references stay literal instead of throwing RangeError.
+      return Number.isFinite(code) && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
+        ? String.fromCodePoint(code)
+        : whole;
     }
     return DECODE[body] ?? whole;
   });

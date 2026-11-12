@@ -1,0 +1,15 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/telegram/social/telegram-messages.ttl#msg-2-9fb6fefe> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://jeswr.org/ns/sectors/social#content> "Hello \U0001f30d";
+    <https://schema.org/dateCreated> "2026-01-20T09:06:40.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/isPartOf> "Synthetic Chat";
+    <https://schema.org/sender> "Synthetic Sender";
+    <https://schema.org/text> "Hello \U0001f30d".
+<https://pod.test/alice/integrations/telegram/social/telegram-messages.ttl#msg-3-a0b70091> a <https://jeswr.org/ns/sectors/social#Note>, <https://schema.org/Message>;
+    <https://jeswr.org/ns/sectors/social#content> "Hi there";
+    <https://jeswr.org/ns/sectors/social#inReplyTo> <https://pod.test/alice/integrations/telegram/social/telegram-messages.ttl#msg-2-9fb6fefe>;
+    <https://schema.org/dateCreated> "2026-01-20T09:07:40.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/isPartOf> "Synthetic Chat";
+    <https://schema.org/messageAttachment> "photo_1.jpg";
+    <https://schema.org/sender> "Synthetic Peer";
+    <https://schema.org/text> "Hi there".

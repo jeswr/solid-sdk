@@ -1,6 +1,7 @@
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The **file-import** adapter registry — the export-file analogue of the
- * OAuth `ADAPTERS` list in `registry.ts`. Each of the 10 Tier-C catalog entries
+ * OAuth `ADAPTERS` list in `registry.ts`. Each of the 14 Tier-C catalog entries
  * has a parser that turns the platform's official data export into pod RDF.
  *
  * A Tier-B entry may ALSO appear here (Garmin): when the platform's OAuth API
@@ -16,12 +17,16 @@ import type { FileImportAdapter } from "./core/file-import.js";
 import { garminFileAdapter } from "./garmin/file-adapter.js";
 import { goodreadsFileAdapter } from "./goodreads/file-adapter.js";
 import { googleTakeoutFileAdapter } from "./google-takeout/file-adapter.js";
+import { letterboxdFileAdapter } from "./letterboxd/file-adapter.js";
 import { netflixFileAdapter } from "./netflix/file-adapter.js";
+import { pocketFileAdapter } from "./pocket/file-adapter.js";
 import { steamFileAdapter } from "./steam/file-adapter.js";
+import { storygraphFileAdapter } from "./storygraph/file-adapter.js";
+import { telegramFileAdapter } from "./telegram/file-adapter.js";
 import { uberFileAdapter } from "./uber/file-adapter.js";
 import { whatsappFileAdapter } from "./whatsapp/file-adapter.js";
 
-/** The 10 Tier-C file-import adapters plus the Tier-B hybrids (Garmin). */
+/** The 14 Tier-C file-import adapters plus the Tier-B hybrids (Garmin). */
 export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
   netflixFileAdapter,
   amazonOrdersFileAdapter,
@@ -33,6 +38,10 @@ export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
   chatgptFileAdapter,
   bankStatementsFileAdapter,
   googleTakeoutFileAdapter,
+  letterboxdFileAdapter,
+  pocketFileAdapter,
+  storygraphFileAdapter,
+  telegramFileAdapter,
   garminFileAdapter,
 ];
 

@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -460,8 +461,9 @@ canonical class IRIs.
 
 ## Streaming file imports
 
-Apple Health, Netflix, Amazon orders, Uber, WhatsApp, Goodreads, Steam, ChatGPT
-and bank statements prefer the native `File.stream()` byte reader. Text-only
+Apple Health, Netflix, Amazon orders, Uber, WhatsApp, Goodreads, Steam, ChatGPT,
+bank statements, Letterboxd, Pocket, StoryGraph and Telegram prefer the native
+`File.stream()` byte reader. Text-only
 `ImportFile` implementations remain compatible. CSV rows (including quoted
 newlines), XML start tags, OFX transactions, multiline chat messages and selected
 JSON array members are parsed incrementally. UTF-8 decoding spans chunks; readers
@@ -537,6 +539,60 @@ Domain/range consistency checks also follow named superclass and subproperty
 chains over the pinned ontology import closure, including gUFO disjointness.
 The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.
+
+## Letterboxd, Pocket, StoryGraph and Telegram exports
+
+Four Tier-C file adapters (`./adapters/letterboxd`, `./adapters/pocket`,
+`./adapters/storygraph`, `./adapters/telegram`) reuse the shared CSV/JSON stream readers,
+the Takeout ZIP reader and the existing models. Shared bounds live in
+`core/export-fields.ts`: text is trimmed and capped at a code point (titles 1,024, names
+512, reviews and message bodies 65,536 UTF-16 units; at most 64 tags of 128), dates are kept
+only from 1970 through 2100, numbers must be plain finite decimals, and links must be
+credential-free absolute `http(s)` URLs of at most 8,192 characters (`javascript:`, `data:`,
+`file:` and every other scheme are refused). A value that fails is omitted; a record that
+lacks its required field (film name, link, title, message id) is skipped and counted.
+
+| Adapter | Accepts | Writes |
+|---|---|---|
+| Letterboxd | export `.zip` or one of its CSVs | `media/letterboxd-diary.ttl`: `schema:WatchAction` per diary/review entry (watched date, 0.5–5 rating, `rewatch` tag, tags, review) → `schema:object` a `schema:Movie` (name, `copyrightYear`, status `watched`, film rating); `media/letterboxd-watchlist.ttl`: watchlist films (status `watchlist`) |
+| Pocket | 2024–25 CSV or legacy `ril_export.html` | `documents/pocket-bookmarks.ttl`: `book:Bookmark` in the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`, `dct:title`, `dct:created`, `book:archived`, `http://schema.org/keywords`) |
+| StoryGraph | StoryGraph library CSV or Open Library reading-log CSV | `documents/storygraph-library.ttl`: `schema:Book` (the Goodreads model plus `reviewBody` and tags) |
+| Telegram | Telegram Desktop `result.json` (account or single chat) | `social/telegram-messages.ttl`: `schema:Message` (the WhatsApp model plus chat name, edit time, `social:inReplyTo`, forwarded-from as `schema:creator`, attachment file names) |
+
+- Letterboxd reads only `diary.csv`, `reviews.csv`, `watched.csv`, `ratings.csv` and
+  `watchlist.csv` at the archive root (or in one `letterboxd-…` folder); `deleted/`,
+  `lists/` and other entries are never inflated. Entries pass the reader's size, CRC and
+  DEFLATE-boundary checks (failures are skipped and counted), each is capped at 64 MiB,
+  the archive at 10,000 directory entries and 256 MiB inflated. The adapter declares
+  `streaming: true` because it enforces these limits and the 64 MiB stream cap for a
+  standalone CSV. Watch events are keyed by Letterboxd URI, else film, year and watched
+  date; a review merges into its diary entry and never clears the entry's fields. A
+  standalone CSV's kind comes from its file name, else its headers (`watchlist` only by
+  name). schema.org has no rewatch term, so a rewatch is the `rewatch` keyword.
+- Pocket decides between HTML and CSV from the content. The HTML reader tokenises tags
+  (64 KiB) and text (1 MiB per anchor) with the shared bounded units, skips comments,
+  expands only the XML entities and numeric references (out-of-range references stay
+  literal) and fails on unterminated markup. The saved page is not
+  `https://schema.org/url`, which provenance reads as the record's source: bookmarks derive
+  from the export. A link saved twice is one bookmark whose tags merge.
+- Goodreads and StoryGraph share `core/books.ts`: a book's fragment is
+  `book-isbn-<ISBN-13>` when a checksum-valid ISBN-13 or ISBN-10 (converted) exists, else
+  a hash of the accent-, case- and punctuation-folded title and first author. The same book
+  imported from both services therefore has the same local name and `schema:isbn` in each
+  connector's document; duplicate rows collapse. Goodreads now uses this key instead of its
+  Book Id, so a re-import rewrites existing Goodreads fragments once. StoryGraph read dates,
+  moods and `Owned?` have no book-model term and are not imported.
+- Telegram streams only message objects and chat names/ids (4 MiB per message; oversized
+  messages are skipped and counted). Keys are read as own properties, so `__proto__` or
+  `constructor` members never resolve. Service messages are left out. A reply links only
+  to an earlier message of the same chat. Attachments are recorded by file name; the
+  importer never opens them, and absolute paths, drive letters, schemes, control
+  characters, `.`/`..` segments and "File not included" placeholders record nothing.
+  `date_unixtime` is preferred; the zone-less `date` is read as UTC.
+
+Synthetic fixtures are inline in the `*.test.ts` files (never compiled into `dist`) and
+in the shared Tier-C SHACL/provenance harness; Pocket output is also validated against
+`@jeswr/solid-bookmark`'s SHACL shape.
 
 ## Recording fixtures
 
@@ -615,7 +671,7 @@ snapshots cover these paths without Google accounts or production traffic.
 `./adapters/google-drive` exports `googleDriveAdapter` and
 `createGoogleDriveAdapter({ maxBytes })` (default 25 MiB). Drive remains Tier B because
 `drive.readonly` is a restricted Google scope. OAuth uses `createGoogleOAuthConfig('drive')`.
-The catalog has 32 entries: eight Tier A, fourteen Tier B, and ten Tier C.
+The catalog has 37 entries: eight Tier A, fifteen Tier B, and fourteen Tier C.
 
 A full import captures `changes/startPageToken` before paginating `files.list`; later
 imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from

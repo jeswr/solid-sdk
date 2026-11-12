@@ -1,0 +1,14 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/letterboxd/media/letterboxd-diary.ttl#film-synthetic-orbit-45c982fb> <http://purl.org/dc/terms/title> "Synthetic \"Orbit\", \U0001f30d";
+    a <https://jeswr.org/ns/sectors/media#CreativeWork>, <https://schema.org/Movie>;
+    <https://schema.org/actionStatus> "watched";
+    <https://schema.org/copyrightYear> 2026;
+    <https://schema.org/name> "Synthetic \"Orbit\", \U0001f30d".
+<https://pod.test/alice/integrations/letterboxd/media/letterboxd-diary.ttl#watch-synthetic-orbit-fc404b26> a <https://jeswr.org/ns/sectors/media#ListeningActivity>, <https://schema.org/WatchAction>;
+    <https://schema.org/dateCreated> "2026-01-21T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/keywords> "cosy", "rewatch";
+    <https://schema.org/name> "Synthetic \"Orbit\", \U0001f30d";
+    <https://schema.org/object> <https://pod.test/alice/integrations/letterboxd/media/letterboxd-diary.ttl#film-synthetic-orbit-45c982fb>;
+    <https://schema.org/ratingValue> "4.5"^^<http://www.w3.org/2001/XMLSchema#double>;
+    <https://schema.org/startTime> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://boxd.it/syn01>.
