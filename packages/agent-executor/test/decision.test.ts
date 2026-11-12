@@ -177,6 +177,7 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     });
     const wire = await h.binding.send.render(e.renderable, h.binding.carriage);
     Object.assign(e, { wire, wireDigest: wire.digest });
+    e.proposal.renderedPreview = await h.binding.send.preview(wire);
     vi.mocked(h.binding.send.validate).mockImplementation(async (wire, context) => {
       const { termsDigest: _digest, ...intent } = context.intent;
       const carrier = JSON.parse(wire.bytes);

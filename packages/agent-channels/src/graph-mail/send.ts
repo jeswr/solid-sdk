@@ -103,6 +103,7 @@ export function createGraphMailSend(
   }
   return {
     render: renderer.render,
+    preview: renderer.preview,
     validate: renderer.validate,
     transmit(wire, io) {
       return sendAttempt(async (dispatched) => {

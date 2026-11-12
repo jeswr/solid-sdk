@@ -152,6 +152,7 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
       id: "fixture",
       carriage: { id: "d2/1", structured: "native", footer: "none", maxBytes: 65536 },
       send: {
+        preview: async (wire) => wire.bytes,
         render: async (renderable) => {
           const bytes = canonicalJson(renderable);
           return { bytes, digest: digestBytes(bytes), mediaType: "application/json" };
@@ -302,6 +303,7 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
           },
         };
         const wire = await binding.send.render(renderable, binding.carriage);
+        proposal.renderedPreview = await binding.send.preview(wire);
         const entry: OutboxEntry = { proposal, renderable, account, wire, wireDigest: wire.digest };
         proposal.intent.termsDigest = proposalTermsDigest(entry);
         stores.entries.set(proposal.id, entry);

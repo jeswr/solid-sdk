@@ -8,6 +8,7 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { RenderableProposal, TokenProvider } from "../types.js";
+import { preview } from "./preview.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
 /** All senders sharing a mailbox must observe its in-flight attempts before claiming absence. */
@@ -61,6 +62,7 @@ export function createDirectSend(
     return { wire, message };
   }
   return {
+    preview,
     async render(proposal, carriage) {
       return (await renderVerified(proposal, carriage)).wire;
     },

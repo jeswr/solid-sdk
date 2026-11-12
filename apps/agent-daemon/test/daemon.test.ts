@@ -161,6 +161,7 @@ function harness() {
       const entry: OutboxEntry = {
         proposal: {
           ...proposal,
+          renderedPreview: wire.bytes,
           intent: {
             ...proposal.intent,
             action: "https://jeswr.org/ns/agent#SendMessage",
@@ -635,6 +636,7 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   };
   const bytes = canonicalJson(renderable);
   const wire = { bytes, mediaType: "application/json", digest: digestBytes(bytes) };
+  proposal.renderedPreview = wire.bytes;
   const outbox: OutboxEntry = {
     proposal,
     renderable,
@@ -769,7 +771,12 @@ it("executes and audits daemon proposal evidence using the same signed approval"
       gmail: {
         id: "gmail",
         carriage: { id: "fixture", structured: "native", footer: "none", maxBytes: 65536 },
-        send: { render: async () => wire, validate: async () => ({ ok: true }), transmit },
+        send: {
+          render: async () => wire,
+          preview: async (wire) => wire.bytes,
+          validate: async () => ({ ok: true }),
+          transmit,
+        },
       },
     },
     dryRun: false,

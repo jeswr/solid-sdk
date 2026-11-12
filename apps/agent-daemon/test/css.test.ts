@@ -113,7 +113,11 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
         carrier.startsWith("seed.") ? { ...message, id: "urn:message:seed" } : message,
       now: () => Date.parse(at),
     });
-    const renderable = { message, compactJws: "fixture.signed.message" };
+    // A real JWS payload, so the direct preview (the decoded signed message) can be shown.
+    const renderable = {
+      message,
+      compactJws: `e30.${Buffer.from(canonicalJson(message)).toString("base64url")}.c2ln`,
+    };
     const wire = await direct.send.render(renderable, direct.carriage);
     // Seed one local inbound carrier without a provider or real credential.
     const seed = await direct.send.render(
@@ -155,7 +159,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
         parameters: {},
         conversation: message.conversation,
       },
-      renderedPreview: "Synthetic reply",
+      renderedPreview: await direct.send.preview(wire),
       wasGeneratedBy: actor,
       createdAt: at,
       validUntil: until,
@@ -183,6 +187,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       carriage: direct.carriage,
       send: {
         render: direct.send.render,
+        preview: direct.send.preview,
         validate: async (w, context) => direct.send.validate(w, context.renderable),
         // Separate reply mailbox/id is unnecessary here; use the direct transport and record the effect.
         transmit: async (w, context) => {

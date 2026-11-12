@@ -11,6 +11,28 @@ Channel contracts, carriage profiles, capability RDF and origin enforcement for 
 and Discord (A-030 / sst-r57).
 The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
 
+Every implemented send half exposes `preview(wire): Promise<string>`. It parses the
+exact wire without re-rendering, signature verification, credentials or I/O. Parsing
+is bounded and fails with `ChannelParseError` on malformed, oversized, truncated or
+unsupported input. The executor compares this result byte for byte with the approved
+`proposal.renderedPreview` on every attempt, before mandate/approval work or transport;
+a difference or parse refusal records `refused(preview-mismatch)` and a
+`tamper-suspected` audit outcome, like `wire-mismatch`.
+
+Preview strings preserve visible text and whitespace, with LF line endings:
+
+| Send family | Preview |
+| --- | --- |
+| MIME renderer, Gmail, Graph mail (including Workspace) | `To: <To header>\nSubject: <Subject header>\n\n<decoded text/plain>`; includes the footer, normalizes only decoded CRLF to LF, and excludes HTML and JSON-LD |
+| Matrix, including Signal/WhatsApp bridges | Exact `content.body`, including footer |
+| Graph Teams | Adaptive Card visible `TextBlock.text` values joined with LF, including footer |
+| Mastodon | Exact `request.status`, including mention and footer |
+| Discord | Exact `content`, LF, then the visible embed `footer.text` |
+| Direct | The signed message as canonical JSON, decoded from the JWS payload: native carriage has no human text, so the owner approves the message itself |
+
+Reserved send scaffolds, including Slack, have no renderer or send capability yet.
+When implemented, their preview must decode the wire's visible text and footer.
+
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
 constants, `toRdf` and `capabilityToTurtle`. RDF delegates to agent-model's validated

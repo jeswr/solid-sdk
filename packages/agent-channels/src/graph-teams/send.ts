@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
@@ -11,6 +12,7 @@ import { AGENT_FOOTER, TEAMS_CARD } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
 import { card, envelopes } from "./card.js";
+import { preview } from "./preview.js";
 import { BASE, graphTeamsRest, id, json, responseJson } from "./rest.js";
 
 const MEDIA_TYPE = "application/vnd.jeswr.teams-message+json";
@@ -124,6 +126,7 @@ export function createGraphTeamsSend(
   }
   return {
     render,
+    preview,
     async validate(input, proposal) {
       try {
         const wire = snapshot(input);

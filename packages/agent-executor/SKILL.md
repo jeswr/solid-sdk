@@ -11,6 +11,24 @@ Read agent DESIGN §2 / §4.1 and README.md before changing behavior. The root e
 createExecutor, proposalTermsDigest, durable filesystem adapters and the three-attempt
 bound. Contracts are in src/types.ts; explicit synthetic fakes live only in ./testing.
 
+Proposers must derive the approval preview from the wire before sealing action terms:
+```ts
+const wire = await binding.send.render(renderable, binding.carriage);
+proposal.renderedPreview = await binding.send.preview(wire);
+const entry = { proposal, renderable, account, wire, wireDigest: wire.digest };
+proposal.intent.termsDigest = proposalTermsDigest(entry);
+```
+The executor compares that preview byte for byte after wire validation and before
+mandate/approval work on every attempt, retry, resend and pre-dispatch re-evaluation.
+Mismatch or parser exception means refused(preview-mismatch), with the same
+tamper-suspected and decision audit handling as wire-mismatch. Never substitute a
+free-text summary, HTML alternative or renderable-derived preview. Email includes
+To, Subject and decoded text/plain with footer (CRLF to LF only). Matrix uses body;
+Teams joins card text blocks; Mastodon uses status; Discord includes content and
+embed footer. Direct's native envelope has no visible text and previews as empty.
+Preserve uncertain obligations when refusing a resend. Preview parsers must be pure,
+bounded, hostile-input hardened and throw ChannelParseError on refusal.
+
 Preserve the nine-step order and fail closed. Halt precedes proposal/mandate reads;
 proposal state never grants authority. Re-evaluate every queued item on control/mandate
 change, and recheck authority after asynchronous lookup/token waits. Supply the
