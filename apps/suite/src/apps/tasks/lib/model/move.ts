@@ -15,6 +15,10 @@ interface ReferenceMove {
   intended: Store;
 }
 const same = (a: Resource["dataset"], b: Resource["dataset"]) => isomorphic([...a], [...b]);
+const objects = (resource: Resource) =>
+  [...resource.dataset].flatMap((quad) =>
+    quad.object.termType === "NamedNode" ? [quad.object.value] : [],
+  );
 const stored = (resource: Resource): StoredTask => ({
   ...resource,
   task: new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory),
@@ -174,12 +178,17 @@ export class TaskMove {
           await this.reconcileCopy(previous ?? copy, copy);
         }
         // Retain changed source revisions permanently, with their confirmed copies untouched.
-        // A retained revision also keeps everything it refers to, e.g. a changed reply keeps
-        // its root, so the retained source stays reachable.
+        // A retained revision also keeps everything it refers to, transitively (e.g. a changed
+        // reply keeps its root), so the retained source stays reachable and consistent.
+        const byId = new Map(latest.map((copy) => [`${copy.original.url}#it`, copy.original]));
         const referenced = new Set<string>();
         const refer = (resource: Resource) => {
-          for (const quad of resource.dataset)
-            if (quad.object.termType === "NamedNode") referenced.add(quad.object.value);
+          for (const value of objects(resource)) {
+            if (referenced.has(value)) continue;
+            referenced.add(value);
+            const next = byId.get(value);
+            if (next) refer(next);
+          }
         };
         const unchanged = (copy: ResourceCopy) =>
           copies.some(
@@ -195,26 +204,24 @@ export class TaskMove {
         // A stable mapping permits deletion. Leave room for another scan afterwards,
         // so a late reply cannot turn successful cleanup into an invisible orphan.
         if (added || pass === 2) continue;
-        // Referring resources go first, so a conditional-delete conflict on a reply is known
-        // before its root is considered.
-        const targets = new Set<string>();
-        for (const { original } of removable)
-          for (const quad of original.dataset)
-            if (quad.object.termType === "NamedNode") targets.add(quad.object.value);
-        const ordered = [...removable].sort(
-          (a, b) =>
-            Number(targets.has(`${a.original.url}#it`)) -
-            Number(targets.has(`${b.original.url}#it`)),
-        );
-        for (const { original } of ordered) {
-          if (referenced.has(`${original.url}#it`)) continue;
-          try {
-            await this.io.remove(original.url, original.etag);
-          } catch (error) {
-            const current = await this.io.optional(original.url);
-            if (current && current.etag === original.etag) throw error;
-            if (current) refer(current);
+        // Delete referring resources before what they refer to, so a conditional-delete
+        // conflict is known (and retains its references) before they are considered.
+        let pending = removable;
+        while (pending.length) {
+          const targets = new Set(pending.flatMap(({ original }) => objects(original)));
+          const ready = pending.filter(({ original }) => !targets.has(`${original.url}#it`));
+          const batch = ready.length ? ready : pending;
+          for (const { original } of batch) {
+            if (referenced.has(`${original.url}#it`)) continue;
+            try {
+              await this.io.remove(original.url, original.etag);
+            } catch (error) {
+              const current = await this.io.optional(original.url);
+              if (current && current.etag === original.etag) throw error;
+              if (current) refer(current);
+            }
           }
+          pending = pending.filter((copy) => !batch.includes(copy));
         }
       }
     } catch (cause) {

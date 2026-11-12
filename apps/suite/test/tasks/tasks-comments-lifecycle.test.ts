@@ -495,6 +495,30 @@ describe("comment lifecycle with projects and task moves", () => {
     expect(pod.mutations().some((r) => r.method === "DELETE" && r.url === root.url)).toBe(false);
   });
 
+  it("keeps everything a retained comment refers to, transitively", async () => {
+    const { store, pod, source, target, task, comments, root } = await setup();
+    const middle = await comments.create("Middle");
+    const last = await comments.create("Last");
+    const derived = "http://www.w3.org/ns/prov#wasDerivedFrom";
+    for (const [from, to] of [
+      [last, middle],
+      [middle, root],
+    ] as const) {
+      const data = await pod.dataset(from.url);
+      node(from.id, data).setIri(derived, to.id);
+      pod.seed(from.url, await serialize(data));
+    }
+    pod.intercept = async (request) => {
+      if (request.method === "DELETE" && request.url === task.url) {
+        const fresh = (await comments.list()).find((thread) => thread.root.url === last.url);
+        if (!fresh) throw new Error("Missing last comment");
+        await comments.edit(fresh.root, "Edited last");
+      }
+    };
+    await store.moveTaskToProject(task, source, target, "moved");
+    for (const comment of [last, middle, root]) expect(pod.files.has(comment.url)).toBe(true);
+  });
+
   it("never adopts a resource another writer created when the copy create is rejected", async () => {
     const { store, pod, source, target, task, comments, root } = await setup();
     const move = store.prepareTaskMove(task, source, target, "moved");
