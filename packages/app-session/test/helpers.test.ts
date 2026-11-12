@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-6.1 Sol
 import { Agent } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -119,6 +120,10 @@ it("the public testing helper supports subscriptions, empty events, transport an
   expect(first).toHaveBeenCalledTimes(1);
   expect(await fake.auth.identity()).toBeNull();
   expect(await (await fake.auth.fetch("https://storage.example/")).text()).toBe("private files");
+  // Account-pinned reads use the same transport mock as the default fetch.
+  const pinned = fake.auth.fetchFor({ webId: WEB_ID, issuer: identity.issuer });
+  expect(pinned).toBe(fake.auth.fetch);
+  expect(await (await pinned("https://storage.example/")).text()).toBe("private files");
   const pending = deferred<void>();
   pending.resolve();
   await expect(pending.promise).resolves.toBeUndefined();
