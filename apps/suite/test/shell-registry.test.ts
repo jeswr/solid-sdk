@@ -41,6 +41,7 @@ describe("shell registry", () => {
       "docs",
       "tasks",
       "permissions",
+      "calendar",
     ]);
     expect(visibleApps(true)).toEqual(appRegistry);
   });

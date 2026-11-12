@@ -200,7 +200,7 @@ describe("AppLauncher", () => {
     expect(screen.getByText("No results for 'docmissing'")).toBeTruthy();
     await accessible();
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getAllByRole("gridcell")).toHaveLength(5);
+    expect(screen.getAllByRole("gridcell")).toHaveLength(6);
   });
   it("uses native links for Enter navigation, closes and invokes registered Create actions", async () => {
     render(<Harness />);
@@ -222,7 +222,7 @@ describe("AppLauncher", () => {
     render(<Harness />);
     let user = await open();
     expect(screen.queryByText("Coming soon")).toBeNull();
-    expect(screen.queryByRole("link", { name: "Calendar" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Notes" })).toBeNull();
     cleanup();
     vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "1");
     render(<Harness />);
@@ -230,7 +230,7 @@ describe("AppLauncher", () => {
     const summary = screen.getByText("Coming soon");
     expect(summary.closest("details")?.open).toBe(false);
     await user.click(summary);
-    expect(screen.getByRole("link", { name: "Calendar" }).getAttribute("href")).toBe("/calendar");
+    expect(screen.getByRole("link", { name: "Notes" }).getAttribute("href")).toBe("/notes");
     await accessible();
   });
   it("offers a first-use pin action while retaining app navigation", async () => {
@@ -278,36 +278,36 @@ describe("AppLauncher", () => {
   }, 15000);
   it("preserves hidden saved pins through checkbox, keyboard and drag edits", async () => {
     vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "0");
-    const { rerender } = render(<Harness initial={["home", "calendar", "drive", "docs"]} />);
+    const { rerender } = render(<Harness initial={["home", "notes", "drive", "docs"]} />);
     const user = await open();
     await user.click(screen.getByRole("button", { name: "Customise rail" }));
-    expect(screen.queryByRole("checkbox", { name: "Calendar" })).toBeNull();
+    expect(screen.queryByRole("checkbox", { name: "Notes" })).toBeNull();
     await user.click(screen.getByRole("checkbox", { name: "Docs" }));
-    expect(update).toHaveBeenLastCalledWith({ pinned: ["home", "calendar", "drive"] });
+    expect(update).toHaveBeenLastCalledWith({ pinned: ["home", "notes", "drive"] });
     await user.click(screen.getByRole("checkbox", { name: "Tasks" }));
     expect(update).toHaveBeenLastCalledWith({
-      pinned: ["home", "calendar", "drive", "tasks"],
+      pinned: ["home", "notes", "drive", "tasks"],
     });
     await user.click(screen.getByRole("button", { name: "Move Home down" }));
     expect(update).toHaveBeenLastCalledWith({
-      pinned: ["calendar", "drive", "home", "tasks"],
+      pinned: ["notes", "drive", "home", "tasks"],
     });
     await user.click(screen.getByRole("button", { name: "Move Home up" }));
     expect(update).toHaveBeenLastCalledWith({
-      pinned: ["calendar", "home", "drive", "tasks"],
+      pinned: ["notes", "home", "drive", "tasks"],
     });
     const home = screen.getByRole("checkbox", { name: "Home" }).closest("li");
     fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "tasks" } });
     expect(update).toHaveBeenLastCalledWith({
-      pinned: ["calendar", "tasks", "home", "drive"],
+      pinned: ["notes", "tasks", "home", "drive"],
     });
     fireEvent.drop(home as HTMLElement, { dataTransfer: { getData: () => "docs" } });
     expect(update).toHaveBeenLastCalledWith({
-      pinned: ["calendar", "tasks", "docs", "home", "drive"],
+      pinned: ["notes", "tasks", "docs", "home", "drive"],
     });
     vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "1");
     rerender(<Harness />);
-    expect((screen.getByRole("checkbox", { name: "Calendar" }) as HTMLInputElement).checked).toBe(
+    expect((screen.getByRole("checkbox", { name: "Notes" }) as HTMLInputElement).checked).toBe(
       true,
     );
   });
@@ -412,7 +412,7 @@ it("shows pinned link tooltips on Tab focus and hover while retaining current-pa
 describe("AppRail and BottomTabBar", () => {
   it("renders six unique visible pins maximum, hides backlog pins, and has labelled bottom slots", async () => {
     render(
-      <Harness initial={["drive", "drive", "calendar", "home", "docs", "tasks", "permissions"]}>
+      <Harness initial={["drive", "drive", "notes", "home", "docs", "tasks", "permissions"]}>
         <AppRail
           currentApp="drive"
           notifications={<button type="button">Notifications</button>}
