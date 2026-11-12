@@ -18,7 +18,11 @@ export {
   pkgId,
   validateAssertionTerms,
 } from "./ids.js";
-export { mergeNanopublications } from "./merge.js";
+export {
+  MAX_SHARED_GRAPH_BLANK_NODES,
+  MAX_SHARED_GRAPH_ROUNDS,
+  mergeNanopublications,
+} from "./merge.js";
 export type {
   Batch,
   BuildOptions,

@@ -13,7 +13,9 @@ Use `createFactAssertion` for structured facts, `buildNanopublications` for batc
 Merge parsed values with `mergeNanopublications(a, b)`, never by concatenating TriG: it
 refuses (fixed error, no values) shared graphs whose copies differ, graphs one input's
 nanopubs read but only the other supplies (a reused batch ID), and private envelope
-graphs claimed by two nanopubs; it relabels blanks per input and unions `affected`.
+graphs claimed by two nanopubs; it drops graphs no nanopub reads, compares shared blank
+graphs by bounded neighbourhood refinement (no canonical labelling; tied blanks, over
+1024 blanks or long chains are refused), relabels blanks per input and unions `affected`.
 Validate untrusted parser output with `validateAssertionTerms(quads)` (linear); never
 canonicalize untrusted records to validate them. `readNamedGraph` indexes subjects and
 objects.

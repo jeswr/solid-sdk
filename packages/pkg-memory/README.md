@@ -363,17 +363,30 @@ and lets one input add records to the other's batch graphs: batch graph names de
 from the batch ID alone, so a foreign export that reuses a batch ID could otherwise
 rewrite a source's kind or thread ID, or make its provenance ambiguous. The helper:
 
-- keeps one copy of a graph present in both inputs only when the copies are identical
-  (quad sets for blank-free graphs; canonical labelling, after a linear shape check,
-  otherwise);
+- keeps only graphs that some nanopub in the result reads; undeclared graphs and
+  default-graph data are dropped, so data planted for a guessable future batch ID cannot
+  block a later merge;
+- keeps one copy of a graph present in both inputs (the first argument's) only when the
+  copies are identical. Blank-free graphs compare as quad sets. Otherwise, after a
+  linear shape check, at most `MAX_SHARED_GRAPH_BLANK_NODES` (1024) blank nodes are
+  labelled by their neighbourhoods for at most `MAX_SHARED_GRAPH_ROUNDS` (32) linear
+  passes; every blank node must get a distinct label, and the induced mapping must carry
+  every quad onto the other copy. Tied blank nodes (for example many interchangeable
+  `[]` objects), long blank chains or more blank nodes are refused. No canonical
+  labelling runs, so comparison cost is linear per pass whatever the input;
 - refuses a graph that one input's nanopubs read (head, assertion, provenance, pubinfo,
   or a batch source/entity graph, including `pkg:correspondenceBatch` context) when only
   the other input supplies it;
 - refuses a private envelope graph (head, provenance or pubinfo) claimed by two
   nanopub IDs, and a dropped duplicate whose blank nodes are referenced elsewhere;
-- relabels blank nodes per input, never matches default or blank-named graphs across
-  inputs, and returns nanopubs sorted by ID with `affected` as the union of both lists.
+- relabels blank nodes per input and returns nanopubs sorted by ID with `affected` as
+  the union of both lists.
 
 Every refusal throws `Error("Conflicting nanopublication merge")`, with no values.
 Splitting one batch across two exports therefore requires identical batch graphs in
 both. The result is an ordinary value that serializes and parses atomically.
+
+`buildNanopublications` writes into a compact store and keeps per-claim state small
+(assertion quads and provenance written straight into its named graph), so large
+batches do not hold an N3 store per claim. Terms, hashes and serialized output are
+unchanged.

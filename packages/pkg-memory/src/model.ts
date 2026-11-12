@@ -3,7 +3,8 @@
 // AUTHORED-BY Codex GPT-6
 import { pathToFileURL } from "node:url";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
+import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df } from "n3";
 import { correspondenceBatches } from "./correspondence.js";
 import { canonicalizeAssertion, messageId, pkgId } from "./ids.js";
@@ -176,13 +177,15 @@ export async function buildNanopublications(
   const owner = safeHttpIri(options.owner);
   if (owner === undefined) throw new Error("Expected owner WebID");
   const now = dateTime(options.generatedAt ?? new Date().toISOString().replace(/\.\d{3}Z$/, "Z"));
-  const dataset = new Store();
+  // The compact store keeps per-graph indexes sparse (memory only; terms, order and
+  // hashes are unchanged), so large batches do not exhaust the heap.
+  const dataset = compactStore([]) as Store;
   const sources = new Store();
   const entities = new Store();
   const activity = pkgId("batch", batch.batch_id, "activity");
   const sourcesId = pkgId("batch", batch.batch_id, "sources");
   const agent = expand(batch.worker.agent_id, owner);
-  const node = (g: Store, s: string | Term): RdfNode => new RdfNode(s, g);
+  const node = (g: DatasetCore, s: string | Term): RdfNode => new RdfNode(s, g);
   const type = `${NS.rdf}type`;
   node(sources, agent)
     .link(type, `${NS.prov}SoftwareAgent`)
@@ -250,18 +253,25 @@ export async function buildNanopublications(
     if (e.url) entity.link(`${NS.schema}url`, e.url);
     if (e.note) entity.text(`${NS.rdfs}comment`, e.note);
   }
+  // Per-claim state stays small: assertion quads, not a store, and provenance
+  // written straight into its named graph (an N3 store per claim costs ~20 KB).
   const claims = new Map<
     string,
-    { id: string; assertion: ReturnType<typeof canonicalizeAssertion>; prov: Store }
+    { id: string; assertion: { id: string; quads: Quad[] }; prov: DatasetCore }
   >();
   for (const c of batch.claims) {
     if (claims.has(c.id)) throw new Error("Duplicate claim id");
     known(c.epistemic, EPISTEMIC_STATUSES);
     known(c.validity ?? "Current", VALIDITY_STATUSES);
-    const assertion = canonicalizeAssertion(
+    const canonical = canonicalizeAssertion(
       typeof c.assertion === "string" ? await parseAssertion(c.assertion, owner) : c.assertion,
     );
-    claims.set(c.id, { id: pkgId("np", batch.batch_id, c.id), assertion, prov: new Store() });
+    const id = pkgId("np", batch.batch_id, c.id);
+    claims.set(c.id, {
+      id,
+      assertion: { id: canonical.id, quads: [...canonical.dataset] },
+      prov: new NamedGraphDataset(df.namedNode(`${id}#provenance`), dataset, df),
+    });
   }
   const ref = (id: string) => {
     const c = claims.get(id);
@@ -278,7 +288,7 @@ export async function buildNanopublications(
       .link(`${NS.np}hasProvenance`, `${id}#provenance`)
       .link(`${NS.np}hasPublicationInfo`, `${id}#pubinfo`);
     putGraph(dataset, id, head);
-    putGraph(dataset, assertion.id, assertion.dataset);
+    putGraph(dataset, assertion.id, assertion.quads);
     const a = node(prov, assertion.id)
       .link(`${NS.pkg}epistemicStatus`, NS.pkg + c.epistemic)
       .link(`${NS.pkg}validityStatus`, NS.pkg + (c.validity ?? "Current"))
@@ -379,7 +389,6 @@ export async function buildNanopublications(
       .text(`${NS.dcterms}identifier`, `${batch.batch_id}/${c.id}`);
     putGraph(dataset, `${id}#pubinfo`, info);
   }
-  for (const c of claims.values()) putGraph(dataset, `${c.id}#provenance`, c.prov);
   for (const [i, s] of (batch.skipped_sensitive ?? []).entries()) {
     const skipped = node(sources, pkgId("batch", batch.batch_id, "skipped", String(i)))
       .link(type, `${NS.prov}Entity`)

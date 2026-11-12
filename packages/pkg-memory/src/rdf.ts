@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
@@ -290,7 +291,7 @@ export function graph(dataset: DatasetCore, name: string): Store {
   return out;
 }
 
-export function putGraph(dataset: Store, name: string, contents: DatasetCore): void {
+export function putGraph(dataset: Store, name: string, contents: Iterable<Quad>): void {
   for (const q of contents)
     dataset.addQuad(df.quad(q.subject, q.predicate, q.object, df.namedNode(name)));
 }
