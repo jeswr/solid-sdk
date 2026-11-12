@@ -5,8 +5,11 @@ import {
   CredentialBoundary,
   describes,
   type HttpOptions,
+  head,
   isWithin,
+  parseLinks,
   secureDocumentFetch,
+  selfIdentifiedSolidRoot,
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
@@ -15,12 +18,17 @@ import type { PodAuthOptions } from "./types.js";
 
 const PIM = "http://www.w3.org/ns/pim/space#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/** At most this many same-origin description roots are probed per storage identifier. */
+const MAX_DESCRIPTION_ROOTS = 8;
+const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
+const SOLID_STORAGE_DESCRIPTION = "http://www.w3.org/ns/solid/terms#storageDescription";
 
 /**
  * The storage roots a storage description advertises, read without credentials or redirects:
  * an LWS (`application/lws+cid`) description's `StorageRoot` services, or a Turtle description's
  * `pim:Storage` subjects. Any failure yields no roots. Advertised roots are claims only; callers
- * must still require each root to lie inside an existing grant.
+ * must still confirm each root (pod-auth's `learn()` requires a same-origin container that
+ * confirms itself by HEAD) or require it to lie inside an existing grant.
  */
 export async function storageDescriptionRoots(
   storage: string,
@@ -140,6 +148,16 @@ export function createBoundary(
     // No response-driven discovery, including ancestor HEADs or self-asserted pim:Storage types.
     isCandidate: (_url: string | URL) => false,
     trustAuthorizationServer,
+    /**
+     * A UMA authorization server for this resource: on the resource's own origin, or an
+     * explicitly configured root's origin. Another learned storage's origin never qualifies.
+     */
+    trustUmaAuthorizationServer: (binding: { authorizationServer: URL; resource: URL }) =>
+      trustAuthorizationServer(binding) &&
+      (binding.authorizationServer.origin === binding.resource.origin ||
+        fixed.entries.some(
+          (root) => eligible(root) && new URL(root).origin === binding.authorizationServer.origin,
+        )),
     trustLws,
     exchangeHttp: {
       ...http,
@@ -177,8 +195,32 @@ export function createBoundary(
       for (const storage of storages) {
         add(next, storage);
         // Solid roots are containers. Non-container identifiers may be LWS/Solid descriptions.
-        if (next.allows(storage) && !storage.endsWith("/"))
-          for (const root of await descriptionRoots(storage, signal)) add(next, root);
+        if (next.allows(storage) && !storage.endsWith("/")) {
+          const candidates = new CredentialBoundary([], { allowInsecureHttp: insecure });
+          for (const root of await descriptionRoots(storage, signal)) add(candidates, root);
+          const identifier = new URL(storage);
+          const sameOrigin = candidates.entries
+            .filter((root) => root.endsWith("/") && new URL(root).origin === identifier.origin)
+            .slice(0, MAX_DESCRIPTION_ROOTS);
+          for (const root of sameOrigin) {
+            // A description cannot grant an ancestor or sibling by itself. The same-origin
+            // container must bind back to this LWS identifier, or identify itself as Solid
+            // storage and either contain the identifier or name it as its storage description.
+            const confirmation = await head(root, { http, signal });
+            if (confirmation === undefined || !describes(confirmation, root)) continue;
+            const links = parseLinks(confirmation.headers.get("link"), root);
+            const only = (rel: string) => {
+              const matching = links.filter((link) => link.rel === rel);
+              return matching.length === 1 && matching[0]!.href === storage;
+            };
+            if (
+              only(LWS_STORAGE) ||
+              (selfIdentifiedSolidRoot(root, confirmation) !== undefined &&
+                (isWithin(identifier, root) || only(SOLID_STORAGE_DESCRIPTION)))
+            )
+              add(next, root);
+          }
+        }
       }
       const nextEndpoints = new Map<string, string>();
       const verified = [...next.entries];
