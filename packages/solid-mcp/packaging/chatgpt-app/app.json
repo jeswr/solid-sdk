@@ -1,0 +1,102 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "descriptor_type": "solid-sdk-preparation-only",
+  "display_name": "Solid Pod",
+  "description": "Search and fetch scoped pod data, archive conversations, and read purpose-limited personal context.",
+  "version": "0.2.0",
+  "mcp_server": {
+    "transport": "streamable-http",
+    "url_template": "https://{host}/mcp"
+  },
+  "auth": {
+    "type": "oauth",
+    "dynamic_client_registration": true,
+    "pkce": {
+      "required": true,
+      "method": "S256"
+    }
+  },
+  "tools": [
+    {
+      "name": "address_get",
+      "readOnly": true
+    },
+    {
+      "name": "chat_export",
+      "readOnly": true
+    },
+    {
+      "name": "chat_get",
+      "readOnly": true
+    },
+    {
+      "name": "chat_list",
+      "readOnly": true
+    },
+    {
+      "name": "chat_save",
+      "readOnly": false
+    },
+    {
+      "name": "context_read",
+      "readOnly": true
+    },
+    {
+      "name": "fetch",
+      "readOnly": true
+    },
+    {
+      "name": "health_query",
+      "readOnly": true
+    },
+    {
+      "name": "memory_forget",
+      "readOnly": false
+    },
+    {
+      "name": "memory_recall",
+      "readOnly": true
+    },
+    {
+      "name": "memory_remember",
+      "readOnly": false
+    },
+    {
+      "name": "pod_list",
+      "readOnly": true
+    },
+    {
+      "name": "pod_read",
+      "readOnly": true
+    },
+    {
+      "name": "pod_write",
+      "readOnly": false
+    },
+    {
+      "name": "profile_get",
+      "readOnly": true
+    },
+    {
+      "name": "search",
+      "readOnly": true
+    },
+    {
+      "name": "solid_list",
+      "readOnly": true
+    },
+    {
+      "name": "solid_read",
+      "readOnly": true
+    },
+    {
+      "name": "solid_search",
+      "readOnly": true
+    },
+    {
+      "name": "solid_write",
+      "readOnly": false
+    }
+  ],
+  "privacy_policy_url": "https://YOUR-HOST.invalid/privacy"
+}
