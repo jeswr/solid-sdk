@@ -669,6 +669,81 @@ future writer port. JSON-only demo fixtures show metadata; sync tests wrap `fixt
 with synthetic byte responses for media/export routes, without changing its public behavior.
 ## Spotify Web API
 
+The `spotify` catalog id also supports `fileAdapterById('spotify')` (direct module:
+`./spotify/file-adapter`). Request Extended streaming history or Account data through
+Spotify Account → Privacy settings → Download your data. Select the ZIP or a single
+`Streaming_History_Audio_*.json`, `Streaming_History_Video_*.json` or
+`StreamingHistory_music_*.json`. Older exports' `MyData/endsong_N.json` (extended) and
+`StreamingHistoryN.json` (account data) are accepted too; each row's fields decide how it
+is read. A ZIP with none of these names fails with "No Spotify streaming history found in
+this archive." No Web API application is needed for file import.
+
+File history merges into `integrations/spotify/music/history/YYYY-MM.ttl`, registered as
+`media:PlaybackEvent`, inside the connector container. A month splits into contiguous
+`YYYY-MM-part-N.ttl` documents (`spotifyHistorySlug`) when a document would exceed 2,000
+plays or about 4 MiB of estimated Turtle (well under readers' 16 MiB cap), up to 64
+documents a month. The adapter reads a month's existing parts first: a stored play stays in
+its part, so re-imports never move or duplicate it, and new plays fill parts in order.
+
+Each play is written by `@jeswr/solid-listening`'s generated scrobble model (`addScrobble`):
+a `media:PlaybackEvent` with `media:msPlayed`, `media:playedWork` → a titled `media:Track`,
+`media:performedByArtist` → a `foaf:name`d `media:Artist`, `media:inAlbum` → a titled
+`media:Album`, and `core:atTime` → `time:Instant`. The event is `#scrobble-<id>` and its
+instant `#scrobble-<id>-instant`. Plays of one recording in a document share its
+`#track-<key>`, `#artist-<key>` and `#album-<key>` nodes, keyed by a hash of every value the
+node describes. Music's top artists and recently played use imported plays; its "most
+played tracks" counts only library tracks, so imported plays do not appear there yet.
+Recordings are not shared across documents. The model still emits the legacy `w3id.org/jeswr` media/core namespaces; the
+adapter stores them under the canonical `@jeswr/suite-vocab` namespaces with
+`canonicalizeJeswrDataset`. The adapter writes no hand-built accessors, `schema:` types,
+`media:playedVia` or Spotify track link (the generated profile leaves out `playedVia`).
+The generated runtime costs a few milliseconds a play, so the 100,000-row maximum takes
+minutes. Episodes use their title and show name in that history representation.
+
+SHA-256 ids derive from the UTC timestamp and valid track URI, falling back to artist/title
+names; rows sharing an id within one import are one play (the last row wins). Basic
+`endTime` is interpreted as UTC at its exported minute precision, so repeats of one
+recording ending in the same minute are numbered in file order and the number joins the id
+from the second repeat on: re-importing the same file, or an overlapping one, adds nothing. Duration is not
+subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
+matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
+and does not filter by duration. Spotify file import deduplicates exact natural keys only.
+
+The same listen can therefore be stored twice: a Basic and an Extended export of the same
+plays hash differently, and the live adapter's `music/recently-played.ttl#play-…` overlaps
+file history for recent periods. Music reads every part alongside its own history and live
+Spotify history, and folds imported duplicates on read: the same normalised title and a
+shared artist within 90 seconds, from different sources or with Basic's minute precision
+(the precise play wins). A failure reading imported file history never hides Music's own.
+
+Only timestamp, title, artist/show, album and milliseconds are kept; a validated track URI
+only feeds the id.
+`ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
+Rows with `incognito_mode: true` (Spotify Private Session plays, which Spotify keeps out of
+the user's history) are skipped and counted as skips; there is no opt-in yet.
+Raw files and filenames are never written to the pod. Malformed rows count as skips.
+All selected input is verified, and every month's existing parts are read and its new
+documents planned, before history writes: invalid JSON, CRC/size/DEFLATE errors, exceeded
+limits and a month over the document limit fail before history changes. Months are then
+saved one after another, so a Pod error may leave earlier months saved; re-import finishes
+without duplicating them.
+
+The shared streaming JSON scanner caps tokens at 1 MiB, records at 4 MiB, nesting at 64,
+and each JSON file at 64 MiB. Per run: 100,000 rows including invalid/duplicate/oversized
+records, 16 MiB retained metadata, 600 months, 1,000 ZIP entries, 512 MiB compressed input
+and 256 MiB actual inflation across selected entries. ZIPs require `stream()` and `slice()`;
+the shared Takeout reader validates headers, directory, overlap, encryption, compression,
+ranges, size and CRC. Only documented history paths are dispatched; unknown files are not
+inflated. Split exports that exceed a cap.
+
+Suite Connect offers history import by default when no host client is configured, and
+live PKCE with a personal public Client ID. The setup form shows the exact
+`/oauth-callback.html` redirect URI to register in the Spotify Developer Dashboard,
+validates 32 hexadecimal characters, and saves `connect.spotify-client-id` through
+suite-sdk pod-backed preferences. `NEXT_PUBLIC_CONNECTOR_SPOTIFY_CLIENT_ID` takes
+precedence. Personal apps remain subject to Spotify's development-account and user limits.
+No client secret is requested, stored or used by this flow.
+
 The Spotify adapter imports saved tracks, playlists with ordered items, followed artists,
 short/medium/long-term top tracks and artists, and recently-played history. The existing
 `music/top-tracks.ttl` remains the medium-term snapshot. Other top ranges use explicit

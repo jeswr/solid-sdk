@@ -100,8 +100,41 @@ await writeOwnerOnlyAcl(
 );
 ```
 
-`parseScrobble` returns `undefined` for anything that is not a usable scrobble (no
-played work, an untitled track, or no valid played-at instant), and its
+A document that holds many scrobbles (a monthly history shard, say) cannot use the
+one-per-resource `#it`/`#track`/… fragments. `addScrobble(dataset, iris, data)` describes
+one scrobble at caller-chosen node subjects in an existing dataset: the generated composite
+builds it in a scratch store and it is moved onto `iris` term for term, so
+`addScrobble(store, scrobbleNodeIris(url), data)` adds exactly the quads of
+`buildScrobble(url, data)` and each call costs the same however large the dataset is. The
+five subjects must be distinct safe absolute IRIs. A track, artist or album subject (or
+any other) may already be in the dataset only with exactly the description this scrobble
+gives it, so plays can share recording nodes; anything else throws before writing.
+Build into a fresh store and merge it into stored data afterwards: a document read back
+from a pod carries extra quads (such as provenance) on its subjects, so re-adding to it
+throws:
+
+```ts
+import { addScrobble } from "@jeswr/solid-listening";
+import { Store } from "n3";
+
+const shard = new Store();
+const base = "https://alice.pod/listening/2026-07.ttl#play-1";
+addScrobble(
+  shard,
+  {
+    event: base,
+    track: `${base}-track`,
+    artist: `${base}-artist`,
+    album: `${base}-album`,
+    instant: `${base}-instant`,
+  },
+  { trackTitle: "Teardrop", artistName: "Massive Attack", playedAt: new Date() },
+);
+```
+
+`parseScrobble` reads the conventional fragments only. It returns `undefined` for
+anything that is not a usable scrobble (no played work, an untitled track, or no valid
+played-at instant), and its
 untrusted-input hardening drops a hostile / malformed field (a non-http(s)
 listener IRI, a malformed date/number literal) rather than aborting the parse.
 
@@ -130,8 +163,8 @@ never edited here.
 ## Public API
 
 `./` (main — **browser-safe, no `node:*`**): `Scrobble`, `Track`, `Artist`,
-`Album`, `PlayedAtInstant`, `ScrobbleData`, `scrobbleSubject`,
-`scrobbleNodeIris`, `buildScrobble`, `serializeScrobble`, `storeToTurtle`,
+`Album`, `PlayedAtInstant`, `ScrobbleData`, `ScrobbleNodeIris`, `scrobbleSubject`,
+`scrobbleNodeIris`, `buildScrobble`, `addScrobble`, `serializeScrobble`, `storeToTurtle`,
 `parseScrobble`, `parseScrobbleTtl`, `isHttpIri`; the owner-only ACL helpers
 `buildOwnerOnlyAcl`, `writeOwnerOnlyAcl`, `aclUrlFor`; and the reused vocab
 constants/builders (`MEDIA`, `PLAYBACK_EVENT_CLASS`, `MEDIA_PLAYED_WORK`,

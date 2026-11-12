@@ -105,8 +105,8 @@ describe("integrations registry", () => {
   });
 
   it("ships a working file-import adapter for every Tier-C catalog entry", () => {
-    // All 10 Tier-C entries plus the Tier-B hybrid (Garmin, asserted below).
-    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 1);
+    // All Tier-C entries plus the Spotify and Garmin hybrids.
+    expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 2);
     for (const entry of TIER_C) {
       const adapter = fileAdapterById(entry.id);
       expect(adapter, `missing file adapter for ${entry.id}`).toBeDefined();
@@ -150,6 +150,7 @@ describe("integrations registry", () => {
       steam: "https://help.steampowered.com/en/accountdata",
       chatgpt: "https://chatgpt.com",
       garmin: "https://connect.garmin.com/modern/activities",
+      spotify: "https://www.spotify.com/account/privacy/",
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).
