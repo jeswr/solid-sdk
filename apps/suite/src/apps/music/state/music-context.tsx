@@ -17,6 +17,15 @@ import { loadHistory } from "../lib/data/history";
 import { type Library, loadLibrary, musicRoot } from "../lib/data/library";
 import { LikedSyncPendingError, retryLikedSync, setLiked } from "../lib/data/liked";
 import {
+  addDriveAudio,
+  type DriveAudio,
+  listDriveAudio,
+  type OwnedFile,
+  OwnedRecordingConflictError,
+  type OwnedUploadResult,
+  uploadMusicFile,
+} from "../lib/data/owned";
+import {
   createPlaylist,
   deletePlaylist,
   editPlaylist,
@@ -58,6 +67,9 @@ interface MusicContextValue extends State {
     plan: ScrobblePlan,
     onProgress?: (done: number, total: number) => void,
   ): Promise<{ added: number; existing: number }>;
+  importFile(file: OwnedFile): Promise<OwnedUploadResult | false>;
+  fromDrive(url: string): Promise<boolean>;
+  driveFiles(): Promise<DriveAudio[]>;
   older(): Promise<void>;
   olderLoading: boolean;
   olderError: boolean;
@@ -224,7 +236,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
   function mutate(
     apply: Patch,
     work: (current: MusicSnapshot) => Promise<ConfirmedWrite> | Promise<void>,
-    success: string,
+    success: string | (() => string),
     playlistId?: string,
     positional = false,
   ): Promise<boolean> {
@@ -237,12 +249,13 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
       // A failed earlier edit invalidates positions captured from its optimistic order.
       if (!patches.current.some((patch) => patch.id === id)) return false;
       let ok = false;
-      let message = success;
+      let message = typeof success === "string" ? success : "";
       try {
         if (!baseline.current) throw new Error("Music is unavailable");
         const committed = await work(baseline.current);
         confirm(committed ?? { apply });
         ok = true;
+        message = typeof success === "string" ? success : success();
       } catch (error) {
         if (error instanceof LikedSyncPendingError) {
           confirm({ apply, document: error.document });
@@ -250,9 +263,11 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
           message = "Liked songs are saved. Playlist synchronization is pending; refresh to retry.";
         } else {
           message =
-            error instanceof MusicWriteError && error.status === 412
-              ? "This item changed elsewhere. We refreshed it; try your change again."
-              : "Couldn’t save your change. Please try again.";
+            error instanceof OwnedRecordingConflictError
+              ? error.message
+              : error instanceof MusicWriteError && error.status === 412
+                ? "This item changed elsewhere. We refreshed it; try your change again."
+                : "Couldn’t save your change. Please try again.";
           if (playlistId) {
             patches.current = patches.current.filter((patch) => patch.positionalFor !== playlistId);
             message += " Queued song moves and removals were cancelled; please try them again.";
@@ -423,6 +438,32 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
         () => importSpotifyFixture(session.fetch, session.storageUrl),
         "Spotify sample imported",
       );
+    },
+    async importFile(file) {
+      let result: OwnedUploadResult | false = false;
+      const ok = await mutate(
+        (snapshot) => snapshot,
+        async () => {
+          result = await uploadMusicFile(session.fetch, session.storageUrl, file);
+        },
+        () =>
+          result && result.status === "already-owned"
+            ? "Already in your library"
+            : "Music file added",
+      );
+      return ok ? result : false;
+    },
+    fromDrive(url) {
+      return mutate(
+        (snapshot) => snapshot,
+        async () => {
+          await addDriveAudio(session.fetch, session.storageUrl, url);
+        },
+        "Added from Drive",
+      );
+    },
+    driveFiles() {
+      return listDriveAudio(session.fetch, session.storageUrl);
     },
     storage: session.storageUrl,
     async importListens(plan, onProgress) {

@@ -1,13 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Test harness: render a component inside a `SessionContext.Provider` with a
- * STUBBED authed fetch and a MemoryKv-backed DiaryStore — no reactive-auth, no
- * server. This is the suite's "everything unit-testable with a stubbed fetch"
- * seam in action.
+ * StorageClient memory backend and a MemoryKv-backed DiaryStore. Public API
+ * requests have a separate stub fetch; no server or reactive-auth is required.
  */
 import { render, type RenderResult } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { vi } from "vitest";
+import { recordingStorage } from "./storage";
 import { DiaryStore } from "@/lib/cache/diary-store";
 import { MemoryKv } from "@/lib/cache/kv";
 import { resetDiaryReadyMemo } from "@/lib/pod/pod-fs";
@@ -23,20 +24,21 @@ export interface FetchCall {
 
 export interface FetchMock {
   fetch: typeof globalThis.fetch;
+  storage: ReturnType<typeof recordingStorage>["storage"];
   calls: FetchCall[];
   /** URLs of PUT requests, in order (handy for ACL-written-first assertions). */
   puts: () => string[];
 }
 
 /**
- * A recording stub fetch. By default: HEAD → 200 (resource exists, skip create),
- * every other method → 200 ok. Override per-request via `handler` (return a
- * Response, or undefined to use the default).
+ * SDK memory storage plus a separate recording fetch for public APIs.
+ * Override public responses with `handler` (undefined uses the default).
  */
 export function makeFetchMock(
   handler?: (call: FetchCall) => Response | undefined,
+  root = "https://alice.example/",
 ): FetchMock {
-  const calls: FetchCall[] = [];
+  const { storage, calls } = recordingStorage(root);
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
     const method = (init?.method ?? "GET").toUpperCase();
@@ -49,7 +51,7 @@ export function makeFetchMock(
     if (method === "HEAD") return new Response(null, { status: 200 });
     return new Response("", { status: 200 });
   }) as unknown as typeof globalThis.fetch;
-  return { fetch, calls, puts: () => calls.filter((c) => c.method === "PUT").map((c) => c.url) };
+  return { fetch, storage, calls, puts: () => calls.filter((c) => c.method === "PUT").map((c) => c.url) };
 }
 
 export interface SessionHarness {
@@ -58,7 +60,7 @@ export interface SessionHarness {
   value: SessionValue;
 }
 
-/** Build a signed-in session value with a stubbed authed fetch + memory store. */
+/** Build a signed-in session value with SDK memory storage + a memory diary cache. */
 export function makeSession(overrides?: {
   fetchMock?: FetchMock;
   publicFetch?: typeof globalThis.fetch;
@@ -68,7 +70,7 @@ export function makeSession(overrides?: {
   resetDiaryReadyMemo();
   const webId = overrides?.webId ?? "https://alice.example/profile/card#me";
   const storageRoot = overrides?.storageRoot ?? "https://alice.example/";
-  const fetchMock = overrides?.fetchMock ?? makeFetchMock();
+  const fetchMock = overrides?.fetchMock ?? makeFetchMock(undefined, storageRoot);
   const store = new DiaryStore(new MemoryKv(), webId);
   const value: SessionValue = {
     ...anonymousSession,
@@ -76,7 +78,7 @@ export function makeSession(overrides?: {
     webId,
     storageRoot,
     store,
-    authedFetch: fetchMock.fetch,
+    storage: fetchMock.storage,
     publicFetch: overrides?.publicFetch ?? fetchMock.fetch,
   };
   return { store, fetchMock, value };
