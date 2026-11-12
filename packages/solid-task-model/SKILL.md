@@ -29,7 +29,8 @@ normalize spelling and drop ambiguous values. Generated literal parsing enforces
 profile, including exactly one string title. README "Exact divergences" and
 `test/compatibility.test.ts` pin the edge behavior. Direct generated wrapper accessors
 follow their stricter datatype/cardinality/IRI guards, with two consumer-facing
-exceptions. A lone ill-typed `xsd:dateTime` reads as an Invalid Date, and a lone
+exceptions. A lone `xsd:dateTime` that `new Date()` cannot parse reads as an Invalid
+Date (lenient non-XSD forms read as `undefined`), and a lone
 lexically safe http(s) IRI that `URL` cannot parse keeps its stored spelling. Consumers
 such as the suite's Tasks views reject or display these values instead of losing them.
 

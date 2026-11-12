@@ -135,10 +135,12 @@ in `test/compatibility.test.ts`:
   spelling (including uppercase schemes), select the first valid scalar and retain every
   valid set member. These reads never mutate the dataset.
 - **Retained direct reads:** to keep consumer validation working, a scalar date
-  accessor returns an Invalid Date for a lone literal typed `xsd:dateTime` whose value is
-  not valid, as `LiteralAs.date` did. An impossible calendar date such as
-  `2026-02-30T00:00:00Z` now also reads as an Invalid Date. Previously it rolled over
-  to 2 March. A scalar IRI accessor returns the exact spelling of a lone http(s) IRI
+  accessor returns an Invalid Date for a lone literal typed `xsd:dateTime` that
+  `new Date(lexical)` cannot parse either, as `LiteralAs.date` did. A lenient non-XSD
+  form the old wrapper parsed (`2026-03-01`, `2026-03-01T00:00Z`, `…+0000`) and an
+  impossible calendar date such as `2026-02-30T00:00:00Z` (which rolled over to
+  2 March) now read as `undefined` instead of a Date. Closing a task replaces a
+  malformed stored completion time with the current time. A scalar IRI accessor returns the exact spelling of a lone http(s) IRI
   that `URL` cannot parse, such as `http://a%zz/`. The IRI must have an authority and
   no forbidden or control characters. Plain-data `parseTask` still drops both values.
   Ambiguous, otherwise-typed, non-http(s) and lexically unsafe values stay dropped.

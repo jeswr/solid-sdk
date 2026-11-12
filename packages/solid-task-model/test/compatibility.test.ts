@@ -434,7 +434,7 @@ it("keeps the original direct-accessor reads of ill-typed dates and unparseable 
       )[key];
     // An ill-typed xsd:dateTime surfaces as an Invalid Date (as @rdfjs/wrapper's
     // LiteralAs.date did) so consumers can reject it; plain-data parse still drops it.
-    for (const object of ['"invalid"^^xsd:dateTime', '"2026-02-30T00:00:00Z"^^xsd:dateTime']) {
+    for (const object of ['"invalid"^^xsd:dateTime', '"2026-13-45T99:00:00Z"^^xsd:dateTime']) {
       const value = read(object);
       expect(value).toBeInstanceOf(Date);
       expect(Number.isNaN(value?.getTime())).toBe(true);
@@ -443,8 +443,13 @@ it("keeps the original direct-accessor reads of ill-typed dates and unparseable 
         state: "open",
       });
     }
-    // Absent, ambiguous, or other-datatype values keep the generated drop.
+    // Absent, ambiguous, or other-datatype values keep the generated drop, and so do
+    // lenient non-XSD forms the old wrapper parsed (a rolled-over date included).
     for (const object of [
+      '"2026-02-30T00:00:00Z"^^xsd:dateTime',
+      '"2026-03-01"^^xsd:dateTime',
+      '"2026-03-01T00:00Z"^^xsd:dateTime',
+      '"2026-03-01T00:00:00+0000"^^xsd:dateTime',
       '"2026-01-01"^^xsd:date',
       '"invalid"',
       '"invalid"^^xsd:dateTime, "2026-01-01T00:00:00Z"^^xsd:dateTime',
@@ -510,4 +515,16 @@ it("drops stored http(s) IRIs with control characters or an empty authority on p
     ]);
     expect(parseTask(RES, dataset)).toEqual({ title: "T", state: "open" });
   }
+});
+
+it("closing a task replaces a malformed stored completion time", () => {
+  const dataset = store(
+    `<#it> a wf:Task ; dct:title "T" ; prov:endedAtTime "garbage"^^xsd:dateTime .`,
+  );
+  const t = new Task(taskSubject(RES), dataset, DataFactory);
+  const before = Date.now();
+  t.state = "closed";
+  const stored = dataset.getQuads(taskSubject(RES), prov("endedAtTime"), null, null);
+  expect(stored).toHaveLength(1);
+  expect(Date.parse(stored[0]?.object.value ?? "")).toBeGreaterThanOrEqual(before - 1000);
 });

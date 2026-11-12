@@ -81,15 +81,20 @@ export function unparseableHttpIri(doc: TermWrapper, predicate: string): string 
 }
 
 /**
- * Direct-accessor fallback for a lone literal that claims `xsd:dateTime` but is not a
- * valid one. The generated read drops it; the original wrapper returned an Invalid Date,
- * which consumers detect and reject. Absent, ambiguous or differently typed values still
+ * Direct-accessor fallback for a lone literal that claims `xsd:dateTime` but that the
+ * original wrapper also could not parse. The generated read drops it; the original
+ * wrapper returned an Invalid Date, which consumers detect and reject. Absent, ambiguous or differently typed values still
  * read as `undefined`.
  */
 export function malformedDate(doc: TermWrapper, predicate: string): Date | undefined {
   const object = soleObject(doc, predicate);
   if (object?.termType !== "Literal" || object.datatype.value !== xsd("dateTime")) return undefined;
-  return tryRead(() => readLiteral(object)) === undefined ? new Date(Number.NaN) : undefined;
+  if (tryRead(() => readLiteral(object)) !== undefined) return undefined;
+  // Only a value the original `new Date(lexical)` also could not parse becomes an Invalid
+  // Date. A lenient non-XSD form it accepted (`2026-03-01`, `…T00:00Z`, a rolled-over
+  // `2026-02-30`) stays dropped: surfacing it as Invalid Date would crash consumers that
+  // displayed it before, and surfacing the parsed value would return a wrong instant.
+  return Number.isNaN(Date.parse(object.value)) ? new Date(Number.NaN) : undefined;
 }
 
 /** Keep the original Store iteration and Turtle property order. */

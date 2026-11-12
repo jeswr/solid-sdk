@@ -71,8 +71,10 @@ export class Task extends Wrapper {
     this.mark();
     this.types.add(value === "closed" ? WF_CLOSED : WF_OPEN);
     this.types.delete(value === "closed" ? WF_OPEN : WF_CLOSED);
-    if (value === "closed") this.endedAt ??= new Date();
-    else this.endedAt = undefined;
+    // Read the generated (guarded) value: a malformed stored completion time is replaced.
+    if (value === "closed") {
+      if (view(this).endedAt === undefined) this.endedAt = new Date();
+    } else this.endedAt = undefined;
   }
   get isOpen(): boolean {
     return this.state === "open";
