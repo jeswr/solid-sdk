@@ -36,7 +36,7 @@ app's compatibility shims. Hosts create an isolated createRegistry(config); neve
 process environment or install host-specific global configuration here.
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
-I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed writes
+I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed and storage-backed writes
 are confined to the adapter container; Type Index documents must be within a `pim:storage`
 or `solid:storage` root advertised by the user's WebID, independently of the import destination.
 Preserve ETags and conditional PUT semantics. Enforce run cancellation at the writer boundary
@@ -58,7 +58,26 @@ Recorder and Type Index wrappers use `forward: true, initSemantics: "direct"` an
 `init.headers` directly before its single spread capture (`initSemantics: "spread"`), matching
 its original mixed lookup semantics; never reread the original init after capture.
 
-All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
+Use `createStoragePodWriter({ storage, container, webId?, typeIndex?, signal? })` for storage-client
+hosts. It requires a Solid backend because connector slugs are deterministic. Reads and
+registration use `readRdf`; create-only RDF and binary writes use `storage.create` with
+`exactUrl`, preserving mail's colon-containing names. Updates require a single strong ETag;
+412s propagate as StorageError and must never be retried as unconditional writes. Omitted
+write conditions use a fresh HEAD validator or create-only when absent. Delete uses the supplied
+ETag or a fresh HEAD, treating only HTTP 404 as already absent. Both writers share slug confinement
+and binary media-type validation in `core/pod-writer-policy.ts`.
+Registration requires webId and `typeIndex.profileDocumentUrl`; `storageFor` optionally selects
+another client for the pinned profile or validated Type Index. Never widen the document grant.
+The shared Type Index path retains typed wrappers, raw shared vocabulary and conditional bootstrap.
+The writer forwards the run signal before and through every operation, including after awaits.
+Storage-client refuses remote JSON-LD contexts by default; preserve this policy. Hosts supply
+freshness policy in their transport; Node requests force revalidation.
+
+All tests use recorded fixtures and memory Pods. Shared `demoImport`, `sparseImport` and `fileImport`
+helpers default to the strict storage-client memory backend, retaining synchronous snapshots for
+existing adapter assertions. `createMemoryPod` remains available for HTTP fault injection;
+`createStorageMemoryPod` exposes the real memory StorageClient. Run the shared writer contract
+against fetch, Solid HTTP and strict memory backends. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
@@ -147,9 +166,18 @@ interrupted relabeling cannot strand memberships. Preserve one run per connector
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
 changing the provisional MCP JSON schema. Never read process environment in this package;
-use the 0600 owner-held config descriptor, with no symlink following. Reuse solid-dpop for
-Pod client credentials and preserve its guarded discovery, transport separation, nonce
-retries, memory-only cache, and redirect refusal. CON-12 owns the later pod-auth migration.
+use the 0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
+to storage-client's Solid backend and `createStoragePodWriter`. Keep `node/pod-auth.ts` only as
+an adapter for the explicit token URL and exact profile-selected cross-storage index grant.
+Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
+credentials. Separate immutable agent boundaries handle external index documents. The adapter
+supplies local DPoP challenges for explicitly authorised requests so the engine authenticates
+before any Pod operation; it never implements proofs, token caching or refresh itself.
+Preserve transport separation, nonce retries, memory-only credentials and redirect refusal.
+Keep cached index agents independent of caller signals; cancel individual waits and requests,
+and evict rejected initialization promises only when they are still the cached promise.
+Suppress stale profile results by epoch. Preserve serialized RDF strings as immutable Blobs
+for both creates and updates so imports keep their adapter-specific size limits.
 Preserve the effective request signal in the exported Pod fetch, including refresh and
 nonce retry transports; reject already-aborted requests before sending. Use per-request
 transport closures so concurrent callers keep separate signals, and compose any internal
