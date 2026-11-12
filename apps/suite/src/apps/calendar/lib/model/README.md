@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Calendar model (CAL-00)
 
@@ -7,7 +8,7 @@ Import from `./index`. This layer has no React, shell or SDK façade dependency.
 
 `CalendarDate` is either a valid `YYYY-MM-DD` civil date (all-day, RDF `xsd:date`) or a `Date` instant (`xsd:dateTime`). Event ends are exclusive. Writers dual-type events as `schema:Event` and `sched:CalendarEvent`, use canonical `@jeswr/suite-vocab` namespaces, and write both schema and scheduling title/start/end predicates. Readers accept the Pod Manager schema-only form, HTTP schema.org, and legacy scheduling namespaces. Calendar documents use `#it`, `dct:title`, and optional `schema:color`.
 
-`buildEvent` / `parseEvent` and `buildCalendar` / `parseCalendar` operate on RDF/JS datasets. `serializeDataset` / `deserializeDataset` round-trip Turtle through the suite's sanctioned serializer/parser. `EventDoc`, `CalendarDoc`, `ModelNode`, and the recurrence/reminder read/write functions expose typed accessors. Foreign types or absent event starts return `undefined`; malformed supported records throw validation errors.
+Calendar documents and the event fields `schema:name`, `schema:location`, `schema:description`, `schema:identifier` (uid), `jsched:timeZone` and event type recognition run on the model generated in `@jeswr/solid-scheduling` (its README "Suite Calendar"); `CalendarDoc` is that package's generated view. Event dates, `sched:summary`, `sched:inCalendar`, recurrence and reminders stay here because the generator cannot express date-or-dateTime values, blank-node rule/reminder nodes, or their legacy w3id aliases. `buildEvent` / `parseEvent` and `buildCalendar` / `parseCalendar` operate on RDF/JS datasets. `serializeDataset` / `deserializeDataset` round-trip Turtle through the suite's sanctioned serializer/parser. `EventDoc`, `CalendarDoc`, `ModelNode`, and the recurrence/reminder read/write functions expose typed accessors. Foreign types or absent event starts return `undefined`; malformed supported records throw validation errors.
 
 Rules use the shared frequency/interval/count/until/byDay/byMonthDay/byMonth/exceptDate object. Weekday keys are `MO`…`SU`; RDF uses `schema:Monday`…`Sunday` IRIs. `count` and `until` are mutually exclusive. Negative month day `-1` means the month's last day. Reminders have exactly one trigger: an absolute instant or a fixed-length ISO duration offset from the event start. `computeFireTimes` is pure and does not schedule notifications.
 

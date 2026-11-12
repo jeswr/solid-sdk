@@ -63,6 +63,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | S scheduling: import `jeswr/solid-scheduling`, ratchet sector, generate, flip | implemented: generated Task + RecurrenceRule composite and Calendar behind facades; sector ratchet still open (normative) | `packages/solid-scheduling` | sst-ild.7.5 |
 | R generate-not-handwrite charter rule; re-brief contacts, recipe, collectibles | rule in AGENTS.md; re-briefs via the orchestrator | `AGENTS.md`, lane briefs | sst-ild.7.6 |
 | W2 Sheets: extract Suite workbook and column descriptor models into a generated shared package | implemented: four flat generated entities composed by layout/order facades; Suite imports the package | `packages/solid-sheets`, `apps/suite` | sst-ild.7 |
+| Suite Calendar: move calendar documents and event fields onto `@jeswr/solid-scheduling` | first slice implemented: generated `CalendarDocument` and `CalendarEvent` (scalar fields, type recognition) on the app's `jsched:`/schema.org IRIs; event dates, summary, inCalendar, recurrence and reminders stay in the app (generator gaps: `sh:or` date/dateTime, blank-node children, cross-owner alias overlap) | `packages/solid-scheduling`, `apps/suite` | sst-q6hu |
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
