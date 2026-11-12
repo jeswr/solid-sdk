@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { sampleWeek } from "../src/apps/places/demo/sample";
 import { placesController } from "../src/apps/places/state/controller";
 
+const read = vi.hoisted(() => vi.fn());
+vi.mock("../src/apps/places/lib/import-worker", () => ({ readTimeline: read }));
+
 const place = {
   url: "https://pod.example/places/places/1.ttl",
   etag: '"1"',
@@ -258,4 +261,69 @@ it("retains skipped-record counts from the repository", async () => {
   repo.load.mockResolvedValueOnce({ ...initial(), skipped: 3 });
   await controller.open();
   expect(controller.getSnapshot().snapshot.skipped).toBe(3);
+});
+// AUTHORED-BY Claude Opus 5.5
+it("keeps the newer preview when a superseded read resolves late", async () => {
+  const { controller } = setup();
+  const first = deferred<ReturnType<typeof sampleWeek>>();
+  const newer = { ...sampleWeek(), skipped: 1 };
+  read.mockReturnValueOnce(first.promise).mockResolvedValueOnce(newer);
+  const stale = controller.readFile(new File(["{}"], "old.json"));
+  await controller.readFile(new File(["{}"], "new.json"));
+  first.resolve(sampleWeek());
+  await stale;
+  expect(controller.getSnapshot().import).toMatchObject({
+    preview: newer,
+    filename: "new.json",
+    stage: "idle",
+  });
+});
+it("falls back to a generic message when reading rejects with a non-Error", async () => {
+  const { controller } = setup();
+  read.mockRejectedValueOnce("worker crashed");
+  await controller.readFile(new File(["{}"], "Timeline.json"));
+  expect(controller.getSnapshot().import).toMatchObject({
+    stage: "idle",
+    error: "Could not read this file.",
+  });
+});
+it("refuses to start an import while a file is being read, another import saves, or after disposal", async () => {
+  const { controller, repo } = setup();
+  await controller.open();
+  const reading = deferred<ReturnType<typeof sampleWeek>>();
+  read.mockReturnValueOnce(reading.promise);
+  const pendingRead = controller.readFile(new File(["{}"], "Timeline.json"));
+  await expect(controller.importTimeline(sampleWeek())).resolves.toBeUndefined();
+  expect(repo.importTimeline).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().import.stage).toBe("reading");
+  reading.resolve(sampleWeek());
+  await pendingRead;
+  const done = deferred<void>();
+  repo.importTimeline.mockReturnValueOnce(done.promise);
+  const first = controller.importTimeline(sampleWeek());
+  await controller.importTimeline(sampleWeek());
+  await Promise.resolve();
+  expect(repo.importTimeline).toHaveBeenCalledTimes(1);
+  done.resolve();
+  await first;
+  controller.dispose();
+  await controller.importTimeline(sampleWeek());
+  expect(repo.importTimeline).toHaveBeenCalledTimes(1);
+});
+it("stops publishing progress once an import is cancelled", async () => {
+  const { controller, repo } = setup();
+  await controller.open();
+  const resume = deferred<void>();
+  repo.importTimeline.mockImplementationOnce(async (_input, progress, signal) => {
+    progress?.(3, 26);
+    await resume.promise;
+    progress?.(20, 26);
+    signal?.throwIfAborted();
+  });
+  const importing = controller.importTimeline(sampleWeek());
+  await vi.waitFor(() => expect(controller.getSnapshot().import.progress.done).toBe(3));
+  controller.cancelImport();
+  resume.resolve();
+  await expect(importing).rejects.toMatchObject({ name: "AbortError" });
+  expect(controller.getSnapshot().import.progress).toEqual({ done: 3, total: 26 });
 });
