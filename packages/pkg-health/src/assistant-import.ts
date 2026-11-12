@@ -119,7 +119,7 @@ function checkedDate(term: Term, reason: string): Literal {
   if (term.datatype.value === `${XSD}dateTime`) {
     const year = new Date(temporalTime(term) as number).getUTCFullYear();
     if (!/(?:Z|[+-]\d\d:\d\d)$/.test(term.value) || year < 1 || year > 9999) throw new Skip(reason);
-  }
+  } else if (!/^(?!0000)\d{4}-/.test(term.value)) throw new Skip(reason);
   return term;
 }
 function date(value: Term): Literal {
@@ -207,6 +207,9 @@ function assertion(node: ReadNode, kind: string, owner: string): Store {
       break;
     case "medication": {
       const product = new ReadNode(iri(requireValue(one(node, [`${H}medication`]))), node.dataset);
+      // A product that names another person is foreign data: never copy its name.
+      if (product.owners.some((t) => t.termType !== "NamedNode" || t.value !== owner))
+        throw new Skip("OtherSubject");
       validate(product);
       if (
         !product
@@ -319,8 +322,7 @@ export async function importAssistantTurtle(
     )
       sourceTerms.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
     if (
-      (SUBJECT_LINK_PREDICATES.includes(q.predicate.value) &&
-        !schema("about").includes(q.predicate.value)) ||
+      SUBJECT_LINK_PREDICATES.includes(q.predicate.value) ||
       (q.predicate.value === RDF_TYPE &&
         q.object.termType === "NamedNode" &&
         factTypes.has(q.object.value))
@@ -333,6 +335,8 @@ export async function importAssistantTurtle(
     if (source) sources.set(source.id, source);
   }
   const claims: Claim[] = [];
+  // The export source IRI is reserved: an input source may never take it over.
+  sources.delete(pkgId("assistant-export", config.batchId));
   const exportSource: Source = {
     id: pkgId("assistant-export", config.batchId),
     url: pkgId("assistant-export", config.batchId),
@@ -347,7 +351,8 @@ export async function importAssistantTurtle(
     try {
       iri(term);
       const node = new ReadNode(term, dataset);
-      const owners = node.owners;
+      // On a fact, schema:about is also a subject link (assistant exports use it so).
+      const owners = [...node.owners, ...terms(node, schema("about"))];
       if (
         !owners.length ||
         owners.some((t) => t.termType !== "NamedNode" || t.value !== config.owner)

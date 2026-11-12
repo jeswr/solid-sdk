@@ -207,9 +207,15 @@ It accepts both schema.org schemes and both `https://w3id.org/jeswr/pkg#` and
 `https://jeswr.org/ns/pkg#` status predicates. Scalar aliases are combined; conflicting
 values refuse the fact. It requires one recognised fact type and exclusively owner
 subject links: canonical/legacy `health:patient`, FHIR `subject`, and schema.org
-`about`, `subject` and `patient` in either scheme. Missing or mixed owner links refuse
-the fact. Candidates have a recognised fact type or a patient/subject link; a
-CreativeWork with only an `about` link is a source, not a fact candidate.
+`subject` and `patient` in either scheme (the shared `SUBJECT_LINK_PREDICATES`, which the
+projector also reads), plus `schema:about` on facts only. Missing or mixed owner links refuse
+the fact, and a medicine statement whose product names another person is refused
+(OtherSubject) without copying the product name. Candidates have a recognised fact type or
+a patient/subject link. On a CreativeWork, `about` names a topic: it is neither a fact
+candidate nor a subject link, so topical sources are accepted; a source whose patient/subject
+names someone else is invalid. The projector likewise ignores `schema:about` topics on
+facts. Dates with year 0000 or a UTC year outside 0001-9999 are refused, and the
+assistant-export IRI is reserved: an input source at that IRI is invalid.
 Conditions and medicines use memory templates; observations, encounters, immunizations
 and owner-linked PropertyValue notes use generated builders. Observation string units
 become `health:unitCode`. Statement labels and string `doseSchedule` are preserved;

@@ -229,7 +229,7 @@ it.each(
 });
 
 it.each(
-  subjectPredicates,
+  subjectPredicates.filter((p) => !p.endsWith("about")),
 )("refuses a source with a foreign subject alias: %s", async (predicate) => {
   const invalid = source.replace(
     "a s:CreativeWork",
@@ -251,11 +251,70 @@ it("does not count CreativeWork about links as facts and refuses mixed-owner sou
   expect((await roundtrip(prefixes + linked + fact)).skipped.count).toBe(0);
   const mixed = await importAssistantTurtle(
     prefixes +
-      linked.replace("a s:CreativeWork", "a s:CreativeWork ; s:about <https://example.org/other>") +
+      linked.replace(
+        "a s:CreativeWork",
+        "a s:CreativeWork ; s:patient <https://example.org/other>",
+      ) +
       fact,
     options,
   );
-  expect(mixed.skipped).toEqual({ count: 1, reasons: { InvalidSource: 1 } });
+  // The patient link also makes the source a (foreign) fact candidate.
+  expect(mixed.skipped).toEqual({ count: 2, reasons: { InvalidSource: 1, OtherSubject: 1 } });
+});
+
+it("accepts a source whose schema:about names a topic", async () => {
+  // AUTHORED-BY Claude Opus 5.5
+  const topical = source.replace(
+    "a s:CreativeWork",
+    "a s:CreativeWork ; s:about <https://example.org/topics/iron>",
+  );
+  const result = await roundtrip(prefixes + topical + fact);
+  expect(result.skipped.count).toBe(0);
+  expect(result.view.facts).toHaveLength(1);
+});
+
+it("refuses a medicine statement whose product names another person, without its name", async () => {
+  // AUTHORED-BY Claude Opus 5.5
+  const body = `ex:product a h:MedicinalProduct ; s:name "Fictional foreign product" ; h:patient <https://example.org/other> .
+  ex:fact a h:MedicationStatement ; h:patient <${owner}> ; s:name "Fictional medicine use" ; h:medication ex:product ;
+  prov:wasDerivedFrom ex:source ; oa:exact "Fictional quote" ; p:epistemicStatus "SelfReportedExplicit" ; p:validityStatus "Current" .`;
+  const result = await importAssistantTurtle(prefixes + source + body, options);
+  expect(result.skipped).toEqual({ count: 2, reasons: { OtherSubject: 2 } });
+  expect(result.value.nanopubs).toEqual([]);
+  expect(await memory.serializeNanopublications(result.value)).not.toContain(
+    "Fictional foreign product",
+  );
+});
+
+it("refuses year 0000 calendar dates on sources and facts", async () => {
+  // AUTHORED-BY Claude Opus 5.5
+  const zeroSource = source.replace(
+    '"2026-10-01T12:00:00Z"^^xsd:dateTime',
+    '"0000-01-01"^^xsd:date',
+  );
+  expect((await importAssistantTurtle(prefixes + zeroSource + fact, options)).skipped).toEqual({
+    count: 1,
+    reasons: { InvalidSource: 1 },
+  });
+  const zeroFact = fact.replace(
+    'p:validityStatus "Current" .',
+    'p:validityStatus "Current" ; s:validFrom "0000-01-01"^^xsd:date .',
+  );
+  const result = await importAssistantTurtle(prefixes + source + zeroFact, options);
+  expect(result.value.nanopubs).toEqual([]);
+  expect(result.skipped.count).toBe(1);
+});
+
+it("never lets an input source take over the reserved export source IRI", async () => {
+  // AUTHORED-BY Claude Opus 5.5
+  const reserved = memory.pkgId("assistant-export", options.batchId);
+  const squatter = source.replaceAll("ex:source", `<${reserved}>`);
+  const body = fact.replace("prov:wasDerivedFrom ex:source", `prov:wasDerivedFrom <${reserved}>`);
+  const result = await importAssistantTurtle(prefixes + squatter + body, options);
+  expect(result.skipped).toEqual({ count: 1, reasons: { InvalidSource: 1 } });
+  expect(await memory.serializeNanopublications(result.value)).not.toContain(
+    "Fictional discussion",
+  );
 });
 
 it("omits a source referenced only by a skipped foreign fact", async () => {

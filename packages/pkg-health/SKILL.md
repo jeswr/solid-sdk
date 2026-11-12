@@ -73,9 +73,11 @@ dateTimes then compare by instant. Source dates stay dates; sub-millisecond sour
 truncate. Refuse zone-less dateTimes and UTC years outside 0001–9999 on facts and sources.
 Over-long quotes are dropped, never cut; a fact needs one usable quote. Every subject
 alias must name the owner: canonical/legacy health patient, FHIR subject and both schema.org
-schemes' about/subject/patient. Share this predicate list with the projector. Fact candidates
-have a recognised fact type or a patient/subject link; source-only about links do not count.
-Foreign/mixed-subject CreativeWorks are invalid sources (referencing facts skip InvalidSource).
+schemes' subject/patient (`SUBJECT_LINK_PREDICATES`, shared with the projector), plus
+schema:about on facts only; `about` on sources and in the projector names a topic. Products
+naming another person refuse their statement. Fact candidates have a recognised fact type or
+a patient/subject link. Foreign/mixed-subject CreativeWorks are invalid sources (referencing
+facts skip InvalidSource); the assistant-export IRI is reserved; year 0000 dates are refused.
 Emit only sources referenced by accepted claims; unreferenced sources and sources used only
 by skipped facts must not reach the RDF. With one derived source, pair each usable quote
 with it. With multiple sources, emit quote-free evidence for each, and attach quotes only

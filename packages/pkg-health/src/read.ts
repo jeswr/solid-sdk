@@ -14,13 +14,14 @@ export const TIME = "http://www.w3.org/2006/time#";
 export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 export const LABEL = "http://www.w3.org/2000/01/rdf-schema#label";
 export const health = (local: string): string[] => [H + local, OLD_H + local];
-/** All outgoing subject aliases: no owner link may hide a conflicting alias. */
+/**
+ * All outgoing person-subject aliases: no owner link may hide a conflicting alias.
+ * schema:about is excluded: on records it usually names a topic, not a person.
+ */
 export const SUBJECT_LINK_PREDICATES: readonly string[] = Object.freeze([
   ...health("patient"),
   `${FHIR}subject`,
-  ...[S, "http://schema.org/"].flatMap((ns) =>
-    ["subject", "patient", "about"].map((local) => ns + local),
-  ),
+  ...[S, "http://schema.org/"].flatMap((ns) => ["subject", "patient"].map((local) => ns + local)),
 ]);
 
 export class ReadNode extends TermWrapper {
