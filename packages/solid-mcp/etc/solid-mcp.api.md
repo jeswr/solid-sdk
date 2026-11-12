@@ -12,6 +12,7 @@ import type { z } from 'zod';
 
 // @public
 export interface CliConfig {
+    account?: string;
     // (undocumented)
     clientId?: string;
     // (undocumented)

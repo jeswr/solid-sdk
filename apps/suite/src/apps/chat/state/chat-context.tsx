@@ -60,8 +60,15 @@ const Context = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ session, children }: { session: ChatSession; children: ReactNode }) {
   const publicFetch = publicFetchOf(session);
   const client = useMemo(
-    () => new ChatClient(session.fetch, session.storageUrl, session.webId, publicFetch),
-    [session.fetch, session.storageUrl, session.webId, publicFetch],
+    () =>
+      new ChatClient(
+        session.fetch,
+        session.storageUrl,
+        session.webId,
+        publicFetch,
+        session.displayName,
+      ),
+    [session.fetch, session.storageUrl, session.webId, publicFetch, session.displayName],
   );
   const [revision, setRevision] = useState(0);
   const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);
@@ -171,7 +178,7 @@ export function useChat() {
 }
 
 export function useAsync<T>(
-  load: () => Promise<T>,
+  load: (signal: AbortSignal) => Promise<T>,
   refresh = true,
   resource: unknown = load,
 ): AsyncResult<T> {
@@ -188,13 +195,14 @@ export function useAsync<T>(
   // biome-ignore lint/correctness/useExhaustiveDependencies: key and attempt invalidate the current read
   useEffect(() => {
     let live = true;
+    const controller = new AbortController();
     setState((current) => ({
       resource,
       status: "loading",
       data: current.resource === resource ? current.data : undefined,
       error: undefined,
     }));
-    void load().then(
+    void load(controller.signal).then(
       (data) => live && setState({ resource, status: "ready", data, error: undefined }),
       (error: unknown) =>
         live &&
@@ -210,6 +218,7 @@ export function useAsync<T>(
     );
     return () => {
       live = false;
+      controller.abort();
     };
   }, [load, key, attempt, resource]);
   return state.resource === resource
