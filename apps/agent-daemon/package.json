@@ -44,6 +44,7 @@
     "@jeswr/agentic-legacy-bridge": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
+    "@jeswr/pod-connectors": "workspace:*",
     "@jeswr/pod-notifications": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/storage-client": "workspace:*",

@@ -285,3 +285,39 @@ the executor remains responsible for authorization, approvals and transmission.
 New packages remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Scheduled connector job (CON-A2 / sst-q0cp)
+
+`composeDaemon` includes a `connectors` job using its authenticated pod-auth fetch.
+Trusted embedded hosts supply `createConnectorsJob(...)` as `DaemonOptions.connectors`.
+The job reads the owner's bounded JSON connection array at
+`<pod>/integrations/connections.json` and uses pod-connectors' existing owner-only
+`integrations/<id>/state.json`. Both require advertised in-container WAC ACL links;
+protection precedes JSON access. A missing settings document means no connections.
+Read the [scheduler contract](../../packages/pod-connectors/README.md#scheduled-connectors-con-a2--sst-q0cp)
+for settings, health, intervals, retries, account cursors and explicit re-enablement.
+Only opaque account ids and trusted registry adapters are accepted; settings cannot
+select code, provider configuration, transports or credentials.
+
+The default `pendingVaultTokenSource` deliberately throws `ReauthoriseError`.
+It is the sst-3erb vault integration stub: enabled connections become disabled with
+`needs-reauth`, without provider traffic. A trusted host can later inject its
+vault-backed `TokenSource`, registry and separate pristine `sourceFetch`.
+The canonical `profileDocumentUrl` comes from the host's profile load; composition
+without it uses the configured owner's document and refuses redirects.
+
+`once` awaits one connectors pass. `run` polls connections every 30 seconds
+independently of channel ingestion, with the normal connector concurrency cap of
+two. Shutdown aborts source/Pod I/O and drains the job before executor drain and
+process lease release. The same composition works in launchd and cloud hosts;
+retain the existing exclusive lease across all of it, including during deployment.
+Logs contain only fixed pass-complete/pass-failed messages, never provider errors.
+
+`awp connectors` lists `connectorId account enabled|disabled health`. `createCliHost` uses the job returned by its lazy `composeDaemon` factory and
+closes that pod session after listing. A host may instead supply an owner-authenticated
+`ConnectorsJob.list` callback as `createCliHost({ connectors, ... })` to avoid composing
+models. That callback owns and closes any temporary session. Missing composition
+fails closed. The CLI projects validated opaque ids and health only, excluding
+cursors, credentials and arbitrary exception text. No health page UI is included.

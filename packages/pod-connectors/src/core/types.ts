@@ -33,6 +33,8 @@ export interface IntegrationMetadata {
   readonly whatYouGet: string;
   /** Honest go-live notes: what the maintainer must register/deploy. */
   readonly requirements: readonly string[];
+  /** Registry scheduling default for API connectors; hosts may override (minimum 15). */
+  readonly defaultIntervalMinutes?: number;
 }
 
 /** OAuth2 endpoints + per-app parameters for the shared PKCE engine. */
@@ -246,12 +248,63 @@ export interface ConnectorState {
   readonly cursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+  /** Latest attempt, separate from the last successful checkpoint above. */
+  readonly health?: ConnectorRunHealth;
+  /** Independent cursors and health, keyed by a host-owned opaque account id. */
+  readonly accounts?: Readonly<Record<string, ConnectorAccountState>>;
+}
+
+export type ConnectorAccountState = Omit<ConnectorState, "accounts">;
+
+export interface ConnectorRunCounts {
+  readonly created: number;
+  readonly updated: number;
+  readonly unchanged: number;
+  readonly skipped: number;
+}
+
+export type ConnectorErrorClass =
+  | "reauthorise"
+  | "rate-limited"
+  | "unauthorised"
+  | "conflict"
+  | "source-or-pod"
+  | "unexpected"
+  | "aborted";
+
+export interface ConnectorRunHealth {
+  readonly lastRunStartedAt: string;
+  readonly lastRunEndedAt: string;
+  readonly outcome: "ok" | "partial" | "failed" | "needs-reauth";
+  readonly counts: ConnectorRunCounts;
+  readonly errorClass?: ConnectorErrorClass;
+  readonly consecutiveFailures: number;
+  readonly nextRunAt?: string;
+  /** The effective interval used for stale classification. */
+  readonly intervalMinutes: number;
+}
+
+/** The vault lane supplies this port. Credentials must never enter persisted state. */
+export interface TokenSource {
+  accessToken(connectorId: string, account: string): Promise<string>;
+}
+
+/** A missing or revoked vault grant requires explicit owner re-enablement. */
+export class ReauthoriseError extends Error {
+  constructor() {
+    super("Connector authorisation is required.");
+    this.name = "ReauthoriseError";
+  }
 }
 
 export interface ConnectorStateOptions {
   readonly state?: ConnectorState;
   /** Called after completion or failure; failures retain the previous checkpoint. */
   readonly onState?: (state: ConnectorState) => void;
+  /** Bounded document accounting, also emitted after partial writes. */
+  readonly onRunCounts?: (counts: ConnectorRunCounts) => void;
+  /** Opt into document change comparisons; a counts listener also enables them. */
+  readonly trackChanges?: boolean;
 }
 
 export interface IntegrationAdapter {

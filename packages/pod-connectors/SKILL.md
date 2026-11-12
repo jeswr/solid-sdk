@@ -251,3 +251,14 @@ placeVisit values (including missing/invalid location or duration) and all other
 shapes count as skips and make location incomplete. Contacts use an independent
 run-level row counter, including duplicate cards, across retained and capped paths;
 manifest release never resets the counter. Excess rows skip before any Pod writes.
+
+CON-A2 adds root-exported ConnectorScheduler and owner-only JSON settings/state ports.
+Read the README's Scheduled connectors contract before changing them. Preserve the
+whole-container run claim even for different accounts, bounded connection/concurrency/
+JSON/retry limits, transport cancellation, allowlisted health codes and legacy checkpoint
+projection. `health.counts` describe the latest attempt's document changes; old `counts`
+remain the last successful import's document/item counters. Keep account cursors separate,
+merge fresh snapshots after 412 and never roll back a newer successful cursor. Reauth is
+latched durably until explicit re-enable; cancellation starts no further state/config I/O.
+The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
+Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.

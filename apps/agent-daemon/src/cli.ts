@@ -13,6 +13,7 @@ import {
 import { type Deps, login } from "@jeswr/agent-credentials";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { existsSync } from "fs";
+import type { ConnectorsJob } from "./connectors.js";
 import { installLaunchd } from "./launchd.js";
 import type { createLocalState } from "./local.js";
 import { scrubLog } from "./logging.js";
@@ -28,6 +29,7 @@ export interface CliIo {
   signal: AbortSignal;
 }
 export interface CliHost {
+  connectors?: ConnectorsJob["list"];
   run(signal: AbortSignal): Promise<void>;
   once(signal?: AbortSignal): Promise<void>;
   halt(): Promise<void>;
@@ -39,6 +41,8 @@ export interface CliHost {
   install(confirm: CliIo["confirm"]): Promise<boolean>;
 }
 export interface CliHostOptions {
+  /** Lazy authenticated owner-only read, independent of channel/model composition. */
+  connectors?: ConnectorsJob["list"];
   daemon: Daemon | (() => Promise<AuthenticatedComposition>);
   local: ReturnType<typeof createLocalState>;
   accounts: CliHost["accounts"];
@@ -61,6 +65,18 @@ export function createCliHost(o: CliHostOptions): CliHost {
     }
   }
   return {
+    connectors:
+      o.connectors ??
+      (async (signal) => {
+        if (typeof o.daemon !== "function") throw new Error("Connectors job is not configured");
+        const composition = await o.daemon();
+        try {
+          if (!composition.connectors) throw new Error("Connectors job is not configured");
+          return await composition.connectors.list(signal);
+        } finally {
+          await composition.close();
+        }
+      }),
     run: (signal) => execute("run", signal),
     once: (signal) => execute("once", signal),
     halt: () => o.local.halt(),
@@ -77,7 +93,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
   };
 }
 const usage =
-  "Usage: awp run | once | halt | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
+  "Usage: awp run | once | halt | status | accounts | connectors | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
 const compositionRequired = "awp requires a trusted composition module (Node --import)";
 function readLedger(path: string): readonly LedgerEntry[] {
@@ -161,6 +177,23 @@ export async function runCli(
       return 2;
     }
     switch (command) {
+      case "connectors": {
+        if (!host.connectors) throw new Error("Connectors job is not configured");
+        const connections = await host.connectors(io.signal);
+        if (connections.length > 1_000) throw new Error("Too many connections");
+        for (const c of connections) {
+          if (
+            !/^[a-z0-9][a-z0-9-]{0,63}$/.test(c.connectorId) ||
+            !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(c.account) ||
+            !["ok", "stale", "failing", "needs-reauth"].includes(c.health)
+          )
+            throw new Error("Invalid connector summary");
+          io.print(
+            `${c.connectorId} ${c.account} ${c.enabled ? "enabled" : "disabled"} ${c.health}`,
+          );
+        }
+        break;
+      }
       case "run":
         await host.run(io.signal);
         break;

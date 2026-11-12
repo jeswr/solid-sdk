@@ -1150,3 +1150,74 @@ it("holds its process lease through a failed watcher close and delayed executor 
   await failed;
   expect(h.state.held()).toBe(false);
 });
+
+it("runs the connectors job once under the process lease before releasing it", async () => {
+  const h = harness();
+  const tick = vi.fn(async (signal?: AbortSignal) => {
+    expect(h.state.held()).toBe(true);
+    expect(signal?.aborted).toBe(false);
+  });
+  const connectors = { tick, run: vi.fn(), list: vi.fn() };
+  await createDaemon({ ...h.options, accounts: [], connectors }).once();
+  expect(tick).toHaveBeenCalledOnce();
+  expect(connectors.run).not.toHaveBeenCalled();
+  expect(h.state.held()).toBe(false);
+});
+it("aborts and drains background connectors before executor drain and lease release", async () => {
+  const h = harness(),
+    controller = new AbortController(),
+    order: string[] = [];
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const connectors = {
+    tick: vi.fn(),
+    list: vi.fn(),
+    run: async (signal: AbortSignal) => {
+      started();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      expect(h.state.held()).toBe(true);
+      order.push("connectors");
+    },
+  };
+  h.executor.drain.mockImplementation(async () => {
+    order.push("executor");
+  });
+  const run = createDaemon({ ...h.options, accounts: [], connectors }).run(controller.signal);
+  await ready;
+  controller.abort();
+  await run;
+  expect(order).toEqual(["connectors", "executor"]);
+  expect(h.state.held()).toBe(false);
+});
+
+it("awp connectors uses a lazy composed job and closes its pod session without running the daemon", async () => {
+  const h = harness(),
+    close = vi.fn(async () => undefined),
+    list = vi.fn(async () => []);
+  const daemon = createDaemon({ ...h.options, accounts: [] });
+  const composition = vi.fn(async () => ({
+    auth: {} as never,
+    daemon,
+    connectors: { list, tick: vi.fn(), run: vi.fn() },
+    close,
+  }));
+  const host = createCliHost({
+    daemon: composition,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  expect(composition).not.toHaveBeenCalled();
+  const signal = new AbortController().signal;
+  expect(await runCli(["connectors"], host, { print: vi.fn(), confirm: vi.fn(), signal })).toBe(0);
+  expect(list).toHaveBeenCalledWith(signal);
+  expect(close).toHaveBeenCalledOnce();
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+});

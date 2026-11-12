@@ -52,7 +52,7 @@ retains read preconditions for subsequent writes; explicit write conditions over
 
 Entry points:
 
-- `.`: contracts, runners, catalog, config factory, fetch-backed writer, errors.
+- `.`: contracts, import runners, scheduler, health, catalog, config factory, fetch-backed writer, errors.
 - `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
 - `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
@@ -738,3 +738,87 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Scheduled connectors (CON-A2 / sst-q0cp)
+
+The root entry exports `ConnectorScheduler`, `TokenSource`, `ReauthoriseError`,
+`connectorConnections`, `createConnectionStore`, `createConnectorStateStore`,
+`connectorHealth` and `connectorHealthSummary`. No host environment or vault is
+read by the scheduler. Hosts inject their connection settings, token source, a
+pristine source fetch, `podWriter(connection, signal)`,
+`stateStore(connectorId, signal)` and `saveConnection(connection, signal)`.
+The last port persists enablement/status changes in the host's settings store.
+`createConnectionStore` supplies an owner-only JSON implementation at
+`<pod>/integrations/connections.json`; it accepts an array like:
+
+```json
+[{ "connectorId": "spotify", "account": "primary", "intervalMinutes": 60, "enabled": true }]
+```
+
+Account ids are opaque host labels (1–128 ASCII letters/digits/dots/underscores/hyphens,
+starting with a letter/digit), never addresses or credentials. Lists are limited to
+1,000 unique connector/account pairs and 256 KiB. Only registered OAuth API adapters
+can be scheduled; file imports remain manual. API catalog rows expose
+`defaultIntervalMinutes` (currently 60). Requested intervals below 15 minutes are
+floored to 15; nonpositive/nonfinite values and intervals above one year are refused.
+
+`tick(signal?)` runs a due pass; overlapping ticks join the same pass. `run(signal)`
+provides a cancellable 30-second polling loop, with injectable `now`, `sleep` and
+`random` ports. Hosts with an existing loop use `tick`. Default concurrency is two
+(maximum 16), and accounts sharing a connector container run serially to preserve
+the runner's reconciliation contract. Separate hosts still need an exclusive host
+lease or other external serialization for imports into the same connector container;
+conditional health updates do not provide a distributed import lock.
+
+Successful/partial runs schedule the next interval from completion. Failures retry
+with exponential delays starting at 15 minutes, multiplied by random jitter in
+[1, 1.25], capped at 24 hours. A success resets the failure counter.
+`ReauthoriseError` persists `{ enabled: false, status: 'needs-reauth' }` and latches
+health without a next-run time, including across restart. Explicit
+`setEnabled(connectorId, account, true)` clears the persisted latch and enables the
+host setting; `setConnections` also handles an observed disabled-to-enabled
+transition. When restoring an already-enabled list over latched state, call
+`setEnabled` explicitly so a failed settings write cannot silently re-enable it.
+`stop()` aborts and drains active work. Run signals reach both the runner and
+source/Pod transports. After cancellation no new state/config write starts; the
+previous checkpoint remains due for replay, as for a manually cancelled import.
+
+The existing owner-only `integrations/<id>/state.json` stays backward compatible.
+Its `connectedAt`, `lastSync`, `cursor`, `lastOutcome` and `counts` retain their
+checkpoint meaning. Scheduler state adds:
+
+- `health`: `lastRunStartedAt`, `lastRunEndedAt`, `outcome` (`ok`, `partial`,
+  `failed`, `needs-reauth`), `counts` (`created`, `updated`, `unchanged`, `skipped`),
+  allowlisted `errorClass`, `consecutiveFailures`, effective `intervalMinutes`
+  and optional `nextRunAt`.
+- `accounts`: independent checkpoints and health keyed by opaque account id.
+  The old account-free checkpoint migrates to the first configured account only.
+  The top-level checkpoint/health summarize the most recent connector activity.
+
+Health change counts describe RDF documents; unchanged comparison excludes run
+provenance. They are bounded by document count and also surface as
+`ImportReport.counts` / `onRunCounts` for partial writes. The scheduler enables
+comparisons automatically; manual runners opt in with `trackChanges: true` or an
+`onRunCounts` listener, preserving their existing write cost by default. Checkpoint counts still
+describe the latest successful import's documents/items/skips. Failure never
+advances its cursor or replaces its successful counts. Partial means a completed
+import with skipped source records and still advances its successful checkpoint.
+
+State requires a strong ETag and sends `If-Match` (or `If-None-Match: *` on creation).
+On 412, the scheduler rereads and reapplies its per-account merge, at most three
+attempts. Concurrent other-account state and newer successful cursors survive.
+Both settings and state install the advertised in-container owner-only WAC ACL
+before accessing JSON, refuse redirects and bound response bytes. Incidental
+fields, provider messages, URLs and tokens are never copied into health. Error
+codes are `reauthorise`, `rate-limited`, `unauthorised`, `conflict`, `source-or-pod`,
+`unexpected` and `aborted` (reserved; cancelled runs start no health writes).
+
+`connectorHealthSummary(states, now)` returns counts `{ ok, stale, failing,
+'needs-reauth', total }`. Inputs may be checkpoints directly or
+`{ state, intervalMinutes?, status? }` for each connection. For a multi-account
+connector, pass its individual `state.accounts[account]` entries. Reauth takes
+precedence, then the latest failure, then staleness at three intervals without a
+success. A partial success refreshes that time; an absent checkpoint is stale.
+Pass epoch milliseconds explicitly for deterministic UI snapshots and tests.
