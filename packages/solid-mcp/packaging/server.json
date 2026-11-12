@@ -32,6 +32,12 @@
           "isSecret": false
         },
         {
+          "name": "SOLID_MCP_ACCOUNT",
+          "description": "Optional owner-chosen account label recorded on captured or imported conversations.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
           "name": "SOLID_MCP_READONLY",
           "description": "Defaults to true. Set false explicitly to enable writes.",
           "isRequired": false,
