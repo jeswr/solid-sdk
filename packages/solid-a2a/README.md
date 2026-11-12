@@ -64,8 +64,9 @@ const protocol = await buildProtocolDocument({
   is not absolute. The request shapes do not bound these, so act on the projection, not
   on `validateIntent` alone.
 - `validateIntent` never throws: an Intent the writers refuse, or a shape the validator
-  cannot compile, is `conforms: false`. Shapes using `sh:pattern` are refused, because a
-  peer's pinned Protocol Document is not vetted and a backtracking regex cannot be timed out.
+  cannot compile, is `conforms: false`. Timeouts and worker startup/runtime failures use
+  that same report, with a diagnostic in `results[0].message`. Shapes using `sh:pattern`
+  remain refused: a peer's pinned Protocol Document is not vetted.
   For the same reason a validation is refused before it starts when its cost is not bounded:
   SHACL outside the Core subset (no `sh:pattern`, `sh:qualifiedValueShapesDisjoint` or SPARQL),
   `rdfs:subClassOf` in the shapes or the intent graph, a looping, branching or long RDF list, a
@@ -84,9 +85,88 @@ const protocol = await buildProtocolDocument({
   (`sh:message`, `sh:name`, `sh:description`) over 1024, and typed literals other than strings
   over 128 (their lexical patterns backtrack); `sh:lessThan`-style pairwise comparisons count
   as steps.
+- In Node, validation uses a shared, lazily pre-warmed `worker_threads` pool, with
+  **min(2, availableParallelism()) workers** and at most **64 waiting calls**. A full
+  queue fails closed with `Validation worker queue is full`. Workers have V8 limits of
+  512 MiB old generation, 16 MiB young generation and a 4 MiB stack (these are heap/stack
+  limits, not a total process RSS limit). Transfer strings, parsed RDF terms, named-graph
+  indexes, validation views and temporary copies coexist. Review probes measured about
+  178 MB of worker heap at the graph caps, roughly a 3x margin under 512 MiB; this is an
+  observation, not a worst-case memory guarantee. The default pool permits 1 GiB of old
+  generation across two workers; the maximum eight-worker pool permits 4 GiB, plus up to
+  128 MiB young generation and 32 MiB stacks. Caller graphs, queues, cached encodings and
+  Node overhead add to the combined process footprint.
+  Idle workers are unref'd.
+  Each call has a **2000 ms wall-clock deadline**, including input preflight, queue wait,
+  worker startup, validation and report projection. Set `{ timeoutMs: 5000 }` to change
+  it; `timeoutMs` must be an integer from 1 to 2147483647. Expiry returns
+  `conforms: false` with `Validation exceeded <timeoutMs> ms wall-clock limit`. Active
+  workers are retired and termination is awaited for up to 100 ms of additional grace.
+  A hung or rejected termination still occupies a pool slot until termination succeeds
+  or exit is observed. Retired workers are never reused. Expired queued calls leave
+  warming workers alive; only ready workers receive work. Crashes, missing worker files
+  and message deserialization failures also fail closed. Successful workers are reused.
+  The calling thread checks raw graph counts (1000 intent / 10000 shape quads), the
+  shared term caps, and aggregate budgets of **1,048,576 data / 4,194,304 shape characters**
+  before conversion or serialization. These count UTF-16 code units with N-Quads escaping
+  weighted before encoding: quotes/backslashes and short escapes cost two, other C0 controls
+  six, and a surrogate pair ten. Metadata counts too, including datatype IRIs, language,
+  direction and graph names; duplicate quads count in full. Escaped source term text across both
+  graphs is bounded to 5 Mi code units; transfer punctuation and safe blank-node labels add
+  a bounded amount. Dataset iteration
+  and structured intent lowering are bounded too. Both execution paths refuse IRIs with
+  whitespace, controls or IRIREF delimiters (`<>"{}|^` plus backtick and backslash), relative
+  IRIs and malformed BCP 47 language tags. RDF 1.2 direction is a separate `ltr`/`rtl` field.
+  Transfer uses N3 Writer/Parser N-Quads and relabels **all** blank nodes to safe `b<n>`
+  labels, sharing one map across data and shapes so identity is preserved. Reports name
+  the caller's own blank-node labels in `focusNode`, `path` and `value`, as in-process
+  validation does: the worker marks which fields are blank nodes and each call restores them
+  through its own inverse map, so concurrent calls never see each other's labels and a
+  literal such as `"b0"` is never rewritten. A worker report naming a blank node the call
+  never sent fails closed as an invalid worker message. Original graphs
+  and protocol hashes stay unchanged. Named graphs, datatypes, languages and direction
+  are preserved. Encoded shapes are weakly cached by their input document/array/dataset.
+  Each call still checks the limits and compares all term fields to invalidate changed shapes.
+  Queued term fields are rechecked at dispatch in case the caller changed them during startup.
+  Deadlines are checked before each graph encoding and before posting to a worker.
+- Use `new ValidationWorkerPool({ size: 2, maxQueueSize: 32 })` and pass it as
+  `{ workerPool }` to configure concurrency and queue capacity. `size` accepts 1–8;
+  `maxQueueSize` accepts 0–65536. Worker warm-up has its own **10000 ms** ready-handshake
+  timeout, configurable with `startupTimeoutMs` (integer 1–2147483647). It continues across
+  short call deadlines; a failed handshake refuses waiting calls. Call
+  `await workerPool.close()` for shutdown: it refuses pending calls and waits for
+  termination with the same 100 ms grace. Closed instances cannot be reused.
+  `await closeValidationPool()` closes the default shared pool; the next call creates
+  another lazily. Pool construction rejects invalid pool configuration; `validateIntent`
+  always returns a report.
+- **Bundlers:** this package ships Node ESM with `dist/validationWorker.js` beside
+  `dist/index.js`. esbuild/webpack may omit that relative worker file when bundling the
+  main entry. Copy/emit the shipped worker as a separate Node ESM asset, retaining access
+  to its external npm dependencies, and supply its absolute URL as
+  `new ValidationWorkerPool({ workerUrl: new URL("file:///app/assets/validationWorker.js") })`.
+  Alternatively supply `workerFactory: (url, options) => new Worker(url, options)` to
+  integrate your bundler's worker creation. The factory must return a fresh Node-compatible
+  Worker per invocation, apply the supplied `resourceLimits`, and run the shipped worker
+  protocol: `{ ready: true }` once loaded, then `{ id, report }` for each
+  `{ id, data, shapes }` request (`data` and `shapes` are N-Quads strings).
+  Factories are trusted application configuration.
+  Node builtins are loaded lazily. Runtimes with `nodejs_compat` but no usable
+  `node:worker_threads` return a clear configuration diagnostic; there is no automatic
+  fallback after a worker failure.
+- **Weaker in-process option:** `{ execution: "in-process" }` explicitly opts into
+  synchronous validation, retaining the step pre-check, term caps and 20,000-operation
+  budget. It cannot interrupt unmetered synchronous work and has **no wall-clock bound**;
+  `timeoutMs` cannot stop it. Browser pages use this metered path by default. Other
+  non-Node runtimes (including edge runtimes) must explicitly choose `execution`;
+  otherwise validation fails closed with a configuration diagnostic.
+  `{ execution: "worker" }` requires a worker even outside detected Node environments.
+  The package does not ship a browser Web Worker entry. Continue to await `validateIntent`
+  in every environment.
 - The deterministic NL parser reads verbs, ACL modes and recipient markers from the prose
   only, never from inside a URL.
 - Handshake decoders accept only an http(s) `protocolSource` and `xsd:boolean` flags.
+
+The package-local [SKILL.md](SKILL.md) records validation maintenance and build guidance.
 
 ## Vocabulary compatibility
 
