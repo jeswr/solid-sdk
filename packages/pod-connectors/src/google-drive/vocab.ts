@@ -60,6 +60,8 @@ export class DriveMetadata extends PodThing {
 /**
  * Files whose content download timed out. Incremental change listings omit unmodified files,
  * so the adapter keeps their metadata subjects here and re-attempts them on later runs.
+ * Hand-written like DriveMetadata: pod-connectors has no codegen profile yet (tracker bead
+ * "pod-connectors: move Drive vocab accessors to generated models").
  */
 export class DriveContentRetry extends PodThing {
   get files(): Set<string> {
@@ -72,7 +74,10 @@ export class DriveContentRetry extends PodThing {
   }
 }
 
-/** One retry-list entry: a file's metadata subject, described inside the retry document. */
+/**
+ * One retry-list entry: a file's metadata subject, described inside the retry document.
+ * Hand-written for the same codegen blocker as DriveContentRetry.
+ */
 export class DriveRetryEntry extends PodThing {
   /** Timed-out download attempts so far. */
   get attempts(): number | undefined {

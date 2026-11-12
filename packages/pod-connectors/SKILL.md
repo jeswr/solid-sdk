@@ -75,7 +75,12 @@ claim); never delete it inside `import`. Raw-message `SourceTimeoutError` is ski
 counted like `ResponseTooLargeError`, but is not journalled as complete: it is retried only
 when an interrupted full sync resumes (documented limitation; no Gmail retry list yet). Return its original history id so
 mutations during partial runs replay next time. Bound retained reconciliation identifiers
-across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Test consecutive request-, item-, byte- and
+across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Never save a journal the Pod
+reader would refuse: `JOURNAL_PERSIST_LIMITS` bounds the over-estimated serialised size and
+quad count, and a journal past it stops writing (keeping the last saved checkpoint). A
+resumed completed ID is exempt from item accounting once per run; repeats are charged.
+Spotify's 401 refresh is shared on its own controller: each waiter's signal cancels only its
+wait, and the refresh aborts when every cancellable waiter has left. Test consecutive request-, item-, byte- and
 duration-capped runs, incomplete message retries and final removal of vanished mail.
 
 Successful Drive media/export copies consume the independent per-file cap rather than the

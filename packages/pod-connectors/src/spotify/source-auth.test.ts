@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { createSpotifySourceAuth } from "./source-auth.js";
@@ -212,7 +213,7 @@ describe("Spotify PKCE SourceAuth", () => {
   });
 });
 
-it("forwards the effective source signal through token refresh and retry", async () => {
+it("forwards the effective source signal to requests; the refresh has its own signal", async () => {
   const caller = new AbortController();
   const seen: (AbortSignal | null | undefined)[] = [];
   const transport = vi.fn<typeof fetch>(async (_input, init) => {
@@ -226,5 +227,113 @@ it("forwards the effective source signal through token refresh and retry", async
     signal: caller.signal,
   });
   expect(seen).toHaveLength(3);
-  for (const signal of seen) expect(signal).toBe(caller.signal);
+  expect(seen[0]).toBe(caller.signal);
+  expect(seen[2]).toBe(caller.signal);
+  // The shared refresh is not bound to any one caller's signal.
+  expect(seen[1]).toBeInstanceOf(AbortSignal);
+  expect(seen[1]).not.toBe(caller.signal);
+});
+
+describe("Spotify shared refresh cancellation", () => {
+  /** Answers 401 to the old token, holds the refresh until released (abort still rejects). */
+  function held() {
+    const release = Promise.withResolvers<void>();
+    const started = Promise.withResolvers<void>();
+    let refreshSignal: AbortSignal | undefined;
+    const transport = vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === TOKEN) {
+        refreshSignal = init?.signal ?? undefined;
+        started.resolve();
+        await Promise.race([
+          release.promise,
+          new Promise<never>((_resolve, reject) =>
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+              once: true,
+            }),
+          ),
+        ]);
+        return response(200, { access_token: "fixture-new", expires_in: 3600 });
+      }
+      const authorization = new Headers(init?.headers).get("authorization");
+      return authorization === "Bearer fixture-new" ? response(200, { ok: true }) : response(401);
+    });
+    const onToken = vi.fn();
+    const auth = createSpotifySourceAuth({
+      clientId: "fixture-client",
+      token,
+      fetch: transport,
+      onToken,
+    });
+    const refreshes = () => transport.mock.calls.filter(([input]) => String(input) === TOKEN);
+    /** Waits for the second request's 401, then lets its handler join the shared refresh. */
+    const joined = async () => {
+      await vi.waitFor(() =>
+        expect(transport.mock.calls.filter(([input]) => String(input) === API)).toHaveLength(2),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    };
+    return {
+      auth,
+      transport,
+      onToken,
+      refreshes,
+      joined,
+      started: started.promise,
+      release: release.resolve,
+      aborted: () => refreshSignal?.aborted === true,
+    };
+  }
+
+  it("keeps serving the other waiters when the first waiter cancels", async () => {
+    const h = held();
+    const first = new AbortController();
+    const second = new AbortController();
+    const one = h.auth.fetch(API, { signal: first.signal });
+    await h.started;
+    const two = h.auth.fetch(API, { signal: second.signal });
+    await h.joined();
+    first.abort(new Error("first left"));
+    await expect(one).rejects.toThrow("first left");
+    expect(h.aborted()).toBe(false);
+    h.release();
+    expect((await two).status).toBe(200);
+    expect(h.refreshes()).toHaveLength(1);
+    expect(h.onToken).toHaveBeenCalledOnce();
+  });
+
+  it("aborts the refresh once every waiter has cancelled, and starts afresh later", async () => {
+    const h = held();
+    const first = new AbortController();
+    const second = new AbortController();
+    const one = h.auth.fetch(API, { signal: first.signal });
+    await h.started;
+    const two = h.auth.fetch(API, { signal: second.signal });
+    await h.joined();
+    first.abort(new Error("first left"));
+    await expect(one).rejects.toThrow("first left");
+    expect(h.aborted()).toBe(false);
+    second.abort(new Error("second left"));
+    await expect(two).rejects.toThrow("second left");
+    await vi.waitFor(() => expect(h.aborted()).toBe(true));
+    // The abandoned refresh published no token.
+    expect(h.onToken).not.toHaveBeenCalled();
+    h.release();
+    expect((await h.auth.fetch(API)).status).toBe(200);
+    expect(h.refreshes()).toHaveLength(2);
+    expect(h.onToken).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the refresh running for a waiter without a signal", async () => {
+    const h = held();
+    const first = new AbortController();
+    const one = h.auth.fetch(API, { signal: first.signal });
+    await h.started;
+    const two = h.auth.fetch(API);
+    await h.joined();
+    first.abort(new Error("first left"));
+    await expect(one).rejects.toThrow("first left");
+    expect(h.aborted()).toBe(false);
+    h.release();
+    expect((await two).status).toBe(200);
+  });
 });

@@ -178,8 +178,8 @@ class Sync {
           const id = row?.id;
           const slug = validId(id) ? messageSlug(this.account, `gmail-${id}`) : undefined;
           if (slug && journal.completed.has(slug)) {
-            // Only rows charged by earlier runs are exempt; duplicates in this run count.
-            if (!resumed.has(slug)) this.ctx.budget.items(1);
+            // A row charged by an earlier run is exempt once; later occurrences in this run count.
+            if (!resumed.delete(slug)) this.ctx.budget.items(1);
             journal.remember(slug);
             this.seen.add(slug);
             continue;

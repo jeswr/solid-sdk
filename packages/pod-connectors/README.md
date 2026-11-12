@@ -114,7 +114,8 @@ Gmail journals a full sync's page token, completed message IDs, initial history 
 seen-message manifest inside its account container after each continuing page, after the
 last page when it completed messages, and after a request/item/byte/duration budget failure. Completed message bytes and memberships are saved
 before the journal. Retries skip completed IDs instead of refetching raw payloads or charging
-their rows again; incomplete message writes are retried. Row positions are never used, so
+their first row again (a repeat of that ID within the run is charged); incomplete message
+writes are retried. Row positions are never used, so
 deletions cannot shift an unprocessed message past the resume point. A saved page token
 rejected with HTTP 400 restarts the listing once and rebuilds the seen manifest, retaining
 completed IDs for reuse. The final sweep uses the retained manifest, and the original history id ensures
@@ -129,7 +130,12 @@ resumes the full sync. Known limitation: once a full sync completes (the journal
 cleared) or a history replay moves the cursor past it, a timed-out message is not
 re-attempted until the message changes or a later full sync lists it again. Budgets must fit the profile,
 labels, one listing page and at least one message. The journal's reconciliation manifest is
-bounded independently at 2,000,000 identifiers and 16 MiB of UTF-8 identifier text.
+bounded independently at 2,000,000 identifiers and 16 MiB of UTF-8 identifier text in
+memory. A saved journal must also stay readable by the default Pod reader (16 MiB, 1,000,000
+quads): the journal over-estimates its serialised size (absolute member IRIs in both the seen
+and completed sets, plus framing) and, once that would pass `JOURNAL_PERSIST_LIMITS`
+(16 MiB − 64 KiB, 999,936 quads), stops writing. The last saved journal, a consistent
+earlier checkpoint, stays; without one the full sync is not resumable and restarts.
 
 Drive's `createGoogleDriveAdapter({ maxBytes })` retains its separate per-file copy cap
 (default 25 MiB). Successful media/export bytes are written per file and consume no JSON
@@ -147,9 +153,15 @@ request, item, byte or duration budget failure among them stops retrying and car
 remaining entries forward with unchanged counts; any other per-file failure (an HTTP error,
 a Pod write) counts an attempt and a skipped item. The run still returns the new cursor;
 only caller cancellation fails it, leaving the list unchanged. Foreign, non-canonical, malformed or excess entries are
-dropped on load (and the list rewritten), never failing the run. The retry list's
-`DriveContentRetry`/`DriveRetryEntry` accessors are hand-written like `DriveMetadata`, and
-move to codegen with the rest of this package's models. A request-capped retry reuses already-linked
+dropped on load (and the list rewritten), never failing the run.
+
+Codegen exception: the retry list's `DriveContentRetry`/`DriveRetryEntry` accessors and
+Gmail's private `FullSyncState` journal accessors are hand-written, like the existing
+`DriveMetadata` and the rest of this package's models. pod-connectors has no codegen profile
+(no `codegen.config.json` or SHACL profile, and no `@jeswr/federation-codegen` dependency),
+and this private adapter state has no federation sector shape to start from. They move to
+generated models together with the package's other models, tracked by the bead
+"pod-connectors: move Drive vocab accessors to generated models". A request-capped retry reuses already-linked
 unchanged representations and progresses to the remaining files.
 
 Exhaustion throws `RunBudgetExceededError`, a subtype of `IntegrationSyncError`, exported

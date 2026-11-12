@@ -1359,3 +1359,46 @@ describe("Gmail finalisation keeps the journal until the cursor is reported", ()
     }
   });
 });
+
+it("exempts a resumed completed ID from item accounting only once per run", async () => {
+  const { podWriter } = setup();
+  const item = MESSAGES.m1 as GmailMessage;
+  const other = { ...item, id: "resume-other", threadId: "resume-other" };
+  // Run 1 completes m1, then fails on the next row: the journal records m1 as charged.
+  await expect(
+    runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: {
+        fetch: fixtureFetch("gmail", [
+          ...base,
+          fetched(item),
+          fetched(other),
+          { url: `${GMAIL_API}/messages`, json: { messages: [{ id: item.id }, { id: other.id }] } },
+        ]),
+      },
+      limits: { maxItems: 8 }, // profile + 6 labels + one row
+    }),
+  ).rejects.toMatchObject({ resource: "items" });
+  const resumed = (maxItems: number) =>
+    runImport({
+      adapter: gmailAdapter,
+      mode: "live",
+      podWriter,
+      sourceAuth: {
+        fetch: fixtureFetch("gmail", [
+          ...base,
+          fetched(item),
+          {
+            url: `${GMAIL_API}/messages`,
+            json: { messages: [{ id: item.id }, { id: item.id }, { id: item.id }] },
+          },
+        ]),
+      },
+      limits: { maxItems },
+    });
+  // Profile + labels (7), the first m1 free, the two repeats charged: 9 items.
+  await expect(resumed(8)).rejects.toMatchObject({ resource: "items" });
+  await expect(resumed(9)).resolves.toMatchObject({ cursor: "1000" });
+});

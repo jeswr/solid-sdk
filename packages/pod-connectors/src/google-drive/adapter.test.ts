@@ -1575,7 +1575,7 @@ describe("Drive content retry list", () => {
         [metaIri(last.id), String(MAX_RETRY_ATTEMPTS - 1)],
       ]);
       const stall = () => new Promise<Response>(() => {});
-      const { result } = run(
+      const { api, result } = run(
         [
           changes({ changes: [], newStartPageToken: "1001" }),
           { url: fileUrl(again.id), json: again },
@@ -1586,12 +1586,18 @@ describe("Drive content retry list", () => {
           media: { [mediaUrl(again.id)]: stall, [mediaUrl(last.id)]: stall },
         },
       );
-      let settled = false;
-      void result.finally(() => {
-        settled = true;
-      });
-      for (let i = 0; i < 5 && !settled; i++) await vi.advanceTimersByTimeAsync(61_000);
-      expect((await result).cursor).toBe("1001");
+      const outcome = result.then(
+        (report) => ({ report }),
+        (error: unknown) => ({ error }),
+      );
+      // Expire each stalled download only once it has started (retries run in id order).
+      for (const file of [again, last]) {
+        await vi.waitFor(() =>
+          expect(api.mock.calls.some(([input]) => String(input) === mediaUrl(file.id))).toBe(true),
+        );
+        await vi.advanceTimersByTimeAsync(61_000);
+      }
+      expect(await outcome).toMatchObject({ report: { cursor: "1001" } });
       expect(saved(pod)).toEqual(new Map([[metaIri(again.id), 2]]));
     } finally {
       vi.useRealTimers();
