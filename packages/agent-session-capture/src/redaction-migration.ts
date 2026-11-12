@@ -15,7 +15,8 @@ export interface RedactionMigrationOptions extends Pick<CaptureOptions, "home" |
  * Owner-run `solid-capture redact-archive [--dry-run]` (sst-5ax.39): re-redact titles and
  * messages stored before every chat save path redacted, and remove the duplicates that
  * replays left beside them. Uses the same MCP configuration and DPoP transport as imports.
- * Returns 1 on any failure without exposing content, credentials or remote errors.
+ * Returns 1 on any failure, including a run that could not check or fix every chat
+ * (`failed` above 0), without exposing content, credentials or remote errors.
  */
 export async function runRedactionMigration(
   args: string[],
@@ -51,7 +52,8 @@ export async function runRedactionMigration(
     );
     const report = await writer.migrateRedaction({ dryRun });
     (options.report ?? ((value) => process.stdout.write(`${JSON.stringify(value)}\n`)))(report);
-    return 0;
+    // The counts are printed either way; anything left unchecked or unfixed is a failure.
+    return report.failed === 0 ? 0 : 1;
   } catch {
     return 1;
   }

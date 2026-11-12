@@ -60,6 +60,7 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
         messagesRewritten: 0,
         messagesReplaced: 0,
         conflicts: 0,
+        failed: 0,
       },
       expect.objectContaining({ dryRun: true, conversations: 0 }),
     ]);
@@ -84,6 +85,30 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
       expect(await run(args)).toBe(1);
     expect(transport.requests).toEqual([]);
     expect(reports).toEqual([]);
+  });
+
+  it("prints the counts but exits 1 when a chat could not be checked", async () => {
+    const root = env.SOLID_MCP_POD_ROOT;
+    const result = await runRedactionMigration(["redact-archive", "--dry-run"], {
+      home,
+      env,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        // One conversation is listed, but its metadata cannot be read.
+        if (request.url === `${root}private/chats/claude/`)
+          return new Response(
+            `<${root}private/chats/claude/> <http://www.w3.org/ns/ldp#contains> <${root}private/chats/claude/thread-1/>.`,
+            { headers: { "content-type": "text/turtle" } },
+          );
+        if (request.url.startsWith(root) && request.url.includes("thread-1"))
+          return new Response("secret detail", { status: 500 });
+        return transport.fetch(input, init);
+      },
+      report: (report) => reports.push(report),
+    });
+    expect(result).toBe(1);
+    expect(reports).toEqual([expect.objectContaining({ conversations: 1, failed: 1 })]);
+    expect(JSON.stringify(reports)).not.toContain("secret detail");
   });
 
   it("fails closed without exposing remote errors", async () => {

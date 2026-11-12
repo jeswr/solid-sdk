@@ -149,9 +149,10 @@ the same MCP configuration and DPoP login as imports. It re-redacts titles and m
 stored before every save path redacted (or before a newer rule), and deletes the
 unredacted originals that a later replay duplicated. Every write and delete uses
 `If-Match`. It prints one JSON line of counts (`conversations`, `titles`,
-`messagesRewritten`, `messagesReplaced`, `conflicts`) and nothing from the chats. On
-`conflicts` above 0, run it again. Exit status is **0** on success or **1** with a fixed,
-content-free message.
+`messagesRewritten`, `messagesReplaced`, `conflicts`, `failed`) and nothing from the chats.
+On `conflicts` above 0, run it again. One chat that cannot be read or fixed does not stop
+the run; it is counted in `failed`. Exit status is **0** when everything was checked, or
+**1** with a fixed, content-free message when `failed` is above 0 or the run could not start.
 
 ## Content and opt-out
 
