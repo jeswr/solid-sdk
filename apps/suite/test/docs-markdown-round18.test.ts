@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+
+import { chipKinds } from "@jeswr/suite-sdk/chips/core";
 import { Editor, getSchema, type JSONContent } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import fc from "fast-check";
@@ -318,11 +320,29 @@ it.each([
 });
 
 const word = markdownText;
+// Chips are inline atoms exported as HTML anchors. Their IRIs pass chipIri but carry query,
+// fragment, percent-escape, quote, angle-bracket, pipe, bracket and non-ASCII characters that
+// the anchor's attribute escaping must preserve; labels reuse the adversarial Markdown text.
+const chip: fc.Arbitrary<JSONContent> = fc
+  .tuple(
+    fc.constantFrom(
+      "https://alice.pod.example/profile/card#me",
+      "https://pod.example/docs/plan%20(draft).ttl?x=1&y=2#h",
+      "http://pod.example/a\"b'c<d>e|f[g]h",
+      "https://例え.jp/ノート/😀?q=*_~`",
+    ),
+    fc.constantFrom(...chipKinds),
+    word,
+  )
+  .map(([iri, kind, label]) => ({ type: "chip", attrs: { iri, kind, label } }));
 const inlineContent = fc
-  .array(word, { minLength: 1, maxLength: 3 })
-  .map((words) =>
-    words.flatMap((value, index) => (index ? [{ type: "hardBreak" }, text(value)] : [text(value)])),
-  );
+  .tuple(fc.array(word, { minLength: 1, maxLength: 3 }), fc.option(chip, { nil: undefined }))
+  .map(([words, chipNode]) => [
+    ...words.flatMap((value, index) =>
+      index ? [{ type: "hardBreak" }, text(value)] : [text(value)],
+    ),
+    ...(chipNode ? [chipNode] : []),
+  ]);
 const paragraph = fc
   .tuple(inlineContent, fc.constantFrom(null, "left", "center", "right", "justify"))
   .map(([content, textAlign]) => ({ type: "paragraph", content, attrs: { textAlign } }));
@@ -425,32 +445,37 @@ it("round trips generated documents with every schema node and mark including ne
       fc.constantFrom(null, "js", "", "markdown linenums=1", "`\n<script>"),
       fc.constantFrom(null, 120, "240"),
       fc.constantFrom(null, "left", "center", "right"),
-      (para, nested, value, level, checked, language, size, align) => {
+      chip,
+      (para, nested, value, level, checked, language, size, align, chipNode) => {
         const original = doc(
           {
             type: "paragraph",
-            content: exportedMarks(schema).flatMap((type): JSONContent[] => [
-              {
-                ...text(value),
-                marks: [
-                  {
-                    type,
-                    ...(type === "link"
-                      ? {
-                          attrs: {
-                            href: "https://example.org/?x=1&y=2",
-                            target: checked ? "_self" : null,
-                            rel: "noopener noreferrer",
-                            class: "docs",
-                            title: "",
-                          },
-                        }
-                      : {}),
-                  },
-                ],
-              },
-              { type: "hardBreak", marks: [{ type: "underline" }] },
-            ]),
+            content: [
+              chipNode,
+              ...exportedMarks(schema).flatMap((type): JSONContent[] => [
+                {
+                  ...text(value),
+                  marks: [
+                    {
+                      type,
+                      ...(type === "link"
+                        ? {
+                            attrs: {
+                              href: "https://example.org/?x=1&y=2",
+                              target: checked ? "_self" : null,
+                              rel: "noopener noreferrer",
+                              class: "docs",
+                              title: "",
+                            },
+                          }
+                        : {}),
+                    },
+                  ],
+                },
+                { type: "hardBreak", marks: [{ type: "underline" }] },
+              ]),
+              chipNode,
+            ],
           },
           para,
           { type: "paragraph" },
