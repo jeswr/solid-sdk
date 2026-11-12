@@ -5,6 +5,7 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { type ReactNode, useRef } from "react";
 import { expect, it, vi } from "vitest";
 import { AddSongs, EditPlaylistDetails } from "../src/apps/music/components/playlist-dialogs";
+import { flac } from "./music-metadata-fixtures";
 import { recordPlay } from "../src/apps/music/lib/data/history";
 import { PlaylistTracks, TrackMenu } from "../src/apps/music/components/track-list";
 import {
@@ -19,7 +20,15 @@ import {
   listPlaylists,
   type MusicPlaylist,
 } from "../src/apps/music/lib/data/playlists";
-import { historyShard, Store, Track } from "../src/apps/music/lib/model";
+import {
+  Artist,
+  historyShard,
+  loadMusic,
+  serializeMusic,
+  Store,
+  Track,
+} from "../src/apps/music/lib/model";
+import { PlayerProvider } from "../src/apps/music/state/player-context";
 import { MusicProvider, useMusic } from "../src/apps/music/state/music-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -30,6 +39,10 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   toast: { error: mocks.error },
 }));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
+vi.mock("../src/apps/music/lib/browser/audio", () => ({
+  mediaPlaybackState: vi.fn(),
+  createAudioEngine: () => ({ load: vi.fn(), stop: vi.fn(), dispose: vi.fn(), volume: vi.fn() }),
+}));
 const root = "https://state.test/";
 let music: ReturnType<typeof useMusic>;
 function Probe() {
@@ -61,7 +74,9 @@ async function fixture(
     subscribe: notifications ? pod.subscribe : () => () => {},
     reset: async () => {},
   };
-  const view = await mount(h(MusicProvider, { session, children: child }));
+  const view = await mount(
+    h(MusicProvider, { session, children: h(PlayerProvider, { session, children: child }) }),
+  );
   return { pod, tracks, view };
 }
 async function ready() {
@@ -656,4 +671,48 @@ it.each([
   expect(listPlaylists(await loadLibrary(pod.fetch, root))[0]?.tracks).toEqual(
     music.snapshot?.playlists[0]?.tracks,
   );
+});
+
+it("reports duplicate uploads as already in the library and keeps a specific audio conflict", async () => {
+  let race = false;
+  let reads = 0;
+  const target = `${musicRoot(root)}tracks/a.ttl`;
+  const { pod, tracks } = await fixture(
+    (fetch) => async (input, init) => {
+      if (race && String(input) === target && !init?.method && ++reads === 3) {
+        const doc = await loadMusic(fetch, target);
+        new Track(tracks[0] as string, doc.dataset).contentUrl =
+          `${musicRoot(root)}files/winner.wav`;
+        await fetch(target, {
+          method: "PUT",
+          headers: { "Content-Type": "text/turtle", "If-Match": doc.etag as string },
+          body: await serializeMusic(doc.dataset),
+        });
+      }
+      return fetch(input, init);
+    },
+    h(Probe),
+    ["Paper Moon"],
+    false,
+  );
+  const doc = await loadMusic(pod.fetch, target);
+  const artist = new Artist(`${target}#artist`, doc.dataset).stampType();
+  artist.title = "Mira Example";
+  new Track(tracks[0] as string, doc.dataset).setArtist(artist.value);
+  await pod.fetch(target, {
+    method: "PUT",
+    headers: { "Content-Type": "text/turtle", "If-Match": doc.etag as string },
+    body: await serializeMusic(doc.dataset),
+  });
+  await ready();
+  const file = { name: "song.flac", type: "audio/flac", bytes: flac().buffer };
+  race = true;
+  await act(async () => expect(await music.importFile(file)).toBe(false));
+  expect(music.notice).toBe("This song already has an audio file. Its existing file was kept.");
+  expect(mocks.error).toHaveBeenLastCalledWith(music.notice);
+  race = false;
+  await act(async () =>
+    expect(await music.importFile(file)).toMatchObject({ status: "already-owned" }),
+  );
+  expect(music.notice).toBe("Already in your library");
 });

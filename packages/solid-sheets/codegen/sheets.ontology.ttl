@@ -1,0 +1,25 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Local projection of the exact standard IRIs written by Suite Sheets; no sector exists.
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+schema:SpreadsheetDigitalDocument a owl:Class ; rdfs:label "Workbook" ; rdfs:comment "Sheets workbook metadata." .
+schema:DataDownload a owl:Class ; rdfs:label "Download" ; rdfs:comment "Sheets download metadata." .
+schema:Dataset a owl:Class ; rdfs:label "Descriptor" ; rdfs:comment "Sheets descriptor metadata." .
+schema:PropertyValue a owl:Class ; rdfs:label "Column" ; rdfs:comment "Sheets column metadata." .
+dct:title a owl:DatatypeProperty ; rdfs:label "title" ; rdfs:comment "Sheets title value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+dct:created a owl:DatatypeProperty ; rdfs:label "created" ; rdfs:comment "Sheets created value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+dct:modified a owl:DatatypeProperty ; rdfs:label "modified" ; rdfs:comment "Sheets modified value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:dateTime .
+dct:creator a owl:ObjectProperty ; rdfs:label "creator" ; rdfs:comment "Sheets creator value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:encoding a owl:ObjectProperty ; rdfs:label "encoding" ; rdfs:comment "Sheets encoding value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:hasPart a owl:ObjectProperty ; rdfs:label "hasPart" ; rdfs:comment "Sheets hasPart value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:name a owl:DatatypeProperty ; rdfs:label "name" ; rdfs:comment "Sheets name value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+schema:encodingFormat a owl:DatatypeProperty ; rdfs:label "encodingFormat" ; rdfs:comment "Sheets encodingFormat value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:string .
+schema:position a owl:DatatypeProperty ; rdfs:label "position" ; rdfs:comment "Sheets position value." ; rdfs:domain rdfs:Resource ; rdfs:range xsd:integer .
+schema:contentUrl a owl:ObjectProperty ; rdfs:label "contentUrl" ; rdfs:comment "Sheets contentUrl value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:subjectOf a owl:ObjectProperty ; rdfs:label "subjectOf" ; rdfs:comment "Sheets subjectOf value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:distribution a owl:ObjectProperty ; rdfs:label "distribution" ; rdfs:comment "Sheets distribution value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:variableMeasured a owl:ObjectProperty ; rdfs:label "variableMeasured" ; rdfs:comment "Sheets variableMeasured value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
+schema:additionalType a owl:ObjectProperty ; rdfs:label "additionalType" ; rdfs:comment "Sheets additionalType value." ; rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
