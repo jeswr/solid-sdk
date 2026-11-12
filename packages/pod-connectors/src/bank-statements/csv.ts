@@ -21,27 +21,44 @@ export const BANK_CSV_FORMATS = ["revolut", "hsbc-uk", "monzo", "starling"] as c
 export type BankCsvFormat = (typeof BANK_CSV_FORMATS)[number];
 /** Longest accepted `accountLabel`, in Unicode code points after `normaliseAccountLabel`. */
 export const MAX_BANK_ACCOUNT_LABEL_CHARS = 256;
+/** Raw labels longer than this are rejected before normalisation, which keeps it linear. */
+const MAX_RAW_ACCOUNT_LABEL_UNITS = 4096;
+const CONTROL_OR_FORMAT = /^[\p{Cc}\p{Cf}]$/u;
+const LABEL_SPACE = /^\s$/u;
+const LINE_BREAKS = /[\t\n\v\f\r\u0085]/g;
+const LONE_SURROGATE = /\p{Cs}/u;
+const ZWNJ = 0x200c;
+const ZWJ = 0x200d;
 // Joiners (ZWNJ, ZWJ) and tag characters are format characters that emoji sequences,
 // subdivision flags and Persian/Indic shaping need, so they are kept inside a label.
-const INVISIBLE_LABEL_CHARS = /[\p{Cc}\p{Cf}]/gu;
-const KEPT_FORMAT_CHAR = /^[\u200C\u200D\u{E0020}-\u{E007F}]$/u;
-const LABEL_EDGE = /^[\s\u200C\u200D]+|[\s\u200C\u200D]+$/gu;
-const VISIBLE_LABEL_CHAR = /[^\s\u200C\u200D\u{E0020}-\u{E007F}]/u;
+const isJoiner = (char: string) => char.codePointAt(0) === ZWNJ || char.codePointAt(0) === ZWJ;
+const isTag = (char: string) => {
+  const code = char.codePointAt(0) ?? 0;
+  return code >= 0xe0020 && code <= 0xe007f;
+};
+const isLabelEdge = (char: string) => LABEL_SPACE.test(char) || isJoiner(char);
 /**
  * The one form of an `accountLabel` that is hashed into the account folder and stored as its
- * display label: control and format characters (Unicode Cc and Cf, including zero-width and
- * bidi controls) removed, except the joiners and tag characters that emoji, flags and some
- * scripts need; then NFC; then whitespace and joiners trimmed from both ends. A plain label is
- * unchanged, so its folder is the same as before normalisation existed. Stripping precedes NFC
- * so a removed character cannot leave a decomposed sequence behind; the result is idempotent.
- * A label with no visible character normalises to "".
+ * display label: tabs and line breaks become spaces; other control and format characters
+ * (Unicode Cc and Cf, including zero-width and bidi controls) are removed, except the joiners
+ * and tag characters that emoji, flags and some scripts need; then NFC; then whitespace and
+ * joiners are trimmed from both ends. A plain label is unchanged, so its folder is the same as
+ * before normalisation existed. Stripping precedes NFC so a removed character cannot leave a
+ * decomposed sequence behind; the result is idempotent. A label with no visible character, a
+ * lone surrogate, or more than 4096 UTF-16 units normalises to "". Linear in the input.
  */
 export function normaliseAccountLabel(label: string): string {
-  const normalised = label
-    .replace(INVISIBLE_LABEL_CHARS, (char) => (KEPT_FORMAT_CHAR.test(char) ? char : ""))
-    .normalize("NFC")
-    .replace(LABEL_EDGE, "");
-  return VISIBLE_LABEL_CHAR.test(normalised) ? normalised : "";
+  if (label.length > MAX_RAW_ACCOUNT_LABEL_UNITS || LONE_SURROGATE.test(label)) return "";
+  let kept = "";
+  for (const char of label.replace(LINE_BREAKS, " "))
+    if (!CONTROL_OR_FORMAT.test(char) || isJoiner(char) || isTag(char)) kept += char;
+  const chars = [...kept.normalize("NFC")];
+  let start = 0;
+  let end = chars.length;
+  while (start < end && isLabelEdge(chars[start] ?? "")) start++;
+  while (end > start && isLabelEdge(chars[end - 1] ?? "")) end--;
+  const trimmed = chars.slice(start, end);
+  return trimmed.some((char) => !isLabelEdge(char) && !isTag(char)) ? trimmed.join("") : "";
 }
 export interface BankStatementOptions {
   /** Headerless HSBC data is ambiguous: only an explicit choice admits it. */

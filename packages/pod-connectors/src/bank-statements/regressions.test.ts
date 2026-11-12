@@ -440,6 +440,28 @@ describe("account label normalisation", () => {
     expect(parseBankCsv(MONZO, 10, { accountLabel: label })[0]?.accountLabel).toBe(label);
   });
 
+  it("turns interior tabs and line breaks into spaces", () => {
+    expect(normaliseAccountLabel("Joint\tSavings")).toBe("Joint Savings");
+    expect(normaliseAccountLabel(" Joint\r\nSavings\n")).toBe("Joint  Savings");
+  });
+
+  it("rejects lone surrogates and over-long raw labels", () => {
+    for (const accountLabel of ["\uD800", "Joint\uDC00", "x".repeat(4097)])
+      expect(() => validateBankOptions({ accountLabel })).toThrow("Account label");
+  });
+
+  it("normalises in linear time, whatever runs the label holds", () => {
+    for (const run of [" ", "\u200C", "\u200D", "\u200B"]) {
+      const label = `a${run.repeat(4000)}b`;
+      const started = performance.now();
+      for (let i = 0; i < 20; i++) normaliseAccountLabel(label);
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(() => validateBankOptions({ accountLabel: `a${run.repeat(200_000)}b` })).toThrow(
+        "Account label",
+      );
+    }
+  });
+
   it("gives the NFC and NFD spellings of a label one folder", async () => {
     const nfc = "Caf\u00E9";
     const nfd = "Cafe\u0301";
