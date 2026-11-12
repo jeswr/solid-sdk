@@ -6,6 +6,7 @@ import { freshRdf } from "../pod/rdf-read.js";
 import { ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortableFetch } from "./abort.js";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError } from "./errors.js";
 import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
@@ -36,7 +37,10 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
   const { adapterId, webId, podRoot } = options;
   if (!/^[a-z0-9-]+$/.test(adapterId))
     throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
-  const root = assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
+  const root = assertWithinPodScope(
+    podRoot,
+    new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).href,
+  );
   const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
   const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
   const resolve = (slug: string): string => {

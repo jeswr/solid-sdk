@@ -20,6 +20,8 @@ export type AuthKind =
 
 /** Static, render-ready description of an integration. No RDF, no I/O. */
 export interface IntegrationMetadata {
+  /** Retired live API; message identifies the successor. Retained for stored/demo connections. */
+  readonly deprecated?: string;
   /** Stable catalog id; URL-safe (used in routes + container paths). */
   readonly id: string;
   readonly name: string;
@@ -199,10 +201,10 @@ export interface ImportContext {
   readonly signal?: AbortSignal;
   /**
    * Source permissions the user granted for this run; undefined means every `metadata.scopes`
-   * entry. Advisory: only adapters that opt in read it (currently Spotify, which omits
-   * playlists of a withheld kind and keeps what earlier runs imported under it). Other adapters
-   * ignore it, so hosts that let users withhold scopes must also gate those adapters' requests
-   * and documents themselves.
+   * entry. Advisory: only adapters that opt in read it. Spotify omits playlists of a withheld
+   * kind and keeps what earlier runs imported under it. Google Health requires every requested
+   * Health scope and refuses partial grants before a source request. Other adapters ignore it,
+   * so hosts that let users withhold scopes must gate their requests and documents themselves.
    */
   readonly scopes?: readonly string[];
 }

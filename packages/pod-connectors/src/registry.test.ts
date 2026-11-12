@@ -42,15 +42,15 @@ describe("integrations registry", () => {
     }
   });
 
-  it("ships the 14 Tier-B adapters, each demoable now with an honest blocker", () => {
+  it("ships the 15 Tier-B adapters, each demoable now with an honest blocker", () => {
     expect(TIER_B_ADAPTERS.map((a) => a.metadata.id).sort()).toEqual([
       "facebook",
-      "fitbit",
       "garmin",
       "gmail",
       "google-calendar",
       "google-contacts",
       "google-drive",
+      "google-health",
       "google-photos",
       "instagram",
       "linkedin",

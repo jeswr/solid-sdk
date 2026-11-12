@@ -13,6 +13,7 @@
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
@@ -80,12 +81,14 @@ export interface ImportReport {
 
 /** Root container for one adapter's documents. */
 export function adapterContainerUrl(podRoot: string, adapterId: string): string {
-  return new URL(`integrations/${adapterId}/`, podRoot).toString();
+  return new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).toString();
 }
 
 export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   const { adapter, mode } = opts;
   const id = adapter.metadata.id;
+  if (mode === "live" && adapter.metadata.deprecated)
+    throw new IntegrationSyncError(id, adapter.metadata.deprecated);
 
   const api = mode === "demo" ? fixtureFetch(id, adapter.fixtures()) : opts.sourceAuth?.fetch;
   if (!api)

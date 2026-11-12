@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Integrations catalog — connect your accounts to your pod
 
 > Status: SPEC. Drives `src/lib/integrations/` and the `/connect` surface.
@@ -99,7 +100,7 @@ Go-live checklist per app (the honest list) lives in each adapter's
 | Google Calendar | `google-calendar` | Calendar | OAuth verification + restricted-scope review |
 | Google Photos | `google-photos` | Media | Photos Library API approval |
 | YouTube | `youtube` | Media | API audit for watch/like history scopes |
-| Fitbit | `fitbit` | Health | Developer app review for intraday data |
+| Google Health | `google-health` | Health | Enable Google Health API in a Google OAuth project; Restricted readonly scopes require Google verification/security review for public use |
 | Garmin | `garmin` | Health, Mobility | Partner-program (Health/Connect API) approval. **Hybrid**: a file import of the user's own Garmin Connect export ships today (see Tier C); the partner application draft is `docs/garmin-partner-application.md` |
 | Instagram | `instagram` | Media, Social & interests | Meta app review |
 | Facebook | `facebook` | Social & interests | Meta app review |
@@ -108,6 +109,14 @@ Go-live checklist per app (the honest list) lives in each adapter's
 | X (Twitter) | `x-twitter` | Social & interests | Paid API tier + elevated access |
 | Slack | `slack` | Work & education | Workspace-admin install approval model |
 | Pinterest | `pinterest` | Media, Social & interests | Trial-access review |
+
+Google Health replaces Fitbit's live API and OAuth, retired on 2 November 2026.
+Users must authorize with Google; Fitbit tokens cannot migrate. The deprecated `fitbit`
+adapter remains available for stored connections and fixture demos, refuses live imports,
+and is excluded from the new-connection catalog. The Google Health writer retains
+`integrations/fitbit/` and existing exercise identifiers. There was no Fitbit file importer
+in this package. See the [connector README](../../../packages/pod-connectors/README.md#google-health-con-a4)
+for imported types, bounded incremental sync and the isolated provider assumptions.
 
 ## Tier C — no user-grade API: import from export file (file imports shipped)
 

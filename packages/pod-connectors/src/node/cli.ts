@@ -150,6 +150,8 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const registry = createRegistry(config.connectors);
     const adapter = registry.adapterById(command.id);
     const fileAdapter = fileAdapterById(command.id);
+    if (!command.file && adapter?.metadata.deprecated)
+      throw new NodeRuntimeError("config", adapter.metadata.deprecated);
     if ((command.file && !fileAdapter) || (!command.file && !adapter))
       throw new NodeRuntimeError(
         "config",

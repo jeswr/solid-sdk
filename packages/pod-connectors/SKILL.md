@@ -38,6 +38,27 @@ its original mixed lookup semantics; never reread the original init after captur
 All tests use recorded fixtures and memory Pods. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
+CON-A4 adds `google-health` as Fitbit's Google OAuth successor. Read its README section
+and `src/google-health/api.ts` before changing it: all Health endpoint, filter, field,
+unit and exact scope assumptions stay in that one module and cite the supplied docs;
+scope spellings remain marked for verification. Shared Google OAuth accepts `health`.
+Keep only readonly scopes for imported categories; never reuse Fitbit tokens. Hosts use
+the adapter's `createSourceAuth` hook for one 401 refresh; preserve transport isolation,
+redirect refusal, byte caps, abort signals and memory-only tokens.
+The standard writer and `adapterContainerUrl` deliberately resolve Google Health into
+the legacy `integrations/fitbit/` container, preserving run exclusion and existing URLs;
+custom writers must do the same. Exercise subjects retain Fitbit ids, matching an
+unambiguous stored start/type when Google omits/changes its native id. Never guess an
+ambiguous match. Fitbit remains a deprecated fixture/demo oracle, excluded from the
+new-connection catalog and refused by live runner/CLI. No Fitbit file path existed here.
+Stage and validate every source page before data writes; retain a versioned per-type
+end-time cursor with 48h overlap, aligned to midnight for daily reconciled summaries.
+Invalid items hold that type cursor; malformed summary batches must preserve old totals.
+Preserve shared RunBudget, response/point/stage/token/page caps, bounded 429/5xx backoff,
+abortable waits, deterministic upserts, conditional ETags and failure checkpoints.
+Daily/sample/sleep fields reuse the existing Fit/schema.org typed shapes. Other Health
+types and source deletions are outside this import. All fixtures remain synthetic.
+
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
 especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
