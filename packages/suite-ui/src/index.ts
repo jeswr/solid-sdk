@@ -108,6 +108,7 @@ export {
   defaultRailPins,
   type NavigationApp,
   suiteApps,
+  visibleNavigationApps,
 } from "./navigation/apps.js";
 export { BottomTabBar } from "./navigation/bottom-tab-bar.js";
 export {
@@ -128,6 +129,12 @@ export {
   type DurationChipsProps,
   type SharingDuration,
 } from "./sharing/duration-chips.js";
+export {
+  type SharingGeneralAccess,
+  type SharingGrantRestrictions,
+  shareRoleRank,
+  sharingGrantPolicy,
+} from "./sharing/grant-policy.js";
 export {
   PeoplePicker,
   type PeoplePickerProps,

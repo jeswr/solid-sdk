@@ -117,6 +117,19 @@ describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (port
     ]);
   });
 
+  it("fetch keeps the backend default representation (no Turtle preference)", async () => {
+    const pod = makeFakePod({
+      [`${POD}note.md`]: { contentType: "text/markdown", body: "# Orchard" },
+    });
+    const fetch = vi.fn(pod.fetch);
+    const id = `${POD}note.md`;
+    const result = await (await connect(fetch)).callTool({ name: "fetch", arguments: { id } });
+    expect(JSON.parse((result.content as [{ text: string }])[0].text).text).toBe("# Orchard");
+    expect(fetch).toHaveBeenCalled();
+    for (const [, init] of fetch.mock.calls)
+      expect(new Headers(init?.headers).get("accept")).toBeNull();
+  });
+
   it("fetch and search preserve RDF ending in a Unicode comment without a newline", async () => {
     const id = `${POD}data.ttl`;
     const pod = makeFakePod({

@@ -1,18 +1,39 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-<!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-sdk
 
-The root exposes SDK-APP-05's `useRegistration()` and SDK-APP-07's `useNotify()`, `useInbox()` and
+The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()`, SDK-APP-05's `useRegistration()` and SDK-APP-07's `useNotify()`, `useInbox()` and
 notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
 
+## Accounts (`SDK-APP-02`)
+
+`AccountsProvider({ manager, children })` takes `createAccountManager(options)` from
+`@jeswr/pod-auth/accounts`. `useAccounts()` returns `{ accounts, active, switchTo, add, remove }`.
+The caller restores/disposes the manager. Switching persists only the active WebID and performs
+no network/navigation. Reuse `PodAuthProvider` with the manager's real active core, replacing its
+component boundary when the core changes (also for same-WebID re-login). Never duplicate credential
+or session state here. Existing usePodAuth/useNotify/useInbox/registration consumers follow that
+core and its fetch. Empty managers use the anonymous lifecycle adapter; login delegates to add.
+Subscribe only after React commit, refresh immediately after subscribing to cover render races,
+and unsubscribe on replacement/unmount. Keep snapshots cached between change events.
+
+A single account is a manager with one account; no single-session fallback is needed. Existing
+PodAuthProvider usage remains supported. Read pod-auth's skill for per-account boundaries, scoped
+logout, cancellation, persisted public pointers, refresh locking and expiry.
+
 ## Offline (`./offline`)
+
+Also re-export `createPageCache`, `PageCache`, `PageCacheOptions`, `purgeForWebId`
+and `cacheProvenance` from solid-offline. These are thin exports: cache policy stays
+in solid-offline. Native consumers supply their existing live session fence, create/start
+after commit, and purge on account switch and every sign-out path. Web keeps its worker.
 
 Re-export `createOutbox`, `withOutbox`, `mergeRdf`, all outbox types and `useOfflineStatus`
 from solid-offline. `useOutbox(outbox: Outbox | null)` returns
@@ -67,9 +88,9 @@ they are not LWS logical `up` links. Pagination reflects the current index and i
 
 `createSearchFeeder(index).resource(url, dataset)` is the plain async dataset callback for
 cached RDF; `.container(url, entries)` replaces a separate synthetic graph from a **complete**
-successful StorageClient listing. Build synthetic quads using rdf-engine's shared n3
-DataFactory, never string-built Turtle. Include decoded member names and listing metadata so
-binary names and recents work without fetching binary bytes. Do not pass an incomplete page
+successful StorageClient listing. Build synthetic quads through ldp-container's typed
+`buildListingDataset` accessors, preserving the shared n3 terms. Include decoded member names
+and listing metadata so binary names and recents work without fetching binary bytes. Do not pass an incomplete page
 as a complete listing. `containerSearchDataset(url, entries)` exposes the same RDF/JS builder.
 The current solid-offline `onVisit` is observability only and has no dataset; the page's cache
 pipeline calls the feeder after parsing, and calls `.container` after collecting all listAll

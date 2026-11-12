@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { APP_ICONS, suiteApps } from "@jeswr/suite-ui";
 import { describe, expect, it } from "vitest";
-import { appForPath, appRegistry, visibleApps } from "../src/shell/lib/registry";
+import { appForPath, appRegistry, defineApp, visibleApps } from "../src/shell/lib/registry";
 
 describe("shell registry", () => {
   it("registers every suite app with its design-system hue and a default root nav", () => {
@@ -20,6 +20,18 @@ describe("shell registry", () => {
       }
     }
   });
+  it("keeps future backlog apps out of default section navigation", () => {
+    const app = defineApp({
+      slug: "calendar",
+      name: "Calendar",
+      basePath: "/calendar",
+      status: "backlog",
+    });
+    expect(app.hue).toBe(APP_ICONS.calendar.hue);
+    expect(app.sidebar).toBeUndefined();
+    expect(visibleApps(false, [app])).toEqual([]);
+    expect(visibleApps(true, [app])).toEqual([app]);
+  });
   it("matches only path segments and chooses the longest root", () => {
     expect(appForPath("/docs")?.slug).toBe("docs");
     expect(appForPath("/docs/d/ref/history")?.slug).toBe("docs");
@@ -35,13 +47,14 @@ describe("shell registry", () => {
     expect(appForPath("/docs/nested/item", [...appRegistry, nested])).toEqual(nested);
   });
   it("hides backlog apps by default", () => {
-    expect(visibleApps(false).map((app) => app.slug)).toEqual([
-      "home",
-      "drive",
-      "docs",
-      "tasks",
-      "permissions",
-    ]);
+    const candidates = appRegistry.map((app) =>
+      app.slug === "calendar" ? { ...app, status: "backlog" as const } : app,
+    );
+    expect(visibleApps(false, candidates)).toEqual(
+      candidates.filter((app) => app.slug !== "calendar"),
+    );
+    expect(visibleApps(true, candidates)).toEqual(candidates);
+    expect(visibleApps(false)).toEqual(appRegistry);
     expect(visibleApps(true)).toEqual(appRegistry);
   });
 });

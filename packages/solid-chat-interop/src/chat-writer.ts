@@ -6,11 +6,13 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { As2MessageDoc, buildAs2Message, parseAs2Message } from "./as2.js";
-import { buildConversation, type ConversationMetadata, parseConversation } from "./conversation.js";
+import { normalizeChatAccount, redactChatAccount } from "./chat-account.js";
+import { buildConversation, parseConversation } from "./conversation.js";
+import { ConversationProvenanceDoc } from "./conversation-provenance.js";
 import { safeHttpIri, sanitizeText } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
 import { redactSecrets } from "./redact.js";
-import { RDF_TYPE } from "./vocab.js";
+import { PROV_ACTIVITY, PROV_AGENT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
 export interface ChatPodPort {
@@ -34,6 +36,8 @@ export const CHAT_PROVIDERS = ["claude", "chatgpt", "codex"] as const;
 export type ChatProvider = (typeof CHAT_PROVIDERS)[number];
 export const CHAT_ROLES = ["system", "user", "assistant", "tool"] as const;
 export type ChatRole = (typeof CHAT_ROLES)[number];
+export const CHAT_CHANNELS = ["hook", "export", "mcp"] as const;
+export type ChatChannel = (typeof CHAT_CHANNELS)[number];
 export interface ChatMessage {
   id?: string;
   role: ChatRole;
@@ -45,6 +49,12 @@ export interface ChatConversation {
   conversationId: string;
   title: string;
   messages: ChatMessage[];
+  /** Owner-chosen label; source-derived IDs must be scoped with chatConversationId before save. */
+  account?: string;
+  /** Required on save; absent when reading legacy metadata. */
+  channel?: ChatChannel;
+  /** First writer creation time, returned on read; ignored on save. */
+  generatedAtTime?: string;
 }
 export interface ChatSummary {
   url: string;
@@ -52,9 +62,13 @@ export interface ChatSummary {
   conversationId: string;
   title: string;
   updatedAt?: string;
+  account?: string;
+  channel?: ChatChannel;
+  generatedAtTime?: string;
 }
 export interface ChatListOptions {
   provider?: ChatProvider;
+  account?: string;
   since?: string;
   /** Exclusive conversation URL from the previous page. */
   cursor?: string;
@@ -161,6 +175,9 @@ export class ChatWriter {
     conversation: ChatConversation,
   ): Promise<{ url: string; saved: number; skipped: number }> {
     const url = this.conversationUrl(conversation.provider, conversation.conversationId);
+    const account = normalizeChatAccount(conversation.account);
+    if (!CHAT_CHANNELS.includes(conversation.channel as ChatChannel))
+      throw new TypeError("Unsupported chat capture channel");
     // Validate and serialize everything before the first write.
     const messages = await Promise.all(
       conversation.messages.map(async (message) => {
@@ -194,6 +211,25 @@ export class ChatWriter {
       identifier: conversation.conversationId,
       title: redactSecrets(sanitizeText(conversation.title)),
     });
+    // Provenance (sst-5ax.31) stays a typed view over the same metadata document.
+    const provenance = new ConversationProvenanceDoc(
+      `${url}_conversation.ttl#it`,
+      metadata,
+      DataFactory,
+    );
+    provenance.generatedAt = new Date();
+    const captureId = `${url}_conversation.ttl#capture`;
+    provenance.generatedBy = captureId;
+    const capture = new ConversationProvenanceDoc(captureId, metadata, DataFactory);
+    capture.types.add(PROV_ACTIVITY);
+    capture.channel = conversation.channel;
+    if (account !== undefined) {
+      const accountId = `${url}_conversation.ttl#account`;
+      provenance.attributedTo = accountId;
+      const agent = new ConversationProvenanceDoc(accountId, metadata, DataFactory);
+      agent.types.add(PROV_AGENT);
+      agent.accountName = redactChatAccount(account);
+    }
     const roomTurtle = await storeToTurtle(metadata);
     for (const container of [this.base, `${this.base}${conversation.provider}/`, url]) {
       const containerStore = new Store();
@@ -239,17 +275,45 @@ export class ChatWriter {
   ): Promise<ChatConversation & { url: string }> {
     const url = this.conversationUrl(provider, conversationId);
     const metadataUrl = `${url}_conversation.ttl`;
-    const room = parseConversation(`${metadataUrl}#it`, await this.dataset(metadataUrl));
-    return this.readConversation(provider, conversationId, room);
+    return this.readConversation(provider, conversationId, await this.dataset(metadataUrl));
   }
   private async readConversation(
     provider: ChatProvider,
     conversationId: string,
-    room: ConversationMetadata | undefined,
+    dataset: DatasetCore,
   ) {
     const url = this.conversationUrl(provider, conversationId);
+    const room = parseConversation(`${url}_conversation.ttl#it`, dataset);
     if (!room || room.identifier !== conversationId) {
       throw new Error("Invalid conversation metadata");
+    }
+    const provenance = new ConversationProvenanceDoc(
+      `${url}_conversation.ttl#it`,
+      dataset,
+      DataFactory,
+    );
+    const details: Pick<ChatConversation, "account" | "channel" | "generatedAtTime"> = {};
+    if (provenance.generatedAt !== undefined)
+      details.generatedAtTime = provenance.generatedAt.toISOString();
+    if (provenance.attributedTo !== undefined) {
+      if (provenance.attributedTo !== `${url}_conversation.ttl#account`)
+        throw new Error("Invalid conversation account provenance");
+      const account = new ConversationProvenanceDoc(provenance.attributedTo, dataset, DataFactory);
+      const label = normalizeChatAccount(account.accountName);
+      if (!account.types.has(PROV_AGENT) || label === undefined)
+        throw new Error("Invalid conversation account provenance");
+      details.account = redactChatAccount(label);
+    }
+    if (provenance.generatedBy !== undefined) {
+      if (provenance.generatedBy !== `${url}_conversation.ttl#capture`)
+        throw new Error("Invalid conversation capture provenance");
+      const capture = new ConversationProvenanceDoc(provenance.generatedBy, dataset, DataFactory);
+      if (
+        !capture.types.has(PROV_ACTIVITY) ||
+        !CHAT_CHANNELS.includes(capture.channel as ChatChannel)
+      )
+        throw new Error("Invalid conversation capture provenance");
+      details.channel = capture.channel as ChatChannel;
     }
     const messages: (ChatMessage & { id: string })[] = [];
     const resources = await this.children(url);
@@ -280,7 +344,7 @@ export class ChatWriter {
       messages.push({ id, role, text: canonical.content, createdAt: canonical.published });
     }
     messages.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    return { url, provider, conversationId, title: room.title, messages };
+    return { url, provider, conversationId, title: room.title, messages, ...details };
   }
   async list(
     options: ChatListOptions = {},
@@ -289,6 +353,8 @@ export class ChatWriter {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100)
       throw new TypeError("limit must be 1–100");
     const since = options.since === undefined ? undefined : timestamp(options.since);
+    const label = normalizeChatAccount(options.account);
+    const account = label === undefined ? undefined : redactChatAccount(label);
     const providers =
       options.provider === undefined ? CHAT_PROVIDERS : [providerId(options.provider)];
     const candidates: { provider: ChatProvider; id: string; url: string }[] = [];
@@ -315,12 +381,9 @@ export class ChatWriter {
         if (chatPortStatus(error) === 404) continue;
         throw error;
       }
-      const conversation = await this.readConversation(
-        candidate.provider,
-        candidate.id,
-        parseConversation(`${metadataUrl}#it`, metadata),
-      );
+      const conversation = await this.readConversation(candidate.provider, candidate.id, metadata);
       const updatedAt = conversation.messages.at(-1)?.createdAt;
+      if (account !== undefined && conversation.account !== account) continue;
       if (since !== undefined && (updatedAt === undefined || updatedAt <= since)) continue;
       if (conversations.length === limit)
         return {
@@ -332,6 +395,11 @@ export class ChatWriter {
         provider: conversation.provider,
         conversationId: conversation.conversationId,
         title: conversation.title,
+        ...(conversation.account === undefined ? {} : { account: conversation.account }),
+        ...(conversation.channel === undefined ? {} : { channel: conversation.channel }),
+        ...(conversation.generatedAtTime === undefined
+          ? {}
+          : { generatedAtTime: conversation.generatedAtTime }),
         ...(updatedAt === undefined ? {} : { updatedAt }),
       });
     }

@@ -19,14 +19,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts"
+    "test:e2e:extension": "playwright test --config tests/extension/playwright.config.ts",
+    "test:e2e:live": "playwright test --config tests/live/playwright.config.ts"
   },
   "dependencies": {
     "@jeswr/app-shell": "workspace:*",
-    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
-    "@jeswr/pod-auth": "workspace:*",
-    "@jeswr/reactive-authentication": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-ui": "workspace:*",
@@ -35,12 +33,11 @@
     "@radix-ui/react-avatar": "^1.2.0",
     "@radix-ui/react-dropdown-menu": "^2.1.18",
     "@rdfjs/wrapper": "^0.34.0",
-    "@solid/object": "^0.6.0",
     "lit": "^3.3.1",
     "lucide-react": "^0.544.0",
-    "n3": "^2.0.3",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@jeswr/app-session": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
@@ -50,7 +47,6 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
-    "@types/n3": "^1.26.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

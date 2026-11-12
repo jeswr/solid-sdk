@@ -3,7 +3,7 @@
   "name": "@jeswr/suite-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Suite notification, search and preferences facades. Experimental, AI-agent-generated.",
+  "description": "Suite account, notification, search and preferences facades. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": false,
@@ -46,6 +46,7 @@
   "license": "MIT",
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-engine": "workspace:*",

@@ -148,6 +148,7 @@ await chats.save({
   provider: "codex", // also "claude" or "chatgpt"
   conversationId: "session-123",
   title: "A conversation",
+  channel: "hook", // required: "hook", "export" or "mcp"
   messages: [{ id: "event-1", role: "user", text: "Hello", createdAt: "2026-10-25T12:00:00Z" }],
 });
 const page = await chats.list({ provider: "codex", limit: 20, since: "2026-10-01T00:00:00Z" });
@@ -187,6 +188,48 @@ empty conversations are excluded when `since` is present. Limit is 1–100 (defa
 without a mutable shared index; it is intended for small chat collections.
 Containers with missing conversation metadata are skipped as incomplete saves;
 permission, transport and message-read errors still propagate.
+
+### Conversation provenance and accounts
+
+`save` requires an explicit `channel`: `hook`, `export` or `mcp`. New conversation
+metadata records `prov:generatedAtTime` as an `xsd:dateTime` and
+`prov:wasGeneratedBy <_conversation.ttl#capture>`, a `prov:Activity` whose
+`dct:type` is the channel literal. An optional `account` adds
+`prov:wasAttributedTo <_conversation.ttl#account>`, a `prov:Agent` with the
+owner-chosen `foaf:accountName` string. Message attribution is unchanged.
+All provenance is written/read through `ConversationProvenanceDoc` typed accessors.
+These accessors are hand-written for now; they move into the generated chat-interop model
+when bead sst-m3nr flips this package to `@jeswr/federation-codegen` (the provenance shape is
+added to the chat-interop profile then).
+First metadata wins, including creation time, account and channel. Legacy records
+remain readable with absent provenance; replay does not backfill or replace them.
+Reads reject ambiguous provenance, non-string account/channel terms, invalid
+creation timestamps and account/activity references outside the metadata document.
+
+Account labels are NFC-normalized and trimmed, then must contain 1–64 UTF-16 code
+units. Control and format characters are rejected, including at the edges before
+trimming. `normalizeChatAccount` validates without echoing input. Labels use the
+same secret redaction as titles; if replacement markers grow beyond 64 characters,
+`redactChatAccount` hides the entire label as `[REDACTED]`.
+
+`ChatWriter.save` takes an already resolved conversation ID. When deriving that ID
+from an external/source ID, scope it first with `chatConversationId(id, account?)`:
+
+```ts
+import { chatConversationId } from "@jeswr/solid-chat-interop";
+const account = "Work";
+const conversationId = await chatConversationId("session-123", account);
+await chats.save({ provider: "codex", conversationId, account, channel: "hook", title: "Session", messages: [] });
+```
+
+This SHA-256 derivation includes the normalized label before redaction, so even
+two labels whose secrets redact identically remain distinct without exposing the
+label in a path. An absent account returns the old ID byte-for-byte. Importer/parser
+results already contain scoped IDs; do not scope those again. `get` accepts the
+stored ID returned by `list` or extracted from the save URL. `get` and list summaries
+expose `account?`, `channel?` and `generatedAtTime?`. `list({account})` matches the
+normalized, redacted stored label before pagination; labels that redact to the same
+text match the same filter. Transcript headers escape and re-redact account labels.
 
 ### Redaction
 

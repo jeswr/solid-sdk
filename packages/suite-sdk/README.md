@@ -1,8 +1,9 @@
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/suite-sdk
 
-> **Experimental — AI-agent-generated.** Private registration, notification, search, preferences and offline facades.
+> **Experimental — AI-agent-generated.** Private account, registration, notification, search, preferences and offline facades.
 
 Mount `PodAuthProvider` from `@jeswr/pod-auth/react`, then use the provider's authenticated
 fetch and current actor through the hook:
@@ -38,7 +39,40 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
 
+## Accounts (`SDK-APP-02`)
+
+```tsx
+import { createAccountManager } from '@jeswr/pod-auth/accounts';
+import { AccountsProvider, useAccounts } from '@jeswr/suite-sdk';
+
+const manager = createAccountManager(options);
+await manager.restoreAll();
+// Mount once around the application:
+<AccountsProvider manager={manager}><App /></AccountsProvider>
+
+// In a component:
+const { accounts, active, switchTo, add, remove } = useAccounts();
+await switchTo(accounts[0].webId); // local switch; no navigation or network
+```
+
+`useAccounts()` returns identity snapshots and the manager's stable actions. `AccountsProvider`
+adopts the manager's current core through `PodAuthProvider` from `@jeswr/pod-auth/react`.
+Existing `usePodAuth`, `useNotify`, `useInbox` and registration consumers then follow the active
+identity and its bounded fetch. Replacing an account as the same WebID also replaces the provider's
+core. With no active account the provider is unauthenticated; its login action adds an account.
+The caller owns manager startup (`restoreAll`) and disposal. See [pod-auth's account contract](../pod-auth/README.md#multiple-accounts-accounts-sdk-app-02)
+for cancellation, scoped removal, expiry and storage details.
+
+A single account is just a manager with one account; no single-session fallback is needed.
+Existing applications can continue using `PodAuthProvider` directly.
+
 ## Offline (`SDK-APP-08`)
+
+The same entry re-exports `createPageCache`, `PageCache`, `PageCacheOptions`,
+`purgeForWebId` and `cacheProvenance` for native session integration (MOB-P3e).
+The caller supplies the bounded session fetch and live `usable()` fence, starts change
+subscriptions after commit, and purges on account switch/logout. See the
+[page cache contract](../solid-offline/README.md#native-page-cache-mob-p3e).
 
 `@jeswr/suite-sdk/offline` re-exports `createOutbox`, `withOutbox`, `mergeRdf`, the outbox
 types and `useOfflineStatus`. `useOutbox(outbox: Outbox | null)` returns
@@ -118,7 +152,8 @@ await feeder.container(driveUrl, entries); // only after every page succeeds
 
 Resources replace their own named graphs. Container feeds replace separate synthetic graphs
 with `ldp:contains`, decoded filename `dct:title`, `dct:modified`, `stat:size`, `dct:format`,
-and the listing's RDF types. `containerSearchDataset(containerUrl, entries)` also exposes
+and the listing's RDF types, built through `@jeswr/ldp-container`'s typed metadata accessors.
+`containerSearchDataset(containerUrl, entries)` also exposes
 the RDF/JS quads directly. A complete replacement removes old listing members while retaining
 cached resource graphs; remove those separately with `index.remove(resourceUrl)` on deletion.
 
