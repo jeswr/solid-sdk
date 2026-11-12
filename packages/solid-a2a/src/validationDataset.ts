@@ -2,6 +2,7 @@
 import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { NamedGraphDataset, SetFrom, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { validationLiteral } from "./validationTransfer.js";
 import { canonicalA2aIri, RDF_TYPE } from "./vocab.js";
 
 /**
@@ -34,10 +35,7 @@ export function validationDataset(dataset: DatasetCore, checkIdentities = true):
       return DataFactory.namedNode(canonicalA2aIri(term.value));
     }
     if (term.termType === "Literal") {
-      return DataFactory.literal(
-        term.value,
-        term.language || DataFactory.namedNode(canonicalA2aIri(term.datatype.value)),
-      );
+      return validationLiteral(term, canonicalA2aIri(term.datatype.value));
     }
     return term;
   }

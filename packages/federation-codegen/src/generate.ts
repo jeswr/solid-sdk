@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The generation pipeline (design §3): ontology + SHACL profile + codegen config →
  * [L0] adapt → [L1] admission (tier-a) → [L2] parse + skolemize shapes → compile
@@ -9,8 +10,8 @@
  */
 
 import { createHash } from "node:crypto";
-import type { ModelManifest } from "@jeswr/model-runtime";
-import { RUNTIME_MAJOR } from "@jeswr/model-runtime";
+import type { ManifestField, ModelManifest } from "@jeswr/model-runtime";
+import { isCompositeEntity, RUNTIME_MAJOR } from "@jeswr/model-runtime";
 import { type NormalizedOntology, type OntologyAdapter, owlRdfsAdapter } from "./adapter.js";
 import { AdmissionError, type AdmissionReport, admit } from "./admission.js";
 import { compileManifest } from "./compile.js";
@@ -42,6 +43,14 @@ export interface GenerateInput {
    * The admission report is always returned; NEVER set this in a production build.
    */
   allowUnadmitted?: boolean;
+  /**
+   * The committed `model.json` from the previous generation, when one exists. A field
+   * that was a closed concept enumeration there (`guards.iriEnum`) must still be one:
+   * an advisory `sh:class` otherwise silently loses all runtime enforcement when the
+   * ontology loses its last named individual of the class. Remove the committed
+   * model.json to accept such a loosening deliberately.
+   */
+  previousManifest?: string;
 }
 
 export interface GenerateResult {
@@ -80,6 +89,63 @@ function emitCodegenManifest(
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
 
+/**
+ * Scalar fields by entity, composite node (if any) and predicate: whether each is a
+ * concept enum. A nested link is enforced structurally, so it is not "unenforced".
+ */
+function conceptEnumFields(manifest: ModelManifest): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  const add = (owner: string[], fields: ManifestField[] | undefined) => {
+    for (const field of Array.isArray(fields) ? fields : [])
+      if (field?.kind !== "nested")
+        out.set(JSON.stringify([...owner, field?.predicate]), field?.guards?.iriEnum === true);
+  };
+  for (const entity of manifest.entities) {
+    if (isCompositeEntity(entity))
+      for (const node of Array.isArray(entity.nodes) ? entity.nodes : [])
+        add([entity.name, node?.name], node?.fields);
+    else add([entity.name], entity?.fields);
+  }
+  return out;
+}
+
+/** A field strict in the committed manifest never silently becomes unenforced. */
+function assertConceptEnumsRetained(previous: string, manifest: ModelManifest): void {
+  let previousFields: Map<string, boolean>;
+  try {
+    const parsed = JSON.parse(previous) as ModelManifest;
+    if (
+      !Array.isArray(parsed?.entities) ||
+      parsed.entities.some((e) => typeof e !== "object" || e === null)
+    )
+      throw new TypeError("no entities");
+    previousFields = conceptEnumFields(parsed);
+  } catch {
+    throw new AdmissionError([
+      {
+        code: "unstable-concept-enum",
+        severity: "error",
+        subject: "model.json",
+        message: "the committed model.json is not a readable manifest",
+      },
+    ]);
+  }
+  const current = conceptEnumFields(manifest);
+  const lost = [...previousFields]
+    .filter(([key, strict]) => strict && current.get(key) === false)
+    .map(([key]) => (JSON.parse(key) as string[]).join(" "));
+  if (lost.length)
+    throw new AdmissionError(
+      lost.map((subject) => ({
+        code: "unstable-concept-enum",
+        severity: "error" as const,
+        subject,
+        message:
+          "field was a closed concept enumeration in the committed model.json and would no longer be enforced; remove the committed model.json to accept this deliberately",
+      })),
+    );
+}
+
 /** Run the full pipeline. Throws {@link AdmissionError} / FidelityError fail-closed. */
 export function generateModel(input: GenerateInput): GenerateResult {
   validateConfig(input.config);
@@ -108,6 +174,8 @@ export function generateModel(input: GenerateInput): GenerateResult {
   // Compile the manifest, then assert FIDELITY (the P0 exit criterion).
   const compiled = compileManifest(shapes, input.config);
   assertFidelity(shapes, compiled);
+  if (input.previousManifest !== undefined)
+    assertConceptEnumsRetained(input.previousManifest, compiled.manifest);
 
   // Derive the composite per-node views (a pure projection of the fidelity-asserted
   // manifest; `undefined` when the manifest has no composite entity).

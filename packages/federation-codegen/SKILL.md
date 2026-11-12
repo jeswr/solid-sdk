@@ -28,7 +28,9 @@ const result = generateModel({ ontologyTtl, shapesTtl, config });
 ```
 
 CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --out <dir>`
-(`--update-lock` accepts a reviewed input change).
+(`--update-lock` accepts a reviewed input change). `gen` passes an existing
+`<out>/model.json` to `generateModel` as `previousManifest`, which pins concept-enum
+strictness across regenerations.
 
 A workspace package that commits generated output must pass the root `check:codegen` guard.
 It needs a `codegen` script writing to `src/generated`, a `workspace:*` devDependency on this
@@ -139,7 +141,12 @@ No ordered opt-in means unchanged generation bytes.
   Merge paths by intersecting cardinalities, numeric bounds and enums and taking the greatest
   minimum length. Different explicit datatype, class, nodeKind, node, name or pattern,
   incompatible alternative paths, and empty intersections fail with both source shapes
-  named. Preserve original property severities/messages in SHACL; presence is a MUST
+  named. A source `sh:in` is decoded with that source's value kind, so the merge rejects
+  any source enum whose kind or datatype differs from the conjoined field (an implicit-IRI
+  `sh:in` merged with an `xsd:string` or `sh:Literal` source); never re-decode or
+  intersect IRIs and literals by JS value. Fidelity re-checks every merged property
+  against each source shape (kind, datatype, class, node, pattern, bounds, enum subset),
+  not only against the merged constraint. Preserve original property severities/messages in SHACL; presence is a MUST
   only if a source property requires presence at Violation grade. Inspect every original
   graph constraint: a second safety shape containing `sh:not` still rejects the entity.
   A shared anonymous property shape keeps one skolem identity within its class group;
@@ -161,6 +168,18 @@ No ordered opt-in means unchanged generation bytes.
   A Warning-graded concept `sh:class` still becomes a strict runtime enum: supplied
   nonmember writes throw and reads drop nonmembers. Emitted `sh:in` retains
   `sh:Warning`, so runtime membership enforcement is stricter than the advisory SHACL.
+  Strictness must never flip silently: an advisory `sh:class` on a projected class
+  with named individuals fails (`unstable-concept-enum`), and the CLI passes the
+  committed `model.json` as `previousManifest` so a field that was an `iriEnum` and
+  would become unenforced fails generation. Remove the committed `model.json` to
+  accept such a loosening deliberately.
+  A concept member that the property's `^https?://` / `^https://` pattern (or the
+  derived scheme guard) excludes fails generation (`concept-enum-scheme-conflict`);
+  an explicit `sh:in` may intersect it away.
+  Lowering makes emitted `shapes.ttl` diverge from the sector profile in both
+  directions (no pod `rdf:type C` required; typed non-individuals and subclass
+  instances excluded). Consumers MUST validate against the emitted `shapes.ttl`,
+  never the sector SHACL, for concept-lowered fields.
 - Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
   Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
   emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
