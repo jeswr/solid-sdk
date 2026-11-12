@@ -5,8 +5,7 @@
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
 
 Source API and export-file adapters extracted with history from Pod Manager. The default
-catalog is unconfigured and uses recorded fixtures for demos. No environment variables are
-read by this package: the host injects public OAuth client ids and token proxy URLs.
+catalog is unconfigured and uses recorded fixtures for demos. Browser entry points read no environment variables (the Node-only VeSync exception is documented below): the host injects public OAuth client ids and token proxy URLs.
 
 ```ts
 import { createRegistry, createFetchPodWriter, runImport } from '@jeswr/pod-connectors';
@@ -437,7 +436,9 @@ connector IRI and start/end times. This companion document is excluded from impo
 counts and Type Index registration. Failed runs attempt provenance recording and retain the original error.
 A cancelled run makes no further Pod request, so it records no activity: documents and items it
 already wrote keep `prov:wasGeneratedBy` naming an activity absent from `_provenance.ttl`. Read
-such an unrecorded activity as a cancelled, incomplete run; the next run that rewrites those
+such an unrecorded activity as a cancelled, incomplete run for adapters without bounded
+history. Polling adapters can prune completed summaries through `maxRunActivities`, so
+absence alone does not establish cancellation for those adapters. The next run that rewrites those
 documents or items links them to its own recorded activity. `runImport` checks its signal at the
 PodWriter boundary, immediately before every port call, so a cancel while a session's implicit
 read or the provenance read is pending still stops the write that follows and the run rejects
@@ -778,3 +779,120 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Connect your Levoit purifiers
+
+VeSync (`vesync`, **Levoit (VeSync)**) is **CLI only**. It uses the unofficial
+account API at `https://smartapi.vesync.com`, following pyvesync request shapes;
+there is no OAuth or browser CORS support. Use your own VeSync account. The adapter
+only lists devices and reads purifier status; it sends no device-control commands.
+Core 300S/400S/600S, Vital 100S/200S (including LAP model identifiers) and the older
+LV-PUR131S are supported conservatively. Other devices are skipped. Provider changes,
+regional accounts or extra login challenges can prevent login; there is no bypass.
+Synthetic fixtures test these shapes; live compatibility awaits an owner-account trial.
+
+First configure the Node CLI's owner-held 0600 Pod client-credentials file as above.
+No `connectors.vesync` OAuth configuration is needed. From the workspace:
+
+```sh
+export PATH=/opt/node24/bin:$PATH
+pnpm --filter @jeswr/solid-environment... run build
+pnpm --filter @jeswr/pod-connectors run build
+node packages/pod-connectors/dist/node/bin.js import vesync
+node packages/pod-connectors/dist/node/bin.js import vesync --room "Living room"
+node packages/pod-connectors/dist/node/bin.js import vesync --watch 10
+# With the installed bin: pod-connectors import vesync --watch --room "Living room"
+```
+
+Email and password prompts both hide input and require a TTY. Alternatively supply
+`VESYNC_EMAIL` and `VESYNC_PASSWORD` through your environment's secret injection;
+never put passwords in command arguments or the JSON config. Only the Node VeSync
+credential reader reads these variables, deletes them from `process.env` (so child
+processes do not inherit them; the operating system's initial process environment,
+such as `/proc/<pid>/environ`, still holds them for the process lifetime and any
+process running as the same user can read it), hashes the password immediately with the API-required MD5 and drops the
+plaintext reference. JavaScript strings cannot be securely erased from memory. The
+hash, email, account ID and session token stay in memory; they never enter the pod,
+run reports or diagnostics. Pod credentials use their separate existing transport.
+For long-running `--watch` processes, prefer the hidden prompt: an environment
+variable leaves the plaintext password readable through `/proc` for days.
+The prompt enters raw mode before printing its label and pauses standard input
+afterwards, so a one-shot import exits when it finishes.
+
+Omit `--watch` for one reading per supported purifier now. Bare `--watch` means ten
+minutes; `--watch <minutes>` accepts 5–1440 minutes. Polling is sequential until
+SIGINT/SIGTERM. HTTP 429/5xx get three attempts with jittered exponential delays;
+watch failures back off from the chosen interval toward one hour, with jitter and a
+five-minute floor. Success resets the interval. HTTP 401 and token-expiry codes
+`-11000022`/`-11000021` trigger at most one re-login per request. Only an explicit
+login rejection (a non-zero login code, or HTTP 401) is a VeSync authentication
+failure; network faults, timeouts and malformed login answers (a success code without
+a session token or account ID) are retryable.
+
+Watch mode classifies each failure by cause, wherever it happens (VeSync, Pod writes,
+or the state checkpoint reread and writes), and prints which side failed:
+
+- Retried with backoff: VeSync transport, timeout or answer faults (an unexpected
+  non-zero VeSync code also drops the session, so the next cycle logs in afresh);
+  network faults; Pod HTTP 5xx, 408, 412 (another writer won) and 429 (rate limited); transient
+  checkpoint reads and writes.
+- Stop the command: a VeSync login rejection and Pod HTTP 401/403 (exit 3); a Pod
+  without strong ETags, other Pod 4xx refusals (including 409), structural checkpoint problems
+  (no unambiguous ACL, missing ETag, corrupt state) and invalid device lists (exit 1);
+  configuration errors (exit 2).
+
+A one-shot import reports the same category. Exit codes: 0 success, 1 import or
+checkpoint failure, 2 configuration, 3 authentication (VeSync or Pod), 130 cancellation.
+
+Each sensor has metadata (Levoit, device model and label), a room FeatureOfInterest,
+and UTC day observations under
+`integrations/vesync/environment/vesync-<hmac>/`. The slug is an HMAC-SHA-256 of
+the cid (uuid fallback) keyed by the connector's environment container URL, so it is
+stable within one pod (re-imports stay idempotent) but differs between pods, and raw
+cid/uuid/MAC never appear in pod IRIs. Room defaults to the purifier's
+name. A single `--room <label>` applies to every purifier. To assign separate rooms,
+use repeated `--room 'vesync-<64 hex>=Bedroom'` options, using the sensor slugs
+visible in the pod. The library also accepts a `room` map keyed by these slugs.
+
+Status keys follow pyvesync's device classes. Core models (bypassV2) read
+`air_quality_value` (PM2.5), `air_quality` (an air quality level), `level`
+(fan) and `filter_life`; Vital models read `PM25`, `AQLevel`, `fanSpeedLevel` and
+`filterLifePercent`; the LV-PUR131S detail route is addressed by uuid and reads its
+top-level `level` and `filterLife.percent` (its text air quality is omitted). Core
+200S models have no air sensor, so only fan and filter readings are recorded. A
+bypassV2 answer whose nested device code is non-zero records no readings.
+PM2.5 uses QUDT MicroGM-PER-M3, numeric air quality indices and fan levels use
+UNITLESS, and filter life uses PERCENT. Fan/filter observations concern the purifier;
+air measurements concern the room. The Core `air_quality` and Vital `AQLevel` values
+are Levoit's categorical 1–4 levels (1 is best), not a 0–500 AQI; they are stored
+as `AirQualityIndex` (UNITLESS) because the environment model has no scale or method
+annotation yet, so never chart them against another device's index. Device-specific index scales are preserved;
+text ratings, modes, booleans and missing/invalid numeric fields are omitted.
+Observations have stable minute/property identities, so repeats within the same
+minute update those readings. Later minutes append with read-modify-write and a
+strong If-Match ETag (create-only when absent); conflicts fail for a later retry.
+Sensor/Observation/FeatureOfInterest classes register through the existing Type Index.
+
+Limits: 1 MiB per source response, 8 MiB accepted response data and 51 adapter
+requests per run, 50 listed devices, 200 observations per run, 30-second signals per
+source attempt and Pod request, and a 3-minute deadline per adapter source call (a lazy
+login, bounded retries and one renewal). An account listing more than 50 devices fails
+the run rather than importing a partial list (reading the first 50 is a follow-up). Day documents respect solid-environment's 2000-root,
+50000-quad and 8 MiB Turtle limits, reserving space for provenance. Full/over-budget day documents
+are logged with fixed text and skipped. Each poll rereads the day; there is no
+provider cursor or deletion sweep. Polling retains the latest 32 run summaries in
+`_provenance.ttl`; older observation provenance links can outlive their summary.
+Sensor and room documents are rewritten on every poll (new provenance and ETag);
+skipping unchanged rewrites is a follow-up.
+
+Library hosts use `createVeSyncAdapter({ room, now? })` from `./adapters/vesync` and
+`createVeSyncSourceAuth({ credentials: { email, passwordHash }, transport, signal? })`
+from `./node`, then pass that source port to `runImport`. The Node entry also exports
+`hashVeSyncPassword` and `readVeSyncCredentials`; `CliOptions.vesyncCredentials` lets
+hosts inject already-hashed credentials. `now`, auth `sleep` and `random` are fixture
+seams. Catalogue metadata adds `cliOnly` and the `cli-only` status; show its requirements
+as terminal instructions. `NormalisedDoc.requirePrecondition` opts into strong-ETag
+checks, and `IntegrationAdapter.maxRunActivities` opts into bounded summaries (1–1000).
+The shared `readJson` helper accepts an optional final AbortSignal after its RunBudget,
+cancels stalled readers, and releases reader locks on completion or failure.

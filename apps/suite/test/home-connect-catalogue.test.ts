@@ -30,10 +30,10 @@ describe("connector catalogue", () => {
       tier: "C",
       whatYouGet: "Your viewing history, saved as watch records in Media.",
     });
-    expect(entries.some((entry) => entry.tier === "B")).toBe(false);
+    expect(entries.some((entry) => entry.tier === "B" && entry.status !== "cli-only")).toBe(false);
     expect(
       catalogue(createRegistry(), true)
-        .filter((entry) => entry.tier === "B")
+        .filter((entry) => entry.tier === "B" && entry.status !== "cli-only")
         .every((entry) => entry.status === "soon"),
     ).toBe(true);
     expect(
@@ -150,5 +150,14 @@ describe("plain connect copy", () => {
     expect(relativeSync("2026-11-01T10:00:00Z", now)).toBe("Synced 2 hours ago");
     expect(relativeSync("2026-10-31T12:00:00Z", now)).toBe("Synced 1 day ago");
     expect(relativeSync("2026-10-30T12:00:00Z", now)).toBe("Synced 2 days ago");
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("shows VeSync CLI instructions without the coming-soon flag", () => {
+  expect(catalogue(createRegistry()).find(({ id }) => id === "vesync")).toMatchObject({
+    status: "cli-only",
+    name: "Levoit (VeSync)",
+    howTo: expect.stringContaining("pod-connectors import vesync"),
   });
 });

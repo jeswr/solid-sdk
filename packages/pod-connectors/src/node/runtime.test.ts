@@ -1671,3 +1671,302 @@ describe("CLI cancellation at the Pod write boundary", () => {
     expect(options.stderr).toHaveBeenCalledWith("Import cancelled.\n");
   });
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+describe("VeSync CLI", () => {
+  it("imports with isolated account credentials and leaves no secrets in reports, logs, errors or the pod", async () => {
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    const sourceRequests: string[] = [];
+    const secrets = [
+      "private-email@example.invalid",
+      "private-plaintext",
+      "private-source-token",
+      "private-account-id",
+    ];
+    const email = secrets[0] ?? "",
+      password = secrets[1] ?? "",
+      passwordHash = hashVeSyncPassword(password);
+    const sourceTransport: typeof fetch = async (input, init) => {
+      sourceRequests.push(String(init?.body));
+      expect(String(init?.body)).not.toContain(password);
+      expect(new Headers(init?.headers).get("authorization")).toBeNull();
+      expect(new Headers(init?.headers).get("dpop")).toBeNull();
+      if (String(input) === VESYNC_API + LOGIN)
+        return Response.json({ code: 0, result: { token: secrets[2], accountID: secrets[3] } });
+      if (String(input) === VESYNC_API + DEVICES)
+        return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { pod, transport: podTransport, requests } = fixturePod();
+    const stdout = vi.fn(),
+      stderr = vi.fn(),
+      run = vi.spyOn(importRunner, "runImport");
+    const options = {
+      configPath: await configPath(),
+      sourceTransport,
+      podTransport,
+      stdout,
+      stderr,
+      vesyncCredentials: async () => ({ email, passwordHash }),
+    };
+    expect(await runCli(["import", "vesync", "--room", "Office"], options)).toBe(0);
+    const report = await run.mock.results[0]?.value;
+    const visible = JSON.stringify({
+      report,
+      stdout: stdout.mock.calls,
+      stderr: stderr.mock.calls,
+      pod: pod.urls().map((url) => pod.get(url)),
+    });
+    for (const secret of [...secrets, passwordHash]) {
+      expect(visible).not.toContain(secret);
+      expect(requests.map(({ body }) => String(body)).join("\n")).not.toContain(secret);
+    }
+    expect(sourceRequests).toHaveLength(3);
+    expect(pod.urls().some((url) => url.includes("environment/vesync-"))).toBe(true);
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining("Imported vesync"));
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => {
+          throw new Error(secrets.join(" "));
+        },
+      }),
+    ).toBe(1);
+    // Only an explicit login rejection is an authentication failure (exit 3).
+    expect(
+      await runCli(["import", "vesync"], {
+        ...options,
+        sourceTransport: async () => Response.json({ code: -11201000, msg: secrets.join(" ") }),
+      }),
+    ).toBe(3);
+    const errors = JSON.stringify(stderr.mock.calls);
+    for (const secret of [...secrets, passwordHash]) expect(errors).not.toContain(secret);
+  });
+  it("polls with protected checkpoint rereads and exits 130 on SIGINT's abort signal", async () => {
+    const { VESYNC_FIXTURES } = await import("../vesync/fixtures.js");
+    const source = vi.fn(fixtureFetch("vesync", VESYNC_FIXTURES));
+    const { transport: podTransport } = fixturePod();
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    // Deterministic watch delays: the second sleep stands in for SIGINT during a wait.
+    const sleeps: number[] = [];
+    const sleep = async (milliseconds: number, signal?: AbortSignal) => {
+      sleeps.push(milliseconds);
+      if (sleeps.length === 2) controller.abort();
+      signal?.throwIfAborted();
+    };
+    const code = await runCli(["import", "vesync", "--watch"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceAuth: { fetch: source },
+      stdout,
+      stderr,
+      signal: controller.signal,
+      sleep,
+    });
+    expect(code).toBe(130);
+    expect(sleeps).toEqual([10 * 60000, 10 * 60000]);
+    expect(stdout).toHaveBeenCalledTimes(2);
+    expect(source).toHaveBeenCalledTimes(4);
+    expect(stderr).toHaveBeenCalledWith("Import cancelled.\n");
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("VeSync watch failure classification", () => {
+  const retrySuffix = " Retrying with backoff.\n";
+  async function watch(
+    options: {
+      login?: () => Response | Promise<Response>;
+      source?: (path: "devices" | "status") => Response | undefined;
+      pod?: (
+        url: string,
+        init: RequestInit | undefined,
+        next: () => Promise<Response>,
+      ) => Promise<Response>;
+      abortAfterSleeps?: number;
+    } = {},
+  ) {
+    const { hashVeSyncPassword } = await import("./vesync-auth.js");
+    const { DEVICES, LOGIN, VESYNC_API } = await import("../vesync/api.js");
+    const { devices, coreStatus } = await import("../vesync/fixtures.js");
+    let logins = 0;
+    const sourceTransport: typeof fetch = async (input) => {
+      if (String(input) === VESYNC_API + LOGIN) {
+        logins++;
+        return options.login
+          ? options.login()
+          : Response.json({ code: 0, result: { token: "t", accountID: "a" } });
+      }
+      const devicesRoute = String(input) === VESYNC_API + DEVICES;
+      const override = options.source?.(devicesRoute ? "devices" : "status");
+      if (override) return override;
+      if (devicesRoute) return Response.json({ code: 0, result: { list: [devices[0]] } });
+      return Response.json(coreStatus);
+    };
+    const { transport } = fixturePod();
+    const podTransport: typeof fetch = (input, init) =>
+      options.pod
+        ? options.pod(String(input), init, () => transport(input, init))
+        : transport(input, init);
+    const controller = new AbortController(),
+      stdout = vi.fn(),
+      stderr = vi.fn();
+    const sleeps: number[] = [];
+    // Injected delays: no fake timers, so real Web Crypto and signals never race a clock.
+    const sleep = async (milliseconds: number, signal?: AbortSignal) => {
+      sleeps.push(milliseconds);
+      if (sleeps.length >= (options.abortAfterSleeps ?? 2)) controller.abort();
+      signal?.throwIfAborted();
+    };
+    const code = await runCli(["import", "vesync", "--watch", "5"], {
+      configPath: await configPath(),
+      podTransport,
+      sourceTransport,
+      vesyncCredentials: async () => ({
+        email: "synthetic@example.invalid",
+        passwordHash: hashVeSyncPassword("synthetic"),
+      }),
+      stdout,
+      stderr,
+      signal: controller.signal,
+      sleep,
+      random: () => 0.5,
+    });
+    const imported = stdout.mock.calls.filter(([text]) => String(text).startsWith("Imported"));
+    return { code, stderr, sleeps, imported: imported.length, logins: () => logins };
+  }
+  const isDay = (url: string) => /\/environment\/vesync-[0-9a-f]{64}\/\d{4}\//.test(url);
+
+  it("retries a VeSync login transport fault, then imports", async () => {
+    let faults = 0;
+    const result = await watch({
+      login: () => {
+        if (++faults === 1) throw new Error("synthetic network fault");
+        return Response.json({ code: 0, result: { token: "t", accountID: "a" } });
+      },
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `VeSync reading failed; the last successful checkpoint was retained.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(1);
+    expect(result.logins()).toBe(2);
+    expect(result.sleeps).toEqual([5 * 60000, 5 * 60000]);
+  });
+  it("retries a transient state reread failure instead of stopping the watch", async () => {
+    let heads = 0;
+    const result = await watch({
+      abortAfterSleeps: 3,
+      pod: (url, init, next) =>
+        init?.method === "HEAD" && url.endsWith("/state.json") && ++heads === 2
+          ? Promise.resolve(new Response(null, { status: 503 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Cannot read or protect connector state.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(2);
+  });
+  it("retries a 412 concurrent modification on a day document", async () => {
+    let conflicts = 0;
+    const result = await watch({
+      pod: (url, init, next) =>
+        init?.method === "PUT" && isDay(url) && ++conflicts === 1
+          ? Promise.resolve(new Response(null, { status: 412 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Your pod answered HTTP 412; it may recover.${retrySuffix}`,
+    );
+    expect(result.imported).toBe(1);
+  });
+  it("retries a transient checkpoint write failure", async () => {
+    let writes = 0;
+    const result = await watch({
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.endsWith("/state.json") && ++writes === 1
+          ? Promise.resolve(new Response(null, { status: 502 }))
+          : next(),
+    });
+    expect(result.code).toBe(130);
+    expect(result.stderr).toHaveBeenCalledWith(`Cannot save connector state.${retrySuffix}`);
+    expect(result.imported).toBe(1);
+  });
+  it("stops on a permanent checkpoint write refusal without scheduling a retry", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.endsWith("/state.json")
+          ? Promise.resolve(new Response(null, { status: 400 }))
+          : next(),
+    });
+    expect(result.code).toBe(1);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith("Cannot save connector state.\n");
+  });
+  it("logs in afresh on the next cycle after an unexpected VeSync session code", async () => {
+    let lists = 0;
+    const result = await watch({
+      source: (path) =>
+        path === "devices" && ++lists === 1
+          ? Response.json({ code: -11012022, msg: "synthetic" })
+          : undefined,
+    });
+    expect(result.code).toBe(130);
+    expect(result.logins()).toBe(2);
+    expect(result.imported).toBe(1);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `VeSync reading failed; the last successful checkpoint was retained.${retrySuffix}`,
+    );
+  });
+  it.each([401, 403])("stops on a Pod HTTP %i, naming the Pod", async (status) => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: (url, init, next) =>
+        init?.method === "PUT" && url.includes("/environment/")
+          ? Promise.resolve(new Response(null, { status }))
+          : next(),
+    });
+    expect(result.code).toBe(3);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith(
+      `Your pod refused access (HTTP ${status}); check the Pod client credentials and grants.\n`,
+    );
+  });
+  it("stops when the Pod serves only weak ETags", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      pod: async (url, init, next) => {
+        const response = await next();
+        if ((init?.method ?? "GET") !== "GET" || !url.includes("/environment/")) return response;
+        const headers = new Headers(response.headers);
+        const etag = headers.get("etag");
+        if (etag) headers.set("etag", `W/${etag}`);
+        return new Response(response.body, { status: response.status, headers });
+      },
+    });
+    expect(result.code).toBe(1);
+    expect(result.imported).toBe(1);
+    expect(result.sleeps).toHaveLength(1);
+    expect(result.stderr).toHaveBeenCalledWith(
+      "Your pod did not return a strong ETag, so readings cannot be updated safely.\n",
+    );
+  });
+  it("stops on a VeSync login rejection with exit 3", async () => {
+    const result = await watch({
+      abortAfterSleeps: 5,
+      login: () => Response.json({ code: -11201000, msg: "synthetic" }),
+    });
+    expect(result.code).toBe(3);
+    expect(result.sleeps).toEqual([]);
+    expect(result.stderr).toHaveBeenCalledWith(
+      "VeSync login failed; check your account credentials.\n",
+    );
+  });
+});

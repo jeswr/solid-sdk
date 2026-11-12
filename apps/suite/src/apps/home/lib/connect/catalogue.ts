@@ -9,8 +9,9 @@ export interface ConnectorEntry {
   whatYouGet: string;
   domains: string[];
   tier: "A" | "B" | "C";
-  status: "connect" | "demo" | "import" | "soon";
+  status: "connect" | "demo" | "import" | "soon" | "cli-only";
   logoId: string;
+  howTo?: string;
 }
 
 // IntegrationMetadata exposes categories, not classes. Keep this host-side bridge
@@ -85,7 +86,7 @@ export function catalogue(
 ): ConnectorEntry[] {
   return registry
     .allCatalogEntries()
-    .filter((entry) => entry.tier !== "B" || showComingSoon)
+    .filter((entry) => entry.cliOnly || entry.tier !== "B" || showComingSoon)
     .map((entry) => {
       const metadata = entry.tier === "C" ? (fileAdapterById(entry.id)?.metadata ?? entry) : entry;
       const status = registry.statusOf(entry);
@@ -96,14 +97,17 @@ export function catalogue(
         domains: [...new Set(destinationsFor(metadata.id).map(({ domain }) => domain))],
         tier: metadata.tier,
         status:
-          status === "live"
-            ? "connect"
-            : status === "demo"
-              ? "demo"
-              : status === "export-file"
-                ? "import"
-                : "soon",
+          status === "cli-only"
+            ? "cli-only"
+            : status === "live"
+              ? "connect"
+              : status === "demo"
+                ? "demo"
+                : status === "export-file"
+                  ? "import"
+                  : "soon",
         logoId: metadata.id,
+        ...(metadata.cliOnly ? { howTo: metadata.requirements.join(" ") } : {}),
       };
     });
 }
