@@ -2,8 +2,12 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { Mandate } from "@jeswr/agent-mandate";
-import { defaultMandate, limitConstraint } from "@jeswr/agent-mandate/issue";
-import { AGENT, evaluateIntent, solidOdrlEngine } from "@jeswr/agent-mandate/verify";
+import {
+  defaultMandate,
+  limitConstraint,
+  removePermission as reduce,
+} from "@jeswr/agent-mandate/issue";
+import { AGENT, evaluateIntent } from "@jeswr/agent-mandate/verify";
 import type { Account, ActionProposal } from "@jeswr/agent-model";
 import { z } from "zod";
 import { accountBinding } from "./accounts";
@@ -280,65 +284,19 @@ export async function describeMandate(
   return [...new Set(rules)];
 }
 
-/** Fresh record identity, retaining expiry, every ban, limit and policy condition. */
-export function reissueMandate(m: Mandate, id: string, now = new Date()): Mandate {
-  return {
-    ...m,
-    id,
-    validFrom: new Date(Math.max(Date.parse(m.validFrom), now.getTime())).toISOString(),
-    autonomous: { ...m.autonomous, id: `${id}/autonomous` },
-    withApproval: { ...m.withApproval, id: `${id}/with-approval` },
-  };
-}
-export async function removePermission(
+export { reissueMandate } from "@jeswr/agent-mandate/issue";
+/** Turn one rule off; the shared reduction lives in @jeswr/agent-mandate. */
+export function removePermission(
   m: Mandate,
   set: "autonomous" | "withApproval",
   index: number,
   id: string,
   now = new Date(),
 ): Promise<Mandate> {
-  const rules = m[set].permissions ?? [];
-  if (!Number.isInteger(index) || !rules[index]) throw new Error("This permission has changed.");
-  const selected = rules[index];
-  const automatic = m.autonomous.permissions ?? [];
-  const overlapping = automatic.filter((rule) => rule.action === selected.action);
-  // Removing an unsupported rule can erase an indeterminate result and unblock unrelated actions.
-  // Ask the shared engine about an unrelated action to detect that global blocker first.
-  for (const rule of [selected, ...overlapping]) {
-    if (
-      !Object.keys(actionNames).some((action) => rule.action === `${AGENT}${action}`) ||
-      (
-        await solidOdrlEngine.evaluate(
-          { id: "urn:permission-removal-check", permissions: [rule] },
-          {
-            agent: m.subject,
-            action: "urn:permission-removal-check:unrelated",
-            target: m.subject,
-            at: now.toISOString(),
-          },
-        )
-      ).effect !== "not-applicable"
-    )
-      throw new Error("Edit this rule in agent permissions first.");
-  }
-  const next = reissueMandate(m, id, now);
-  const remaining = rules.filter((_, i) => i !== index);
-  return {
-    ...next,
-    // Automatic overlaps must not defeat the reduction: demote them for an automatic rule,
-    // or drop them when removing an ask-first rule. Preserve every retained rule's scope.
-    autonomous: {
-      ...next.autonomous,
-      permissions: automatic.filter((rule) => rule.action !== selected.action),
-    },
-    withApproval: {
-      ...next.withApproval,
-      permissions: [
-        ...(set === "withApproval" ? remaining : (m.withApproval.permissions ?? [])),
-        ...(set === "autonomous" ? overlapping : []),
-      ],
-    },
-  };
+  return reduce(m, set, index, id, {
+    knownActions: Object.keys(actionNames).map((action) => `${AGENT}${action}`),
+    now,
+  });
 }
 
 function accountIntent(m: Mandate, binding: string, recipient: Account, action: string, now: Date) {

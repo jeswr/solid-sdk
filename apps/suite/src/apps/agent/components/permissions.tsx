@@ -18,6 +18,7 @@ import {
   type EditorValues,
   editorDefaults,
   editorSchema,
+  lastSignedMandate,
   loadVerifiedMandate,
   mandateHistory,
   PendingRevocation,
@@ -44,6 +45,8 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
       readProposals(c),
     ]);
     if (accounts.some((a) => "error" in a)) throw new Error("An account could not be read");
+    // With no current permission, keep the owner's last signed memory choice (e.g. OFF).
+    const remembered = mandate ?? (await lastSignedMandate(c, session).catch(() => undefined));
     const emailBindings = [
       ...new Set(
         loadedRecords(accounts)
@@ -60,6 +63,7 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
       accounts: loadedRecords(accounts),
       agent,
       mandate,
+      remembered,
       emailBindings,
       sentHashes: loadedRecords(proposals)
         .filter(
@@ -75,13 +79,13 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
   const data = query.status === "ready" ? query.data : undefined;
   const form = useForm<EditorValues>({
     resolver: zodResolver(editorSchema),
-    defaultValues: editorDefaults(new Date(), data?.mandate),
+    defaultValues: editorDefaults(new Date(), data?.remembered),
   });
   const { resetField, getFieldState } = form;
   useEffect(() => {
     if (data && !getFieldState("memoryScope").isDirty)
       resetField("memoryScope", {
-        defaultValue: editorDefaults(new Date(), data.mandate).memoryScope,
+        defaultValue: editorDefaults(new Date(), data.remembered).memoryScope,
       });
   }, [data, resetField, getFieldState]);
   const [template, setTemplate] = useState("custom");
@@ -103,7 +107,7 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
       ));
   const chooseTemplate = (name: string) => {
     form.reset({
-      ...editorDefaults(new Date(), data?.mandate),
+      ...editorDefaults(new Date(), data?.remembered),
       bindings: name === "tests" ? ["gmail"] : bindings,
       recipients: accountHashes,
       BookAppointment: name === "meetings" ? "auto" : "ask",
@@ -136,7 +140,7 @@ export function PermissionsScreen({ history = false }: { history?: boolean }) {
           data.emailBindings,
         );
       } else mandate = buildEditorMandate(values, options);
-      if (data.mandate?.memoryScope !== undefined)
+      if (data.remembered?.memoryScope !== undefined)
         mandate = { ...mandate, memoryScope: values.memoryScope };
       setPreview({ mandate, turtle: await previewMandate(mandate, client) });
     } catch (e) {

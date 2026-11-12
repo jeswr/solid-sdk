@@ -125,6 +125,35 @@ export async function loadVerifiedMandate(
     now: () => now,
   }).load();
 }
+/**
+ * The newest owner-signed permission record, verified as of its own start time and
+ * regardless of later expiry or revocation. Only for remembering the owner's last
+ * choices (such as Personalise OFF) when no permission is current; never authority.
+ */
+export async function lastSignedMandate(
+  client: AgentClient,
+  session: Session,
+): Promise<Mandate | undefined> {
+  const agent = await readAgentIdentity(client);
+  if (!agent) return undefined;
+  const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
+  for (const vc of loadedRecords(await readMandateCredentials(client)).slice(0, 32)) {
+    const at = new Date(vc.validFrom as string);
+    if (!Number.isFinite(at.getTime())) continue;
+    const mandate = await createVcMandateVerifier({
+      read: async () => vc,
+      ownerWebId: session.webId,
+      agentWebId: agent,
+      statusListCredential: client.paths.mandatesStatus,
+      webIdKeyResolver: keys,
+      // Revocation ends authority, not the owner's recorded preference.
+      resolveStatus: async () => ({ status: "valid" }),
+      now: () => at,
+    }).load();
+    if (mandate) return mandate;
+  }
+  return undefined;
+}
 export function statusIndex(vc: VerifiableCredential): number {
   const entries = Array.isArray(vc.credentialStatus) ? vc.credentialStatus : [vc.credentialStatus];
   const entry = entries[0];

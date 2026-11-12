@@ -77,6 +77,7 @@ import {
 } from "../src/apps/agent/lib/mandate-rules";
 import {
   activateMandate,
+  lastSignedMandate,
   loadVerifiedMandate,
   mandateHistory,
   migrateStatusList,
@@ -885,6 +886,8 @@ describe("signed mandate activation and revocation", () => {
     expect(statusIndex(await activateMandate(client, session, second, next))).toBe(1);
     await revokeMandate(client, session, next);
     expect(await loadVerifiedMandate(client, session, next)).toBeUndefined();
+    // The last signed record still carries the owner's choices, but no authority.
+    expect((await lastSignedMandate(client, session))?.id).toBe(second.id);
     expect(await mandateHistory(client, session, next)).toMatchObject([
       { id: second.id, status: "revoked" },
       { id: first.id, status: "replaced" },
@@ -2211,6 +2214,12 @@ describe("Home permission reductions and signed memory scope", () => {
     await expect(activateMandate(client, session, stale, NOW, first)).rejects.toThrow(
       "permissions changed",
     );
+    // Revoking authority keeps the last signed Personalise OFF for the next editor.
+    await revokeMandate(client, session, NOW);
+    expect(await loadVerifiedMandate(client, session, NOW)).toBeUndefined();
+    const remembered = await lastSignedMandate(client, session);
+    expect(remembered?.id).toBe(reduced.id);
+    expect(editorDefaults(NOW, remembered).memoryScope).toEqual([]);
   });
 });
 
@@ -2289,14 +2298,16 @@ it("removal never unblocks unknown policy semantics or leaves overlapping automa
     "Allowed",
   );
   expect(reduced.withApproval.permissions).toHaveLength(3);
+  // Turning an ask-first rule off bans that scope instead of leaving it asking first.
   const approvalRemoved = await removePermission(source, "withApproval", 0, "urn:reduced", NOW);
-  expect(await proposalBadge(approvalRemoved, proposal(), NOW)).toBe("Ask first");
+  expect(await proposalBadge(approvalRemoved, proposal(), NOW)).toBe("Never");
   expect(
     await evaluateIntent(approvalRemoved, proposalIntent(proposal(), source.subject, NOW)),
   ).toEqual({
-    decision: "confirm-required",
-    reason: "no-matching-rule",
+    decision: "prohibited",
+    reason: "prohibition",
   });
+  expect(approvalRemoved.prohibitions).toHaveLength(source.prohibitions.length + 1);
   const noApproval = await removePermission(
     { ...source, withApproval: { id: "urn:ask" } },
     "autonomous",
@@ -2355,10 +2366,11 @@ it.each([
     ...proposalIntent(proposal(), source.subject, NOW),
     target: "urn:recipient",
   };
-  expect(await evaluateIntent(next, intent)).toEqual({
-    decision: "confirm-required",
-    reason: set === "autonomous" ? "owner-approval" : "no-matching-rule",
-  });
+  expect(await evaluateIntent(next, intent)).toEqual(
+    set === "autonomous"
+      ? { decision: "confirm-required", reason: "owner-approval" }
+      : { decision: "prohibited", reason: "prohibition" },
+  );
   const authority = (decision: Awaited<ReturnType<typeof evaluateIntent>>) =>
     decision.decision === "permit" ? 2 : decision.reason === "owner-approval" ? 1 : 0;
   for (const action of ["SendMessage", "Remember", "Transfer"])

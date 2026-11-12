@@ -91,6 +91,14 @@ WebID assertionMethod, the canonical graph signature, proposal, digest, expiry a
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.
 
+`reissueMandate(m, id, now)` gives a mandate a fresh record identity and never moves
+`validFrom` earlier. `removePermission(m, set, index, id, { knownActions, now })` turns one
+permission off without broadening authority: an automatic rule (and every automatic rule
+for the same action) becomes ask-first; an ask-first rule becomes a top-level prohibition at
+the same scope, because unmatched actions still require confirmation, and automatic rules
+for that action are dropped. Rules for unknown actions, or that the engine can't evaluate
+fully, are refused ("Edit this rule…"). Both are exported from `./issue` and the root.
+
 Browser callers import `@jeswr/agent-mandate/approval`, `@jeswr/agent-mandate/control`,
 `@jeswr/agent-mandate/issue` and `@jeswr/agent-mandate/verify`. The latter two expose
 mandate composition/signing and verification/policy evaluation without expanding the UI layer allowlist.
