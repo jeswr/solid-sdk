@@ -922,6 +922,42 @@ describe('guard validation', () => {
     expect(outbox.pending()).toEqual([]);
   });
 
+  it('accepts 64-character tags and rejects longer ones', async () => {
+    const longest = `a${'b'.repeat(63)}`;
+    await expect(enqueue(box(), { guard: { tag: longest } })).resolves.toMatchObject({
+      guard: { tag: longest },
+    });
+    await expect(enqueue(box(), { guard: { tag: `${longest}c` } })).rejects.toThrow('guard tag');
+  });
+
+  it('rejects an oversized stored tag by length before matching its pattern', async () => {
+    const original = box();
+    await enqueue(original);
+    const huge = 'a'.repeat(1_000_000);
+    await stored((record) => {
+      record.guard.tag = huge;
+      record.item.guard.tag = huge;
+    });
+    original.close();
+    const test = vi.spyOn(RegExp.prototype, 'test');
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    const matched = test.mock.calls.some(([input]) => input === huge);
+    test.mockRestore();
+    expect(matched).toBe(false);
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('invalid guard tag') },
+    ]);
+    const client = storage();
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()[0]?.status).toBe('failed');
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
   it.each([
     (record: TestStoredItem) => {
       record.guard.tag = 'INVALID';
@@ -978,6 +1014,25 @@ describe('guard validation', () => {
     },
     (record: TestStoredItem) => {
       Object.assign(record, { guard: new Map([['tag', tag]]) });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { tag: 42 });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.item.guard, { tag: [tag] });
+    },
+    (record: TestStoredItem) => {
+      record.guard.tag = `a${'b'.repeat(64)}`;
+      record.item.guard.tag = record.guard.tag;
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { assertions: 42 });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { assertions: null });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record, { guard: JSON.stringify(guard) });
     },
   ])('quarantines tampered persisted guards during hydration and retry: %s', async (tamper) => {
     const original = box();

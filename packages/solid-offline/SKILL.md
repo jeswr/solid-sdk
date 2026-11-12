@@ -156,8 +156,10 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   against the remaining node budget before enumeration; reject hidden/symbol properties.
   Reject lossy values, accessors, sparse arrays, class instances and cycles before enqueue/online
   delivery. Snapshot assertions before asynchronous work and serialize the validated copy once
-  at enqueue into a canonical JSON string for IndexedDB. On every hydration, check the stored
-  string's UTF-8 byte length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
+  at enqueue into a canonical JSON string for IndexedDB. On every hydration, read only the stored
+  envelope's `tag` and `assertions` by name (never enumerate its keys), reject a tag longer than
+  64 characters before matching its pattern, and check the stored assertion string's UTF-8 byte
+  length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
   with the same depth, value-count and byte budgets. Fail closed on legacy object-valued
   assertions, since no guarded records have shipped. Invalid records become failed and cannot
   be delivered by retry or resolution.

@@ -317,7 +317,8 @@ function errorMessage(error: unknown): string {
 }
 
 function validateTag(tag: unknown): asserts tag is string {
-  if (typeof tag !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
+  // Length first, so a corrupted stored tag is rejected before the pattern sees it.
+  if (typeof tag !== 'string' || tag.length > 64 || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
     throw new TypeError('[solid-offline] invalid guard tag');
   }
 }
