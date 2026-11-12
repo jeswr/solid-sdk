@@ -308,6 +308,26 @@ describe("WacPermissionsBackend.revokeGrants — origins", () => {
     expect(rules.some((a) => a.agent.has(OWNER) && a.canReadWriteAcl)).toBe(true);
   });
 
+  it("refuses to delete an origin rule that carries Control, writing nothing", async () => {
+    const pod = aclPod([POD, HEALTH], {
+      [`${POD}.acl`]: ROOT_ACL,
+      [`${HEALTH}.acl`]: `${HEALTH_ACL}
+<#owner-via-origin> a acl:Authorization ;
+  acl:agent <${OWNER}> ; acl:origin <${ORIGIN}> ;
+  acl:accessTo <./> ; acl:default <./> ;
+  acl:mode acl:Read, acl:Write, acl:Control .`,
+    });
+    const before = pod.docs.get(`${HEALTH}.acl`)?.body;
+    const backend = new WacPermissionsBackend(pod.fetch);
+    const app = (await backend.listApps(ctx())).find((a) => a.agentId === ORIGIN);
+    if (!app) throw new Error("origin missing from read model");
+    await expect(backend.revokeGrants(ORIGIN, allGrants(app))).rejects.toMatchObject({
+      name: "SharingError",
+      code: "owner-lockout",
+    });
+    expect(pod.docs.get(`${HEALTH}.acl`)?.body).toBe(before);
+  });
+
   it("keeps the rule restricted to its remaining origins", async () => {
     const acl = await revokeOrigin(`<${ORIGIN}>, <${OTHER_ORIGIN}>`);
     const restricted = [...acl.authorizations].filter((a) => a.origin.size > 0);

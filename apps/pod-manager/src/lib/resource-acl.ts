@@ -208,7 +208,13 @@ const MESSAGES: Record<SharingErrorCode, string> = {
 /** Wrap any sharing failure as a {@link SharingError} with plain-language copy. */
 export function toSharingError(error: unknown): SharingError {
   if (error instanceof SharingError) return error;
-  const code: SharingErrorCode = isRoleError(error) ? error.code : "failed";
+  // pod-access reports document shapes it can't read (other agent classes, unknown
+  // constructs) as a TypeError from its parser; those are refusals, not network faults.
+  const code: SharingErrorCode = isRoleError(error)
+    ? error.code
+    : error instanceof TypeError && !/fetch|network|load failed/i.test(error.message)
+      ? "unsupported"
+      : "failed";
   return new SharingError(code, MESSAGES[code], { cause: error });
 }
 

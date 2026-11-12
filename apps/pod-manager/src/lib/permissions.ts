@@ -34,7 +34,7 @@ import { DataFactory, Writer } from "n3";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { CATEGORIES, UNCATEGORISED, type DataCategory } from "./categories.js";
 import type { CategorySummary } from "./pod-data.js";
-import { AclDiscoveryError, AclReadError, AclWriteError } from "./errors.js";
+import { AclDiscoveryError, AclReadError, AclWriteError, SharingError } from "./errors.js";
 import { ProfileAgent } from "./profile-agent.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -426,11 +426,19 @@ export class WacPermissionsBackend implements PermissionsBackend {
           const named = [...irisOf(auth, `${ACL}accessTo`), ...irisOf(auth, `${ACL}default`)];
           if (!named.some((target) => targets.has(target))) continue;
           if (auth.agent.delete(agentId)) changed = true;
-          if (auth.origin.delete(agentId)) {
-            changed = true;
+          if (auth.origin.has(agentId)) {
             // `acl:origin` narrows a rule to those origins: removing the last
-            // one would leave its agents unrestricted (wider access). Delete
-            // the whole rule instead — revoke may over-remove, never widen.
+            // one would leave its agents unrestricted (wider access), so the
+            // rule is deleted instead. A rule that also carries Control may be
+            // the owner's only way to manage access, so deleting it is refused
+            // unchanged rather than risk a lockout.
+            if (auth.origin.size === 1 && auth.canReadWriteAcl)
+              throw new SharingError(
+                "owner-lockout",
+                "This app's access is part of a rule that controls who can manage sharing. Change it in Sharing instead.",
+              );
+            auth.origin.delete(agentId);
+            changed = true;
             if (auth.origin.size === 0) deleteAuthorization(auth);
           }
           pruneEmptyAuthorization(auth);

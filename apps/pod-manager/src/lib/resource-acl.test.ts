@@ -372,4 +372,10 @@ describe("toSharingError", () => {
     expect(wrapped.code).toBe("failed");
     expect(wrapped.cause).toBeInstanceOf(Error);
   });
+
+  it("treats the access parser's TypeErrors as unsupported, but network TypeErrors as failed", () => {
+    expect(toSharingError(new TypeError("Unknown access mode")).code).toBe("unsupported");
+    expect(toSharingError(new TypeError("Failed to fetch")).code).toBe("failed");
+    expect(toSharingError(new TypeError("Load failed")).code).toBe("failed");
+  });
 });
