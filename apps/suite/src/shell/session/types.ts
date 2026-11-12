@@ -40,7 +40,7 @@ const signInMessages = {
   "popup-blocked": "Allow popups for Solid Suite, then try signing in again.",
   "account-active": "Sign out of your current Solid account before signing in to another account.",
   "session-elsewhere":
-    "A Solid session from another tab is still active. Sign in with that account's WebID, or sign out in that tab.",
+    "A remembered Solid session is still active in this browser. Sign in with that account's WebID, or sign out of it in the tab that uses it.",
   "in-progress": "A sign-in is already in progress.",
   "invalid-identity": "This account needs a WebID and one pod storage to use Solid Suite.",
   failed: "We couldn't sign you in. Please try again.",
