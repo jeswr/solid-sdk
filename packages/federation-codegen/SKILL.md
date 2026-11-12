@@ -7,6 +7,8 @@ description: Use when generating a typed domain model from a sector ontology plu
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+
 # Domain-model code generation
 
 `@jeswr/federation-codegen` lives in `packages/federation-codegen`. It compiles an OWL/RDFS
@@ -305,3 +307,65 @@ oracle remains verbatim except imports in the generator integration harness. The
 validates generated SHACL as well as the package's normative-shape oracle. Do not restore
 duplicate config or generated files under `examples/bookmark/`. After a generator change,
 build the generator and run `pnpm --filter @jeswr/solid-bookmark run codegen`.
+
+
+## Fixed values and bounded logical invariants
+
+Property-level `sh:hasValue` accepts exactly one IRI or admitted typed literal on a
+scalar/enum field (`sh:maxCount 1`). It must satisfy the conjoined datatype, concept
+class/`sh:in`, bounds and lexical guards. Literals must match the runtime writer's
+canonical lexical form. Conflicting merged fixed values, collections, ordered fields,
+composite links and fixed-value defaults fail closed. The manifest retains the exact
+term and strongest contributing severity. Generated TypeScript retains the base
+scalar/enum type; it does not narrow a fixed value to e.g. `true`.
+
+Node-level `sh:not`, `sh:and` and `sh:or` accept only this grammar:
+
+```text
+Expr = [ sh:path P; sh:hasValue V ]
+     | [ sh:path P; sh:qualifiedMinCount N; sh:qualifiedValueShape Expr ]
+     | [ sh:not Expr ] | [ sh:and (Expr ...) ] | [ sh:or (Expr ...) ]
+```
+
+Every path is a single predicate IRI identifying a projected field on the current
+entity. Qualified paths must be composite links or IRI collections with a projected
+`sh:class` target; the inner expression uses that target's fields. A flat collection's
+`sh:class` keeps the existing policy (advisory hints omitted, Violation rejected); atoms
+never need it. Lists must be nonempty and well
+formed; expression/list nodes cannot be shared or cyclic. Logical depth is at most
+four (a qualified context change adds no level), total atoms at most sixteen per
+source NodeShape, and N is a positive `xsd:integer` at most sixteen. Each qualified
+atom and its inner atoms count towards that total. The parser checks these limits
+before general blank-node identity refinement.
+
+Expression nodes accept only their operator's predicates. At a logical NodeShape,
+ordinary shape structure plus `sh:message`, `sh:severity`, `rdfs:label` and
+`rdfs:comment` are allowed. Nested annotations, `sh:node` operands, `sh:xone`,
+qualified maxima/disjointness, complex/alternative expression paths and unknown
+predicates remain rejected. Every merged source shape contributes its own invariant,
+source IRI, severity (default Violation) and message, in deterministic shape order.
+Fidelity independently re-reads the graph and checks those trees and fixed values
+exactly. The diet fixture pins model JSON bytes and compares its
+safety cases with emitted SHACL validation.
+
+The runtime evaluates atoms with SHACL semantics over the raw data graph (not parsed
+values): `hasValue` checks the raw objects of the path, and qualified atoms count every raw
+linked object (any IRI scheme, blank nodes) on whose own raw data the inner expression
+holds. Negated safety rules therefore fail closed exactly like an external validator of
+the emitted shapes.ttl; the diet regression tests compare both on adversarial data. Parses
+reject false Violation invariants; Warning/Info are advisory. A composite child's Violation
+invariant or Violation fixed value rejects the containing parse whenever the link has a raw
+object, even behind an optional `sh:node` or class-only link; other failures of an optional
+child still drop only the child. Invariants see only the parsed dataset: when a qualified
+rule spans resources (e.g. a `self`-subject target stored in its own document), merge the
+linked documents before parsing, or the atom is false and a negated rule passes vacuously.
+Builds and setters (ordered setters included) validate the staged state of the affected
+focuses before live mutation, within a bounded budget. See model-runtime's
+fixed-value/invariant contract for the precise rules.
+
+The full health-diary CLI probe now admits its consent and genetic safety constructs.
+With a temporary flat entity config it still fails on the Violation-grade
+`Meal.hasItem` class collection and eight vocabulary properties missing domain/range
+or explicit waivers: `additive`, `declaredAllergen`, `derivedFrom`, `note`,
+`offCategory`, `offRef`, `severity`, and `traceAllergen`. This lane does not migrate
+health-diary or relax those independent admission rules.

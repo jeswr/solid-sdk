@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Claude Opus 5.5
@@ -39,6 +40,7 @@ import {
   isHttpPattern,
   linkTargetConforms,
 } from "./compile.js";
+import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { compareStrings, SH } from "./rdf.js";
 import {
@@ -647,6 +649,23 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
   const owners = compiled.manifest.entities.flatMap<ManifestEntity | ManifestNode>((e) =>
     isCompositeEntity(e) ? e.nodes : [e],
   );
+  const invariants = shapeInvariants(shapes);
+  for (const owner of owners) {
+    const shape = shapes.nodeShapes.find((s) => owner.typeIris.includes(s.targetClass));
+    if (
+      JSON.stringify(owner.invariants ?? []) !==
+      JSON.stringify(shape ? (invariants.byClass.get(shape.targetClass) ?? []) : [])
+    )
+      throw new FidelityError(`invariant mismatch for ${owner.name}`);
+    for (const field of owner.fields) {
+      const c = shape?.properties.find((p) => p.pathIri === field.predicate);
+      if (JSON.stringify(field.hasValue) !== JSON.stringify(c ? propertyHasValue(c) : undefined))
+        throw new FidelityError(`hasValue mismatch for ${owner.name}.${field.name}`);
+    }
+    for (const c of shape?.properties ?? [])
+      if (propertyHasValue(c) && !owner.fields.some((f) => f.predicate === c.pathIri))
+        throw new FidelityError(`omitted hasValue field ${c.pathIri}`);
+  }
   for (const owner of owners)
     for (const field of owner.fields) {
       const c = shapes.nodeShapes

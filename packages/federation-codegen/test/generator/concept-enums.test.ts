@@ -8,6 +8,7 @@ import { Parser, Store } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
 import {
   AdmissionError,
+  admit,
   assertFidelity,
   type CodegenConfig,
   compileManifest,
@@ -500,7 +501,7 @@ describe("ontology concept IRI enumeration admission", () => {
     expect(() => generate(`${shapesTtl}\n<${cell}> <urn:p> <urn:o> .`)).toThrow(/collision/);
   });
 
-  it("the actual diet safety shapes still fail admission on sh:not after class grouping", () => {
+  it("the actual diet safety constraints are admitted; unrelated profile blockers stay closed", () => {
     const profile = readFileSync(
       new URL("../../../solid-health-diary/shapes/diet.shacl.ttl", import.meta.url),
       "utf8",
@@ -509,21 +510,21 @@ describe("ontology concept IRI enumeration admission", () => {
       new URL("../../../solid-health-diary/shapes/diet.vocab.ttl", import.meta.url),
       "utf8",
     );
-    try {
-      generateModel({
-        shapesTtl: profile,
-        ontologyTtl: vocab,
-        config,
-        admissionNamespace: "https://jeswr.org/ns/sectors/health/diet#",
-      });
-      throw new Error("unexpected admission");
-    } catch (error) {
-      expect(error).toBeInstanceOf(AdmissionError);
-      const errors = (error as AdmissionError).violations;
-      for (const name of ["GeneticRiskCoverageShape", "GeneticRiskMarkerConsistencyShape"])
-        expect(
-          errors.some((v) => v.subject.endsWith(name) && v.message.includes("shacl#not")),
-        ).toBe(true);
-    }
+    const ontologyQuads = parseTurtle(vocab);
+    const ontology = owlRdfsAdapter.adapt(ontologyQuads);
+    const shapes = parseShapes(profile, config.shapesBase, ontology, ontologyQuads);
+    const probe: CodegenConfig = {
+      ...config,
+      entities: shapes.nodeShapes.map((shape, index) => ({
+        name: `Entity${index}`,
+        targetClass: shape.targetClass,
+        subject: { convention: "self" },
+      })),
+    };
+    const report = admit(ontology, shapes, "https://jeswr.org/ns/sectors/health/diet#", probe);
+    const errors = report.violations.filter((v) => v.severity === "error");
+    expect(errors.filter((v) => v.code === "missing-domain-range")).toHaveLength(8);
+    expect(errors.filter((v) => v.code === "unsupported-constraint")).toHaveLength(1);
+    expect(errors.some((v) => /not|hasValue|qualified/.test(v.message))).toBe(false);
   });
 });

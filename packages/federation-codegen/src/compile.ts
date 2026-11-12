@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -33,6 +34,7 @@ import {
   type FieldConfig,
   isCompositeConfig,
 } from "./config.js";
+import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
 import { SH } from "./rdf.js";
 import {
@@ -283,6 +285,8 @@ function compileField(
   }
 
   if (Object.keys(guards).length > 0) field.guards = guards;
+  const hasValue = propertyHasValue(constraint);
+  if (hasValue) field.hasValue = hasValue;
   return field;
 }
 
@@ -543,6 +547,7 @@ function compileCompositeEntity(
 /** Compile the normalized shapes + config into a validated manifest + provenance. */
 export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig): CompileResult {
   assertClassOwnership(config);
+  const invariants = shapeInvariants(shapes);
   const orderedTargets = orderedItemTargets(shapes, config);
   if (implicitClassTargets(shapes.quads).length)
     throw new TypeError("implicit class targets are not modeled by the runtime");
@@ -602,6 +607,14 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
   const compositeEntities: AnyManifestEntity[] = config.entities
     .filter(isCompositeConfig)
     .map((c) => compileCompositeEntity(c, shapeByTarget, shapes, typeAliases, provenance));
+
+  for (const entity of [...flatEntities, ...compositeEntities]) {
+    const owners = "nodes" in entity ? entity.nodes : [entity];
+    for (const owner of owners) {
+      const constraints = invariants.byClass.get(owner.typeIris[0] as string);
+      if (constraints) owner.invariants = structuredClone(constraints);
+    }
+  }
 
   const manifest: ModelManifest = validateManifest({
     manifestVersion: 1,
