@@ -399,7 +399,7 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
 `readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
-`isRoleError`, `isGrantableTarget`, `isSealed`, `sealAccess`, `unsealAccess`, `sealDataset`, and
+`isRoleError`, `isGrantableTarget`, `isSealed`, `isSecuring`, `sealAccess`, `unsealAccess`, `sealDataset`, and
 their documented types (`Role`, `ResourceKind`, `AgentRef`,
 `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
 `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
@@ -430,6 +430,16 @@ empty when it was made owner-only). Seal last, after that verification, so a fai
 leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
 `sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
 access document built offline (such as a seeded demo pod).
+
+`setGrants(urls, grants, { ..., securing: true })` also writes the caller's securing mark
+(`<doc> pa:securingBy <webId>`) into each own access document it writes, in the same conditional
+write as the policy (a document that would otherwise be unchanged is written to add it), so no
+state has the new policy without the mark. It records that the owner started securing the
+resource from access others held and has not sealed it yet, so what the resource governs was
+written, at least in part, by others. `isSecuring(url, options)` reads it like `isSealed` (the
+caller's mark on the resource's own document only). Sealing (`sealAccess`, `sealDataset`) removes
+the caller's mark in the same write; role edits and `unsealAccess` keep it. Only an agent with
+Control on the resource can write or remove it.
 
 `isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
 false for anything outside storage, the storage root (with or without its slash), `settings/` and

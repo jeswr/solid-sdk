@@ -23,6 +23,7 @@ import {
   replaceWac,
   subjectAgent,
 } from "./rdf.js";
+import { hasSecuringMark, markSecuring } from "./seal.js";
 import type {
   AccessModesSnapshot,
   AgentRef,
@@ -280,15 +281,20 @@ async function plan(
   desired: Map<string, Row>,
   options: GrantMutationOptions & Pick<SetGrantsOptions, "ownOnly">,
   agent?: AgentRef,
+  securing = false,
 ): Promise<Write | undefined> {
   const before = options.ownOnly && !snapshot.own ? new Map<string, Row>() : editableRows(snapshot);
   const keys = new Set([...before.keys(), ...desired.keys()]);
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
+  // The securing mark goes into the same write as the policy, so no state has one without the other.
+  const unmarked =
+    securing &&
+    !(snapshot.own && hasSecuringMark(snapshot.own.dataset, snapshot.own.url, options.webId));
   // Moves must also preserve an existing empty own ACR. An empty ACP selection still
   // inherits controls; WAC's empty selection is refused by the lockout check below.
-  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
+  if (!changes.length && !(options.ownOnly && !snapshot.own) && !unmarked) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.
@@ -367,6 +373,7 @@ async function plan(
       folderScope(snapshot, options),
     );
   }
+  if (securing) markSecuring(dataset, snapshot.ownUrl, options.webId);
   // Re-read generated RDF through the same strict role policy boundary before persistence.
   const emitted = readPolicy(
     dataset,
@@ -523,7 +530,13 @@ async function prepare(
     )
       throw roleError("unsupported", url, "Partial permissions need a richer policy model");
   const writes: Write[] = [];
-  const resourceWrite = await plan(snapshot, desired, options);
+  const resourceWrite = await plan(
+    snapshot,
+    desired,
+    options,
+    undefined,
+    options.securing === true,
+  );
   if (resourceWrite) writes.push(resourceWrite);
   if (comments) {
     const next = editableRows(comments);

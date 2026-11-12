@@ -19,7 +19,7 @@ export type {
   MovePreservingAccessResult,
 } from "./move.js";
 export { movePreservingAccess } from "./move.js";
-export { isSealed, sealAccess, sealDataset, unsealAccess } from "./seal.js";
+export { isSealed, isSecuring, sealAccess, sealDataset, unsealAccess } from "./seal.js";
 export { isGrantableTarget } from "./targets.js";
 export type {
   AccessModesSnapshot,

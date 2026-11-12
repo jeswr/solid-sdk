@@ -6,6 +6,7 @@ import { bob, fixture, manager, memoryAccess, owner, root } from "../../test/rol
 import { serialize } from "../rdf.js";
 import {
   isSealed,
+  isSecuring,
   readAccessModes,
   sealAccess,
   sealDataset,
@@ -13,6 +14,7 @@ import {
   unsealAccess,
 } from "./index.js";
 import { properties } from "./rdf.js";
+import { markSecuring } from "./seal.js";
 
 const folder = `${root}settings/`;
 const acl = `${folder}.acl`;
@@ -28,8 +30,11 @@ async function sealedFixture(webId = owner) {
 async function aclDataset(body: string) {
   return new Store(await parseRdf(body, "text/turtle", { baseIRI: acl }));
 }
+const SECURING_BY = "https://jeswr.org/ns/pod-access#securingBy";
 const seals = (dataset: Store) =>
   dataset.getQuads(acl, SEALED_BY, null, null).map((quad) => quad.object.value);
+const marks = (dataset: Store) =>
+  dataset.getQuads(acl, SECURING_BY, null, null).map((quad) => quad.object.value);
 
 describe("access seals", () => {
   it("seals an own access document conditionally, keeping its policy", async () => {
@@ -59,7 +64,7 @@ describe("access seals", () => {
     // A child inherits its folder's sealed document, but an inherited seal never counts.
     const child = `${folder}state.json`;
     mem.advertise(child);
-    expect(await isSealed(child, { ...options, kind: "file", webId: bob })).toBe(false);
+    expect(await isSealed(child, { ...options, kind: "resource", webId: bob })).toBe(false);
   });
   it("ignores a seal statement about another subject or with a literal value", async () => {
     const mem = memoryAccess();
@@ -109,7 +114,7 @@ describe("access seals", () => {
     const child = `${folder}state.json`;
     mem.advertise(child);
     await expect(
-      sealAccess(child, { ...mem.options, kind: "file", webId: owner }),
+      sealAccess(child, { ...mem.options, kind: "resource", webId: owner }),
     ).rejects.toMatchObject({ code: "unsupported" });
     expect(mem.writes()).toEqual([]);
   });
@@ -137,5 +142,112 @@ describe("access seals", () => {
       sealAccess(folder, { ...mem.options, kind: "folder", webId: owner }),
     ).rejects.toMatchObject({ code: "conflict" });
     expect(await isSealed(folder, { ...mem.options, kind: "folder", webId: owner })).toBe(false);
+  });
+});
+
+describe("securing marks", () => {
+  const options = (mem: ReturnType<typeof memoryAccess>, webId = owner) => ({
+    ...mem.options,
+    kind: "folder" as const,
+    webId,
+  });
+  const viewer = { agent: { type: "public" as const }, role: "viewer" as const };
+  it("writes the mark in the same write that creates the own policy, and sealing removes it", async () => {
+    const mem = memoryAccess();
+    mem.attach(root, await fixture("wac", root, [manager], true));
+    mem.advertise(folder);
+    const opts = options(mem);
+    expect(await isSecuring(folder, opts)).toBe(false);
+    const result = await setGrants(
+      [folder],
+      [manager, { ...viewer, inherited: false, source: "" }],
+      {
+        ...opts,
+        ownOnly: true,
+        securing: true,
+      },
+    );
+    expect(result.failed).toEqual([]);
+    // One write: the policy and the mark together, never one without the other.
+    expect(mem.writes().map((write) => write.url)).toEqual([acl]);
+    const written = await aclDataset(mem.docs.get(acl)?.body ?? "");
+    expect(marks(written)).toEqual([owner]);
+    expect(seals(written)).toEqual([]);
+    expect(await isSecuring(folder, opts)).toBe(true);
+    expect(await isSealed(folder, opts)).toBe(false);
+    expect((await readAccessModes(folder, opts)).members).toEqual([
+      { agent: { type: "webid", id: owner }, modes: ["append", "control", "read", "write"] },
+      { agent: { type: "public" }, modes: ["read"] },
+    ]);
+    await sealAccess(folder, opts);
+    expect(mem.writes()).toHaveLength(2);
+    const sealed = await aclDataset(mem.docs.get(acl)?.body ?? "");
+    expect(marks(sealed)).toEqual([]);
+    expect(seals(sealed)).toEqual([owner]);
+    expect(await isSecuring(folder, opts)).toBe(false);
+  });
+  it("adds the mark to an unchanged policy, once, and role edits and unsealing keep it", async () => {
+    const mem = memoryAccess();
+    mem.attach(folder, await fixture("wac", folder, [manager], true));
+    const opts = options(mem);
+    await setGrants([folder], [manager], { ...opts, ownOnly: true, securing: true });
+    expect(mem.writes()).toHaveLength(1);
+    expect(await isSecuring(folder, opts)).toBe(true);
+    // Already marked and unchanged: nothing to write.
+    await setGrants([folder], [manager], { ...opts, ownOnly: true, securing: true });
+    expect(mem.writes()).toHaveLength(1);
+    const edit = await setGrants(
+      [folder],
+      [
+        manager,
+        { agent: { type: "webid", id: bob }, role: "viewer", inherited: false, source: "" },
+      ],
+      opts,
+    );
+    expect(edit.failed).toEqual([]);
+    expect(mem.writes()).toHaveLength(2);
+    expect(await isSecuring(folder, opts)).toBe(true);
+    await unsealAccess(folder, opts);
+    expect(mem.writes()).toHaveLength(2);
+    expect(await isSecuring(folder, opts)).toBe(true);
+  });
+  it("counts only the caller's mark, only on the resource's own document", async () => {
+    const mem = memoryAccess();
+    const bobManager = { ...manager, agent: { type: "webid" as const, id: bob } };
+    mem.attach(folder, await fixture("wac", folder, [bobManager], true));
+    await setGrants([folder], [bobManager], {
+      ...options(mem, bob),
+      ownOnly: true,
+      securing: true,
+    });
+    expect(await isSecuring(folder, options(mem))).toBe(false);
+    expect(await isSecuring(folder, options(mem, bob))).toBe(true);
+    const child = `${folder}state.json`;
+    mem.advertise(child);
+    expect(await isSecuring(child, { ...options(mem, bob), kind: "resource" })).toBe(false);
+    const bare = `${root}bare/`;
+    mem.advertise(bare);
+    expect(await isSecuring(bare, options(mem, bob))).toBe(false);
+  });
+  it("removes a mark found next to a seal when sealing again, offline too", async () => {
+    const mem = memoryAccess();
+    const dataset = await aclDataset(await sealedFixture());
+    markSecuring(dataset, acl, owner);
+    mem.attach(folder, await serialize(dataset));
+    const opts = options(mem);
+    expect(await isSealed(folder, opts)).toBe(true);
+    await sealAccess(folder, opts);
+    expect(mem.writes()).toHaveLength(1);
+    expect(await isSecuring(folder, opts)).toBe(false);
+    expect(await isSealed(folder, opts)).toBe(true);
+    const offline = await aclDataset(await fixture("wac", folder, [manager], true));
+    markSecuring(offline, acl, owner);
+    markSecuring(offline, acl, bob);
+    sealDataset(offline, acl, owner);
+    // Only the sealer's own mark goes.
+    expect(marks(offline)).toEqual([bob]);
+    sealDataset(offline, acl, owner, false);
+    expect(marks(offline)).toEqual([bob]);
+    expect(seals(offline)).toEqual([]);
   });
 });

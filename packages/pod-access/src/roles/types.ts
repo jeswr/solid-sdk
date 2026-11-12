@@ -86,6 +86,12 @@ export interface SetGrantsOptions extends GrantMutationOptions {
   expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
   /** Replace/create own access, including empty ACP selections, without copying WAC defaults. */
   ownOnly?: boolean;
+  /**
+   * Also write the caller's securing mark (`pa:securingBy`, see `isSecuring`) into each own access
+   * document this call writes, in the same conditional write; `sealAccess` removes it. A document
+   * that would otherwise be unchanged is written to add the mark.
+   */
+  securing?: boolean;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */
 export interface SetGrantsResult {
