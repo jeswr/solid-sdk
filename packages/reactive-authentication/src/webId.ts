@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Quad } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser } from "n3";
@@ -20,24 +21,76 @@ export class WebIdAgent extends TermWrapper {
   }
 }
 
-/** Fetches Turtle with bounded, scheme-checked redirects and parses against the final document URL. */
+const PROFILE_MAX_BYTES = 256 * 1024;
+const PROFILE_TIMEOUT_MS = 8_000;
+
+/** Fetches Turtle only, with a byte cap, deadline and scheme-checked redirects. */
 export async function fetchTurtle(
   url: URL,
   signal: AbortSignal | undefined,
   http?: HttpOptions,
 ): Promise<{ quads: Quad[]; base: string }> {
-  const { response, url: finalUrl } = await secureDocumentFetch(url, "text/turtle", signal, http);
+  const timeout = AbortSignal.timeout(PROFILE_TIMEOUT_MS);
+  const boundedSignal = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+  const { response, url: finalUrl } = await secureDocumentFetch(
+    url,
+    "text/turtle",
+    boundedSignal,
+    http,
+  );
   if (!response.ok) {
+    void response.body?.cancel().catch(() => {});
     throw new ReactiveAuthenticationError(
       `${url.href} could not be retrieved (${response.status})`,
     );
   }
 
+  const text = await readProfile(response, boundedSignal);
   const base = finalUrl.href;
   try {
-    return { quads: new Parser({ baseIRI: base }).parse(await response.text()), base };
+    return { quads: new Parser({ baseIRI: base }).parse(text), base };
   } catch (error) {
     throw new ReactiveAuthenticationError(`${url.href} could not be parsed as Turtle`, error);
+  }
+}
+
+/** Count received bytes rather than trusting Content-Length, and cancel stalled/oversized bodies. */
+async function readProfile(response: Response, signal: AbortSignal): Promise<string> {
+  const reader = response.body?.getReader();
+  const abort = () => {
+    void reader?.cancel(signal.reason).catch(() => {});
+  };
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    signal.throwIfAborted();
+    if (Number(response.headers.get("content-length")) > PROFILE_MAX_BYTES)
+      throw new Error(`WebID profile exceeds ${PROFILE_MAX_BYTES} byte limit`);
+    if (!reader) return "";
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      signal.throwIfAborted();
+      if (done) break;
+      size += value.byteLength;
+      if (size > PROFILE_MAX_BYTES)
+        throw new Error(`WebID profile exceeds ${PROFILE_MAX_BYTES} byte limit`);
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return new TextDecoder().decode(bytes);
+  } catch (error) {
+    // Cancellation is best effort: a misbehaving source must not hold up the rejection.
+    void reader?.cancel(error).catch(() => {});
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", abort);
+    reader?.releaseLock();
   }
 }
 
