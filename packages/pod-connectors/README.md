@@ -26,6 +26,37 @@ const report = await runImport({
 });
 ```
 
+`createStoragePodWriter` uses an injected `StorageClient` and an explicit connector container:
+
+```ts
+import { createStoragePodWriter } from '@jeswr/pod-connectors';
+
+const podWriter = createStoragePodWriter({
+  storage, // Solid StorageClient, authenticated by the host
+  container: new URL(`integrations/${adapter.metadata.id}/`, storage.root).href,
+  webId,
+  typeIndex: { profileDocumentUrl },
+  signal,
+});
+```
+
+The storage writer reads with `storage.readRdf`, serialises RDF through the existing N3
+helpers, and preserves `ifMatch` / `ifNoneMatch: '*'` conditions. With no condition it
+observes the current strong ETag or creates only when missing. Conflicts surface as
+`StorageError` with status 412; they never trigger a blind overwrite or an automatic retry.
+Binary create/replace and conditional deletion share the fetch writer's container and
+media-type checks. Missing deletes are harmless; unreadable resources and missing or weak
+ETags fail closed. Exact Solid creates preserve existing path spelling, including mail's
+`system:inbox.ttl`. LWS's server-assigned identifiers cannot implement these deterministic
+slugs, so the factory requires a Solid backend.
+
+`webId` is optional for data-only operations. Registration requires it and `typeIndex`;
+`typeIndex.storageFor(url)` can select a separately scoped client for the canonical profile
+or the index validated against the profile's advertised storage. Selection, bootstrap and
+registration logic are shared with the fetch writer, and these reads also use `readRdf`.
+Pass the run's `signal` to the writer to cancel every storage operation inside a port.
+Hosts own cache policy; the Node transport forces revalidation.
+
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
 The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
@@ -45,16 +76,16 @@ redirects during the host's existing profile load. The WebID remains the RDF sub
 Registration never dereferences the redirecting WebID or makes an unauthenticated profile
 request, and all authenticated profile and Type Index operations refuse redirects.
 Every connector RDF read, including registration, rejects JSON-LD context URLs with
-`RemoteContextRefusedError` and never fetches a context. Inline context objects remain supported.
+`RemoteContextRefusedError` on the fetch writer (storage-client reports `not-rdf`) and never fetches a context. Inline context objects remain supported.
 Deterministic document paths and Type Index bootstrap
 behavior are preserved. The runner
 retains read preconditions for subsequent writes; explicit write conditions override them.
 
 Entry points:
 
-- `.`: contracts, runners, catalog, config factory, fetch-backed writer, errors.
+- `.`: contracts, runners, catalog, config factory, fetch-backed and storage-backed writers, errors.
 - `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
-- `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
+- `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE and state store.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
@@ -63,7 +94,8 @@ Entry points:
   compatibility modules used by Pod Manager's thin re-export shims.
 
 `pnpm --filter @jeswr/pod-connectors build` builds ESM and declarations. `test` runs all
-moved fixture tests and the environment-read regression test without production traffic.
+fixture tests (shared adapter imports use storage-client’s strict memory backend), shared
+writer contracts for both writers, and the environment-read regression test without production traffic.
 
 ## Run limits
 
@@ -391,8 +423,16 @@ Direct exchanges request JSON token responses, including GitHub. The provider's 
 selects form-post secrets (the default), HTTP Basic with a form body (Fitbit), or HTTP Basic
 with a JSON body (Notion) for a local secret. Proxy flows keep the shared form contract.
 
-Pod login uses CSS client credentials and DPoP, including bounded nonce retries and an
-in-memory token cache. Source login displays a browser URL, binds only `127.0.0.1` on an
+Pod login uses `forClientCredentials` from `@jeswr/pod-auth/node` for CSS client credentials,
+DPoP, bounded nonce retries and memory-only tokens. Its fetch feeds storage-client's Solid
+backend and `createStoragePodWriter`. The small `node/pod-auth.ts` adapter retains the config's
+explicit token URL and grants a separate static agent boundary to a validated cross-storage
+Type Index document. It never grants that storage's entire root. Shared agent initialization has no
+caller signal; cancelling one caller leaves other callers able to proceed, and rejected
+initialization can retry. Serialized RDF strings travel as immutable Blobs for creates and
+updates, preserving their preconditions without imposing the ordinary replay-size cap. The
+transport refuses redirects and preserves each request's cancellation through discovery, token
+refresh and nonce retries. Source login displays a browser URL, binds only `127.0.0.1` on an
 OS-assigned port by default, and uses state plus S256 PKCE. Set `connectors[id].callbackPort`
 to an integer from **1024 to 65535** for a fixed loopback callback. Twitch requires this
 setting with either a local secret or a token proxy; omitting it fails with a configuration
