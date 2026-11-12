@@ -211,9 +211,14 @@ function usePhotosState(session: PodSession) {
         albums: state.albums.map((album) => (album.url === url ? transform(album) : album)),
       });
       return run(patch, async () => {
-        const previous = baseline.current.albums.find((album) => album.url === url)?.members ?? [];
-        const saved = await writeAlbum.edit(url, transform);
-        const added = saved.members.filter((member) => !previous.includes(member));
+        // Only refs THIS edit's transform added: members someone else (e.g. a group Editor)
+        // wrote to the album in the meantime must never be extended to the album's groups.
+        let added: string[] = [];
+        const saved = await writeAlbum.edit(url, (fresh) => {
+          const changed = transform(fresh);
+          added = changed.members.filter((member) => !fresh.members.includes(member));
+          return changed;
+        });
         if (added.length) await shareWithAlbumGroups(url, added);
         announce(message);
         return (state) => ({

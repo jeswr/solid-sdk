@@ -73,8 +73,18 @@ notification receipts are trusted. An individual document ACL cannot bypass the 
 Both the document's and the settings folder's raw modes are checked under their CURRENT policy
 before provisioning rewrites the folder, so settings another agent could have written are refused,
 never laundered into trusted state. Fix the folder's access (an explicit owner decision) to use
-them. Settings that appear while the folder is being secured fail with a reload error.
+them. Securing a dedicated folder (`groups/` or the settings folder) that is not already safe
+requires it to be empty; anything that appears between that check and the permission rewrite was
+writable by others, so it is conditionally deleted (never trusted) and the call fails with
+`SECURING_RACE`. Planted sub-folders are left in place but never read. If that deletion itself
+fails, the error surfaces and the owner must review the folder before retrying. On an already
+owner-only folder, settings another tab wrote meanwhile fail with a reload error instead.
+A folder whose policy pod-access cannot represent as roles (e.g. Append-only grants) is refused
+rather than rewritten.
 
-`extend(source, resources)` lets a collection's contents follow it: every shareable group with
-access to `source` (e.g. the Family album) gets Viewer access to `resources` (e.g. an added photo's
-document, original and thumbnail), with the same target checks as `share` and no notification.
+`extend(source, resources, { within })` lets a collection's contents follow it: every shareable
+group with access to `source` (e.g. the Family album) gets Viewer access to `resources` (e.g. an
+added photo's document, original and thumbnail), with the same target checks as `share` and no
+notification. `within` is the application folder (e.g. the Photos library); the source and every
+resource must be canonical URLs strictly inside it. Callers pass only the resources the OWNER
+added in this action, never members read back from a collection others can edit.

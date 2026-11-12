@@ -15,7 +15,9 @@ Append-only and Write-only principals; check the groups folder's member scope to
 Group grants are Viewer/Editor only; never target the root, settings/, groups/ (isGrantableTarget).
 Require owner-only access to existing settings before trusting space URLs or notification receipts:
 check the document and folder BEFORE provisioning rewrites the folder's ACL, never after.
-Collections share references only; use extend(source, resources) for contents added later.
+Secure only empty unsafe folders and delete anything planted during the rewrite (SECURING_RACE).
+Collections share references only; use extend(source, resources, { within }) for contents the
+owner adds later, passing only that action's own additions, never members others could write.
 Share multi-resource items in one call so each member receives at most one notification attempt.
 Keep conditional writes, deletion reviews, complete scans and notification claims before delivery.
 Run lint, dependency-first build, typecheck, exhaustive tests, root lint and suite demo e2e.

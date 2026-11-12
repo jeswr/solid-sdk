@@ -914,24 +914,74 @@ describe("group grant limits and receipt pruning (review round 1)", () => {
   });
 });
 
-it("refuses settings that appear while the settings folder is being secured", async () => {
-  const { directory, storage, notify } = make();
-  const group = await directory.create("Family", [bob]);
+function plantDuringProvisioning(storage: ReturnType<typeof make>["storage"], folder: string) {
   const original = vi.mocked(setGrants).getMockImplementation();
+  let planted = false;
   vi.mocked(setGrants).mockImplementation(async (urls, grants, options) => {
-    if (urls[0] === `${root}settings/group-sharing/`)
-      // Another writer creates state.json between the trust check and provisioning.
-      await storage.create(
-        `${root}settings/group-sharing/`,
-        JSON.stringify({ notices: [], spaces: { x: [`${root}x`] } }),
-        { name: "state.json", contentType: "application/json" },
-      );
+    if (urls[0] === folder && !planted) {
+      planted = true;
+      // Written after the safety check, before the permission rewrite lands.
+      await storage.create(folder, JSON.stringify({ notices: [], spaces: { x: [`${root}x`] } }), {
+        name: "state.json",
+        contentType: "application/json",
+      });
+    }
     return (original as NonNullable<typeof original>)(urls, grants, options);
   });
+}
+it("deletes settings planted while an unsafe settings folder is secured and never trusts them", async () => {
+  const { directory, storage, notify } = make();
+  const group = await directory.create("Family", [bob]);
+  const folder = `${root}settings/group-sharing/`;
+  // No owner management yet (the mocked pod grants nothing): the folder is not owner-only.
+  plantDuringProvisioning(storage, folder);
+  await expect(directory.setFamily(group.id)).rejects.toThrow("others could write it");
+  await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
+  // The retry starts from empty settings, not from the planted spaces.
+  await directory.setFamily(group.id);
+  expect(JSON.parse(await (await storage.read(`${folder}state.json`)).text()).spaces).toEqual({});
+  expect(notify).not.toHaveBeenCalled();
+});
+it("refuses settings another tab writes while an owner-only settings folder is re-secured", async () => {
+  const { directory, storage } = make();
+  const group = await directory.create("Family", [bob]);
+  const folder = `${root}settings/group-sharing/`;
+  roles.set(folder, [
+    { agent: { type: "webid", id: owner }, role: "manager", inherited: false, source: "" },
+  ]);
+  // Only a writer the owner-only folder admits (the owner's other tab) can win this race; the
+  // write is kept and this call asks for a reload instead of overwriting it.
+  plantDuringProvisioning(storage, folder);
   await expect(directory.setFamily(group.id)).rejects.toThrow(
     "changed while they were being secured",
   );
-  // Only a writer the (owner-only) folder admitted can win this race, i.e. the owner's other
-  // tab; the caller reloads instead of overwriting it.
-  expect(notify).not.toHaveBeenCalled();
+  expect((await storage.read(`${folder}state.json`)).contentType).toBe("application/json");
+});
+
+it("never deletes access or metadata documents listed in a folder being secured", async () => {
+  const { directory, storage } = make();
+  const group = await directory.create("Family", [bob]);
+  const folder = `${root}settings/group-sharing/`;
+  const listAll = storage.listAll.bind(storage);
+  let secured = false;
+  vi.spyOn(storage, "listAll").mockImplementation(async function* (url, options) {
+    yield* listAll(url, options);
+    if (url === folder && secured)
+      yield {
+        url: `${folder}.acl`,
+        kind: "resource" as const,
+        contentType: null,
+        size: null,
+        modified: null,
+        types: [],
+      };
+  });
+  const original = vi.mocked(setGrants).getMockImplementation();
+  vi.mocked(setGrants).mockImplementation(async (urls, grants, options) => {
+    if (urls[0] === folder) secured = true;
+    return (original as NonNullable<typeof original>)(urls, grants, options);
+  });
+  const remove = vi.spyOn(storage, "delete");
+  await directory.setFamily(group.id);
+  expect(remove).not.toHaveBeenCalled();
 });

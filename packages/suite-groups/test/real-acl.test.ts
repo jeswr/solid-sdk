@@ -40,7 +40,7 @@ const probe = (appliesTo: Grant["appliesTo"] = "both") =>
   );
 
 /** A memory pod whose resources advertise `<url>.acl`, served and conditionally written over HTTP. */
-async function pod() {
+async function pod(hooks: { beforePut?: (url: string) => Promise<void> } = {}) {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   Object.assign(storage.features.accessControl, { state: "available", detail: { model: "wac" } });
   const exists = storage.head.bind(storage);
@@ -82,6 +82,7 @@ async function pod() {
       }
     const acl = acls.get(url);
     if (init.method === "PUT") {
+      await hooks.beforePut?.(url);
       const headers = new Headers(init.headers);
       if (acl ? headers.get("if-match") !== acl.etag : headers.get("if-none-match") !== "*")
         return new Response(null, { status: 412 });
@@ -306,27 +307,30 @@ describe("collection contents follow the collection's groups (review round 2)", 
     const { directory, storage, fetch, putAcl, puts, acls } = await pod();
     const group = await directory.create("Family", [bob]);
     const other = await directory.create("Unshared", [mallory]);
-    const album = await storage.create(root, "a", {
+    const space = await storage.create(root, null, { name: "photos", kind: "container" });
+    const album = await storage.create(space.url, "a", {
       name: "album.ttl",
       contentType: "text/turtle",
     });
-    const photo = await storage.create(root, "p", {
+    const photo = await storage.create(space.url, "p", {
       name: "photo.ttl",
       contentType: "text/turtle",
     });
-    const original = await storage.create(root, "o", {
+    const original = await storage.create(space.url, "o", {
       name: "photo.jpg",
       contentType: "image/jpeg",
     });
     // Nothing shared yet: no reads of the contents' access, no writes.
     const start = puts.length;
-    expect(await directory.extend(album.url, [photo.url])).toEqual([]);
+    expect(await directory.extend(album.url, [photo.url], { within: space.url })).toEqual([]);
     expect(puts.slice(start)).toEqual([]);
     await directory.share(group.id, album.url, "editor");
-    expect(await directory.extend(album.url, [])).toEqual([]);
-    expect(await directory.extend(album.url, [photo.url, original.url, photo.url])).toEqual([
-      group.id,
-    ]);
+    expect(await directory.extend(album.url, [], { within: space.url })).toEqual([]);
+    expect(
+      await directory.extend(album.url, [photo.url, original.url, photo.url], {
+        within: space.url,
+      }),
+    ).toEqual([group.id]);
     for (const url of [photo.url, original.url]) {
       const grants = (await readGrants(url, { fetch, root, model: "wac" })).grants;
       // Viewer only, whatever the collection role, and never the unshared group.
@@ -342,16 +346,113 @@ describe("collection contents follow the collection's groups (review round 2)", 
       policy(ownerRule("resource"), rule({ kind: "group", group: foreign }, ["read"], "resource")),
     );
     const before = puts.length;
-    expect(await directory.extend(album.url, [photo.url])).toEqual([]);
+    expect(await directory.extend(album.url, [photo.url], { within: space.url })).toEqual([]);
     expect(puts.slice(before)).toEqual([]);
   });
   it.each([
-    [root, `${root}photo.ttl`],
-    [`${root}album.ttl`, `${root}settings/x`],
-    [`${root}album.ttl`, `${root}groups/a.ttl`],
-  ])("refuses reserved collections or contents (%s, %s)", async (source, target) => {
+    [`${root}photos/album.ttl`, `${root}photo.ttl`, `${root}photos/`],
+    [`${root}album.ttl`, `${root}photos/photo.ttl`, `${root}photos/`],
+    [`${root}photos/album.ttl`, `${root}photos/`, `${root}photos/`],
+    [`${root}photos/album.ttl`, `${root}photos/a/../../settings/x`, `${root}photos/`],
+    [`${root}photos/album.ttl`, `${root}photosx/photo.ttl`, `${root}photos/`],
+    [`${root}photos/album.ttl`, `${root}photos/photo.ttl`, root],
+    [`${root}settings/album.ttl`, `${root}settings/x`, `${root}settings/`],
+    [`${root}groups/a.ttl`, `${root}groups/b.ttl`, `${root}groups/`],
+  ])("refuses a collection or contents outside its space (%s, %s within %s)", async (source, target, within) => {
+    const { directory, puts } = await pod();
+    const start = puts.length;
+    await expect(directory.extend(source, [target], { within })).rejects.toThrow(GROUP_TARGET);
+    expect(puts.slice(start)).toEqual([]);
+  });
+  it("refuses a space that is not a folder", async () => {
     const { directory } = await pod();
-    await expect(directory.extend(source, [target])).rejects.toThrow(GROUP_TARGET);
+    await expect(
+      directory.extend(`${root}photos/a.ttl`, [`${root}photos/b.ttl`], {
+        within: `${root}photos`,
+      }),
+    ).rejects.toThrow("application folder");
+  });
+});
+
+describe("content planted while a folder is being secured (review round 3)", () => {
+  it("deletes a state.json planted between the safety check and the ACL rewrite; the retry refuses it", async () => {
+    // The adversarial review's proof of concept, which granted the Family group Editor on private/.
+    const hooks: { beforePut?: (url: string) => Promise<void> } = {};
+    const { directory, storage, fetch, putAcl, puts } = await pod(hooks);
+    const group = await directory.create("Family", [bob, mallory]);
+    await storage.create(root, null, { name: "settings", kind: "container" });
+    await storage.create(`${root}settings/`, null, { name: "group-sharing", kind: "container" });
+    await storage.create(root, null, { name: "private", kind: "container" });
+    const folder = `${root}settings/group-sharing/`;
+    // Mallory can edit the settings folder; no state.json exists yet.
+    await putAcl(folder, policy(ownerRule(), rule(agent(mallory), ["read", "write"])));
+    let raced = false;
+    hooks.beforePut = async (url) => {
+      if (url !== `${folder}.acl` || raced) return;
+      raced = true;
+      await storage.create(
+        folder,
+        JSON.stringify({
+          notices: [JSON.stringify([group.id, bob, group.id])],
+          spaces: { [JSON.stringify([group.id, "calendar"])]: [`${root}private/`] },
+        }),
+        { name: "state.json", contentType: "application/json" },
+      );
+    };
+    await expect(directory.setFamily(group.id)).rejects.toThrow("others could write it");
+    await expect(storage.read(settings)).rejects.toMatchObject({ code: "not-found" });
+    // The owner reloads and retries, as the error says: the planted spaces are gone.
+    const create = vi.fn(async () => [`${root}new/`]);
+    await storage.create(root, null, { name: "new", kind: "container" });
+    await directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(puts).not.toContain(`${root}private/.acl`);
+    const grants = (
+      await readGrants(`${root}private/`, { fetch, root, model: "wac", kind: "folder" })
+    ).grants;
+    expect(grants.some((grant) => grant.agent.type === "group")).toBe(false);
+  });
+  it("refuses to secure a non-empty settings folder others could write", async () => {
+    const { directory, storage, putAcl, puts } = await pod();
+    const group = await directory.create("Family", [bob]);
+    await storage.create(root, null, { name: "settings", kind: "container" });
+    await storage.create(`${root}settings/`, null, { name: "group-sharing", kind: "container" });
+    const folder = `${root}settings/group-sharing/`;
+    await storage.create(folder, "x", { name: "other.txt", contentType: "text/plain" });
+    await putAcl(folder, policy(ownerRule(), rule({ kind: "authenticated" }, ["append"])));
+    const start = puts.length;
+    await expect(directory.setFamily(group.id)).rejects.toThrow("settings must be owner-only");
+    expect(puts.slice(start)).toEqual([]);
+  });
+  it("deletes a group document planted while the groups folder is published; nested folders are never read", async () => {
+    const hooks: { beforePut?: (url: string) => Promise<void> } = {};
+    const { directory, storage, putAcl } = await pod(hooks);
+    await storage.create(root, null, { name: "groups", kind: "container" });
+    // The empty groups folder lets any signed-in agent edit. (A role-less grant such as Append
+    // only is refused outright: pod-access never replaces a policy it cannot represent.)
+    await putAcl(
+      `${root}groups/`,
+      policy(ownerRule(), rule({ kind: "authenticated" }, ["read", "write"])),
+    );
+    let raced = false;
+    hooks.beforePut = async (url) => {
+      if (url !== `${root}groups/.acl` || raced) return;
+      raced = true;
+      const { serializeGroup } = await import("../src/index.js");
+      await storage.create(
+        `${root}groups/`,
+        await serializeGroup(`${root}groups/planted.ttl`, { name: "Family", members: [mallory] }),
+        { name: "planted.ttl", contentType: "text/turtle" },
+      );
+      await storage.create(`${root}groups/`, null, { name: "nested", kind: "container" });
+    };
+    await expect(directory.create("Team", [bob])).rejects.toThrow("others could write it");
+    await expect(storage.read(`${root}groups/planted.ttl`)).rejects.toMatchObject({
+      code: "not-found",
+    });
+    // Now owner-managed and public-read; only the owner's own group is listed.
+    const team = await directory.create("Team", [bob]);
+    expect(await directory.list()).toEqual([team]);
   });
 });
 

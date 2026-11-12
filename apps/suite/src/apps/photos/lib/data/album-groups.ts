@@ -20,10 +20,30 @@ export async function photoResources(
     const { photo } = await io.loadPhoto(item.href);
     if (!photo) continue;
     urls.add(item.href);
-    for (const url of [photo.contentUrl, photo.thumbnailUrl])
-      if (url?.startsWith(io.root)) urls.add(url);
+    // The item document names its binaries; only the library's own binary folders count, so
+    // an edited item can never point a grant at another document in the pod.
+    if (binary(photo.contentUrl, `${io.root}originals/`)) urls.add(photo.contentUrl);
+    if (photo.thumbnailUrl && binary(photo.thumbnailUrl, `${io.root}thumbs/`))
+      urls.add(photo.thumbnailUrl);
   }
   return [...urls];
+}
+/** A canonical, query- and fragment-free direct child of `folder`. */
+function binary(url: string, folder: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const name = parsed.href.slice(folder.length);
+    return (
+      parsed.href === url &&
+      !parsed.search &&
+      !parsed.hash &&
+      url.startsWith(folder) &&
+      name.length > 0 &&
+      !name.includes("/")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Photos added to an album become visible to the groups that album is shared with. */
@@ -34,5 +54,6 @@ export async function shareAddedPhotos(
   refs: readonly string[],
 ): Promise<string[]> {
   const resources = await photoResources(io, refs);
-  return resources.length ? directory.extend(album, resources) : [];
+  // Album and contents both stay inside the Photos library.
+  return resources.length ? directory.extend(album, resources, { within: io.root }) : [];
 }

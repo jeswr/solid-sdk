@@ -24,7 +24,7 @@ import {
 } from "@jeswr/solid-task-model/contacts";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { DataFactory } from "n3";
-import { ownerOnlyAccess, publicReadModes } from "./owner-access.js";
+import { ownerOnlyAccess, ownerOnlyModes, publicReadModes } from "./owner-access.js";
 import { wacGroupIds } from "./wac.js";
 
 export interface SharedGroup {
@@ -60,6 +60,9 @@ export const GROUP_TARGET =
   "Groups can't be given access to your whole pod, your settings or the groups folder. Choose a specific item.";
 /** Delivery receipts kept in the private settings: the newest, oldest dropped first. */
 export const NOTICE_LIMIT = 2000;
+export const SETTINGS_UNSAFE = "Group settings must be owner-only before they can be used";
+export const SECURING_RACE =
+  "Something was added while this folder was being secured. It was removed because others could write it. Reload and try again";
 export const GROUP_UNSAFE =
   "Shareable groups need public Read and owner-only changes. Private contact labels won't be published. Review this groups folder's access before continuing.";
 
@@ -170,12 +173,21 @@ export class GroupDirectory {
       }
     }
   }
+  /**
+   * Make a dedicated folder owner-managed (and publicly readable for groups). A folder that is not
+   * already safe must be empty, since anything in it could have been written by someone else;
+   * anything that appears between that check and the permission rewrite was written under the
+   * old policy, so it is conditionally deleted (never trusted) and the call fails.
+   */
   private async provision(url: string, publicRead: boolean) {
     await this.ensureContainer(url);
     const snapshot = await readAccessModes(url, this.options(url));
-    if (publicRead && !publicReadModes(snapshot, this.session.webId)) {
-      for await (const _entry of this.session.storage.listAll(url)) throw new Error(GROUP_UNSAFE);
-    }
+    const safe = publicRead
+      ? publicReadModes(snapshot, this.session.webId)
+      : ownerOnlyModes(snapshot, this.session.webId);
+    const unsafe = publicRead ? GROUP_UNSAFE : SETTINGS_UNSAFE;
+    if (!safe)
+      for await (const _entry of this.session.storage.listAll(url)) throw new Error(unsafe);
     check(
       await setGrants(
         [url],
@@ -200,6 +212,20 @@ export class GroupDirectory {
         { ...this.options(url), expected: { [url]: snapshot.version }, ownOnly: true },
       ),
     );
+    if (!safe) await this.discardPlanted(url);
+  }
+  private async discardPlanted(url: string) {
+    const planted: string[] = [];
+    for await (const entry of this.session.storage.listAll(url))
+      if (!/\.(acl|acr|meta)$/.test(entry.url)) planted.push(entry.url);
+    if (!planted.length) return;
+    for (const entry of planted) {
+      // A folder planted in the race is left in place but never read: only direct documents are.
+      if (entry.endsWith("/")) continue;
+      const head = await this.session.storage.head(entry);
+      await this.session.storage.delete(entry, { ifMatch: etag(head.etag) });
+    }
+    throw new Error(SECURING_RACE);
   }
   /** Raw modes, so principals that map to no role (e.g. Append only) are never hidden. */
   private async assertPublicRead(url: string) {
@@ -243,7 +269,7 @@ export class GroupDirectory {
         !(await ownerOnlyAccess(this.session, this.settingsUrl)) ||
         !(await ownerOnlyAccess(this.session, this.settingsContainer))
       )
-        throw new Error("Group settings must be owner-only before they can be used");
+        throw new Error(SETTINGS_UNSAFE);
       return { data: data as Settings, etag: etag(read.etag) };
     } catch (error) {
       if (!missing(error)) throw error;
@@ -481,10 +507,24 @@ export class GroupDirectory {
    * Contents follow their collection: every shareable group with access to `source` (a shared
    * album, say) gets Viewer access to `resources` (an added photo's document and binaries).
    * Returns the groups granted. It sends no notification; sharing the collection already did.
+   * `within` is the application space (e.g. the Photos library) that must contain the source
+   * and every resource, so a collection never extends access outside its own space.
    */
-  async extend(source: string, resources: readonly string[]): Promise<string[]> {
-    this.target(source);
-    const targets = [...new Set(resources)].map((url) => this.target(url));
+  async extend(
+    source: string,
+    resources: readonly string[],
+    options: { within: string },
+  ): Promise<string[]> {
+    const space = this.target(options.within);
+    if (!space.endsWith("/") || new URL(space).href !== space)
+      throw new Error("Choose the application folder the collection belongs to");
+    const inside = (url: string) => {
+      if (new URL(url).href !== url || !url.startsWith(space) || url === space)
+        throw new Error(GROUP_TARGET);
+      return this.target(url);
+    };
+    inside(source);
+    const targets = [...new Set(resources)].map(inside);
     const held = new Set(
       (await readGrants(source, this.options(source))).grants.flatMap((grant) =>
         grant.agent.type === "group" ? [grant.agent.id] : [],

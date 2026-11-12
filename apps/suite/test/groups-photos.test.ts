@@ -8,7 +8,7 @@ import { toast } from "@jeswr/suite-ui";
 import { expect, it, vi } from "vitest";
 import { scenes } from "../src/apps/photos/demo/images";
 import { photoResources, shareAddedPhotos } from "../src/apps/photos/lib/data/album-groups";
-import { changeMembers } from "../src/apps/photos/lib/data/albums";
+import { changeMembers, createAlbumWriter } from "../src/apps/photos/lib/data/albums";
 import { photoDataStorage } from "../src/apps/photos/lib/data/storage";
 import { uploadFiles } from "../src/apps/photos/lib/data/upload";
 import { PhotosProvider, usePhotos } from "../src/apps/photos/state/photos-context";
@@ -169,4 +169,92 @@ it("warns, keeping the album edit, when the album's groups cannot be extended", 
     expect(await photos.editAlbum(album, (value) => changeMembers(value, [ref], true))).toBe(true);
   });
   expect(messages.warning).toHaveBeenCalledWith(expect.stringContaining("may not see them yet"));
+});
+
+it("never extends a member someone else added to the album between load and save", async () => {
+  const { pod, session, storage, directory, io, upload } = await setup();
+  const group = await directory.create("Family Photos", [bob]);
+  await directory.setupFamily(group.id, familySpaces(session, ["photos"], "editor"));
+  const state = JSON.parse(
+    await (await storage.read(`${DEMO_ROOT}settings/group-sharing/state.json`)).text(),
+  );
+  const [album] = state.spaces[JSON.stringify([group.id, "photos"])];
+  const chosen = await upload();
+  const secret = await upload();
+  let photos!: ReturnType<typeof usePhotos>;
+  function Probe() {
+    photos = usePhotos();
+    return null;
+  }
+  await mount(h(PhotosProvider, { session, children: h(Probe) }));
+  await act(async () => {
+    await photos.refresh();
+  });
+  // A group Editor adds a ref to the owner's private photo after the owner loaded the album.
+  await createAlbumWriter(io).edit(album, (value) => changeMembers(value, [secret], true));
+  await act(async () => {
+    expect(await photos.editAlbum(album, (value) => changeMembers(value, [chosen], true))).toBe(
+      true,
+    );
+  });
+  const files = (ref: string) => {
+    const id = (ref.split("/").at(-1) as string).replace(".ttl#it", "");
+    return [
+      ref.split("#")[0] as string,
+      `${io.root}originals/${id}.png`,
+      `${io.root}thumbs/${id}.webp`,
+    ];
+  };
+  for (const url of files(chosen))
+    expect(await groupGrant(pod.fetch, url)).toEqual([
+      expect.objectContaining({ agent: { type: "group", id: group.id }, role: "viewer" }),
+    ]);
+  // The remote member stays in the album, but its photo stays private.
+  expect((await io.loadAlbum(album)).album?.members).toEqual(
+    expect.arrayContaining([chosen, secret]),
+  );
+  for (const url of files(secret)) expect(await groupGrant(pod.fetch, url)).toEqual([]);
+});
+
+it("only counts binaries in the library's originals/ and thumbs/ folders", async () => {
+  const { io, upload } = await setup();
+  const ref = await upload();
+  const { photo } = await io.loadPhoto(ref.split("#")[0] as string);
+  if (!photo) throw new Error("Missing photo");
+  const evil = `${io.root}items/evil.ttl`;
+  // An item document naming other pod documents as its binaries.
+  await io.savePhoto(
+    evil,
+    { ...photo, contentUrl: `${DEMO_ROOT}drive/notes.md`, thumbnailUrl: `${io.root}albums/x.ttl` },
+    { create: true },
+  );
+  expect(await photoResources(io, [`${evil}#it`])).toEqual([evil]);
+  const nested = `${io.root}items/nested.ttl`;
+  await io.savePhoto(
+    nested,
+    {
+      ...photo,
+      contentUrl: `${io.root}originals/a/b.png`,
+      thumbnailUrl: `${io.root}thumbs/x.webp?v=1`,
+    },
+    { create: true },
+  );
+  expect(await photoResources(io, [`${nested}#it`])).toEqual([nested]);
+  // Traversal out of originals/ and thumbs/ is refused, even when it would resolve elsewhere.
+  for (const [name, contentUrl, thumbnailUrl] of [
+    ["up", `${io.root}originals/../../journal/secret.ttl`, `${io.root}thumbs/../items/x.ttl`],
+    ["photos-up", `${io.root}../journal/secret.ttl`, `${io.root}originals/%2e%2e/x.png`],
+    ["photos-other", `${io.root}items/other.ttl`, `${io.root}trash/x.webp`],
+  ] as const) {
+    const item = `${io.root}items/${name}.ttl`;
+    await io.savePhoto(item, { ...photo, contentUrl, thumbnailUrl }, { create: true });
+    expect((await io.loadPhoto(item)).photo?.contentUrl).toBe(contentUrl);
+    expect(await photoResources(io, [`${item}#it`])).toEqual([item]);
+  }
+  // The library's own binaries still count.
+  expect(await photoResources(io, [ref])).toEqual([
+    ref.split("#")[0],
+    photo.contentUrl,
+    photo.thumbnailUrl,
+  ]);
 });
