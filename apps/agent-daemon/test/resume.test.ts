@@ -4,7 +4,17 @@ import { MemoryLedger } from "@jeswr/agent-audit";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { issueControlStatement, verifyControlStatement } from "@jeswr/agent-mandate/control";
 import type { ControlStatement } from "@jeswr/agent-model";
-import { lstat, mkdtemp, rename, rm, symlink, unlink, utimes, writeFile } from "fs/promises";
+import {
+  lstat,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  symlink,
+  unlink,
+  utimes,
+  writeFile,
+} from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -152,6 +162,36 @@ it("rejects stale, expired, future, wrong-owner and superseded Resumes and unava
     createCliHost({ ...f.options, resumeAuthority: undefined }).resume(),
   ).rejects.toThrow();
   expect(await f.local.halted()).toBe(true);
+});
+
+it("binds Resume freshness to the recorded stop time, under the lock, and keeps an undated HALT", async () => {
+  const f = await fixture();
+  const path = join(f.directory, "HALT");
+  await f.local.halt();
+  const recorded = Date.parse(/^halted (\S+)\n$/.exec(await readFile(path, "utf8"))?.[1] ?? "");
+  expect(Number.isFinite(recorded)).toBe(true);
+  // A back-dated mtime can't make an older Resume look fresh.
+  await utimes(path, new Date(0), new Date(0));
+  const seen: number[] = [];
+  const authorize = vi.fn(async (haltedAt: number) => {
+    seen.push(haltedAt);
+    // The dispatch fence is held while authorisation is checked.
+    expect(f.local.halted()).resolves.toBe(true);
+    await expect(lstat(join(f.directory, "halt.lock"))).resolves.toBeTruthy();
+    return false;
+  });
+  await expect(f.local.resume(authorize)).rejects.toThrow("fresh signed Resume");
+  expect(seen).toEqual([recorded]);
+  expect(await f.local.halted()).toBe(true);
+  await expect(lstat(join(f.directory, "halt.lock"))).rejects.toThrow();
+  for (const text of ["halted\n", "halted yesterday\n", "halted 2026-11-01T00:00:00Z"]) {
+    await rm(path);
+    await writeFile(path, text, { mode: 0o600 });
+    const allow = vi.fn(async () => true);
+    await expect(f.local.resume(allow)).rejects.toThrow("no recorded time");
+    expect(allow).not.toHaveBeenCalled();
+    expect(await f.local.halted()).toBe(true);
+  }
 });
 
 it("preserves a new halt arriving during Resume verification and refuses HALT symlinks", async () => {

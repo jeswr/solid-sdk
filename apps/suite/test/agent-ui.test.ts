@@ -473,7 +473,65 @@ it.each([
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })),
   );
   await until(() => Boolean(document.querySelector('[role="menuitem"]')));
-  expect(document.querySelector('[role="menuitem"]')?.textContent).toBe(label);
+  // A stop with no verified owner Halt behind it (a local `awp halt`) also offers Resume.
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+  ).toEqual(kind === "Halt" ? ["Resume"] : ["Stop the agent", "Resume"]);
+  await view.unmount();
+});
+
+it("offers a typed-confirmation Resume after a local-only stop and signs it only once confirmed", async () => {
+  const f = await fixture();
+  await setupApprovalKey(f.session);
+  const url = `${BASE}control/heartbeat.ttl`;
+  const store = new Store();
+  const node = metadataNode(store, url);
+  node.setIri(`${RDF}type`, `${AGENT}Heartbeat`);
+  node.setText(`${PROV}generatedAtTime`, new Date().toISOString());
+  node.setText(`${AGENT}state`, "stopped");
+  await f.pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serialize([...store], { format: "text/turtle" }),
+  });
+  const writes: string[] = [];
+  vi.spyOn(f.session, "fetch").mockImplementation(async (input, init) => {
+    if (String(input).startsWith(`${BASE}control/`) && init?.method === "PUT")
+      writes.push(String(init.body));
+    return f.pod.fetch(input, init);
+  });
+  const view = await mount(f.tree(h(SettingsScreen)));
+  await until(() => Boolean(view.host.querySelector('[aria-label="Agent status: Stopped"]')));
+  const buttons = () => [...view.host.querySelectorAll("button")].map((b) => b.textContent);
+  expect(buttons()).toContain("Stop the agent");
+  const resume = [...view.host.querySelectorAll("button")].find((b) => b.textContent === "Resume");
+  if (!resume) throw new Error("Missing Resume");
+  await click(resume);
+  await until(() => Boolean(document.querySelector('[role="alertdialog"]')));
+  const dialog = document.querySelector('[role="alertdialog"]');
+  expect(dialog?.textContent).toContain("Your agent says it was stopped on its computer.");
+  const save = [
+    ...document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+  ].find((button) => button.textContent === "Resume");
+  if (!save) throw new Error("Missing confirmation");
+  expect(save.disabled).toBe(true);
+  await click(save);
+  expect(writes).toEqual([]);
+  const input = document.querySelector<HTMLInputElement>("#agent-resume-confirmation");
+  if (!input) throw new Error("Missing confirmation input");
+  await act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      input,
+      "RESUME",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await until(() => !save.disabled);
+  await click(save);
+  await until(() => !document.querySelector('[role="alertdialog"]'));
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toContain("Resume");
+  expect(writes[0]).not.toContain("Halt");
   await view.unmount();
 });
 

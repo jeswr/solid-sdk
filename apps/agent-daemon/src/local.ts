@@ -40,6 +40,8 @@ async function readPrivate(path: string): Promise<string | undefined> {
     await file.close();
   }
 }
+/** HALT records its stop time so Resume freshness doesn't rest on the file's mtime alone. */
+const haltRecord = () => `halted ${new Date().toISOString()}\n`;
 async function writePrivate(directory: string, name: string, text: string) {
   const temporary = join(directory, `${randomUUID()}.tmp`);
   const file = await open(temporary, "wx", 0o600);
@@ -189,21 +191,30 @@ export function createLocalState(directory: string) {
       }
     },
     async halt() {
-      await writePrivate(directory, "HALT", "halted\n");
+      await writePrivate(directory, "HALT", haltRecord());
     },
-    /** The trusted host verifies a fresh owner Resume before removing the local stop. */
+    /**
+     * The trusted host verifies a fresh owner Resume before removing the local stop. The
+     * check runs under halt.lock (the dispatch fence), against the stop time recorded in
+     * HALT and its mtime, whichever is later; a HALT without a readable time is kept.
+     */
     async resume(authorize: (haltedAt: number) => Promise<boolean>) {
       const path = join(directory, "HALT");
-      let halted: Awaited<ReturnType<typeof lstat>>;
       try {
-        halted = await lstat(path);
+        await lstat(path);
       } catch (error) {
         if (missing(error)) return false;
         throw error;
       }
-      if (!halted.isFile() || !(await authorize(halted.mtimeMs)))
-        throw new Error("A fresh signed Resume is required");
       await mutateHalt(async () => {
+        const halted = await lstat(path);
+        if (!halted.isFile()) throw new Error("A fresh signed Resume is required");
+        const recorded = /^halted (\S+)\n$/.exec((await readPrivate(path)) ?? "")?.[1];
+        const at = Date.parse(recorded ?? "");
+        if (!Number.isFinite(at))
+          throw new Error("This local stop has no recorded time, so it was kept");
+        if (!(await authorize(Math.max(at, halted.mtimeMs))))
+          throw new Error("A fresh signed Resume is required");
         const current = await lstat(path);
         if (
           current.ino !== halted.ino ||
@@ -236,7 +247,7 @@ export function createLocalState(directory: string) {
         } catch (error) {
           // Keep any new Halt, or restore one if the renamed file was newer or
           // a filesystem failure prevented us from establishing absence.
-          await writePrivate(directory, "HALT", "halted\n");
+          await writePrivate(directory, "HALT", haltRecord());
           await unlink(removed).catch(() => {});
           throw error;
         }

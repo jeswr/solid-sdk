@@ -52,6 +52,7 @@ export function StatusPill({ status }: { status: AgentStatus }) {
       {status.demo && <small>Demo agent</small>}
       <AgentControl
         stopped={status.ownerHalted === true}
+        localStop={status.state === "stopped" && status.ownerHalted !== true}
         unknown={status.controlLimit === true}
         triggerLabel={`Agent status: ${labels[status.state]}${status.demo ? " (demo)" : ""}`}
         trigger={

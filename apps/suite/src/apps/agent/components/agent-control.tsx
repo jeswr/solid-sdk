@@ -21,6 +21,7 @@ import { useApprovalDevice } from "./approval-key-setup-sheet";
 export function AgentControl({
   stopped,
   unknown = false,
+  localStop = false,
   link = false,
   trigger,
   triggerLabel,
@@ -28,6 +29,11 @@ export function AgentControl({
 }: {
   stopped: boolean;
   unknown?: boolean;
+  /**
+   * The agent reports a stop that has no signed owner Halt (for example `awp halt` on its
+   * computer). Resume is offered alongside Stop; it still needs a signed, confirmed Resume.
+   */
+  localStop?: boolean;
   link?: boolean;
   trigger?: ReactNode;
   triggerLabel?: string;
@@ -42,6 +48,8 @@ export function AgentControl({
   const [error, setError] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const label = stopped ? "Resume" : "Stop the agent";
+  // An extra Resume, never derived from unsigned state alone: confirming it signs a Resume.
+  const extraResume = !stopped && (unknown || localStop);
   const begin = (resume: boolean) =>
     void device.requireKey(() => {
       setResume(resume);
@@ -78,13 +86,26 @@ export function AgentControl({
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem onSelect={() => begin(stopped)}>{label}</DropdownMenuItem>
-            {unknown && <DropdownMenuItem onSelect={() => begin(true)}>Resume</DropdownMenuItem>}
+            {extraResume && (
+              <DropdownMenuItem onSelect={() => begin(true)}>Resume</DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (
-        <Button ref={triggerRef} variant={link ? "link" : "outline"} onClick={() => begin(stopped)}>
-          {label}
-        </Button>
+        <>
+          <Button
+            ref={triggerRef}
+            variant={link ? "link" : "outline"}
+            onClick={() => begin(stopped)}
+          >
+            {label}
+          </Button>
+          {extraResume && (
+            <Button variant={link ? "link" : "outline"} onClick={() => begin(true)}>
+              Resume
+            </Button>
+          )}
+        </>
       )}
       <AlertDialog
         open={open}
@@ -108,6 +129,12 @@ export function AgentControl({
           </AlertDialogDescription>
           {resume && (
             <>
+              {localStop && !stopped && (
+                <p>
+                  Your agent says it was stopped on its computer. Resuming here records that you
+                  want it running again.
+                </p>
+              )}
               <p>
                 If you also stopped it on the agent's computer, run <code>awp resume</code> there.
               </p>

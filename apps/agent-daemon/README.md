@@ -122,12 +122,23 @@ every signed Resume, and the executor checks it on every gate pass. Heartbeats
 continue every 60 seconds and report `running`, `paused` (no current valid permission),
 or `stopped` (signed Halt or local HALT). The UI accepts heartbeat state for two minutes;
 an active signed Halt continues to show Stopped even if the daemon is offline.
+When the daemon reports a stop with no signed Halt behind it (a local `awp halt`),
+the UI also offers Resume, which signs an owner Resume only after you type RESUME.
+The heartbeat state only decides whether the button is shown; it is never authority.
+
+`HALT` records its stop time (`halted <ISO time>`). The executor checks it before
+each dispatch, but the check and the send are not one atomic step across processes:
+a send that has already passed its final check can still go out after `awp halt`
+writes the file. A local stop guarantees that no new dispatch starts after it is
+visible, not that an in-flight send is recalled.
 
 To resume, confirm Resume in the UI, then run `awp resume` on the agent's computer
 if HALT exists. The host must supply `createCliHost({ resumeAuthority: {
 ownerWebId, controls } })`, using the executor's **owner-proof-verifying** control
 adapter. The command removes HALT only after a current verified Resume newer than
-the file, with no newer Halt, and fsyncs the directory. Missing verification,
+the stop time recorded in the file (and its modification time), with no newer Halt,
+and fsyncs the directory. Authorisation is checked again while holding `halt.lock`,
+and a HALT without a readable recorded time is kept. Missing verification,
 expired/future statements, symlinks and a file replaced during verification fail
 closed. Clearing the file never replaces the executor's signed-control and
 permission checks. Resume is idempotent when the file is already absent, and reports
@@ -137,7 +148,8 @@ After a crashed Resume, establish that the lock holder has stopped before removi
 the leftover `halt.lock`; `awp halt` remains available throughout recovery.
 
 The Resume must be signed **after** the local stop. Its browser timestamp is compared
-strictly with HALT's modification time on the agent's computer. Clock skew between
+strictly with the later of HALT's recorded stop time and its modification time on
+the agent's computer. Clock skew between
 devices can delay or refuse resume; refusal is the safe direction. Correct the clocks
 and sign a new Resume if needed. The command also refuses future-dated statements.
 

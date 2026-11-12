@@ -16,7 +16,10 @@ export function SettingsScreen() {
         <ErrorState error="unreachable" actions={{ retry: status.query.reload }} />
       )}
       <StatusPill status={status} />
-      <AgentControl stopped={status.ownerHalted === true} />
+      <AgentControl
+        stopped={status.ownerHalted === true}
+        localStop={status.state === "stopped" && status.ownerHalted !== true}
+      />
       <article className="agent-card">
         <h2>Approval key on this device</h2>
         <p>
