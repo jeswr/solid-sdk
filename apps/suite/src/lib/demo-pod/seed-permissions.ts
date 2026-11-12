@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralFrom,
@@ -83,7 +84,13 @@ export async function seedPermissions(
         .iri(`${ACL}mode`, `${ACL}Read`);
     }),
     document("health/.acl", root, now, (node) => {
-      const resource = auth(node, "health/", true);
+      // Health verifies both this container and its default policy before saving.
+      auth(node, "health/", true);
+    }),
+    document("health/activity.ttl.acl", root, now, (node) => {
+      // The permissions demo shares only the fictional Activity document. Its
+      // policy must never apply to Health's measurements or clinical records.
+      const resource = auth(node, "health/activity.ttl", false);
       node(`${resource}.acl#maracoach`)
         .iri(`${NS.RDF}type`, `${ACL}Authorization`)
         .iri(`${ACL}origin`, APP)
