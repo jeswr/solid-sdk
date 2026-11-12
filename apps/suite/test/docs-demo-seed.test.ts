@@ -46,7 +46,13 @@ it("opens every seeded Docs document through the editor loader with its title an
   // Inspect the seed itself so a document silently omitted from list() cannot escape testing.
   const documents = [];
   for (const file of seed) {
-    if (file.contentType !== "text/turtle" || file.path.endsWith("/")) continue;
+    // Template content snapshots are Docs-shaped but are not documents (sst-3yw7).
+    if (
+      file.path.startsWith("templates/") ||
+      file.contentType !== "text/turtle" ||
+      file.path.endsWith("/")
+    )
+      continue;
     const url = new URL(file.path, DEMO_ROOT).href;
     const { dataset } = await fetchRdf(url, { fetch: pod.fetch });
     const data = parseDocument(url, dataset);

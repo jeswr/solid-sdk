@@ -11,6 +11,8 @@ export type {
   MovePreservingAccessResult,
 } from "./move.js";
 export { movePreservingAccess } from "./move.js";
+export type { PrivateAccessSession, PrivateContainerOptions } from "./private-access.js";
+export { ensurePrivateContainerAccess, verifyPrivateDemoAccess } from "./private-access.js";
 export type {
   AgentRef,
   GrantMutationOptions,

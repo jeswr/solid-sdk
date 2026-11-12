@@ -1,0 +1,19 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# A template is a CreativeWork profile. No sector defines reusable app templates.
+# schema:about is narrowed to the four suite app slugs; schema:url links the content.
+@prefix template: <https://jeswr.org/ns/templates#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix schema: <http://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+[] a sh:NodeShape ; sh:targetClass template:Template ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:pattern "\\S" ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path schema:about ; sh:name "app" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:in ( "docs" "sheets" "notes" "tasks" ) ] ;
+  sh:property [ sh:path schema:genre ; sh:name "category" ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minCount 1 ; sh:pattern "\\S" ] ;
+  sh:property [ sh:path schema:text ; sh:name "previewText" ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+  sh:property [ sh:path schema:image ; sh:name "previewImage" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path schema:url ; sh:name "content" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:pattern "^https?://" ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+  sh:property [ sh:path dct:creator ; sh:name "author" ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ] .

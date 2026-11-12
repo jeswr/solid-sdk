@@ -438,3 +438,13 @@ wraps such controls: transparent while online; offline it disables them and expl
 keyboard- and pointer-reachable tooltip (default `OFFLINE_REASON`, "You're offline. This needs a
 connection."). Its trigger is a span, so it stays focusable inside a disabled fieldset. `ConflictDialog` calls `onChoose`
 with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Template gallery
+
+`TemplateGallery` presents built-in and pod templates in a responsive dialog. Pass
+`items`, `onChoose`, `open` and `onOpenChange`; each item has `id`, `name`, `category`,
+`source` (`builtin` or `user`) and optional description, app and preview. Category and
+source filters, native buttons, arrow/Home/End navigation, loading/error/retry states
+and optional `onDelete` are included. `busy` disables choices and dismissal while the
+caller creates an item. Load `styles/components.css` for token-based light/dark styles.
