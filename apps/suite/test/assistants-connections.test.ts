@@ -20,6 +20,10 @@ import {
 
 const at = Date.parse("2026-11-11T10:00:00Z");
 const signal = () => new AbortController().signal;
+function withoutLastUsed<T extends { lastUsed?: Date }>(record: T): Omit<T, "lastUsed"> {
+  const { lastUsed: _lastUsed, ...rest } = record;
+  return rest;
+}
 function session(fetch: typeof globalThis.fetch): PodSession {
   return {
     mode: "solid",
@@ -48,7 +52,8 @@ describe("connection list and owner disconnect", () => {
     expect(first).toBeDefined();
     if (!first) throw new Error();
     expect(connectionName(first)).toBe("Demo assistant");
-    expect(connectionName({ ...first, title: undefined })).toBe("mcp.example");
+    const { title: _title, ...untitled } = first;
+    expect(connectionName(untitled)).toBe("mcp.example");
     expect(connectionStatus(first, at)).toBe("Active");
     expect(connectionStatus(first, at + 31 * 86400000)).toBe("Expired");
     expect(connectionStatus({ ...first, revokedAt: new Date(at) }, at)).toBe(
@@ -224,7 +229,7 @@ describe("connection list and owner disconnect", () => {
       await f.pod.fetch(url, {
         method: "PUT",
         headers: { "content-type": "text/turtle" },
-        body: buildConnectionRecord(url, { ...record, lastUsed: undefined, created: new Date(at) }),
+        body: buildConnectionRecord(url, { ...withoutLastUsed(record), created: new Date(at) }),
       });
     const result = await listConnections(f.account, signal());
     expect(result.rows.map(({ url }) => url)).toEqual(original.rows.map(({ url }) => url).sort());
