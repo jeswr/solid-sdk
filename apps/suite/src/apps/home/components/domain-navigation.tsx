@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { en } from "@jeswr/suite-i18n";
-import { useT } from "@jeswr/suite-i18n/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -10,6 +9,7 @@ import { DOMAINS } from "../lib/model/domains";
 import { shortcutsEnabled } from "../state/shortcuts";
 import { DomainIcon } from "./domain-icon";
 import { domainHref } from "./home-sidebar";
+import { useHomeLabels } from "./use-home-labels";
 
 export function DomainNavigation({
   domains,
@@ -20,7 +20,7 @@ export function DomainNavigation({
   active: string;
   counts: ReadonlyMap<string, number>;
 }) {
-  const t = useT();
+  const labels = useHomeLabels();
   const row = useRef<HTMLFieldSetElement>(null);
   const router = useRouter();
   // biome-ignore lint/correctness/useExhaustiveDependencies: scroll on route changes and when counts first appear
@@ -66,11 +66,7 @@ export function DomainNavigation({
             aria-current={domain.id === active ? "page" : undefined}
           >
             <DomainIcon name={domain.icon} />
-            <span>
-              {Object.hasOwn(en.home.domains, domain.id)
-                ? t(`home.domains.${domain.id as keyof typeof en.home.domains}`)
-                : domain.label}
-            </span>
+            <span>{labels.domain(domain)}</span>
             {(counts.get(domain.id) ?? 0) > 0 ? (
               <span className="hm-nav-count">
                 <span className="hm-sr-only">, </span>

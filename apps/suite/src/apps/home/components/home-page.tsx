@@ -1,7 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { en } from "@jeswr/suite-i18n";
 import { useT } from "@jeswr/suite-i18n/react";
 import {
   Button,
@@ -37,9 +36,11 @@ import { HomeHeader } from "./home-header";
 import { AddManuallySheet } from "./item/add-manually-sheet";
 import { itemShortcut } from "./item/shortcuts";
 import { useItemActions } from "./item/use-item-actions";
+import { useHomeLabels } from "./use-home-labels";
 
 export function HomePage({ domain }: { domain: string }) {
   const t = useT();
+  const labels = useHomeLabels();
   const session = useHomeSession();
   const loaded = useDomainItems(session);
   const access = useHomeAccess(session, loaded.updated);
@@ -64,9 +65,7 @@ export function HomePage({ domain }: { domain: string }) {
   const items = data.items.filter((item) => item.domain.id === entry.id);
   const sections = sectionsFor(entry, items, selected, limit).map((section) => ({
     ...section,
-    label: Object.hasOwn(en.home.types, section.id)
-      ? t(`home.types.${section.id as keyof typeof en.home.types}`)
-      : section.label,
+    label: labels.type(section),
   }));
   const sources = connectedSources(items, session.storageUrl);
   const [online, setOnline] = useState(true);
@@ -141,9 +140,7 @@ export function HomePage({ domain }: { domain: string }) {
         <div className="hm-domain-heading">
           <h2 id="hm-domain-heading">
             <DomainIcon name={entry.icon} size={24} />
-            {Object.hasOwn(en.home.domains, entry.id)
-              ? t(`home.domains.${entry.id as keyof typeof en.home.domains}`)
-              : entry.label}
+            {labels.domain(entry)}
           </h2>
           {canAdd ? (
             <Button ref={addButton} variant="outline" onClick={openAdd} disabled={!online}>
@@ -157,7 +154,7 @@ export function HomePage({ domain }: { domain: string }) {
           </p>
         ) : null}
         <FilterChips
-          label={`${Object.hasOwn(en.home.domains, entry.id) ? t(`home.domains.${entry.id as keyof typeof en.home.domains}`) : entry.label} data types`}
+          label={t("home.dataTypes", { domain: labels.domain(entry) })}
           options={entry.dataTypes}
           value={selected}
           onChange={filter}

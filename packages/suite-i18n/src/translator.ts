@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createFormatters, negotiateLocale } from "./locale.js";
-import { formatMessage, messageParameters } from "./message.js";
+import { type CompiledMessage, compileMessage, messageParameters } from "./message.js";
 import type { Catalog, Parameters, PartialCatalog, Translator } from "./types.js";
 
 function lookup(catalog: unknown, key: string): unknown {
@@ -65,6 +66,16 @@ export function createI18n<const C extends Catalog>({
   warn,
 }: I18nOptions<C>): I18n<C> {
   const locale = negotiateLocale(requested, [], ["en", ...Object.keys(catalogs)]);
+  // Catalog strings are finite, so parse each one once per translator.
+  const compiled = new Map<string, CompiledMessage>();
+  const formatMessage = (source: string, params: Parameters | undefined, target: string) => {
+    let message = compiled.get(source);
+    if (!message) {
+      message = compileMessage(source);
+      compiled.set(source, message);
+    }
+    return message(params, target);
+  };
   const translate = (key: string, params?: Parameters): string => {
     const original = lookup(english, key);
     const localized = locale === "en" ? original : lookup(catalogs[locale], key);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Machine-translated; native-speaker review is welcome.
 import type { PartialCatalog } from "../types.js";
 import type { en } from "./en.js";
@@ -94,14 +95,68 @@ export const fr = {
     emptyBody: "Les nouvelles notifications apparaîtront ici.",
     today: "Aujourd'hui",
     earlier: "Plus tôt",
-    unread: "Notifications, {count} non lues",
+    unread: "{count, plural, one {Notifications, # non lue} other {Notifications, # non lues}}",
     "new": "{count, plural, one {# nouvelle notification} other {# nouvelles notifications}}",
+  },
+  navigation: {
+    apps: "Applications",
+    more: "Plus",
+    moreApps: "Plus d'applications",
+    closeApps: "Fermer les applications",
+    filter: "Filtrer les applications",
+    refreshing: "Actualisation des préférences d'applications",
+    noneAvailable: "Aucune application disponible",
+    nonePinned: "Aucune application épinglée pour l'instant",
+    chooseApps: "Choisir des applications",
+    found: "{count, plural, one {# application trouvée} other {# applications trouvées}}",
+    available: "Applications disponibles",
+    noResults: "Aucun résultat pour « {filter} »",
+    clearFilters: "Effacer les filtres",
+    comingSoon: "Bientôt disponible",
+    comingSoonApps: "Applications bientôt disponibles",
+    noComingSoon: "Aucune application à venir ne correspond à ce filtre.",
+    create: "Créer",
+    customise: "Personnaliser la barre",
+    customiseHelp:
+      "Épinglez jusqu'à 6 applications. Faites-les glisser pour les réordonner, ou utilisez les cases à cocher et les boutons Monter/Descendre.",
+    pinnedCount:
+      "{count, plural, one {# application épinglée sur 6} other {# applications épinglées sur 6}}",
+    saving: "Enregistrement…",
+    railUnavailable:
+      "Les réglages de la barre seront disponibles une fois vos préférences d'applications chargées",
+    pinnedApps: "Applications épinglées",
+    drag: "Faire glisser {name} pour l'épingler ou le déplacer",
+    moveUp: "Monter {name}",
+    moveDown: "Descendre {name}",
+    loadingPinned: "Chargement des applications épinglées",
+    loadingApps: "Chargement des applications",
+  },
+  startup: {
+    title: "Mise à jour nécessaire",
+    body: "Il manque à la vue web de cet appareil des fonctions dont Solid Suite a besoin pour sécuriser votre connexion. Mettez à jour le système (et, sur Android, Android System WebView), puis rouvrez l'application.",
   },
   common: {
     retry: "Réessayer",
     close: "Fermer",
   },
   signin: {
+    errors: {
+      "invalid-url": "Aucun service de connexion trouvé à cette adresse",
+      unavailable: "La connexion n'est pas disponible ici. Veuillez réessayer.",
+      "issuer-not-authorized":
+        "Ce compte ne fait pas confiance à ce fournisseur. Essayez votre propre fournisseur ou votre WebID.",
+      "ambiguous-issuer":
+        "Votre WebID indique plusieurs fournisseurs. Saisissez l'adresse de votre fournisseur pour continuer.",
+      cancelled: "La connexion a été annulée.",
+      "popup-blocked":
+        "Autorisez les fenêtres pop-up pour Solid Suite, puis réessayez de vous connecter.",
+      "account-active":
+        "Déconnectez-vous de votre compte Solid actuel avant de vous connecter à un autre compte.",
+      "in-progress": "Une connexion est déjà en cours.",
+      "invalid-identity":
+        "Ce compte a besoin d'un WebID et d'un stockage de pod pour utiliser Solid Suite.",
+      failed: "Connexion impossible. Veuillez réessayer.",
+    },
     unavailable:
       "La création de compte n'est pas encore proposée ici. Connectez-vous avec un compte existant.",
     demoFailed: "Impossible d'ouvrir le pod de démonstration. Veuillez réessayer.",
@@ -142,12 +197,13 @@ export const fr = {
   },
   home: {
     morning: "Bonjour, {name}",
-    afternoon: "Bon après-midi, {name}",
+    afternoon: "Bonjour, {name}",
     evening: "Bonsoir, {name}",
     intro: "Voici le contenu de votre pod et qui peut le voir.",
     pod: "Votre pod",
     empty: "Rien pour le moment",
     noMatches: "Aucun élément ne correspond à ces filtres",
+    dataTypes: "Types de données : {domain}",
     domains: {
       personal: "Personnel",
       documents: "Documents",
@@ -161,7 +217,7 @@ export const fr = {
       socials: "Réseaux sociaux",
     },
     morningNoName: "Bonjour",
-    afternoonNoName: "Bon après-midi",
+    afternoonNoName: "Bonjour",
     eveningNoName: "Bonsoir",
     types: {
       identity: "Identité",

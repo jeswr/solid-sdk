@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it, vi } from "vitest";
 import {
   catalogs,
+  compileMessage,
   createI18n,
   createSuiteI18n,
   en,
@@ -129,7 +131,50 @@ describe("message grammar", () => {
   });
 });
 
+describe("compiled messages", () => {
+  it("parses once and formats repeatedly for any locale", () => {
+    const message = compileMessage("{n, plural, one {# file} other {# files}}");
+    expect(message({ n: 1 })).toBe("1 file");
+    expect(message({ n: 1234 }, "de")).toBe(`${new Intl.NumberFormat("de").format(1234)} files`);
+    expect(compileMessage("plain")()).toBe("plain");
+    expect(() => compileMessage("{")).toThrow(SyntaxError);
+    expect(() => message({})).toThrow("Missing parameter n");
+  });
+});
+
+function keys(catalog: object, prefix = ""): string[] {
+  return Object.entries(catalog).flatMap(([key, value]) =>
+    typeof value === "string" ? [`${prefix}${key}`] : keys(value, `${prefix}${key}.`),
+  );
+}
+
 describe("catalog contracts", () => {
+  it.each(Object.entries(catalogs))("%s translates every English key", (_locale, catalog) => {
+    expect(keys(en).filter((key) => !keys(catalog).includes(key))).toEqual([]);
+  });
+  it.each([
+    ["en", [0, 1, 2, 5], ["Notifications, 0 unread", "Notifications, 1 unread"]],
+    ["fr", [0, 1, 2], ["Notifications, 0 non lue", "Notifications, 2 non lues"]],
+    [
+      "ar",
+      [0, 1, 2, 3, 11, 100],
+      [
+        "الإشعارات، لا توجد إشعارات غير مقروءة",
+        "الإشعارات، إشعار واحد غير مقروء",
+        "الإشعارات، إشعاران غير مقروءين",
+        "الإشعارات، 3 إشعارات غير مقروءة",
+        "الإشعارات، 11 إشعارًا غير مقروء",
+        "الإشعارات، 100 إشعار غير مقروء",
+      ],
+    ],
+  ] as const)("pluralises unread notifications in %s", (locale, counts, expected) => {
+    const { t } = createSuiteI18n(locale);
+    const labels = counts.map((count) => t("notifications.unread", { count }));
+    for (const label of expected) expect(labels).toContain(label);
+    expect(createSuiteI18n("de").t("notifications.unread", { count: 1234 })).toBe(
+      `Benachrichtigungen, ${new Intl.NumberFormat("de").format(1234)} ungelesen`,
+    );
+  });
   it("validates every English source message even before it has a translation", () => {
     expect(validateCatalog(en, en)).toEqual([]);
   });

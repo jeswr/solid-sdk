@@ -64,7 +64,7 @@
 .suite-rail-button[aria-current="page"]::before {
   content: "";
   position: absolute;
-  left: -8px;
+  inset-inline-start: -8px;
   top: 8px;
   bottom: 8px;
   width: 3px;
@@ -389,7 +389,7 @@
     min-height: 44px;
   }
   .suite-rail-button[aria-current="page"]::before {
-    left: -6px;
+    inset-inline-start: -6px;
   }
   .suite-launcher button,
   .suite-launcher summary,

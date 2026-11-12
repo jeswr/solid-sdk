@@ -1,9 +1,29 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { dir, negotiateLocale } from "@jeswr/suite-i18n";
+import {
+  DEVICE_LOCALE_KEY,
+  dir,
+  type Locale,
+  localeNames,
+  locales,
+  negotiateLocale,
+  readDeviceLocale,
+  writeDeviceLocale,
+} from "@jeswr/suite-i18n";
 import { I18nProvider, useLocale, useT } from "@jeswr/suite-i18n/react";
-import { type ReactNode, useLayoutEffect, useState } from "react";
-import { usePreferences } from "./settings/preferences";
+import { DirectionProvider } from "@jeswr/suite-ui";
+import { Languages } from "lucide-react";
+import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
+import { useAllPreferences } from "./settings/preferences";
+
+type Choice = Locale | "";
+interface LanguageChoice {
+  /** The explicit choice in effect ("" follows the browser). */
+  value: Choice;
+  choose(value: Choice): void;
+}
+const LanguageContext = createContext<LanguageChoice | null>(null);
 
 function DocumentLocale() {
   const locale = useLocale();
@@ -14,22 +34,95 @@ function DocumentLocale() {
   return null;
 }
 
-/** English on the server and first hydration; browser negotiation happens before paint. */
+/**
+ * English on the server and first hydration; the stored choice and browser languages apply
+ * before paint. An account's explicit choice wins once its preferences load. Until then (signed
+ * out, or while the session restores) the device-level choice applies, which mirrors the last
+ * explicit choice made here, so a reload or the sign-in page paints in it straight away.
+ */
 export function SuiteI18nProvider({ children }: { children: ReactNode }) {
-  const preference = usePreferences("locale");
+  const { preferences, ready, update } = useAllPreferences();
+  const [device, setDevice] = useState<Choice>("");
   const [languages, setLanguages] = useState<readonly string[]>([]);
   useLayoutEffect(() => {
-    const update = () => setLanguages(navigator.languages);
-    update();
-    window.addEventListener("languagechange", update);
-    return () => window.removeEventListener("languagechange", update);
+    const browser = () => setLanguages(navigator.languages);
+    const storage = (event: StorageEvent) => {
+      if (event.key === DEVICE_LOCALE_KEY || event.key === null) setDevice(readDeviceLocale());
+    };
+    browser();
+    setDevice(readDeviceLocale());
+    addEventListener("languagechange", browser);
+    addEventListener("storage", storage);
+    return () => {
+      removeEventListener("languagechange", browser);
+      removeEventListener("storage", storage);
+    };
   }, []);
-  const locale = negotiateLocale(preference.value, languages);
+  const account = ready ? preferences.locale : "";
+  useLayoutEffect(() => {
+    if (account && account !== device) {
+      writeDeviceLocale(account);
+      setDevice(account);
+    }
+  }, [account, device]);
+  const value = account || device;
+  const choose = (next: Choice) => {
+    writeDeviceLocale(next);
+    setDevice(next);
+    // A no-op while signed out; the device choice carries over to the next sign-in.
+    update("locale", next);
+  };
+  const locale = negotiateLocale(value, languages);
   return (
     <I18nProvider locale={locale}>
-      <DocumentLocale />
-      {children}
+      <DirectionProvider dir={dir(locale)}>
+        <LanguageContext.Provider value={{ value, choose }}>
+          <DocumentLocale />
+          {children}
+        </LanguageContext.Provider>
+      </DirectionProvider>
     </I18nProvider>
+  );
+}
+
+/** The language picker's binding: the account preference, or the device choice when signed out. */
+export function useLanguageChoice(): LanguageChoice {
+  const context = useContext(LanguageContext);
+  if (!context) throw new Error("useLanguageChoice requires SuiteI18nProvider");
+  return context;
+}
+
+export function LanguageSelect(props: {
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-label"?: string;
+}) {
+  const t = useT();
+  const language = useLanguageChoice();
+  return (
+    <select
+      {...props}
+      value={language.value}
+      onChange={(event) => language.choose(event.target.value as Choice)}
+    >
+      <option value="">{t("settings.automatic")}</option>
+      {locales.map((locale) => (
+        <option key={locale} value={locale} lang={locale}>
+          {localeNames[locale]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Compact picker for pages shown before sign-in. */
+export function LanguagePicker() {
+  const t = useT();
+  return (
+    <span className="shell-language">
+      <Languages size={16} strokeWidth={1.75} aria-hidden="true" />
+      <LanguageSelect aria-label={t("settings.languageLabel")} />
+    </span>
   );
 }
 

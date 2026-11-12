@@ -152,7 +152,7 @@ export function SignInCard({
                   setView("accounts");
                 }}
               >
-                <ArrowLeft size={20} aria-hidden="true" />
+                <ArrowLeft size={20} className="suite-rtl-mirror" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
             <TooltipContent>{t("signin.back")}</TooltipContent>

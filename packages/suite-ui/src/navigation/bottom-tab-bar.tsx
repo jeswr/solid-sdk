@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
 import { AppGlyph, mobileApps, suiteApps, useNavigationApps } from "./apps.js";
 
@@ -9,9 +11,10 @@ export function BottomTabBar({
   currentApp,
   apps: suppliedApps = suiteApps,
 }: Omit<AppLauncherProps, "trigger">) {
+  const t = useT();
   const apps = useNavigationApps(suppliedApps);
   return (
-    <nav className="suite-bottom-tabs" aria-label="Apps">
+    <nav className="suite-bottom-tabs" aria-label={t("navigation.apps")}>
       {mobileApps.map((slug) => {
         const app = apps.find(
           (item) =>

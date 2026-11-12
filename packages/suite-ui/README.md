@@ -423,3 +423,12 @@ with `mine`, `theirs` or `both`; the caller applies the choice and controls when
 Navigation's built-in app names and `SignInCard` controls use the shared
 `I18nProvider` from `@jeswr/suite-i18n/react`. Standalone use defaults to English;
 explicit host app names and sign-in titles remain authoritative.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Navigation chrome (launcher, customise panel, loading and empty states, landmarks) is
+translated the same way. The host must share one `@jeswr/suite-i18n` copy with suite-ui,
+or these components fall back to English. `DirectionProvider` and `useDirection` re-export
+Radix's direction context: wrap the app in `<DirectionProvider dir={dir(locale)}>` so menus,
+popovers and the launcher grid's arrow keys follow RTL. Shell, navigation and sign-in styles
+use logical properties; add `suite-rtl-mirror` to a directional icon to flip it under
+`[dir="rtl"]`.

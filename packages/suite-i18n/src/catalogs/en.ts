@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 export const en = {
   apps: {
     home: "Home",
@@ -91,14 +92,64 @@ export const en = {
     emptyBody: "New notifications will appear here.",
     today: "Today",
     earlier: "Earlier",
-    unread: "Notifications, {count} unread",
+    unread: "{count, plural, one {Notifications, # unread} other {Notifications, # unread}}",
     "new": "{count, plural, one {# new notification} other {# new notifications}}",
+  },
+  navigation: {
+    apps: "Apps",
+    more: "More",
+    moreApps: "More apps",
+    closeApps: "Close apps",
+    filter: "Filter apps",
+    refreshing: "Refreshing app preferences",
+    noneAvailable: "No apps available",
+    nonePinned: "No apps pinned yet",
+    chooseApps: "Choose apps",
+    found: "{count, plural, one {# app found} other {# apps found}}",
+    available: "Available apps",
+    noResults: "No results for '{filter}'",
+    clearFilters: "Clear filters",
+    comingSoon: "Coming soon",
+    comingSoonApps: "Coming soon apps",
+    noComingSoon: "No coming-soon apps match this filter.",
+    create: "Create",
+    customise: "Customise rail",
+    customiseHelp:
+      "Pin up to 6 apps. Drag to reorder, or use the checkboxes and Move up/down buttons.",
+    pinnedCount: "{count, plural, other {# of 6 apps pinned}}",
+    saving: "Saving…",
+    railUnavailable: "Rail settings are unavailable until your app preferences load",
+    pinnedApps: "Pinned apps",
+    drag: "Drag {name} to pin or reorder",
+    moveUp: "Move {name} up",
+    moveDown: "Move {name} down",
+    loadingPinned: "Loading pinned apps",
+    loadingApps: "Loading apps",
+  },
+  startup: {
+    title: "Update needed",
+    body: "This device's web view is missing features Solid Suite needs to keep your sign-in safe. Update the system (and, on Android, Android System WebView), then open the app again.",
   },
   common: {
     retry: "Retry",
     close: "Close",
   },
   signin: {
+    errors: {
+      "invalid-url": "We couldn't find a sign-in service at that address",
+      unavailable: "Sign-in isn't available here. Please try again.",
+      "issuer-not-authorized":
+        "That account doesn't trust this provider. Try your own provider or your WebID.",
+      "ambiguous-issuer":
+        "Your WebID lists several providers. Enter your provider's address to continue.",
+      cancelled: "Sign-in was cancelled.",
+      "popup-blocked": "Allow popups for Solid Suite, then try signing in again.",
+      "account-active":
+        "Sign out of your current Solid account before signing in to another account.",
+      "in-progress": "A sign-in is already in progress.",
+      "invalid-identity": "This account needs a WebID and one pod storage to use Solid Suite.",
+      failed: "We couldn't sign you in. Please try again.",
+    },
     unavailable: "Account creation isn't offered here yet — sign in with an existing account.",
     demoFailed: "We couldn't open the demo pod. Please try again.",
     title: "Sign in to Solid Suite",
@@ -144,6 +195,7 @@ export const en = {
     pod: "Your pod",
     empty: "Nothing here yet",
     noMatches: "No items match these filters",
+    dataTypes: "{domain} data types",
     domains: {
       personal: "Personal",
       documents: "Documents",

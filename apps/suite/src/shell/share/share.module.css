@@ -12,7 +12,7 @@
   display: flex;
   gap: 12px;
   align-items: center;
-  padding-right: 32px;
+  padding-inline-end: 32px;
 }
 .header > div {
   min-width: 0;

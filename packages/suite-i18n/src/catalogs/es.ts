@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Machine-translated; native-speaker review is welcome.
 import type { PartialCatalog } from "../types.js";
 import type { en } from "./en.js";
@@ -94,14 +95,68 @@ export const es = {
     emptyBody: "Las nuevas notificaciones aparecerán aquí.",
     today: "Hoy",
     earlier: "Anteriores",
-    unread: "Notificaciones, {count} sin leer",
+    unread: "{count, plural, one {Notificaciones, # sin leer} other {Notificaciones, # sin leer}}",
     "new": "{count, plural, one {# nueva notificación} other {# nuevas notificaciones}}",
+  },
+  navigation: {
+    apps: "Aplicaciones",
+    more: "Más",
+    moreApps: "Más aplicaciones",
+    closeApps: "Cerrar aplicaciones",
+    filter: "Filtrar aplicaciones",
+    refreshing: "Actualizando las preferencias de aplicaciones",
+    noneAvailable: "No hay aplicaciones disponibles",
+    nonePinned: "Aún no hay aplicaciones fijadas",
+    chooseApps: "Elegir aplicaciones",
+    found: "{count, plural, one {# aplicación encontrada} other {# aplicaciones encontradas}}",
+    available: "Aplicaciones disponibles",
+    noResults: "No hay resultados para «{filter}»",
+    clearFilters: "Borrar filtros",
+    comingSoon: "Próximamente",
+    comingSoonApps: "Aplicaciones próximamente",
+    noComingSoon: "Ninguna aplicación próxima coincide con este filtro.",
+    create: "Crear",
+    customise: "Personalizar barra",
+    customiseHelp:
+      "Fija hasta 6 aplicaciones. Arrastra para reordenar o usa las casillas y los botones Subir/Bajar.",
+    pinnedCount:
+      "{count, plural, one {# de 6 aplicaciones fijada} other {# de 6 aplicaciones fijadas}}",
+    saving: "Guardando…",
+    railUnavailable:
+      "Los ajustes de la barra no están disponibles hasta que se carguen tus preferencias de aplicaciones",
+    pinnedApps: "Aplicaciones fijadas",
+    drag: "Arrastra {name} para fijarla o reordenarla",
+    moveUp: "Subir {name}",
+    moveDown: "Bajar {name}",
+    loadingPinned: "Cargando aplicaciones fijadas",
+    loadingApps: "Cargando aplicaciones",
+  },
+  startup: {
+    title: "Actualización necesaria",
+    body: "Al visor web de este dispositivo le faltan funciones que Solid Suite necesita para proteger tu inicio de sesión. Actualiza el sistema (y, en Android, Android System WebView) y vuelve a abrir la aplicación.",
   },
   common: {
     retry: "Reintentar",
     close: "Cerrar",
   },
   signin: {
+    errors: {
+      "invalid-url": "No encontramos un servicio de inicio de sesión en esa dirección",
+      unavailable: "El inicio de sesión no está disponible aquí. Inténtalo de nuevo.",
+      "issuer-not-authorized":
+        "Esa cuenta no confía en este proveedor. Prueba con tu propio proveedor o tu WebID.",
+      "ambiguous-issuer":
+        "Tu WebID indica varios proveedores. Introduce la dirección de tu proveedor para continuar.",
+      cancelled: "Se canceló el inicio de sesión.",
+      "popup-blocked":
+        "Permite las ventanas emergentes para Solid Suite y vuelve a iniciar sesión.",
+      "account-active":
+        "Cierra la sesión de tu cuenta de Solid actual antes de iniciar sesión con otra cuenta.",
+      "in-progress": "Ya hay un inicio de sesión en curso.",
+      "invalid-identity":
+        "Esta cuenta necesita un WebID y un almacenamiento de pod para usar Solid Suite.",
+      failed: "No pudimos iniciar sesión. Inténtalo de nuevo.",
+    },
     unavailable: "Aquí aún no se pueden crear cuentas. Inicia sesión con una cuenta existente.",
     demoFailed: "No pudimos abrir el pod de demostración. Inténtalo de nuevo.",
     title: "Inicia sesión en Solid Suite",
@@ -147,6 +202,7 @@ export const es = {
     pod: "Tu pod",
     empty: "Todavía no hay nada",
     noMatches: "Ningún elemento coincide con estos filtros",
+    dataTypes: "Tipos de datos de {domain}",
     domains: {
       personal: "Personal",
       documents: "Documentos",

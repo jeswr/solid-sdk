@@ -58,7 +58,12 @@ export function TopBar({
                 href={back.href}
                 aria-label={back.label}
               >
-                <ArrowLeft size={20} strokeWidth={1.75} aria-hidden="true" />
+                <ArrowLeft
+                  size={20}
+                  strokeWidth={1.75}
+                  className="suite-rtl-mirror"
+                  aria-hidden="true"
+                />
               </a>
             </TooltipTrigger>
             <TooltipContent>{back.label}</TooltipContent>

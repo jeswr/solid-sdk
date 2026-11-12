@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import type { NavigationError } from "./preferences.js";
 
 export const navigationErrorCopy: Record<NavigationError, string> = {
@@ -24,18 +25,20 @@ export function NavigationErrorState({
   error: NavigationError;
   retry: () => void;
 }) {
+  const t = useT();
   return (
     <div className="suite-navigation-state" role="alert">
       <p>{navigationErrorCopy[error]}</p>
       <button type="button" data-slot="navigation-action" className="suite-action" onClick={retry}>
-        Retry
+        {t("common.retry")}
       </button>
     </div>
   );
 }
 export function LauncherSkeleton() {
+  const t = useT();
   return (
-    <div role="status" aria-label="Loading apps" className="suite-launcher-skeleton">
+    <div role="status" aria-label={t("navigation.loadingApps")} className="suite-launcher-skeleton">
       {Array.from({ length: 6 }, (_, i) => (
         <span key={i.toString()} />
       ))}

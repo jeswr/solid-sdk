@@ -127,3 +127,12 @@ it("bakes native target, local app origin, public URL and an https Client ID URL
   ])
     expect(() => nativeSettings(env)).toThrow();
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("hashes the suite's pre-hydration language script like any other inline script", async () => {
+  const { localeBootScript } = await import("@jeswr/suite-i18n");
+  const body = localeBootScript();
+  const result = addCsp(`<html><head><script>${body}</script></head><body></body></html>`);
+  expect(result).toContain(`'sha256-${createHash("sha256").update(body).digest("base64")}'`);
+  expect(() => assertCspHashes(result)).not.toThrow();
+});

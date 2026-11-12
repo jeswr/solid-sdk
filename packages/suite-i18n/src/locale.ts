@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 export const locales = ["en", "es", "fr", "de", "pt", "ar"] as const;
 export type Locale = (typeof locales)[number];
 export const localeNames: Record<Locale, string> = {
@@ -43,8 +44,11 @@ export function negotiateLocale(
   return "en";
 }
 
+/** Base languages written right to left. */
+export const rtlLanguages: readonly string[] = ["ar", "he", "fa", "ur"];
+
 export function dir(locale: string): "rtl" | "ltr" {
-  return ["ar", "he", "fa", "ur"].includes(canonical(locale)?.split("-")[0] ?? "") ? "rtl" : "ltr";
+  return rtlLanguages.includes(canonical(locale)?.split("-")[0] ?? "") ? "rtl" : "ltr";
 }
 
 export function createFormatters(locale: string) {

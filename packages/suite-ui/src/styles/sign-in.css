@@ -95,7 +95,7 @@
   border-radius: 0;
   background: transparent;
   color: var(--foreground);
-  text-align: left;
+  text-align: start;
 }
 .su-sign-in-card .su-sign-in-account:is(:hover, :focus-visible) {
   background: var(--surface-2);
@@ -143,7 +143,7 @@
 }
 .su-sign-in-logo {
   position: absolute;
-  left: 10px;
+  inset-inline-start: 10px;
   top: 50%;
   transform: translateY(-50%);
   display: inline-flex;
@@ -169,7 +169,7 @@
 }
 .su-sign-in-other > svg {
   position: absolute;
-  left: 16px;
+  inset-inline-start: 16px;
 }
 .su-sign-in-providers {
   padding: 0;
@@ -244,4 +244,8 @@
   .su-sign-in-help {
     transition: none;
   }
+}
+/* AUTHORED-BY Claude Opus 5.5: the back arrow points toward the start edge in RTL too. */
+[dir="rtl"] .su-sign-in-back svg {
+  transform: scaleX(-1);
 }

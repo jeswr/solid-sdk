@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
-import { localeNames, locales } from "@jeswr/suite-i18n";
 import { useT } from "@jeswr/suite-i18n/react";
+import { useId } from "react";
+import { LanguageSelect } from "../i18n";
 import { appRegistry } from "../registry";
 import { usePreferences } from "./preferences";
 
 export function AppearanceSettings() {
   const t = useT();
-  const language = usePreferences("locale");
+  const languageId = useId();
   const theme = usePreferences("theme");
   const density = usePreferences("density");
   const font = usePreferences("fontScale");
@@ -18,20 +20,9 @@ export function AppearanceSettings() {
     <>
       <fieldset>
         <legend>{t("settings.language")}</legend>
-        <label>
+        <label htmlFor={languageId}>
           {t("settings.languageLabel")}
-          <select
-            value={language.value}
-            onChange={(event) => language.update(event.target.value as typeof language.value)}
-            aria-describedby="language-help"
-          >
-            <option value="">{t("settings.automatic")}</option>
-            {locales.map((locale) => (
-              <option key={locale} value={locale} lang={locale}>
-                {localeNames[locale]}
-              </option>
-            ))}
-          </select>
+          <LanguageSelect id={languageId} aria-describedby="language-help" />
         </label>
         <p id="language-help">{t("settings.languageHelp")}</p>
       </fieldset>

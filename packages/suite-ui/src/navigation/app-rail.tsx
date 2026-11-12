@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import type { ReactNode } from "react";
 import {
   Tooltip,
@@ -24,6 +26,7 @@ export function AppRail({
   offline,
   account,
 }: AppRailProps) {
+  const t = useT();
   const apps = useNavigationApps(suppliedApps);
   const preferences = usePreferences("rail");
   const visible = apps.filter(
@@ -34,10 +37,14 @@ export function AppRail({
     .filter((app) => app !== undefined)
     .slice(0, 6);
   return (
-    <nav className="suite-rail" aria-label="Apps">
+    <nav className="suite-rail" aria-label={t("navigation.apps")}>
       <AppLauncher currentApp={currentApp} apps={apps} trigger="brand" />
       {preferences.status === "loading" ? (
-        <div className="suite-rail-skeleton" role="status" aria-label="Loading pinned apps">
+        <div
+          className="suite-rail-skeleton"
+          role="status"
+          aria-label={t("navigation.loadingPinned")}
+        >
           <span />
           <span />
           <span />

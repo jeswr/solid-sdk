@@ -7,7 +7,13 @@ import Link from "next/link";
 import { AppHeading } from "@/shell/app-frame";
 import type { DomainItem } from "../lib/model/discovery";
 import { sortItems } from "../lib/model/discovery";
-import { asOfTime, itemTitle, relativeTime } from "../state/presentation";
+import {
+  asOfTime,
+  firstName,
+  greetingPeriod,
+  itemTitle,
+  relativeTime,
+} from "../state/presentation";
 import type { HomeAccess } from "../state/use-home-access";
 
 export interface HomeHeaderProps {
@@ -38,10 +44,8 @@ export function HomeHeader({
   onRetry,
 }: HomeHeaderProps) {
   const t = useT();
-  const hour = new Date(now).getHours();
-  const period =
-    hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening";
-  const name = displayName.trim().split(/\s+/)[0];
+  const period = greetingPeriod(new Date(now));
+  const name = firstName(displayName);
   const latest = sortItems(items.filter((item) => item.modified))[0];
   return (
     <header className="hm-header">

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { ar } from "./catalogs/ar.js";
 import { de } from "./catalogs/de.js";
 import { en } from "./catalogs/en.js";
@@ -19,6 +20,7 @@ export const catalogs: Readonly<Record<Exclude<Locale, "en">, PartialCatalog<typ
 };
 export const createSuiteI18n = (locale = "en"): I18n<typeof en> =>
   createI18n({ english: en, catalogs, locale });
+export * from "./device.js";
 export * from "./locale.js";
 export * from "./message.js";
 export * from "./translator.js";

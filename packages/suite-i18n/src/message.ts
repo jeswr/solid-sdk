@@ -109,38 +109,49 @@ export function messageParameters(source: string): Record<string, "value" | "num
   return Object.fromEntries([...parameters].sort(([a], [b]) => a.localeCompare(b)));
 }
 
-export function formatMessage(source: string, params: Parameters = {}, locale = "en"): string {
-  let rules: Intl.PluralRules | undefined;
-  let numbers: Intl.NumberFormat | undefined;
-  const render = (nodes: Node[], count?: number): string =>
-    nodes
-      .map((node): string => {
-        if (node.kind === "text") return node.value;
-        if (node.kind === "pound") {
-          if (count === undefined) return "#";
-          numbers ??= new Intl.NumberFormat(locale);
-          return numbers.format(count);
-        }
-        const value = Object.hasOwn(params, node.name) ? params[node.name] : undefined;
-        if (typeof value !== "string" && typeof value !== "number")
-          throw new TypeError(`Missing parameter ${node.name}`);
-        if (node.kind === "argument") return String(value);
-        if (node.kind === "plural" && (typeof value !== "number" || !Number.isFinite(value)))
-          throw new TypeError(`Expected finite number for ${node.name}`);
-        if (node.kind === "select" && typeof value !== "string")
-          throw new TypeError(`Expected string for ${node.name}`);
-        let key = String(value);
-        if (node.kind === "plural") {
-          key = `=${value}`;
-          if (!node.options.has(key)) {
-            rules ??= new Intl.PluralRules(locale);
-            key = rules.select(value as number);
+/** A parsed message, ready to format repeatedly without parsing again. */
+export type CompiledMessage = (params?: Parameters, locale?: string) => string;
+
+/** Parse once; the returned formatter throws on missing or wrong parameter values. */
+export function compileMessage(source: string): CompiledMessage {
+  const nodes = parseMessage(source);
+  return (params = {}, locale = "en") => {
+    let rules: Intl.PluralRules | undefined;
+    let numbers: Intl.NumberFormat | undefined;
+    const render = (list: Node[], count?: number): string =>
+      list
+        .map((node): string => {
+          if (node.kind === "text") return node.value;
+          if (node.kind === "pound") {
+            if (count === undefined) return "#";
+            numbers ??= new Intl.NumberFormat(locale);
+            return numbers.format(count);
           }
-        }
-        // The parser requires an other branch.
-        const body = node.options.get(key) ?? node.options.get("other");
-        return render(body as Node[], node.kind === "plural" ? (value as number) : count);
-      })
-      .join("");
-  return render(parseMessage(source));
+          const value = Object.hasOwn(params, node.name) ? params[node.name] : undefined;
+          if (typeof value !== "string" && typeof value !== "number")
+            throw new TypeError(`Missing parameter ${node.name}`);
+          if (node.kind === "argument") return String(value);
+          if (node.kind === "plural" && (typeof value !== "number" || !Number.isFinite(value)))
+            throw new TypeError(`Expected finite number for ${node.name}`);
+          if (node.kind === "select" && typeof value !== "string")
+            throw new TypeError(`Expected string for ${node.name}`);
+          let key = String(value);
+          if (node.kind === "plural") {
+            key = `=${value}`;
+            if (!node.options.has(key)) {
+              rules ??= new Intl.PluralRules(locale);
+              key = rules.select(value as number);
+            }
+          }
+          // The parser requires an other branch.
+          const body = node.options.get(key) ?? node.options.get("other");
+          return render(body as Node[], node.kind === "plural" ? (value as number) : count);
+        })
+        .join("");
+    return render(nodes);
+  };
+}
+
+export function formatMessage(source: string, params: Parameters = {}, locale = "en"): string {
+  return compileMessage(source)(params, locale);
 }

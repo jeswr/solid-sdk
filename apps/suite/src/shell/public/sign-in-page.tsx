@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import type { en } from "@jeswr/suite-i18n";
 import { useT } from "@jeswr/suite-i18n/react";
 /**
  * /signin (02-suite-shell §8.1) on the suite-ui SignInCard: Account ID first,
@@ -26,7 +27,11 @@ import { RECENT_PROVIDERS_KEY, recentProviders } from "@/shell/lib/preferences";
 import { hintForField, rememberedIssuer } from "@/shell/lib/sign-in-hint";
 import { DemoButton } from "@/shell/public/demo-button";
 import { PodExplainer } from "@/shell/public/pod-explainer";
-import { SIGNUP_UNAVAILABLE_PARAM, useRegistration } from "@/shell/registration/use-registration";
+import {
+  SIGNUP_UNAVAILABLE_KEY,
+  SIGNUP_UNAVAILABLE_PARAM,
+  useRegistration,
+} from "@/shell/registration/use-registration";
 import { useAccounts } from "@/shell/session/accounts-provider";
 import { SignInError, type SignInHint } from "@/shell/session/types";
 
@@ -39,6 +44,11 @@ export default function Page() {
 }
 
 type Pending = { kind: "webid" | "provider" | "account" | "custom"; key: string } | null;
+/** A message key, translated at render so a language change re-renders an open error. */
+type Failure =
+  | `signin.errors.${keyof typeof en.signin.errors}`
+  | "signin.failed"
+  | "signin.extensionFailed";
 
 function SignIn() {
   const t = useT();
@@ -69,7 +79,7 @@ function SignIn() {
   }, [next, router]);
   const registration = useRegistration();
   const [recent, setRecent] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Failure | null>(null);
   const [pending, setPending] = useState<Pending>(null);
   const attempt = useRef<AbortController | null>(null);
   useEffect(() => () => attempt.current?.abort(), []);
@@ -120,9 +130,7 @@ function SignIn() {
       if (issuer) remember(issuer);
       finishSignIn();
     } catch (cause) {
-      if (cause instanceof SignInError) {
-        setError(cause.message);
-      } else setError(t("signin.failed"));
+      setError(cause instanceof SignInError ? `signin.errors.${cause.code}` : "signin.failed");
     } finally {
       attempt.current = null;
       setPending(null);
@@ -139,7 +147,7 @@ function SignIn() {
       )}
       {params.get(SIGNUP_UNAVAILABLE_PARAM) === "unavailable" && (
         <p role="status" className="shell-public-note">
-          {t("signin.unavailable")}
+          {t(SIGNUP_UNAVAILABLE_KEY)}
         </p>
       )}
       <fieldset
@@ -154,7 +162,7 @@ function SignIn() {
           recentProviders={recent}
           recentAccounts={recentAccounts}
           pending={pending}
-          error={error}
+          error={error && t(error)}
           onCancel={() => attempt.current?.abort()}
           onWebId={(input) =>
             void submit(hintForField("webid", input), { kind: "webid", key: input })
@@ -178,7 +186,7 @@ function SignIn() {
                       await signInWith("extension", { webId: extension.webId ?? "" });
                       finishSignIn();
                     } catch {
-                      setError(t("signin.extensionFailed"));
+                      setError("signin.extensionFailed");
                     }
                   }}
                 >

@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Machine-translated; native-speaker review is welcome.
 import type { PartialCatalog } from "../types.js";
 import type { en } from "./en.js";
 export const pt = {
   apps: {
     home: "Início",
-    drive: "Arquivos",
+    drive: "Ficheiros",
     docs: "Documentos",
     tasks: "Tarefas",
     permissions: "Permissões",
@@ -94,14 +95,65 @@ export const pt = {
     emptyBody: "As novas notificações aparecerão aqui.",
     today: "Hoje",
     earlier: "Anteriores",
-    unread: "Notificações, {count} por ler",
+    unread: "{count, plural, one {Notificações, # por ler} other {Notificações, # por ler}}",
     "new": "{count, plural, one {# nova notificação} other {# novas notificações}}",
+  },
+  navigation: {
+    apps: "Apps",
+    more: "Mais",
+    moreApps: "Mais apps",
+    closeApps: "Fechar apps",
+    filter: "Filtrar apps",
+    refreshing: "A atualizar as preferências das apps",
+    noneAvailable: "Nenhuma app disponível",
+    nonePinned: "Ainda não há apps afixadas",
+    chooseApps: "Escolher apps",
+    found: "{count, plural, one {# app encontrada} other {# apps encontradas}}",
+    available: "Apps disponíveis",
+    noResults: "Sem resultados para «{filter}»",
+    clearFilters: "Limpar filtros",
+    comingSoon: "Brevemente",
+    comingSoonApps: "Apps disponíveis brevemente",
+    noComingSoon: "Nenhuma app futura corresponde a este filtro.",
+    create: "Criar",
+    customise: "Personalizar barra",
+    customiseHelp:
+      "Afixe até 6 apps. Arraste para reordenar ou use as caixas de verificação e os botões Mover para cima/baixo.",
+    pinnedCount: "{count, plural, one {# de 6 apps afixada} other {# de 6 apps afixadas}}",
+    saving: "A guardar…",
+    railUnavailable:
+      "As definições da barra ficam disponíveis quando as preferências das apps forem carregadas",
+    pinnedApps: "Apps afixadas",
+    drag: "Arrastar {name} para afixar ou reordenar",
+    moveUp: "Mover {name} para cima",
+    moveDown: "Mover {name} para baixo",
+    loadingPinned: "A carregar apps afixadas",
+    loadingApps: "A carregar apps",
+  },
+  startup: {
+    title: "Atualização necessária",
+    body: "A vista web deste dispositivo não tem funcionalidades de que o Solid Suite precisa para proteger o seu início de sessão. Atualize o sistema (e, no Android, o Android System WebView) e volte a abrir a app.",
   },
   common: {
     retry: "Tentar novamente",
     close: "Fechar",
   },
   signin: {
+    errors: {
+      "invalid-url": "Não encontrámos um serviço de início de sessão nesse endereço",
+      unavailable: "O início de sessão não está disponível aqui. Tente novamente.",
+      "issuer-not-authorized":
+        "Essa conta não confia neste fornecedor. Experimente o seu próprio fornecedor ou o seu WebID.",
+      "ambiguous-issuer":
+        "O seu WebID indica vários fornecedores. Introduza o endereço do seu fornecedor para continuar.",
+      cancelled: "O início de sessão foi cancelado.",
+      "popup-blocked": "Permita janelas pop-up para o Solid Suite e volte a iniciar sessão.",
+      "account-active": "Termine sessão na conta Solid atual antes de iniciar sessão noutra conta.",
+      "in-progress": "Já está a decorrer um início de sessão.",
+      "invalid-identity":
+        "Esta conta precisa de um WebID e de um armazenamento de pod para usar o Solid Suite.",
+      failed: "Não foi possível iniciar sessão. Tente novamente.",
+    },
     unavailable: "Ainda não é possível criar contas aqui. Inicie sessão com uma conta existente.",
     demoFailed: "Não foi possível abrir o pod de demonstração. Tente novamente.",
     title: "Iniciar sessão no Solid Suite",
@@ -147,6 +199,7 @@ export const pt = {
     pod: "O seu pod",
     empty: "Ainda não há nada",
     noMatches: "Nenhum item corresponde a estes filtros",
+    dataTypes: "Tipos de dados de {domain}",
     domains: {
       personal: "Pessoal",
       documents: "Documentos",

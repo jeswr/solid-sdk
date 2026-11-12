@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Machine-translated; native-speaker review is welcome.
 import type { PartialCatalog } from "../types.js";
 import type { en } from "./en.js";
@@ -94,15 +95,65 @@ export const ar = {
     emptyBody: "ستظهر الإشعارات الجديدة هنا.",
     today: "اليوم",
     earlier: "سابقًا",
-    unread: "الإشعارات، {count} غير مقروءة",
+    unread:
+      "{count, plural, zero {الإشعارات، لا توجد إشعارات غير مقروءة} one {الإشعارات، إشعار واحد غير مقروء} two {الإشعارات، إشعاران غير مقروءين} few {الإشعارات، # إشعارات غير مقروءة} many {الإشعارات، # إشعارًا غير مقروء} other {الإشعارات، # إشعار غير مقروء}}",
     "new":
       "{count, plural, zero {لا إشعارات جديدة} one {إشعار جديد واحد} two {إشعاران جديدان} few {# إشعارات جديدة} many {# إشعارًا جديدًا} other {# إشعار جديد}}",
+  },
+  navigation: {
+    apps: "التطبيقات",
+    more: "المزيد",
+    moreApps: "مزيد من التطبيقات",
+    closeApps: "إغلاق التطبيقات",
+    filter: "تصفية التطبيقات",
+    refreshing: "جارٍ تحديث تفضيلات التطبيقات",
+    noneAvailable: "لا توجد تطبيقات متاحة",
+    nonePinned: "لم يتم تثبيت أي تطبيقات بعد",
+    chooseApps: "اختيار التطبيقات",
+    found:
+      "{count, plural, zero {لم يُعثر على أي تطبيق} one {تم العثور على تطبيق واحد} two {تم العثور على تطبيقين} few {تم العثور على # تطبيقات} many {تم العثور على # تطبيقًا} other {تم العثور على # تطبيق}}",
+    available: "التطبيقات المتاحة",
+    noResults: "لا توجد نتائج لـ «{filter}»",
+    clearFilters: "مسح عوامل التصفية",
+    comingSoon: "قريبًا",
+    comingSoonApps: "تطبيقات قادمة قريبًا",
+    noComingSoon: "لا توجد تطبيقات قادمة تطابق عامل التصفية هذا.",
+    create: "إنشاء",
+    customise: "تخصيص الشريط",
+    customiseHelp:
+      "ثبّت ما يصل إلى 6 تطبيقات. اسحب لإعادة الترتيب، أو استخدم مربعات الاختيار وزرَّي النقل لأعلى ولأسفل.",
+    pinnedCount:
+      "{count, plural, zero {لا تطبيقات مثبتة من أصل 6} one {تطبيق واحد مثبت من أصل 6} two {تطبيقان مثبتان من أصل 6} few {# تطبيقات مثبتة من أصل 6} many {# تطبيقًا مثبتًا من أصل 6} other {# تطبيق مثبت من أصل 6}}",
+    saving: "جارٍ الحفظ…",
+    railUnavailable: "إعدادات الشريط غير متاحة حتى يتم تحميل تفضيلات التطبيقات",
+    pinnedApps: "التطبيقات المثبتة",
+    drag: "اسحب {name} لتثبيته أو إعادة ترتيبه",
+    moveUp: "نقل {name} لأعلى",
+    moveDown: "نقل {name} لأسفل",
+    loadingPinned: "جارٍ تحميل التطبيقات المثبتة",
+    loadingApps: "جارٍ تحميل التطبيقات",
+  },
+  startup: {
+    title: "يلزم التحديث",
+    body: "يفتقد عارض الويب في هذا الجهاز ميزات يحتاجها Solid Suite لحماية تسجيل دخولك. حدّث النظام (وعلى Android، حدّث Android System WebView أيضًا)، ثم افتح التطبيق مرة أخرى.",
   },
   common: {
     retry: "إعادة المحاولة",
     close: "إغلاق",
   },
   signin: {
+    errors: {
+      "invalid-url": "تعذّر العثور على خدمة تسجيل دخول في هذا العنوان",
+      unavailable: "تسجيل الدخول غير متاح هنا. يُرجى المحاولة مرة أخرى.",
+      "issuer-not-authorized": "هذا الحساب لا يثق بهذا المزوّد. جرّب مزوّدك الخاص أو WebID الخاص بك.",
+      "ambiguous-issuer": "يذكر WebID الخاص بك عدة مزوّدين. أدخل عنوان مزوّدك للمتابعة.",
+      cancelled: "تم إلغاء تسجيل الدخول.",
+      "popup-blocked": "اسمح بالنوافذ المنبثقة لـ Solid Suite، ثم حاول تسجيل الدخول مرة أخرى.",
+      "account-active": "سجّل الخروج من حساب Solid الحالي قبل تسجيل الدخول إلى حساب آخر.",
+      "in-progress": "هناك عملية تسجيل دخول قيد التنفيذ بالفعل.",
+      "invalid-identity": "يحتاج هذا الحساب إلى WebID ومساحة تخزين pod واحدة لاستخدام Solid Suite.",
+      failed: "تعذر تسجيل دخولك. حاول مجددًا.",
+    },
     unavailable: "إنشاء الحسابات غير متاح هنا بعد. سجّل الدخول باستخدام حساب موجود.",
     demoFailed: "تعذر فتح مساحة التخزين التجريبية. حاول مجددًا.",
     title: "تسجيل الدخول إلى Solid Suite",
@@ -148,6 +199,7 @@ export const ar = {
     pod: "مساحة pod الخاصة بك",
     empty: "لا يوجد شيء هنا بعد",
     noMatches: "لا توجد عناصر تطابق هذه المرشحات",
+    dataTypes: "أنواع بيانات {domain}",
     domains: {
       personal: "شخصي",
       documents: "المستندات",

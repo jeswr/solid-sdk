@@ -83,3 +83,21 @@ it("renders nothing below the gate in the exported HTML", async () => {
   const Gate = await gate();
   expect(renderToString(h(Gate, null, h("span", null, "Pod content")))).toBe("");
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("shows the update screen in the device or browser language", async () => {
+  setGlobal("isSecureContext", true);
+  setGlobal("indexedDB", { open: () => undefined });
+  setGlobal("navigator", { ...navigator, locks: undefined, languages: ["es-MX"] });
+  let view = await mount(h(await gate(), null, h("span", null, "Pod content")));
+  expect(view.host.querySelector("h1")?.textContent).toBe("Actualización necesaria");
+  expect(view.host.querySelector("main")?.getAttribute("dir")).toBe("ltr");
+  localStorage.setItem("suite.locale.v1", "ar");
+  try {
+    view = await mount(h(await gate(), null, h("span", null, "Pod content")));
+    expect(view.host.querySelector("h1")?.textContent).toBe("يلزم التحديث");
+    expect(view.host.querySelector("main")?.getAttribute("dir")).toBe("rtl");
+  } finally {
+    localStorage.removeItem("suite.locale.v1");
+  }
+});

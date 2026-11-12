@@ -9,12 +9,15 @@ import { CONNECTORS, connectorForUrl, provenanceOf } from "../lib/model/provenan
 import { httpUrl, inStorage, primarySubject, subjectOf } from "../lib/model/rdf";
 import { protectedDocument } from "./protected-document";
 
-export function greeting(date: Date, displayName: string): string {
+/** Morning from 5:00, afternoon from 12:00, evening from 18:00 (local time). */
+export function greetingPeriod(date: Date): "morning" | "afternoon" | "evening" {
   const hour = date.getHours();
-  const period =
-    hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening";
-  const first = displayName.trim().split(/\s+/)[0];
-  return `Good ${period}${first ? `, ${first}` : ""}`;
+  return hour >= 5 && hour < 12 ? "morning" : hour >= 12 && hour < 18 ? "afternoon" : "evening";
+}
+
+/** The first word of a display name, or "" for a blank one. */
+export function firstName(displayName: string): string {
+  return displayName.trim().split(/\s+/)[0] ?? "";
 }
 
 export function parseTypes(value: string | null, domain: DataCategory): string[] {

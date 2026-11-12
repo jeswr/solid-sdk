@@ -238,7 +238,7 @@
 }
 .suite-file-badge {
   position: absolute;
-  right: -6px;
+  inset-inline-end: -6px;
   bottom: -8px;
   padding: 0 var(--space-0\.5);
   border-radius: var(--radius-sm);
@@ -449,7 +449,7 @@
   visibility: hidden;
   pointer-events: none;
   top: 0;
-  left: 0;
+  inset-inline-start: 0;
 
   clip-path: inset(100%);
 }
@@ -564,7 +564,7 @@
 .suite-editable {
   justify-content: start;
   overflow-wrap: anywhere;
-  text-align: left;
+  text-align: start;
   width: fit-content;
   border-color: transparent;
 }
@@ -595,7 +595,7 @@
   max-width: 100%;
   border-radius: var(--radius-sm);
   background: var(--surface-2);
-  padding-left: var(--space-2);
+  padding-inline-start: var(--space-2);
   font-size: var(--text-sm);
 }
 .suite-tag-label {
@@ -783,7 +783,7 @@
 }
 .su-upload-dock {
   position: fixed;
-  right: var(--space-4);
+  inset-inline-end: var(--space-4);
   bottom: var(--space-4);
   z-index: 30;
   width: min(360px, calc(100% - var(--space-8)));
@@ -1004,7 +1004,7 @@
 }
 .su-markdown ul,
 .su-markdown ol {
-  padding-left: var(--space-6);
+  padding-inline-start: var(--space-6);
   list-style: revert;
 }
 .su-markdown a {
@@ -1015,7 +1015,7 @@
   width: 100%;
   gap: var(--space-3);
   margin: 0;
-  text-align: left;
+  text-align: start;
 }
 .su-details div {
   display: grid;
@@ -1133,7 +1133,7 @@
   color: var(--primary-soft-foreground);
   border: 1px solid var(--border);
   font-size: var(--text-xs);
-  margin-right: calc(-1 * var(--space-2));
+  margin-inline-end: calc(-1 * var(--space-2));
 }
 .suite-item-details button {
   margin-top: var(--space-2);
@@ -1163,8 +1163,8 @@
   padding-block: var(--space-3);
 }
 .suite-feedback[role="alert"] {
-  border-left: 2px solid var(--destructive);
-  padding-left: var(--space-3);
+  border-inline-start: 2px solid var(--destructive);
+  padding-inline-start: var(--space-3);
 }
 .suite-skeleton {
   display: block;
@@ -1234,7 +1234,7 @@
 }
 .suite-item-details {
   border: 0;
-  border-left: 1px solid var(--border);
+  border-inline-start: 1px solid var(--border);
   border-radius: 0;
 }
 .suite-pod-meter h3 {
@@ -1554,4 +1554,9 @@
     animation: none;
     transition: none;
   }
+}
+
+/* AUTHORED-BY Claude Opus 5.5: directional icons (back arrows) point the other way in RTL. */
+[dir="rtl"] .suite-rtl-mirror {
+  transform: scaleX(-1);
 }

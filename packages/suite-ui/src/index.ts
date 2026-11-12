@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 export type {
   CollectionErrorKind,
@@ -26,6 +27,7 @@ export type {
 export { Breadcrumbs } from "./components/breadcrumbs.js";
 export type { SurfaceState as ContentSurfaceState } from "./components/content.js";
 export { formatBytes, plainText, surfaceErrors } from "./components/content.js";
+export { DirectionProvider, useDirection } from "./components/direction.js";
 export { DropZoneOverlay, type DropZoneOverlayProps } from "./components/drop-zone-overlay.js";
 export type { EditableTextProps } from "./components/editable-text.js";
 export { EditableText } from "./components/editable-text.js";

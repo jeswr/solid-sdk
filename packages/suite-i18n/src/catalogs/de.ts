@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Machine-translated; native-speaker review is welcome.
 import type { PartialCatalog } from "../types.js";
 import type { en } from "./en.js";
@@ -50,7 +51,7 @@ export const de = {
     followSystem: "Systemeinstellung",
     reduce: "Reduzieren",
     colours: "App-Farben in der Leiste anzeigen",
-    startPage: "Startseite",
+    startPage: "Beim Start öffnen",
   },
   shell: {
     feedback: "Feedback geben",
@@ -65,7 +66,7 @@ export const de = {
     trigger: "Konto: {name}",
     menu: "Kontomenü",
     switch: "Konto wechseln",
-    nowUsing: "Jetzt als {name}",
+    nowUsing: "Du verwendest jetzt {name}",
     add: "Weiteres Konto hinzufügen",
     manage: "Konto verwalten",
     signOut: "Abmelden",
@@ -94,14 +95,67 @@ export const de = {
     emptyBody: "Neue Benachrichtigungen erscheinen hier.",
     today: "Heute",
     earlier: "Früher",
-    unread: "Benachrichtigungen, {count} ungelesen",
+    unread:
+      "{count, plural, one {Benachrichtigungen, # ungelesen} other {Benachrichtigungen, # ungelesen}}",
     "new": "{count, plural, one {# neue Benachrichtigung} other {# neue Benachrichtigungen}}",
+  },
+  navigation: {
+    apps: "Apps",
+    more: "Mehr",
+    moreApps: "Weitere Apps",
+    closeApps: "Apps schließen",
+    filter: "Apps filtern",
+    refreshing: "App-Einstellungen werden aktualisiert",
+    noneAvailable: "Keine Apps verfügbar",
+    nonePinned: "Noch keine Apps angeheftet",
+    chooseApps: "Apps auswählen",
+    found: "{count, plural, one {# App gefunden} other {# Apps gefunden}}",
+    available: "Verfügbare Apps",
+    noResults: "Keine Ergebnisse für „{filter}“",
+    clearFilters: "Filter zurücksetzen",
+    comingSoon: "Demnächst",
+    comingSoonApps: "Demnächst verfügbare Apps",
+    noComingSoon: "Keine demnächst verfügbaren Apps entsprechen diesem Filter.",
+    create: "Erstellen",
+    customise: "Leiste anpassen",
+    customiseHelp:
+      "Hefte bis zu 6 Apps an. Ziehe sie zum Umsortieren oder verwende die Kontrollkästchen und die Schaltflächen Nach oben/Nach unten.",
+    pinnedCount: "{count, plural, other {# von 6 Apps angeheftet}}",
+    saving: "Wird gespeichert…",
+    railUnavailable:
+      "Die Leisteneinstellungen sind verfügbar, sobald deine App-Einstellungen geladen sind",
+    pinnedApps: "Angeheftete Apps",
+    drag: "{name} ziehen, um die App anzuheften oder zu verschieben",
+    moveUp: "{name} nach oben verschieben",
+    moveDown: "{name} nach unten verschieben",
+    loadingPinned: "Angeheftete Apps werden geladen",
+    loadingApps: "Apps werden geladen",
+  },
+  startup: {
+    title: "Update erforderlich",
+    body: "Der Web-Ansicht dieses Geräts fehlen Funktionen, die Solid Suite für eine sichere Anmeldung braucht. Aktualisiere das System (und unter Android auch Android System WebView) und öffne die App dann erneut.",
   },
   common: {
     retry: "Erneut versuchen",
     close: "Schließen",
   },
   signin: {
+    errors: {
+      "invalid-url": "Unter dieser Adresse wurde kein Anmeldedienst gefunden",
+      unavailable: "Die Anmeldung ist hier nicht verfügbar. Bitte versuche es erneut.",
+      "issuer-not-authorized":
+        "Dieses Konto vertraut diesem Anbieter nicht. Versuche es mit deinem eigenen Anbieter oder deiner WebID.",
+      "ambiguous-issuer":
+        "Deine WebID nennt mehrere Anbieter. Gib die Adresse deines Anbieters ein, um fortzufahren.",
+      cancelled: "Die Anmeldung wurde abgebrochen.",
+      "popup-blocked": "Erlaube Pop-ups für Solid Suite und melde dich dann erneut an.",
+      "account-active":
+        "Melde dich von deinem aktuellen Solid-Konto ab, bevor du dich mit einem anderen Konto anmeldest.",
+      "in-progress": "Eine Anmeldung läuft bereits.",
+      "invalid-identity":
+        "Dieses Konto benötigt eine WebID und einen Pod-Speicher, um Solid Suite zu nutzen.",
+      failed: "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
+    },
     unavailable:
       "Hier können noch keine Konten erstellt werden. Melde dich mit einem bestehenden Konto an.",
     demoFailed: "Der Demo-Pod konnte nicht geöffnet werden. Bitte erneut versuchen.",
@@ -148,6 +202,7 @@ export const de = {
     pod: "Dein Pod",
     empty: "Noch keine Inhalte",
     noMatches: "Keine Einträge für diese Filter",
+    dataTypes: "Datentypen: {domain}",
     domains: {
       personal: "Persönlich",
       documents: "Dokumente",

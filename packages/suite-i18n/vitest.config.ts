@@ -6,7 +6,7 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: "v8",
-      include: ["src/{message,translator,locale,react}.{ts,tsx}"],
+      include: ["src/{device,message,translator,locale,react}.{ts,tsx}"],
       thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
     },
   },
