@@ -1,0 +1,417 @@
+/* AUTHORED-BY Codex (GPT-6.1 Sol) */
+/* AUTHORED-BY Claude Opus 5.5 */
+.sld-page {
+  padding: clamp(1rem, 3vw, 2.5rem);
+  color: var(--foreground);
+  min-width: 0;
+}
+.sld-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+.sld-sidebar strong {
+  font-size: 1.4rem;
+}
+.sld-sidebar-title {
+  padding: 1rem;
+  font-weight: 600;
+}
+.sld-muted {
+  color: var(--foreground-muted);
+  font-size: 0.875rem;
+}
+.sld-save-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 2rem;
+  font-size: 0.8rem;
+  color: var(--foreground-muted);
+  margin-bottom: 1rem;
+}
+.sld-library-header,
+.sld-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+.sld-library-header h1,
+.sld-library-header h2 {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 650;
+  margin-bottom: 0.4rem;
+}
+.sld-toolbar,
+.sld-editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.sld-search {
+  max-width: 28rem;
+  margin-bottom: 1.75rem;
+}
+.sld-library {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 1.5rem;
+}
+.sld-deck-card {
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  overflow: hidden;
+}
+.sld-open-deck {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  cursor: pointer;
+}
+.sld-open-deck strong {
+  overflow-wrap: anywhere;
+}
+.sld-card-thumbnail {
+  display: block;
+  width: 100%;
+  container-type: inline-size;
+}
+.sld-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 1rem 0.75rem;
+  color: var(--foreground-muted);
+  font-size: 0.8rem;
+}
+.sld-card-footer > span {
+  flex: 1;
+}
+.sld-canvas {
+  --sld-paper: var(--surface);
+  --sld-ink: var(--foreground);
+  --sld-accent: var(--primary);
+  background: var(--sld-paper);
+  color: var(--sld-ink);
+  border: 1px solid var(--border);
+  width: 100%;
+  padding: 7%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  border-radius: 0.3rem;
+}
+.sld-canvas[data-theme="dark"] {
+  --sld-paper: var(--rail);
+  --sld-ink: var(--rail-foreground);
+  --sld-accent: var(--rail-foreground);
+}
+.sld-canvas[data-theme="contrast"] {
+  --sld-paper: var(--foreground);
+  --sld-ink: var(--background);
+  --sld-accent: var(--background);
+}
+.sld-canvas[data-theme="warm"] {
+  --sld-paper: var(--app-slides-soft);
+  --sld-ink: var(--foreground);
+  --sld-accent: var(--foreground);
+}
+.sld-canvas h3,
+.sld-canvas > strong {
+  font-size: clamp(1rem, 4cqw, 2.75rem);
+  font-weight: 650;
+  line-height: 1.15;
+  margin-bottom: 0.5em;
+  color: var(--sld-accent);
+}
+.sld-canvas[data-layout="title"],
+.sld-canvas[data-layout="section"] {
+  text-align: center;
+}
+.sld-canvas[data-layout="title"] h3,
+.sld-canvas[data-layout="section"] h3 {
+  font-size: clamp(1rem, 5.5cqw, 3.75rem);
+}
+.sld-canvas img {
+  max-height: 65%;
+  object-fit: contain;
+  min-height: 0;
+}
+.sld-columns {
+  display: flex;
+  gap: 6%;
+  min-height: 0;
+}
+.sld-columns > * {
+  flex: 1;
+  min-width: 0;
+}
+.sld-markdown {
+  font-size: clamp(0.7rem, 2.4cqw, 1.5rem);
+  line-height: 1.5;
+}
+.sld-markdown p {
+  margin: 0.4em 0;
+}
+.sld-markdown ul,
+.sld-markdown ol {
+  padding-left: 1.3em;
+}
+.sld-markdown a {
+  text-decoration: underline;
+}
+.sld-markdown pre {
+  white-space: pre-wrap;
+}
+.sld-editor-header > input {
+  max-width: 24rem;
+  font-weight: 650;
+}
+.sld-editor-toolbar {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+}
+.sld-editor-toolbar label,
+.sld-fields label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.sld-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  max-width: 100%;
+}
+.sld-broken {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+}
+.sld-editor-grid {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: 1.5rem;
+}
+.sld-slide-rail {
+  max-height: 80vh;
+  overflow: auto;
+}
+.sld-sorter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
+.sld-sorter > li {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.3rem;
+  background: var(--surface);
+}
+.sld-sorter > li[data-selected="true"] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+.sld-sorter-item {
+  display: flex;
+  align-items: center;
+}
+.sld-slide-select {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  height: auto;
+  white-space: normal;
+  padding: 0.25rem;
+  text-align: left;
+  min-width: 0;
+}
+.sld-slide-select > span:last-child {
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+.sld-mini {
+  display: block;
+  container-type: inline-size;
+}
+.sld-mini .sld-canvas {
+  padding: 0.5rem;
+}
+.sld-mini .sld-canvas > strong {
+  font-size: 0.6rem;
+}
+.sld-mini .sld-canvas > span {
+  display: none;
+}
+.sld-sorter-move {
+  display: flex;
+  justify-content: flex-end;
+}
+.sld-preview {
+  margin: 0;
+  container-type: inline-size;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: var(--surface-2);
+}
+.sld-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 1.5rem 0;
+}
+.sld-image-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+.sld-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+.sld-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.sld-print-deck {
+  display: none;
+}
+.sld-present {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: var(--background);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  container-type: inline-size;
+}
+.sld-present > .sld-canvas {
+  max-height: calc(100dvh - 6rem);
+  max-width: min(100%, calc((100dvh - 6rem) * 16 / 9));
+  flex-shrink: 0;
+}
+.sld-present-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.sld-presenter-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 1.5rem;
+}
+.sld-presenter-grid section {
+  container-type: inline-size;
+}
+.sld-presenter-window h1 {
+  font-size: 1.75rem;
+  font-weight: 650;
+}
+.sld-presenter-window h2 {
+  margin: 1rem 0;
+  font-weight: 600;
+}
+.sld-notes-text {
+  white-space: pre-wrap;
+}
+.sld-page :focus-visible,
+.sld-present :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+@media (max-width: 767px) {
+  .sld-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sld-slide-rail {
+    max-height: 12rem;
+  }
+  .sld-sorter {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0.3rem;
+  }
+  .sld-sorter > li {
+    min-width: 10rem;
+    width: 10rem;
+  }
+  .sld-editor-header > input {
+    max-width: 100%;
+  }
+  .sld-presenter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media print {
+  @page {
+    size: landscape;
+    margin: 0;
+  }
+  body:has(.sld-print-deck) * {
+    visibility: hidden;
+  }
+  body:has(.sld-print-deck) .sld-print-deck,
+  body:has(.sld-print-deck) .sld-print-deck * {
+    visibility: visible;
+  }
+  .sld-print-deck {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+  }
+  .sld-print-page {
+    break-after: page;
+    break-inside: avoid;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    container-type: inline-size;
+  }
+  .sld-print-page:last-child {
+    break-after: auto;
+  }
+  .sld-print-page .sld-canvas {
+    border: 0;
+    border-radius: 0;
+    print-color-adjust: exact;
+  }
+}

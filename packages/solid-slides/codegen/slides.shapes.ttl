@@ -1,0 +1,31 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <http://schema.org/> .
+@prefix slides: <https://jeswr.org/ns/slides#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+# No federation presentation sector exists. This initial profile uses schema.org
+# PresentationDigitalDocument/hasPart and suite terms only for slide-specific fields.
+# hasPart projects an IRI set: composite links admit a single child, not repeated slides.
+# The facade validates every linked hash node through the generated Slide entity.
+slides:PresentationShape a sh:NodeShape ; sh:targetClass schema:PresentationDigitalDocument ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:theme ; sh:name "theme" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "light" "dark" "contrast" "warm" ) ] ;
+  sh:property [ sh:path slides:aspectRatio ; sh:name "aspectRatio" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "16:9" "4:3" ) ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:hasPart ; sh:name "slideUrls" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ] .
+slides:SlideShape a sh:NodeShape ; sh:targetClass slides:Slide ;
+  sh:property [ sh:path schema:position ; sh:name "position" ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 0 ] ;
+  sh:property [ sh:path slides:layout ; sh:name "layout" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "title" "title-and-body" "two-column" "section" "image" "blank" ) ] ;
+  sh:property [ sh:path schema:name ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:text ; sh:name "body" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:secondBody ; sh:name "secondBody" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path schema:image ; sh:name "image" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:imageAlt ; sh:name "imageAlt" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:speakerNotes ; sh:name "notes" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:hidden ; sh:name "hidden" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path slides:drawing ; sh:name "drawing" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] .

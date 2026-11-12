@@ -43,9 +43,23 @@ const appExpectations = [
   ["money", "wallet", 130],
   ["health", "heart-pulse", 10],
   ["permissions", "shield-check", 225],
+  ["bookmarks", "bookmark", 55],
+  ["insights", "chart-line", 187],
+  ["forms", "clipboard-list", 265],
+  ["recipes", "chef-hat", 70],
+  ["media", "clapperboard", 310],
+  ["journal", "notebook-pen", 100],
+  ["events", "party-popper", 0],
+  ["whiteboard", "pen-tool", 160],
+  ["wallet", "id-card", 115],
+  ["places", "map-pin", 140],
+  ["slides", "presentation", 290],
+  ["publish", "globe", 215],
+  ["trips", "plane", 237],
+  ["ask", "message-circle-question-mark", 30],
 ] as const;
 describe("§3 app mapping", () => {
-  it("contains exactly the fifteen specified apps", () =>
+  it("contains exactly the twenty-nine specified apps", () =>
     expect(Object.keys(APP_ICONS)).toEqual(appExpectations.map(([id]) => id)));
   for (const [app, glyph, hue] of appExpectations)
     it(`${app}: glyph, hue, geometry and accessible sizes`, async () => {
