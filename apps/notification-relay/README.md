@@ -63,6 +63,17 @@ The push API accepts Solid-OIDC access tokens as `Authorization: DPoP <token>` w
 request-bound `DPoP: <proof>`. Issuer discovery, audience `solid`, WebID issuer endorsement,
 proof signature/method/public URL/time/token hash/key binding and shared replay protection
 are enforced. `RELAY_MOBILE_CLIENT_ID` must equal the token's `client_id`.
+The generic resource verifier is `createResourceTokenVerifier` from
+[`@jeswr/solid-api-auth`](../../packages/solid-api-auth/README.md); this app retains its
+mobile-client and stored-sender route policies. Discovery, JWKS and WebID profiles cache for
+ten minutes, with 1,000 entries and 1,000 in-flight loads per cache. Loads share work per URL
+and abort after five seconds, including body reads; timeouts release their slots even if a
+transport ignores abort. Unknown-key rejection retries the newest cached JWKS before applying
+the one-minute forced-refresh cooldown. Concurrent refreshes share one fetch. Failed refreshes
+retain the previous value and its original expiry. Cooldowns are bounded, expire before oldest
+eviction, and preserve evicted live deadlines through a conservative overflow deadline;
+URL churn cannot reset a live cooldown. Under saturation this can temporarily suppress new
+forced refreshes. Replay storage remains the relay's shared atomic store.
 
 - `POST /push/installations`: JSON `{ platform: "android" | "ios", pushToken,
   devicePublicKey, authSecret, deviceSigningKey }`, P2 token + device proof →
