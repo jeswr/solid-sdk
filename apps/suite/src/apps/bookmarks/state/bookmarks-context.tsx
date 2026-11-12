@@ -34,9 +34,10 @@ export function BookmarksProvider({
     const controller = new AbortController();
     let opened: LibraryStore | undefined;
     let off: (() => void) | undefined;
+    // Cleanup clears this timer, so it only fires while the effect is live.
     const timeout = setTimeout(() => {
       controller.abort();
-      if (live) setError(true);
+      setError(true);
     }, DISCOVERY_TIMEOUT_MS);
     setStore(null);
     setError(false);
