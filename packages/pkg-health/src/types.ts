@@ -37,7 +37,7 @@ export interface HealthFactBase {
   code?: HealthCode;
   period: HealthPeriod;
   belief: Belief;
-  /** A later update could not be read; display the uncertainty alongside belief "might". */
+  /** A later update could not be read; display the uncertainty alongside any non-past belief. */
   affectedBySkipped?: true;
   validity: ValidityStatus;
   epistemic: EpistemicStatus;

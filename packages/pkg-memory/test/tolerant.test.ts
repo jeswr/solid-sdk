@@ -537,3 +537,37 @@ it("keeps contradiction targets when a skipped nanopub also names a kept envelop
   const result = await parseNanopublicationsTolerant(await raw(value.dataset));
   expect([...result.affected].sort()).toEqual([a.id, b.id].sort());
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("leaves no skipped term reachable from the returned store's internal indexes", async () => {
+  const value = await fixture();
+  const b = required(value.nanopubs[1]);
+  value.dataset.addQuad(
+    df.namedNode("https://example.org/skipped-only-subject"),
+    df.namedNode(`${NS.schema}name`),
+    df.literal("Fictional skipped-only-value"),
+    df.namedNode(b.id),
+  );
+  const result = await parseNanopublicationsTolerant(await raw(value.dataset));
+  expect(result.skipped.map((s) => s.id)).toEqual([b.id]);
+  // Walk every own value, Map key and array entry, including N3's private term index.
+  const seen = new Set<unknown>();
+  const found: string[] = [];
+  const walk = (node: unknown): void => {
+    if (typeof node === "string") {
+      if (node.includes("skipped-only")) found.push(node);
+      return;
+    }
+    if (node === null || typeof node !== "object" || seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof Map) for (const entry of node) entry.forEach(walk);
+    else if (node instanceof Set) for (const v of node) walk(v);
+    else
+      for (const key of Reflect.ownKeys(node)) {
+        if (typeof key === "string") walk(key);
+        walk((node as Record<PropertyKey, unknown>)[key]);
+      }
+  };
+  walk(result);
+  expect(found).toEqual([]);
+});

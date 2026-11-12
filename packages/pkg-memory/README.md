@@ -331,8 +331,9 @@ changes graph-scoped evidence semantics.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 Parsing constructs one reference-aware N3 store through fetch-rdf, preserving language
-spelling without replaying the document. Tolerant import removes orphan graphs from
-that store after validation. Read paths use `readNamedGraph(dataset, name)`: a read-only
+spelling without replaying the document. When tolerant import drops any graph, it
+returns a new compact store holding only the retained graphs (N3's term index would
+otherwise keep skipped terms); otherwise it returns the parsed store unchanged. Read paths use `readNamedGraph(dataset, name)`: a read-only
 snapshot with a compact subject index, retaining the original graph names. Nested
 matches share its quads; `add` and `delete` throw. Take a fresh snapshot after edits.
 The parsed store uses N3's insertion hook to keep numeric indexes sparse on V8;
