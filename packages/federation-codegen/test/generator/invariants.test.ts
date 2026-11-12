@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import { defineModel, isCompositeEntity } from "@jeswr/model-runtime";
 import { createRdfEngine } from "@jeswr/rdf-engine/node";
@@ -233,7 +234,7 @@ describe("node logical closed grammar and limits", () => {
     for (const name of ["model.json", "model.js", "model.d.ts", "shapes.ttl"])
       expect(generate(permuted).artifacts[name]).toBe(compiled.artifacts[name]);
     expect(createHash("sha256").update(must(compiled.artifacts["model.json"])).digest("hex")).toBe(
-      "8852f66648cf73de87281463281159017b19d0173f2c1df28a320d4aefc582cf",
+      "6b67ad0ceca814c188b4fdad165ecd2d3c9b5b36afaf9c42bc7581b09f522924",
     );
   });
   it.each([
@@ -378,16 +379,17 @@ describe("diet semantics through generated runtime and SHACL", () => {
 });
 
 describe("hasValue atoms on class-linked collections", () => {
-  it("preserves and enforces the class before matching an exact member", () => {
+  it("match the exact raw member, independently of the advisory sh:class hint", () => {
     const result = generate(
       safety("sh:not [sh:not [sh:path diet:hlaMarker; sh:hasValue <https://pod.test/doc#marker>]]"),
     );
     const owner = flat(result.manifest.entities.find((e) => e.name === "Summary"));
-    expect(owner.fields.find((f) => f.name === "hlaMarker")?.hasClass).toBe(`${EX}HlaMarker`);
+    // The flat sh:class hint keeps main's advisory-omission policy; atoms never need it.
+    expect(owner.fields.find((f) => f.name === "hlaMarker")?.hasClass).toBeUndefined();
     const e = must(defineModel(result.manifest).entities.Summary);
     for (const [type, valid] of [
       ["HlaMarker", true],
-      ["Unknown", false],
+      ["Unknown", true],
     ] as const) {
       const store = new Store(
         new Parser().parse(`${H}<https://pod.test/doc> a diet:GeneticSummary; diet:consentGiven true; diet:hlaMarker <https://pod.test/doc#marker>.

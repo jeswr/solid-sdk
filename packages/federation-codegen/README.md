@@ -391,8 +391,9 @@ Expr = [ sh:path P; sh:hasValue V ]
 
 Every path is a single predicate IRI identifying a projected field on the current
 entity. Qualified paths must be composite links or IRI collections with a projected
-`sh:class` target; the inner expression uses that target's fields. Collection links
-retain `hasClass` for data-graph membership checks. Lists must be nonempty and well
+`sh:class` target; the inner expression uses that target's fields. A flat collection's
+`sh:class` keeps the existing policy (advisory hints omitted, Violation rejected); atoms
+never need it. Lists must be nonempty and well
 formed; expression/list nodes cannot be shared or cyclic. Logical depth is at most
 four (a qualified context change adds no level), total atoms at most sixteen per
 source NodeShape, and N is a positive `xsd:integer` at most sixteen. Each qualified
@@ -405,15 +406,18 @@ ordinary shape structure plus `sh:message`, `sh:severity`, `rdfs:label` and
 qualified maxima/disjointness, complex/alternative expression paths and unknown
 predicates remain rejected. Every merged source shape contributes its own invariant,
 source IRI, severity (default Violation) and message, in deterministic shape order.
-Fidelity independently re-reads the graph and checks those trees, fixed values and
-collection classes exactly. The diet fixture pins model JSON bytes and compares its
+Fidelity independently re-reads the graph and checks those trees and fixed values
+exactly. The diet fixture pins model JSON bytes and compares its
 safety cases with emitted SHACL validation.
 
-Runtime parses reject false Violation invariants; Warning/Info use the existing
-advisory disposition. Qualified atoms count distinct linked nodes only after their
-own entity reader succeeds. Builds and setters validate staged state before live
-mutation; linked readers share bounded reads, and exhaustion fails closed even in
-negated expressions. See model-runtime's fixed-value/invariant contract.
+The runtime evaluates atoms with SHACL semantics over the raw data graph (not parsed
+values): `hasValue` checks the raw objects of the path, and qualified atoms count every raw
+linked object (any IRI scheme, blank nodes) on whose own raw data the inner expression
+holds. Negated safety rules therefore fail closed exactly like an external validator of
+the emitted shapes.ttl; the diet regression tests compare both on adversarial data. Parses
+reject false Violation invariants; Warning/Info are advisory. Builds and setters validate
+the staged state of the affected focuses before live mutation, within a bounded budget.
+See model-runtime's fixed-value/invariant contract.
 
 The full health-diary CLI probe now admits its consent and genetic safety constructs.
 With a temporary flat entity config it still fails on the Violation-grade

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import type { DataFactory, Term } from "@rdfjs/types";
 import { DataFactory as Factory } from "n3";
 import { expandDatatype, iriMapper, literalMapper, readLiteral } from "./datatypes.js";
@@ -206,6 +207,9 @@ export function validateEntityInvariants(entities: AnyManifestEntity[]): void {
         if (fields.length !== 1 || !fields[0])
           fail("path must identify one field on the current entity");
         const field = fields[0];
+        // Atoms read the raw path predicate exactly as SHACL does; a read alias would make the
+        // runtime's field and the atom disagree, so it is not understood (fail closed).
+        if (field.aliasPredicates?.length) fail("invariant paths cannot carry read aliases");
         if (e.op === "hasValue") {
           keys(["op", "path", "term"]);
           return {
@@ -233,8 +237,6 @@ export function validateEntityInvariants(entities: AnyManifestEntity[]): void {
         const target = targets[0];
         if (field.kind === "nested" && groups.get(focus)?.get(field.node as string) !== target)
           fail("qualified target differs from link target");
-        if (field.kind !== "nested" && field.hasClass !== targetClass)
-          fail("qualified target differs from collection class");
         return {
           op: "qualified",
           path,

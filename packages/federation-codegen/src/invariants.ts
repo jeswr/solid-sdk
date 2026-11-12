@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import {
   type ConstraintTerm,
@@ -74,15 +75,12 @@ export interface ShapeInvariants {
   byClass: Map<string, EntityInvariant[]>;
   /** Nodes fully checked by this closed parser; ordinary admission must not reinterpret them. */
   consumed: Set<string>;
-  /** Collection class constraints whose targets have an entity reader. */
-  collectionLinks: Set<string>;
 }
 
 /** Parse the ORIGINAL graph at each call, independently of the compiled manifest. */
 export function shapeInvariants(shapes: NormalizedShapes): ShapeInvariants {
   const graph = new Graph(shapes.quads);
   const consumed = new Set<string>();
-  const collectionLinks = new Set<string>();
   const byClass = new Map<string, EntityInvariant[]>();
   const incoming = new Map<string, number>();
   const key = (t: Term) => JSON.stringify([t.termType, t.value]);
@@ -133,14 +131,6 @@ export function shapeInvariants(shapes: NormalizedShapes): ShapeInvariants {
           return reject(node.value, "path must identify a direct field on the current entity");
         if (graph.objects(node, `${SH}hasValue`).length) {
           closed(node, [`${SH}path`, `${SH}hasValue`]);
-          if (
-            c.kind === "iri" &&
-            c.hasClass &&
-            !c.conceptIris &&
-            c.maxCount !== 1 &&
-            shapes.nodeShapes.some((s) => s.targetClass === c.hasClass)
-          )
-            for (const source of propertySources(c)) collectionLinks.add(source.shapeIri);
           return {
             op: "hasValue",
             path: path.value,
@@ -166,7 +156,6 @@ export function shapeInvariants(shapes: NormalizedShapes): ShapeInvariants {
             node.value,
             "qualified path requires a composite link or class-linked IRI collection with a projected target",
           );
-        if (!c.node) for (const source of propertySources(c)) collectionLinks.add(source.shapeIri);
         return {
           op: "qualified",
           path: path.value,
@@ -246,5 +235,5 @@ export function shapeInvariants(shapes: NormalizedShapes): ShapeInvariants {
       propertyHasValue(c);
     }
   }
-  return { byClass, consumed, collectionLinks };
+  return { byClass, consumed };
 }

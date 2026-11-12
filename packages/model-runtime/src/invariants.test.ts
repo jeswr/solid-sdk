@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory as F, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -80,7 +81,6 @@ function linked(
         datatype: undefined,
         maxCount: undefined,
         collection: "set",
-        hasClass: `${EX}Child`,
       }),
     ],
   );
@@ -95,6 +95,13 @@ function linked(
   });
   return m;
 }
+/** `not(qualified ≥1 links with flag=true)`: the shape of a negated safety rule. */
+const negated = (): ModelManifest => {
+  const m = linked(atom());
+  const constraint = must((m.entities[0] as ManifestEntity).invariants?.[0]);
+  constraint.expression = not(constraint.expression);
+  return m;
+};
 const linkedStore = (
   children: string[],
   links = children.map((_, i) => `<${URL}#c${i}>`).join(", "),
@@ -297,15 +304,28 @@ describe("qualified linked entity readers", () => {
     "a ex:Child; ex:flag true",
     "a ex:Child; ex:flag true; ex:required 1",
     'a ex:Other; ex:flag true; ex:required "yes"',
+    'ex:flag true; ex:required "yes"',
+    'a ex:Child; ex:flag true, false; ex:required "yes"',
+    'a ex:Child; ex:flag true; ex:required "a", "b"',
+  ])("counts on raw data even when the linked reader would reject or drop it: %s", (child) => {
+    // SHACL qualified semantics: the linked node need not parse, be typed or keep the value
+    // its reader would drop. A negated safety rule therefore fails CLOSED on such data.
+    const store = linkedStore([child]);
+    // The Child's own reader never surfaces flag=true for any of these.
+    expect(
+      must(defineModel(linked(atom())).entities.Child).parse(`${URL}#c0`, store)?.flag,
+    ).toBeUndefined();
+    expect(entity(linked(atom())).parse(URL, store)).toBeDefined();
+    expect(entity(negated()).parse(URL, store)).toBeUndefined();
+  });
+  it.each([
     'a ex:Child; ex:flag "true"; ex:required "yes"',
     'a ex:Child; ex:flag false; ex:required "yes"',
-  ])("failed own parse or false child expression never counts: %s", (child) => {
+    'a ex:Child; ex:flag "1"^^xsd:boolean; ex:required "yes"',
+    'a ex:Child; ex:required "yes"',
+  ])("a linked node without the exact raw term never counts: %s", (child) => {
     expect(entity(linked(atom())).parse(URL, linkedStore([child]))).toBeUndefined();
-    const m = linked(atom());
-    const owner = m.entities[0] as ManifestEntity;
-    const constraint = must(owner.invariants?.[0]);
-    constraint.expression = not(constraint.expression);
-    expect(entity(m).parse(URL, linkedStore([child]))).toBeDefined();
+    expect(entity(negated()).parse(URL, linkedStore([child]))).toBeDefined();
   });
   it("applies nested not/and/or in the linked entity context", () => {
     const expr: InvariantExpression = {
@@ -325,12 +345,12 @@ describe("qualified linked entity readers", () => {
       entity(linked(expr)).parse(URL, linkedStore(['a ex:Child; ex:flag true; ex:required "yes"'])),
     ).toBeDefined();
   });
-  it("a linked entity's own Violation invariant prevents it counting", () => {
+  it("a linked entity's own invariants do not decide whether it counts", () => {
     const m = linked(atom());
     (m.entities[1] as ManifestEntity).invariants = [invariant(not(atom()))];
-    expect(
-      entity(m).parse(URL, linkedStore(['a ex:Child; ex:flag true; ex:required "yes"'])),
-    ).toBeUndefined();
+    const store = linkedStore(['a ex:Child; ex:flag true; ex:required "yes"']);
+    expect(must(defineModel(m).entities.Child).parse(`${URL}#c0`, store)).toBeUndefined();
+    expect(entity(m).parse(URL, store)).toBeDefined();
   });
   it("child setters cannot invalidate a parent's invariant", () => {
     const m = linked(atom());
@@ -345,20 +365,48 @@ describe("qualified linked entity readers", () => {
     }).toThrow(TypeError);
     expect(snapshot(store)).toEqual(before);
   });
-  it("shares raw-read exhaustion through a negated qualified atom", () => {
-    const m = linked(atom());
-    const root = m.entities[0] as ManifestEntity;
-    const constraint = must(root.invariants?.[0]);
-    constraint.expression = not(constraint.expression);
+  it("evaluates linearly: 1,000 linked nodes fit the budget", () => {
+    const children = (n: number) =>
+      linkedStore(Array.from({ length: n }, () => 'a ex:Child; ex:flag false; ex:required "yes"'));
+    expect(entity(negated()).parse(URL, children(1000))?.links).toHaveLength(1000);
+    // Writes additionally run main's alias-migration audit, whose own budget is unchanged.
+    const store = children(300);
+    const w = new (entity(negated()).Wrapper)(URL, store, F) as unknown as { links: Set<string> };
+    w.links.add(`${URL}#extra`);
+    expect(store.countQuads(URL, `${EX}links`, null, null)).toBe(301);
+  });
+  it("fails a Violation invariant closed when its read budget is exhausted", () => {
     const store = linkedStore(
-      Array.from({ length: 2600 }, () => 'a ex:Child; ex:flag false; ex:required "yes"'),
+      Array.from({ length: 6000 }, () => 'a ex:Child; ex:flag false; ex:required "yes"'),
     );
-    expect(entity(m).parse(URL, store)).toBeUndefined();
+    expect(entity(negated()).parse(URL, store)).toBeUndefined();
     const before = snapshot(store);
     expect(() => {
-      (new (entity(m).Wrapper)(URL, store, F) as unknown as { links: Set<string> }).links.clear();
-    }).toThrow();
+      (
+        new (entity(negated()).Wrapper)(URL, store, F) as unknown as { links: Set<string> }
+      ).links.add(`${URL}#extra`);
+    }).toThrow(/budget/);
     expect(snapshot(store)).toEqual(before);
+  });
+  it("a Warning invariant that would exhaust the budget is advisory, not a rejection", () => {
+    const m = negated();
+    must((m.entities[0] as ManifestEntity).invariants?.[0]).severity = "Warning";
+    const store = linkedStore(
+      Array.from({ length: 6000 }, () => 'a ex:Child; ex:flag false; ex:required "yes"'),
+    );
+    expect(entity(m).parse(URL, store)?.links).toHaveLength(6000);
+  });
+  it("applies the invariant budget only to entities with invariants", () => {
+    // The owner has no invariant; only its linked Child does. A large owner still parses.
+    const m = linked(atom());
+    delete (m.entities[0] as ManifestEntity).invariants;
+    (m.entities[1] as ManifestEntity).invariants = [
+      invariant(not(atom("required", "x", `${XSD}string`))),
+    ];
+    const store = linkedStore(
+      Array.from({ length: 6000 }, () => 'a ex:Child; ex:flag false; ex:required "yes"'),
+    );
+    expect(entity(m).parse(URL, store)?.links).toHaveLength(6000);
   });
 });
 
@@ -459,7 +507,6 @@ describe("invariant adversarial bounds and migration", () => {
         datatype: undefined,
         collection: "set",
         maxCount: undefined,
-        hasClass: `${EX}Record`,
       }),
     ];
     let expression = atom();
@@ -483,20 +530,32 @@ describe("invariant adversarial bounds and migration", () => {
       ManifestError,
     );
   });
-  it("never commits alias migration when the explicit write violates an invariant", () => {
+  it("never commits alias migration when the staged write violates an invariant", () => {
     const e = entity(
-      manifest([invariant(atom())], [field("flag", { aliasPredicates: [`${EX}oldFlag`] })]),
+      manifest(
+        [invariant(atom())],
+        [field("flag"), field("other", { aliasPredicates: [`${EX}oldOther`] })],
+      ),
     );
-    const store = dataset("ex:oldFlag true");
+    const store = dataset("ex:flag false; ex:oldOther true");
     const before = snapshot(store);
-    const w = new e.Wrapper(URL, store, F) as unknown as { flag: boolean };
+    const w = new e.Wrapper(URL, store, F) as unknown as { flag: boolean; other: boolean };
     expect(() => {
-      w.flag = false;
+      w.other = true;
     }).toThrow(TypeError);
     expect(snapshot(store)).toEqual(before);
     w.flag = true;
-    expect(store.countQuads(URL, `${EX}oldFlag`, null, null)).toBe(0);
-    expect(e.parse(URL, store)).toEqual({ flag: true });
+    w.other = true;
+    expect(store.countQuads(URL, `${EX}oldOther`, null, null)).toBe(0);
+    expect(e.parse(URL, store)).toEqual({ flag: true, other: true });
+  });
+  it("rejects invariant paths whose field carries read aliases", () => {
+    // Atoms read exactly the SHACL path predicate, so an aliased field is not understood.
+    expect(() =>
+      defineModel(
+        manifest([invariant(atom())], [field("flag", { aliasPredicates: [`${EX}oldFlag`] })]),
+      ),
+    ).toThrow(/aliases/);
   });
   it("a failed linked Warning invariant remains advisory", () => {
     const m = linked(atom());
@@ -505,10 +564,19 @@ describe("invariant adversarial bounds and migration", () => {
       entity(m).parse(URL, linkedStore(['a ex:Child; ex:flag true; ex:required "yes"'])),
     ).toBeDefined();
   });
-  it("ignores wrong-kind and unsafe linked terms", () => {
-    for (const links of ['"literal"', "_:blank", "<urn:node>"]) {
-      expect(entity(linked(atom())).parse(URL, linkedStore([], links))).toBeUndefined();
+  it("counts blank-node and non-http linked nodes, and literals, with SHACL semantics", () => {
+    for (const links of ["_:b", "<urn:x:node>", "<mailto:a@example.org>"]) {
+      const store = new Store(
+        new Parser().parse(
+          `${header}<${URL}> a ex:Record; ex:links ${links}. ${links} ex:flag true.`,
+        ),
+      );
+      expect(entity(linked(atom())).parse(URL, store), links).toBeDefined();
+      expect(entity(negated()).parse(URL, store), links).toBeUndefined();
     }
+    // A literal value node has no outgoing data: an atom on it is false, its negation true.
+    expect(entity(linked(atom())).parse(URL, linkedStore([], '"literal"'))).toBeUndefined();
+    expect(entity(linked(not(atom()))).parse(URL, linkedStore([], '"literal"'))).toBeDefined();
   });
   it("keeps exact numeric term identity inside a logical atom", () => {
     const e = entity(
@@ -576,10 +644,16 @@ describe("invariant adversarial bounds and migration", () => {
       ),
     ).toThrow(ManifestError);
   });
-  it("rejects a qualified target different from the field's class", () => {
+  it("keeps sh:class metadata on nested links only", () => {
     const m = linked(atom());
-    const owner = m.entities[0] as ManifestEntity;
-    must(owner.fields[0]).hasClass = `${EX}Other`;
+    must((m.entities[0] as ManifestEntity).fields[0]).hasClass = `${EX}Child`;
+    expect(() => defineModel(m)).toThrow(/hasClass is only allowed on a nested field/);
+  });
+  it("rejects a qualified target that names no entity", () => {
+    const m = linked(atom());
+    const constraint = must((m.entities[0] as ManifestEntity).invariants?.[0]);
+    if (constraint.expression.op !== "qualified") throw new Error("fixture");
+    constraint.expression.targetClass = `${EX}Unknown`;
     expect(() => defineModel(m)).toThrow(ManifestError);
   });
 });
@@ -631,7 +705,7 @@ describe("composite invariant ownership", () => {
 });
 
 describe("hasValue atoms on composite links", () => {
-  it("compares the exact link only after its linked reader succeeds", () => {
+  it("compares the exact raw link term, independently of the linked reader", () => {
     const m: ModelManifest = {
       ...manifest(),
       entities: [
@@ -663,8 +737,10 @@ describe("hasValue atoms on composite links", () => {
     for (const [links, values, valid] of [
       [`<${URL}#child>`, "true", true],
       [`<${URL}#other>`, "true", false],
-      [`<${URL}#child>, <${URL}#other>`, "true", false],
-      [`<${URL}#child>`, '"true"', false],
+      // Raw semantics: the term is among the objects even though the reader drops the
+      // ambiguous optional link, or the child fails its own strict reader.
+      [`<${URL}#child>, <${URL}#other>`, "true", true],
+      [`<${URL}#child>`, '"true"', true],
       ['"literal"', "true", false],
       ["", "true", false],
     ] as const) {
@@ -723,31 +799,141 @@ describe("writes through structural node lenses", () => {
 });
 
 describe("type-set invariant writes", () => {
-  it("cannot invalidate a parent's qualified minimum by removing the child's class", () => {
+  it("a linked node's class does not affect its owner's raw qualified count", () => {
     const model = defineModel(linked(atom()));
     const store = linkedStore(['a ex:Child; ex:flag true; ex:required "yes"']);
     const child = new (must(model.entities.Child).Wrapper)(`${URL}#c0`, store, F);
     child.types.add(`${EX}Extra`);
-    for (const mutate of [
-      () => child.types.delete(`${EX}Child`),
-      () => child.types.clear(),
-      () => child.types.add(`${EX}Extra`).clear(),
-    ]) {
-      const before = snapshot(store);
-      expect(mutate).toThrow(TypeError);
+    child.types.delete(`${EX}Child`);
+    child.types.clear();
+    expect(must(model.entities.Record).parse(URL, store)).toBeDefined();
+  });
+  it("a type write that makes a node a focus of a violated shape throws before mutation", () => {
+    const model = defineModel(linked(atom()));
+    // Untyped and unlinked: no shape applies yet, and the Record invariant would fail here.
+    const store = new Store(new Parser().parse(`${header}<${URL}#c0> ex:flag true.`));
+    const child = new (must(model.entities.Child).Wrapper)(`${URL}#c0`, store, F);
+    const before = snapshot(store);
+    expect(() => child.types.add(`${EX}Record`)).toThrow(TypeError);
+    expect(() => child.types.add(`${EX}Child`)).not.toThrow(); // Child has no invariant
+    expect(snapshot(store)).not.toEqual(before);
+    expect(store.countQuads(`${URL}#c0`, null, `${EX}Record`, null)).toBe(0);
+  });
+});
+
+describe("write validation is scoped to the focuses a write can affect", () => {
+  const twoLevel = (): ModelManifest => {
+    const m = manifest(
+      [
+        invariant({
+          op: "qualified",
+          path: `${EX}links`,
+          targetClass: `${EX}Child`,
+          minCount: 1,
+          expression: {
+            op: "qualified",
+            path: `${EX}sub`,
+            targetClass: `${EX}Leaf`,
+            minCount: 1,
+            expression: atom(),
+          },
+        }),
+      ],
+      [
+        field("links", {
+          kind: "iri",
+          datatype: undefined,
+          maxCount: undefined,
+          collection: "set",
+        }),
+      ],
+    );
+    m.entities.push(
+      {
+        name: "Child",
+        typeIris: [`${EX}Child`],
+        subject: { convention: "self" },
+        fields: [
+          field("sub", {
+            kind: "iri",
+            datatype: undefined,
+            maxCount: undefined,
+            collection: "set",
+          }),
+        ],
+      },
+      {
+        name: "Leaf",
+        typeIris: [`${EX}Leaf`],
+        subject: { convention: "self" },
+        fields: [field("flag")],
+      },
+    );
+    return m;
+  };
+  it("a valid write succeeds next to an invalid sibling of the same shape", () => {
+    const e = entity(manifest([invariant(atom())], [field("flag"), field("other")]));
+    const store = new Store(
+      new Parser().parse(`${header}<${URL}> a ex:Record; ex:flag true.
+      <${URL}2> a ex:Record; ex:flag false.`),
+    );
+    expect(e.parse(`${URL}2`, store)).toBeUndefined();
+    (new e.Wrapper(URL, store, F) as unknown as { other: boolean }).other = true;
+    expect(e.parse(URL, store)).toEqual({ flag: true, other: true });
+  });
+  it("a sibling missing a fixed value does not block a write", () => {
+    const hasValue = {
+      term: { kind: "literal" as const, value: "true", datatype: `${XSD}boolean` },
+      severity: "Violation" as const,
+    };
+    const e = entity(manifest(undefined, [field("flag", { hasValue }), field("other")]));
+    const store = new Store(
+      new Parser().parse(`${header}<${URL}> a ex:Record; ex:flag true. <${URL}2> a ex:Record.`),
+    );
+    (new e.Wrapper(URL, store, F) as unknown as { other: boolean }).other = false;
+    expect(e.parse(URL, store)).toEqual({ flag: true, other: false });
+  });
+  it("a linked-node write succeeds next to an invalid unrelated owner", () => {
+    const model = defineModel(linked(atom()));
+    const store = new Store(
+      new Parser().parse(`${header}<${URL}> a ex:Record.
+      <${URL}#c0> a ex:Child; ex:flag true; ex:required "yes".`),
+    );
+    expect(must(model.entities.Record).parse(URL, store)).toBeUndefined();
+    const child = new (must(model.entities.Child).Wrapper)(`${URL}#c0`, store, F) as unknown as {
+      flag: boolean;
+    };
+    child.flag = false;
+    expect(store.countQuads(`${URL}#c0`, `${EX}flag`, null, null)).toBe(1);
+  });
+  it.each([
+    ["named", `<${URL}#child>`],
+    ["blank", "_:child"],
+  ])("finds owners through a two-level qualified chain (%s intermediate)", (_label, mid) => {
+    const model = defineModel(twoLevel());
+    const store = new Store(
+      new Parser().parse(`${header}<${URL}> a ex:Record; ex:links ${mid}.
+      ${mid} a ex:Child; ex:sub <${URL}#leaf>. <${URL}#leaf> a ex:Leaf; ex:flag true.`),
+    );
+    expect(must(model.entities.Record).parse(URL, store)).toBeDefined();
+    const before = snapshot(store);
+    const leaf = new (must(model.entities.Leaf).Wrapper)(`${URL}#leaf`, store, F) as unknown as {
+      flag: boolean;
+    };
+    expect(() => {
+      leaf.flag = false;
+    }).toThrow(/violates invariant/);
+    expect(snapshot(store)).toEqual(before);
+    if (mid.startsWith("<")) {
+      const child = new (must(model.entities.Child).Wrapper)(
+        `${URL}#child`,
+        store,
+        F,
+      ) as unknown as {
+        sub: Set<string>;
+      };
+      expect(() => child.sub.delete(`${URL}#leaf`)).toThrow(/violates invariant/);
       expect(snapshot(store)).toEqual(before);
     }
-  });
-  it("cannot make a forbidden qualified match by adding a previously missing class", () => {
-    const m = linked(atom());
-    const owner = m.entities[0] as ManifestEntity;
-    const constraint = must(owner.invariants?.[0]);
-    constraint.expression = not(constraint.expression);
-    const model = defineModel(m);
-    const store = linkedStore(['ex:flag true; ex:required "yes"']);
-    const before = snapshot(store);
-    const child = new (must(model.entities.Child).Wrapper)(`${URL}#c0`, store, F);
-    expect(() => child.types.add(`${EX}Child`)).toThrow(TypeError);
-    expect(snapshot(store)).toEqual(before);
   });
 });

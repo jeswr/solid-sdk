@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -515,8 +516,7 @@ function assertCompositeFidelity(
       if (
         node.name !== composite.root &&
         constraint.hasClass !== undefined &&
-        constraint.conceptIris === undefined &&
-        field.hasClass === undefined
+        constraint.conceptIris === undefined
       ) {
         throw new FidelityError(
           `child shape sh:class constraint ${field.predicate} requires a projected composite link`,
@@ -607,14 +607,6 @@ export function assertFidelity(shapes: NormalizedShapes, compiled: CompileResult
       const c = shape?.properties.find((p) => p.pathIri === field.predicate);
       if (JSON.stringify(field.hasValue) !== JSON.stringify(c ? propertyHasValue(c) : undefined))
         throw new FidelityError(`hasValue mismatch for ${owner.name}.${field.name}`);
-      if (
-        field.kind !== "nested" &&
-        field.hasClass !==
-          (c && propertySources(c).some((s) => invariants.collectionLinks.has(s.shapeIri))
-            ? c.hasClass
-            : undefined)
-      )
-        throw new FidelityError(`collection class mismatch for ${owner.name}.${field.name}`);
     }
     for (const c of shape?.properties ?? [])
       if (propertyHasValue(c) && !owner.fields.some((f) => f.predicate === c.pathIri))

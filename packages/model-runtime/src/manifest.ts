@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -110,7 +111,7 @@ export interface ManifestField {
   kind: "iri" | "literal" | "nested";
   /** For a `nested` field: the name of the target sub-node within the composite. */
   node?: string;
-  /** Link/IRI collection's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
+  /** Nested link's sh:class, checked through rdf:type/rdfs:subClassOf* in the DATA graph. */
   hasClass?: string;
   /** True when the source link has sh:class but no sh:node; its target must match exactly. */
   classOnly?: true;
@@ -485,6 +486,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     return validateNestedField(raw, name, predicate);
   }
   if (raw.node !== undefined) fail("field.node is only allowed on a nested field");
+  if (raw.hasClass !== undefined) fail("field.hasClass is only allowed on a nested field");
   if (raw.classOnly !== undefined) fail("field.classOnly is only allowed on a nested field");
   if (raw.kind !== "iri" && raw.kind !== "literal") {
     fail('field.kind must be "iri", "literal", or "nested"');
@@ -508,11 +510,6 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
 
   const field: ManifestField = { name, predicate, kind };
-  if (raw.hasClass !== undefined) {
-    if (kind !== "iri" || collection !== "set")
-      fail("field.hasClass requires a nested link or IRI collection");
-    field.hasClass = checkIri(raw.hasClass, "field.hasClass");
-  }
   if (raw.aliasPredicates !== undefined) {
     field.aliasPredicates = validateAliases(
       raw.aliasPredicates,

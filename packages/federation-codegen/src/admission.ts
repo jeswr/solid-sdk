@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -313,7 +314,6 @@ export function admit(
         component === "class" &&
         !isNested &&
         !orderedShapeIris.has(subject.value) &&
-        !invariants.collectionLinks.has(subject.value) &&
         c?.conceptIris === undefined &&
         config !== undefined
       ) {

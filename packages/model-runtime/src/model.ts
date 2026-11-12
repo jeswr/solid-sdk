@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -38,6 +39,7 @@ import {
 } from "./guards.js";
 import {
   constraintTerm,
+  type EntityInvariant,
   type InvariantExpression,
   invariantOwners,
   MAX_INVARIANT_ATOMS,
@@ -205,12 +207,6 @@ function projectValue(plan: FieldPlan, value: unknown): unknown {
 /** All term/lexical constraints precede scheme-policy normalization on reads. */
 function readTerm(doc: TermWrapper, plan: FieldPlan, term: Term): unknown {
   const { field, mapper } = plan;
-  if (
-    field.kind === "iri" &&
-    field.hasClass &&
-    (term.termType !== "NamedNode" || !hasDatasetClass(doc, term.value, [field.hasClass]))
-  )
-    return undefined;
   if (!enumTermMatches(doc, plan, term)) return undefined;
   const raw = tryRead(() => mapper.as(new TermWrapper(term, doc.dataset, doc.factory)));
   // IRI lexical safety is projection policy: the bookmark contract permits the
@@ -867,8 +863,10 @@ function makeWrapperClass(
       return this.value;
     }
     get types(): Set<string> {
+      // A type write can make this node a focus of a constrained shape, so it is validated;
+      // like main, it performs no alias migration.
       return hasWriteConstraints(context)
-        ? guardedWriteSet(this, context, { owner, iri: this.value }, typeSet)
+        ? guardedWriteSet(this, context, { owner, iri: this.value }, typeSet, false)
         : typeSet(this);
     }
     get isInstance(): boolean {
@@ -877,10 +875,7 @@ function makeWrapperClass(
     mark(): this {
       if (hasWriteConstraints(context)) {
         stagedWrite(this, context, { owner, iri: this.value }, (staged) => {
-          for (const t of typeIris)
-            SetFrom.subjectPredicate(staged, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom).add(
-              t,
-            );
+          for (const t of typeIris) typeSet(staged).add(t);
         });
       } else {
         beforeWrite(this);
@@ -898,11 +893,7 @@ function makeWrapperClass(
           return readOrdered(this, plan);
         },
         set(this: TermWrapper, value: unknown) {
-          if (hasWriteConstraints(context)) {
-            stagedWrite(this, context, { owner, iri: this.value, field }, (staged) =>
-              writeOrdered(staged, plan, value),
-            );
-          } else writeOrdered(this, plan, value, () => beforeWrite(this, field));
+          writeOrdered(this, plan, value, () => beforeWrite(this, field));
         },
         enumerable: false,
         configurable: true,
@@ -1099,14 +1090,9 @@ export class MigrationError extends Error {
 
 interface ReadBudget {
   visits: number;
-  expressions?: number;
   migration?: MigrationBudget;
-  reads?: number;
-  exhausted?: boolean;
-  active?: Set<string>;
-  owners?: ShapeOwner[];
-  groups?: ReadonlyMap<ShapeOwner, ReadonlyMap<string, ManifestNode>>;
-  bounded?: DatasetCore;
+  /** One invariant evaluator (and read budget) per top-level parse, created on first use. */
+  invariants?: InvariantEvaluator;
 }
 
 interface MigrationBudget {
@@ -1221,7 +1207,6 @@ function aliasFocusNodes(
         before: parseShapeAt(node, iri, readStore, factory, byName, strict, {
           visits: 0,
           migration: budget,
-          ...invariantContext(manifest.entities),
         }),
       });
     };
@@ -1299,7 +1284,6 @@ function aliasFocusNodes(
         before: parseShapeAt(request.owner, request.iri, readStore, factory, byName, false, {
           visits: 0,
           migration: budget,
-          ...invariantContext(manifest.entities),
         }),
       });
     }
@@ -1434,7 +1418,6 @@ function canonicalizeAliases(
       {
         visits: 0,
         migration: budget,
-        ...invariantContext(manifest.entities),
       },
     );
     if (!sameProjection(check.before, after, check.node, check.byName))
@@ -1504,11 +1487,17 @@ function makeEntity(
   const build = (resourceUrl: string, data: EntityData): Store => {
     const store = new Store();
     const doc = new Wrapper(subject(resourceUrl), store, factory);
-    for (const type of entity.typeIris) typeSet(doc).add(type);
+    markUnchecked(doc, entity, migrationManifest);
     for (const plan of plans) {
+      migrateBeforeWrite(doc, migrationManifest, {
+        owner: entity,
+        iri: doc.value,
+        field: plan.field,
+      });
       writeFlatField(doc, plan, data);
     }
-    assertWriteConstraints(store, migrationManifest, factory);
+    // Validate the final built state once, so jointly valid fields work in any order.
+    assertWriteConstraints(store, migrationManifest, factory, [{ owner: entity, iri: doc.value }]);
     return store;
   };
 
@@ -1516,7 +1505,9 @@ function makeEntity(
     if (!isSafeAbsoluteIri(resourceUrl)) return undefined;
     const iri = entity.subject.convention === "hash-it" ? `${resourceUrl}#it` : resourceUrl;
     if (!isSafeAbsoluteIri(iri)) return undefined;
-    return parseEntityAt(entity, iri, dataset, factory, migrationManifest.manifest.entities);
+    const doc = new Wrapper(subject(resourceUrl), dataset, factory);
+    if (!doc.isInstance) return undefined;
+    return parseShapeAt(entity, iri, dataset, factory);
   };
 
   return assembleEntity(
@@ -1645,294 +1636,263 @@ function resolveNestedTarget(doc: TermWrapper, predicate: string): NestedTargetR
   return { reject: false, target, present: raw !== undefined };
 }
 
-function invariantContext(entities: ModelManifest["entities"]) {
+/** Composite node groups, so a write can follow nested links exactly as parse does. */
+function nodeGroups(
+  manifests: readonly ModelManifest[],
+): Map<ShapeOwner, ReadonlyMap<string, ManifestNode>> {
   const groups = new Map<ShapeOwner, ReadonlyMap<string, ManifestNode>>();
-  for (const entity of entities) {
-    if (!isCompositeEntity(entity)) continue;
-    const byName = new Map(entity.nodes.map((node) => [node.name, node]));
-    for (const node of entity.nodes) groups.set(node, byName);
-  }
-  return { owners: invariantOwners(entities), groups };
+  for (const manifest of manifests)
+    for (const entity of manifest.entities) {
+      if (!isCompositeEntity(entity)) continue;
+      const byName = new Map(entity.nodes.map((node) => [node.name, node]));
+      for (const node of entity.nodes) groups.set(node, byName);
+    }
+  return groups;
 }
 
-function parseEntityAt(
-  owner: ShapeOwner,
-  iri: string,
+/**
+ * Raw quads one invariant evaluation (a parse, or one write's validation) may read. Only
+ * invariant atoms consume it; ordinary field reads keep their own bounds.
+ */
+const MAX_INVARIANT_READS = MAX_CLASS_READS;
+/** Expression steps per evaluation; memoisation makes this linear in the nodes reached. */
+const MAX_INVARIANT_STEPS = 100_000;
+
+/** Internal signal: an invariant evaluation exhausted its budget (fails closed). */
+class InvariantBudgetExceeded extends Error {}
+
+function termKey(term: Term): string {
+  return term.termType === "Literal"
+    ? JSON.stringify([term.termType, term.value, term.datatype.value, term.language])
+    : JSON.stringify([term.termType, term.value]);
+}
+
+/**
+ * Evaluates invariant expressions with SHACL semantics over the RAW data graph — never over
+ * parsed values. An atom sees exactly what an external SHACL validator (or the emitted
+ * shapes.ttl) sees: `hasValue` holds iff the exact term is among the focus node's raw objects
+ * of the path predicate; `qualified` counts the distinct raw objects of the path (IRIs of any
+ * scheme, blank nodes, literals) on whose own raw data the sub-expression holds. Nothing is
+ * dropped by maxCount, datatype, guards, typing or a linked node's own reader, so a value the
+ * reader would discard still makes a negated safety rule fail CLOSED.
+ *
+ * Each (node, predicate) is read once and each (node, sub-expression) is evaluated once, so the
+ * work is linear in the linked nodes reached; reads and steps are both hard-bounded.
+ */
+class InvariantEvaluator {
+  private reads = 0;
+  private steps = 0;
+  private readonly objectsByNode = new Map<string, Term[]>();
+  private readonly memo = new Map<InvariantExpression, Map<string, boolean>>();
+  constructor(
+    readonly dataset: DatasetCore,
+    readonly factory: DataFactory,
+  ) {}
+
+  /** Count one unit of raw graph work against the shared budget. */
+  consume(): void {
+    if (++this.reads > MAX_INVARIANT_READS) throw new InvariantBudgetExceeded();
+  }
+
+  /** Distinct raw objects of (focus, predicate), across graphs, read at most once. */
+  objects(focus: Term, predicate: string): Term[] {
+    if (focus.termType !== "NamedNode" && focus.termType !== "BlankNode") return [];
+    const key = `${termKey(focus)} ${predicate}`;
+    const cached = this.objectsByNode.get(key);
+    if (cached) return cached;
+    const seen = new Set<string>();
+    const objects: Term[] = [];
+    for (const object of matchObjects(this.dataset, focus, this.factory.namedNode(predicate))) {
+      this.consume();
+      const id = termKey(object);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      objects.push(object);
+    }
+    this.objectsByNode.set(key, objects);
+    return objects;
+  }
+
+  holds(e: InvariantExpression, focus: Term, depth = 0, frames = 0): boolean {
+    // The manifest grammar is bounded; these limits also stop a mutated (cyclic) tree.
+    if (
+      ++this.steps > MAX_INVARIANT_STEPS ||
+      depth > MAX_INVARIANT_DEPTH ||
+      frames > MAX_INVARIANT_ATOMS + MAX_INVARIANT_DEPTH
+    )
+      throw new InvariantBudgetExceeded();
+    const key = termKey(focus);
+    let byFocus = this.memo.get(e);
+    const known = byFocus?.get(key);
+    if (known !== undefined) return known;
+    let result: boolean;
+    if (e.op === "not") result = !this.holds(e.expression, focus, depth + 1, frames + 1);
+    else if (e.op === "and")
+      result = e.expressions.every((child) => this.holds(child, focus, depth + 1, frames + 1));
+    else if (e.op === "or")
+      result = e.expressions.some((child) => this.holds(child, focus, depth + 1, frames + 1));
+    else if (e.op === "hasValue") {
+      const expected = constraintTerm(e.term, this.factory);
+      result = this.objects(focus, e.path).some((term) => term.equals(expected));
+    } else if (e.op === "qualified") {
+      let count = 0;
+      result = false;
+      for (const linked of this.objects(focus, e.path))
+        if (this.holds(e.expression, linked, depth, frames + 1) && ++count >= e.minCount) {
+          result = true;
+          break;
+        }
+    } else throw new InvariantBudgetExceeded(); // unknown operator: fail closed
+    if (!byFocus) {
+      byFocus = new Map();
+      this.memo.set(e, byFocus);
+    }
+    byFocus.set(key, result);
+    return result;
+  }
+
+  /**
+   * The first Violation invariant of `owner` that does not hold at `focus`. Warning/Info
+   * invariants are advisory: the runtime has no reporting channel, so they are not evaluated
+   * (and so can neither reject an entity nor exhaust the budget); external validators of the
+   * emitted shapes.ttl report them.
+   */
+  violated(owner: ShapeOwner, focus: Term): EntityInvariant | undefined {
+    for (const invariant of owner.invariants ?? [])
+      if (invariant.severity === "Violation" && !this.holds(invariant.expression, focus))
+        return invariant;
+    return undefined;
+  }
+}
+
+/** Parse-time invariant check; budget exhaustion rejects (only Violations are evaluated). */
+function invariantsHold(
+  node: ShapeOwner,
+  focus: Term,
   dataset: DatasetCore,
   factory: DataFactory,
-  entities: ModelManifest["entities"],
-  byName: ReadonlyMap<string, ManifestNode> = new Map(),
-): EntityData | undefined {
-  const budget: ReadBudget = { visits: 0, ...invariantContext(entities) };
-  const bounded = budget.owners?.some((o) => o.invariants?.length)
-    ? invariantDataset(dataset, budget)
-    : dataset;
-  try {
-    const doc = new TermWrapper(factory.namedNode(iri), bounded, factory);
-    if (!hasDatasetClass(doc, iri, [...owner.typeIris, ...(owner.aliasTypeIris ?? [])]))
-      return undefined;
-    return parseShapeAt(owner, iri, bounded, factory, byName, false, budget);
-  } catch (error) {
-    if (!(error instanceof InvariantReadLimit)) throw error;
-    return undefined;
-  }
-}
-
-function invariantDataset(dataset: DatasetCore, budget: ReadBudget): DatasetCore {
-  if (!budget.bounded) {
-    const consume = () => {
-      budget.reads = (budget.reads ?? 0) + 1;
-      if (budget.reads > MAX_CLASS_READS) {
-        budget.exhausted = true;
-        throw new InvariantReadLimit();
-      }
-    };
-    const read = (...args: Parameters<DatasetCore["match"]>) => {
-      const lazy = (dataset as Store).readQuads;
-      return typeof lazy === "function"
-        ? lazy.call(dataset, args[0] ?? null, args[1] ?? null, args[2] ?? null, args[3] ?? null)
-        : dataset.match(...args);
-    };
-    budget.bounded = new Proxy(dataset, {
-      get(target, key) {
-        if (key === "readQuads")
-          return function* (s: Term, p: Term, o: Term | null, g: Term | null) {
-            for (const q of read(s, p, o, g)) {
-              consume();
-              yield q;
-            }
-          };
-        if (key === "match")
-          return (...args: Parameters<DatasetCore["match"]>) => {
-            const found = new Store();
-            for (const q of read(...args)) {
-              consume();
-              found.add(q);
-            }
-            return found;
-          };
-        const value = Reflect.get(target, key, target);
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  }
-  return budget.bounded as DatasetCore;
-}
-
-/** Every invariant read shares a hard raw-read/visit budget, including linked readers. */
-class InvariantReadLimit extends TypeError {}
-function parseShapeAt(
-  node: ShapeOwner,
-  iri: string,
-  dataset: DatasetCore,
-  factory: DataFactory,
-  byName: ReadonlyMap<string, ManifestNode> = new Map(),
-  strict = false,
-  budget: ReadBudget = { visits: 0 },
-): EntityData | undefined {
-  const key = JSON.stringify([node.typeIris, iri]);
-  budget.active ??= new Set();
-  if (budget.active.has(key)) return undefined;
-  if (budget.active.size >= 64) {
-    budget.exhausted = true;
-    return undefined;
-  }
-  budget.active.add(key);
-  if (budget.owners?.some((o) => o.invariants?.length)) invariantDataset(dataset, budget);
-  try {
-    return readShapeAt(node, iri, budget.bounded ?? dataset, factory, byName, strict, budget);
-  } catch (error) {
-    if (!(error instanceof InvariantReadLimit)) throw error;
-    return undefined;
-  } finally {
-    budget.active.delete(key);
-  }
-}
-
-/** Two-valued logic is applied only to validated field projections; failed children never count. */
-function invariantsConform(
-  node: ShapeOwner,
-  doc: TermWrapper,
-  data: EntityData,
-  factory: DataFactory,
-  byName: ReadonlyMap<string, ManifestNode>,
   budget: ReadBudget,
 ): boolean {
-  const evaluate = (
-    e: InvariantExpression,
-    focus: ShapeOwner,
-    current: TermWrapper,
-    values: EntityData,
-    depth = 0,
-    frames = 0,
-  ): boolean => {
-    budget.expressions = (budget.expressions ?? 0) + 1;
-    if (
-      depth > MAX_INVARIANT_DEPTH ||
-      frames > MAX_INVARIANT_ATOMS + MAX_INVARIANT_DEPTH ||
-      budget.expressions > MAX_NODE_VISITS
-    ) {
-      budget.exhausted = true;
-      return false;
-    }
-    if (e.op === "not")
-      return !evaluate(e.expression, focus, current, values, depth + 1, frames + 1);
-    if (e.op === "and")
-      return e.expressions.every((child) =>
-        evaluate(child, focus, current, values, depth + 1, frames + 1),
-      );
-    if (e.op === "or")
-      return e.expressions.some((child) =>
-        evaluate(child, focus, current, values, depth + 1, frames + 1),
-      );
-    const field = focus.fields.find((f) => f.predicate === e.path);
-    if (!field) return false;
-    if (e.op === "hasValue") {
-      if (field.kind === "nested") {
-        const link = resolveNestedTarget(current, field.predicate);
-        const group = budget.groups?.get(focus) ?? byName;
-        const target = group.get(field.node as string);
-        return (
-          !link.reject &&
-          link.target !== undefined &&
-          target !== undefined &&
-          factory.namedNode(link.target).equals(constraintTerm(e.term, factory)) &&
-          (field.hasClass === undefined ||
-            hasDatasetClass(current, link.target, [field.hasClass], budget.migration)) &&
-          parseShapeAt(
-            target,
-            link.target,
-            current.dataset,
-            factory,
-            group,
-            !field.classOnly,
-            budget,
-          ) !== undefined
-        );
-      }
-      if (values[field.name] === undefined) return false;
-      const plan = planField(field);
-      const expected = constraintTerm(e.term, factory);
-      const terms =
-        field.collection === "set"
-          ? retainedSetTerms(current, plan)
-          : [readSingleTerm(current, plan).term];
-      return terms.some((t) => t?.equals(expected));
-    }
-    if (e.op !== "qualified") return false;
-    const target = budget.owners?.find((o) => o.typeIris.includes(e.targetClass));
-    if (!target) return false;
-    const seen = new Set<string>();
-    let count = 0;
-    // A nested child has already passed its reader before its expression may count.
-    for (const term of matchObjects(
-      current.dataset,
-      current as unknown as Term,
-      factory.namedNode(field.predicate),
-    )) {
-      if (
-        term.termType !== "NamedNode" ||
-        !isSafeAbsoluteIri(term.value) ||
-        !/^https?:\/\//i.test(term.value) ||
-        seen.has(term.value)
-      )
-        continue;
-      seen.add(term.value);
-      if (field.kind !== "nested") {
-        if (
-          !Array.isArray(values[field.name]) ||
-          !retainedSetTerms(current, planField(field)).some((t) => t.equals(term))
-        )
-          continue;
-      }
-      if (field.kind === "nested") {
-        const link = resolveNestedTarget(current, field.predicate);
-        if (
-          link.reject ||
-          link.target !== term.value ||
-          (field.hasClass &&
-            !hasDatasetClass(current, term.value, [field.hasClass], budget.migration))
-        )
-          continue;
-      }
-      const linked = new TermWrapper(term, current.dataset, factory);
-      if (
-        (field.kind !== "nested" || field.classOnly) &&
-        !hasDatasetClass(
-          linked,
-          term.value,
-          [...target.typeIris, ...(target.aliasTypeIris ?? [])],
-          budget.migration,
-        )
-      )
-        continue;
-      const parsed = parseShapeAt(
-        target,
-        term.value,
-        current.dataset,
-        factory,
-        budget.groups?.get(target) ?? byName,
-        field.kind === "nested" && !field.classOnly,
-        budget,
-      );
-      if (
-        parsed !== undefined &&
-        evaluate(e.expression, target, linked, parsed, depth, frames + 1) &&
-        ++count >= e.minCount
-      )
-        return true;
-    }
-    return false;
-  };
-  for (const invariant of node.invariants ?? []) {
-    const valid = evaluate(invariant.expression, node, doc, data);
-    if (budget.exhausted || (!valid && invariant.severity === "Violation")) return false;
-    // Warning/Info have the same advisory disposition as a non-required field.
+  if (!node.invariants?.some((invariant) => invariant.severity === "Violation")) return true;
+  budget.invariants ??= new InvariantEvaluator(dataset, factory);
+  try {
+    return budget.invariants.violated(node, focus) === undefined;
+  } catch (error) {
+    if (error instanceof InvariantBudgetExceeded) return false;
+    throw error;
   }
-  return !budget.exhausted;
 }
 
-function hasWriteConstraints(context: MigrationContext): boolean {
-  return [context.manifest, ...context.checkAlso].some((m) =>
-    invariantOwners(m.entities).some(
-      (o) => o.invariants?.length || o.fields.some((f) => f.hasValue),
-    ),
+function hasOwnConstraints(owner: ShapeOwner): boolean {
+  return (
+    owner.invariants?.some((invariant) => invariant.severity === "Violation") === true ||
+    owner.fields.some((field) => field.hasValue !== undefined)
   );
 }
 
-/** Validate all typed focuses, so a child setter cannot bypass its parent's safety invariant. */
+const writeConstraintCache = new WeakMap<ModelManifest, boolean>();
+function hasWriteConstraints(context: MigrationContext): boolean {
+  return [context.manifest, ...context.checkAlso].some((manifest) => {
+    let found = writeConstraintCache.get(manifest);
+    if (found === undefined) {
+      found = invariantOwners(manifest.entities).some(
+        (owner) => owner.invariants?.length || owner.fields.some((field) => field.hasValue),
+      );
+      writeConstraintCache.set(manifest, found);
+    }
+    return found;
+  });
+}
+
+/** Every qualified path chain (outermost first) inside an expression. */
+function qualifiedChains(
+  e: InvariantExpression,
+  prefix: string[] = [],
+  out: string[][] = [],
+  depth = 0,
+): string[][] {
+  if (depth > MAX_INVARIANT_ATOMS + MAX_INVARIANT_DEPTH) throw new InvariantBudgetExceeded();
+  if (e.op === "not") qualifiedChains(e.expression, prefix, out, depth + 1);
+  else if (e.op === "and" || e.op === "or")
+    for (const child of e.expressions) qualifiedChains(child, prefix, out, depth + 1);
+  else if (e.op === "qualified") {
+    const chain = [...prefix, e.path];
+    out.push(chain);
+    qualifiedChains(e.expression, chain, out, depth + 1);
+  }
+  return out;
+}
+
+/**
+ * Validate a write's STAGED state before it is committed. Only focuses the write can affect
+ * are checked, so an unrelated invalid sibling from the pod never blocks a write:
+ *  - the written node under the writing wrapper's shape (`seeds`), and under every other shape
+ *    it is a focus of (typed, or reached from a typed composite root via nested links);
+ *  - the nested descendants of those focuses, since a link write can change which node is
+ *    the child (sh:node applies the child's constraints to it, typed or not);
+ *  - owners whose qualified invariants reach the written node: found by a bounded reverse
+ *    lookup along each qualified path chain, so a linked node's write cannot flip its owner.
+ * Each focus must keep its hasValue fields and its Violation invariants (raw-graph semantics).
+ */
 function assertWriteConstraints(
-  store: Store,
+  store: DatasetCore,
   context: MigrationContext,
   factory: DataFactory,
-  request?: MigrationRequest,
+  seeds: readonly { owner: ShapeOwner; iri: string }[],
+  written?: string,
 ): void {
   if (!hasWriteConstraints(context)) return;
-  for (const manifest of [context.manifest, ...context.checkAlso]) {
-    const { owners, groups } = invariantContext(manifest.entities);
-    const byName = new Map(
-      owners.filter((o): o is ManifestNode => "fragment" in o).map((o) => [o.name, o]),
-    );
-    const budget: ReadBudget = { visits: 0, owners, groups };
-    const bounded = invariantDataset(store, budget);
-    let scans = 0;
-    const candidates = new Set<string>();
-    for (const q of store.readQuads(null, RDF_TYPE, null, null)) {
-      if (++scans > MAX_CLASS_READS) throw new TypeError("invariant write exceeds read budget");
-      if (q.subject.termType === "NamedNode") candidates.add(q.subject.value);
-    }
-    if (request) candidates.add(request.iri);
-    // sh:node also applies constraints to untyped children. Establish those focuses
-    // from the staged links, so a structural node lens cannot bypass their invariants.
-    const reached = new Map<ShapeOwner, Set<string>>();
-    const visit = (owner: ShapeOwner, iri: string, depth = 0): void => {
-      if (depth > 64 || ++scans > MAX_CLASS_READS)
-        throw new TypeError("invariant write exceeds visit budget");
-      const subjects = reached.get(owner) ?? new Set<string>();
+  const manifests = [context.manifest, ...context.checkAlso];
+  const owners = manifests.flatMap((manifest) => invariantOwners(manifest.entities));
+  const groups = nodeGroups(manifests);
+  const evaluator = new InvariantEvaluator(store, factory);
+  const consume = (): true => {
+    evaluator.consume();
+    return true;
+  };
+  const focuses = new Map<ShapeOwner, Set<string>>();
+  try {
+    const typed = (owner: ShapeOwner, iri: string): boolean =>
+      hasDatasetClass(
+        new TermWrapper(factory.namedNode(iri), store, factory),
+        iri,
+        [...owner.typeIris, ...(owner.aliasTypeIris ?? [])],
+        undefined,
+        consume,
+      );
+    /** Typed, or the sh:node child of a node that is itself a focus (acyclic, bounded). */
+    const isFocus = (owner: ShapeOwner, iri: string, depth = 0): boolean => {
+      if (depth > 64) throw new InvariantBudgetExceeded();
+      if (typed(owner, iri)) return true;
+      const group = groups.get(owner);
+      if (!group || !("fragment" in owner)) return false;
+      for (const parent of group.values())
+        for (const field of parent.fields) {
+          if (field.kind !== "nested" || field.node !== owner.name) continue;
+          for (const q of store.match(
+            null,
+            factory.namedNode(field.predicate),
+            factory.namedNode(iri),
+            null,
+          )) {
+            consume();
+            if (q.subject.termType === "NamedNode" && isFocus(parent, q.subject.value, depth + 1))
+              return true;
+          }
+        }
+      return false;
+    };
+    const descend = (owner: ShapeOwner, iri: string, depth = 0): void => {
+      consume();
+      if (depth > 64) throw new InvariantBudgetExceeded();
+      let subjects = focuses.get(owner);
+      if (!subjects) {
+        subjects = new Set();
+        focuses.set(owner, subjects);
+      }
       if (subjects.has(iri)) return;
       subjects.add(iri);
-      reached.set(owner, subjects);
-      const doc = new TermWrapper(factory.namedNode(iri), bounded, factory);
+      const doc = new TermWrapper(factory.namedNode(iri), store, factory);
       for (const field of owner.fields) {
         if (field.kind !== "nested") continue;
         const child = groups.get(owner)?.get(field.node as string);
@@ -1941,58 +1901,59 @@ function assertWriteConstraints(
           child &&
           !link.reject &&
           link.target !== undefined &&
-          (field.hasClass === undefined || hasDatasetClass(doc, link.target, [field.hasClass]))
+          (field.hasClass === undefined ||
+            hasDatasetClass(doc, link.target, [field.hasClass], undefined, consume))
         )
-          visit(child, link.target, depth + 1);
+          descend(child, link.target, depth + 1);
       }
     };
-    for (const entity of manifest.entities) {
-      if (
-        !isCompositeEntity(entity) ||
-        !entity.nodes.some((n) => n.invariants?.length || n.fields.some((f) => f.hasValue))
-      )
-        continue;
-      const root = entity.nodes.find((n) => n.name === entity.root);
-      if (!root) continue;
-      for (const iri of candidates) {
-        const doc = new TermWrapper(factory.namedNode(iri), bounded, factory);
-        if (hasDatasetClass(doc, iri, [...root.typeIris, ...(root.aliasTypeIris ?? [])]))
-          visit(root, iri);
-      }
-      if (request)
-        for (const node of entity.nodes)
-          if (node.typeIris.some((type) => request.owner.typeIris.includes(type)))
-            visit(node, request.iri);
-    }
-    for (const owner of owners) {
-      if (!owner.invariants?.length && !owner.fields.some((f) => f.hasValue)) continue;
-      for (const iri of new Set([...candidates, ...(reached.get(owner) ?? [])])) {
-        if (++scans > MAX_CLASS_READS) throw new TypeError("invariant write exceeds read budget");
-        const doc = new TermWrapper(factory.namedNode(iri), bounded, factory);
-        if (
-          !(
-            request?.iri === iri && owner.typeIris.some((t) => request.owner.typeIris.includes(t))
-          ) &&
-          !reached.get(owner)?.has(iri) &&
-          !hasDatasetClass(doc, iri, [...owner.typeIris, ...(owner.aliasTypeIris ?? [])])
-        )
-          continue;
-        for (const field of owner.fields) {
-          if (field.hasValue) {
-            const selected = readSingleTerm(doc, planField(field)).term;
-            if (!selected?.equals(constraintTerm(field.hasValue.term, factory)))
-              throw new TypeError(`field ${field.name} requires sh:hasValue`);
+    for (const seed of seeds) descend(seed.owner, seed.iri);
+    if (written !== undefined) {
+      for (const owner of owners) if (isFocus(owner, written)) descend(owner, written);
+      // Reverse lookup: owners whose qualified chains end at, or pass through, the written node.
+      for (const owner of owners)
+        for (const invariant of owner.invariants ?? []) {
+          if (invariant.severity !== "Violation") continue;
+          for (const chain of qualifiedChains(invariant.expression)) {
+            let level: Term[] = [factory.namedNode(written)];
+            for (let i = chain.length - 1; i >= 0 && level.length; i--) {
+              const next = new Map<string, Term>();
+              for (const object of level)
+                for (const q of store.match(
+                  null,
+                  factory.namedNode(chain[i] as string),
+                  object,
+                  null,
+                )) {
+                  consume();
+                  next.set(termKey(q.subject), q.subject);
+                }
+              level = [...next.values()];
+            }
+            for (const candidate of level)
+              if (candidate.termType === "NamedNode" && isFocus(owner, candidate.value))
+                descend(owner, candidate.value);
           }
         }
-        if (owner.invariants?.some((i) => i.severity === "Violation")) {
-          const data: EntityData = {};
-          for (const field of owner.fields)
-            if (field.kind !== "nested") readFlatFieldInto(doc, planField(field), data);
-          if (!invariantsConform(owner, doc, data, factory, groups.get(owner) ?? byName, budget))
-            throw new TypeError(`entity ${owner.name} violates an invariant`);
+    }
+    for (const [owner, subjects] of focuses) {
+      if (!hasOwnConstraints(owner)) continue;
+      for (const iri of subjects) {
+        const doc = new TermWrapper(factory.namedNode(iri), store, factory);
+        for (const field of owner.fields) {
+          if (!field.hasValue) continue;
+          const selected = readSingleTerm(doc, planField(field)).term;
+          if (!selected?.equals(constraintTerm(field.hasValue.term, factory)))
+            throw new TypeError(`field ${field.name} requires sh:hasValue`);
         }
+        const failed = evaluator.violated(owner, factory.namedNode(iri));
+        if (failed) throw new TypeError(`entity ${owner.name} violates invariant ${failed.shape}`);
       }
     }
+  } catch (error) {
+    if (error instanceof InvariantBudgetExceeded)
+      throw new TypeError("invariant write validation exceeds its read budget");
+    throw error;
   }
 }
 
@@ -2001,24 +1962,37 @@ function typeSet(doc: TermWrapper): Set<string> {
   return SetFrom.subjectPredicate(doc, RDF_TYPE, NamedNodeAs.string, safeNamedNodeFrom);
 }
 
+/** `mark()` without staged validation: build validates its final store once instead. */
+function markUnchecked(doc: TermWrapper, owner: ShapeOwner, context: MigrationContext): void {
+  migrateBeforeWrite(doc, context, { owner, iri: doc.value });
+  for (const type of owner.typeIris) typeSet(doc).add(type);
+}
+
 /** Never leak an unchecked live set through chaining or the forEach callback. */
 function guardedWriteSet<T>(
   doc: TermWrapper,
   context: MigrationContext,
   request: MigrationRequest,
   makeSet: (focus: TermWrapper) => Set<T>,
+  migrate = true,
 ): Set<T> {
   const guarded = new Proxy(makeSet(doc), {
     get(target, key) {
       if (["add", "delete", "clear"].includes(String(key)))
         return (value: T) => {
           let result: unknown;
-          stagedWrite(doc, context, request, (staged) => {
-            const set = makeSet(staged);
-            if (key === "add") result = set.add(value);
-            else if (key === "delete") result = set.delete(value);
-            else result = set.clear();
-          });
+          stagedWrite(
+            doc,
+            context,
+            request,
+            (staged) => {
+              const set = makeSet(staged);
+              if (key === "add") result = set.add(value);
+              else if (key === "delete") result = set.delete(value);
+              else result = set.clear();
+            },
+            migrate,
+          );
           return key === "add" ? guarded : result;
         };
       if (key === "forEach")
@@ -2032,23 +2006,35 @@ function guardedWriteSet<T>(
   return guarded;
 }
 
-/** Migration and explicit change both run in a copy; validation precedes the first live mutation. */
+/**
+ * Migration (as on main) and the explicit change both run in a copy; validation precedes the
+ * first live mutation. `migrate: false` keeps main's migration-free rdf:type set writes.
+ */
 function stagedWrite(
   doc: TermWrapper,
   context: MigrationContext,
   request: MigrationRequest,
   change: (staged: TermWrapper) => void,
+  migrate = true,
 ): void {
-  const output = canonicalizeAliases(doc.dataset, context, doc.factory, request);
+  const output = migrate
+    ? canonicalizeAliases(doc.dataset, context, doc.factory, request)
+    : new Store([...doc.dataset.match()]);
   change(new TermWrapper(doc as unknown as Term, output, doc.factory));
-  assertWriteConstraints(output, context, doc.factory, request);
+  assertWriteConstraints(
+    output,
+    context,
+    doc.factory,
+    [{ owner: request.owner, iri: request.iri }],
+    request.iri,
+  );
   const before = [...doc.dataset.match()];
   for (const q of before) if (!output.has(q)) doc.dataset.delete(q);
-  for (const q of output) if (!doc.dataset.has(q)) doc.dataset.add(q);
+  for (const q of [...output]) if (!doc.dataset.has(q)) doc.dataset.add(q);
 }
 
 /** Parse at an ACTUAL focus IRI; only nested focus nodes use strict conformance. */
-function readShapeAt(
+function parseShapeAt(
   node: ManifestEntity | ManifestNode,
   iri: string,
   dataset: DatasetCore,
@@ -2058,11 +2044,7 @@ function readShapeAt(
   budget: ReadBudget = { visits: 0 },
 ): EntityData | undefined {
   if (budget.migration) migrationRead(budget.migration);
-  if (++budget.visits > MAX_NODE_VISITS) {
-    budget.exhausted = true;
-    return undefined;
-  }
-  if (!isSafeAbsoluteIri(iri)) return undefined;
+  if (++budget.visits > MAX_NODE_VISITS || !isSafeAbsoluteIri(iri)) return undefined;
   const doc = new TermWrapper(factory.namedNode(iri), dataset, factory);
   const data: EntityData = {};
   for (const field of node.fields) {
@@ -2097,8 +2079,10 @@ function readShapeAt(
     }
     Object.assign(data, childData);
   }
-  if (!invariantsConform(node, doc, data, factory, byName, budget)) return undefined;
-  if (budget.exhausted) return undefined;
+  // Migration audits compare field projections only; invariants are checked on the staged
+  // write itself, and alias migration cannot change them (invariant paths carry no aliases).
+  if (!budget.migration && !invariantsHold(node, doc as unknown as Term, dataset, factory, budget))
+    return undefined;
   return data;
 }
 
@@ -2154,8 +2138,13 @@ function makeCompositeEntity(
       if (!force && !subtreeHasData(rt, data)) return undefined;
       const iri = nodeIri(rt, resourceUrl);
       const doc = new rt.Wrapper(iri, store, factory);
-      for (const type of rt.node.typeIris) typeSet(doc).add(type);
+      markUnchecked(doc, rt.node, migrationManifest);
       for (const plan of rt.plans) {
+        migrateBeforeWrite(doc, migrationManifest, {
+          owner: rt.node,
+          iri: doc.value,
+          field: plan.field,
+        });
         writeFlatField(doc, plan, data);
       }
       for (const nf of rt.nested) {
@@ -2165,6 +2154,7 @@ function makeCompositeEntity(
         if (childIri !== undefined) {
           // Assert the shape's explicit class on writes; build-time ontology
           // ancestry is not available to a validator of the resulting document.
+          // (Unchecked like main's unguarded types set: the final store is validated below.)
           if (nf.hasClass !== undefined) {
             typeSet(new TermWrapper(factory.namedNode(childIri), store, factory)).add(nf.hasClass);
           }
@@ -2173,8 +2163,10 @@ function makeCompositeEntity(
       }
       return iri;
     };
-    buildNode(rootRt, true);
-    assertWriteConstraints(store, migrationManifest, factory);
+    const rootIri = buildNode(rootRt, true) as string;
+    assertWriteConstraints(store, migrationManifest, factory, [
+      { owner: rootRt.node, iri: rootIri },
+    ]);
     return store;
   };
 
@@ -2184,12 +2176,12 @@ function makeCompositeEntity(
     if (!isSafeAbsoluteIri(rootIri)) return undefined;
     // Target classes select root resources; sh:node applies child property constraints
     // without making the child shape's target classes an additional constraint.
-    return parseEntityAt(
+    if (!new rootRt.Wrapper(rootIri, dataset, factory).isInstance) return undefined;
+    return parseShapeAt(
       rootRt.node,
       rootIri,
       dataset,
       factory,
-      migrationManifest.manifest.entities,
       new Map(entity.nodes.map((node) => [node.name, node])),
     );
   };

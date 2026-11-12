@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
@@ -499,10 +500,7 @@ function compileCompositeEntity(
         nodeName !== compConfig.root &&
         constraint.hasClass !== undefined &&
         !constraint.ordered &&
-        constraint.conceptIris === undefined &&
-        !propertySources(constraint).some((s) =>
-          shapeInvariants(shapes).collectionLinks.has(s.shapeIri),
-        )
+        constraint.conceptIris === undefined
       )
         throw new Error(
           `child shape sh:class constraint ${constraint.pathIri} requires a projected composite link`,
@@ -615,16 +613,6 @@ export function compileManifest(shapes: NormalizedShapes, config: CodegenConfig)
     for (const owner of owners) {
       const constraints = invariants.byClass.get(owner.typeIris[0] as string);
       if (constraints) owner.invariants = structuredClone(constraints);
-      const shape = shapeByTarget.get(owner.typeIris[0] as string);
-      for (const field of owner.fields) {
-        const c = shape?.properties.find((p) => p.pathIri === field.predicate);
-        if (
-          c &&
-          field.collection === "set" &&
-          propertySources(c).some((s) => invariants.collectionLinks.has(s.shapeIri))
-        )
-          field.hasClass = c.hasClass;
-      }
     }
   }
 
