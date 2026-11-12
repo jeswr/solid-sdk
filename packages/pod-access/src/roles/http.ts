@@ -73,18 +73,17 @@ export function links(headers: Headers, base: string, rel: string): string[] {
       raw.startsWith('"')
         ? raw.slice(1, raw.endsWith('"') ? -1 : undefined).replace(/\\(.)/g, "$1")
         : raw;
-    if (
-      !parameters.some(
-        (param) =>
-          (param[1] as string).toLowerCase() === "rel" &&
-          // Relation values stay case-sensitive, matching the requests-solid parser:
-          // if the two layers could disagree on an endpoint, discovery must fail closed.
-          value(param[2] ?? "")
-            .split(/\s+/)
-            .includes(rel),
-      )
-    )
+    const relTokens = parameters
+      .filter((param) => (param[1] as string).toLowerCase() === "rel")
+      .flatMap((param) => value(param[2] ?? "").split(/\s+/));
+    // Relation values match case-sensitively, like the requests-solid parser. RFC 8288
+    // compares them case-insensitively, so a case variant could name a second endpoint
+    // the server means: refuse it rather than silently pick another document.
+    if (!relTokens.includes(rel)) {
+      if (relTokens.some((token) => token.toLowerCase() === rel.toLowerCase()))
+        throw roleError("invalid-response", base, "Access Link relation casing is ambiguous");
       continue;
+    }
     if (!link) throw roleError("invalid-response", base, "Invalid access Link header");
     const params = new Map<string, string>();
     for (const param of parameters) {

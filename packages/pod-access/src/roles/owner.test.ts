@@ -466,6 +466,18 @@ describe("makeOwnerOnly", () => {
     await p.run();
     expect(p.puts()).toHaveLength(1);
   });
+  it.each([
+    `<policy>; rel="ACL"`,
+    `<other>; rel="ACL", <policy>; rel="${ACP}accessControl"`,
+    `<policy>; rel="${ACP}ACCESSCONTROL"`,
+  ])("refuses a case variant of the access relation: %s", async (link) => {
+    const p = pod({ model: "acp", own: 404, link });
+    await expect(p.run()).rejects.toMatchObject({
+      code: "invalid-response",
+      message: expect.stringContaining("casing"),
+    });
+    expect(p.puts()).toEqual([]);
+  });
   it("refuses discovery changing between reads", async () => {
     const p = pod({ model: "acp", own: acp() });
     p.fetch.mockImplementationOnce(
