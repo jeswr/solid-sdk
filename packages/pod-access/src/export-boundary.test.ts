@@ -75,7 +75,7 @@ describe("public export boundary", () => {
       assert.ok(entries.length > 0);
       const roles = await load("@jeswr/pod-access/roles");
       assert.deepEqual(Object.keys(roles).sort(),
-        ["addGrant", "grantsWithRoles", "isGrantableTarget", "isRoleError", "modesToRole", "movePreservingAccess", "readAccessModes", "readGrants", "removeGrant", "rolesToModes", "setGrants"].sort());
+        ["addGrant", "grantsWithRoles", "isGrantableTarget", "isRoleError", "isSealed", "modesToRole", "movePreservingAccess", "readAccessModes", "readGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset", "setGrants", "unsealAccess"].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);

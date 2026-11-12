@@ -2,6 +2,10 @@
 import type { GroupDirectory } from "@jeswr/suite-groups";
 import type { PhotoStorage } from "../model";
 
+/** Upload's item, original and thumbnail names (see model/upload.ts and purgePhoto's check). */
+const ITEM = /^([a-zA-Z0-9][a-zA-Z0-9_-]*)\.ttl$/;
+const ORIGINAL = /^(jpg|png|webp|tif|heic|avif)$/;
+
 /**
  * What a viewer needs to see these photos: each photo's item document, original and thumbnail,
  * when they live in this library. Album membership is only a reference, so sharing an album
@@ -12,38 +16,29 @@ export async function photoResources(
   refs: readonly string[],
 ): Promise<string[]> {
   const urls = new Set<string>();
+  const items = `${io.root}items/`;
   for (const ref of new Set(refs)) {
     const item = new URL(ref);
     item.hash = "";
-    // Photos imported by reference (e.g. Google Photos) are not in this pod's library.
-    if (item.search || !item.href.startsWith(`${io.root}items/`)) continue;
+    // Photos imported by reference (e.g. Google Photos) are not in this pod's library, and a
+    // name upload never writes (encoded, nested, with a query) is skipped, never refused, so
+    // one bad reference can't stop the rest of the album from being shared.
+    const id = item.href.startsWith(items) && ITEM.exec(item.href.slice(items.length))?.[1];
+    if (!id) continue;
     const { photo } = await io.loadPhoto(item.href);
     if (!photo) continue;
     urls.add(item.href);
-    // The item document names its binaries; only the library's own binary folders count, so
-    // an edited item can never point a grant at another document in the pod.
-    if (binary(photo.contentUrl, `${io.root}originals/`)) urls.add(photo.contentUrl);
-    if (photo.thumbnailUrl && binary(photo.thumbnailUrl, `${io.root}thumbs/`))
-      urls.add(photo.thumbnailUrl);
+    // The item document names its binaries, which anyone who can edit it could change: only
+    // this item's own original and thumbnail count, never another photo's or another document.
+    const original = `${io.root}originals/${id}.`;
+    if (
+      photo.contentUrl.startsWith(original) &&
+      ORIGINAL.test(photo.contentUrl.slice(original.length))
+    )
+      urls.add(photo.contentUrl);
+    if (photo.thumbnailUrl === `${io.root}thumbs/${id}.webp`) urls.add(photo.thumbnailUrl);
   }
   return [...urls];
-}
-/** A canonical, query- and fragment-free direct child of `folder`. */
-function binary(url: string, folder: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const name = parsed.href.slice(folder.length);
-    return (
-      parsed.href === url &&
-      !parsed.search &&
-      !parsed.hash &&
-      url.startsWith(folder) &&
-      name.length > 0 &&
-      !name.includes("/")
-    );
-  } catch {
-    return false;
-  }
 }
 
 /** Photos added to an album become visible to the groups that album is shared with. */

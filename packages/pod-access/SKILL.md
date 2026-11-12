@@ -233,9 +233,13 @@ mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelErr
 
 `readAccessModes` returns the raw per-principal modes (`resource`, and `members` for containers)
 with `readGrants`' version token; it keeps principals that map to no role and is the API for
-owner-only/no-other-writer checks. `isGrantableTarget(target, storage, reserved?)` is the one
-target check for approvals and other grant callers (root, `settings/`, reserved folders, access
-documents, ambiguous encodings); requests-solid approval uses it. Keep both documented in README.
+owner-only/no-other-writer checks; its `governedBy` says whose WAC document applies (own vs
+inherited). `isGrantableTarget(target, storage, reserved?)` is the one target check for approvals
+and other grant callers (root, `settings/`, reserved folders, access documents, ambiguous
+encodings); requests-solid approval uses it. `sealAccess`/`isSealed`/`unsealAccess` keep an
+owner's seal in a resource's own access document (only Control can write it): seal last, after
+verifying what it governs, and trust contents only while sealed; `sealDataset` seals an offline
+document. Keep all of these documented in README.
 
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token

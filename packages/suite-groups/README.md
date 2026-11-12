@@ -68,17 +68,32 @@ contact labels. Listing, membership edits, Family marking and sharing verify, on
 the groups folder (both scopes) and each group document have public Read, owner management and
 no principal other than the owner holding anything but Read (so no Append, Write or Control);
 private or writable group membership fails closed before grants are issued.
-Existing settings documents must also have owner-only access before their Family space URLs or
-notification receipts are trusted. An individual document ACL cannot bypass the private folder.
-Both the document's and the settings folder's raw modes are checked under their CURRENT policy
-before provisioning rewrites the folder, so settings another agent could have written are refused,
-never laundered into trusted state. Fix the folder's access (an explicit owner decision) to use
-them. Securing a dedicated folder (`groups/` or the settings folder) that is not already safe
-requires it to be empty; anything that appears between that check and the permission rewrite was
-writable by others, so it is conditionally deleted (never trusted) and the call fails with
-`SECURING_RACE`. Planted sub-folders are left in place but never read. If that deletion itself
-fails, the error surfaces and the owner must review the folder before retrying. On an already
-owner-only folder, settings another tab wrote meanwhile fail with a reload error instead.
+Trust in a dedicated folder (`groups/`, `settings/group-sharing/`) rests on a seal, not on its
+current access alone (pod-access `sealAccess`, in the folder's own ACL, so only Control can write
+it). Securing a folder rewrites its ACL to owner management (plus public Read for `groups/`),
+deletes whatever it then holds, and seals it LAST. Readers (`list`, settings, membership edits,
+Family marking, sharing) trust a folder only while it is sealed and still safe on raw modes, and
+a document in it only while it inherits that folder's ACL (`governedBy`): an own document ACL
+could have been planted, and sealed, by whoever wrote it before the folder was secured. So a
+cleanup that fails part-way, a crash or a closed tab leaves the folder unsealed and refused
+(`SETTINGS_UNSAFE`, `GROUP_UNSAFE`), and the next change that secures it cleans up again.
+
+- A sealed, safe folder is left as it is. A sealed folder whose access widened is unsealed
+  first, and then treated like any unsafe folder.
+- An unsafe folder must be empty to be secured (`SETTINGS_UNSAFE`/`GROUP_UNSAFE` otherwise): its
+  content could be someone else's, and is never taken over.
+- An unsealed folder's content was not verified, even if it is owner-only now. After the rewrite
+  it is deleted, the documents readers read first (`state.json`; group `.ttl` documents), each
+  delete conditional on the entry's current ETag. A failure never stops the rest, and the call
+  fails with `SECURING_RACE` (reload and retry) once the folder is sealed.
+- The seal is withheld (`SECURING_BLOCKED`) while a readable document survives, e.g. one whose own
+  ACL shuts the owner out; remove it to continue. Other leftovers (such an undeletable `0.txt`, a
+  planted sub-folder) are never read, so they do not block the seal.
+- Settings written before the seal existed, or a demo pod seeded without it, count as unverified:
+  the next change discards them.
+- Known limit, as for the requests-solid records folder: if the owner widens a sealed folder's
+  ACL with another tool and narrows it again before this library sees it, the seal survives.
+
 A folder whose policy pod-access cannot represent as roles (e.g. Append-only grants) is refused
 rather than rewritten.
 

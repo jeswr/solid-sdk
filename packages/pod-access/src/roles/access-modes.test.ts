@@ -21,6 +21,28 @@ const probe = (appliesTo: Grant["appliesTo"] = "both") =>
   );
 
 describe("readAccessModes", () => {
+  it("names whose access document applies: its own, an ancestor's, or none", async () => {
+    const mem = memoryAccess();
+    mem.attach(folder, await fixture("wac", folder, [manager], true));
+    const options = { ...mem.options, kind: "folder" as const };
+    expect((await readAccessModes(folder, options)).governedBy).toBe(folder);
+    mem.advertise(doc);
+    expect((await readAccessModes(doc, { ...options, kind: "file" })).governedBy).toBe(folder);
+    mem.put(`${doc}.acl`, await fixture("wac", doc));
+    expect((await readAccessModes(doc, { ...options, kind: "file" })).governedBy).toBe(doc);
+    // No document anywhere on the walk: nothing applies.
+    const bare = memoryAccess();
+    bare.advertise(root);
+    bare.advertise(folder);
+    expect((await readAccessModes(folder, bare.options)).governedBy).toBeNull();
+  });
+  it("reports an ACP resource as governed by its own control resource", async () => {
+    const mem = memoryAccess("acp");
+    mem.attach(root, await fixture("acp", root, [manager], true));
+    mem.attach(folder);
+    const modes = await readAccessModes(folder, { ...mem.options, kind: "folder" });
+    expect(modes.governedBy).toBe(folder);
+  });
   it("reports principals that readGrants drops because their modes map to no role", async () => {
     const mem = memoryAccess();
     mem.attach(folder, await writeWac(probe(), folder, `${folder}.acl`));

@@ -399,13 +399,14 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
 `readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
-`isRoleError`, `isGrantableTarget`, and their documented types (`Role`, `ResourceKind`, `AgentRef`,
+`isRoleError`, `isGrantableTarget`, `isSealed`, `sealAccess`, `unsealAccess`, `sealDataset`, and
+their documented types (`Role`, `ResourceKind`, `AgentRef`,
 `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
 `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
 `AccessModesSnapshot`). It does not change the offline root API.
 
 <!-- AUTHORED-BY Claude Opus 5.5 -->
-`readAccessModes(url, options)` returns `{ url, resource, members, version }`: every principal's
+`readAccessModes(url, options)` returns `{ url, resource, members, governedBy, version }`: every principal's
 raw modes (`{ agent, modes }`, Write implying Append), including principals whose modes map to no
 role (Append only, Write without Read, Control without edit), which `readGrants` omits. Use it,
 not the role projection, for security checks such as "only the owner can change this".
@@ -413,8 +414,22 @@ not the role projection, for security checks such as "only the owner can change 
 ancestor's inherited rules); for a container URL `members` is what its members inherit (its own
 member-scope `acl:default` rules, else the inherited ones), and it is empty otherwise. It never
 refuses a folder whose scopes differ (it reports both), but refuses conditional policies like
-`readGrants`. Its `version` equals `readGrants`' token for the same options, so it can guard a
-later `setGrants` (`expected: { [url]: version }`).
+`readGrants`. `governedBy` is the resource whose own WAC document applies (`url` itself, or the
+nearest ancestor it inherits from; `null` when none does; `url` under ACP), so a caller can insist
+that a document inherits its folder's access instead of carrying its own. Its `version` equals
+`readGrants`' token for the same options, so it can guard a later `setGrants`
+(`expected: { [url]: version }`).
+
+`sealAccess(url, options)` marks `url`'s OWN access document with the caller's seal
+(`<doc> pa:sealedBy <webId>`, `pa:` = `https://jeswr.org/ns/pod-access#`), conditionally on its
+ETag and keeping every other statement; `isSealed(url, options)` reads it, counting only the
+caller's seal on the resource's own document (never an inherited one); `unsealAccess` removes it
+(a no-op without an own document). Only an agent with Control on the resource can write the seal,
+so it records that its owner verified what the resource governs (for example that a folder was
+empty when it was made owner-only). Seal last, after that verification, so a failure part-way
+leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
+`sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
+access document built offline (such as a seeded demo pod).
 
 `isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
 false for anything outside storage, the storage root (with or without its slash), `settings/` and

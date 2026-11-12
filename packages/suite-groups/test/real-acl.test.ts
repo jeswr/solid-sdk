@@ -3,11 +3,21 @@
 // serialised with pod-access writeWac (n3.Writer) and parsed back with fetch-rdf.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { type EffectivePolicy, type Grant, writeWac } from "@jeswr/pod-access";
-import { readGrants } from "@jeswr/pod-access/roles";
+import { type EffectivePolicy, type Grant, readWac, writeWac } from "@jeswr/pod-access";
+import { readGrants, sealDataset } from "@jeswr/pod-access/roles";
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
-import { GROUP_TARGET, GROUP_UNSAFE, GroupDirectory, ownerOnlyAccess } from "../src/index.js";
+import {
+  GROUP_TARGET,
+  GROUP_UNSAFE,
+  GroupDirectory,
+  ownerOnlyAccess,
+  SECURING_BLOCKED,
+  SECURING_RACE,
+  SETTINGS_UNSAFE,
+} from "../src/index.js";
 
 const root = "https://pod.example/owner/";
 const owner = "https://pod.example/profile#me";
@@ -39,16 +49,38 @@ const probe = (appliesTo: Grant["appliesTo"] = "both") =>
     rule(agent(mallory), ["write"], appliesTo),
   );
 
-/** A memory pod whose resources advertise `<url>.acl`, served and conditionally written over HTTP. */
+/**
+ * A memory pod whose resources advertise `<url>.acl`, served and conditionally written over HTTP.
+ * A document whose own ACL gives the owner nothing is refused to the owner (403), as WAC would.
+ */
 async function pod(hooks: { beforePut?: (url: string) => Promise<void> } = {}) {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   Object.assign(storage.features.accessControl, { state: "available", detail: { model: "wac" } });
-  const exists = storage.head.bind(storage);
-  vi.spyOn(storage, "head").mockImplementation(async (url, options) => ({
-    ...(await exists(url, options)),
-    links: new Map([["acl", [{ target: `${url}.acl`, params: {} }]]]),
-  }));
   const acls = new Map<string, { body: string; etag: string }>();
+  const lockedOut = async (url: string) => {
+    const acl = acls.get(`${url}.acl`);
+    if (url.endsWith("/") || !acl) return false;
+    const dataset = await parseRdf(acl.body, "text/turtle", { baseIRI: `${url}.acl` });
+    return !readWac(dataset, url, `${url}.acl`).grants.some((grant) =>
+      grant.who.some((all) => all.some((who) => who.kind === "agent" && who.webId === owner)),
+    );
+  };
+  const guard = async (method: string, url: string) => {
+    if (await lockedOut(url)) throw new StorageError("forbidden", { method, url, status: 403 });
+  };
+  const exists = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation(async (url, options) => {
+    await guard("HEAD", url);
+    return {
+      ...(await exists(url, options)),
+      links: new Map([["acl", [{ target: `${url}.acl`, params: {} }]]]),
+    };
+  });
+  const remove = storage.delete.bind(storage);
+  vi.spyOn(storage, "delete").mockImplementation(async (url, options) => {
+    await guard("DELETE", url);
+    return remove(url, options);
+  });
   let version = 0;
   const putAcl = async (resource: string, value: EffectivePolicy) => {
     acls.set(`${resource}.acl`, {
@@ -71,6 +103,8 @@ async function pod(hooks: { beforePut?: (url: string) => Promise<void> } = {}) {
   const puts: string[] = [];
   const fetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input);
+    if (init.method === "HEAD" && (await lockedOut(url)))
+      return new Response(null, { status: 403 });
     if (init.method === "HEAD")
       try {
         const head = await exists(url);
@@ -296,9 +330,25 @@ describe("settings written under an earlier untrusted policy (review round 2)", 
     await expect(directory.setFamily(group.id)).rejects.toThrow("settings must be owner-only");
     expect(puts.slice(start)).toEqual([]);
   });
-  it("trusts pre-existing settings whose folder and document were owner-only all along", async () => {
-    const { directory, group } = await preexisting(policy(ownerRule()));
+  it("never trusts settings in an owner-only folder that was never sealed; the next change discards them", async () => {
+    // Owner-only now cannot show who wrote them: a cleanup that failed after the permission
+    // rewrite leaves exactly this state (review round 4).
+    const { directory, group, fetch, acls, storage } = await preexisting(policy(ownerRule()));
+    await storage.create(root, null, { name: "private", kind: "container" });
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    const create = vi.fn();
+    await expect(
+      directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]),
+    ).rejects.toThrow(SECURING_RACE);
+    expect(create).not.toHaveBeenCalled();
+    expect(acls.get(`${folder}.acl`)?.body).toContain("sealedBy");
+    expect(await directory.list()).toEqual([{ ...group, family: false }]);
+    await directory.setFamily(group.id);
     expect((await directory.list())[0]).toMatchObject({ id: group.id, family: true });
+    const grants = (
+      await readGrants(`${root}private/`, { fetch, root, model: "wac", kind: "folder" })
+    ).grants;
+    expect(grants.some((grant) => grant.agent.type === "group")).toBe(false);
   });
 });
 
@@ -453,6 +503,101 @@ describe("content planted while a folder is being secured (review round 3)", () 
     // Now owner-managed and public-read; only the owner's own group is listed.
     const team = await directory.create("Team", [bob]);
     expect(await directory.list()).toEqual([team]);
+  });
+});
+
+describe("fail-safe cleanup with real ACLs (review round 4)", () => {
+  const folder = `${root}settings/group-sharing/`;
+  /** The PoC: Mallory can manage the settings folder, and plants during the rewrite. */
+  async function attacked() {
+    const hooks: { beforePut?: (url: string) => Promise<void> } = {};
+    const fixture = await pod(hooks);
+    const { directory, storage, putAcl } = fixture;
+    const group = await directory.create("Family", [bob, mallory]);
+    await storage.create(root, null, { name: "settings", kind: "container" });
+    await storage.create(`${root}settings/`, null, { name: "group-sharing", kind: "container" });
+    await storage.create(root, null, { name: "private", kind: "container" });
+    await storage.create(root, null, { name: "new", kind: "container" });
+    await putAcl(folder, policy(ownerRule(), rule(agent(mallory), ["read", "write", "control"])));
+    let raced = false;
+    hooks.beforePut = async (url) => {
+      if (url !== `${folder}.acl` || raced) return;
+      raced = true;
+      // A blocker sorting before state.json, whose own ACL shuts the owner out.
+      await storage.create(folder, "x", { name: "0.txt", contentType: "text/plain" });
+      await putAcl(`${folder}0.txt`, policy(rule(agent(mallory), ["read", "write", "control"])));
+      await storage.create(
+        folder,
+        JSON.stringify({
+          family: group.id,
+          notices: [],
+          spaces: { [JSON.stringify([group.id, "calendar"])]: [`${root}private/`] },
+        }),
+        { name: "state.json", contentType: "application/json" },
+      );
+    };
+    return { ...fixture, group };
+  }
+  const groupOnPrivate = async (fetch: typeof globalThis.fetch) =>
+    (
+      await readGrants(`${root}private/`, { fetch, root, model: "wac", kind: "folder" })
+    ).grants.some((grant) => grant.agent.type === "group");
+
+  it("deletes state.json past a blocker with its own ACL; the retry grants nothing planted", async () => {
+    const { directory, storage, fetch, puts, acls } = await attacked();
+    const group = (await directory.list())[0];
+    if (!group) throw new Error("Expected the Family group");
+    await expect(directory.setFamily(group.id)).rejects.toThrow(SECURING_RACE);
+    await expect(storage.read(settings)).rejects.toMatchObject({ code: "not-found" });
+    // The blocker is still there (the owner can't touch it) but nothing ever reads it.
+    await expect(storage.head(`${folder}0.txt`)).rejects.toMatchObject({ code: "forbidden" });
+    expect(acls.get(`${folder}.acl`)?.body).toContain("sealedBy");
+    const create = vi.fn(async () => [`${root}new/`]);
+    await directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(puts).not.toContain(`${root}private/.acl`);
+    expect(await groupOnPrivate(fetch)).toBe(false);
+  });
+  it("refuses, and grants nothing, after a failed discard; the retry cleans up", async () => {
+    const { directory, storage, fetch, puts, acls, group } = await attacked();
+    const remove = vi.mocked(storage.delete).getMockImplementation() as typeof storage.delete;
+    let failures = 1;
+    vi.mocked(storage.delete).mockImplementation(async (url, options) => {
+      if (url === settings && failures-- > 0)
+        throw new StorageError("network", { method: "DELETE", url });
+      return remove(url, options);
+    });
+    await expect(directory.setFamily(group.id)).rejects.toThrow(SECURING_BLOCKED);
+    // Owner-only now, but unsealed: the surviving planted settings are refused everywhere.
+    expect(acls.get(`${folder}.acl`)?.body).not.toContain("sealedBy");
+    expect(await ownerOnlyAccess({ storage, fetch, webId: owner }, settings)).toBe(true);
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
+    await expect(directory.notifyOnce(group.id, group.id, "Invite")).rejects.toThrow(
+      SETTINGS_UNSAFE,
+    );
+    const create = vi.fn(async () => [`${root}new/`]);
+    await expect(
+      directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]),
+    ).rejects.toThrow(SECURING_RACE);
+    expect(create).not.toHaveBeenCalled();
+    expect(puts).not.toContain(`${root}private/.acl`);
+    await directory.setupFamily(group.id, [{ key: "calendar", role: "editor", create }]);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(await groupOnPrivate(fetch)).toBe(false);
+  });
+  it("refuses settings whose own ACL looks owner-only and carries a seal its planter wrote", async () => {
+    const { directory, storage, putAcl, acls } = await pod();
+    const group = await directory.create("Family", [bob]);
+    await directory.setFamily(group.id);
+    // Mallory's orphan state.json ACL, rewritten to look owner-only (and sealed) after use.
+    await putAcl(settings, policy(ownerRule("resource")));
+    const own = `${settings}.acl`;
+    const forged = await parseRdf(acls.get(own)?.body as string, "text/turtle", { baseIRI: own });
+    sealDataset(forged, own, owner);
+    acls.set(own, { body: new Writer().quadsToString([...forged]), etag: '"x"' });
+    expect(acls.get(own)?.body).toContain("sealedBy");
+    expect(await storage.read(settings)).toBeDefined();
+    await expect(directory.list()).rejects.toThrow(SETTINGS_UNSAFE);
   });
 });
 

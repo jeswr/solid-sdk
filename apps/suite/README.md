@@ -121,13 +121,17 @@ attempt per member. The Family calendar is always a new, uniquely named calendar
 The Family Photos space is the album. Album membership only references photos, so adding a photo
 to an album shared with groups grants those groups Viewer access to the photo's item document,
 original and thumbnail (`apps/photos/lib/data/album-groups.ts`). Only photos the owner's own
-edit added are extended (never members a group Editor wrote meanwhile), and only binaries in the
-library's `originals/` and `thumbs/` folders count. A failure is reported and the album edit is
-kept. Removing a photo from the album does not revoke that access.
+edit added are extended (never members a group Editor wrote meanwhile), and only the item's own
+binaries count (`originals/<id>.<ext>`, `thumbs/<id>.webp`, as upload names them), so an Editor
+can't point a shared photo at another one. A reference or binary with any other name is skipped,
+never fatal to the rest. A failure is reported and the album edit is kept. Removing a photo from
+the album does not revoke that access.
 Progress/notification receipts are kept privately in `settings/group-sharing/`. Failed delivery does not undo permissions; claims are recorded
 before delivery to prevent duplicate notifications. Multi-resource setup/deletion is not
 atomic: partial failures are shown for review and explicit recovery.
 
-The demo seeds a fictional Family and Garden team. Library behavior and its limitations are
+The demo seeds a fictional Family and Garden team, with the `groups/` and
+`settings/group-sharing/` ACLs sealed as group sharing leaves a folder it verified (see
+suite-groups: content in an unsealed folder is never trusted). Library behavior and its limitations are
 in [suite-groups](../../packages/suite-groups/README.md); `e2e/groups.spec.ts` covers creation,
 Drive sharing and Permissions in all configured widths and themes.

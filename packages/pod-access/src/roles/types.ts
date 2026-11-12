@@ -41,6 +41,12 @@ export interface AccessModesSnapshot {
   readonly url: string;
   resource: PrincipalModes[];
   members: PrincipalModes[];
+  /**
+   * WAC: the resource whose own access document applies, `url` itself or the nearest ancestor it
+   * inherits from; null when no document applies. ACP: `url`, whose own control resource applies
+   * (with member controls collected from its ancestors).
+   */
+  readonly governedBy: string | null;
   readonly version: GrantSnapshot["version"];
 }
 /** Separate permission targets: resource body, comments container, and own ACR. */

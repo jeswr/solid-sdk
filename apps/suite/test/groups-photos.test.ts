@@ -258,3 +258,58 @@ it("only counts binaries in the library's originals/ and thumbs/ folders", async
     photo.thumbnailUrl,
   ]);
 });
+
+it("counts only the item's own original and thumbnail; one bad entry never blocks the rest", async () => {
+  const { pod, session, storage, directory, io, upload } = await setup();
+  const group = await directory.create("Family Photos", [bob]);
+  await directory.setupFamily(group.id, familySpaces(session, ["photos"], "editor"));
+  const state = JSON.parse(
+    await (await storage.read(`${DEMO_ROOT}settings/group-sharing/state.json`)).text(),
+  );
+  const [album] = state.spaces[JSON.stringify([group.id, "photos"])];
+  const shared = await upload();
+  const secret = await upload();
+  const sharedItem = shared.split("#")[0] as string;
+  const { photo } = await io.loadPhoto(sharedItem);
+  if (!photo) throw new Error("Missing photo");
+  // A group Editor of the shared photo points its binaries at the owner's private photo.
+  const secretId = (secret.split("/").at(-1) as string).replace(".ttl#it", "");
+  const secretFiles = [`${io.root}originals/${secretId}.png`, `${io.root}thumbs/${secretId}.webp`];
+  const hijacked = `${io.root}items/hijacked.ttl`;
+  await io.savePhoto(
+    hijacked,
+    { ...photo, contentUrl: secretFiles[0] as string, thumbnailUrl: secretFiles[1] as string },
+    { create: true },
+  );
+  expect(await photoResources(io, [`${hijacked}#it`])).toEqual([hijacked]);
+  // Encoded names pass a folder check but no pod's grant check: they are skipped, not fatal.
+  const encoded = `${io.root}items/encoded.ttl`;
+  await io.savePhoto(
+    encoded,
+    {
+      ...photo,
+      contentUrl: `${io.root}originals/..%2F..%2Fx`,
+      thumbnailUrl: `${io.root}thumbs/..%2Fx.webp`,
+    },
+    { create: true },
+  );
+  expect(await photoResources(io, [`${encoded}#it`])).toEqual([encoded]);
+  expect(
+    await photoResources(io, [`${io.root}items/a%2Fb.ttl#it`, `${io.root}items/.ttl#it`]),
+  ).toEqual([]);
+  // Sharing them together with a good photo still shares the good photo.
+  expect(
+    await shareAddedPhotos(directory, io, album, [
+      `${io.root}items/a%2Fb.ttl#it`,
+      `${encoded}#it`,
+      `${hijacked}#it`,
+      shared,
+    ]),
+  ).toEqual([group.id]);
+  for (const url of [sharedItem, photo.contentUrl, photo.thumbnailUrl as string])
+    expect(await groupGrant(pod.fetch, url)).toEqual([
+      expect.objectContaining({ agent: { type: "group", id: group.id }, role: "viewer" }),
+    ]);
+  for (const url of [secret.split("#")[0] as string, ...secretFiles])
+    expect(await groupGrant(pod.fetch, url)).toEqual([]);
+});

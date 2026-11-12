@@ -207,8 +207,9 @@ function version(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot)
  * effective policy of the resource itself: its own document, else the nearest ancestor's
  * inherited (`acl:default`) rules. For a container URL, `members` is what its members inherit:
  * its own member-scope rules, else the same inherited rules; it is empty for other resources.
- * Conditional policies are refused, as in `readGrants`. The version token equals the one
- * `readGrants` returns for the same options, so it can guard a later `setGrants`.
+ * Conditional policies are refused, as in `readGrants`. `governedBy` names whose access document
+ * applies, so a caller can tell inherited access from a resource's own. The version token equals
+ * the one `readGrants` returns for the same options, so it can guard a later `setGrants`.
  */
 export async function readAccessModes(
   url: string,
@@ -224,6 +225,7 @@ export async function readAccessModes(
     url,
     resource: list(rows(snapshot)),
     members: url.endsWith("/") ? list(rows(snapshot, snapshot.documents, true)) : [],
+    governedBy: snapshot.model === "acp" ? url : (snapshot.documents[0]?.resource ?? null),
     version: version(snapshot, options, comments),
   };
 }

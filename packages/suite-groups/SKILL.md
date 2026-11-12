@@ -13,9 +13,11 @@ Refuse unsafe or private group documents, and never publish a nonempty private g
 Check access on raw modes (pod-access readAccessModes), never the role projection, which hides
 Append-only and Write-only principals; check the groups folder's member scope too.
 Group grants are Viewer/Editor only; never target the root, settings/, groups/ (isGrantableTarget).
-Require owner-only access to existing settings before trusting space URLs or notification receipts:
-check the document and folder BEFORE provisioning rewrites the folder's ACL, never after.
-Secure only empty unsafe folders and delete anything planted during the rewrite (SECURING_RACE).
+Trust a dedicated folder (groups/, settings) only while it is sealed (pod-access sealAccess) and
+safe, and its documents only while they inherit its ACL (governedBy). Seal LAST, after the rewrite
+and cleanup, so any failure leaves it unsealed and refused; never trust "owner-only now" alone.
+Secure only empty unsafe folders; cleanup deletes readable documents first and keeps going past
+failures (SECURING_RACE); a surviving readable document withholds the seal (SECURING_BLOCKED).
 Collections share references only; use extend(source, resources, { within }) for contents the
 owner adds later, passing only that action's own additions, never members others could write.
 Share multi-resource items in one call so each member receives at most one notification attempt.
