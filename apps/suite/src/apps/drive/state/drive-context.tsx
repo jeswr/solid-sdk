@@ -39,6 +39,7 @@ import {
 } from "../lib/client/client";
 import { DRIVE_ROOT_CLASS } from "../lib/constants";
 import { useAccessConfirmation } from "./access-confirmation";
+import { useDriveReplay } from "./outbox";
 import { type DrivePreferences, useDrivePreferences } from "./prefs";
 import { type UploadQueue, useUploadQueue } from "./uploads";
 
@@ -222,6 +223,7 @@ export function DriveProvider({
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
+  useDriveReplay(session, invalidate);
 
   useEffect(() => {
     if (!provision) return;

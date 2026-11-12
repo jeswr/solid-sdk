@@ -1,12 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { Button, toast } from "@jeswr/suite-ui";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import type { EndpointCapture } from "../lib/client/access";
 import { DriveError, type DriveItem } from "../lib/client/client";
 import { discoveryOptions, type ResourceAssertion } from "../lib/client/commit";
 import { isOwnStorage } from "../lib/client/ownership";
+import { textGuard } from "../lib/offline/guards";
 import { useDrive } from "../state/drive-context";
+import { useDriveOutbox } from "../state/outbox";
 import { useDriveUi } from "../state/ui";
 
 export interface PreviewText {
@@ -18,6 +22,8 @@ export interface PreviewText {
   editableEncoding?: boolean | undefined;
   declaredCharset?: boolean | undefined;
   verifyHeaders?: ResourceAssertion["verifyHeaders"] | undefined;
+  /** The same discovery as JSON, so a save queued offline replays with the same check. */
+  discovery?: EndpointCapture | undefined;
 }
 
 /** Retain the opened version and local edits across background preview refreshes. */
@@ -38,6 +44,7 @@ export function TextPreview({
 }) {
   const { client, session, invalidate } = useDrive();
   const { registerPreviewGuard } = useDriveUi();
+  const storage = useDriveOutbox(session);
   const [local, setLocal] = useState<PreviewText>();
   const [saved, setSaved] = useState<PreviewText>();
   const [editing, setEditing] = useState(false);
@@ -121,11 +128,14 @@ export function TextPreview({
   const etag = current.etag;
   const strong = etag !== undefined && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
   const noValidator = "Reload this file to get a current version before saving.";
-  const disabledReason = !online
-    ? "You're offline. Reconnect to save."
-    : !strong
-      ? noValidator
-      : undefined;
+  // Offline, a save queues only when Drive can replay it with the captured discovery.
+  const queueable = !!storage && !!current.discovery;
+  const disabledReason =
+    !online && !queueable
+      ? "You're offline. Reconnect to save."
+      : !strong
+        ? noValidator
+        : undefined;
   const finish = () => {
     restoreFocus.current = true;
     setEditing(false);
@@ -139,28 +149,59 @@ export function TextPreview({
     finish();
   };
   const save = async () => {
-    if (!writable || !strong || navigator.onLine === false || busy.current || changed) return;
+    const offline = navigator.onLine === false;
+    if (!writable || !strong || (offline && !queueable) || busy.current || changed) return;
     busy.current = true;
     setSaving(true);
     setError(undefined);
     try {
       const contentType = `${current.contentType}${current.declaredCharset ? "; charset=utf-8" : ""}`;
       const text = current.text.includes("\r\n") ? draft.replace(/\n/g, "\r\n") : draft;
-      const result = await client.write(
-        item.url,
-        text,
-        { contentType, ifMatch: etag, ...discoveryOptions(current) },
-        { kind: "protect-ancestors" },
-      );
+      // Queue through the shell outbox; replay runs Drive's same guarded write with the
+      // captured discovery and If-Match (sst-8xm.74.1).
+      const queue = async () => {
+        const result = await (storage as NonNullable<typeof storage>).write(item.url, text, {
+          contentType,
+          ifMatch: etag,
+          offline: "queue",
+          guard: textGuard(current.discovery as EndpointCapture),
+        });
+        return {
+          etag: result.queued ? undefined : (result.etag ?? undefined),
+          queued: !!result.queued,
+        };
+      };
+      let result: { etag?: string | undefined; queued: boolean };
+      if (offline) result = await queue();
+      else {
+        try {
+          result = {
+            ...(await client.write(
+              item.url,
+              text,
+              { contentType, ifMatch: etag, ...discoveryOptions(current) },
+              { kind: "protect-ancestors" },
+            )),
+            queued: false,
+          };
+        } catch (cause) {
+          // Only a fetch that never got an HTTP answer may be queued.
+          if (!(cause instanceof TypeError) || !queueable) throw cause;
+          result = await queue();
+        }
+      }
       if (!live.current) {
         return;
       }
       savedAgainst.current = latestValue.current;
-      setSaved({ ...current, text, etag: result.etag ?? undefined });
+      // A queued save has no version yet; the next edit needs a fresh read.
+      setSaved({ ...current, text, etag: result.etag });
       setLocal(undefined);
       finish();
-      toast.success("Saved");
-      invalidate(item.url);
+      toast.success(
+        result.queued ? "Saved on this device. It will sync when you're back online." : "Saved",
+      );
+      if (!result.queued) invalidate(item.url);
     } catch (cause) {
       if (!live.current) return;
       if (cause instanceof DriveError && cause.status === 412) {
@@ -206,7 +247,7 @@ export function TextPreview({
           ) : null}
           <div className="drv-text-editor-actions">
             <Button
-              disabled={!strong || !online || saving || changed}
+              disabled={!strong || (!online && !queueable) || saving || changed}
               aria-describedby={disabledReason ? `${label}-reason` : undefined}
               type="submit"
             >

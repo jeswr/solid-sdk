@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import "./drive-ui-dom";
 import { createRequire } from "node:module";
 import { toast } from "@jeswr/suite-ui";
@@ -14,6 +15,7 @@ import {
   type DriveItem,
 } from "../src/apps/drive/lib/client/client";
 import { decodePreviewText } from "../src/apps/drive/lib/files/text";
+import { folderGuard, textGuard } from "../src/apps/drive/lib/offline/guards";
 import { docsHref } from "../src/apps/drive/lib/open-with/docs";
 import type { DriveContextValue } from "../src/apps/drive/state/drive-context";
 import { type OpenWithDocsControl, useOpenWithDocs } from "../src/apps/drive/state/open-with-docs";
@@ -22,7 +24,15 @@ import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { act, deferred, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("../src/apps/drive/state/drive-context", () => ({ useDrive: () => drive }));
-const mocks = vi.hoisted(() => ({ push: vi.fn(), convert: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  convert: vi.fn(),
+  outbox: null as null | { write: ReturnType<typeof vi.fn>; create: ReturnType<typeof vi.fn> },
+}));
+vi.mock("../src/apps/drive/state/outbox", async (original) => ({
+  ...(await original<typeof import("../src/apps/drive/state/outbox")>()),
+  useDriveOutbox: () => mocks.outbox,
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("../src/apps/docs/hooks/open-with-docs", () => ({ openWithDocs: mocks.convert }));
 vi.mock("../src/apps/drive/lib/open-with/docs", async (original) => ({
@@ -61,6 +71,7 @@ function contents(children?: ReactNode) {
   return h(DriveUiProvider, null, h(Probe), children);
 }
 afterEach(() => {
+  mocks.outbox = null;
   vi.restoreAllMocks();
   vi.clearAllMocks();
   localStorage.clear();
@@ -1067,4 +1078,109 @@ test.each([
   await act(async () => pending.reject(new Error("Failed")));
   confirm.mockReturnValue(true);
   expect(await clickLocation()).toBe(false);
+});
+
+function queueing(result: object = { queued: true }) {
+  const outbox = {
+    write: vi.fn(async (url: string) => ({ url, etag: null, created: false, ...result })),
+    create: vi.fn(async (container: string, _body: unknown, opts: { name: string }) => ({
+      url: `${container}${encodeURIComponent(opts.name)}/`,
+      etag: null,
+      created: true,
+      ...result,
+    })),
+  };
+  mocks.outbox = outbox;
+  return outbox;
+}
+
+test("offline, Save queues through the outbox with Drive's text guard and the GET validator", async () => {
+  const outbox = queueing();
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  const { get, view } = await setup({ preview: true });
+  const opened = await drive.client.readVersion(FILE);
+  const write = vi.spyOn(drive.client, "write");
+  await editText(get);
+  const button = get.getByRole("button", { name: "Save" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  await save(get);
+  expect(write).not.toHaveBeenCalled();
+  expect(outbox.write).toHaveBeenCalledExactlyOnceWith(FILE, "Changed text", {
+    contentType: "text/plain",
+    ifMatch: opened.etag,
+    offline: "queue",
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+  });
+  expect(toast.success).toHaveBeenCalledWith(
+    "Saved on this device. It will sync when you're back online.",
+  );
+  expect(drive.invalidate).not.toHaveBeenCalled();
+  expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("Changed text");
+  // A queued save has no version yet: the next edit needs a fresh read.
+  await editText(get, "Again");
+  expect((get.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+test("a save that loses the network before any answer is queued, and an online delivery refreshes", async () => {
+  const outbox = queueing({ queued: undefined, etag: '"replayed"' });
+  const { get } = await setup({ preview: true });
+  vi.spyOn(drive.client, "write").mockRejectedValue(new TypeError("Failed to fetch"));
+  await editText(get);
+  await save(get);
+  expect(outbox.write).toHaveBeenCalledOnce();
+  expect(toast.success).toHaveBeenCalledWith("Saved");
+  expect(drive.invalidate).toHaveBeenCalledWith(FILE);
+});
+
+test("without a captured discovery, Drive neither queues nor enables an offline save", async () => {
+  const outbox = queueing();
+  const { item, view } = await setup();
+  const { discovery: _discovery, ...opened } = await drive.client.readVersion(FILE);
+  vi.spyOn(drive.client, "readVersion").mockResolvedValue(opened);
+  await view.render(contents(h(PreviewBody, { item, metadataStatus: "ready" })));
+  const get = within(view.host);
+  await vi.waitFor(() => expect(get.getByRole("button", { name: "Edit" })).toBeTruthy());
+  vi.spyOn(drive.client, "write").mockRejectedValue(new TypeError("Failed to fetch"));
+  await editText(get);
+  await save(get);
+  expect(outbox.write).not.toHaveBeenCalled();
+  expect(get.getByText("Couldn't save this file. Your changes are still here.")).toBeTruthy();
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await act(async () => window.dispatchEvent(new Event("offline")));
+  expect((get.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+test("New folder queues offline with Drive's folder guard and reports the queue", async () => {
+  const outbox = queueing();
+  await setup();
+  const create = vi.spyOn(drive.client, "createFolder");
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  await act(async () => expect(await actions.newFolder(DRIVE, "Plans")).toBe(`${DRIVE}Plans/`));
+  expect(create).not.toHaveBeenCalled();
+  expect(outbox.create).toHaveBeenCalledExactlyOnceWith(DRIVE, null, {
+    name: "Plans",
+    kind: "container",
+    offline: "queue",
+    guard: folderGuard,
+  });
+  expect(toast.success).toHaveBeenCalledWith(
+    "Saved on this device. It will sync when you're back online.",
+  );
+  expect(drive.invalidate).not.toHaveBeenCalled();
+});
+
+test("New folder queues only after an unanswered request, and reports a delivered create", async () => {
+  const outbox = queueing({ queued: undefined });
+  await setup();
+  const create = vi
+    .spyOn(drive.client, "createFolder")
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  await act(async () => expect(await actions.newFolder(DRIVE, "Later")).toBe(`${DRIVE}Later/`));
+  expect(outbox.create).toHaveBeenCalledOnce();
+  expect(toast.success).toHaveBeenCalledWith("Created Later");
+  expect(drive.invalidate).toHaveBeenCalledWith(`${DRIVE}Later/`);
+  create.mockRejectedValueOnce(new DriveError("forbidden", 403, `${DRIVE}Denied/`));
+  await act(async () => expect(await actions.newFolder(DRIVE, "Denied")).toBeUndefined());
+  expect(outbox.create).toHaveBeenCalledOnce();
+  expect(toast.error).toHaveBeenCalled();
 });

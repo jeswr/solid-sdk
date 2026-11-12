@@ -25,6 +25,7 @@ import {
   type ConfirmAccess,
   DriveAccessChangedError,
   DriveAccessError,
+  type EndpointCapture,
   type OwnAccess,
   ownAccessGuards,
   policyOwner,
@@ -154,7 +155,11 @@ export interface DriveClient {
     /** The GET's effective user write permission, when advertised. */
     writable?: boolean;
     readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+    /** The same discovery as JSON, for a save queued offline (sst-8xm.74.1). */
+    readonly discovery?: EndpointCapture;
   }>;
+  /** Rebuild the check for a discovery captured by readVersion, when a queued save replays. */
+  discoveryVerifier(url: string, capture: EndpointCapture): ResourceAssertion["verifyHeaders"];
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
   readRdf(
     url: string,
@@ -714,6 +719,7 @@ export function createSolidDriveClient(options: {
       writable:
         parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
       verifyHeaders: access.captureEndpoint(url, response.headers),
+      discovery: access.endpointCapture(url, response.headers),
     };
   };
 
@@ -3033,6 +3039,7 @@ export function createSolidDriveClient(options: {
     read,
     readLimited,
     readVersion,
+    discoveryVerifier: (url, capture) => access.verifyCapture(url, capture),
     readRdf,
     exclusive(urls, work) {
       return sourceOperation(
