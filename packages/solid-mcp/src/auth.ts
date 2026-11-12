@@ -219,6 +219,6 @@ export function scopedFetch(config: { podRoot: string; fetch: typeof fetch }): t
 }
 
 /** True when writes are enabled (the caller explicitly opted out of read-only). */
-export function writesEnabled(config: SolidMcpConfig): boolean {
+export function writesEnabled(config: Pick<SolidMcpConfig, "readOnly">): boolean {
   return config.readOnly === false;
 }

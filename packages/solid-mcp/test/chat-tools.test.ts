@@ -686,3 +686,101 @@ describe("MCP chat tools over the scoped fetch port", () => {
     }
   });
 });
+
+describe("MCP chat tools on a PodPort-only server (sst-5ax.34)", () => {
+  async function portable(pod: PodPort, readOnly: boolean) {
+    const server = createSolidMcpServer({ pod, readOnly });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "chat-port-test", version: "1.0" });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    return client;
+  }
+  const port = (fake: ReturnType<typeof fakePod>) =>
+    createFetchPodPort({ fetch: fake.fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
+
+  it("registers chat tools, discovers ACLs through the port's HEAD and protects chats", async () => {
+    const fake = fakePod();
+    const pod = port(fake);
+    const head = vi.spyOn(pod, "head");
+    const client = await portable(pod, false);
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["chat_save", "chat_list", "chat_get"]));
+    const saved = json(await client.callTool({ name: "chat_save", arguments: input }));
+    expect(saved).toMatchObject({ url: `${ROOT}private/chats/claude/session-1/`, saved: 2 });
+    expect(head).toHaveBeenCalledWith(`${ROOT}private/chats/claude/session-1/`);
+    const acl = fake.resources.get(`${ROOT}private/chats/claude/session-1/.acl`);
+    expect(acl?.body).toContain(OWNER);
+    expect(acl?.body).not.toMatch(/foaf\/0\.1\/Agent|AuthenticatedAgent/);
+    const got = json(
+      await client.callTool({
+        name: "chat_get",
+        arguments: { provider: "claude", conversationId: "session-1" },
+      }),
+    );
+    expect(got.messages.map((m: { text: string }) => m.text)).toEqual(["Question", "Answer"]);
+    expect(
+      json(await client.callTool({ name: "chat_list", arguments: {} })).conversations,
+    ).toHaveLength(1);
+  });
+
+  it("keeps the read-only default and refuses saves without writing", async () => {
+    const fake = fakePod();
+    const client = await portable(port(fake), true);
+    const result = await client.callTool({ name: "chat_save", arguments: input });
+    expect(result.isError).toBe(true);
+    expect(fake.requests.some((request) => request.method === "PUT")).toBe(false);
+  });
+
+  it("refuses an ACP pod and a missing ACL link before writing chat content", async () => {
+    for (const link of [
+      `<${ROOT}x.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"`,
+      `<${ROOT}meta>; rel="describedby"`,
+    ]) {
+      const fake = fakePod();
+      fake.aclLinks.set(`${ROOT}private/chats/claude/session-1/`, link);
+      const client = await portable(port(fake), false);
+      const result = await client.callTool({ name: "chat_save", arguments: input });
+      expect(result.isError).toBe(true);
+      // Ancestor containers may already exist; no conversation resource or message is written.
+      expect(
+        [...fake.resources.keys()].some((url) =>
+          url.startsWith(`${ROOT}private/chats/claude/session-1/`),
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("refuses an advertised ACL outside the pod or with a query", async () => {
+    for (const acl of ["https://elsewhere.example/acl", `${ROOT}acl?x=1`]) {
+      const fake = fakePod();
+      const pod: PodPort = { ...port(fake), head: async () => ({ acl }) };
+      const client = await portable(pod, false);
+      const result = await client.callTool({ name: "chat_save", arguments: input });
+      expect(result.isError).toBe(true);
+      expect(fake.requests.some((request) => request.method === "PUT")).toBe(false);
+    }
+  });
+
+  it("omits chat tools without HEAD or an owner WebID", async () => {
+    const fake = fakePod();
+    const { head: _head, ...headless } = port(fake);
+    const ownerless = createFetchPodPort({ fetch: fake.fetch, podRoot: ROOT, readOnly: false });
+    for (const pod of [headless as PodPort, ownerless]) {
+      const names = (await (await portable(pod, false)).listTools()).tools.map((t) => t.name);
+      expect(names).toContain("pod_read");
+      expect(names).not.toContain("chat_save");
+    }
+  });
+
+  it("requires a capability when the adapter is built directly", () => {
+    expect(() => createChatPodPort({ podRoot: ROOT, webId: OWNER })).toThrow(TypeError);
+    const fake = fakePod();
+    const { head: _head, ...headless } = port(fake);
+    expect(() => createChatPodPort({ podRoot: ROOT, webId: OWNER }, headless as PodPort)).toThrow(
+      "Chat ACL discovery requires PodPort.head",
+    );
+    expect(() =>
+      registerChatTools(new McpServer({ name: "x", version: "1" }), { podRoot: ROOT }),
+    ).toThrow(TypeError);
+  });
+});
