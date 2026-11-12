@@ -36,6 +36,8 @@ export function accessSummaryText(access: AccessSummary, ownerId?: string): stri
     : "Only you";
 }
 export interface ItemDetailsProps {
+  /** The shell DetailsPane supplies border, surface and padding for embedded content. */
+  variant?: "standalone" | "embedded";
   title?: string;
   metadata?: readonly { label: string; value: ReactNode }[];
   access?: AccessSummary;
@@ -49,6 +51,7 @@ export interface ItemDetailsProps {
   state?: SurfaceState;
 }
 export function ItemDetails({
+  variant = "standalone",
   title,
   metadata = [],
   access,
@@ -69,7 +72,7 @@ export function ItemDetails({
     ),
   ];
   return (
-    <section className="suite-item-details" aria-label="Details">
+    <section className="suite-item-details" data-variant={variant} aria-label="Details">
       {selection && selection.count > 1 ? (
         <p role="status">
           {selection.count} items selected · {formatBytes(selection.totalSize)}
@@ -78,7 +81,7 @@ export function ItemDetails({
         <>
           <div className="suite-detail-title">
             <FileText aria-hidden="true" size={24} strokeWidth={1.5} />
-            <h2>{plainText(title)}</h2>
+            {variant === "embedded" ? <h3>{plainText(title)}</h3> : <h2>{plainText(title)}</h2>}
           </div>
           {actions && <div className="suite-actions">{actions}</div>}
           <h3 className="suite-section-label">Who has access</h3>
