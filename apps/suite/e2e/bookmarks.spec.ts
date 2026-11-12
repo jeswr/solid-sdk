@@ -65,7 +65,7 @@ test("demo CRUD, search, tags, bulk actions, HTML interchange and persistence", 
     .fill("Remember the spring planting plan");
   await page.getByRole("button", { name: "Save bookmark" }).click();
   await saved(page);
-  await page.getByRole("textbox", { name: "Search bookmarks" }).fill("spring planting");
+  await page.getByRole("textbox", { name: "Search bookmarks" }).fill("remember spring");
   await expect(page.locator(".bkm-item")).toHaveCount(1);
   await page.getByRole("textbox", { name: "Search bookmarks" }).fill("");
   await page.getByRole("button", { name: "Archive The orchard notebook", exact: true }).click();

@@ -757,7 +757,9 @@ function Library() {
               <Button type="button" variant="outline" onClick={() => setTagging(false)}>
                 Cancel
               </Button>
-              <Button disabled={!editable || !bulkTag.trim()}>Add tag</Button>
+              <Button type="submit" disabled={!editable || !bulkTag.trim()}>
+                Add tag
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
