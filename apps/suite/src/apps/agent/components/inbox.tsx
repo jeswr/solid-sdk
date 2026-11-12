@@ -12,18 +12,13 @@ import {
 } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { readArchive } from "../lib/archive";
 import { collection, metadataOf } from "../lib/collections";
 import { archiveKey, deviceState } from "../lib/device-state";
 import { useAgentQuery, useAgentWorkspace } from "../lib/hooks";
 import { archiveView, triageLabel } from "../lib/inbox";
 import { resourceSlug } from "../lib/paths";
-import {
-  type InboxMessage,
-  loadedRecords,
-  readAccounts,
-  readControl,
-  readInbox,
-} from "../lib/readers";
+import { type InboxMessage, loadedRecords, readAccounts, readInbox } from "../lib/readers";
 import { createAgentSigner } from "../lib/sign";
 import { createAgentVerifier } from "../lib/verify";
 import { useApprovalDevice } from "./approval-key-setup-sheet";
@@ -94,7 +89,7 @@ export function InboxScreen({ binding }: { binding?: string }) {
   );
   // Archive is a signed owner control, so it holds on every device and for the agent.
   const archived = useAgentQuery(client.paths.archive, (c) =>
-    readControl(c, createAgentVerifier(session), client.paths.archive),
+    readArchive(c, createAgentVerifier(session), new Date()),
   );
   // Messages archived on this device before signed archiving stay hidden here.
   useEffect(() => {
