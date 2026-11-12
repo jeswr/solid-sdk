@@ -168,6 +168,8 @@ export default defineConfig({
         "src/apps/mail/lib/quotes/**/*.ts",
         "src/lib/demo-pod/{pod,seed,seed-home,binaries}.ts",
         "src/lib/refs.ts",
+        "src/lib/chat-invitation-room.ts",
+        "src/lib/account-id-set.ts",
         "src/lib/route-params.ts",
         "src/lib/native/**/*.ts",
         "src/lib/urls.ts",

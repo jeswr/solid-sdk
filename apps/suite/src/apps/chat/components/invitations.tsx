@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { Invitation } from "../lib/client";
 import { useAsync, useChat } from "../state/chat-context";
@@ -23,34 +24,17 @@ function senderHost(actor: string | undefined): string {
     return "Unknown sender";
   }
 }
-const claimKey = (invitation: Invitation) => JSON.stringify([invitation.room, invitation.actor]);
-function InvitationRow({
-  invitation,
-  dismiss,
-  ignore,
-}: {
-  invitation: Invitation;
-  dismiss(): void;
-  ignore(key: string): void;
-}) {
-  const { client } = useChat();
-  const roomUrl = invitation.room;
-  const room = useAsync(
-    useCallback((signal) => client.room(roomUrl, { signal }), [client, roomUrl]),
-    false,
-  );
-  const invalid =
-    !!room.data && (!invitation.actor || !room.data.members.includes(invitation.actor));
-  const key = `${client.webId}:${claimKey(invitation)}`;
-  useEffect(() => {
-    if (invalid) ignore(key);
-  }, [invalid, ignore, key]);
-  if (invalid) return null;
+/** Host and room slug: short enough to tell rows apart in a button name. */
+function roomLabel(room: string): string {
+  const url = new URL(room);
+  return `${url.host}/${url.pathname.split("/").at(-2)}`;
+}
+function InvitationRow({ invitation, dismiss }: { invitation: Invitation; dismiss(): void }) {
   const name =
-    room.data?.name || `Room invitation (${new URL(roomUrl).pathname.split("/").at(-2)})`;
+    invitation.name || `Room invitation (${new URL(invitation.room).pathname.split("/").at(-2)})`;
   return (
-    <li className="chat-invitation" data-room={roomUrl}>
-      <Link href={`/chat/r/${encodeRef(roomUrl)}`} className="chat-room-link">
+    <li className="chat-invitation" data-room={invitation.room}>
+      <Link href={`/chat/r/${encodeRef(invitation.room)}`} className="chat-room-link">
         {name}
       </Link>
       <p className="chat-hint">{senderHost(invitation.actor)}</p>
@@ -72,16 +56,15 @@ function ForeignInvitationRow({
   invitation: Invitation;
   dismiss(): void;
 }) {
-  const name = `Room invitation (${invitation.room})`;
   return (
     <li className="chat-invitation" data-room={invitation.room}>
-      <span>{name}</span>
+      <span>Room invitation ({invitation.room})</span>
       <p className="chat-hint">{senderHost(invitation.actor)}</p>
       <p className="chat-hint">Opens when Chat supports rooms in other pods</p>
       <Button
         variant="ghost"
         size="sm"
-        aria-label={`Dismiss invitation to ${name}`}
+        aria-label={`Dismiss invitation to ${roomLabel(invitation.room)}`}
         onClick={dismiss}
       >
         Dismiss
@@ -89,8 +72,23 @@ function ForeignInvitationRow({
     </li>
   );
 }
+/** More than three rows collapse behind their count. */
+function Collapsed({ summary, children }: { summary: string; children: ReactNode[] }) {
+  const list = <ul>{children}</ul>;
+  return children.length > 3 ? (
+    <details>
+      <summary>
+        {children.length} {summary}
+      </summary>
+      {list}
+    </details>
+  ) : (
+    list
+  );
+}
 export function Invitations() {
   const { client, session } = useChat();
+  // Sidebar and drawer copies share the client's in-flight scan, room checks included.
   const result = useAsync(
     useCallback((signal) => client.invitations({ signal }), [client]),
     false,
@@ -98,14 +96,10 @@ export function Invitations() {
   const store = useMemo(() => invitationDismissals(session.webId), [session.webId]);
   const [dismissals, setDismissals] = useState(() => ({ store, rooms: store.load() }));
   const hidden = dismissals.store === store ? dismissals.rooms : store.load();
-  const [ignored, setIgnored] = useState<string[]>([]);
-  const ignore = useCallback(
-    (key: string) => setIgnored((keys) => (keys.includes(key) ? keys : [...keys, key])),
-    [],
-  );
   const section = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const nextFocus = useRef<string | null | undefined>(undefined);
+  // After the last dismissal, focus lands on the heading; the empty section goes once it leaves.
   const [retainHeading, setRetainHeading] = useState<string>();
   const headingId = useId();
   useEffect(() => {
@@ -152,12 +146,7 @@ export function Invitations() {
     target?.focus();
     nextFocus.current = undefined;
   }, [dismissals]);
-  const visible =
-    result.data?.filter(
-      (invitation) =>
-        !hidden.has(invitation.room) &&
-        !ignored.includes(`${session.webId}:${claimKey(invitation)}`),
-    ) ?? [];
+  const visible = result.data?.filter((invitation) => !hidden.has(invitation.room)) ?? [];
   const own = visible.filter((invitation) => client.canOpen(invitation.room));
   const foreign = visible.filter((invitation) => !client.canOpen(invitation.room));
   const dismiss = (rooms: string[]) => {
@@ -166,7 +155,7 @@ export function Invitations() {
     nextFocus.current =
       rows.slice(index + 1).find((row) => !rooms.includes(row.dataset.room as string))?.dataset
         .room ?? null;
-    setRetainHeading(session.webId);
+    if (nextFocus.current === null) setRetainHeading(session.webId);
     const saved = new Set([...hidden, ...rooms].slice(-200));
     store.save(saved);
     setDismissals({ store, rooms: saved });
@@ -183,52 +172,41 @@ export function Invitations() {
     </p>
   );
   if (!visible.length && retainHeading !== session.webId) return failure || null;
-  const foreignRows = (
-    <ul>
-      {foreign.map((invitation) => (
-        <ForeignInvitationRow
-          key={invitation.room}
-          invitation={invitation}
-          dismiss={() => dismiss([invitation.room])}
-        />
-      ))}
-    </ul>
-  );
   return (
     <section ref={section} aria-labelledby={headingId}>
-      <h2 ref={heading} id={headingId} tabIndex={-1}>
+      <h2 ref={heading} id={headingId} tabIndex={-1} onBlur={() => setRetainHeading(undefined)}>
         Invitations
       </h2>
       {!!own.length && (
-        <ul>
+        <Collapsed summary="room invitations in your pod">
           {own.map((invitation) => (
             <InvitationRow
               key={invitation.room}
               invitation={invitation}
               dismiss={() => dismiss([invitation.room])}
-              ignore={ignore}
             />
           ))}
-        </ul>
+        </Collapsed>
       )}
       {!!foreign.length && (
-        <>
-          {foreign.length > 3 ? (
-            <details>
-              <summary>{foreign.length} invitations from other pods</summary>
-              {foreignRows}
-            </details>
-          ) : (
-            foreignRows
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => dismiss(foreign.map((invitation) => invitation.room))}
-          >
-            Dismiss all
-          </Button>
-        </>
+        <Collapsed summary="invitations from other pods">
+          {foreign.map((invitation) => (
+            <ForeignInvitationRow
+              key={invitation.room}
+              invitation={invitation}
+              dismiss={() => dismiss([invitation.room])}
+            />
+          ))}
+        </Collapsed>
+      )}
+      {visible.length > 3 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => dismiss(visible.map((invitation) => invitation.room))}
+        >
+          Dismiss all {visible.length} invitations
+        </Button>
       )}
       {failure}
     </section>

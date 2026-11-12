@@ -1,12 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { roomInvitation } from "@jeswr/pod-access/notify";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
-import { Writer } from "n3";
-import { parseChat } from "../../src/apps/chat/lib/model";
+// solid-agent-notify is pod-access's transport; its activity module has no demo-pod imports.
+import {
+  buildActivity,
+  serializeTurtle,
+} from "../../../../packages/solid-agent-notify/src/activity";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -294,25 +298,11 @@ test("demo inbox offers open, join and disappear after leaving through the UI", 
   await expect(page.getByRole("button", { name: "Join room", exact: true })).toBeEnabled();
   const root = "https://alice.demo.pod/";
   const room = `${root}chat/rooms/invited-book-club/`;
-  const dataset = await parseChat(
-    JSON.stringify({
-      ...roomInvitation(room),
-      "@id": "#it",
-      actor: `${root}profile/card#me`,
-      "@context": {
-        "@vocab": "https://www.w3.org/ns/activitystreams#",
-        type: "@type",
-        object: { "@type": "@id" },
-        actor: { "@type": "@id" },
-      },
-    }),
-    `${root}inbox/invitation`,
-    "application/ld+json",
-  );
-  const writer = new Writer();
-  writer.addQuads([...dataset]);
-  const body = await new Promise<string>((resolve, reject) =>
-    writer.end((error, result) => (error ? reject(error) : resolve(result))),
+  // pod-access's Offer, serialised by solid-agent-notify's typed builder and Turtle writer.
+  const offer = roomInvitation(room);
+  if (offer.type !== "Offer") throw new Error("roomInvitation must build an Offer");
+  const body = await serializeTurtle(
+    buildActivity({ ...offer, type: offer.type, actor: `${root}profile/card#me` }),
   );
   await page.evaluate(
     async ({ root, body }) => {

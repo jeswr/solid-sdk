@@ -30,7 +30,7 @@ import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeIdentifierRef, decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
 import type { Message } from "../lib/client";
-import { invitationRoom } from "../lib/model";
+import { roomContainer } from "../lib/model";
 import {
   useChat,
   useChatActions,
@@ -330,8 +330,10 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       ) : !isJoined || !member ? (
         <div className="chat-join">
           <p>
-            {isJoined
-              ? "This account is not a member. Ask the room creator for posting access."
+            {!member
+              ? isJoined
+                ? "This account is not a member. Ask the room creator for posting access."
+                : "You can't join because this account is not a member of this room. Ask the room creator to add you."
               : "Join this conversation to keep it in your room list."}
           </p>
           <Button
@@ -427,7 +429,9 @@ function RoomRouteContent({ reference }: { reference: string }) {
   let url: string;
   let messageId: string | undefined;
   try {
-    url = invitationRoom(decodeRef(reference), client.storageUrl);
+    // Ordinary room links keep the pod-scope check below; only inbox Offers use the stricter
+    // chat/rooms/<slug>/ normaliser, so existing rooms elsewhere in the pod still open.
+    url = roomContainer(decodeRef(reference));
   } catch {
     return (
       <div className="chat-state" role="alert">

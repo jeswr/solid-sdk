@@ -39,23 +39,39 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
 - `invitations({ signal? })` reads the current WebID's LDN inbox through pod-access and the
   session fetch. It reads at most 100 inbox children, keeps Offers with HTTP(S) room containers
   or canonical index subjects, omits joined rooms, and returns at most 50 distinct rooms,
-  newest first. A missing inbox is empty; inbox listing errors propagate. The sidebar loads
-  metadata through `room()`, falls back to “Room invitation” on unavailable indexes (including
-  403), and routes to the existing Join flow. Room reads retain the client's pod scope.
+  newest first. With the pod-access reader, a missing inbox and any profile discovery failure
+  are empty; inbox listing 5xx/network errors propagate. Concurrent callers (the sidebar and
+  drawer copies) share one in-flight scan; each keeps its own cancellation, and the scan is
+  aborted only when every caller has left. Scans run one at a time.
+  Own-pod rooms are checked during the scan through `room()` (pod scope retained, at most four
+  at once), with results cached per room while the inbox still offers it, so neither copy nor a
+  focus refresh re-reads an index. Own-pod claims are kept per room and sender before
+  de-duplication: a room is listed with the newest claimed sender who is a loaded member, and
+  dropped when no claimed sender is. An own-pod room whose index fails with a 4xx (other than
+  401, 408 and 429) or holds no room is dropped too, because the owner creates their own rooms
+  and is never invited to them. Unreachable and 5xx rooms stay listed under the fallback
+  “Room invitation (<slug>)” name with the newest claim. The sidebar routes to the existing Join
+  flow; Join requires loaded room membership, and a non-member is told why.
   Actors remain sender claims: labels say “Invitation claims to be from <host>”, with no
-  profile requests. Loaded own-pod rooms ignore claims from senders outside their membership.
-  One model normaliser accepts only HTTP(S) `chat/rooms/<slug>/` containers or their canonical
+  profile requests.
+  One normaliser (`apps/suite/src/lib/chat-invitation-room.ts`, wrapped by the model's
+  `invitationRoom`) accepts only HTTP(S) `chat/rooms/<slug>/` containers or their canonical
   `index.ttl#it` subjects, with no query. Own-pod paths must be directly under the storage's
-  `chat/rooms/`. The tray uses the same normaliser. Join requires loaded room membership.
+  `chat/rooms/`. The shell tray uses the same module without loading Chat's model. The room
+  route keeps its earlier pod-scoped container check, so existing rooms elsewhere still open.
   Foreign-pod invitations have no link or metadata fetch; they explain cross-pod support is
-  pending, collapse behind a count above three, and support Dismiss all.
+  pending, and Dismiss names them by host and room slug. Own-pod and foreign lists each
+  collapse behind a count above three; above three shown invitations, “Dismiss all N
+  invitations” dismisses every shown row. The heading leaves with the last row once focus moves
+  off it.
   Dismissals use the shared account ID set with Chat's key prefix and an identity-checked
   envelope, retaining at most 200 container URLs in guarded localStorage keyed by WebID; inbox
   resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
   A single reader per client retains profile/inbox discovery. Mount, explicit retry/join and
   focus refreshes (30-second throttle)
-  expose failures as a small inline retry. The demo inbox e2e seeds an Offer at fixture level;
-  two-user delivery belongs to sst-rn91.
+  expose failures as a small inline retry. A creation's delivery-failure toast is dropped when
+  the shell account or session changed while it ran. The demo inbox e2e seeds an Offer at
+  fixture level; two-user delivery belongs to sst-rn91.
 - `chat.lastRead` lives in `settings/chat-preferences.json`, with schema validation,
   conditional writes and one conflict merge using monotonic markers. Unread counts cover
   the newest seven-day page, excluding own messages, deletions and edit revisions.

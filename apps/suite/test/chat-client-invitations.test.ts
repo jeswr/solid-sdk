@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -46,6 +47,16 @@ async function inboxFixture(items: string[], status = 200) {
       ? Promise.resolve(new Response(null, { status }))
       : fetch(input, init);
   return { pod, client: status === 200 ? client : new ChatClient(transport, ROOT, ME), fetch };
+}
+const FOREIGN = "https://8.8.4.4/";
+/** Replace the inbox's members after the fixture has written rooms. */
+async function writeInbox(client: ChatClient, items: string[]) {
+  for (const [index, body] of items.entries())
+    await client.fetch(`${INBOX}${index}.ttl`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body,
+    });
 }
 const offer = (object?: string, extra = "", kind = "Offer") =>
   `@prefix as: <https://www.w3.org/ns/activitystreams#>. <#it> a as:${kind}${object ? `; as:object <${object}>` : ""}${extra}.`;
@@ -149,9 +160,11 @@ it("bounds delivery to four and aborts without failing a completed creation", as
   );
 });
 it("filters kinds, unsafe objects and joined rooms, deduplicating newest first", async () => {
-  const room = `${ROOT}chat/rooms/new/`;
   const joined = `${ROOT}chat/rooms/joined/`;
-  const { client, fetch } = await inboxFixture([
+  const { client, fetch } = await inboxFixture([]);
+  const { url: room } = await client.createRoom({ name: "New", members: [BOB] });
+  await client.leave(room);
+  await writeInbox(client, [
     offer(
       room,
       `; as:actor <${BOB}>; as:published "2026-11-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>`,
@@ -178,16 +191,17 @@ it("filters kinds, unsafe objects and joined rooms, deduplicating newest first",
   ]);
   await client.join(joined);
   expect(await client.invitations()).toEqual([
-    { room, actor: ME },
+    { room, actor: ME, name: "New" },
     { room: "http://pod.example/chat/rooms/other/" },
   ]);
   expect(fetch.mock.calls.some(([url]) => String(url).includes("elsewhere"))).toBe(false);
 });
 it("caps invitations at 50 and bounds inbox reads", async () => {
   const { client, fetch } = await inboxFixture(
-    Array.from({ length: 210 }, (_, i) => offer(`${ROOT}chat/rooms/r${i}/`)),
+    Array.from({ length: 210 }, (_, i) => offer(`${FOREIGN}chat/rooms/r${i}/`)),
   );
   expect(await client.invitations()).toHaveLength(50);
+  expect(fetch.mock.calls.some(([url]) => String(url).endsWith("index.ttl"))).toBe(false);
   expect(
     fetch.mock.calls.filter(([url]) => /^https:\/\/8\.8\.8\.8\/inbox\/\d+\.ttl$/.test(String(url))),
   ).toHaveLength(100);
@@ -198,7 +212,7 @@ it("handles missing inboxes, surfaces read errors and cancels reads", async () =
   await expect((await inboxFixture([], 503)).client.invitations()).rejects.toMatchObject({
     status: 503,
   });
-  const { client } = await inboxFixture([offer(`${ROOT}chat/rooms/new/`)]);
+  const { client } = await inboxFixture([offer(`${FOREIGN}chat/rooms/new/`)]);
   await expect(client.invitations({ signal: AbortSignal.abort() })).rejects.toMatchObject({
     name: "AbortError",
   });
@@ -256,10 +270,149 @@ it("invites the peer when resuming an interrupted DM", async () => {
   expect(posts).toHaveLength(2);
 });
 
-it("isolates simultaneous sidebar/drawer refresh cancellation while sharing discovery", async () => {
-  const { client, fetch } = await inboxFixture([offer(`${ROOT}chat/rooms/new/`)]);
-  const [a, b] = await Promise.all([client.invitations(), client.invitations()]);
-  expect(a).toEqual(b);
-  expect(a).toHaveLength(1);
+const dated = (actor: string, day: number) =>
+  `; as:actor <${actor}>; as:published "2026-11-${String(day).padStart(2, "0")}T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>`;
+
+it("ignores own-pod Offers for rooms whose index fails with a 4xx, and checks each room once", async () => {
+  const { client, fetch } = await inboxFixture([]);
+  const { url: real } = await client.createRoom({ name: "Real", members: [BOB] });
+  await client.leave(real);
+  const spam = Array.from({ length: 4 }, (_, i) => `${ROOT}chat/rooms/spam-${i}/`);
+  const statuses: Record<string, number> = {
+    [`${ROOT}chat/rooms/forbidden/index.ttl`]: 403,
+    [`${ROOT}chat/rooms/gone/index.ttl`]: 410,
+    [`${ROOT}chat/rooms/down/index.ttl`]: 503,
+    [`${ROOT}chat/rooms/expired/index.ttl`]: 401,
+    [`${ROOT}chat/rooms/slow/index.ttl`]: 429,
+  };
+  let down = true;
+  const transport: typeof globalThis.fetch = (input, init) => {
+    if (String(input) === `${ROOT}chat/rooms/offline/index.ttl`)
+      return Promise.reject(new TypeError("Network down"));
+    const status = statuses[String(input)];
+    return status && (status !== 503 || down)
+      ? Promise.resolve(new Response(null, { status }))
+      : fetch(input, init);
+  };
+  const reader = new ChatClient(transport, ROOT, ME);
+  await reader.fetch(`${ROOT}chat/rooms/empty/index.ttl`, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: "",
+  });
+  await writeInbox(reader, [
+    ...spam.map((room, i) => offer(room, dated(BOB, 20 + i))),
+    ...["forbidden", "gone", "empty", "down", "expired", "slow"].map((slug, i) =>
+      offer(`${ROOT}chat/rooms/${slug}/`, dated(BOB, 10 + i)),
+    ),
+    offer(`${FOREIGN}chat/rooms/far/`, dated(BOB, 5)),
+    offer(real, dated(BOB, 1)),
+    offer(`${ROOT}chat/rooms/offline/`),
+  ]);
+  const rooms = (calls: typeof fetch.mock.calls) =>
+    calls.filter(([url, init]) => String(url).endsWith("/index.ttl") && !init?.method).length;
+  const before = rooms(fetch.mock.calls);
+  expect(await reader.invitations()).toEqual([
+    { room: `${ROOT}chat/rooms/slow/`, actor: BOB },
+    { room: `${ROOT}chat/rooms/expired/`, actor: BOB },
+    { room: `${ROOT}chat/rooms/down/`, actor: BOB },
+    { room: `${FOREIGN}chat/rooms/far/`, actor: BOB },
+    { room: real, actor: BOB, name: "Real" },
+    { room: `${ROOT}chat/rooms/offline/` },
+  ]);
+  const first = rooms(fetch.mock.calls) - before;
+  // Missing and loaded rooms stay cached; unreachable ones are retried on the next scan.
+  down = false;
+  expect((await reader.invitations()).map((invitation) => invitation.room)).toEqual([
+    `${ROOT}chat/rooms/slow/`,
+    `${ROOT}chat/rooms/expired/`,
+    `${FOREIGN}chat/rooms/far/`,
+    real,
+    `${ROOT}chat/rooms/offline/`,
+  ]);
+  expect(rooms(fetch.mock.calls) - before - first).toBe(1);
+});
+
+it("checks membership per claimed sender before de-duplicating own-pod rooms", async () => {
+  const { client, pod } = await inboxFixture([]);
+  const { url: room } = await client.createRoom({ name: "Club", members: [BOB] });
+  const { url: alone } = await client.createRoom({ name: "Alone", members: [] });
+  await client.leave(room);
+  await client.leave(alone);
+  await writeInbox(client, [
+    offer(room, dated("https://forged.example/#me", 9)),
+    offer(room, dated(BOB, 2)),
+    offer(alone, dated("https://forged.example/#me", 3)),
+    offer(alone),
+  ]);
+  expect(await client.invitations()).toEqual([{ room, actor: BOB, name: "Club" }]);
+  // Rooms the inbox no longer offers leave the check cache.
+  for (const index of [2, 3])
+    expect((await pod.fetch(`${INBOX}${index}.ttl`, { method: "DELETE" })).ok).toBe(true);
+  expect(await client.invitations()).toEqual([{ room, actor: BOB, name: "Club" }]);
+});
+
+it("shares one scan between concurrent callers, isolating each caller's cancellation", async () => {
+  const room = `${FOREIGN}chat/rooms/shared/`;
+  const { fetch } = await inboxFixture([offer(room)]);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const signals: AbortSignal[] = [];
+  let waiting = false;
+  const transport: typeof globalThis.fetch = async (input, init) => {
+    if (init?.signal) signals.push(init.signal);
+    if (String(input) === INBOX) {
+      waiting = true;
+      await gate;
+    }
+    return fetch(input, init);
+  };
+  const client = new ChatClient(transport, ROOT, ME);
+  const a = new AbortController();
+  const first = client.invitations({ signal: a.signal });
+  const second = client.invitations({ signal: new AbortController().signal });
+  const third = client.invitations();
+  await vi.waitFor(() => expect(waiting).toBe(true));
+  a.abort();
+  await expect(first).rejects.toMatchObject({ name: "AbortError" });
+  release();
+  expect(await second).toEqual([{ room }]);
+  expect(await third).toEqual([{ room }]);
+  expect(signals.some((signal) => signal.aborted)).toBe(false);
   expect(fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}profile`)).toHaveLength(1);
+  expect(fetch.mock.calls.filter(([url]) => String(url) === INBOX)).toHaveLength(1);
+});
+
+it("aborts the shared scan once every caller leaves, then starts a fresh one", async () => {
+  const room = `${FOREIGN}chat/rooms/fresh/`;
+  const { fetch } = await inboxFixture([offer(room)]);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const listed: AbortSignal[] = [];
+  const transport: typeof globalThis.fetch = async (input, init) => {
+    if (String(input) === INBOX && listed.length === 0) {
+      listed.push(init?.signal as AbortSignal);
+      await gate;
+    }
+    return fetch(input, init);
+  };
+  const client = new ChatClient(transport, ROOT, ME);
+  const a = new AbortController();
+  const b = new AbortController();
+  const first = client.invitations({ signal: a.signal });
+  const second = client.invitations({ signal: b.signal });
+  await vi.waitFor(() => expect(listed).toHaveLength(1));
+  a.abort();
+  expect(listed[0]?.aborted).toBe(false);
+  b.abort();
+  expect(listed[0]?.aborted).toBe(true);
+  await expect(first).rejects.toMatchObject({ name: "AbortError" });
+  await expect(second).rejects.toMatchObject({ name: "AbortError" });
+  const next = client.invitations();
+  release();
+  expect(await next).toEqual([{ room }]);
 });

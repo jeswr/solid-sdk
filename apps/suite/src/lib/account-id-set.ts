@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 export interface AccountIdSet {
   load(): Set<string>;
   save(ids: ReadonlySet<string>): void;
@@ -11,6 +12,8 @@ export function createAccountIdSet(
   max: number,
   storage?: Pick<Storage, "getItem" | "setItem">,
 ): AccountIdSet {
+  // slice(-0) keeps everything: only a positive bound caps storage.
+  if (!Number.isSafeInteger(max) || max < 1) throw new RangeError("Invalid account ID set bound");
   const load = (): Set<string> => {
     if (!accountId) return new Set();
     try {

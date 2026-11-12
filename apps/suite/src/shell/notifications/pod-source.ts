@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import {
   createInboxReader,
   type InboxNotification,
@@ -6,7 +7,7 @@ import {
   readInvitations,
   withAbortSignal,
 } from "@jeswr/pod-access/notify";
-import { invitationRoom } from "../../apps/chat/lib/model/paths";
+import { invitationRoomTarget as invitationRoom } from "../../lib/chat-invitation-room";
 import { encodeRef } from "../../lib/refs";
 import {
   type NotificationSource,

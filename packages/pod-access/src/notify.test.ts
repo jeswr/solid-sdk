@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { expect, test, vi } from "vitest";
 import {
   assignmentAnnounce,
@@ -220,6 +221,34 @@ test("validates limits before I/O and preserves discovery/listing errors", async
   await expect(readInvitations({ reader, webId: "me", normalise })).rejects.toThrow(
     "Listing failed",
   );
+});
+
+test("with the real reader, discovery failures read as no inbox and listing 5xx propagates", async () => {
+  const webId = "https://8.8.8.8/profile#me";
+  const inbox = "https://8.8.4.4/inbox/";
+  const normalise = (item: InboxNotification) => ({ key: item.url, value: item.url });
+  const profile = new Response(`<${webId}> <http://www.w3.org/ns/ldp#inbox> <${inbox}>.`, {
+    headers: { "content-type": "text/turtle" },
+  });
+  // Each reader gets its own transport, so the discovery cache never crosses cases.
+  for (const failure of [
+    () => new Response(null, { status: 503 }),
+    () => new Response(null, { status: 403 }),
+    () => {
+      throw new TypeError("Network down");
+    },
+  ]) {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => failure());
+    const reader = createInboxReader({ fetch });
+    expect(await readInvitations({ reader, webId, normalise })).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  }
+  const fetch = vi.fn<typeof globalThis.fetch>(async (url) =>
+    url === inbox ? new Response(null, { status: 503 }) : profile.clone(),
+  );
+  await expect(
+    readInvitations({ reader: createInboxReader({ fetch }), webId, normalise }),
+  ).rejects.toMatchObject({ status: 503 });
 });
 
 test.each([

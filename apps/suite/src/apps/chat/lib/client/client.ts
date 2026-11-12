@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import {
@@ -49,7 +50,13 @@ import {
   type SearchSnippet,
 } from "../search";
 import { aggregateReactions, type ReactionSummary } from "../timeline";
-import { deliverInvitations, type InvitationDelivery, readInvitations } from "./invitations";
+import {
+  deliverInvitations,
+  type Invitation,
+  type InvitationDelivery,
+  type InvitationRoomCache,
+  readInvitations,
+} from "./invitations";
 import { PreferencesStore } from "./preferences-store";
 
 export interface Room {
@@ -159,6 +166,10 @@ export class ChatClient {
   private readonly resolvedNames = new Map<string, string>();
   private invitationSignal = new AbortController().signal;
   private invitationQueue: Promise<unknown> = Promise.resolve();
+  private invitationScan:
+    | { controller: AbortController; callers: number; pending: Promise<Invitation[]> }
+    | undefined;
+  private readonly invitationRooms: InvitationRoomCache = new Map();
   private readonly inboxReader;
   private joinedCache: JoinedRoom[] | undefined;
   constructor(
@@ -505,23 +516,73 @@ export class ChatClient {
       await copyMessageTask(this.fetch, this.storageUrl, this.webId, message, task);
     }
   }
-  invitations({ signal }: { signal?: AbortSignal | undefined } = {}) {
-    const requestSignal = signal ?? new AbortController().signal;
-    // Sidebar and drawer may read concurrently. Serialize discovery transports so each
-    // caller retains its own cancellation signal while sharing one cached reader.
-    const read = () => {
-      this.invitationSignal = requestSignal;
-      return readInvitations(
-        this.inboxReader,
-        this.fetch,
-        this.storageUrl,
-        this.webId,
-        requestSignal,
+  /**
+   * Sidebar and drawer copies share one in-flight scan. Each caller keeps its own cancellation;
+   * the scan is aborted only once every caller has left. Scans run one at a time, so a scan's
+   * discovery requests never run under a later scan's signal.
+   */
+  invitations({ signal }: { signal?: AbortSignal | undefined } = {}): Promise<Invitation[]> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    let scan = this.invitationScan;
+    if (!scan) {
+      const controller = new AbortController();
+      const read = () => {
+        this.invitationSignal = controller.signal;
+        return readInvitations({
+          reader: this.inboxReader,
+          joinedFetch: this.fetch,
+          storage: this.storageUrl,
+          webId: this.webId,
+          signal: controller.signal,
+          loadRoom: (url, signal) => this.room(url, { signal }),
+          cache: this.invitationRooms,
+        });
+      };
+      const pending = this.invitationQueue.then(read, read);
+      this.invitationQueue = pending;
+      const current = { controller, callers: 0, pending };
+      pending.then(
+        () => this.endScan(current),
+        () => this.endScan(current),
       );
-    };
-    const pending = this.invitationQueue.then(read, read);
-    this.invitationQueue = pending;
-    return pending;
+      this.invitationScan = scan = current;
+    }
+    const shared = scan;
+    shared.callers++;
+    return new Promise<Invitation[]>((resolve, reject) => {
+      let left = false;
+      const leave = () => {
+        left = true;
+        signal?.removeEventListener("abort", abort);
+        shared.callers--;
+      };
+      const abort = () => {
+        leave();
+        if (shared.callers === 0) {
+          shared.controller.abort();
+          this.endScan(shared);
+        }
+        reject((signal as AbortSignal).reason);
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      // Settling an already rejected caller is a no-op; only its count must not drop twice.
+      const settle = () => {
+        if (!left) leave();
+      };
+      shared.pending.then(
+        (value) => {
+          settle();
+          resolve(value);
+        },
+        (error: unknown) => {
+          settle();
+          reject(error);
+        },
+      );
+    });
+  }
+  private endScan(scan: NonNullable<ChatClient["invitationScan"]>) {
+    if (this.invitationScan === scan) this.invitationScan = undefined;
   }
 
   private async invited(room: Room, signal?: AbortSignal): Promise<CreatedRoom> {

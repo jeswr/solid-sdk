@@ -141,9 +141,13 @@ every other shape is other. Keep wrapper and builder round-trip coverage at 100%
 `readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` owns
 shared inbox discovery/filter/projection/de-duplication/capping. A projection returns `{ key,
 value }` or null; validation exceptions and empty keys are skipped. Reader order decides the
-newest duplicate; excluded keys are omitted. Omit kind for a mixed notification tray. Limits
-are non-negative safe integers, default 50; zero performs no I/O. Missing inboxes are empty,
-reader errors propagate, and abort checks fence every await and projection. Reuse the reader.
+newest duplicate; excluded keys are omitted. Omit kind for a generic mixed-tray projection
+(the name reflects Chat's first use). A throwing `normalise` drops the item by design, even for
+programming errors. Limits are non-negative safe integers, default 50; zero performs no I/O.
+Missing inboxes are empty. With `createInboxReader`, discovery never rejects: network, 401/403,
+5xx and unparseable profiles all read as no inbox (empty), so callers cannot tell an outage from
+a missing inbox. Listing 401/403/404 is empty; listing 5xx/network rejects. A custom reader's
+rejection propagates. Abort checks fence every await and projection. Reuse the reader.
 `withAbortSignal(fetch, signalOrGetter)` preserves both request deadlines and caller lifetimes,
 checks before I/O and after responses, and supports dynamic committed-session signal getters.
 Use it for discovery cancellation instead of copying transport wrappers into consumers.

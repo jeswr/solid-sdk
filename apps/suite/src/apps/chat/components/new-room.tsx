@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   Button,
@@ -22,12 +23,14 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import type { Room } from "../lib/client";
 import { useChat, useReadPreferences, useRooms } from "../state/chat-context";
 import { ChatEmpty, useProfile } from "./chat-app";
 import { RoomView } from "./room";
 export function NewRoomPage() {
   const { client, currentRoom, invalidate } = useChat();
+  const accounts = useOptionalAccounts();
   const router = useRouter();
   const preferences = useReadPreferences();
   const rooms = useRooms();
@@ -118,6 +121,12 @@ export function NewRoomPage() {
                   return;
                 }
                 setBusy(true);
+                // A creation can outlive sign-out or an account switch; its notice must not
+                // reach the next account. Standalone previews have no shell accounts.
+                const account = accounts?.active?.id;
+                const sessionVersion = accounts?.sessionVersion;
+                const sameAccount = () =>
+                  !accounts || (!!account && accounts.isActiveAccount(account, sessionVersion));
                 creation.current?.abort();
                 const controller = new AbortController();
                 creation.current = controller;
@@ -141,7 +150,7 @@ export function NewRoomPage() {
                       const canShare = failedInvitations.every((invitation) =>
                         client.canOpen(invitation.webId),
                       );
-                      if (failed)
+                      if (failed && sameAccount())
                         toast(
                           `Couldn't notify ${failed} member${failed === 1 ? "" : "s"}.${canShare ? " Share the invite link instead." : ""}`,
                           canShare

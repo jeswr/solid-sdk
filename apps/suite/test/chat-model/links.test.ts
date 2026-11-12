@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 
 import { expect, it } from "vitest";
 import { aclLink } from "../../src/apps/chat/lib/model/links";
@@ -81,4 +82,5 @@ it("normalises room Offers to containers, scoped to the own-pod room directory",
     "urn:room:1",
   ])
     expect(() => invitationRoom(value, storage)).toThrow();
+  expect(() => invitationRoom(room, `${storage}#me`)).toThrow("invalid-input");
 });

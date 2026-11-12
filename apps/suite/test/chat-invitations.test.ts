@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createRequire } from "node:module";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Invitation, type Room } from "../src/apps/chat/lib/client";
@@ -75,7 +76,7 @@ it("renders a section only with invitations, links the name to Join, and passes 
   const view = await mount(content());
   expect(view.host.querySelector("section")).toBeNull();
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: "https://sender.example/profile#me" },
+    { room: ROOM, actor: "https://sender.example/profile#me", name: "Book club" },
   ]);
   await view.unmount();
   const populated = await mount(content());
@@ -93,19 +94,16 @@ it("renders a section only with invitations, links the name to Join, and passes 
     ).violations,
   ).toEqual([]);
 });
-it("falls back on 403 without fetching the claimed sender's profile", async () => {
+it("shows an unreachable own room under its fallback name without fetching the claimed sender's profile", async () => {
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
     { room: ROOM, actor: "https://hostile.example/profile#me" },
   ]);
-  vi.mocked(ChatClient.prototype.room).mockRejectedValue(
-    Object.assign(new Error("Forbidden"), { status: 403 }),
-  );
   const profile = vi.spyOn(ChatClient.prototype, "profile");
   const view = await mount(content());
   expect(view.host.querySelector("a")?.textContent).toBe("Room invitation (book-club)");
-  expect(view.host.textContent).toContain("Room invitation");
   expect(view.host.textContent).toContain("Invitation claims to be from hostile.example");
   expect(profile).not.toHaveBeenCalled();
+  expect(ChatClient.prototype.room).not.toHaveBeenCalled();
 });
 it("persists bounded local dismissals per WebID without deleting inbox items", async () => {
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([{ room: ROOM, actor: SENDER }]);
@@ -178,11 +176,9 @@ it("does not refresh for revisions, changes, online events or polling, and prese
   vi.spyOn(Date, "now").mockImplementation(() => now);
   const read = vi
     .mocked(ChatClient.prototype.invitations)
-    .mockImplementation(async () => [{ room: ROOM, actor: SENDER }]);
+    .mockImplementation(async () => [{ room: ROOM, actor: SENDER, name: "Book club" }]);
   const view = await mount(content());
   const link = view.host.querySelector("a");
-  const pending = deferred<Room>();
-  vi.mocked(ChatClient.prototype.room).mockReturnValue(pending.promise);
   await click(
     Array.from(view.host.querySelectorAll("button")).find(
       (button) => button.textContent === "Revision",
@@ -190,13 +186,13 @@ it("does not refresh for revisions, changes, online events or polling, and prese
   );
   await act(() => window.dispatchEvent(new Event("online")));
   expect(read).toHaveBeenCalledTimes(1);
-  expect(ChatClient.prototype.room).toHaveBeenCalledTimes(1);
   now += 30_000;
   await act(() => window.dispatchEvent(new Event("focus")));
   expect(read).toHaveBeenCalledTimes(2);
   expect(view.host.querySelector("a")).toBe(link);
   expect(link?.textContent).toBe("Book club");
-  expect(ChatClient.prototype.room).toHaveBeenCalledTimes(1);
+  // Rows render the scan's checked rooms; they never read rooms themselves.
+  expect(ChatClient.prototype.room).not.toHaveBeenCalled();
 });
 
 it("refreshes after an explicit Join and removes the joined invitation", async () => {
@@ -213,27 +209,28 @@ it("refreshes after an explicit Join and removes the joined invitation", async (
   expect(view.host.querySelector("section")).toBeNull();
 });
 
-it("renders foreign-pod invitations as plain text, collapses over three, and dismisses all", async () => {
+const button = (host: Element, text: string) =>
+  Array.from(host.querySelectorAll("button")).find(
+    (button) => button.textContent === text,
+  ) as HTMLElement;
+
+it("renders foreign-pod invitations as plain text with short dismiss names, collapses over three, and dismisses all", async () => {
   const invitations = Array.from({ length: 4 }, (_, i) => ({
     room: `https://foreign.example/chat/rooms/r${i}/`,
     actor: SENDER,
   }));
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(invitations);
   const view = await mount(content());
-  expect(ChatClient.prototype.room).not.toHaveBeenCalled();
   expect(view.host.querySelector("a")).toBeNull();
   expect(view.host.querySelector("details")?.open).toBe(false);
   expect(view.host.querySelector("summary")?.textContent).toBe("4 invitations from other pods");
   const names = Array.from(view.host.querySelectorAll("li button")).map((button) =>
     button.getAttribute("aria-label"),
   );
-  expect(new Set(names).size).toBe(4);
+  expect(names).toEqual(invitations.map((_, i) => `Dismiss invitation to foreign.example/r${i}`));
+  expect(view.host.textContent).toContain(`Room invitation (${invitations[0]?.room})`);
   expect(view.host.textContent).toContain("Opens when Chat supports rooms in other pods");
-  await click(
-    Array.from(view.host.querySelectorAll("button")).find(
-      (button) => button.textContent === "Dismiss all",
-    ) as HTMLElement,
-  );
+  await click(button(view.host, "Dismiss all 4 invitations"));
   expect(view.host.querySelector("li")).toBeNull();
   expect(document.activeElement).toBe(view.host.querySelector("h2"));
   expect(JSON.parse(localStorage.getItem(key(ME)) as string).ids).toEqual(
@@ -241,34 +238,63 @@ it("renders foreign-pod invitations as plain text, collapses over three, and dis
   );
 });
 
-it("shows up to three foreign invitations without collapsing", async () => {
+it("collapses more than three own-pod invitations, and Dismiss all covers every shown row", async () => {
+  const own = Array.from({ length: 4 }, (_, i) => ({
+    room: `${ROOT}chat/rooms/r${i}/`,
+    actor: SENDER,
+    name: `Room ${i}`,
+  }));
+  const foreign = { room: "https://foreign.example/chat/rooms/f/", actor: SENDER };
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([...own, foreign]);
+  const view = await mount(content());
+  expect(
+    Array.from(view.host.querySelectorAll("summary")).map((summary) => summary.textContent),
+  ).toEqual(["4 room invitations in your pod"]);
+  expect(view.host.querySelectorAll("details li")).toHaveLength(4);
+  await click(button(view.host, "Dismiss all 5 invitations"));
+  expect(view.host.querySelector("li")).toBeNull();
+  expect(JSON.parse(localStorage.getItem(key(ME)) as string).ids).toEqual([
+    ...own.map((invitation) => invitation.room),
+    foreign.room,
+  ]);
+});
+
+it("shows up to three invitations without collapsing or a bulk dismissal", async () => {
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
     { room: "https://foreign.example/chat/rooms/r/" },
+    { room: ROOM, actor: SENDER, name: "Book club" },
+    { room: `${ROOT}chat/rooms/two/`, actor: SENDER, name: "Two" },
   ]);
   const view = await mount(content());
   expect(view.host.querySelector("details")).toBeNull();
   expect(view.host.textContent).toContain("Unknown sender");
+  expect(view.host.textContent).not.toContain("Dismiss all");
 });
 
-it("ignores own-pod invitations whose sender is absent from loaded membership", async () => {
+it("removes the empty Invitations heading once focus leaves it, and at once in other copies", async () => {
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: "https://forged.example/#me" },
+    { room: ROOM, actor: SENDER, name: "Book club" },
   ]);
-  const view = await mount(content());
+  const view = await mount(content(ME, true));
+  const [acting, other] = Array.from(view.host.querySelectorAll("section"));
+  await click(acting?.querySelector("li button") as HTMLElement);
+  const sections = view.host.querySelectorAll("section");
+  expect(sections).toHaveLength(1);
+  expect(sections[0]).toBe(acting);
+  expect(other?.isConnected).toBe(false);
+  const heading = view.host.querySelector("h2") as HTMLElement;
+  expect(document.activeElement).toBe(heading);
+  expect(acting?.querySelector("li")).toBeNull();
+  await act(() => heading.blur());
   expect(view.host.querySelector("section")).toBeNull();
 });
 
 it("names dismiss buttons and moves focus to the next row, then the heading", async () => {
   const other = `${ROOT}chat/rooms/other/`;
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: SENDER },
-    { room: other, actor: SENDER },
+    { room: ROOM, actor: SENDER, name: "Book club" },
+    { room: other, actor: SENDER, name: "Other room" },
   ]);
-  vi.mocked(ChatClient.prototype.room).mockImplementation(async (url) => ({
-    ...room,
-    url,
-    name: url === ROOM ? "Book club" : "Other room",
-  }));
   const view = await mount(content());
   const first = view.host.querySelector(
     'button[aria-label="Dismiss invitation to Book club"]',
@@ -284,13 +310,14 @@ it("names dismiss buttons and moves focus to the next row, then the heading", as
 
 it("does not read invitations on the Chat polling tick", async () => {
   const interval = vi.spyOn(globalThis, "setInterval");
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([{ room: ROOM, actor: SENDER }]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
+    { room: ROOM, actor: SENDER, name: "Book club" },
+  ]);
   const view = await mount(content(ME, false, true));
   const tick = interval.mock.calls.find(([, delay]) => delay === 30_000)?.[0];
   if (typeof tick !== "function") throw new Error("Chat poll was not installed");
   await act(() => tick());
   expect(ChatClient.prototype.invitations).toHaveBeenCalledTimes(1);
-  expect(ChatClient.prototype.room).toHaveBeenCalledTimes(1);
   expect(view.host.querySelector("a")?.textContent).toBe("Book club");
 });
 
