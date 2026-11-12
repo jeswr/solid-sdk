@@ -189,8 +189,10 @@ export function createGithubBackoff(now = () => Date.now()) {
       const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
       // A primary low budget is per resource; secondary limits can span endpoints,
       // so they pause both buckets.
-      for (const bucket of secondary ? (["core", "search", "secondary"] as const) : [resource])
-        until[bucket] = Math.max(until[bucket], deadline);
+      const buckets: (keyof typeof until)[] = secondary
+        ? ["core", "search", "secondary"]
+        : [resource];
+      for (const bucket of buckets) until[bucket] = Math.max(until[bucket], deadline);
       // Only an actual rate-limit failure interrupts an admitted submission;
       // ordinary responses (including the label fallback) can still finish.
       if (secondary || (response.status === 403 && low)) check(resource);

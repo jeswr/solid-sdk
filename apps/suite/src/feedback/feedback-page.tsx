@@ -221,7 +221,7 @@ export function FeedbackPage() {
         setFrozenRecord(draft.record);
         setPathway(saved.pathway);
         setAnswers(saved.answers);
-        setMessages(saved.transcript);
+        setMessages(saved.transcript.map(({ audio, ...m }) => (audio ? { ...m, audio } : m)));
         setName(saved.contact.name);
         setEmail(saved.contact.email);
         setDone(true);
