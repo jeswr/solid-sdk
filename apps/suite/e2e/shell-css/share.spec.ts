@@ -46,9 +46,11 @@ async function tabTo(page: Page, target: Locator) {
 
 async function selectRow(page: Page, row: Locator, keyboardOnly: boolean) {
   if (!keyboardOnly) {
-    // Space selects at every viewport; a phone's row click opens the item.
+    // Space toggles selection at every viewport; a phone's row click opens the item.
+    // Selection survives closing the share dialog, so only select a row that is not selected.
     await row.focus();
-    await row.press("Space");
+    if ((await row.getAttribute("aria-selected")) !== "true") await row.press("Space");
+    await expect(row).toHaveAttribute("aria-selected", "true");
     return;
   }
   await tabTo(page, page.locator('tr[data-url][tabindex="0"]'));
