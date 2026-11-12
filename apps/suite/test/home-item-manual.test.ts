@@ -353,9 +353,15 @@ it("fails closed when a missing document's ACL location can't be established", a
       },
     ],
   });
-  // The storage root advertises an ACL that does not follow the `.acl` suffix convention.
+  // The storage root advertises an ACL that does not follow the `.acl` suffix convention, and the
+  // missing document's 404 names no ACL (the demo pod now links one, as some servers do not).
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
     const response = await pod.fetch(input, init);
+    if (response.status === 404) {
+      const headers = new Headers(response.headers);
+      headers.delete("link");
+      return new Response(response.body, { status: 404, headers });
+    }
     if (String(input) !== root) return response;
     const headers = new Headers(response.headers);
     headers.set("link", `<${root}acl-store/root>; rel="acl"`);

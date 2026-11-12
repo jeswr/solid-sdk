@@ -32,7 +32,8 @@ function makeSession(webId: string) {
   };
 }
 
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
   useSession: () => sessionState,
 }));
 

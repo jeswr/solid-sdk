@@ -2,12 +2,14 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Client entry: the session provider lazily creates one shared pod-auth core.
+
+import { SessionProvider } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AppErrorBoundary } from "./AppErrorBoundary";
-import { SessionProvider } from "./auth/SessionProvider";
+import { getPodAuth } from "./auth/pod-auth";
 import "./styles.css";
 
 const rootEl = document.getElementById("root");
@@ -22,7 +24,14 @@ createRoot(rootEl).render(
         both the app-shell components' `dark:` utilities and the host chrome (whose
         --bg/--ink/… aliases map onto the OKLCH tokens in styles.css). */}
     <ThemeProvider storageKey="pod-docs:app-shell-theme">
-      <SessionProvider>
+      <SessionProvider
+        getPodAuth={getPodAuth}
+        appName="Pod Docs"
+        dev={import.meta.env.DEV}
+        legacyCredentials={{
+          sessionStorage: ["pod-docs:pss.autologin.flow", "pod-docs:autologin-attempted"],
+        }}
+      >
         {/* The shared crash-resilience boundary (#72/#73): INSIDE the providers
             (themed fallback; the auth seam stays unguarded) but around ALL
             rendered content. See AppErrorBoundary.tsx for the resetKey choice. */}

@@ -27,6 +27,8 @@ import type { MusicPlaylist } from "../lib/data/playlists";
 import { formatDuration } from "../lib/library";
 import { albumHref, artistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
+import { usePlayer } from "../state/player-context";
+import { PlayTrack } from "./player";
 import { AddToPlaylist } from "./playlist-dialogs";
 
 export function Like({ track }: { track: MusicTrack }) {
@@ -65,6 +67,7 @@ export function TrackMenu({
   onMove?: (from: number, to: number) => void;
   onRemove?: (position: number) => void;
 }) {
+  const player = usePlayer();
   const source = safeSource(track.sourceUrl);
   const [adding, setAdding] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -101,6 +104,17 @@ export function TrackMenu({
             if (reordering.current) event.preventDefault();
           }}
         >
+          {track.contentUrl && (
+            <>
+              <DropdownMenuItem onSelect={() => player.playTracks([track])}>Play</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => player.enqueue(track, true)}>
+                Play next
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => player.enqueue(track, false)}>
+                Add to queue
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem
             onSelect={() => {
               fromMenu.current = true;
@@ -165,9 +179,12 @@ export function TrackMenu({
 }
 export function TrackName({ track }: { track: MusicTrack }) {
   return (
-    <span className="mus-track-name">
-      <strong>{track.title}</strong>
-      <Link href={artistHref(track.artistId)}>{track.artist}</Link>
+    <span className="mus-track-heading">
+      <PlayTrack track={track} />
+      <span className="mus-track-name">
+        <strong>{track.title}</strong>
+        <Link href={artistHref(track.artistId)}>{track.artist}</Link>
+      </span>
     </span>
   );
 }
