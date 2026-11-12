@@ -539,12 +539,18 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
       '@jeswr/solid-odrl':
         specifier: workspace:*
         version: link:../../packages/solid-odrl
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -764,6 +770,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/solid-api-auth':
+        specifier: workspace:*
+        version: link:../../packages/solid-api-auth
       jose:
         specifier: ^6.2.3
         version: 6.2.14
@@ -1654,9 +1663,15 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
       '@jeswr/reactive-authentication':
         specifier: workspace:*
         version: link:../../packages/reactive-authentication
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../../packages/storage-client
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -4832,6 +4847,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -4845,6 +4863,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
       '@jeswr/rdf-engine':
         specifier: workspace:*
         version: link:../rdf-engine

@@ -1,0 +1,40 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Generation-only projection of drawing.ttl: the same Scene and predicate IRIs.
+# External superclass declarations/ontology annotations are omitted; the published
+# ontology retains their full axioms. Reused terms are not re-minted.
+@prefix draw: <https://jeswr.org/ns/drawing#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix schema: <http://schema.org/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/drawing> a owl:Ontology ;
+  vann:preferredNamespacePrefix "draw" ;
+  vann:preferredNamespaceUri "https://jeswr.org/ns/drawing#" .
+
+draw:Scene a owl:Class ;
+  rdfs:subClassOf core:InformationResource, schema:CreativeWork ;
+  rdfs:label "Drawing Scene"@en ;
+  rdfs:comment "An RDF descriptor pointing to an opaque, byte-exact drawing canvas resource."@en .
+
+draw:sceneDocument a owl:ObjectProperty ;
+  rdfs:label "scene document"@en ;
+  rdfs:comment "Links the descriptor to its byte-exact canvas JSON resource."@en ;
+  rdfs:domain draw:Scene ; rdfs:range rdfs:Resource .
+
+draw:schemaVersion a owl:DatatypeProperty ;
+  rdfs:label "schema version"@en ;
+  rdfs:comment "The Excalidraw scene-format version."@en ;
+  rdfs:domain draw:Scene ; rdfs:range xsd:string .
+
+draw:viewBackgroundColor a owl:DatatypeProperty ;
+  rdfs:label "view background colour"@en ;
+  rdfs:comment "The canvas background colour recorded by Excalidraw."@en ;
+  rdfs:domain draw:Scene ; rdfs:range xsd:string .
+
+draw:thumbnail a owl:ObjectProperty ;
+  rdfs:label "thumbnail"@en ;
+  rdfs:comment "Links the scene to its preview image resource."@en ;
+  rdfs:domain draw:Scene ; rdfs:range rdfs:Resource .
