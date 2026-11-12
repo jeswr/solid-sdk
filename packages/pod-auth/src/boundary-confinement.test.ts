@@ -382,3 +382,27 @@ test.each([
   await f.boundary.learn(f.op.webId, new AbortController().signal);
   expect(f.boundary.allows(`${sibling}private`)).toBe(matches);
 });
+
+test.each([
+  "https://POD.example/alice/storage",
+  "https://pod.example:443/alice/storage",
+])("a back-link confirms a root for the non-canonical identifier %s", async (identifier) => {
+  const op = createMockOp({ storages: [identifier] });
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === "HEAD")
+      return new Response(null, {
+        headers: { link: `<${identifier}>; rel="${lwsRelation}"` },
+      });
+    if (request.url === storage)
+      return Response.json({
+        id: identifier,
+        type: "Storage",
+        service: [{ type: "StorageRoot", serviceEndpoint: "https://pod.example/bob/" }],
+      });
+    return op.fetch(request);
+  };
+  const boundary = createBoundary({}, { fetch });
+  await boundary.learn(op.webId, new AbortController().signal);
+  expect(boundary.allows("https://pod.example/bob/private")).toBe(true);
+});
