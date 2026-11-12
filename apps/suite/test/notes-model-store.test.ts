@@ -125,7 +125,11 @@ describe("notes store", () => {
     expect((await s.store.create({ title: "Hello World" })).url).toBe(`${ROOT}hello-world-3.ttl`);
     expect((await s.store.create()).url).toBe(`${ROOT}note.ttl`);
     expect((await s.store.create({ title: "!!!" })).url).toBe(`${ROOT}note-2.ttl`);
-    expect(await s.store.read(a.url)).toEqual({ ...a, localGeneration: expect.any(Number) });
+    expect(await s.store.read(a.url)).toEqual({
+      ...a,
+      readOnly: false,
+      localGeneration: expect.any(Number),
+    });
     for (const url of Object.values(s.store.containers)) expect(s.pod.has(url)).toBe(true);
     expect(
       s.calls
@@ -247,7 +251,11 @@ describe("notes store", () => {
     expect(note.created).toBe(original.created);
     expect(note.labels).toEqual(["home"]);
     expect(note.revisions[0]?.id).toBe(`${note.url}#rev-25`);
-    expect(await s.store.read(note.url)).toEqual({ ...note, localGeneration: expect.any(Number) });
+    expect(await s.store.read(note.url)).toEqual({
+      ...note,
+      readOnly: false,
+      localGeneration: expect.any(Number),
+    });
     await expect(s.store.save(original, { title: "Stale" }, original.etag)).rejects.toBeInstanceOf(
       NoteConflictError,
     );
@@ -314,7 +322,7 @@ describe("notes store", () => {
     }
     expect(note.url).toBe(originalUrl);
     expect(await s.store.list("active")).toEqual([
-      { ...note, localGeneration: expect.any(Number) },
+      { ...note, readOnly: false, localGeneration: expect.any(Number) },
     ]);
     expect(await s.store.unarchive(note)).toBe(note);
     const archived = await s.store.archive(note);
@@ -333,6 +341,7 @@ describe("notes store", () => {
     expect((await s.store.archive(second)).url).toBe(`${ROOT}archive/same-2.ttl`);
     expect(await s.store.read(first.url)).toEqual({
       ...first,
+      readOnly: false,
       localGeneration: expect.any(Number),
     });
     const url = `${ROOT}extensionless`;
@@ -464,8 +473,8 @@ describe("notes store", () => {
   it("keeps both copies when a 502 cannot be verified", async () => {
     const s = await fixture();
     const note = await s.store.create();
-    s.intercept(async (url) =>
-      url === note.url ? new Response(null, { status: 502 }) : undefined,
+    s.intercept(async (url, init) =>
+      url === note.url && init?.method !== "HEAD" ? new Response(null, { status: 502 }) : undefined,
     );
     await expect(s.store.archive(note)).rejects.toBeInstanceOf(NoteMoveUncertainError);
     expect(s.pod.has(note.url)).toBe(true);
@@ -510,7 +519,7 @@ describe("notes store", () => {
     const s = await fixture();
     const note = await s.store.create({ body: "Original body" });
     s.intercept(async (url, init) => {
-      if (url !== note.url) return;
+      if (url !== note.url || init?.method === "HEAD") return;
       if (init?.method === "DELETE") throw new TypeError("Lost response");
       const response = await s.pod.fetch(url, init);
       const headers = new Headers(response.headers);
@@ -547,7 +556,7 @@ describe("notes store", () => {
     const s = await fixture();
     const note = await s.store.create();
     s.intercept(async (url, init) => {
-      if (url !== note.url) return;
+      if (url !== note.url || init?.method === "HEAD") return;
       if (init?.method === "DELETE") throw new TypeError("Lost response");
       if (failure === "transport") throw new TypeError("Offline");
       return new Response(null, { status: 503 });
@@ -661,6 +670,7 @@ describe("notes store", () => {
     expect((await s.store.read(archived.url))?.labels).toEqual(["B"]);
     expect(await s.store.read(destination.url)).toEqual({
       ...destination,
+      readOnly: false,
       localGeneration: expect.any(Number),
     });
     expect(await s.store.renameLabelEverywhere("A", "B")).toEqual([]);
@@ -725,10 +735,15 @@ it("never deletes a replacement at the confirmed trash URL", async () => {
   await expect(s.store.deleteForever(confirmed.url, confirmed.etag)).rejects.toBeInstanceOf(
     NoteConflictError,
   );
-  expect(s.calls).toEqual([{ url: confirmed.url, method: "DELETE", headers: expect.any(Headers) }]);
-  expect(s.calls[0]?.headers.get("if-match")).toBe(confirmed.etag);
+  expect(s.calls.map(({ url, method }) => ({ url, method }))).toEqual([
+    { url: confirmed.url, method: "HEAD" },
+    { url: `${confirmed.url}.acl`, method: "GET" },
+    { url: confirmed.url, method: "DELETE" },
+  ]);
+  expect(s.calls.at(-1)?.headers.get("if-match")).toBe(confirmed.etag);
   expect(await s.store.read(replacement.url)).toEqual({
     ...replacement,
+    readOnly: false,
     localGeneration: expect.any(Number),
   });
 });
@@ -761,9 +776,10 @@ it("rolls back the stale destination on a concurrent source edit without a verif
   const edited = await s.store.save(original, { body: "New content" }, original.etag);
   s.calls.length = 0;
   await expect(s.store.archive(original)).rejects.toBeInstanceOf(NoteConflictError);
-  expect(s.calls.filter((call) => call.method === "GET")).toEqual([]);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toEqual([]);
   expect(await s.store.read(original.url)).toEqual({
     ...edited,
+    readOnly: false,
     localGeneration: expect.any(Number),
   });
   expect(s.pod.has(`${ROOT}archive/concurrent.ttl`)).toBe(false);
@@ -791,7 +807,9 @@ it.each([
         ? RedirectRefusedError
         : ResourceDeleteError,
   );
-  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(failure === "http" ? 0 : 1);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toHaveLength(
+    failure === "http" ? 0 : 1,
+  );
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
 });
@@ -804,7 +822,9 @@ it("verifies a transport that rejects without an Error and rolls back its uncomm
     if (url === original.url && init?.method === "DELETE") return Promise.reject();
   });
   await expect(s.store.archive(original)).rejects.toBeUndefined();
-  expect(s.calls.filter((call) => call.method === "GET")).toHaveLength(1);
+  expect(s.calls.filter((call) => call.method === "GET" && call.url === original.url)).toHaveLength(
+    1,
+  );
   expect(s.pod.has(original.url)).toBe(true);
   expect(s.pod.has(`${ROOT}archive/note.ttl`)).toBe(false);
 });

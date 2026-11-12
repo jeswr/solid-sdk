@@ -41,6 +41,7 @@ function message(id: string, content: string): Message {
     tombstone: false,
     deleted: false,
     edited: false,
+    reactions: [],
   };
 }
 async function tick() {

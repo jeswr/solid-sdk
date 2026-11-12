@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /**
@@ -35,7 +36,8 @@ import {
   requestCacheDirective,
   withCacheProvenance,
 } from './cache-policy.js';
-import type { MetadataStore } from './metadata-store.js';
+import { nextPages } from './listing-pages.js';
+import { type MetadataStore, responseBytes } from './metadata-store.js';
 import { reportRevalidation } from './revalidation-events.js';
 import type { CacheMetadata, OfflineEvent } from './types.js';
 
@@ -61,6 +63,8 @@ export interface SwrDeps {
   now(): number;
   /** Returns whether the browser believes it is online. */
   isOnline(): boolean;
+  /** Native pages and ADR-006 readers await the origin before consulting bytes. */
+  strategy?: 'network-first';
 }
 
 /** Outcome classifier for tests + observability. */
@@ -141,9 +145,23 @@ export async function handleFetch(request: Request, deps: SwrDeps): Promise<Hand
   if (request.cache === 'no-store') directive = 'no-store';
   else if (directive === 'default' && (request.cache === 'no-cache' || request.cache === 'reload'))
     directive = 'no-cache';
-  if (deps.isOnline() && directive !== 'default') {
+  if (directive === 'no-store' || (deps.isOnline() && directive !== 'default')) {
     return handleDirective(directive, request, rl, deps);
   }
+
+  if (deps.strategy === 'network-first' && deps.isOnline()) {
+    try {
+      return await forcedRevalidate(request, rl, deps);
+    } catch (error) {
+      // Explicit freshness, abort and session failures must never become stale
+      // success. Only transport TypeErrors admit an offline fallback.
+      if (directive !== 'default' || request.signal.aborted || !(error instanceof TypeError))
+        throw error;
+      return handleCachePath(request, rl, { ...deps, isOnline: () => false });
+    }
+  }
+  if (deps.strategy === 'network-first' && directive === 'no-cache')
+    throw new Error('Offline read requires revalidation');
 
   // 4. The normal metadata-first stale-while-revalidate cache path.
   return handleCachePath(request, rl, deps);
@@ -288,14 +306,16 @@ async function forcedRevalidate(
   deps: SwrDeps,
 ): Promise<HandleResult> {
   let terminal: 'updated' | 'revalidated' | 'revalidate-failed' = 'revalidate-failed';
+  let previous: { record?: CacheMetadata; cached?: Response } = {};
   async function finish(fresh: Response): Promise<HandleResult> {
-    const result = await finalizeForced(rl, fresh, deps);
+    const { result, changed } = await finalizeForced(rl, fresh, deps, previous);
     if (
       (fresh.status >= 200 && fresh.status < 300) ||
+      fresh.status === 401 ||
       fresh.status === 403 ||
       fresh.status === 404
     ) {
-      terminal = 'updated';
+      terminal = changed ? 'updated' : 'revalidated';
     }
     return result;
   }
@@ -304,6 +324,12 @@ async function forcedRevalidate(
     deps.broadcast,
     async () => {
       const record = await lookupRecord(rl, deps);
+      previous = {
+        record,
+        cached: record
+          ? await deps.cache.match(keyRequest(rl.url, record.varyKey), IGNORE_VARY)
+          : undefined,
+      };
 
       // KEEP the caller's `Cache-Control: no-cache` on the wire (roborev High): the
       // SW's `self.fetch` can itself hit the browser HTTP cache / an intermediary, so
@@ -388,27 +414,71 @@ async function finalizeForced(
   rl: RequestLike,
   fresh: Response,
   deps: SwrDeps,
-): Promise<HandleResult> {
+  previous: { record?: CacheMetadata; cached?: Response },
+): Promise<{ result: HandleResult; changed: boolean }> {
   // 1xx/3xx (or any non-authoritative blip): don't touch the cache; hand the
   // network answer back as-is. Only 2xx/403/404 are authoritative about content.
   const authoritative =
-    (fresh.status >= 200 && fresh.status < 300) || fresh.status === 403 || fresh.status === 404;
+    (fresh.status >= 200 && fresh.status < 300) ||
+    fresh.status === 401 ||
+    fresh.status === 403 ||
+    fresh.status === 404;
   if (!authoritative) {
     return {
-      response: withCacheProvenance(fresh, 'miss'),
-      source: 'request-no-cache-revalidated',
+      result: {
+        response: withCacheProvenance(fresh, 'miss'),
+        source: 'request-no-cache-revalidated',
+      },
+      changed: false,
     };
   }
   const decision = classifyResponse(rl, resLike(fresh));
+  // Filling an empty cache or completing an uncacheable read is not a resource
+  // change. Without validators compare bounded bytes, so subscribers can safely
+  // reread even when the server always returns 200.
+  let changed = previous.record !== undefined;
   // A change/revoke affects the whole resource → purge ALL variants first, so a
   // stale positive entry can never survive a non-cacheable (no-store/403/404)
-  // answer.
-  await purgeAllVariants(rl.url, deps);
+  // answer or a failed/oversized comparison stream.
+  try {
+    if (changed && decision.cacheable && previous.cached)
+      changed = !(await sameRepresentation(rl.url, previous, fresh));
+  } finally {
+    await purgeAllVariants(rl.url, deps);
+  }
   if (decision.cacheable) await store(rl, fresh, deps, decision.negative);
   return {
-    response: withCacheProvenance(fresh, 'miss'),
-    source: 'request-no-cache-revalidated',
+    result: {
+      response: withCacheProvenance(fresh, 'miss'),
+      source: 'request-no-cache-revalidated',
+    },
+    changed,
   };
+}
+
+async function sameRepresentation(
+  url: string,
+  previous: { record?: CacheMetadata; cached?: Response },
+  fresh: Response,
+): Promise<boolean> {
+  const cached = previous.cached;
+  if (!cached) return false;
+  // A changed continuation link evicts the old cursor chain, so it is a listing change
+  // even when the first page's bytes are identical.
+  const priorPages = previous.record?.nextPages ?? nextPages(url, cached.headers.get('link'));
+  const freshPages = nextPages(url, fresh.headers.get('link'));
+  if (
+    priorPages.length !== freshPages.length ||
+    priorPages.some((page, index) => page !== freshPages[index]) ||
+    cached.status !== fresh.status ||
+    cached.headers.get('etag') !== fresh.headers.get('etag') ||
+    cached.headers.get('content-type') !== fresh.headers.get('content-type')
+  )
+    return false;
+  const [before, after] = await Promise.all([responseBytes(cached), responseBytes(fresh.clone())]);
+  const left = new Uint8Array(before);
+  const right = new Uint8Array(after);
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 /** True if the request *could* be cached (GET/HEAD + not a never-cache endpoint). */
@@ -554,8 +624,10 @@ async function store(
   await evictListingPages(rl.url, await deps.meta.getByUrl(rl.url), deps);
   // Store the bytes UN-mutated under the canonical (url, varyKey) key + the 1:1
   // metadata row (the shared coherence primitives — see `cache-coherence.ts`).
-  await putCanonicalBytes(deps.cache, rl, response);
-  await deps.meta.put(metadataFromResponse(rl, resLike(response), now, negative));
+  await putCanonicalBytes(deps.cache, rl, response, {
+    store: deps.meta,
+    record: metadataFromResponse(rl, resLike(response), now, negative),
+  });
 }
 
 /**
@@ -622,7 +694,7 @@ async function revalidate(
         // corrective), then go through `classifyResponse`: a cacheable 403/404 leaves a
         // single negative entry (offline parity, #8); a no-store/private 403/404 caches
         // nothing. Either way no stale positive variant survives.
-        if (fresh.status === 403 || fresh.status === 404) {
+        if (fresh.status === 401 || fresh.status === 403 || fresh.status === 404) {
           const decision = classifyResponse(rl, resLike(fresh));
           await purgeAllVariants(rl.url, deps);
           if (decision.cacheable) {

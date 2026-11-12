@@ -21,6 +21,8 @@ import {
   RequiredAs,
   RequiredFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import {
@@ -73,16 +75,9 @@ function types(self: TermWrapper): Set<string> {
 
 /** Add an rdf:type IRI to a subject if not already present. */
 function addType(self: TermWrapper, klass: string): void {
-  const current = types(self);
-  if (!current.has(klass)) {
-    self.dataset.add(
-      self.factory.quad(
-        self as never,
-        self.factory.namedNode(RDF_TYPE),
-        self.factory.namedNode(klass),
-      ),
-    );
-  }
+  // The live WrappingSet writes the triple through the wrapper (a dataset is a
+  // set, so re-adding an existing type is a no-op).
+  SetFrom.subjectPredicate(self, RDF_TYPE, NamedNodeAs.string, NamedNodeFrom.string).add(klass);
 }
 
 function requireNonEmpty(value: string, field: string): string {
@@ -229,15 +224,9 @@ export class Album extends TermWrapper {
   /** Add a track IRI to schema:track. Idempotent. */
   addTrack(trackIri: string): this {
     requireNonEmpty(trackIri, "Album.addTrack(trackIri)");
-    if (!this.trackIris.has(trackIri)) {
-      this.dataset.add(
-        this.factory.quad(
-          this as never,
-          this.factory.namedNode(SCHEMA_TRACK),
-          this.factory.namedNode(trackIri),
-        ),
-      );
-    }
+    SetFrom.subjectPredicate(this, SCHEMA_TRACK, NamedNodeAs.string, NamedNodeFrom.string).add(
+      trackIri,
+    );
     return this;
   }
 
@@ -348,49 +337,29 @@ export class Playlist extends TermWrapper {
     for (const iri of trackIris) {
       requireNonEmpty(iri, "Playlist.setTracks(trackIris)");
     }
-    // delete every existing list item + its link, then re-emit contiguously.
+    // The live list-element set (raw terms: list items are blank nodes).
+    const elements = SetFrom.subjectPredicate(
+      this,
+      SCHEMA_ITEM_LIST_ELEMENT,
+      TermAs.term,
+      TermFrom.itself,
+    );
+    // delete every existing list item's own triples + its link, then re-emit contiguously.
     for (const listItem of this.matchObjects(SCHEMA_ITEM_LIST_ELEMENT)) {
       for (const quad of [...this.dataset.match(listItem, undefined, undefined, undefined)]) {
         this.dataset.delete(quad);
       }
-      this.dataset.delete(
-        this.factory.quad(
-          this as never,
-          this.factory.namedNode(SCHEMA_ITEM_LIST_ELEMENT),
-          listItem as never,
-        ),
-      );
     }
+    elements.clear();
     // strip any flat track predicates so the ordered form is authoritative.
     for (const predicate of [SCHEMA_TRACK, MO_TRACK_PROP]) {
-      for (const quad of [
-        ...this.dataset.match(
-          this as never,
-          this.factory.namedNode(predicate),
-          undefined,
-          undefined,
-        ),
-      ]) {
-        this.dataset.delete(quad);
-      }
+      SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string).clear();
     }
     trackIris.forEach((iri, index) => {
       const listItem = this.factory.blankNode();
-      this.dataset.add(
-        this.factory.quad(
-          this as never,
-          this.factory.namedNode(SCHEMA_ITEM_LIST_ELEMENT),
-          listItem,
-        ),
-      );
+      elements.add(listItem);
       const entry = new TermWrapper(listItem, this.dataset, this.factory);
-      this.dataset.add(
-        this.factory.quad(
-          listItem,
-          this.factory.namedNode(RDF_TYPE),
-          this.factory.namedNode(SCHEMA_LIST_ITEM),
-        ),
-      );
+      addType(entry, SCHEMA_LIST_ITEM);
       RequiredAs.object(entry, SCHEMA_POSITION, index + 1, LiteralFrom.integer);
       RequiredAs.object(entry, SCHEMA_ITEM, iri, NamedNodeFrom.string);
     });
