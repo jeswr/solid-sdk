@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { roomInvitation } from "@jeswr/pod-access/notify";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 // solid-agent-notify is pod-access's transport; its activity module has no demo-pod imports.
 import {
   buildActivity,
@@ -33,6 +34,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__chat-test-reset");
+  await seedDemoSession(page);
   // Observe clipboard writes without requiring a platform clipboard in CI.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
