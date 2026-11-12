@@ -99,6 +99,7 @@
     "@jeswr/model-runtime",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
+    "@jeswr/solid-sheets",
     "@jeswr/solid-environment",
     "@jeswr/suite-insights"
   ],
