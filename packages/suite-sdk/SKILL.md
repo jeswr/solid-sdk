@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk's ./react entry, encodeRef/decodeRef route refs, classifyError, deriveSuiteCaps, accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -11,6 +11,39 @@ The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()`, SDK-APP-05's
 notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
+
+## One entry point and pure helpers (`./react`, SDK-APP-01)
+
+Apps import `@jeswr/suite-sdk/react` (A-1). It re-exports the root, `./offline`, `./search` and
+`./preferences`, plus the pure helpers below. It has no `"use client"` directive, so server routes
+can call `decodeRef` and `classifyError`. The hook modules it re-exports keep their own directive.
+Keep new hooks in modules that carry `"use client"`, and keep pure helpers free of React.
+
+- `encodeRef(url)` / `decodeRef(ref)` (A-18): base64url without padding of `new URL(url).href`.
+  Only http(s) URLs encode (`TypeError` otherwise). `decodeRef` accepts only canonical refs and
+  throws `RefError` for anything else; routes render 404. `encodeIdentifierRef` /
+  `decodeIdentifierRef` keep an RDF identifier verbatim (no URL normalisation) for subject IRIs.
+- `classifyError(error, online = navigator.onLine)` maps errors to the 01-§9 UI categories that
+  suite-ui's `errorStateCopy` renders (A-7). The mapping table:
+  - every `StorageErrorCode` by code: `network` becomes `offline` when offline, else `unreachable`;
+    428 (`precondition-required`), `not-rdf`, `scope`, `bad-request` and `invalid-response` become
+    `unknown`; 405 and 415 become `unsupported`;
+  - `CapabilitiesError`: `network` as above; `description-unreachable` becomes `reauth` (401),
+    `forbidden` (403) or `unreachable`; other codes become `unknown`;
+  - pod-auth `IssuerNotAuthorizedError` and `UnknownAccountError` become `reauth`;
+  - objects with a storage `code`, then an HTTP `status` (0 = network); everything else is
+    `unknown`.
+  Never inspect raw errors in UI code.
+- `deriveSuiteCaps(features, { hasInbox?, selfRegistration? })` is the pure boolean view of the
+  ADR-002 `Features`. Every boolean is `state === "available"` (unknown and unavailable are false):
+  - `accessControl` is the model when available, else `none`;
+  - `publicLinks` and `authenticatedAgentGrants` require WAC or ACP; `grantExpiry` and
+    `grantPurpose` require ODRL grants;
+  - `move` requires native move;
+  - `notifyAgents` means Solid;
+  - `accessRequests` is the feature, or Solid with `hasInbox`;
+  - `quota` is always false;
+  - `patchMediaTypes` is the de-duplicated union of the patch formats.
 
 ## Accounts (`SDK-APP-02`)
 
