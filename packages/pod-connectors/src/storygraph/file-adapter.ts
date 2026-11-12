@@ -8,7 +8,9 @@
  * Open Library's reading-log export (My Books → Export) is a CSV keyed by
  * `Work Id`/`Edition Id` with `Title`, `Author(s)`, `ISBN 13`/`ISBN 10`, `Bookshelf`
  * ("Want to Read", "Currently Reading", "Already Read"), a rating and `Date Added`.
- * The header row selects the dialect; other CSVs are refused.
+ * The header row selects the dialect; other CSVs are refused. Each dialect has its own
+ * document (`documents/storygraph-library.ttl`, `documents/openlibrary-library.ttl`), so
+ * importing one service's export never replaces the other's books.
  *
  * Both map onto the Goodreads book model (`schema:Book` in Documents) through the shared
  * book identity (core/books.ts): the same book from Goodreads and StoryGraph has the same
@@ -37,7 +39,10 @@ import { Book, CLASSES } from "../core/vocab.js";
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "storygraph";
-const SLUG = "documents/storygraph-library.ttl";
+const SLUGS: Readonly<Record<ReadingDialect, string>> = {
+  storygraph: "documents/storygraph-library.ttl",
+  openlibrary: "documents/openlibrary-library.ttl",
+};
 
 const metadata: IntegrationMetadata = {
   id: ID,
@@ -62,13 +67,16 @@ export const storygraphFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your library…", done: 0, total: 1 });
-    const doc = ctx.resolve(SLUG);
+    let doc = "";
     const store = new Store();
     const books = new Set<string>();
     let dialect: ReadingDialect | undefined;
     let rows = 0;
     for await (const row of csvRows(file, ctx.skip)) {
-      dialect ??= readingDialect(Object.keys(row));
+      if (!dialect) {
+        dialect = readingDialect(Object.keys(row));
+        doc = ctx.resolve(SLUGS[dialect]);
+      }
       if (rows >= ctx.maxRows) break;
       rows++;
       const title = cappedText(field(row, "Title"), MAX_TITLE_CHARS);
@@ -104,8 +112,13 @@ export const storygraphFileAdapter: FileImportAdapter = {
     }
 
     ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
-    if (books.size === 0) return;
-    await ctx.write({ slug: SLUG, category: "documents", forClass: CLASSES.Book, dataset: store });
+    if (books.size === 0 || !dialect) return;
+    await ctx.write({
+      slug: SLUGS[dialect],
+      category: "documents",
+      forClass: CLASSES.Book,
+      dataset: store,
+    });
   },
 };
 

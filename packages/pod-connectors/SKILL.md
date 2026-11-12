@@ -287,4 +287,7 @@ every field bound from `core/export-fields.ts` and Goodreads/StoryGraph book ide
 allowlist and its own entry/inflation caps; keep it from inflating unselected entries.
 Pocket writes the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`), never
 `PodThing.sourceUrl`, so provenance stays on the export. Telegram reads JSON keys as own
-properties and records attachment names only; never open or resolve an export path.
+properties and records attachment names only; never open or resolve an export path. Keep
+one document per independently exported unit (Letterboxd `media/letterboxd/<kind>.ttl`,
+Telegram `social/telegram/<chat key>.ttl`, StoryGraph and Open Library one each): a
+partial export must replace only what it covers, never earlier imports.

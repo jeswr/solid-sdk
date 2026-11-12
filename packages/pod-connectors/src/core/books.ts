@@ -7,7 +7,9 @@
  * onto one subject:
  *
  * - a valid ISBN-13, or an ISBN-10 converted to ISBN-13 (checksums verified), else
- * - the case-, accent- and punctuation-folded title plus primary author.
+ * - the case-, accent- and punctuation-folded title plus primary author, plus the
+ *   source's own book id when the export has one (two ISBN-less editions that share a
+ *   title and author stay apart; such books then do not match across services).
  */
 import { recordFragment } from "./slug.js";
 
@@ -65,14 +67,28 @@ function fold(value: string): string {
 }
 
 /** The cross-service identity key of a book. */
-export function bookKey(title: string, author: string | undefined, isbn?: string): string {
-  return isbn ? `isbn:${isbn}` : `title:${fold(title)}|author:${fold(author ?? "")}`;
+export function bookKey(
+  title: string,
+  author: string | undefined,
+  isbn?: string,
+  sourceId?: string,
+): string {
+  if (isbn) return `isbn:${isbn}`;
+  const key = `title:${fold(title)}|author:${fold(author ?? "")}`;
+  return sourceId ? `${key}|source:${sourceId}` : key;
 }
 
 /** The deterministic fragment (without the `book-` prefix) shared by every reading adapter. */
-export function bookFragment(title: string, author: string | undefined, isbn?: string): string {
+export function bookFragment(
+  title: string,
+  author: string | undefined,
+  isbn?: string,
+  sourceId?: string,
+): string {
   // The readable part must depend only on the key: services spell titles differently.
-  return isbn ? `isbn-${isbn}` : recordFragment(fold(title), bookKey(title, author));
+  return isbn
+    ? `isbn-${isbn}`
+    : recordFragment(fold(title), bookKey(title, author, undefined, sourceId));
 }
 
 /** The first author of a comma-separated author list. */

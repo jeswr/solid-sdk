@@ -14,11 +14,16 @@ import {
   letterboxdFileAdapter,
   letterboxdRating,
   letterboxdUrl,
+  MAX_LETTERBOXD_INFLATED_BYTES,
 } from "./file-adapter.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/letterboxd/`;
-const DIARY_DOC = `${ROOT}media/letterboxd-diary.ttl`;
-const WATCHLIST_DOC = `${ROOT}media/letterboxd-watchlist.ttl`;
+// One document per export file kind, so a partial export replaces only its own kinds.
+const DIARY_DOC = `${ROOT}media/letterboxd/diary.ttl`;
+const REVIEWS_DOC = `${ROOT}media/letterboxd/reviews.ttl`;
+const WATCHED_DOC = `${ROOT}media/letterboxd/watched.ttl`;
+const RATINGS_DOC = `${ROOT}media/letterboxd/ratings.ttl`;
+const WATCHLIST_DOC = `${ROOT}media/letterboxd/watchlist.ttl`;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 // Synthetic export rows only (invented films, links and dates).
@@ -111,7 +116,13 @@ describe("letterboxd file adapter", () => {
       "likes/films.csv": WATCHED,
     });
     const { pod, report } = await fileImport(letterboxdFileAdapter, file);
-    expect(report.written.map((w) => w.url).sort()).toEqual([DIARY_DOC, WATCHLIST_DOC]);
+    expect(report.written.map((w) => w.url)).toEqual([
+      DIARY_DOC,
+      REVIEWS_DOC,
+      WATCHED_DOC,
+      RATINGS_DOC,
+      WATCHLIST_DOC,
+    ]);
     expect(report.skipped).toBeUndefined();
     const ds = pod.dataset(DIARY_DOC);
     // The review merged into the logged entry instead of adding a fourth viewing.
@@ -123,18 +134,28 @@ describe("letterboxd file adapter", () => {
       .filter((q) => q.predicate.value === "https://schema.org/name")
       .map((q) => q.object.value);
     expect(names).not.toContain("Deleted Film");
-    // A film from watched.csv/ratings.csv carries its film link and the film rating.
-    const never = subjectsOf(ds, CLASSES.Movie)
-      .map((iri) => new Movie(iri, ds, DataFactory))
-      .find((film) => film.name === "Never Logged");
-    expect(never?.sourceUrl).toBe("https://boxd.it/film02");
-    expect(never?.ratingValue).toBe(3);
-    expect(never?.watchStatus).toBe("watched");
+    // reviews.ttl keeps the review on the diary viewing's own subject, so a later
+    // diary-only import cannot lose it.
+    const reviews = pod.dataset(REVIEWS_DOC);
+    expect(subjectsOf(reviews, CLASSES.WatchAction)).toEqual([reviewed.value]);
+    expect(new WatchAction(reviewed.value, reviews, DataFactory).reviewBody).toBe(
+      'A "synthetic" review,\nover two lines',
+    );
+    // Films from watched.csv and ratings.csv: the film link and the film rating.
+    const film = (doc: string, name: string) => {
+      const data = pod.dataset(doc);
+      return subjectsOf(data, CLASSES.Movie)
+        .map((iri) => new Movie(iri, data, DataFactory))
+        .find((m) => m.name === name);
+    };
+    expect(film(WATCHED_DOC, "Never Logged")?.sourceUrl).toBe("https://boxd.it/film02");
+    expect(film(WATCHED_DOC, "Never Logged")?.watchStatus).toBe("watched");
+    expect(film(RATINGS_DOC, "Never Logged")?.ratingValue).toBe(3);
     const watchlist = pod.dataset(WATCHLIST_DOC);
     const [someday] = subjectsOf(watchlist, CLASSES.Movie);
-    const film = new Movie(required(someday), watchlist, DataFactory);
-    expect(film.watchStatus).toBe("watchlist");
-    expect(film.dateCreated?.toISOString().slice(0, 10)).toBe("2024-04-01");
+    const queued = new Movie(required(someday), watchlist, DataFactory);
+    expect(queued.watchStatus).toBe("watchlist");
+    expect(queued.dateCreated?.toISOString().slice(0, 10)).toBe("2024-04-01");
     expect(pod.get(report.indexUrl)).toContain(CLASSES.Movie);
   });
 
@@ -164,6 +185,128 @@ describe("letterboxd file adapter", () => {
     expect(event.reviewBody).toBe("Merged by date");
     // The review row had no rating: the diary's rating survives.
     expect(event.ratingValue).toBe(4);
+  });
+
+  it("keeps earlier kinds when a partial export is imported later", async () => {
+    const { pod } = await fileImport(letterboxdFileAdapter, streamedBytesFile("diary.csv", DIARY));
+    const viewings = subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction);
+    expect(viewings).toHaveLength(3);
+    const { report } = await fileImport(
+      letterboxdFileAdapter,
+      streamedBytesFile("ratings.csv", RATINGS),
+      { pod },
+    );
+    expect(report.written.map((w) => w.url)).toEqual([RATINGS_DOC]);
+    expect(subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction)).toEqual(viewings);
+    // A ZIP lacking some kinds leaves those documents untouched too.
+    const watchlistOnly = zipFile({ "watchlist.csv": WATCHLIST }).file;
+    await fileImport(letterboxdFileAdapter, watchlistOnly, { pod });
+    expect(subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction)).toEqual(viewings);
+    expect(subjectsOf(pod.dataset(RATINGS_DOC), CLASSES.Movie)).toHaveLength(1);
+    expect(subjectsOf(pod.dataset(WATCHLIST_DOC), CLASSES.Movie)).toHaveLength(1);
+  });
+
+  it("keeps a review whose diary entry is not in the import as its own viewing", async () => {
+    const { pod } = await fileImport(letterboxdFileAdapter, streamedBytesFile("diary.csv", DIARY));
+    const { report } = await fileImport(
+      letterboxdFileAdapter,
+      streamedBytesFile("reviews.csv", REVIEWS),
+      { pod },
+    );
+    expect(report.written.map((w) => w.url)).toEqual([REVIEWS_DOC]);
+    const reviews = pod.dataset(REVIEWS_DOC);
+    const [alone] = subjectsOf(reviews, CLASSES.WatchAction);
+    expect(alone?.startsWith(`${REVIEWS_DOC}#watch-`)).toBe(true);
+    const review = new WatchAction(required(alone), reviews, DataFactory);
+    expect(review.reviewBody).toBe('A "synthetic" review,\nover two lines');
+    expect(review.sourceUrl).toBe("https://boxd.it/aaa01");
+    expect(new Movie(required(review.watchedWork), reviews, DataFactory).name).toBe(
+      "Synthetic Orbit",
+    );
+    expect(subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction)).toHaveLength(3);
+  });
+
+  it("keeps two same-day viewings of one film apart by their own links", async () => {
+    const diary = `Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date
+2024-01-03,Film A,2019,https://boxd.it/aaa01,1,,,2024-01-02
+2024-01-03,Film A,2019,https://boxd.it/aaa02,5,Yes,,2024-01-02`;
+    const reviews = `Date,Name,Year,Letterboxd URI,Rating,Rewatch,Review,Tags,Watched Date
+2024-01-03,Film A,2019,https://boxd.it/zzz09,,,Other link: ambiguous,,2024-01-02
+2024-01-03,Film A,2019,https://boxd.it/aaa02,,,Second viewing,,2024-01-02`;
+    const { file } = zipFile({ "diary.csv": diary, "reviews.csv": reviews });
+    const { pod } = await fileImport(letterboxdFileAdapter, file);
+    const ds = pod.dataset(DIARY_DOC);
+    expect(subjectsOf(ds, CLASSES.WatchAction)).toHaveLength(2);
+    const first = new WatchAction(watchByUri(ds, "https://boxd.it/aaa01"), ds, DataFactory);
+    const second = new WatchAction(watchByUri(ds, "https://boxd.it/aaa02"), ds, DataFactory);
+    expect([first.ratingValue, first.rewatch, first.reviewBody]).toEqual([1, false, undefined]);
+    expect([second.ratingValue, second.rewatch, second.reviewBody]).toEqual([
+      5,
+      true,
+      "Second viewing",
+    ]);
+    // A review with a different link never merges by film and date.
+    const standalone = pod.dataset(REVIEWS_DOC);
+    const other = new WatchAction(
+      watchByUri(standalone, "https://boxd.it/zzz09"),
+      standalone,
+      DataFactory,
+    );
+    expect(other.value.startsWith(`${REVIEWS_DOC}#`)).toBe(true);
+    expect(other.reviewBody).toBe("Other link: ambiguous");
+  });
+
+  it("refuses an archive with more than one export folder or root plus folder", async () => {
+    for (const entries of [
+      { "letterboxd-a/diary.csv": DIARY, "letterboxd-b/diary.csv": DIARY },
+      { "diary.csv": DIARY, "letterboxd-a/ratings.csv": RATINGS },
+    ]) {
+      await expect(
+        fileImport(letterboxdFileAdapter, zipFile(entries).file),
+        Object.keys(entries).join(" "),
+      ).rejects.toThrow("This ZIP holds more than one Letterboxd export.");
+    }
+    // One folder alone is a re-zipped export; folders other than letterboxd-* are ignored.
+    const { pod } = await fileImport(
+      letterboxdFileAdapter,
+      zipFile({ "letterboxd-a/diary.csv": DIARY, "deleted/diary.csv": DIARY }).file,
+    );
+    expect(subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction)).toHaveLength(3);
+  });
+
+  it("treats entry names differing only in case as duplicates: first wins, rest counted", async () => {
+    const other = DIARY.replaceAll("Synthetic Orbit", "Case Twin").replaceAll("aaa0", "ccc0");
+    const { pod, report } = await fileImport(
+      letterboxdFileAdapter,
+      zipFile({ "diary.csv": DIARY, "Diary.CSV": other, "DIARY.csv": other }).file,
+    );
+    expect(report.skipped).toBe(2);
+    const names = [...pod.dataset(DIARY_DOC)]
+      .filter((q) => q.predicate.value === "https://schema.org/name")
+      .map((q) => q.object.value);
+    expect(names).toContain("Synthetic Orbit");
+    expect(names).not.toContain("Case Twin");
+  });
+
+  it("caps total inflation at the shared 64 MiB file limit", async () => {
+    expect(MAX_LETTERBOXD_INFLATED_BYTES).toBe(MAX_FILE_BYTES);
+    // Two entries each under the per-entry cap, together over the total cap: the second
+    // is skipped and counted (a 256 MiB budget would have read both).
+    const pad = "\n".repeat(MAX_FILE_BYTES / 2 + 1024);
+    const zip = zipSync(
+      {
+        "watched.csv": strToU8(`${WATCHED}${pad}`),
+        "ratings.csv": strToU8(`${RATINGS}${pad}`),
+      },
+      { level: 9 },
+    );
+    const { pod, report } = await fileImport(
+      letterboxdFileAdapter,
+      streamedBytesFile("export.zip", zip, 65536),
+    );
+    expect(report.written.map((w) => w.url)).toEqual([WATCHED_DOC]);
+    expect(report.skipped).toBe(1);
+    expect(subjectsOf(pod.dataset(WATCHED_DOC), CLASSES.Movie)).toHaveLength(2);
   });
 
   it("skips and counts malformed rows, dropping invalid values", async () => {
@@ -221,6 +364,7 @@ ${"x".repeat(MAX_CSV_RECORD_BYTES + 1)}
       streamedBytesFile("export.zip", corrupt, 97),
     );
     expect(report.skipped).toBe(1);
+    expect(report.written.map((w) => w.url)).toEqual([DIARY_DOC]);
     const names = [...pod.dataset(DIARY_DOC)]
       .filter((q) => q.predicate.value === "https://schema.org/name")
       .map((q) => q.object.value);
@@ -287,6 +431,8 @@ describe("letterboxd helpers", () => {
       "/diary.csv",
       "a/b/diary.csv",
       "letterboxd-x\\diary.csv",
+      "letterboxd-../diary.csv",
+      "letterboxd-\u202e/diary.csv",
       "profile.csv",
       "diary.csv.exe",
     ])

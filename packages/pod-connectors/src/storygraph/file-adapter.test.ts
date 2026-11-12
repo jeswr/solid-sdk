@@ -2,6 +2,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
+import { bookFragment } from "../core/books.js";
 import { MAX_BODY_CHARS } from "../core/export-fields.js";
 import { fileImport, memoryFile, streamedBytesFile, TEST_POD_ROOT } from "../core/testing.js";
 import { Book, CLASSES } from "../core/vocab.js";
@@ -14,6 +15,7 @@ import {
 } from "./file-adapter.js";
 
 const DOC = `${TEST_POD_ROOT}integrations/storygraph/documents/storygraph-library.ttl`;
+const OPEN_LIBRARY_DOC = `${TEST_POD_ROOT}integrations/storygraph/documents/openlibrary-library.ttl`;
 const GOODREADS_DOC = `${TEST_POD_ROOT}integrations/goodreads/documents/goodreads-library.ttl`;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
@@ -71,11 +73,13 @@ describe("storygraph file adapter", () => {
   });
 
   it("maps the Open Library reading log", async () => {
-    const { pod } = await fileImport(
+    const { pod, report } = await fileImport(
       storygraphFileAdapter,
       streamedBytesFile("OpenLibrary_ReadingLog.csv", OPEN_LIBRARY),
     );
-    const [edition, work] = books(pod.dataset(DOC));
+    // Open Library has its own document, so it never replaces a StoryGraph import.
+    expect(report.written.map((w) => w.url)).toEqual([OPEN_LIBRARY_DOC]);
+    const [edition, work] = books(pod.dataset(OPEN_LIBRARY_DOC));
     expect(work?.identifier).toBe("OL123W");
     expect(work?.sourceUrl).toBe("https://openlibrary.org/works/OL123W");
     expect(work?.readingStatus).toBe("to-read");
@@ -104,7 +108,15 @@ describe("storygraph file adapter", () => {
     const local = (book: Book) => book.value.split("#")[1];
     const fromGoodreads = books(pod.dataset(GOODREADS_DOC));
     const fromStorygraph = books(pod.dataset(DOC));
-    expect(fromStorygraph.map(local).sort()).toEqual(fromGoodreads.map(local).sort());
+    // The ISBN book shares its identity. Without an ISBN, Goodreads keys by its own Book Id
+    // (same-titled editions stay apart), so the folded-title book is matched only between
+    // sources that carry no id of their own.
+    expect(fromStorygraph.map(local)).toContain("book-isbn-9780441013593");
+    expect(fromGoodreads.map(local)).toContain("book-isbn-9780441013593");
+    const folded = fromStorygraph.find((book) => !book.isbn);
+    expect(folded && local(folded)).toBe(
+      `book-${bookFragment("The Folded Title", "Accent Writer")}`,
+    );
     const isbnBook = fromStorygraph.find((book) => book.isbn);
     expect(isbnBook?.isbn).toBe("9780441013593");
     expect(isbnBook && local(isbnBook)).toBe("book-isbn-9780441013593");
@@ -133,6 +145,22 @@ describe("storygraph file adapter", () => {
     expect(only?.ratingValue).toBe(4);
     expect([...(only?.keywords ?? [])]).toEqual(["extra"]);
     expect(report.state?.counts.items).toBe(1);
+  });
+
+  it("keeps both libraries when Open Library is imported after StoryGraph (and back)", async () => {
+    const { pod } = await fileImport(
+      storygraphFileAdapter,
+      streamedBytesFile("storygraph.csv", STORYGRAPH),
+    );
+    const storygraphQuads = [...pod.dataset(DOC)].length;
+    await fileImport(storygraphFileAdapter, streamedBytesFile("ol.csv", OPEN_LIBRARY), { pod });
+    expect(books(pod.dataset(DOC))).toHaveLength(3);
+    expect(books(pod.dataset(OPEN_LIBRARY_DOC))).toHaveLength(2);
+    await fileImport(storygraphFileAdapter, streamedBytesFile("storygraph.csv", STORYGRAPH), {
+      pod,
+    });
+    expect([...pod.dataset(DOC)].length).toBe(storygraphQuads);
+    expect(books(pod.dataset(OPEN_LIBRARY_DOC))).toHaveLength(2);
   });
 
   it("re-imports idempotently", async () => {

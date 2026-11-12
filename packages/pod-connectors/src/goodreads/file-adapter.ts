@@ -58,7 +58,9 @@ export const goodreadsFileAdapter: FileImportAdapter = {
       const author = row.Author?.trim();
       // Normalised ISBN-13 when valid, so the same book shares its identity with StoryGraph.
       const normalisedIsbn = isbn13(row.ISBN13) ?? isbn13(row.ISBN);
-      const frag = bookFragment(title, author, normalisedIsbn);
+      // Without an ISBN the Goodreads Book Id keeps same-titled editions apart.
+      const sourceId = bookId && /^\d{1,20}$/.test(bookId) ? `goodreads:${bookId}` : undefined;
+      const frag = bookFragment(title, author, normalisedIsbn, sourceId);
       const book = new Book(`${doc}#book-${frag}`, store, DataFactory).mark();
       book.name = title;
       if (bookId) {

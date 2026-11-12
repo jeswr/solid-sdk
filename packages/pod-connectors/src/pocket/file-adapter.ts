@@ -25,7 +25,7 @@ import {
 } from "../core/export-fields.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
 import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
-import { recordFragment } from "../core/slug.js";
+import { strongRecordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { Bookmark, CLASSES } from "../core/vocab.js";
 import { type PocketItem, pocketHtmlItems } from "./ril-export.js";
@@ -71,11 +71,9 @@ export const pocketFileAdapter: FileImportAdapter = {
         ctx.skip();
         continue;
       }
-      const bookmark = new Bookmark(
-        `${doc}#bookmark-${recordFragment(url.replace(/^https?:\/\//, ""), url)}`,
-        store,
-        DataFactory,
-      ).mark();
+      // The link is attacker-chosen, so the discriminator is a 128-bit hash, not 32-bit FNV.
+      const fragment = await strongRecordFragment(url.replace(/^https?:\/\//, ""), url);
+      const bookmark = new Bookmark(`${doc}#bookmark-${fragment}`, store, DataFactory).mark();
       const tags = tagList(item.tags, html ? "," : "|");
       if (seen.has(url)) {
         // The first occurrence keeps its fields; a duplicate only contributes tags.

@@ -6,6 +6,7 @@
  * finite, and links must be credential-free absolute http(s) URLs. Values that fail a
  * check are dropped (`undefined`), never coerced into something plausible.
  */
+import { escapeIri } from "@jeswr/rdf-serialize";
 import { safeIri } from "./vocab.js";
 
 /** Titles, film/book names and chat names. */
@@ -90,8 +91,11 @@ export function httpUrl(raw: unknown): string | undefined {
   const url = new URL(text);
   if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
   if (url.username || url.password || !url.hostname) return undefined;
-  if (url.href.length > MAX_URL_CHARS) return undefined;
-  return safeIri(url.href);
+  // WHATWG leaves `|`, `{`, `}`, `^`, `\` and others raw in queries and fragments;
+  // Turtle IRIs forbid them, so they are percent-encoded rather than the link dropped.
+  const href = escapeIri(url.href);
+  if (href.length > MAX_URL_CHARS) return undefined;
+  return safeIri(href);
 }
 
 /** Split a tag list, capping each tag and the number of tags; duplicates collapse. */

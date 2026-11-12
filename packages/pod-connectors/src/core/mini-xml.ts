@@ -27,19 +27,31 @@ const DECODE: Record<string, string> = {
 
 /** Decode the five predefined XML entities plus numeric character refs. */
 export function decodeXmlEntities(s: string): string {
-  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (whole, body: string) => {
+  return s.replace(/&(#[xX][0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (whole, body: string) => {
     if (body[0] === "#") {
       const code =
         body[1] === "x" || body[1] === "X"
           ? Number.parseInt(body.slice(2), 16)
           : Number.parseInt(body.slice(1), 10);
-      // Out-of-range or surrogate references stay literal instead of throwing RangeError.
-      return Number.isFinite(code) && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff)
-        ? String.fromCodePoint(code)
-        : whole;
+      // References to anything XML 1.0 does not allow as a character (NUL, other C0
+      // controls, surrogates, U+FFFE/U+FFFF, beyond U+10FFFF) stay literal, like any
+      // other invalid reference, instead of decoding or throwing RangeError.
+      return isXmlChar(code) ? String.fromCodePoint(code) : whole;
     }
     return DECODE[body] ?? whole;
   });
+}
+
+/** XML 1.0 `Char`: tab, LF, CR, U+0020–U+D7FF, U+E000–U+FFFD and U+10000–U+10FFFF. */
+function isXmlChar(code: number): boolean {
+  return (
+    code === 0x9 ||
+    code === 0xa ||
+    code === 0xd ||
+    (code >= 0x20 && code <= 0xd7ff) ||
+    (code >= 0xe000 && code <= 0xfffd) ||
+    (code >= 0x10000 && code <= 0x10ffff)
+  );
 }
 
 /**

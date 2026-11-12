@@ -549,43 +549,69 @@ the Takeout ZIP reader and the existing models. Shared bounds live in
 512, reviews and message bodies 65,536 UTF-16 units; at most 64 tags of 128), dates are kept
 only from 1970 through 2100, numbers must be plain finite decimals, and links must be
 credential-free absolute `http(s)` URLs of at most 8,192 characters (`javascript:`, `data:`,
-`file:` and every other scheme are refused). A value that fails is omitted; a record that
-lacks its required field (film name, link, title, message id) is skipped and counted.
+`file:` and every other scheme are refused; characters Turtle forbids in IRIs, such as `|`,
+`{`, `}`, `^`, `\` and the backtick, are percent-encoded after WHATWG parsing). A value
+that fails is omitted; a record that lacks its required field (film name, link, title,
+message id) is skipped and counted.
+
+Each adapter writes one document per independently exported unit, so importing a partial
+or different export replaces only the documents it covers and never deletes earlier
+imports: Letterboxd one per CSV kind, Telegram one per chat, StoryGraph and Open Library
+one each. This layout replaces the single-document slugs of the first, unreleased version
+(`media/letterboxd-diary.ttl`, `media/letterboxd-watchlist.ttl`,
+`social/telegram-messages.ttl`); there is no migration, and documents at those old slugs
+are no longer written.
 
 | Adapter | Accepts | Writes |
 |---|---|---|
-| Letterboxd | export `.zip` or one of its CSVs | `media/letterboxd-diary.ttl`: `schema:WatchAction` per diary/review entry (watched date, 0.5–5 rating, `rewatch` tag, tags, review) → `schema:object` a `schema:Movie` (name, `copyrightYear`, status `watched`, film rating); `media/letterboxd-watchlist.ttl`: watchlist films (status `watchlist`) |
+| Letterboxd | export `.zip` or one of its CSVs | `media/letterboxd/diary.ttl`: `schema:WatchAction` per diary entry (watched date, 0.5–5 rating, `rewatch` tag, tags, attached review) → `schema:object` a `schema:Movie` (name, `copyrightYear`, status `watched`); `media/letterboxd/reviews.ttl`: reviews (on the diary entry's subject when attached, else their own viewing); `media/letterboxd/watched.ttl` and `media/letterboxd/ratings.ttl`: films (status `watched`; ratings add the film rating); `media/letterboxd/watchlist.ttl`: watchlist films (status `watchlist`) |
 | Pocket | 2024–25 CSV or legacy `ril_export.html` | `documents/pocket-bookmarks.ttl`: `book:Bookmark` in the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`, `dct:title`, `dct:created`, `book:archived`, `http://schema.org/keywords`) |
-| StoryGraph | StoryGraph library CSV or Open Library reading-log CSV | `documents/storygraph-library.ttl`: `schema:Book` (the Goodreads model plus `reviewBody` and tags) |
-| Telegram | Telegram Desktop `result.json` (account or single chat) | `social/telegram-messages.ttl`: `schema:Message` (the WhatsApp model plus chat name, edit time, `social:inReplyTo`, forwarded-from as `schema:creator`, attachment file names) |
+| StoryGraph | StoryGraph library CSV or Open Library reading-log CSV | `documents/storygraph-library.ttl` (StoryGraph) or `documents/openlibrary-library.ttl` (Open Library): `schema:Book` (the Goodreads model plus `reviewBody` and tags) |
+| Telegram | Telegram Desktop `result.json` (account or single chat) | `social/telegram/<chat key>.ttl` per chat, the key a 128-bit SHA-256 hash of the chat id: `schema:Message` (the WhatsApp model plus chat name, edit time, `social:inReplyTo`, forwarded-from as `schema:creator`, attachment file names) |
 
 - Letterboxd reads only `diary.csv`, `reviews.csv`, `watched.csv`, `ratings.csv` and
-  `watchlist.csv` at the archive root (or in one `letterboxd-…` folder); `deleted/`,
-  `lists/` and other entries are never inflated. Entries pass the reader's size, CRC and
-  DEFLATE-boundary checks (failures are skipped and counted), each is capped at 64 MiB,
-  the archive at 10,000 directory entries and 256 MiB inflated. The adapter declares
-  `streaming: true` because it enforces these limits and the 64 MiB stream cap for a
-  standalone CSV. Watch events are keyed by Letterboxd URI, else film, year and watched
-  date; a review merges into its diary entry and never clears the entry's fields. A
-  standalone CSV's kind comes from its file name, else its headers (`watchlist` only by
-  name). schema.org has no rewatch term, so a rewatch is the `rewatch` keyword.
+  `watchlist.csv`, either at the archive root or in exactly one `letterboxd-…` folder; an
+  archive with two such folders, or root files plus a folder, is refused ("This ZIP holds
+  more than one Letterboxd export."). Names that differ only in case are duplicates: the
+  first is read, the rest are skipped and counted. `deleted/`, `lists/` and other entries
+  are never inflated. Entries pass the reader's size, CRC and DEFLATE-boundary checks
+  (failures are skipped and counted), each is capped at 64 MiB, the archive at 10,000
+  directory entries and 64 MiB inflated in total (an entry that no longer fits is skipped
+  and counted). The adapter declares `streaming: true` because it enforces these limits
+  and the 64 MiB stream cap for a standalone CSV. A ZIP writes each kind it contains and
+  leaves the others untouched. A diary entry is keyed by its own Letterboxd URI only
+  (entries without one, by film, year and watched date), so two same-day viewings stay
+  apart. A review attaches to a diary entry of the same import by URI, else by film, year
+  and watched date when exactly one entry matches and that entry has no different URI; it
+  is merged into the entry (never clearing its fields) and recorded in `reviews.ttl` on the
+  entry's subject, so a later diary-only import keeps it. Other reviews are their own
+  viewings in `reviews.ttl`. A standalone CSV's kind comes from its file name, else its
+  headers (`watchlist` only by name). schema.org has no rewatch term, so a rewatch is the
+  `rewatch` keyword.
 - Pocket decides between HTML and CSV from the content. The HTML reader tokenises tags
   (64 KiB) and text (1 MiB per anchor) with the shared bounded units, skips comments,
-  expands only the XML entities and numeric references (out-of-range references stay
-  literal) and fails on unterminated markup. The saved page is not
+  expands only the XML entities and numeric references (references to code points XML 1.0
+  disallows, such as NUL, other C0 controls, surrogates and U+FFFE/U+FFFF, stay literal)
+  and fails on unterminated markup. A bookmark's fragment carries a 128-bit SHA-256 hash of
+  its link (links are attacker-chosen; a 32-bit hash collides on demand). The saved page is not
   `https://schema.org/url`, which provenance reads as the record's source: bookmarks derive
   from the export. A link saved twice is one bookmark whose tags merge.
 - Goodreads and StoryGraph share `core/books.ts`: a book's fragment is
   `book-isbn-<ISBN-13>` when a checksum-valid ISBN-13 or ISBN-10 (converted) exists, else
-  a hash of the accent-, case- and punctuation-folded title and first author. The same book
-  imported from both services therefore has the same local name and `schema:isbn` in each
-  connector's document; duplicate rows collapse. Goodreads now uses this key instead of its
-  Book Id, so a re-import rewrites existing Goodreads fragments once. StoryGraph read dates,
+  a hash of the accent-, case- and punctuation-folded title and first author (Goodreads adds
+  its Book Id here, so ISBN-less books that share a title and author stay apart; those books
+  then match across services only by ISBN). The same book imported from both services
+  therefore has the same local name and `schema:isbn` in each connector's document;
+  duplicate rows collapse. Goodreads now uses this key, so a re-import rewrites existing
+  Goodreads fragments once. StoryGraph read dates,
   moods and `Owned?` have no book-model term and are not imported.
 - Telegram streams only message objects and chat names/ids (4 MiB per message; oversized
   messages are skipped and counted). Keys are read as own properties, so `__proto__` or
-  `constructor` members never resolve. Service messages are left out. A reply links only
-  to an earlier message of the same chat. Attachments are recorded by file name; the
+  `constructor` members never resolve. Service messages are left out. Messages are grouped
+  by chat with the JSON reader's array-member boundaries, so `messages` before a chat's
+  `name` and `id` stay in that chat; a chat without an id is skipped and counted once.
+  Message subjects are `#msg-<chat key>-<message id>`. A reply links only to an earlier
+  message of the same chat, never when `reply_to_peer_id` names another chat. Attachments are recorded by file name; the
   importer never opens them, and absolute paths, drive letters, schemes, control
   characters, `.`/`..` segments and "File not included" placeholders record nothing.
   `date_unixtime` is preferred; the zone-less `date` is read as UTC.

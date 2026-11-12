@@ -130,6 +130,26 @@ Second,https://example.org/a,1710000000,two|one,archive`;
     expect(report.state?.counts.items).toBe(1);
   });
 
+  it("keeps links with characters Turtle forbids, percent-encoded", async () => {
+    const csv = `title,url,time_added,tags,status
+Fonts,https://fonts.googleapis.com/css?family=Roboto|Open+Sans,1600000000,,unread
+Braces,https://example.org/?q={x}^y,1600000000,,unread`;
+    const { pod, report } = await fileImport(pocketFileAdapter, streamedBytesFile("p.csv", csv));
+    expect(report.skipped).toBeUndefined();
+    expect(bookmarks(pod.dataset(DOC)).map((b) => b.url)).toEqual([
+      "https://example.org/?q=%7Bx%7D%5Ey",
+      "https://fonts.googleapis.com/css?family=Roboto%7COpen+Sans",
+    ]);
+    expect(pod.get(DOC)).toContain("Roboto%7COpen+Sans");
+  });
+
+  it("names bookmarks with a 128-bit hash of the link", async () => {
+    const { pod } = await fileImport(pocketFileAdapter, streamedBytesFile("p.csv", CSV));
+    const locals = bookmarks(pod.dataset(DOC)).map((b) => b.value.split("#")[1]);
+    expect(locals).toHaveLength(3);
+    for (const local of locals) expect(local).toMatch(/^bookmark-[a-z0-9-]+-[0-9a-f]{32}$/);
+  });
+
   it("re-imports idempotently", async () => {
     const file = streamedBytesFile("p.csv", CSV);
     const { pod, report } = await fileImport(pocketFileAdapter, file);

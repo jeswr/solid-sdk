@@ -74,6 +74,14 @@ describe("export field bounds", () => {
   it("keeps credential-free absolute http(s) links only", () => {
     expect(httpUrl(" https://example.org/a b ")).toBe("https://example.org/a%20b");
     expect(httpUrl("HTTP://Example.org")).toBe("http://example.org/");
+    // Characters Turtle forbids in IRIs are percent-encoded after WHATWG parsing.
+    expect(httpUrl("https://fonts.googleapis.com/css?family=Roboto|Open+Sans")).toBe(
+      "https://fonts.googleapis.com/css?family=Roboto%7COpen+Sans",
+    );
+    expect(httpUrl("https://example.com/a?x={y}")).toBe("https://example.com/a?x=%7By%7D");
+    expect(httpUrl("https://example.com/a#frag^x`y")).toBe("https://example.com/a#frag%5Ex%60y");
+    expect(httpUrl("https://example.com/a?q=\\")).toBe("https://example.com/a?q=%5C");
+    expect(httpUrl('https://example.com/<a>"b"')).toBe("https://example.com/%3Ca%3E%22b%22");
     for (const raw of [
       "javascript:alert(1)",
       "JaVaScRiPt:alert(1)",
@@ -127,6 +135,16 @@ describe("shared book identity", () => {
     expect(bookFragment("Any title", undefined, "9780441013593")).toBe("isbn-9780441013593");
     expect(bookFragment("Le Café", "Writer")).toBe(bookFragment("le cafe", "writer"));
     expect(bookFragment("Le Café", "Writer")).not.toBe(bookFragment("Le Café", "Other"));
+    // A source id separates same-titled books that have no ISBN; an ISBN still wins.
+    expect(bookFragment("Selected Poems", "Jane", undefined, "goodreads:111")).not.toBe(
+      bookFragment("Selected Poems", "Jane", undefined, "goodreads:222"),
+    );
+    expect(bookFragment("Selected Poems", "Jane", undefined, "goodreads:111")).toMatch(
+      /^selected-poems-[0-9a-f]{8}$/,
+    );
+    expect(bookFragment("Any", "Jane", "9780441013593", "goodreads:111")).toBe(
+      "isbn-9780441013593",
+    );
     expect(primaryAuthor("A One, B Two")).toBe("A One");
     expect(primaryAuthor(undefined)).toBeUndefined();
   });

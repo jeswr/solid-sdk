@@ -11,17 +11,29 @@
  *   ratings.csv   `Date,Name,Year,Letterboxd URI,Rating`
  *   watchlist.csv `Date,Name,Year,Letterboxd URI`
  *
- * Each diary or review entry becomes a `schema:WatchAction` (the class Netflix and
- * Twitch use) with the watched date, the 0.5–5 star rating, the rewatch flag, tags and
- * review text, linked through `schema:object` to a `schema:Movie` for the film (name and
- * release year). Watched and rated films are films with the status `watched`; watchlist
- * films go to a separate document with the status `watchlist`. A review of a logged
- * entry merges into that entry: by its Letterboxd URI, else by film and watched date.
+ * Each kind has its own document, `media/letterboxd/<kind>.ttl`: an import replaces the
+ * kinds it contains and leaves every other kind untouched, so a later ratings.csv (or a
+ * ZIP without a diary) never deletes earlier viewings.
+ *
+ * Each diary entry becomes a `schema:WatchAction` (the class Netflix and Twitch use) with
+ * the watched date, the 0.5–5 star rating, the rewatch flag and tags, linked through
+ * `schema:object` to a `schema:Movie` for the film (name and release year). A diary entry
+ * is identified by its own Letterboxd URI (entries without one, by film and watched date).
+ * A review attaches to a diary entry of the same import: by its URI, else by film and
+ * watched date when exactly one entry matches and that entry has no different URI. The
+ * review text is then merged into the diary entry, and reviews.ttl records the review on
+ * that entry's subject; an unattached review is its own viewing in reviews.ttl. Watched
+ * and rated films are films with the status `watched` (ratings.csv adds the film rating);
+ * watchlist films have the status `watchlist`.
  *
  * The archive is read with the shared bounded ZIP reader (size, CRC, DEFLATE-boundary
- * and total-inflation checks); other files and subfolders (`deleted/`, `lists/`, …) are
- * never inflated. A single extracted CSV is also accepted: its file name, else its
- * header row, selects the kind (`watchlist` only by name: its header equals watched.csv's).
+ * and total-inflation checks, the total capped at the shared 64 MiB file limit); other
+ * files and subfolders (`deleted/`, `lists/`, …) are never inflated. The five files are
+ * read from the archive root or from exactly one `letterboxd-…` folder; an archive with
+ * both, or with two folders, is refused. Names that differ only in case are duplicates:
+ * the first is read and the rest are counted as skipped. A single extracted CSV is also
+ * accepted: its file name, else its header row, selects the kind (`watchlist` only by
+ * name: its header equals watched.csv's).
  */
 import { DataFactory, Store } from "n3";
 import {
@@ -52,13 +64,14 @@ import {
 import { vocabMap } from "./vocab-map.js";
 
 const ID = "letterboxd";
-const DIARY = "media/letterboxd-diary.ttl";
-const WATCHLIST = "media/letterboxd-watchlist.ttl";
+/** The document of one export file kind. */
+const slugOf = (kind: LetterboxdKind) => `media/letterboxd/${kind}.ttl`;
 
 /** Central-directory records read from an archive (Letterboxd exports hold a few hundred). */
 export const MAX_LETTERBOXD_ZIP_ENTRIES = 10_000;
-/** Inflated bytes across every selected CSV in one archive. */
-export const MAX_LETTERBOXD_INFLATED_BYTES = 256 * 1024 * 1024;
+/** Inflated bytes across every selected CSV in one archive: the shared file limit. */
+export const MAX_LETTERBOXD_INFLATED_BYTES = MAX_FILE_BYTES;
+const MIXED_EXPORTS = "This ZIP holds more than one Letterboxd export.";
 
 const metadata: IntegrationMetadata = {
   id: ID,
@@ -127,10 +140,36 @@ async function isZipArchive(file: ImportFile): Promise<boolean> {
  */
 export function letterboxdEntryKind(name: string): LetterboxdKind | undefined {
   if (name.includes("\\") || name.includes("\0")) return undefined;
-  const match = name.match(/^(?:(letterboxd-[^/]+)\/)?([a-z]+)\.csv$/i);
+  // Export folders are `letterboxd-<username>-<timestamp>`: plain ASCII word characters.
+  const match = name.match(/^(?:(letterboxd-[A-Za-z0-9_-]{1,128})\/)?([a-z]+)\.csv$/i);
   if (!match) return undefined;
   const kind = (match[2] as string).toLowerCase() as LetterboxdKind;
   return KINDS.includes(kind) ? kind : undefined;
+}
+
+/**
+ * The archive entries to read, in kind order (diary first, so reviews can attach): files
+ * at the root or in exactly one `letterboxd-…` folder; case-only duplicates are counted.
+ */
+export function letterboxdEntries<T extends { name: string }>(
+  entries: readonly T[],
+  onSkip: () => void,
+): T[] {
+  const selected = entries.filter((entry) => letterboxdEntryKind(entry.name) !== undefined);
+  const folders = new Set(
+    selected.map((entry) => entry.name.slice(0, entry.name.lastIndexOf("/") + 1).toLowerCase()),
+  );
+  if (folders.size > 1) throw new Error(MIXED_EXPORTS);
+  const byKind = new Map<LetterboxdKind, T>();
+  for (const entry of selected) {
+    const kind = letterboxdEntryKind(entry.name) as LetterboxdKind;
+    if (byKind.has(kind)) onSkip();
+    else byKind.set(kind, entry);
+  }
+  return KINDS.flatMap((kind) => {
+    const entry = byKind.get(kind);
+    return entry ? [entry] : [];
+  });
 }
 
 async function importArchive(
@@ -139,14 +178,9 @@ async function importArchive(
   library: LetterboxdLibrary,
 ): Promise<void> {
   if (!file.slice) throw new Error("Letterboxd ZIP imports require file.slice().");
-  const entries = (await zipDirectory(file, MAX_LETTERBOXD_ZIP_ENTRIES))
-    .filter((entry) => letterboxdEntryKind(entry.name) !== undefined)
-    // Diary entries first, so reviews merge into them and watched films know their events.
-    .sort(
-      (a, b) =>
-        KINDS.indexOf(letterboxdEntryKind(a.name) as LetterboxdKind) -
-        KINDS.indexOf(letterboxdEntryKind(b.name) as LetterboxdKind),
-    );
+  const entries = letterboxdEntries(await zipDirectory(file, MAX_LETTERBOXD_ZIP_ENTRIES), () =>
+    ctx.skip(),
+  );
   const decoder = new TextDecoder();
   await readZip(
     file,
@@ -221,20 +255,42 @@ function releaseYear(raw: string | undefined): number | undefined {
     : undefined;
 }
 
-/** Buffers the run's two documents; deterministic subjects make re-imports idempotent. */
-class LetterboxdLibrary {
-  private readonly diary = new Store();
-  private readonly watchlist = new Store();
-  private readonly diaryDoc: string;
-  private readonly watchlistDoc: string;
-  /** Watch-event subjects by Letterboxd URI and by film + watched date. */
-  private readonly events = new Map<string, string>();
-  private rowsRead = 0;
-  private eventCount = 0;
+/** One kind's document as built by this run. */
+interface KindDocument {
+  readonly doc: string;
+  readonly store: Store;
+  /** Rows mapped from this kind; a kind with none is not written. */
+  rows: number;
+}
 
-  constructor(private readonly ctx: FileImportContext) {
-    this.diaryDoc = ctx.resolve(DIARY);
-    this.watchlistDoc = ctx.resolve(WATCHLIST);
+/** A diary viewing of this run, for reviews to attach to. */
+interface Viewing {
+  readonly subject: string;
+  readonly film: string;
+  readonly uri?: string;
+}
+
+/**
+ * Buffers one document per kind; deterministic subjects make re-imports idempotent.
+ * Only the kinds read in this run are written.
+ */
+class LetterboxdLibrary {
+  private readonly kinds = new Map<LetterboxdKind, KindDocument>();
+  /** Diary viewings by `uri:<link>` and, for entries without a link, `film:<film>|<date>`. */
+  private readonly viewings = new Map<string, Viewing>();
+  /** Diary viewings by film and watched date, for the reviews fallback. */
+  private readonly byFilmDate = new Map<string, Viewing[]>();
+  private rowsRead = 0;
+
+  constructor(private readonly ctx: FileImportContext) {}
+
+  private kind(kind: LetterboxdKind): KindDocument {
+    let entry = this.kinds.get(kind);
+    if (!entry) {
+      entry = { doc: this.ctx.resolve(slugOf(kind)), store: new Store(), rows: 0 };
+      this.kinds.set(kind, entry);
+    }
+    return entry;
   }
 
   async rows(
@@ -255,7 +311,8 @@ class LetterboxdLibrary {
       }
       if (this.rowsRead >= this.ctx.maxRows) return;
       this.rowsRead++;
-      if (!this.row(kind as LetterboxdKind, row)) this.ctx.skip();
+      if (this.row(kind as LetterboxdKind, row)) this.kind(kind as LetterboxdKind).rows++;
+      else this.ctx.skip();
     }
   }
 
@@ -266,8 +323,27 @@ class LetterboxdLibrary {
     const year = releaseYear(row.Year);
     const filmKey = `${name}|${year ?? ""}`;
     const uri = letterboxdUrl(row["Letterboxd URI"]);
-    const store = kind === "watchlist" ? this.watchlist : this.diary;
-    const doc = kind === "watchlist" ? this.watchlistDoc : this.diaryDoc;
+    const { doc, store } = this.kind(kind);
+    const watchedRaw = row["Watched Date"]?.trim() ?? "";
+    const filmDate = `${filmKey}|${watchedRaw}`;
+    const logged = parseDateOnly(row.Date);
+    if (kind === "reviews") {
+      // Attach to this run's diary viewing (merged there too), else stand alone here.
+      const attached = this.attachTarget(uri, filmDate);
+      if (attached) {
+        const diary = this.kind("diary").store;
+        const merged = new WatchAction(attached.subject, diary, DataFactory);
+        this.watch(merged, attached.film, uri, logged, row);
+        this.watch(
+          new WatchAction(attached.subject, store, DataFactory),
+          attached.film,
+          uri,
+          logged,
+          row,
+        );
+        return true;
+      }
+    }
     const film = new Movie(
       `${doc}#film-${recordFragment(name, filmKey)}`,
       store,
@@ -275,7 +351,6 @@ class LetterboxdLibrary {
     ).mark();
     film.name = name;
     if (year !== undefined) film.copyrightYear = year;
-    const logged = parseDateOnly(row.Date);
     if (kind === "watchlist") {
       film.watchStatus = "watchlist";
       if (uri) film.sourceUrl = uri;
@@ -290,31 +365,50 @@ class LetterboxdLibrary {
       if (kind === "ratings" && rating !== undefined) film.ratingValue = rating;
       return true;
     }
-    this.watch(film, filmKey, uri, logged, row);
+    const subject = `${doc}#watch-${recordFragment(name, uri ?? `film:${filmDate}`)}`;
+    if (kind === "reviews") {
+      this.watch(new WatchAction(subject, store, DataFactory), film.value, uri, logged, row);
+      return true;
+    }
+    const key = uri ? `uri:${uri}` : `film:${filmDate}`;
+    let viewing = this.viewings.get(key);
+    if (!viewing) {
+      viewing = { subject, film: film.value, uri };
+      this.viewings.set(key, viewing);
+      this.byFilmDate.set(filmDate, [...(this.byFilmDate.get(filmDate) ?? []), viewing]);
+    }
+    this.watch(new WatchAction(viewing.subject, store, DataFactory), film.value, uri, logged, row);
     return true;
   }
 
+  /**
+   * The diary viewing a review attaches to: the one with the same link, else the only
+   * viewing of the film on that date, provided its link is not a different one.
+   */
+  private attachTarget(uri: string | undefined, filmDate: string): Viewing | undefined {
+    if (uri) {
+      const exact = this.viewings.get(`uri:${uri}`);
+      if (exact) return exact;
+    }
+    const candidates = this.byFilmDate.get(filmDate) ?? [];
+    if (candidates.length !== 1) return undefined;
+    const [only] = candidates as [Viewing];
+    return uri && only.uri && only.uri !== uri ? undefined : only;
+  }
+
+  /** Write a viewing's present values; a review row never clears its diary entry's fields. */
   private watch(
-    film: Movie,
-    filmKey: string,
+    event: WatchAction,
+    film: string,
     uri: string | undefined,
     logged: Date | undefined,
     row: Record<string, string>,
   ): void {
-    const watchedRaw = row["Watched Date"]?.trim() ?? "";
-    const keys = [`film:${filmKey}|${watchedRaw}`];
-    if (uri) keys.unshift(`uri:${uri}`);
-    let subject = keys.map((key) => this.events.get(key)).find((found) => found !== undefined);
-    if (!subject) {
-      subject = `${this.diaryDoc}#watch-${recordFragment(film.name ?? "", uri ?? keys[0])}`;
-      this.eventCount++;
-    }
-    for (const key of keys) this.events.set(key, subject);
-    const event = new WatchAction(subject, this.diary, DataFactory).mark();
-    // Only present values are written: a review row never clears its diary entry's fields.
-    event.name = film.name;
-    event.watchedWork = film.value;
-    const watched = parseDateOnly(watchedRaw);
+    event.mark();
+    const name = cappedText(row.Name, MAX_TITLE_CHARS);
+    if (name) event.name = name;
+    event.watchedWork = film;
+    const watched = parseDateOnly(row["Watched Date"]);
     if (watched) event.startTime = watched;
     if (logged) event.dateCreated = logged;
     if (uri) event.sourceUrl = uri;
@@ -327,19 +421,15 @@ class LetterboxdLibrary {
   }
 
   async save(): Promise<void> {
-    if (this.diary.size > 0)
+    for (const kind of KINDS) {
+      const entry = this.kinds.get(kind);
+      if (!entry || entry.rows === 0) continue;
       await this.ctx.write({
-        slug: DIARY,
+        slug: slugOf(kind),
         category: "media",
-        forClass: this.eventCount > 0 ? CLASSES.WatchAction : CLASSES.Movie,
-        dataset: this.diary,
+        forClass: kind === "diary" || kind === "reviews" ? CLASSES.WatchAction : CLASSES.Movie,
+        dataset: entry.store,
       });
-    if (this.watchlist.size > 0)
-      await this.ctx.write({
-        slug: WATCHLIST,
-        category: "media",
-        forClass: CLASSES.Movie,
-        dataset: this.watchlist,
-      });
+    }
   }
 }
