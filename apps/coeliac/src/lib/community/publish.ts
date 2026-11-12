@@ -1,12 +1,12 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * The pod write path for a share card (Phase 4B, design §4.3) — **owner-only ACL,
  * fail-closed, written FIRST**, in a DISJOINT `/community/` scope that never
  * touches (or widens) the diary.
  *
- * All I/O goes through an injectable authed `fetch` (the suite auth seam), so this
- * is unit-testable with a stubbed fetch and no server. The owner-only ACL is
- * authored by `@jeswr/solid-health-diary`'s reviewed `writeOwnerOnlyAcl` (never a
+ * All I/O goes through the session StorageClient, tested with SDK memory storage.
+ * The owner-only ACL is authored by `@jeswr/solid-health-diary`'s reviewed `buildOwnerOnlyAcl` (never a
  * hand-built triple), written on the community ROOT before any share resource, so
  * shares inherit owner-only access and nothing is ever briefly world-readable.
  *
@@ -17,10 +17,11 @@
  * SIDECAR are SEPARATE functions: the card is structurally incapable of bundling
  * the source link (design §4.1).
  */
-import { writeOwnerOnlyAcl } from "@jeswr/solid-health-diary";
+import type { StorageClient } from "@jeswr/storage-client";
 import { DataFactory, Writer } from "n3";
 import { PROV } from "@jeswr/solid-health-diary";
-import { ensureContainer, putResource } from "../pod/pod-fs";
+import { type PodStorage, resolvePodStorage } from "../pod/client";
+import { ensureContainer, putResource, writeOwnerOnlyAcl } from "../pod/pod-fs";
 import type { ShareCard } from "./share-card";
 import { assertShareable, ShareSanitizationError } from "./share";
 import { serializeShareCard } from "./share-rdf";
@@ -58,11 +59,11 @@ function assertDiaryResourceUrl(iri: string): string {
 }
 
 /** In-memory "community scope ready" memo (test seam via {@link resetCommunityReadyMemo}). */
-const readyKeys = new Set<string>();
+let readyKeys = new WeakMap<StorageClient, Set<string>>();
 
 /** Reset the "community ready" memo (test seam / after logout). */
 export function resetCommunityReadyMemo(): void {
-  readyKeys.clear();
+  readyKeys = new WeakMap();
 }
 
 /**
@@ -73,25 +74,28 @@ export function resetCommunityReadyMemo(): void {
  * `${storageRoot}community/`, so this can never touch a diary resource.
  */
 export async function ensureCommunityReady(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   ownerWebId: string,
   opts: { force?: boolean } = {},
 ): Promise<void> {
   const root = communityRoot(storageRoot);
   const key = `${root} ${ownerWebId}`;
-  if (!opts.force && readyKeys.has(key)) return;
+  const client = await resolvePodStorage(storage);
+  const ready = readyKeys.get(client) ?? new Set<string>();
+  readyKeys.set(client, ready);
+  if (!opts.force && ready.has(key)) return;
 
   assertCommunityScope(root, storageRoot);
-  await ensureContainer(authedFetch, root);
-  await writeOwnerOnlyAcl(root, ownerWebId, authedFetch);
+  await ensureContainer(client, root);
+  await writeOwnerOnlyAcl(client, root, ownerWebId);
 
   for (const container of communityContainers(storageRoot)) {
     if (container === root) continue;
     assertCommunityScope(container, storageRoot);
-    await ensureContainer(authedFetch, container);
+    await ensureContainer(client, container);
   }
-  readyKeys.add(key);
+  ready.add(key);
 }
 
 /**
@@ -106,7 +110,7 @@ export async function ensureCommunityReady(
  * @returns the published card resource URL.
  */
 export async function publishShareCard(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   ownerWebId: string,
   ulid: string,
@@ -132,8 +136,8 @@ export async function publishShareCard(
 
   const ttl = await serializeShareCard(withId, subjectIri);
 
-  await ensureCommunityReady(authedFetch, storageRoot, ownerWebId);
-  await putResource(authedFetch, url, ttl);
+  await ensureCommunityReady(storage, storageRoot, ownerWebId);
+  await putResource(storage, url, ttl);
   return url;
 }
 
@@ -169,7 +173,7 @@ export async function serializeProvenanceSidecar(
  * @returns the sidecar resource URL.
  */
 export async function writeShareProvenanceSidecar(
-  authedFetch: typeof globalThis.fetch,
+  storage: PodStorage,
   storageRoot: string,
   ownerWebId: string,
   ulid: string,
@@ -177,7 +181,7 @@ export async function writeShareProvenanceSidecar(
 ): Promise<string> {
   const url = assertCommunityScope(shareProvenanceSidecarUrl(storageRoot, ulid), storageRoot);
   const ttl = await serializeProvenanceSidecar(`${url}#it`, derivedFrom);
-  await ensureCommunityReady(authedFetch, storageRoot, ownerWebId);
-  await putResource(authedFetch, url, ttl);
+  await ensureCommunityReady(storage, storageRoot, ownerWebId);
+  await putResource(storage, url, ttl);
   return url;
 }
