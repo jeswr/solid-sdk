@@ -51,6 +51,14 @@ export interface SuiteShellProps {
   children: ReactNode;
 }
 
+function saveShellPreferences(value: ShellPreferences) {
+  try {
+    localStorage.setItem("suite.shell.v1", JSON.stringify(value));
+  } catch {
+    /* Memory-only preferences. */
+  }
+}
+
 function Frame({
   app: slug,
   pageTitle,
@@ -84,11 +92,12 @@ function Frame({
   useEffect(() => {
     if (previousPathname.current === pathname) return;
     previousPathname.current = pathname;
-    if (!window.matchMedia("(min-width: 1024px)").matches)
-      setPreferences((current) =>
-        current.sidebarOpen ? { ...current, sidebarOpen: false } : current,
-      );
-  }, [pathname]);
+    if (!preferences.sidebarOpen || window.matchMedia("(min-width: 1024px)").matches) return;
+    // Save the close like the sheet's own close does, so a reload doesn't reopen the drawer.
+    const closed = { ...preferences, sidebarOpen: false };
+    setPreferences(closed);
+    saveShellPreferences(closed);
+  }, [pathname, preferences]);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
     try {
@@ -107,11 +116,7 @@ function Frame({
   if (!app) return null;
   const updateShell = (value: ShellPreferences) => {
     setPreferences(value);
-    try {
-      localStorage.setItem("suite.shell.v1", JSON.stringify(value));
-    } catch {
-      /* Memory-only preferences. */
-    }
+    saveShellPreferences(value);
   };
   const updateRail = (value: RailPreferences) => {
     const valid = parseRailPreferences(value);

@@ -116,8 +116,15 @@ test("searches messages and follows a highlighted result to the focused room mes
   await search.fill("garden");
   await search.press("Enter");
   await expect(page).toHaveURL(/\/chat\/search\?q=garden$/);
+  const pageSearch = page.getByRole("searchbox", {
+    name: "Search messages in joined rooms",
+    exact: true,
+  });
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
     await expect(page.getByRole("dialog", { name: "Chat navigation", exact: true })).toBeHidden();
+    // The closing drawer returns focus to its toggle, which races the search page's own
+    // autofocus; settle focus on the page field so the toggle's tooltip can't linger.
+    await pageSearch.focus();
   }
   await expect(page.getByRole("heading", { name: "Search", level: 2, exact: true })).toBeVisible();
   const results = page.getByRole("list", { name: "Search results", exact: true });
@@ -125,9 +132,7 @@ test("searches messages and follows a highlighted result to the focused room mes
   await expect(results.locator("mark")).toHaveText("Garden");
   await expect(page.getByRole("main").getByRole("status")).toContainText("1 message in 1 room");
   await expect(page.getByRole("main").getByRole("status")).not.toContainText("days");
-  await expect(
-    page.getByRole("searchbox", { name: "Search messages in joined rooms", exact: true }),
-  ).toHaveValue("garden");
+  await expect(pageSearch).toHaveValue("garden");
   await accessible(page);
   await capture(page, info, "search");
   await results.getByRole("link").click();

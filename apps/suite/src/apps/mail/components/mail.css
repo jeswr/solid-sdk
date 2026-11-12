@@ -24,6 +24,14 @@
 .mail-sidebar p {
   margin: var(--space-2) 0 0;
 }
+/* In the suite shell this sidebar sits inside .suite-sidebar-nav, whose link colour and
+   hover would otherwise repaint the filled Compose button (failing text contrast). */
+.mail-sidebar a[data-slot="button"][data-variant="default"] {
+  color: var(--primary-foreground);
+}
+.mail-sidebar a[data-slot="button"][data-variant="default"]:hover {
+  background: color-mix(in oklab, var(--primary) 90%, transparent);
+}
 .mail-sidebar :where(nav ul) {
   display: grid;
   gap: var(--space-1);

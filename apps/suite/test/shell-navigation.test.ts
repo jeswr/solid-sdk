@@ -76,6 +76,8 @@ it.each([
   route.pathname = "/mail/archive";
   await view.render(tree(app));
   expect(document.querySelector('[role="dialog"]')).toBeNull();
+  // The close is saved, so a reload on the new page doesn't reopen the drawer.
+  expect(JSON.parse(localStorage.getItem("suite.shell.v1") ?? "{}").sidebarOpen).toBe(false);
   await act(() => toggle.focus());
   await click(toggle);
   // Re-rendering the same pathname must allow the drawer to remain open.

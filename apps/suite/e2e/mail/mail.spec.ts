@@ -3,7 +3,7 @@
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { expect, type Locator, type Page, type TestInfo, test } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
 import { seedDemoSession } from "../demo-session";
 
@@ -44,6 +44,13 @@ async function accessible(page: Page) {
   await expect(page).toHaveTitle("Mail · Solid Suite");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+}
+/** The drawer autofocuses its Close button, whose tooltip takes the first Escape. */
+async function closeWithEscape(page: Page, drawer: Locator) {
+  await expect(async () => {
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden({ timeout: 500 });
+  }).toPass();
 }
 async function nav(page: Page, folder: string) {
   if ((page.viewportSize()?.width ?? 1280) < 1024) {
@@ -117,11 +124,8 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   await expect(compose).toHaveAccessibleDescription(
     "Drafts save to your pod. Sending needs a connected mail account.",
   );
-  if ((page.viewportSize()?.width ?? 1280) < 1024) {
-    const drawer = page.getByRole("dialog", { name: "Mail navigation", exact: true });
-    await page.keyboard.press("Escape");
-    await expect(drawer).toBeHidden();
-  }
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await closeWithEscape(page, page.getByRole("dialog", { name: "Mail navigation", exact: true }));
   const iri = await rows.first().getAttribute("data-thread");
   await rows.first().focus();
   await expect(rows.first()).toBeFocused();
@@ -131,7 +135,7 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
-  ).toHaveJSProperty("tagName", "H2");
+  ).toHaveJSProperty("tagName", (page.viewportSize()?.width ?? 1280) < 1024 ? "H2" : "H3");
   await page.getByRole("button", { name: "Star thread", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unstar thread", exact: true })).toHaveAttribute(
     "aria-pressed",
@@ -239,7 +243,7 @@ test("composes, saves, edits and discards a draft in the pod", async ({ page }, 
   await expect(page.getByRole("heading", { name: "This draft isn't here any more" })).toBeVisible();
 });
 
-test("closes narrow Mail navigation after a folder change and lets Escape close it after reopening", async ({
+test("closes narrow Mail navigation after navigating and lets Escape close it after reopening", async ({
   page,
 }) => {
   test.skip((page.viewportSize()?.width ?? 1280) >= 1024, "Narrow navigation drawer");
@@ -247,13 +251,21 @@ test("closes narrow Mail navigation after a folder change and lets Escape close 
   const toggle = page.getByRole("button", { name: "Toggle sidebar", exact: true });
   const drawer = page.getByRole("dialog", { name: "Mail navigation", exact: true });
   await toggle.click();
-  await drawer.getByRole("link", { name: "Archive", exact: true }).click();
-  await expect(page).toHaveURL(/\/mail\/archive$/);
+  // An empty mailbox lists only Inbox, so leave it through the drawer's Import link.
+  await drawer.getByRole("link", { name: "Import mail", exact: true }).click();
+  await expect(page).toHaveURL(/\/mail\/import$/);
   await expect(drawer).toBeHidden();
-  await expect(page.getByRole("heading", { name: "Archive", level: 2, exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Import mail", level: 2, exact: true }),
+  ).toBeVisible();
+  // The close is remembered: a reload doesn't reopen the drawer.
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Import mail", level: 2, exact: true }),
+  ).toBeVisible();
+  await expect(drawer).toBeHidden();
   await toggle.click();
   await expect(drawer).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(drawer).toBeHidden();
+  await closeWithEscape(page, drawer);
   await expect(toggle).toBeFocused();
 });
