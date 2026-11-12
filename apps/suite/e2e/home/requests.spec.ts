@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // 03-home-permissions §9 scenarios 9 and 10. The build and this runner share SUITE_TEST_CAPS
 // (with SUITE_E2E=1, without which it is ignored). The pages are statically exportable for the
 // native build, so the capabilities are read when the suite is built, not per request:
@@ -192,6 +193,7 @@ test.describe("scenario 9: requests (accessRequests)", () => {
       .getByRole("listitem", { name: "Request from MaraCoach" })
       .getByRole("button", { name: "Review" })
       .click();
+    const before = await podDocuments(page, `${ROOT}health/activity.ttl.acl`);
     const sheet = page.getByRole("dialog", { name: /MaraCoach requests access to:$/ });
     await sheet.getByRole("checkbox", { name: "Select all" }).click();
     await expect(sheet.getByRole("button", { name: "Share", exact: true })).toBeDisabled();
@@ -212,7 +214,7 @@ test.describe("scenario 9: requests (accessRequests)", () => {
     await expect(page.getByRole("listitem", { name: "Request from MaraCoach" })).toContainText(
       "Denied",
     );
-    expect(await podDocuments(page, `${ROOT}health/activity.ttl.acl`)).toEqual([]);
+    expect(await podDocuments(page, `${ROOT}health/activity.ttl.acl`)).toEqual(before);
   });
 });
 
