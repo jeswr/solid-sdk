@@ -200,7 +200,9 @@ describe("AppLauncher", () => {
     expect(screen.getByText("No results for 'docmissing'")).toBeTruthy();
     await accessible();
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
-    expect(screen.getAllByRole("gridcell")).toHaveLength(5);
+    expect(screen.getAllByRole("gridcell")).toHaveLength(
+      suiteApps.filter((app) => app.status !== "backlog").length,
+    );
   });
   it("uses native links for Enter navigation, closes and invokes registered Create actions", async () => {
     render(<Harness />);

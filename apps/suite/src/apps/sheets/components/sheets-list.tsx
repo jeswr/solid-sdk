@@ -30,12 +30,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { useConnectionState } from "../../../shell/sync/connection-state";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import type { WorkbookSummary } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
 import { useWorkbookService } from "../state/service";
 import { ShareWorkbook } from "./share-workbook";
 import { SheetsSidebar, workbookHref } from "./sheets-sidebar";
+import { SheetsAccessNotice, SheetsEmpty, SheetsLoadError } from "./sheets-states";
 
 function relativeTime(date: Date) {
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
@@ -47,6 +49,7 @@ function relativeTime(date: Date) {
 }
 
 export function SheetsList() {
+  const offline = useConnectionState() === "offline";
   const sharingConnection = useNeedsConnection();
   const service = useWorkbookService();
   const router = useRouter();
@@ -59,6 +62,11 @@ export function SheetsList() {
   }>();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const search = query.trim();
+  const visibleRows = rows?.filter((row) =>
+    row.title.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  );
   const trigger = useRef<HTMLElement | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt refreshes after mutations or retries
   useEffect(() => {
@@ -96,24 +104,30 @@ export function SheetsList() {
     <SuiteFrame app="sheets" sidebar={<SheetsSidebar />} context={<span>Sheets</span>}>
       <section className="sht-list" aria-labelledby="sht-list-title">
         <h1 id="sht-list-title">All spreadsheets</h1>
+        <div className="sht-list-search">
+          <label htmlFor="sht-search">Search spreadsheets</label>
+          <Input
+            id="sht-search"
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+        <SheetsAccessNotice offline={offline} readOnly={false} />
         {failed ? (
-          <div className="sht-state" role="alert">
-            <h2>Couldn't load your spreadsheets</h2>
-            <Button onClick={refresh}>Retry</Button>
-          </div>
+          <SheetsLoadError
+            onRetry={refresh}
+            offline={offline}
+            message="Couldn't load your spreadsheets. Try again when your pod is available."
+          />
         ) : !rows ? (
           <div className="sht-skeleton" role="status" aria-label="Loading spreadsheets">
             <span />
             <span />
             <span />
           </div>
-        ) : rows.length === 0 ? (
-          <div className="sht-state">
-            <Table2 className="sht-icon" size={40} aria-hidden="true" />
-            <h2>No spreadsheets yet</h2>
-            <p>Make room for your next idea.</p>
-            <Button onClick={() => router.push("/sheets/new")}>New spreadsheet</Button>
-          </div>
+        ) : visibleRows?.length === 0 ? (
+          <SheetsEmpty query={search} onClear={() => setQuery("")} />
         ) : (
           <table className="sht-table">
             <caption className="sr-only">Your spreadsheets</caption>
@@ -132,7 +146,7 @@ export function SheetsList() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {visibleRows?.map((row) => (
                 <tr key={row.container}>
                   <td>
                     <Link className="sht-name" href={workbookHref(row.container)}>
