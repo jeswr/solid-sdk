@@ -1,6 +1,6 @@
 {
-  "updated": "2026-11-13T01:00Z",
-  "note": "Everything to build, in the order it will be done. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then wider testing and adoption. Careful thinking is done by Fable; plumbing by Opus.",
+  "updated": "2026-11-13T03:05Z",
+  "note": "Everything to build, in the order it will be done. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
       "id": "P1",
@@ -38,8 +38,8 @@
         {
           "id": "P1.5",
           "title": "Real traces: main flow and three failures",
-          "detail": "Mortgage in principle; over-ask refused; offer outside limits; injected instruction stopped.",
-          "status": "next",
+          "detail": "The full 14-step flow with four parties running as agents, and three failures (the lender over-asks, an offer outside the limits, an injected instruction). All real runs, replayed in this explorer.",
+          "status": "done",
           "owner": "Opus (to Fable's brief)"
         },
         {
@@ -53,14 +53,14 @@
           "id": "P1.7",
           "title": "Product index and sector register",
           "detail": "Find lenders through a trusted index with no personal data; check them on a register.",
-          "status": "next",
+          "status": "done",
           "owner": "Opus (to Fable's brief)"
         },
         {
           "id": "P1.8",
           "title": "Step-up challenge",
           "detail": "A bank asks for a certified face check before it accepts the mandate.",
-          "status": "next",
+          "status": "done",
           "owner": "Opus (to Fable's brief)"
         },
         {
@@ -87,8 +87,8 @@
         {
           "id": "P1.12",
           "title": "Narrated walkthrough video",
-          "detail": "Slides, then the site, with pointing and captions.",
-          "status": "next",
+          "detail": "A six-minute narrated walkthrough exists with a stand-in voice. It is re-recorded against the real main flow once the runtime's next changes land.",
+          "status": "doing",
           "owner": "Fable"
         },
         {
@@ -144,7 +144,7 @@
           "id": "P2.5",
           "title": "Mortgage profile",
           "detail": "The claims, accepted sources and assurance levels for the worked example.",
-          "status": "next",
+          "status": "doing",
           "owner": "Fable"
         },
         {
@@ -160,6 +160,69 @@
           "detail": "Bring the existing zero-knowledge specifications in as an authenticity suite.",
           "status": "later",
           "owner": "Fable"
+        },
+        {
+          "id": "P2.8",
+          "title": "Derived data and inference",
+          "detail": "Answers by query, by proof and by joint computation as one idea: a published rule applied to signed sources, with five ways of assuring the result.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P2.9",
+          "title": "Content that does not fit",
+          "detail": "Rules for prose, pictures and judgement, in both directions: a model's reading is a new statement, and free text leaves unasked only when everything the model has seen could be sent.",
+          "status": "done",
+          "owner": "Fable"
+        }
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Use cases and evaluation",
+      "goal": "Show that the same design works across sectors and settings, say plainly where it does not, and measure it.",
+      "items": [
+        {
+          "id": "P6.1",
+          "title": "Catalog of use cases by context",
+          "detail": "70 use cases in 15 sectors and five settings, each with what makes it hard, what goes wrong and the expected outcome.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.2",
+          "title": "A real run for every use case",
+          "detail": "A general scenario engine so that a use case is a profile and a scenario file with no new code. Then every use case and each of its branches runs for real. Twelve need a live proof or joint computation from the engine project. This is the gate.",
+          "status": "doing",
+          "owner": "Fable (design and review), Codex (build)"
+        },
+        {
+          "id": "P6.3",
+          "title": "Review of where the design fits and where it does not",
+          "detail": "13 kinds of case where messages in agreed terms fall short, what the design does about each, and what it leaves unsolved.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.4",
+          "title": "Evaluation plan",
+          "detail": "Ten questions with a measure each, six methods, nine published benchmarks and how each maps onto the design.",
+          "status": "done",
+          "owner": "Fable"
+        },
+        {
+          "id": "P6.5",
+          "title": "Evaluation without a model",
+          "detail": "One change at a time to every real message; a worst-case core that proposes what an attacker wants; injected faults; AgentDojo replayed through the gates.",
+          "status": "next",
+          "owner": "Fable (design and review), Codex (build)"
+        },
+        {
+          "id": "P6.6",
+          "title": "Benchmarks with a real model",
+          "detail": "AgentDojo and ConVerse with a model as the core, then health, policy and negotiation benchmarks. Needs a model key.",
+          "status": "later",
+          "owner": "Fable (design and review), Codex (build)"
         }
       ]
     },
@@ -241,34 +304,6 @@
       ]
     },
     {
-      "id": "P6",
-      "title": "Real use cases",
-      "goal": "Show the same design works between people, between a person and a business, between businesses, and inside one.",
-      "items": [
-        {
-          "id": "P6.1",
-          "title": "Catalog of use cases by context",
-          "detail": "Person to person, business to consumer, business to business to consumer, business to business, internal agents.",
-          "status": "later",
-          "owner": "Fable"
-        },
-        {
-          "id": "P6.2",
-          "title": "A scenario and traces for each",
-          "detail": "Each use case run as a scenario in this explorer.",
-          "status": "later",
-          "owner": "Fable (design), Opus (plumbing)"
-        },
-        {
-          "id": "P6.3",
-          "title": "Review of where the design fits and where it does not",
-          "detail": "Written up per context.",
-          "status": "later",
-          "owner": "Fable"
-        }
-      ]
-    },
-    {
       "id": "P7",
       "title": "Adoption",
       "goal": "A name, a default, and a way for someone to start with nothing but email.",
@@ -276,8 +311,8 @@
         {
           "id": "P7.1",
           "title": "A name",
-          "detail": "Options with a recommendation, for Jesse to choose.",
-          "status": "next",
+          "detail": "Answerable. Chosen by Jesse on 13 Nov 2026.",
+          "status": "done",
           "owner": "Fable, Jesse decides"
         },
         {
@@ -300,6 +335,27 @@
           "detail": "Its channels do not yet verify signatures and it has no memory at runtime.",
           "status": "later",
           "owner": "Opus (to Fable's brief)"
+        }
+      ]
+    },
+    {
+      "id": "P8",
+      "title": "The rest of the app suite",
+      "goal": "If usage remains after everything above, and only once the gate is met.",
+      "items": [
+        {
+          "id": "P8.1",
+          "title": "Drive the remaining app suite work",
+          "detail": "Pick up the paused suite workstreams and take them forward.",
+          "status": "later",
+          "owner": "Fable (orchestration)"
+        },
+        {
+          "id": "P8.2",
+          "title": "Hand off to the engine project",
+          "detail": "Tell the engine project to run its own work to completion under the same usage rules.",
+          "status": "later",
+          "owner": "Fable"
         }
       ]
     }
