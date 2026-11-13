@@ -391,18 +391,23 @@ sites. Click **Remove cookie access** to remove it and verify absence before sha
 enabled. If removal or verification fails, sharing stays blocked; remove cookie access
 from Chrome's extension settings before retrying. The review click rechecks absence, so
 each capture starts without cookie permission.
-Confirmation checks site access again before sending, including access withdrawn during review.
-It also rechecks that cookie access is absent: an unexpected grant, including a late prompt,
-refuses the capture and triggers cleanup. Review again after cleanup to retry.
-With site access already granted and cookie access absent, the review click requests only optional `cookies`, reads
-cookies matching the chosen page, and removes cookie access immediately after preparing the
-snapshot. It then checks that cookie access is absent. Cleanup also covers errors, permission
-denial, cancellation, popup closure and grants arriving after closure; the same host grants
-remain throughout.
-The preview shows the site,
-cookie count and persona. Click **Share this sign-in with my agent** to send that snapshot
-to the local agent vault. Cancel, profile changes, navigation to another site and expired
-reviews prevent sending. Nothing is captured automatically or sent to the page.
+The service worker owns one capture lease across all popups, from Review until cleanup.
+A second popup receives **Another sharing is in progress** and cannot request cookies or
+start another capture. Review checks the current active tab and existing host access before
+enabling **Allow cookies and review**. Click that button to request only optional `cookies`
+inside the popup's click gesture. The worker checks the tab and host access again after the
+prompt before contacting `beginLogin`, then shows the site, cookie count and persona.
+Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
+grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
+sends it only if its count still matches the review. Nothing is sent to the page.
+
+Cookie access lasts only for this exclusive review/confirmation lease, which expires after
+two minutes. Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
+cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
+change. Cancellation is final even if an older async step completes afterward. An unresolved
+permission prompt fences new captures after cancellation/closure until its result or late
+grant is cleaned; an old grant can never become another capture's authority. If Chrome never
+reports a closed prompt's outcome, sharing stays blocked for that worker lifetime.
 
 Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
 accounts. Configure an account for the exact site in the agent's store first. Install the
@@ -416,8 +421,8 @@ while held, so the exact-origin query and filtering remain necessary.
 If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
 alongside the review or sharing outcome and blocks further sharing until removal is verified.
 Worker cleanup failure leaves a toolbar `!` badge; a surviving grant also blocks sharing
-when the popup reopens. Cookie permission belongs only to the snapshot step of one capture;
-cleanup failure is never reported as clean success.
+when the popup reopens. Cookie permission belongs only to one exclusive capture lease;
+cleanup failure stays visible alongside the actual sharing outcome.
 
 Hostile same-OS-user processes are outside the vault's threat model: they can read its
 store/key or forge the public extension-ID caller argument. No code-signature checks or
