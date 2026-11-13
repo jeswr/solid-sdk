@@ -61,7 +61,7 @@ export function samMortgageMandate() {
       permit(
         "use",
         PREQUAL_OP.id,
-        [PURPOSE.mortgagePrequalification],
+        [PURPOSE.mortgageApplication],
         [NORTH.party, VALLEY.party],
         "#compare",
       ),
@@ -70,14 +70,14 @@ export function samMortgageMandate() {
       permit(
         "distribute",
         DISCLOSURE_TARGET,
-        [PURPOSE.creditChecking],
+        [PURPOSE.creditAssessment],
         [NORTH.party, VALLEY.party],
         "#disclose-with-approval",
       ),
       permit(
         "compensate",
         PAYMENT_OP,
-        [PURPOSE.mortgagePrequalification],
+        [PURPOSE.mortgageApplication],
         [NORTH.party],
         "#fees-with-approval",
       ),
@@ -87,32 +87,26 @@ export function samMortgageMandate() {
 
 export function lenderMandate() {
   return mandateOf("lender-intake", [
-    permit("use", PREQUAL_OP.id, [PURPOSE.creditChecking], undefined, "#evidence-requests"),
+    permit("use", PREQUAL_OP.id, [PURPOSE.creditAssessment], undefined, "#evidence-requests"),
     permit(
       "distribute",
       UNDERWRITING_OP.id,
-      [PURPOSE.creditChecking],
+      [PURPOSE.creditAssessment],
       [UW.party],
       "#onward-underwriting",
     ),
-    permit(
-      "use",
-      VALUATION_OP.id,
-      [PURPOSE.mortgagePrequalification],
-      undefined,
-      "#valuation-orders",
-    ),
+    permit("use", VALUATION_OP.id, [PURPOSE.mortgageApplication], undefined, "#valuation-orders"),
   ]);
 }
 
 export function valleyMandate() {
-  return mandateOf("lender-intake", [permit("use", PREQUAL_OP.id, [PURPOSE.creditChecking])]);
+  return mandateOf("lender-intake", [permit("use", PREQUAL_OP.id, [PURPOSE.creditAssessment])]);
 }
 
 export function underwriterMandate() {
   return mandateOf("underwriting", [
-    permit("use", UNDERWRITING_OP.id, [PURPOSE.creditChecking], [NORTH.party]),
-    permit("distribute", `${AWP}op/underwriting-result`, [PURPOSE.creditChecking], [NORTH.party]),
+    permit("use", UNDERWRITING_OP.id, [PURPOSE.creditAssessment], [NORTH.party]),
+    permit("distribute", `${AWP}op/underwriting-result`, [PURPOSE.creditAssessment], [NORTH.party]),
   ]);
 }
 
@@ -182,7 +176,7 @@ export function lenderInternalRoles(): InternalRole[] {
     {
       agent: NB_ASSESS,
       label: "assessment agent",
-      purposes: [PURPOSE.creditChecking],
+      purposes: [PURPOSE.creditAssessment],
       actions: ["read"],
     },
     {
@@ -194,7 +188,7 @@ export function lenderInternalRoles(): InternalRole[] {
     {
       agent: NORTH.actor,
       label: "intake agent",
-      purposes: [PURPOSE.creditChecking],
+      purposes: [PURPOSE.creditAssessment],
       actions: ["read", "distribute"],
     },
   ];

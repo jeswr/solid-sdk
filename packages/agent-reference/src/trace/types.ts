@@ -69,6 +69,8 @@ export interface PacketLayerView {
   readonly summary: string;
   readonly raw?: unknown;
   readonly digest?: string;
+  /** Free text found in this layer: shown as it came, and always untrusted content. */
+  readonly untrusted?: readonly { readonly path: string; readonly text: string }[];
 }
 
 export interface PacketView {

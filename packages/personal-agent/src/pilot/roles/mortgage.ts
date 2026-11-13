@@ -347,7 +347,7 @@ export const MORTGAGE_LENDER_ROLE: RoleDefinition = {
                 agent: NORTH.actor,
                 action: "distribute",
                 items: [derived, deposit],
-                purpose: PURPOSE.creditChecking,
+                purpose: PURPOSE.creditAssessment,
                 recipient: UW.party,
               });
               if (onward.decision !== "permit" || !onward.items)
@@ -464,7 +464,7 @@ export const MORTGAGE_LENDER_ROLE: RoleDefinition = {
                 agent: NB_ASSESS,
                 action: "read",
                 items: [derived, deposit],
-                purpose: PURPOSE.creditChecking,
+                purpose: PURPOSE.creditAssessment,
               });
               if (read.decision !== "permit" || !read.items)
                 throw new Error(`assessment read not permitted: ${read.reason}`);

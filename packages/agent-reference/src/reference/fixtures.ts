@@ -23,7 +23,7 @@ export const DEPOSIT_ID = "urn:awp:evidence:harbourbank-deposit-2026-10";
 
 /** The terms an issuer attaches: use and share for a mortgage application, 90 days, no marketing. */
 export function issuerTerms(issuer: Iri, statement: Iri, label: string): ItemTerms {
-  const purposes = [PURPOSE.mortgagePrequalification, PURPOSE.creditChecking];
+  const purposes = [PURPOSE.mortgageApplication, PURPOSE.creditAssessment];
   const policy: OdrlPolicy = {
     id: `${AWP}terms/${label}`,
     type: "Set",

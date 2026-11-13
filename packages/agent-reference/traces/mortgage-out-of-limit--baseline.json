@@ -44,7 +44,7 @@
     }
   ],
   "generated": {
-    "commit": "b84513b025f3c21125d70c9942bb0dfa95ee733c",
+    "commit": "67b498bf15e338ec01f91e4c7b685c59af452409",
     "core": "scripted"
   },
   "events": [
@@ -660,7 +660,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:ad8ce4d663b…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:19235e5bd51…; never trusted."
         },
         "layers": {
           "header": {
@@ -690,7 +690,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1555c9a9583d12006294a382bf091e0a609ab70ecc364da1631260eeaaebedc7"
+            "digest": "sha-256:05ddc55605836faf47b5280147c3d40d8c549992f8372f4f535bae4355c18414"
           },
           "authority": {
             "present": false,
@@ -787,8 +787,8 @@
                       }
                     ],
                     "purposes": [
-                      "https://example.org/awp-fixture#MortgagePrequalification",
-                      "https://example.org/awp-fixture#CreditChecking"
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
                     ],
                     "effects": [
                       "evidence disclosed under agreed terms",
@@ -820,7 +820,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:cd48de99590d27bc0340571e0d8bc9676a28830527e99f9b24a694b3ade3538a"
+            "digest": "sha-256:14948022e474a70562ed233bfad850f6130449711bba9661a2fd4aaee78df55f"
           },
           "evidence": {
             "present": false,
@@ -869,7 +869,7 @@
         "kind": "description",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:ad8ce4d663b…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:19235e5bd51…; never trusted."
         },
         "layers": {
           "header": {
@@ -899,7 +899,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:1555c9a9583d12006294a382bf091e0a609ab70ecc364da1631260eeaaebedc7"
+            "digest": "sha-256:05ddc55605836faf47b5280147c3d40d8c549992f8372f4f535bae4355c18414"
           },
           "authority": {
             "present": false,
@@ -996,8 +996,8 @@
                       }
                     ],
                     "purposes": [
-                      "https://example.org/awp-fixture#MortgagePrequalification",
-                      "https://example.org/awp-fixture#CreditChecking"
+                      "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+                      "https://w3id.org/jeswr/awp#purpose/credit-assessment"
                     ],
                     "effects": [
                       "evidence disclosed under agreed terms",
@@ -1029,7 +1029,7 @@
                 "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
               }
             },
-            "digest": "sha-256:cd48de99590d27bc0340571e0d8bc9676a28830527e99f9b24a694b3ade3538a"
+            "digest": "sha-256:14948022e474a70562ed233bfad850f6130449711bba9661a2fd4aaee78df55f"
           },
           "evidence": {
             "present": false,
@@ -1213,7 +1213,7 @@
       ],
       "rule": {
         "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
-        "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage prequalification with North Bank or https://valleybank.example/#org, on its own."
+        "text": "Sam's mandate lets the agent use mortgage prequalification for mortgage application with North Bank or https://valleybank.example/#org, on its own."
       },
       "caption": "Sam's mandate covers this action."
     },
@@ -1762,7 +1762,7 @@
       ],
       "rule": {
         "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
-        "text": "North Bank's mandate lets the agent use mortgage prequalification for credit checking, on its own."
+        "text": "North Bank's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
       },
       "caption": "North Bank's mandate covers this action."
     },
@@ -1910,7 +1910,7 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:14ca1554ae5…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:4529617a8a0…; never trusted."
         },
         "layers": {
           "header": {
@@ -1940,7 +1940,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:4685fb2d626f44d0566543c97a1613804f8ad7a986cedd82ba136d1c572fda25"
+            "digest": "sha-256:7d6f2fc84a1b57b2e77455c75406c9e42cc7ff7478c22cfac19a3e0758234b23"
           },
           "authority": {
             "present": true,
@@ -1996,14 +1996,14 @@
                     "currency": "USD"
                   }
                 ],
-                "purpose": "https://example.org/awp-fixture#CreditChecking",
+                "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                 "recipients": [
                   "https://northbank.example/#org"
                 ],
                 "onward": [
                   {
                     "recipient": "https://underwriter.example/#org",
-                    "purpose": "https://example.org/awp-fixture#CreditChecking",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                     "fields": [
                       "annualGrossIncome",
                       "depositBalance"
@@ -2019,11 +2019,11 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
               "round": 2,
               "counters": "urn:awp:ref:sam:0003"
             },
-            "digest": "sha-256:a8a2e764c33860e2744bb50a890273cffee7fcaf412c9eb65f160c8a8f1b5ba6"
+            "digest": "sha-256:b576ac948afe19d2cdc3f003e1ff4577e7e7778c05e71985e055d425cc04a70d"
           },
           "evidence": {
             "present": false,
@@ -2031,7 +2031,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose CreditChecking; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "summary": "Terms: purpose credit-assessment; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
             "raw": {
               "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
               "modelVersion": "0.1",
@@ -2056,14 +2056,14 @@
                   "currency": "USD"
                 }
               ],
-              "purpose": "https://example.org/awp-fixture#CreditChecking",
+              "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
               "recipients": [
                 "https://northbank.example/#org"
               ],
               "onward": [
                 {
                   "recipient": "https://underwriter.example/#org",
-                  "purpose": "https://example.org/awp-fixture#CreditChecking",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                   "fields": [
                     "annualGrossIncome",
                     "depositBalance"
@@ -2079,7 +2079,7 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+            "digest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b"
           },
           "provenance": {
             "present": true,
@@ -2207,9 +2207,9 @@
       ],
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-        "text": "Its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing."
+        "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
       },
-      "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing."
+      "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
       "seq": 61,
@@ -2311,7 +2311,7 @@
         },
         "terms": {
           "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-          "summary": "use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing"
+          "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
         },
         "provenance": "signed by Paywell, issued 2026-11-02T09:00:00Z"
       },
@@ -2417,9 +2417,9 @@
       ],
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-        "text": "Its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing."
+        "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
       },
-      "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing."
+      "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
     },
     {
       "seq": 68,
@@ -2473,7 +2473,7 @@
         },
         "terms": {
           "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-          "summary": "use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing"
+          "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
         },
         "provenance": "signed by Harbour Bank, issued 2026-11-01T09:00:00Z"
       },
@@ -2492,7 +2492,7 @@
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:14ca1554ae5…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:4529617a8a0…; never trusted."
         },
         "layers": {
           "header": {
@@ -2522,7 +2522,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:4685fb2d626f44d0566543c97a1613804f8ad7a986cedd82ba136d1c572fda25"
+            "digest": "sha-256:7d6f2fc84a1b57b2e77455c75406c9e42cc7ff7478c22cfac19a3e0758234b23"
           },
           "authority": {
             "present": true,
@@ -2578,14 +2578,14 @@
                     "currency": "USD"
                   }
                 ],
-                "purpose": "https://example.org/awp-fixture#CreditChecking",
+                "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                 "recipients": [
                   "https://northbank.example/#org"
                 ],
                 "onward": [
                   {
                     "recipient": "https://underwriter.example/#org",
-                    "purpose": "https://example.org/awp-fixture#CreditChecking",
+                    "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                     "fields": [
                       "annualGrossIncome",
                       "depositBalance"
@@ -2601,11 +2601,11 @@
                 },
                 "synthetic": true
               },
-              "termsDigest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+              "termsDigest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
               "round": 2,
               "counters": "urn:awp:ref:sam:0003"
             },
-            "digest": "sha-256:a8a2e764c33860e2744bb50a890273cffee7fcaf412c9eb65f160c8a8f1b5ba6"
+            "digest": "sha-256:b576ac948afe19d2cdc3f003e1ff4577e7e7778c05e71985e055d425cc04a70d"
           },
           "evidence": {
             "present": false,
@@ -2613,7 +2613,7 @@
           },
           "terms": {
             "present": true,
-            "summary": "Terms: purpose CreditChecking; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
+            "summary": "Terms: purpose credit-assessment; kept at most 90 days; never for Marketing; passed on only to 1 named recipient(s).",
             "raw": {
               "model": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
               "modelVersion": "0.1",
@@ -2638,14 +2638,14 @@
                   "currency": "USD"
                 }
               ],
-              "purpose": "https://example.org/awp-fixture#CreditChecking",
+              "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
               "recipients": [
                 "https://northbank.example/#org"
               ],
               "onward": [
                 {
                   "recipient": "https://underwriter.example/#org",
-                  "purpose": "https://example.org/awp-fixture#CreditChecking",
+                  "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
                   "fields": [
                     "annualGrossIncome",
                     "depositBalance"
@@ -2661,7 +2661,7 @@
               },
               "synthetic": true
             },
-            "digest": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583"
+            "digest": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b"
           },
           "provenance": {
             "present": true,
@@ -2840,7 +2840,7 @@
       ],
       "rule": {
         "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves."
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves."
       },
       "caption": "Sam's mandate covers this action, with approval."
     },
@@ -2908,7 +2908,7 @@
       ],
       "reason": "minimal-disclosure",
       "rule": {
-        "id": "sha-256:05458d218d4c35ceace796bba5039119c1988e72d29900f9cc9fdb09891c6583",
+        "id": "sha-256:592b6c4e3de69889be395d8cbdc6d5e9f665e25d68db6b04c4ccf2eb5cdbb47b",
         "text": "The request asks for income.gross.monthly series and deposit.balance; by value is the only form in this configuration."
       },
       "caption": "Only what the request needs goes: Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months."
@@ -2930,9 +2930,9 @@
       ],
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-        "text": "The issuer's terms: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing. They go out with the data."
+        "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
       },
-      "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+      "caption": "Harbour Bank's balance at October 31, 2026: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
     },
     {
       "seq": 83,
@@ -2951,9 +2951,9 @@
       ],
       "rule": {
         "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-        "text": "The issuer's terms: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing. They go out with the data."
+        "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
       },
-      "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage prequalification or credit checking; share with a regulated lender for mortgage prequalification or credit checking; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
+      "caption": "Paywell's record of your pay for the last 12 months: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. North Bank is a regulated lender (sector register)."
     },
     {
       "seq": 84,
@@ -2973,7 +2973,7 @@
       "reason": "limit-exceeded",
       "rule": {
         "id": "https://w3id.org/jeswr/awp#limits/sam/retention",
-        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit checking with North Bank or https://valleybank.example/#org, after Sam approves. You asked me not to let anyone keep your data for more than 60 days; this asks for 90."
+        "text": "Sam's mandate lets the agent distribute evidence disclosure for credit assessment with North Bank or https://valleybank.example/#org, after Sam approves. You asked me not to let anyone keep your data for more than 60 days; this asks for 90."
       },
       "caption": "This is outside Sam's limits, so the gate asks Sam."
     },
@@ -2996,7 +2996,7 @@
       "kind": "ask-principal",
       "chat": {
         "who": "agent",
-        "text": "North Bank asks for two of your statements: Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months. They would use them for credit checking, keep them for 90 days and pass them on only to the underwriter. You asked me not to let anyone keep your data for more than 60 days; this asks for 90. May I share them?"
+        "text": "North Bank asks for two of your statements: Harbour Bank's balance at October 31, 2026 and Paywell's record of your pay for the last 12 months. They would use them for credit assessment, keep them for 90 days and pass them on only to the underwriter. You asked me not to let anyone keep your data for more than 60 days; this asks for 90. May I share them?"
       },
       "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
     },

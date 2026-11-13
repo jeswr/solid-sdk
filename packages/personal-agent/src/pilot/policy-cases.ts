@@ -59,8 +59,8 @@ const mortgageAgreement = { id: "urn:awp:agreement:0000000000000000000000000000c
 const mortgageGrant = grantFromTerms(
   mortgageAgreement,
   {
-    purpose: PURPOSE.creditChecking,
-    onward: [{ purpose: PURPOSE.creditChecking, recipient: "https://underwriter.example/#org" }],
+    purpose: PURPOSE.creditAssessment,
+    onward: [{ purpose: PURPOSE.creditAssessment, recipient: "https://underwriter.example/#org" }],
     prohibitedPurposes: [PURPOSE.marketing],
   } as unknown as EvidenceRequestTerms,
   SAM.party,
@@ -196,7 +196,7 @@ export const POLICY_CASES: readonly PolicyCase[] = [
     source: "samMortgageMandate (autonomous)",
     policy: sam.autonomous,
     request: req(SAM.actor, "use", PREQUAL_OP.id, {
-      purpose: PURPOSE.mortgagePrequalification,
+      purpose: PURPOSE.mortgageApplication,
       recipient: NORTH.party,
     }),
     expected: "permit",
@@ -206,7 +206,7 @@ export const POLICY_CASES: readonly PolicyCase[] = [
     id: "M-2",
     source: "samMortgageMandate (with-approval)",
     policy: sam.withApproval,
-    request: req(SAM.actor, "distribute", DISCLOSURE_TARGET, { purpose: PURPOSE.creditChecking }),
+    request: req(SAM.actor, "distribute", DISCLOSURE_TARGET, { purpose: PURPOSE.creditAssessment }),
     expected: "indeterminate",
     note: "disclosure with the recipient missing",
   },
@@ -214,7 +214,7 @@ export const POLICY_CASES: readonly PolicyCase[] = [
     id: "M-3",
     source: "grantFromTerms (mortgage evidence grant)",
     policy: mortgageGrant.policy,
-    request: req(NORTH.party, "read", mortgageGrant.target, { purpose: PURPOSE.creditChecking }),
+    request: req(NORTH.party, "read", mortgageGrant.target, { purpose: PURPOSE.creditAssessment }),
     expected: "permit",
     note: "read for the agreed purpose",
   },

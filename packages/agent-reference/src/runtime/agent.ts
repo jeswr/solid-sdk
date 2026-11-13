@@ -43,7 +43,7 @@ import type {
 } from "../core/types.js";
 import { type GateContext, GateMemory } from "../gates/common.js";
 import { type Admission, InboundGate } from "../gates/inbound.js";
-import { OutboundGate } from "../gates/outbound.js";
+import { OutboundGate, type ProposalOrigin } from "../gates/outbound.js";
 import { type KeyAlg, type SigningKey, signCompact, verifyCompact } from "../mechanisms/jws.js";
 import {
   actionDigest,
@@ -274,6 +274,8 @@ export class AgentRuntime {
   private admission: Admission | undefined;
   /** Set while an approved action resumes, so the core is not shown proposing it twice. */
   private resuming = false;
+  /** Set while a task the core took from a received message is being proposed. */
+  private proposalOrigin: ProposalOrigin | undefined;
 
   private constructor(private readonly options: AgentRuntimeOptions) {
     this.retention = { ...DEFAULT_RETENTION, ...(options.retention ?? {}) };
@@ -1871,7 +1873,7 @@ export class AgentRuntime {
     });
     let effective = decision;
     if (!quiet) {
-      if (!this.resuming) this.outbound.propose(intent);
+      if (!this.resuming) this.outbound.propose(intent, this.proposalOrigin);
       effective = this.outbound.release(intent, decision).decision;
     }
     this.record(effective);
@@ -2629,7 +2631,13 @@ export class AgentRuntime {
    * conventional service). Same executor rules: mandate check, owner approval, write-ahead,
    * idempotency key, reconciliation. Calling again with the same task id is idempotent.
    */
-  runTask(input: { taskId: Iri; kind: string; plan: EffectPlan }): Promise<{
+  runTask(input: {
+    taskId: Iri;
+    kind: string;
+    plan: EffectPlan;
+    /** Where the core took this task from, when it came from a received message. */
+    origin?: ProposalOrigin;
+  }): Promise<{
     task: TaskState;
     effect?: EffectState;
     decisions: readonly AuthorisationDecision[];
@@ -2654,7 +2662,12 @@ export class AgentRuntime {
         throw new Error("task id reused for a different effect");
       const effect = this.state.effects[input.plan.key];
       if (task.status !== "concluded" && !(effect?.status === "concluded")) {
-        await this.runEffect(task.id, input.plan, task.id);
+        this.proposalOrigin = input.origin;
+        try {
+          await this.runEffect(task.id, input.plan, task.id);
+        } finally {
+          this.proposalOrigin = undefined;
+        }
       }
       let after = this.state.tasks[task.id] as TaskState;
       const pending = Object.values(this.state.pending).find((p) => p.conversation === task.id);

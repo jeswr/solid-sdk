@@ -35,6 +35,17 @@ import {
 } from "./common.js";
 import { evaluateItemTerms, termsSummary } from "./quality.js";
 
+/** Where the core took a proposed action from, when it came from a received message. */
+export interface ProposalOrigin {
+  /** The message id. */
+  readonly message: string;
+  /** Message kind ("receipt"). */
+  readonly kind: string;
+  /** Sender, by display name. */
+  readonly from: string;
+  /** The free text the core read. */
+  readonly text: string;
+}
 export interface OutboundDeps {
   readonly identity: { readonly actor: Iri; readonly party?: Iri };
   readonly now: () => string;
@@ -192,12 +203,17 @@ export class OutboundGate {
     }.${limitText ? ` ${limitText}` : ""} May I go ahead?`;
   }
 
-  /** The core proposes an action; the gate receives it. */
-  propose(intent: ActionIntent): void {
+  /**
+   * The core proposes an action; the gate receives it. When the core took the idea from a
+   * message, the caption says which one: the gate decides on the action all the same.
+   */
+  propose(intent: ActionIntent, origin?: ProposalOrigin): void {
     this.emit({
       part: "core",
       kind: "propose",
-      caption: `The core proposes to ${this.describeAction(intent)}.`,
+      caption: origin
+        ? `The core proposes to ${this.describeAction(intent)}. It took this from the untrusted free text in ${origin.from}'s ${origin.kind} message (${origin.message}): "${origin.text}"`
+        : `The core proposes to ${this.describeAction(intent)}.`,
     });
   }
 

@@ -49,20 +49,28 @@ export const FIXTURE = "https://example.org/awp-fixture#";
  *
  * Checked against DPV 2.1 (Final CG Report, 16 March 2025; `dpv/modules/purposes.ttl`):
  * see {@link DPV_VALIDATION}. `dpv:CreditChecking` does NOT exist in DPV 2.1, so credit
- * checking is a fixture identifier; the nearest DPV concept, `dpv:CustomerSolvencyMonitoring`
+ * assessment is a profile term; the nearest DPV concept, `dpv:CustomerSolvencyMonitoring`
  * (broader `dpv:CustomerManagement`), concerns existing customers and is recorded only as
  * related, not reused.
+ *
+ * The mortgage purposes are the mortgage profile's terms (`mortgage-application`,
+ * `credit-assessment`, `product-search`).
  */
+// OPEN-DESIGN: the mortgage profile names its purposes but not their namespace; they are
+// minted under the AWP namespace here until the profile fixes one.
+const PROFILE_PURPOSE = `${AWP}purpose/`;
+
 export const PURPOSE = {
   scheduling: `${DPV}CommunicationManagement`,
-  creditChecking: `${FIXTURE}CreditChecking`,
+  creditAssessment: `${PROFILE_PURPOSE}credit-assessment`,
   marketing: `${DPV}Marketing`,
   serviceProvision: `${DPV}ServiceProvision`,
   productDevelopment: `${DPV}ResearchAndDevelopment`,
   maintenance: `${FIXTURE}PredictiveMaintenance`,
   personalHealthSummary: `${FIXTURE}PatientRequestedSummary`,
   priceComparison: `${FIXTURE}PublicPlanComparison`,
-  mortgagePrequalification: `${FIXTURE}MortgagePrequalification`,
+  mortgageApplication: `${PROFILE_PURPOSE}mortgage-application`,
+  productSearch: `${PROFILE_PURPOSE}product-search`,
 } as const;
 
 /**
@@ -85,7 +93,7 @@ export const DPV_VALIDATION = {
     `${DPV}hasPurpose`,
   ],
   absent: [`${DPV}CreditChecking`],
-  replaced: { [`${DPV}CreditChecking`]: `${FIXTURE}CreditChecking` },
+  replaced: { [`${DPV}CreditChecking`]: `${AWP}purpose/credit-assessment` },
 } as const;
 
 export interface TermEntry {
