@@ -136,7 +136,10 @@ Run the package and full workspace gates. For an intentional public API change, 
 
 Import `createOutbox`, `withOutbox` and the `Outbox`, `OutboxItem`, `ConflictRecord`,
 `QueueingStorageClient` types from `@jeswr/solid-offline/outbox`. Construct one outbox per
-active WebID, optionally injecting `idb` and `now`. Await `outbox.ready` before reading the
+active WebID, optionally injecting `idb` and `now`. An application that must not share the
+default queue passes `namespace` (`/^[a-z][a-z0-9.-]{0,63}$/`, else `TypeError` before storage
+opens): it gets its own database, BroadcastChannel and replay lock for that WebID, and its
+replay/retry/purge never touch other queues' records. Await `outbox.ready` before reading the
 initial synchronous `pending()` and `conflicts()` snapshots. Queue bodies live only in the
 separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously returns a copy.
 
@@ -212,6 +215,12 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   URL while other URLs proceed. Other failures become failed items with readable errors.
   `retry(id?)` uses the decorated client or latest replay client. Per-item progress is only
   `(0, size)` and successful `(size, size)`; streaming progress is deferred.
+- `enqueue` accepts `initialStatus: 'waiting' | 'failed'` (default waiting; other values throw
+  `TypeError` before storing). A failed intent is skipped by replay until `retry(id)`.
+  `discard(id)` takes an item ID (a conflict ID matches nothing) and deletes the intent in any
+  status, clearing a conflict from `conflicts()`. It skips the replay lock, so an in-flight
+  replay, retry or mine/both request elsewhere may still complete; status saves skip records
+  that no longer exist, so a late failure never resurrects it and a late success is a no-op.
 - `resolve(id, 'mine')` must freshly HEAD and use its ETag (never wildcard when absent).
   `theirs` drops local state; `both` creates binary `-conflict-<ms>` or RDF ` (copy)` siblings
   before the extension. Failed resolution retains local bytes. Keep-both rejects deletes.

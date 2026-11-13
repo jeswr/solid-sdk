@@ -61,6 +61,8 @@ export interface OutboxOperation {
   container?: string;
   name?: string;
   label?: string;
+  /** Defaults to waiting. Imports may preserve failures that require an explicit Retry. */
+  initialStatus?: 'waiting' | 'failed';
   createOptions?: Omit<CreateOptions, 'signal'>;
   deleteOptions?: { recursive?: boolean };
   guard?: OutboxGuard;
@@ -115,6 +117,8 @@ export interface Outbox {
   replay(client: StorageClient, options?: ReplayOptions): Promise<void>;
   /** Uses the client supplied to withOutbox or the most recent replay. */
   retry(id?: string): Promise<void>;
+  /** Drop an intent, even during replay. An already-started request may still complete. */
+  discard(id: string): Promise<void>;
   resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
   on(event: 'change' | 'conflict', listener: () => void): () => void;
   /** Deletes only this WebID's queue. Logout deliberately does not call this. */
@@ -624,18 +628,32 @@ function childUrl(container: string, name: string): string {
   return new URL(encodeURIComponent(name), container).href;
 }
 
-/** A separate DB from read metadata: logout may purge the cache, never unsent writes. */
+/**
+ * A separate DB from read metadata: logout may purge the cache, never unsent writes.
+ * `namespace` gives an application its own queue (database, channel and replay lock) for the
+ * same WebID, so its replay never sees, sends or changes another queue's records.
+ */
 export function createOutbox(options: {
   webId: string;
   idb?: IDBFactory;
   now?: () => number;
+  namespace?: string;
 }): Outbox {
   if (!options.webId) throw new Error('[solid-offline] outbox requires a WebID');
+  if (
+    options.namespace !== undefined &&
+    (typeof options.namespace !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(options.namespace))
+  )
+    throw new TypeError('[solid-offline] invalid outbox namespace');
   const factory = options.idb ?? globalThis.indexedDB;
   if (!factory) throw new Error('[solid-offline] outbox requires IndexedDB');
   const now = options.now ?? Date.now;
-  // Full identity avoids the collision risk of the read-cache's short hash.
-  const dbName = `solid-offline-outbox:${encodeURIComponent(options.webId)}`;
+  // Full identity avoids the collision risk of the read-cache's short hash. An encoded WebID
+  // never contains ":", so a namespaced name can never equal the default name of any WebID.
+  const dbName =
+    options.namespace === undefined
+      ? `solid-offline-outbox:${encodeURIComponent(options.webId)}`
+      : `solid-offline-outbox:${options.namespace}:${encodeURIComponent(options.webId)}`;
   const listeners = { change: new Set<() => void>(), conflict: new Set<() => void>() };
   let records: StoredItem[] = [];
   let closed = false;
@@ -772,7 +790,18 @@ export function createOutbox(options: {
   }
 
   async function save(record: StoredItem): Promise<void> {
-    record.order = Number(await transaction('readwrite', (store) => store.put(record)));
+    if (record.order === undefined) {
+      record.order = Number(await transaction('readwrite', (store) => store.put(record)));
+    } else {
+      // A concurrent discard must not be undone by a late replay status update.
+      await transaction('readwrite', (store) => {
+        const request = store.get(record.order as number);
+        request.onsuccess = () => {
+          if (request.result !== undefined) store.put(record);
+        };
+        return request;
+      });
+    }
     await refresh();
     notify(record.conflict ? 'conflict' : 'change');
   }
@@ -868,6 +897,7 @@ export function createOutbox(options: {
       }
       record.item.status = 'replaying';
       await save(record);
+      if (!records.some((current) => current.item.id === record.item.id)) continue;
       // Registration can disappear while persistence yields to a component cleanup.
       if (
         guardRequired(policies, storedRequest(record, storage), record.guard) ||
@@ -944,6 +974,11 @@ export function createOutbox(options: {
       }),
     conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
     async enqueue(operation) {
+      if (
+        operation.initialStatus !== undefined &&
+        !['waiting', 'failed'].includes(operation.initialStatus)
+      )
+        throw new TypeError('[solid-offline] invalid initial status');
       const guard = snapshotGuard(operation.guard);
       const persistedGuard = guard && {
         tag: guard.tag,
@@ -975,7 +1010,7 @@ export function createOutbox(options: {
           label: operation.label,
           size: body?.byteLength ?? 0,
           createdAt: now(),
-          status: 'waiting',
+          status: operation.initialStatus ?? 'waiting',
           ...(guard ? { guard: { tag: guard.tag } } : {}),
         };
         await save({
@@ -1043,6 +1078,21 @@ export function createOutbox(options: {
         }
         await replay(storage);
       });
+    },
+    async discard(id) {
+      await ready;
+      if (closed) throw new Error('[solid-offline] outbox is closed');
+      // Do not wait for the replay lock: another tab may have a request in flight.
+      await transaction('readwrite', (store) => {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          for (const record of request.result as StoredItem[])
+            if (record.item.id === id) store.delete(record.order as number);
+        };
+        return request;
+      });
+      await refresh();
+      notify();
     },
     resolve(id, strategy) {
       return exclusive(async () => {

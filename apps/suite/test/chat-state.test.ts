@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createOutbox } from "@jeswr/suite-sdk/offline";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Room } from "../src/apps/chat/lib/client";
 import {
@@ -11,6 +12,7 @@ import {
   useRooms,
   useSend,
 } from "../src/apps/chat/state/chat-context";
+import { CHAT_OUTBOX_NAMESPACE } from "../src/apps/chat/state/outbox";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 
@@ -78,7 +80,10 @@ it("uses the filtered change channel and polls every 30 seconds when subscribe i
     return h("p", null, rooms.status);
   }
   const view = await mount(h(ChatProvider, { session: withChannel, children: h(Probe) }));
-  vi.useFakeTimers();
+  // Keep IndexedDB's setImmediate task source live while advancing Chat's timers.
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   const calls = list.mock.calls.length;
   await act(async () => {
     listener(`${ROOT}drive/file.txt`);
@@ -119,8 +124,36 @@ it("queues offline hook sends and flushes them on online", async () => {
   expect(sender.data[0]).toEqual(pending);
   vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
   await act(() => window.dispatchEvent(new Event("online")));
-  expect(reopened.host.textContent).toBe("sent");
+  await vi.waitFor(async () => {
+    await act(() => {});
+    expect(reopened.host.textContent).toBe("sent");
+  });
   expect((await client.messages(room.url)).messages[0]?.content).toBe("Queued");
+});
+
+it("queues Chat's pending sends in Chat's own outbox, never the shell's", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Isolated", members: [] });
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  let sender!: ReturnType<typeof useSend>;
+  function Probe() {
+    sender = useSend(room.url);
+    return null;
+  }
+  const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
+  await act(() => sender.send("Not a Drive write"));
+  const shell = createOutbox({ webId: ME });
+  const chat = createOutbox({ webId: ME, namespace: CHAT_OUTBOX_NAMESPACE });
+  try {
+    await Promise.all([shell.ready, chat.ready]);
+    expect(shell.pending()).toEqual([]);
+    expect(chat.pending().map((item) => item.label)).toEqual(["Send chat message"]);
+  } finally {
+    shell.close();
+    chat.close();
+    await view.unmount();
+  }
 });
 
 it("rehydrates and flushes pending sends when Chat remounts already online", async () => {
@@ -139,10 +172,13 @@ it("rehydrates and flushes pending sends when Chat remounts already online", asy
   await view.unmount();
   online.mockReturnValue(true);
   await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
-  expect((await client.messages(room.url)).messages[0]).toMatchObject({
-    id: pending?.id,
-    published: pending?.published,
-    content: "Survives Drive",
+  await vi.waitFor(async () => {
+    await act(() => {});
+    expect((await client.messages(room.url)).messages[0]).toMatchObject({
+      id: pending?.id,
+      published: pending?.published,
+      content: "Survives Drive",
+    });
   });
 });
 it("clears prior-room data on navigation and ignores late abandoned responses", async () => {
