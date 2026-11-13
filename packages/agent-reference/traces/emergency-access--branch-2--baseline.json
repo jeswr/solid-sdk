@@ -1,15 +1,65 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "emergency-access",
+  "path": {
+    "index": 2,
+    "what": "The same flag is used by someone not on the register"
+  },
+  "parties": [
+    {
+      "id": "clinician",
+      "name": "The clinician"
+    },
+    {
+      "id": "patient",
+      "name": "The patient"
+    },
+    {
+      "id": "contact",
+      "name": "The trusted contact"
+    },
+    {
+      "id": "register",
+      "name": "The professional register"
+    },
+    {
+      "id": "practice",
+      "name": "The family practice"
+    },
+    {
+      "id": "clinician-agent",
+      "name": "The clinician’s agent"
+    },
+    {
+      "id": "record-agent",
+      "name": "The patient’s record agent"
+    },
+    {
+      "id": "patient-agent",
+      "name": "The patient’s agent"
+    },
+    {
+      "id": "contact-agent",
+      "name": "The trusted contact’s agent"
+    }
+  ],
   "scenario": {
     "id": "emergency-access--branch-2",
-    "title": "Access to allergies in an emergency",
+    "title": "Access to allergies in an emergency: The same flag is used by someone not on the register",
     "steps": {
-      "1": "clinician-evidence",
-      "2": "patient-summary",
-      "3": "request",
-      "4": "record-answers",
-      "5": "release-summary"
+      "1": "The clinician’s agent checks and admits the signed statements.",
+      "2": "The patient’s record agent checks and admits the signed statements.",
+      "3": "The clinician’s agent sends a signed request.",
+      "4": "The patient’s record agent checks the incoming message and prepares a response.",
+      "5": "The patient’s record agent completes the message step.",
+      "6": "The clinician’s agent checks the incoming message and prepares a response.",
+      "7": "The patient’s record agent completes the notifications step.",
+      "8": "The patient’s agent checks the incoming message and prepares a response.",
+      "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+      "10": "The patient’s record agent completes the duties step.",
+      "11": "The patient’s record agent checks the observed result.",
+      "12": "The patient’s record agent checks the observed result."
     }
   },
   "configuration": {
@@ -31,31 +81,31 @@
   "agents": [
     {
       "id": "clinician-agent",
-      "name": "clinician-agent",
+      "name": "The clinician’s agent",
       "actsFor": "clinician",
       "role": "agent"
     },
     {
       "id": "record-agent",
-      "name": "record-agent",
+      "name": "The patient’s record agent",
       "actsFor": "patient",
       "role": "agent"
     },
     {
       "id": "patient-agent",
-      "name": "patient-agent",
+      "name": "The patient’s agent",
       "actsFor": "patient",
       "role": "agent"
     },
     {
       "id": "contact-agent",
-      "name": "contact-agent",
+      "name": "The trusted contact’s agent",
       "actsFor": "contact",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -90,7 +140,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "clinician's emergency.declaration statement is intact and signed with clinician's pinned key."
+      "caption": "The clinician's emergency.declaration statement is intact and signed with The clinician's pinned key."
     },
     {
       "seq": 2,
@@ -115,20 +165,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:clinician",
-        "text": "clinician is accepted for emergency.declaration claims."
+        "text": "The clinician is accepted for emergency.declaration claims."
       },
       "resolution": {
-        "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+        "question": "Is The clinician an authority for emergency.declaration claims about The clinician?",
         "path": [
           {
-            "at": "clinician's own list",
+            "at": "The clinician's own list",
             "kind": "own-list",
-            "says": "clinician is accepted for emergency.declaration."
+            "says": "The clinician is accepted for emergency.declaration."
           }
         ],
         "answer": "Accepted, for emergency.declaration claims only."
       },
-      "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+      "caption": "The clinician's emergency.declaration statement: The clinician is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -146,7 +196,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "clinician's emergency.declaration statement asks for nothing, so there is no authority to check."
+      "caption": "The clinician's emergency.declaration statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -173,7 +223,7 @@
         "id": "urn:terms:emergency",
         "text": "Its terms allow this: ."
       },
-      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency.declaration statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -195,7 +245,7 @@
         "id": "urn:profile:emergency-access:emergency.declaration",
         "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
       },
-      "caption": "clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for urn:scenario:emergency-access:task: self-reported, 0 days old."
     },
     {
       "seq": 6,
@@ -205,7 +255,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "clinician's emergency.declaration statement is admitted."
+      "caption": "The clinician's emergency.declaration statement is admitted."
     },
     {
       "seq": 7,
@@ -215,7 +265,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:emergency-access:emergency",
-        "label": "clinician's emergency.declaration statement",
+        "label": "The clinician's emergency.declaration statement",
         "claimType": "emergency.declaration",
         "subject": "urn:fictional:clinician",
         "value": null,
@@ -226,9 +276,9 @@
           "id": "urn:terms:emergency",
           "summary": ""
         },
-        "provenance": "signed by clinician"
+        "provenance": "signed by The clinician"
       },
-      "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -251,7 +301,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "practice's clinical.summary statement is intact and signed with practice's pinned key."
+      "caption": "The family practice's clinical.summary statement is intact and signed with The family practice's pinned key."
     },
     {
       "seq": 9,
@@ -276,20 +326,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:practice",
-        "text": "practice is accepted for clinical.summary claims."
+        "text": "The family practice is accepted for clinical.summary claims."
       },
       "resolution": {
-        "question": "Is practice an authority for clinical.summary claims about patient?",
+        "question": "Is The family practice an authority for clinical.summary claims about The patient?",
         "path": [
           {
-            "at": "patient's own list",
+            "at": "The patient's own list",
             "kind": "own-list",
-            "says": "practice is accepted for clinical.summary."
+            "says": "The family practice is accepted for clinical.summary."
           }
         ],
         "answer": "Accepted, for clinical.summary claims only."
       },
-      "caption": "practice's clinical.summary statement: practice is an accepted source for this kind of claim."
+      "caption": "The family practice's clinical.summary statement: The family practice is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -307,7 +357,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "practice's clinical.summary statement asks for nothing, so there is no authority to check."
+      "caption": "The family practice's clinical.summary statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -334,7 +384,7 @@
         "id": "urn:terms:summary",
         "text": "Its terms allow this: ."
       },
-      "caption": "practice's clinical.summary statement: its terms allow this: ."
+      "caption": "The family practice's clinical.summary statement: its terms allow this: ."
     },
     {
       "seq": 12,
@@ -356,7 +406,7 @@
         "id": "urn:profile:emergency-access:clinical.summary",
         "text": "Accept clinical.summary from urn:fictional:practice by recorded-by-authority, at most 1 days old."
       },
-      "caption": "practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
+      "caption": "The family practice's clinical.summary statement is fit for urn:scenario:emergency-access:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -366,7 +416,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "practice's clinical.summary statement is admitted."
+      "caption": "The family practice's clinical.summary statement is admitted."
     },
     {
       "seq": 14,
@@ -376,7 +426,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:emergency-access:summary",
-        "label": "practice's clinical.summary statement",
+        "label": "The family practice's clinical.summary statement",
         "claimType": "clinical.summary",
         "subject": "urn:fictional:patient",
         "value": null,
@@ -387,9 +437,9 @@
           "id": "urn:terms:summary",
           "summary": ""
         },
-        "provenance": "signed by practice"
+        "provenance": "signed by The family practice"
       },
-      "caption": "practice's clinical.summary statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The family practice's clinical.summary statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -397,7 +447,7 @@
       "agent": "clinician-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:emergency read with patient."
+      "caption": "The core proposes to use urn:op:emergency read with The patient."
     },
     {
       "seq": 16,
@@ -420,7 +470,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "clinician's mandate covers this action."
+      "caption": "The clinician's mandate covers this action."
     },
     {
       "seq": 17,
@@ -443,18 +493,18 @@
         }
       ],
       "resolution": {
-        "question": "Is patient a party I can send urn:op:emergency read to?",
+        "question": "Is The patient a party I can send urn:op:emergency-read to?",
         "path": [
           {
-            "at": "clinician's own list",
+            "at": "The clinician's own list",
             "kind": "own-list",
-            "says": "patient is accepted for urn:op:emergency read."
+            "says": "The patient is accepted for urn:op:emergency-read."
           }
         ],
-        "answer": "Accepted, for urn:op:emergency read only."
+        "answer": "Accepted, for urn:op:emergency-read only."
       },
       "reason": "recipient-established",
-      "caption": "patient: Accepted, for urn:op:emergency read only."
+      "caption": "The patient: Accepted, for urn:op:emergency-read only."
     },
     {
       "seq": 18,
@@ -508,7 +558,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within clinician's limits."
+      "caption": "Inside what the agent may do on its own, and within The clinician's limits."
     },
     {
       "seq": 21,
@@ -548,7 +598,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency.declaration statement: its terms allow this: ."
     },
     {
       "seq": 23,
@@ -593,7 +643,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with clinician-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The clinician’s agent's pinned key, and written to the record."
     },
     {
       "seq": 25,
@@ -603,7 +653,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to record-agent."
+      "caption": "The invoke message goes to The patient’s record agent."
     },
     {
       "seq": 26,
@@ -613,8 +663,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
-        "from": "clinician-agent",
-        "to": "record-agent",
+        "from": "The clinician’s agent",
+        "to": "The patient’s record agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -623,7 +673,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
+            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -650,7 +700,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+            "summary": "1 representation statement(s): The clinician says The clinician’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -692,7 +742,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: emergency.declaration from clinician.",
+            "summary": "1 statement(s) signed by their sources: emergency.declaration from The clinician.",
             "raw": [
               {
                 "declared": "emergency",
@@ -733,7 +783,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The clinician’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
               "statements": [
@@ -762,7 +812,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "clinician-agent sends an invoke message to record-agent."
+      "caption": "The clinician’s agent sends an invoke message to The patient’s record agent."
     },
     {
       "seq": 27,
@@ -772,8 +822,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
-        "from": "clinician-agent",
-        "to": "record-agent",
+        "from": "The clinician’s agent",
+        "to": "The patient’s record agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -782,7 +832,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From clinician-agent to record-agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
+            "summary": "From The clinician’s agent to The patient’s record agent; invoke; signed (JWS EdDSA, pinned key z0gQy7sX7Xu4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-emergency-access-branch-2:clinician-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -809,7 +859,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): clinician says clinician-agent acts for it.",
+            "summary": "1 representation statement(s): The clinician says The clinician’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -861,7 +911,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: emergency.declaration from clinician.",
+            "summary": "1 statement(s) signed by their sources: emergency.declaration from The clinician.",
             "raw": [
               {
                 "declared": "emergency",
@@ -902,7 +952,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by clinician-agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The clinician’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0001",
               "statements": [
@@ -931,7 +981,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from clinician-agent reaches the inbound gate."
+      "caption": "An invoke message from The clinician’s agent reaches the inbound gate."
     },
     {
       "seq": 28,
@@ -958,7 +1008,7 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with clinician-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The clinician’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 29,
@@ -983,20 +1033,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:clinician",
-        "text": "clinician is accepted for emergency.declaration claims."
+        "text": "The clinician is accepted for emergency.declaration claims."
       },
       "resolution": {
-        "question": "Is clinician an authority for emergency.declaration claims about clinician?",
+        "question": "Is The clinician an authority for emergency.declaration claims about The clinician?",
         "path": [
           {
-            "at": "patient's own list",
+            "at": "The patient's own list",
             "kind": "own-list",
-            "says": "clinician is accepted for emergency.declaration."
+            "says": "The clinician is accepted for emergency.declaration."
           }
         ],
         "answer": "Accepted, for emergency.declaration claims only."
       },
-      "caption": "clinician's emergency.declaration statement: clinician is an accepted source for this kind of claim."
+      "caption": "The clinician's emergency.declaration statement: The clinician is an accepted source for this kind of claim."
     },
     {
       "seq": 30,
@@ -1016,9 +1066,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:a56efa2d525e5cd9261e087555671049:1794560400000",
-        "text": "A representation statement signed with clinician's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The clinician's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "clinician signed a statement that clinician-agent acts for them in this operation."
+      "caption": "The clinician signed a statement that The clinician’s agent acts for them in this operation."
     },
     {
       "seq": 31,
@@ -1045,7 +1095,7 @@
         "id": "urn:terms:emergency",
         "text": "Its terms allow this: ."
       },
-      "caption": "clinician's emergency.declaration statement: its terms allow this: ."
+      "caption": "The clinician's emergency.declaration statement: its terms allow this: ."
     },
     {
       "seq": 32,
@@ -1067,7 +1117,7 @@
         "id": "urn:profile:emergency-access:emergency.declaration",
         "text": "Accept emergency.declaration from urn:fictional:clinician by self-reported, at most 1 days old."
       },
-      "caption": "clinician's emergency.declaration statement is fit for a mortgage application: self-reported, 0 days old."
+      "caption": "The clinician's emergency.declaration statement is fit for urn:op:emergency-read: self-reported, 0 days old."
     },
     {
       "seq": 33,
@@ -1087,7 +1137,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:emergency-access:emergency",
-        "label": "clinician's emergency.declaration statement",
+        "label": "The clinician's emergency.declaration statement",
         "claimType": "emergency.declaration",
         "subject": "urn:fictional:clinician",
         "value": null,
@@ -1098,9 +1148,9 @@
           "id": "urn:terms:emergency",
           "summary": ""
         },
-        "provenance": "signed by clinician"
+        "provenance": "signed by The clinician"
       },
-      "caption": "clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency.declaration statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 35,
@@ -1131,7 +1181,7 @@
       "agent": "record-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to read urn:op:emergency read with clinician."
+      "caption": "The core proposes to read urn:op:emergency read with The clinician."
     },
     {
       "seq": 37,
@@ -1156,9 +1206,9 @@
       "reason": "source-unknown",
       "rule": {
         "id": "urn:awp:mandate:52b76acca7332ca12262f6e32ee71914:emergency-access",
-        "text": "No rule in patient's mandate lets the agent read urn:op:emergency read with clinician for urn:purpose:emergency access (source-unknown)."
+        "text": "No rule in The patient's mandate lets the agent read urn:op:emergency read with The clinician for urn:purpose:emergency access (source-unknown)."
       },
-      "caption": "patient's mandate does not allow this: read urn:op:emergency read with clinician."
+      "caption": "The patient's mandate does not allow this: read urn:op:emergency read with The clinician."
     },
     {
       "seq": 38,

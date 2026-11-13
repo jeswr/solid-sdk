@@ -1,0 +1,232 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "home-purchase",
+  "path": {
+    "index": 1,
+    "what": "A message gives a new account for the deposit"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The buyer"
+    },
+    {
+      "id": "receiver",
+      "name": "The seller"
+    },
+    {
+      "id": "bank",
+      "name": "The conveyancer’s deposit bank"
+    },
+    {
+      "id": "email",
+      "name": "The unverified account sender"
+    },
+    {
+      "id": "land-register",
+      "name": "The fictional land registry"
+    },
+    {
+      "id": "other-person",
+      "name": "The other fictional owner"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The buyer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The seller’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "home-purchase--branch-1",
+    "title": "Buying a home: A message gives a new account for the deposit",
+    "steps": {
+      "1": "The buyer’s agent checks the signed statements.",
+      "2": "The buyer’s agent proposes the local action."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The buyer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The seller’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Conveyancing source preflights",
+      "replacedBy": "An email author signs an unauthoritative deposit account; the registry signs ownership by someone other than the seller. No funds, escrow or completion are simulated"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The unverified account sender's deposit.account statement is intact and signed with The unverified account sender's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "The unverified account sender's deposit.account statement: The unverified account sender is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The unverified account sender's deposit.account statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "source-not-authoritative",
+      "caption": "The unverified account sender's deposit.account statement is refused and kept out of memory."
+    },
+    {
+      "seq": 5,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Buying a home with The buyer."
+    },
+    {
+      "seq": 6,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The buyer's mandate covers this action."
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "Required deposit.account was refused: source-not-authoritative."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-not-authoritative",
+      "caption": "A refused source cannot authorize the action."
+    }
+  ]
+}

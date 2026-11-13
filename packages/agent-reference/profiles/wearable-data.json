@@ -1,0 +1,87 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "wearable-data",
+  "parties": {
+    "owner": "The person",
+    "receiver": "The insurer",
+    "device-maker": "The device maker",
+    "owner-agent": "The person’s agent",
+    "receiver-agent": "The insurer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "activity.weekly-total",
+      "sources": [
+        "urn:fictional:wearable-data:device-maker"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:wearable-data",
+      "claims": [
+        "activity.weekly-total"
+      ]
+    },
+    {
+      "id": "urn:purpose:underwriting",
+      "claims": [
+        "activity.weekly-total"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "activity.weekly-total"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "input.requestedPurpose": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:wearable-data",
+      "version": "0.1",
+      "label": "Sharing activity data for a discount",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:wearable-data"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:wearable-data:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:wearable-data"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

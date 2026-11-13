@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "erasure-request",
+  "parties": {
+    "party-1": "A person",
+    "party-2": "A company",
+    "party-3": "Parties the company passed the data to"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

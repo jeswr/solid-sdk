@@ -1,0 +1,79 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "visa-application",
+  "parties": {
+    "owner": "The applicant",
+    "receiver": "The consulate",
+    "bank": "The foreign bank",
+    "employer": "The employer",
+    "owner-agent": "The applicant’s agent",
+    "receiver-agent": "The consulate’s agent"
+  },
+  "claims": [
+    {
+      "kind": "funds.balance",
+      "sources": [
+        "urn:fictional:visa-application:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:visa-application",
+      "claims": [
+        "funds.balance"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "funds.balance"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:visa-application",
+      "version": "0.1",
+      "label": "Applying for a visa",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

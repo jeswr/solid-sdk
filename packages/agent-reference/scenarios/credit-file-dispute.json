@@ -1,0 +1,76 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "credit-file-dispute",
+  "useCase": "credit-file-dispute",
+  "title": "Correcting an error on a credit file",
+  "profile": "credit-file-dispute",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:credit-file-dispute:party-1",
+      "name": "A person",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:credit-file-dispute:party-2",
+      "name": "Their agent",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:credit-file-dispute:party-3",
+      "name": "A credit reference agency",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-4",
+      "identity": "urn:fictional:credit-file-dispute:party-4",
+      "name": "A lender",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The agency does not answer by its deadline",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "fitness",
+    "source",
+    "evidence"
+  ],
+  "suites": {
+    "accountability": "regulator-claim"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "*",
+      "reason": "Needs source-precedence conflict resolution, a deadline-bound correction agreement and regulator-claim evidence exchange; signatures and a local ledger do not implement that dispute workflow."
+    }
+  ]
+}

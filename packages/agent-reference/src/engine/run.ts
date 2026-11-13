@@ -65,6 +65,9 @@ export interface PathResult {
   readonly path: string;
   readonly trace?: TraceFile;
   readonly blocked?: string;
+  readonly actual?: { outcome: string; reason: string; check?: string };
+  readonly expected?: { outcome: string; reason: string };
+  readonly disagrees?: boolean;
   readonly matches?: boolean;
   readonly difference?: { index: number; expected?: OutlineEntry; actual?: OutlineEntry };
 }
@@ -123,10 +126,10 @@ function unsupported(profile: DomainProfile, scenario: Scenario, path: string): 
   if (named) return named.reason;
   if (scenario.assurance)
     return scenario.assurance === "proved"
-      ? "needs the proof system"
+      ? "needs a proof system"
       : scenario.assurance === "joint"
-        ? "needs the joint computation"
-        : "attested assurance is outside Brief 11";
+        ? "needs joint computation"
+        : "needs attestation";
   for (const [layer, suite] of Object.entries(scenario.suites))
     if (
       BASELINE.layers[layer as keyof typeof BASELINE.layers] !== suite &&
@@ -178,7 +181,8 @@ export async function runScenario(
       change: {},
       outline: scenario.expect,
       blocked: undefined as string | undefined,
-      expect: undefined,
+      expect: scenario.result,
+      catalogueExpected: scenario.catalogueExpected,
     },
     ...scenario.branches,
   ];
@@ -231,7 +235,27 @@ export async function runScenario(
       throw new Error(
         `${scenario.id}/${path.id}: outline differs at ${diff.index}: ${JSON.stringify(diff)}`,
       );
-    results.push({ path: path.id, trace, matches: !diff, ...(diff ? { difference: diff } : {}) });
+    const lastDecision = trace.events.findLast((e) => e.kind === "decision");
+    const actual = path.expect
+      ? { outcome: path.expect.outcome, reason: path.expect.reason, check: path.expect.check }
+      : lastDecision?.outcome && lastDecision.reason
+        ? { outcome: lastDecision.outcome, reason: lastDecision.reason }
+        : undefined;
+    const expected =
+      path.catalogueExpected ??
+      (path.id !== "main" && path.expect
+        ? { outcome: path.expect.outcome, reason: path.expect.reason }
+        : undefined);
+    results.push({
+      path: path.id,
+      trace,
+      actual,
+      expected,
+      disagrees:
+        !!expected && (actual?.outcome !== expected.outcome || actual?.reason !== expected.reason),
+      matches: !diff,
+      ...(diff ? { difference: diff } : {}),
+    });
   }
   const events = results.flatMap((result) => result.trace?.events ?? []);
   if (events.length)
@@ -607,8 +631,11 @@ async function runPath(
   const queue: Array<{ from: string; out: OutboundMessage }> = [];
   const openings = new Map<string, unknown>();
   const responses = new Map<string, { reply?: unknown; agreementPlan?: unknown }>();
-  const name = (iri: string | undefined) =>
-    scenario.parties.find((p) => p.identity === iri || p.actor === iri)?.name ?? iri ?? "anonymous";
+  const partyName = (party: Scenario["parties"][number]) => profile.parties[party.id] ?? party.name;
+  const name = (iri: string | undefined) => {
+    const party = scenario.parties.find((p) => p.identity === iri || p.actor === iri);
+    return party ? partyName(party) : (iri ?? "anonymous");
+  };
   const task = `urn:scenario:${scenario.id}:task`;
   const variables = (current?: HandlerContext) => ({
     steps: outputs,
@@ -636,6 +663,8 @@ async function runPath(
       sink: recorder.sink(agent.traceId ?? agent.id),
       taskId: task,
       name,
+      taskLabel: (operation) =>
+        profile.operations.find((op) => op.id === operation)?.label ?? operation,
       vocabulary: profile.vocabulary,
       identifiers: profile.identifiers,
       sourceAliases: profile.sources,
@@ -670,6 +699,7 @@ async function runPath(
           methods: c.methods,
           maxAgeDays: c.maxAgeDays,
           ...(c.corroboration ? { corroboration: c.corroboration } : {}),
+          ...(c.completeness ? { completeness: c.completeness } : {}),
           text: `Accept ${c.kind} from ${c.sources.join(", ")} by ${c.methods.join(", ")}, at most ${c.maxAgeDays} days old.`,
         })),
       },
@@ -791,6 +821,9 @@ async function runPath(
       case "instruct":
         runtime.instruct(step.text);
         break;
+      case "revoke-mandate":
+        result = await runtime.revokeMandate();
+        break;
       case "admit":
         result = await runtime.admitStatements(
           step.statements.map((id) => required(signed[id])),
@@ -863,7 +896,7 @@ async function runPath(
           const last = injection.path.at(-1);
           if (!last || ["__proto__", "constructor", "prototype"].includes(last))
             throw new Error("invalid injection path");
-          at[last] = injection.value;
+          at[last] = template<Json>(injection.value);
           if (injection.target !== "wire") {
             hostileMessage = target as typeof hostileMessage;
             if (!injection.resign)
@@ -874,6 +907,8 @@ async function runPath(
             };
           } else wire = target as typeof wire;
         }
+        if (step.stripSignature)
+          wire = { format: "awp-unsigned-json/0.1", payload: JSON.stringify(hostileMessage) };
         if (step.outboundAtStep)
           recorder.label((who, event, current) =>
             who === (required(parties.get(step.agent)).traceId ?? step.agent) &&
@@ -1272,9 +1307,21 @@ async function runPath(
   }
   return {
     schema: TRACE_SCHEMA,
+    useCase: scenario.useCase ?? scenario.id,
+    path:
+      path === "main"
+        ? (scenario.cataloguePath ?? "main")
+        : {
+            index: scenario.branches.findIndex((b) => b.id === path) + 1,
+            what: required(scenario.branches.find((b) => b.id === path)).what,
+          },
+    parties: scenario.parties.map((p) => ({ id: p.id, name: partyName(p) })),
     scenario: {
       id: path === "main" ? scenario.id : `${scenario.id}--${path}`,
-      title: scenario.title,
+      title:
+        path === "main"
+          ? scenario.title
+          : `${scenario.title}: ${required(scenario.branches.find((b) => b.id === path)).what}`,
       steps:
         scenario.traceSteps ??
         Object.fromEntries(
@@ -1284,7 +1331,7 @@ async function runPath(
     configuration: { id: configuration.id, layers: { ...configuration.layers } },
     agents: agents.map((p) => ({
       id: p.traceId ?? p.id,
-      name: p.name,
+      name: partyName(p),
       actsFor: required(p.actsFor),
       role: p.role,
     })),

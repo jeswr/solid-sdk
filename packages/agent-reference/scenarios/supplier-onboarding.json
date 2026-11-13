@@ -8,49 +8,49 @@
     {
       "id": "supplier",
       "identity": "urn:fictional:supplier",
-      "name": "supplier",
+      "name": "The supplier",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "buyer",
       "identity": "urn:fictional:buyer",
-      "name": "buyer",
+      "name": "The buyer",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "company-register",
       "identity": "urn:fictional:company-register",
-      "name": "company-register",
+      "name": "The fictional company register",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "supplier-bank",
       "identity": "urn:fictional:supplier-bank",
-      "name": "supplier-bank",
+      "name": "The supplier’s bank",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "certifier",
       "identity": "urn:fictional:certifier",
-      "name": "certifier",
+      "name": "The fictional certifier",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "registrar",
       "identity": "urn:fictional:registrar",
-      "name": "registrar",
+      "name": "The local registrar",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "supplier-agent",
       "identity": "urn:fictional:supplier-agent",
-      "name": "supplier-agent",
+      "name": "The supplier’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:supplier-agent:agent",
@@ -59,7 +59,7 @@
     {
       "id": "buyer-agent",
       "identity": "urn:fictional:buyer-agent",
-      "name": "buyer-agent",
+      "name": "The buyer’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:buyer-agent:agent",
@@ -599,7 +599,11 @@
               "certificate"
             ]
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The supplier’s agent checks and admits the signed statements.",
+          "2": "The supplier’s agent sends a signed request."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -900,7 +904,11 @@
               "certificate"
             ]
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The supplier’s agent checks and admits the signed statements.",
+          "2": "The supplier’s agent sends a signed request."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -1668,5 +1676,14 @@
         "id": "signatory"
       }
     }
-  ]
+  ],
+  "useCase": "supplier-onboarding",
+  "traceSteps": {
+    "1": "The supplier’s agent checks and admits the signed statements.",
+    "2": "The supplier’s agent sends a signed request.",
+    "3": "The buyer’s agent checks the incoming message and prepares a response.",
+    "4": "The buyer’s agent proposes the local action.",
+    "5": "The buyer’s agent checks the observed result.",
+    "6": "The buyer’s agent checks the durable record."
+  }
 }

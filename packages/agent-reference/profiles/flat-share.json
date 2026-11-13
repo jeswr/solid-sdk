@@ -31,12 +31,22 @@
       "pattern": "negotiate",
       "access": "represented",
       "models": [],
-      "purposes": ["urn:purpose:flat-share"],
+      "purposes": [
+        "urn:purpose:flat-share"
+      ],
       "requiresRepresentation": true
     }
   ],
   "trust": {
-    "levels": ["own-list"],
+    "levels": [
+      "own-list"
+    ],
     "onUnknown": "ask-principal"
+  },
+  "parties": {
+    "alex": "Alex, a fictional flatmate",
+    "alex-agent": "Alex’s agent",
+    "blair": "Blair, a fictional flatmate",
+    "blair-agent": "Blair’s agent"
   }
 }

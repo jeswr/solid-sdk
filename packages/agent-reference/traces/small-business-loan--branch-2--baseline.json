@@ -1,0 +1,628 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "small-business-loan",
+  "path": {
+    "index": 2,
+    "what": "Management accounts are self-reported, not filed"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The company"
+    },
+    {
+      "id": "receiver",
+      "name": "The lender"
+    },
+    {
+      "id": "accounting",
+      "name": "The accounting platform"
+    },
+    {
+      "id": "tax",
+      "name": "The fictional tax authority"
+    },
+    {
+      "id": "register",
+      "name": "The company register"
+    },
+    {
+      "id": "registrar",
+      "name": "The local registrar"
+    },
+    {
+      "id": "director",
+      "name": "The director"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The company’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The lender’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "small-business-loan--branch-2",
+    "title": "A loan for a small company: Management accounts are self-reported, not filed",
+    "steps": {
+      "1": "The company’s agent checks the signed statements.",
+      "2": "The company’s agent sends the signed request.",
+      "3": "The company’s agent completes the organisation approve step.",
+      "4": "The lender’s agent checks the message and prepares a response.",
+      "5": "The company’s agent checks the message and prepares a response."
+    }
+  },
+  "configuration": {
+    "id": "small-business-loan-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "organization-document-local",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-credential",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The company’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The lender’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Corporate registrar, company register, accounting platform and tax authority",
+      "replacedBy": "Separately keyed fictional local documents, role statements and account/tax records; an exact-action director signature binds the GBP 25000 application, with no loan disbursement"
+    },
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The accounting platform's business.accounts statement is intact and signed with The accounting platform's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:small-business-loan:business.accounts",
+        "text": "The accounting platform is accepted for business.accounts claims."
+      },
+      "resolution": {
+        "question": "Is The accounting platform an authority for business.accounts claims about The company?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The accounting platform is accepted for business.accounts."
+          }
+        ],
+        "answer": "Accepted, for business.accounts claims only."
+      },
+      "caption": "The accounting platform's business.accounts statement: The accounting platform is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The accounting platform's business.accounts statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:small-business-loan:accounts",
+        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      },
+      "caption": "The accounting platform's business.accounts statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "method-not-accepted",
+      "rule": {
+        "id": "urn:profile:small-business-loan:business.accounts",
+        "text": "Accept business.accounts from urn:fictional:small-business-loan:accounting by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The accounting platform's business.accounts statement was not produced in a way urn:scenario:small-business-loan:task accepts."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "caption": "The accounting platform's business.accounts statement is refused and kept out of memory."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional tax authority's business.tax-filing statement is intact and signed with The fictional tax authority's pinned key."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:small-business-loan:business.tax-filing",
+        "text": "The fictional tax authority is accepted for business.tax-filing claims."
+      },
+      "resolution": {
+        "question": "Is The fictional tax authority an authority for business.tax-filing claims about The company?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The fictional tax authority is accepted for business.tax-filing."
+          }
+        ],
+        "answer": "Accepted, for business.tax-filing claims only."
+      },
+      "caption": "The fictional tax authority's business.tax-filing statement: The fictional tax authority is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional tax authority's business.tax-filing statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:small-business-loan:tax-filing",
+        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      },
+      "caption": "The fictional tax authority's business.tax-filing statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:small-business-loan:business.tax-filing",
+        "text": "Accept business.tax-filing from urn:fictional:small-business-loan:tax by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The fictional tax authority's business.tax-filing statement is fit for urn:scenario:small-business-loan:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The fictional tax authority's business.tax-filing statement is admitted."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:small-business-loan:tax-filing",
+        "label": "The fictional tax authority's business.tax-filing statement",
+        "claimType": "business.tax-filing",
+        "subject": "urn:fictional:small-business-loan:owner",
+        "value": null,
+        "source": "urn:fictional:small-business-loan:tax",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:small-business-loan:tax-filing",
+          "summary": "use for urn:purpose:small business loan; share for urn:purpose:small business loan"
+        },
+        "provenance": "signed by The fictional tax authority"
+      },
+      "caption": "The fictional tax authority's business.tax-filing statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "organization-document-local",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The company register's organization.role statement is intact and signed with The company register's pinned key."
+    },
+    {
+      "seq": 15,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:small-business-loan:organization.role",
+        "text": "The company register is accepted for organization.role claims."
+      },
+      "resolution": {
+        "question": "Is The company register an authority for organization.role claims about The director?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The company register is accepted for organization.role."
+          }
+        ],
+        "answer": "Accepted, for organization.role claims only."
+      },
+      "caption": "The company register's organization.role statement: The company register is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 16,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The company register's organization.role statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 17,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:small-business-loan:director-role",
+        "text": "Its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+      },
+      "caption": "The company register's organization.role statement: its terms allow this: use for urn:purpose:small business loan; share for urn:purpose:small business loan."
+    },
+    {
+      "seq": 18,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:small-business-loan:organization.role",
+        "text": "Accept organization.role from urn:fictional:small-business-loan:register by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The company register's organization.role statement is fit for urn:scenario:small-business-loan:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 19,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The company register's organization.role statement is admitted."
+    },
+    {
+      "seq": 20,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:small-business-loan:director-role",
+        "label": "The company register's organization.role statement",
+        "claimType": "organization.role",
+        "subject": "urn:fictional:small-business-loan:director",
+        "value": null,
+        "source": "urn:fictional:small-business-loan:register",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:small-business-loan:director-role",
+          "summary": "use for urn:purpose:small business loan; share for urn:purpose:small business loan"
+        },
+        "provenance": "signed by The company register"
+      },
+      "caption": "The company register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in A loan for a small company with The lender."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-credential",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "rule": {
+        "id": "urn:rule:director-borrowing",
+        "text": "The company's mandate lets the agent use urn:op:small business loan, on its own."
+      },
+      "reason": "within-mandate",
+      "caption": "The company's mandate covers this action."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "ask-more",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "structured-form-required",
+      "caption": "Structured form required: business.accounts; request source unknown; original undefined."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-more",
+      "outcome": "ask-more",
+      "reason": "structured-form-required",
+      "caption": "Ask source unknown for business.accounts."
+    }
+  ]
+}

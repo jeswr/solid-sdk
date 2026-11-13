@@ -1,12 +1,69 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "master-data-change",
+  "path": {
+    "index": 2,
+    "what": "The new details come from an email"
+  },
+  "parties": [
+    {
+      "id": "business",
+      "name": "The business"
+    },
+    {
+      "id": "finance-agent",
+      "name": "The business’s finance agent"
+    },
+    {
+      "id": "supplier-bank",
+      "name": "The supplier’s bank"
+    },
+    {
+      "id": "directory",
+      "name": "The staff directory"
+    },
+    {
+      "id": "controller-one",
+      "name": "The first financial controller"
+    },
+    {
+      "id": "controller-two",
+      "name": "The second financial controller"
+    },
+    {
+      "id": "requester",
+      "name": "The requesting staff member"
+    },
+    {
+      "id": "email",
+      "name": "An unverified email sender"
+    },
+    {
+      "id": "erp",
+      "name": "The business’s account system"
+    },
+    {
+      "id": "erp-agent",
+      "name": "The account system’s agent"
+    }
+  ],
   "scenario": {
     "id": "master-data-change--branch-2",
-    "title": "master-data-change (entirely fictional)",
+    "title": "Changing a supplier's bank details in a business system: The new details come from an email",
     "steps": {
-      "1": "admit-account-role-controller-one-role-controller-two-role-requester",
-      "2": "perform"
+      "1": "The business’s finance agent checks and admits the signed statements.",
+      "2": "The business’s finance agent sends a signed request.",
+      "3": "The business’s finance agent obtains a staff approval.",
+      "4": "The business’s finance agent obtains a staff approval.",
+      "5": "The account system’s agent checks and admits the signed statements.",
+      "6": "The account system’s agent checks the incoming message and prepares a response.",
+      "7": "The account system’s agent proposes the local action.",
+      "8": "The account system’s agent checks the observed result.",
+      "9": "The account system’s agent completes the message step.",
+      "10": "The business’s finance agent checks the incoming message and prepares a response.",
+      "11": "The business’s finance agent checks the durable record.",
+      "12": "The account system’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -28,19 +85,19 @@
   "agents": [
     {
       "id": "finance-agent",
-      "name": "finance-agent",
+      "name": "The business’s finance agent",
       "actsFor": "business",
       "role": "agent"
     },
     {
       "id": "erp-agent",
-      "name": "Fictional ERP agent",
+      "name": "The account system’s agent",
       "actsFor": "erp",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -79,7 +136,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "email's bank.account-owner statement is intact and signed with email's pinned key."
+      "caption": "An unverified email sender's bank.account-owner statement is intact and signed with An unverified email sender's pinned key."
     },
     {
       "seq": 2,
@@ -102,7 +159,7 @@
         }
       ],
       "reason": "source-not-authoritative",
-      "caption": "email's bank.account-owner statement: email is not accepted as a source for this kind of claim."
+      "caption": "An unverified email sender's bank.account-owner statement: An unverified email sender is not accepted as a source for this kind of claim."
     },
     {
       "seq": 3,
@@ -120,7 +177,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "email's bank.account-owner statement asks for nothing, so there is no authority to check."
+      "caption": "An unverified email sender's bank.account-owner statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -131,7 +188,7 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "source-not-authoritative",
-      "caption": "email's bank.account-owner statement is refused and kept out of memory."
+      "caption": "An unverified email sender's bank.account-owner statement is refused and kept out of memory."
     },
     {
       "seq": 5,
@@ -154,7 +211,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 6,
@@ -179,20 +236,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization.role claims."
       },
       "resolution": {
-        "question": "Is directory an authority for organization.role claims about controller-one?",
+        "question": "Is The staff directory an authority for organization.role claims about The first financial controller?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization.role."
           }
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 7,
@@ -210,7 +267,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 8,
@@ -237,7 +294,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 9,
@@ -259,7 +316,7 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 10,
@@ -269,7 +326,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization.role statement is admitted."
     },
     {
       "seq": 11,
@@ -279,16 +336,16 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-controller-one",
-        "label": "directory's organization.role statement",
+        "label": "The staff directory's organization.role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:controller-one",
         "value": null,
         "source": "urn:fictional:directory",
         "method": "recorded-by-authority",
         "asOf": "2026-11-13T09:00:00.000Z",
-        "provenance": "signed by directory"
+        "provenance": "signed by The staff directory"
       },
-      "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 12,
@@ -311,7 +368,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 13,
@@ -336,20 +393,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization.role claims."
       },
       "resolution": {
-        "question": "Is directory an authority for organization.role claims about controller-two?",
+        "question": "Is The staff directory an authority for organization.role claims about The second financial controller?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization.role."
           }
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 14,
@@ -367,7 +424,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 15,
@@ -394,7 +451,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 16,
@@ -416,7 +473,7 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 17,
@@ -426,7 +483,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization.role statement is admitted."
     },
     {
       "seq": 18,
@@ -436,16 +493,16 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-controller-two",
-        "label": "directory's organization.role statement",
+        "label": "The staff directory's organization.role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:controller-two",
         "value": null,
         "source": "urn:fictional:directory",
         "method": "recorded-by-authority",
         "asOf": "2026-11-13T09:00:00.000Z",
-        "provenance": "signed by directory"
+        "provenance": "signed by The staff directory"
       },
-      "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 19,
@@ -468,7 +525,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "directory's organization.role statement is intact and signed with directory's pinned key."
+      "caption": "The staff directory's organization.role statement is intact and signed with The staff directory's pinned key."
     },
     {
       "seq": 20,
@@ -493,20 +550,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:directory",
-        "text": "directory is accepted for organization.role claims."
+        "text": "The staff directory is accepted for organization.role claims."
       },
       "resolution": {
-        "question": "Is directory an authority for organization.role claims about requester?",
+        "question": "Is The staff directory an authority for organization.role claims about The requesting staff member?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "directory is accepted for organization.role."
+            "says": "The staff directory is accepted for organization.role."
           }
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "directory's organization.role statement: directory is an accepted source for this kind of claim."
+      "caption": "The staff directory's organization.role statement: The staff directory is an accepted source for this kind of claim."
     },
     {
       "seq": 21,
@@ -524,7 +581,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "directory's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The staff directory's organization.role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 22,
@@ -551,7 +608,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The staff directory's organization.role statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 23,
@@ -573,7 +630,7 @@
         "id": "urn:profile:master-data-change:organization.role",
         "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
       },
-      "caption": "directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+      "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 24,
@@ -583,7 +640,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "directory's organization.role statement is admitted."
+      "caption": "The staff directory's organization.role statement is admitted."
     },
     {
       "seq": 25,
@@ -593,16 +650,16 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:master-data-change:role-requester",
-        "label": "directory's organization.role statement",
+        "label": "The staff directory's organization.role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:requester",
         "value": null,
         "source": "urn:fictional:directory",
         "method": "recorded-by-authority",
         "asOf": "2026-11-13T09:00:00.000Z",
-        "provenance": "signed by directory"
+        "provenance": "signed by The staff directory"
       },
-      "caption": "directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization.role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 26,
@@ -610,7 +667,7 @@
       "agent": "finance-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:master data change with erp."
+      "caption": "The core proposes to take the next step in master-data-change with The business’s account system."
     },
     {
       "seq": 27,
@@ -634,10 +691,10 @@
       ],
       "rule": {
         "id": "urn:rule:authorised",
-        "text": "business's mandate lets the agent use urn:op:master data change, on its own."
+        "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
       },
       "reason": "within-mandate",
-      "caption": "business's mandate covers this action."
+      "caption": "The business's mandate covers this action."
     },
     {
       "seq": 28,

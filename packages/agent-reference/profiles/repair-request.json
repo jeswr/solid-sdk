@@ -1,0 +1,118 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "repair-request",
+  "parties": {
+    "owner": "The tenant",
+    "receiver": "The landlord",
+    "owner-agent": "The tenant’s agent",
+    "receiver-agent": "The landlord’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:repair-request:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "repair.booking",
+      "sources": [
+        "urn:fictional:repair-request:receiver-agent:actor"
+      ],
+      "methods": [
+        "model-output"
+      ],
+      "maxAgeDays": 1
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:repair-request",
+      "claims": [
+        "unstructured-content",
+        "repair.booking"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:repair-request",
+      "version": "0.1",
+      "label": "Reporting a repair",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:repair-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:repair-request:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:repair-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:repair-request:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:repair-request"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [],
+  "readings": [
+    {
+      "claimType": "repair.booking",
+      "type": "code",
+      "values": [
+        "inspect-damp"
+      ]
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "transfer",
+      "claims": [
+        "repair.booking"
+      ]
+    }
+  ]
+}

@@ -8,42 +8,42 @@
     {
       "id": "clinician",
       "identity": "urn:fictional:clinician",
-      "name": "clinician",
+      "name": "The clinician",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "patient",
       "identity": "urn:fictional:patient",
-      "name": "patient",
+      "name": "The patient",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "contact",
       "identity": "urn:fictional:contact",
-      "name": "contact",
+      "name": "The trusted contact",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "register",
       "identity": "urn:fictional:register",
-      "name": "register",
+      "name": "The professional register",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "practice",
       "identity": "urn:fictional:practice",
-      "name": "practice",
+      "name": "The family practice",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "clinician-agent",
       "identity": "urn:fictional:clinician-agent",
-      "name": "clinician-agent",
+      "name": "The clinician’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:clinician-agent:agent",
@@ -52,7 +52,7 @@
     {
       "id": "record-agent",
       "identity": "urn:fictional:record-agent",
-      "name": "record-agent",
+      "name": "The patient’s record agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:record-agent:agent",
@@ -61,7 +61,7 @@
     {
       "id": "patient-agent",
       "identity": "urn:fictional:patient-agent",
-      "name": "patient-agent",
+      "name": "The patient’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:patient-agent:agent",
@@ -70,7 +70,7 @@
     {
       "id": "contact-agent",
       "identity": "urn:fictional:contact-agent",
-      "name": "contact-agent",
+      "name": "The trusted contact’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:contact-agent:agent",
@@ -1613,7 +1613,14 @@
               }
             }
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The clinician’s agent checks and admits the signed statements.",
+          "2": "The patient’s record agent checks and admits the signed statements.",
+          "3": "The clinician’s agent sends a signed request.",
+          "4": "The patient’s record agent checks the incoming message and prepares a response.",
+          "5": "The patient’s record agent completes the message step."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -2658,5 +2665,20 @@
   ],
   "suites": {},
   "assurance": null,
-  "blocked": []
+  "blocked": [],
+  "useCase": "emergency-access",
+  "traceSteps": {
+    "1": "The clinician’s agent checks and admits the signed statements.",
+    "2": "The patient’s record agent checks and admits the signed statements.",
+    "3": "The clinician’s agent sends a signed request.",
+    "4": "The patient’s record agent checks the incoming message and prepares a response.",
+    "5": "The patient’s record agent completes the message step.",
+    "6": "The clinician’s agent checks the incoming message and prepares a response.",
+    "7": "The patient’s record agent completes the notifications step.",
+    "8": "The patient’s agent checks the incoming message and prepares a response.",
+    "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+    "10": "The patient’s record agent completes the duties step.",
+    "11": "The patient’s record agent checks the observed result.",
+    "12": "The patient’s record agent checks the observed result."
+  }
 }

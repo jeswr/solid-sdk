@@ -1,0 +1,100 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "cancel-subscription",
+  "parties": {
+    "owner": "The subscriber",
+    "receiver": "The subscription service",
+    "owner-agent": "The subscriber’s agent",
+    "receiver-agent": "The subscription service’s agent"
+  },
+  "claims": [
+    {
+      "kind": "subscription.control",
+      "sources": [
+        "urn:fictional:cancel-subscription:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:cancel-subscription",
+      "claims": [
+        "subscription.control"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "subscription.control"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "terms.freeMonths": {
+      "type": "number"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:cancel-subscription",
+      "version": "0.1",
+      "label": "Cancelling a subscription",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cancel-subscription"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:cancel-subscription:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cancel-subscription"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:cancel-subscription:renew",
+      "version": "0.1",
+      "label": "Offer free months to stay",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:cancel-subscription"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "transfer",
+      "claims": [
+        "subscription.control"
+      ]
+    }
+  ]
+}

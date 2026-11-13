@@ -1,0 +1,19 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "prescription-dispensing",
+  "parties": {
+    "party-1": "A patient",
+    "party-2": "A prescriber",
+    "party-3": "A pharmacy",
+    "party-4": "The professional register",
+    "party-5": "A dispensing register"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

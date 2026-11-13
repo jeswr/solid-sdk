@@ -1,0 +1,84 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "agent-handoff",
+  "parties": {
+    "owner": "The retailer",
+    "receiver": "The delivery partner",
+    "customer": "The customer",
+    "owner-agent": "The retailer’s agent",
+    "receiver-agent": "The delivery partner’s agent"
+  },
+  "claims": [
+    {
+      "kind": "delivery.address",
+      "sources": [
+        "urn:fictional:agent-handoff:customer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:agent-handoff",
+      "claims": [
+        "delivery.address"
+      ]
+    },
+    {
+      "id": "urn:purpose:delivery",
+      "claims": [
+        "delivery.address"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "delivery.address"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:agent-handoff",
+      "version": "0.1",
+      "label": "A service agent hands a customer to a partner's agent",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:agent-handoff"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:agent-handoff:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:agent-handoff"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

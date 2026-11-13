@@ -1,0 +1,107 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "employment-reference",
+  "parties": {
+    "owner": "The former employer",
+    "receiver": "The new employer",
+    "owner-agent": "The former employer’s agent",
+    "receiver-agent": "The new employer’s agent",
+    "subject": "The candidate"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:employment-reference:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:employment-reference",
+      "claims": [
+        "unstructured-content"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "review-reference"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:employment-reference",
+      "version": "0.1",
+      "label": "A reference from a former employer",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:employment-reference"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:employment-reference:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:employment-reference"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:employment-reference:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:employment-reference"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

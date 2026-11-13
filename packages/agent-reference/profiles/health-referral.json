@@ -109,5 +109,14 @@
       "replacedBy": "Fictional issuer-only register signing current clinician roles"
     }
   ],
-  "referenceAction": "use"
+  "referenceAction": "use",
+  "parties": {
+    "practice": "The family practice",
+    "clinic": "The specialist clinic",
+    "record-holder": "The local record holder",
+    "register": "The professional register",
+    "clinician": "The clinician",
+    "practice-agent": "The family practice’s agent",
+    "clinic-agent": "The specialist clinic’s agent"
+  }
 }

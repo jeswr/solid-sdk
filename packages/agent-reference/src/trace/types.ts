@@ -135,6 +135,9 @@ export interface TraceAgent {
 }
 
 export interface TraceFile {
+  readonly useCase?: string;
+  readonly path?: "main" | { readonly index: number; readonly what: string };
+  readonly parties?: readonly { readonly id: string; readonly name: string }[];
   readonly standIns?: readonly { readonly what: string; readonly replacedBy: string }[];
   readonly schema: typeof TRACE_SCHEMA;
   readonly scenario: {

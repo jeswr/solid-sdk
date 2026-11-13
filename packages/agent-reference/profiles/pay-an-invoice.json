@@ -5,21 +5,32 @@
   "claims": [
     {
       "kind": "payee-account",
-      "sources": ["urn:fictional:bank"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30
     },
     {
       "kind": "invoice",
-      "sources": ["urn:fictional:supplier"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:supplier"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:pay-an-invoice",
-      "claims": ["payee-account", "invoice"]
+      "claims": [
+        "payee-account",
+        "invoice"
+      ]
     }
   ],
   "rules": [],
@@ -41,18 +52,24 @@
     },
     "input.currency": {
       "type": "code",
-      "values": ["GBP"]
+      "values": [
+        "GBP"
+      ]
     },
     "output.status": {
       "type": "code",
-      "values": ["submitted"]
+      "values": [
+        "submitted"
+      ]
     },
     "output.reference": {
       "type": "identifier"
     },
     "observed.status": {
       "type": "code",
-      "values": ["submitted"]
+      "values": [
+        "submitted"
+      ]
     }
   },
   "operations": [
@@ -63,7 +80,9 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": ["urn:purpose:pay-an-invoice"],
+      "purposes": [
+        "urn:purpose:pay-an-invoice"
+      ],
       "requiresRepresentation": true
     }
   ],
@@ -72,5 +91,13 @@
       "what": "Payment bank and account directory",
       "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
     }
-  ]
+  ],
+  "parties": {
+    "business": "The business",
+    "business-agent": "The business’s agent",
+    "bank": "The supplier’s bank",
+    "bank-agent": "The supplier’s bank’s agent",
+    "supplier": "The supplier",
+    "email": "An unverified email sender"
+  }
 }

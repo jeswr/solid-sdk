@@ -1,12 +1,55 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "supplier-onboarding",
+  "path": {
+    "index": 1,
+    "what": "A certificate was withdrawn last week"
+  },
+  "parties": [
+    {
+      "id": "supplier",
+      "name": "The supplier"
+    },
+    {
+      "id": "buyer",
+      "name": "The buyer"
+    },
+    {
+      "id": "company-register",
+      "name": "The fictional company register"
+    },
+    {
+      "id": "supplier-bank",
+      "name": "The supplier’s bank"
+    },
+    {
+      "id": "certifier",
+      "name": "The fictional certifier"
+    },
+    {
+      "id": "registrar",
+      "name": "The local registrar"
+    },
+    {
+      "id": "supplier-agent",
+      "name": "The supplier’s agent"
+    },
+    {
+      "id": "buyer-agent",
+      "name": "The buyer’s agent"
+    }
+  ],
   "scenario": {
     "id": "supplier-onboarding--branch-1",
-    "title": "Taking on a new supplier",
+    "title": "Taking on a new supplier: A certificate was withdrawn last week",
     "steps": {
-      "1": "supplier-evidence",
-      "2": "supplier-applies"
+      "1": "The supplier’s agent checks and admits the signed statements.",
+      "2": "The supplier’s agent sends a signed request.",
+      "3": "The buyer’s agent checks the incoming message and prepares a response.",
+      "4": "The buyer’s agent proposes the local action.",
+      "5": "The buyer’s agent checks the observed result.",
+      "6": "The buyer’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -28,19 +71,19 @@
   "agents": [
     {
       "id": "supplier-agent",
-      "name": "supplier-agent",
+      "name": "The supplier’s agent",
       "actsFor": "supplier",
       "role": "agent"
     },
     {
       "id": "buyer-agent",
-      "name": "buyer-agent",
+      "name": "The buyer’s agent",
       "actsFor": "buyer",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -79,7 +122,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "company-register's company.exists statement is intact and signed with company-register's pinned key."
+      "caption": "The fictional company register's company.exists statement is intact and signed with The fictional company register's pinned key."
     },
     {
       "seq": 2,
@@ -104,20 +147,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:company-register",
-        "text": "company-register is accepted for company.exists claims."
+        "text": "The fictional company register is accepted for company.exists claims."
       },
       "resolution": {
-        "question": "Is company-register an authority for company.exists claims about supplier?",
+        "question": "Is The fictional company register an authority for company.exists claims about The supplier?",
         "path": [
           {
-            "at": "supplier's own list",
+            "at": "The supplier's own list",
             "kind": "own-list",
-            "says": "company-register is accepted for company.exists."
+            "says": "The fictional company register is accepted for company.exists."
           }
         ],
         "answer": "Accepted, for company.exists claims only."
       },
-      "caption": "company-register's company.exists statement: company-register is an accepted source for this kind of claim."
+      "caption": "The fictional company register's company.exists statement: The fictional company register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -135,7 +178,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "company-register's company.exists statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional company register's company.exists statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -162,7 +205,7 @@
         "id": "urn:terms:company",
         "text": "Its terms allow this: ."
       },
-      "caption": "company-register's company.exists statement: its terms allow this: ."
+      "caption": "The fictional company register's company.exists statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -184,7 +227,7 @@
         "id": "urn:profile:supplier-onboarding:company.exists",
         "text": "Accept company.exists from urn:fictional:company-register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "company-register's company.exists statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional company register's company.exists statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -194,7 +237,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "company-register's company.exists statement is admitted."
+      "caption": "The fictional company register's company.exists statement is admitted."
     },
     {
       "seq": 7,
@@ -204,7 +247,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:supplier-onboarding:company",
-        "label": "company-register's company.exists statement",
+        "label": "The fictional company register's company.exists statement",
         "claimType": "company.exists",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -215,9 +258,9 @@
           "id": "urn:terms:company",
           "summary": ""
         },
-        "provenance": "signed by company-register"
+        "provenance": "signed by The fictional company register"
       },
-      "caption": "company-register's company.exists statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional company register's company.exists statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -240,7 +283,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "supplier-bank's bank.account-owner statement is intact and signed with supplier-bank's pinned key."
+      "caption": "The supplier’s bank's bank.account-owner statement is intact and signed with The supplier’s bank's pinned key."
     },
     {
       "seq": 9,
@@ -265,20 +308,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:supplier-bank",
-        "text": "supplier-bank is accepted for bank.account-owner claims."
+        "text": "The supplier’s bank is accepted for bank.account-owner claims."
       },
       "resolution": {
-        "question": "Is supplier-bank an authority for bank.account-owner claims about supplier?",
+        "question": "Is The supplier’s bank an authority for bank.account-owner claims about The supplier?",
         "path": [
           {
-            "at": "supplier's own list",
+            "at": "The supplier's own list",
             "kind": "own-list",
-            "says": "supplier-bank is accepted for bank.account-owner."
+            "says": "The supplier’s bank is accepted for bank.account-owner."
           }
         ],
         "answer": "Accepted, for bank.account-owner claims only."
       },
-      "caption": "supplier-bank's bank.account-owner statement: supplier-bank is an accepted source for this kind of claim."
+      "caption": "The supplier’s bank's bank.account-owner statement: The supplier’s bank is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -296,7 +339,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "supplier-bank's bank.account-owner statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's bank.account-owner statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -323,7 +366,7 @@
         "id": "urn:terms:account",
         "text": "Its terms allow this: ."
       },
-      "caption": "supplier-bank's bank.account-owner statement: its terms allow this: ."
+      "caption": "The supplier’s bank's bank.account-owner statement: its terms allow this: ."
     },
     {
       "seq": 12,
@@ -345,7 +388,7 @@
         "id": "urn:profile:supplier-onboarding:bank.account-owner",
         "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "supplier-bank's bank.account-owner statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+      "caption": "The supplier’s bank's bank.account-owner statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -355,7 +398,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "supplier-bank's bank.account-owner statement is admitted."
+      "caption": "The supplier’s bank's bank.account-owner statement is admitted."
     },
     {
       "seq": 14,
@@ -365,7 +408,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:supplier-onboarding:account",
-        "label": "supplier-bank's bank.account-owner statement",
+        "label": "The supplier’s bank's bank.account-owner statement",
         "claimType": "bank.account-owner",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -376,9 +419,9 @@
           "id": "urn:terms:account",
           "summary": ""
         },
-        "provenance": "signed by supplier-bank"
+        "provenance": "signed by The supplier’s bank"
       },
-      "caption": "supplier-bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's bank.account-owner statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -401,7 +444,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "certifier's certificate statement is intact and signed with certifier's pinned key."
+      "caption": "The fictional certifier's certificate statement is intact and signed with The fictional certifier's pinned key."
     },
     {
       "seq": 16,
@@ -424,7 +467,7 @@
         }
       ],
       "reason": "status-withdrawn",
-      "caption": "certifier's certificate statement: certifier is not accepted as a source for this kind of claim."
+      "caption": "The fictional certifier's certificate statement: The fictional certifier is not accepted as a source for this kind of claim."
     },
     {
       "seq": 17,
@@ -442,7 +485,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "certifier's certificate statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional certifier's certificate statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 18,
@@ -453,7 +496,7 @@
       "verdict": "fail",
       "outcome": "refuse",
       "reason": "status-withdrawn",
-      "caption": "certifier's certificate statement is refused and kept out of memory."
+      "caption": "The fictional certifier's certificate statement is refused and kept out of memory."
     },
     {
       "seq": 19,
@@ -461,7 +504,7 @@
       "agent": "supplier-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:onboard supplier with buyer."
+      "caption": "The core proposes to use urn:op:onboard supplier with The buyer."
     },
     {
       "seq": 20,
@@ -484,7 +527,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "supplier's mandate covers this action."
+      "caption": "The supplier's mandate covers this action."
     },
     {
       "seq": 21,

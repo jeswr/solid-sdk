@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "care-abroad",
+  "parties": {
+    "party-1": "A traveller",
+    "party-2": "A home practice",
+    "party-3": "A clinic abroad"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

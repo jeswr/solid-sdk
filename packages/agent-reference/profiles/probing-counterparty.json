@@ -5,15 +5,21 @@
   "claims": [
     {
       "kind": "contact",
-      "sources": ["urn:fictional:rowan"],
-      "methods": ["self-reported"],
+      "sources": [
+        "urn:fictional:rowan"
+      ],
+      "methods": [
+        "self-reported"
+      ],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:service-query",
-      "claims": ["contact"]
+      "claims": [
+        "contact"
+      ]
     }
   ],
   "rules": [],
@@ -25,21 +31,27 @@
     },
     "terms.evidenceRequest.*.claimType": {
       "type": "code",
-      "values": ["contact"]
+      "values": [
+        "contact"
+      ]
     },
     "output.items.*": {
       "type": "identifier"
     },
     "terms.topic": {
       "type": "code",
-      "values": ["contact-request"]
+      "values": [
+        "contact-request"
+      ]
     },
     "terms.turn": {
       "type": "number"
     },
     "input.request": {
       "type": "code",
-      "values": ["private-history"]
+      "values": [
+        "private-history"
+      ]
     },
     "input.sequence": {
       "type": "number"
@@ -53,9 +65,17 @@
       "pattern": "negotiate",
       "access": "represented",
       "models": [],
-      "purposes": ["urn:purpose:service-query"],
+      "purposes": [
+        "urn:purpose:service-query"
+      ],
       "requiresRepresentation": true,
       "agreementDelivery": "acceptor"
     }
-  ]
+  ],
+  "parties": {
+    "rowan": "Rowan, a fictional customer",
+    "cedar": "The fictional service",
+    "person-agent": "Rowan’s agent",
+    "service-agent": "The service’s agent"
+  }
 }

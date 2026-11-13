@@ -1,0 +1,128 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "insurance-claim-photos",
+  "parties": {
+    "owner": "The policyholder",
+    "receiver": "The insurer",
+    "owner-agent": "The policyholder’s agent",
+    "receiver-agent": "The insurer’s agent",
+    "garage": "The accepted repair garage",
+    "other-garage": "The unaccepted repair garage"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:insurance-claim-photos:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "repair.estimate",
+      "sources": [
+        "urn:fictional:insurance-claim-photos:garage",
+        "urn:fictional:insurance-claim-photos:other-garage"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 7
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:insurance-claim-photos",
+      "claims": [
+        "unstructured-content",
+        "repair.estimate"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "review-claim"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:insurance-claim-photos",
+      "version": "0.1",
+      "label": "An insurance claim with photographs",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-claim-photos"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-claim-photos:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-claim-photos"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-claim-photos:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-claim-photos"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    },
+    {
+      "claimType": "damage.severity",
+      "type": "code",
+      "values": [
+        "minor",
+        "serious"
+      ]
+    }
+  ]
+}

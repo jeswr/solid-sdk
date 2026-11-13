@@ -1,0 +1,68 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "fee-dispute",
+  "useCase": "fee-dispute",
+  "title": "Taking a dispute to an ombudsman",
+  "profile": "fee-dispute",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:fee-dispute:party-1",
+      "name": "Sam",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:fee-dispute:party-2",
+      "name": "A lender",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:fee-dispute:party-3",
+      "name": "An ombudsman",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The lender's record has a gap",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "record-unavailable",
+        "check": "evidence"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "evidence",
+    "recipient"
+  ],
+  "suites": {
+    "accountability": "regulator-claim"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "*",
+      "reason": "Needs regulator-claim exchange of both parties’ signed record segments, continuity/gap verification and a forum decision gate. checkRecord only validates the local ledger and is not that evidential workflow."
+    }
+  ]
+}

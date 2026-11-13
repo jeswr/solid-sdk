@@ -1,14 +1,42 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "right-to-work",
+  "path": "main",
+  "parties": [
+    {
+      "id": "candidate",
+      "name": "The candidate"
+    },
+    {
+      "id": "employer",
+      "name": "The employer"
+    },
+    {
+      "id": "immigration-office",
+      "name": "The fictional immigration office"
+    },
+    {
+      "id": "university",
+      "name": "The fictional university"
+    },
+    {
+      "id": "candidate-agent",
+      "name": "The candidate’s agent"
+    },
+    {
+      "id": "employer-agent",
+      "name": "The employer’s agent"
+    }
+  ],
   "scenario": {
     "id": "right-to-work",
     "title": "Hiring: right to work and qualifications",
     "steps": {
-      "1": "holder-admits-revealed-claims",
-      "2": "show-required-claims",
-      "3": "employer-verifies",
-      "4": "employer-record"
+      "1": "The candidate’s agent checks and admits the signed statements.",
+      "2": "The candidate’s agent sends a signed request.",
+      "3": "The employer’s agent checks the incoming message and prepares a response.",
+      "4": "The employer’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -30,19 +58,19 @@
   "agents": [
     {
       "id": "candidate-agent",
-      "name": "candidate-agent",
+      "name": "The candidate’s agent",
       "actsFor": "candidate",
       "role": "agent"
     },
     {
       "id": "employer-agent",
-      "name": "employer-agent",
+      "name": "The employer’s agent",
       "actsFor": "employer",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -73,7 +101,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "immigration-office's work.entitled statement is intact and signed with immigration-office's pinned key."
+      "caption": "The fictional immigration office's work.entitled statement is intact and signed with The fictional immigration office's pinned key."
     },
     {
       "seq": 2,
@@ -98,20 +126,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:immigration-office",
-        "text": "immigration-office is accepted for work.entitled claims."
+        "text": "The fictional immigration office is accepted for work.entitled claims."
       },
       "resolution": {
-        "question": "Is immigration-office an authority for work.entitled claims about candidate?",
+        "question": "Is The fictional immigration office an authority for work.entitled claims about The candidate?",
         "path": [
           {
-            "at": "candidate's own list",
+            "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "immigration-office is accepted for work.entitled."
+            "says": "The fictional immigration office is accepted for work.entitled."
           }
         ],
         "answer": "Accepted, for work.entitled claims only."
       },
-      "caption": "immigration-office's work.entitled statement: immigration-office is an accepted source for this kind of claim."
+      "caption": "The fictional immigration office's work.entitled statement: The fictional immigration office is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -129,7 +157,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "immigration-office's work.entitled statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional immigration office's work.entitled statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -156,7 +184,7 @@
         "id": "urn:terms:entitlement",
         "text": "Its terms allow this: ."
       },
-      "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work.entitled statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -178,7 +206,7 @@
         "id": "urn:profile:right-to-work:work.entitled",
         "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "immigration-office's work.entitled statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work.entitled statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -188,7 +216,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "immigration-office's work.entitled statement is admitted."
+      "caption": "The fictional immigration office's work.entitled statement is admitted."
     },
     {
       "seq": 7,
@@ -198,7 +226,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:right-to-work:entitlement",
-        "label": "immigration-office's work.entitled statement",
+        "label": "The fictional immigration office's work.entitled statement",
         "claimType": "work.entitled",
         "subject": "urn:fictional:candidate",
         "value": null,
@@ -209,9 +237,9 @@
           "id": "urn:terms:entitlement",
           "summary": ""
         },
-        "provenance": "signed by immigration-office"
+        "provenance": "signed by The fictional immigration office"
       },
-      "caption": "immigration-office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional immigration office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -234,7 +262,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "university's degree statement is intact and signed with university's pinned key."
+      "caption": "The fictional university's degree statement is intact and signed with The fictional university's pinned key."
     },
     {
       "seq": 9,
@@ -259,20 +287,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:university",
-        "text": "university is accepted for degree claims."
+        "text": "The fictional university is accepted for degree claims."
       },
       "resolution": {
-        "question": "Is university an authority for degree claims about candidate?",
+        "question": "Is The fictional university an authority for degree claims about The candidate?",
         "path": [
           {
-            "at": "candidate's own list",
+            "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "university is accepted for degree."
+            "says": "The fictional university is accepted for degree."
           }
         ],
         "answer": "Accepted, for degree claims only."
       },
-      "caption": "university's degree statement: university is an accepted source for this kind of claim."
+      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -290,7 +318,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "university's degree statement asks for nothing, so there is no authority to check."
+      "caption": "The fictional university's degree statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -317,7 +345,7 @@
         "id": "urn:terms:degree",
         "text": "Its terms allow this: ."
       },
-      "caption": "university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: ."
     },
     {
       "seq": 12,
@@ -339,7 +367,7 @@
         "id": "urn:profile:right-to-work:degree",
         "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "university's degree statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -349,7 +377,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "university's degree statement is admitted."
+      "caption": "The fictional university's degree statement is admitted."
     },
     {
       "seq": 14,
@@ -359,7 +387,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:right-to-work:degree",
-        "label": "university's degree statement",
+        "label": "The fictional university's degree statement",
         "claimType": "degree",
         "subject": "urn:fictional:candidate",
         "value": null,
@@ -370,9 +398,9 @@
           "id": "urn:terms:degree",
           "summary": ""
         },
-        "provenance": "signed by university"
+        "provenance": "signed by The fictional university"
       },
-      "caption": "university's degree statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional university's degree statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -380,7 +408,7 @@
       "agent": "candidate-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:right to work with employer."
+      "caption": "The core proposes to use urn:op:right to work with The employer."
     },
     {
       "seq": 16,
@@ -403,7 +431,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "candidate's mandate covers this action."
+      "caption": "The candidate's mandate covers this action."
     },
     {
       "seq": 17,
@@ -426,18 +454,18 @@
         }
       ],
       "resolution": {
-        "question": "Is employer a party I can send urn:op:right to work to?",
+        "question": "Is The employer a party I can send urn:op:right-to-work to?",
         "path": [
           {
-            "at": "candidate's own list",
+            "at": "The candidate's own list",
             "kind": "own-list",
-            "says": "employer is accepted for urn:op:right to work."
+            "says": "The employer is accepted for urn:op:right-to-work."
           }
         ],
-        "answer": "Accepted, for urn:op:right to work only."
+        "answer": "Accepted, for urn:op:right-to-work only."
       },
       "reason": "recipient-established",
-      "caption": "employer: Accepted, for urn:op:right to work only."
+      "caption": "The employer: Accepted, for urn:op:right-to-work only."
     },
     {
       "seq": 18,
@@ -491,7 +519,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within candidate's limits."
+      "caption": "Inside what the agent may do on its own, and within The candidate's limits."
     },
     {
       "seq": 21,
@@ -531,7 +559,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work.entitled statement: its terms allow this: ."
     },
     {
       "seq": 23,
@@ -571,7 +599,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: ."
     },
     {
       "seq": 25,
@@ -616,7 +644,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with candidate-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The candidate’s agent's pinned key, and written to the record."
     },
     {
       "seq": 27,
@@ -626,7 +654,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to employer-agent."
+      "caption": "The invoke message goes to The employer’s agent."
     },
     {
       "seq": 28,
@@ -636,8 +664,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
-        "from": "candidate-agent",
-        "to": "employer-agent",
+        "from": "The candidate’s agent",
+        "to": "The employer’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -646,7 +674,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From candidate-agent to employer-agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
+            "summary": "From The candidate’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
@@ -673,7 +701,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): candidate says candidate-agent acts for it.",
+            "summary": "1 representation statement(s): The candidate says The candidate’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -710,7 +738,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "2 statement(s) signed by their sources: work.entitled from immigration-office; degree from university.",
+            "summary": "2 statement(s) signed by their sources: work.entitled from The fictional immigration office; degree from The fictional university.",
             "raw": [
               {
                 "issuer": "urn:fictional:immigration-office",
@@ -779,7 +807,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by candidate-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The candidate’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
               "statements": [
@@ -814,7 +842,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "candidate-agent sends an invoke message to employer-agent."
+      "caption": "The candidate’s agent sends an invoke message to The employer’s agent."
     },
     {
       "seq": 29,
@@ -824,8 +852,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-right-to-work-main:candidate-agent:0002",
-        "from": "candidate-agent",
-        "to": "employer-agent",
+        "from": "The candidate’s agent",
+        "to": "The employer’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -834,7 +862,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From candidate-agent to employer-agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
+            "summary": "From The candidate’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key 7aoE51jwfA-k…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-right-to-work-main:candidate-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
@@ -861,7 +889,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): candidate says candidate-agent acts for it.",
+            "summary": "1 representation statement(s): The candidate says The candidate’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -908,7 +936,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "2 statement(s) signed by their sources: work.entitled from immigration-office; degree from university.",
+            "summary": "2 statement(s) signed by their sources: work.entitled from The fictional immigration office; degree from The fictional university.",
             "raw": [
               {
                 "issuer": "urn:fictional:immigration-office",
@@ -977,7 +1005,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by candidate-agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The candidate’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-right-to-work-main:candidate-agent:0001",
               "statements": [
@@ -1012,7 +1040,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from candidate-agent reaches the inbound gate."
+      "caption": "An invoke message from The candidate’s agent reaches the inbound gate."
     },
     {
       "seq": 30,
@@ -1039,7 +1067,7 @@
         "id": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with candidate-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The candidate’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 31,
@@ -1064,20 +1092,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:immigration-office",
-        "text": "immigration-office is accepted for work.entitled claims."
+        "text": "The fictional immigration office is accepted for work.entitled claims."
       },
       "resolution": {
-        "question": "Is immigration-office an authority for work.entitled claims about candidate?",
+        "question": "Is The fictional immigration office an authority for work.entitled claims about The candidate?",
         "path": [
           {
-            "at": "employer's own list",
+            "at": "The employer's own list",
             "kind": "own-list",
-            "says": "immigration-office is accepted for work.entitled."
+            "says": "The fictional immigration office is accepted for work.entitled."
           }
         ],
         "answer": "Accepted, for work.entitled claims only."
       },
-      "caption": "immigration-office's work.entitled statement: immigration-office is an accepted source for this kind of claim."
+      "caption": "The fictional immigration office's work.entitled statement: The fictional immigration office is an accepted source for this kind of claim."
     },
     {
       "seq": 32,
@@ -1102,20 +1130,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:university",
-        "text": "university is accepted for degree claims."
+        "text": "The fictional university is accepted for degree claims."
       },
       "resolution": {
-        "question": "Is university an authority for degree claims about candidate?",
+        "question": "Is The fictional university an authority for degree claims about The candidate?",
         "path": [
           {
-            "at": "employer's own list",
+            "at": "The employer's own list",
             "kind": "own-list",
-            "says": "university is accepted for degree."
+            "says": "The fictional university is accepted for degree."
           }
         ],
         "answer": "Accepted, for degree claims only."
       },
-      "caption": "university's degree statement: university is an accepted source for this kind of claim."
+      "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim."
     },
     {
       "seq": 33,
@@ -1135,9 +1163,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:7667e114a1553269b2f0276d59a0899e:1794560400000",
-        "text": "A representation statement signed with candidate's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The candidate's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "candidate signed a statement that candidate-agent acts for them in this operation."
+      "caption": "The candidate signed a statement that The candidate’s agent acts for them in this operation."
     },
     {
       "seq": 34,
@@ -1164,7 +1192,7 @@
         "id": "urn:terms:entitlement",
         "text": "Its terms allow this: ."
       },
-      "caption": "immigration-office's work.entitled statement: its terms allow this: ."
+      "caption": "The fictional immigration office's work.entitled statement: its terms allow this: ."
     },
     {
       "seq": 35,
@@ -1191,7 +1219,7 @@
         "id": "urn:terms:degree",
         "text": "Its terms allow this: ."
       },
-      "caption": "university's degree statement: its terms allow this: ."
+      "caption": "The fictional university's degree statement: its terms allow this: ."
     },
     {
       "seq": 36,
@@ -1213,7 +1241,7 @@
         "id": "urn:profile:right-to-work:work.entitled",
         "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
       },
-      "caption": "immigration-office's work.entitled statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+      "caption": "The fictional immigration office's work.entitled statement is fit for urn:op:right-to-work: recorded-by-authority, 0 days old."
     },
     {
       "seq": 37,
@@ -1235,7 +1263,7 @@
         "id": "urn:profile:right-to-work:degree",
         "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
       },
-      "caption": "university's degree statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+      "caption": "The fictional university's degree statement is fit for urn:op:right-to-work: recorded-by-authority, 0 days old."
     },
     {
       "seq": 38,
@@ -1255,7 +1283,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:right-to-work:entitlement",
-        "label": "immigration-office's work.entitled statement",
+        "label": "The fictional immigration office's work.entitled statement",
         "claimType": "work.entitled",
         "subject": "urn:fictional:candidate",
         "value": null,
@@ -1266,9 +1294,9 @@
           "id": "urn:terms:entitlement",
           "summary": ""
         },
-        "provenance": "signed by immigration-office"
+        "provenance": "signed by The fictional immigration office"
       },
-      "caption": "immigration-office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional immigration office's work.entitled statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 40,
@@ -1278,7 +1306,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:right-to-work:degree",
-        "label": "university's degree statement",
+        "label": "The fictional university's degree statement",
         "claimType": "degree",
         "subject": "urn:fictional:candidate",
         "value": null,
@@ -1289,9 +1317,9 @@
           "id": "urn:terms:degree",
           "summary": ""
         },
-        "provenance": "signed by university"
+        "provenance": "signed by The fictional university"
       },
-      "caption": "university's degree statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional university's degree statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 41,

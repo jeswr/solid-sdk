@@ -1,0 +1,1994 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "tenancy-application",
+  "path": {
+    "index": 2,
+    "what": "The letting agent's agent keeps asking in different words"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The tenant"
+    },
+    {
+      "id": "receiver",
+      "name": "The letting agency"
+    },
+    {
+      "id": "bank",
+      "name": "The tenant’s bank"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The tenant’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The letting agency’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "tenancy-application--branch-2",
+    "title": "Applying to rent a home: The letting agent's agent keeps asking in different words",
+    "steps": {
+      "1": "The letting agency’s agent sends the signed request.",
+      "2": "The tenant’s agent checks the message and prepares a response.",
+      "3": "The letting agency’s agent checks the message and prepares a response.",
+      "4": "The tenant’s agent checks the message and prepares a response."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The tenant’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The letting agency’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free tenancy preflights",
+      "replacedBy": "The actual agency request cannot authorize raw statements, and a fresh signed negotiation hits the real runtime round cap; no income/rent proof is fabricated"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Applying to rent a home with The tenant."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The letting agency's mandate covers this action."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The tenant a party I can send Applying to rent a home to?",
+        "path": [
+          {
+            "at": "The letting agency's own list",
+            "kind": "own-list",
+            "says": "The tenant is accepted for Applying to rent a home."
+          }
+        ],
+        "answer": "Accepted, for Applying to rent a home only."
+      },
+      "reason": "recipient-established",
+      "caption": "The tenant: Accepted, for Applying to rent a home only."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The letting agency's limits."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The letting agency’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to The tenant’s agent."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+        "from": "The letting agency’s agent",
+        "to": "The tenant’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:f9614340861…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The letting agency’s agent to The tenant’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "party": "urn:fictional:tenancy-application:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:af4e56d0d3777e1da4271d07dbaea8a8d1648ef7715c17e5d192fef2d8618b18"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The letting agency says The letting agency’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+                "party": "urn:fictional:tenancy-application:receiver",
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:tenancy-application, with terms (round 1).",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request"
+              },
+              "termsDigest": "sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10",
+              "round": 1
+            },
+            "digest": "sha-256:2b8467f2a75787b4fa9016cabb013f0d45a2e3e611c864996833dd43794b1ce4"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request"
+            },
+            "digest": "sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The letting agency’s agent sends a propose message to The tenant’s agent."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+        "from": "The letting agency’s agent",
+        "to": "The tenant’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:f9614340861…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The letting agency’s agent to The tenant’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "party": "urn:fictional:tenancy-application:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:af4e56d0d3777e1da4271d07dbaea8a8d1648ef7715c17e5d192fef2d8618b18"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The letting agency says The letting agency’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+                "party": "urn:fictional:tenancy-application:receiver",
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+          },
+          "content": {
+            "present": true,
+            "summary": "An offer to start urn:op:tenancy-application, with terms (round 1). It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:tenancy-application\"; \"urn:purpose:tenancy-application\"; \"sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request"
+              },
+              "termsDigest": "sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10",
+              "round": 1
+            },
+            "digest": "sha-256:2b8467f2a75787b4fa9016cabb013f0d45a2e3e611c864996833dd43794b1ce4",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:tenancy-application"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:tenancy-application"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request"
+            },
+            "digest": "sha-256:23c493feb4635def6c84817cab7a935bea6ada013894b00810704c2ac674cc10"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from The letting agency’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The letting agency’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+        "text": "A representation statement signed with The letting agency's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The letting agency signed a statement that The letting agency’s agent acts for them in this operation."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Applying to rent a home with The letting agency."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The tenant's mandate covers this action."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The letting agency a party I can send Applying to rent a home to?",
+        "path": [
+          {
+            "at": "The tenant's own list",
+            "kind": "own-list",
+            "says": "The letting agency is accepted for Applying to rent a home."
+          }
+        ],
+        "answer": "Accepted, for Applying to rent a home only."
+      },
+      "reason": "recipient-established",
+      "caption": "The letting agency: Accepted, for Applying to rent a home only."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The tenant's limits."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 25,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The tenant’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 26,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to The letting agency’s agent."
+    },
+    {
+      "seq": 27,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+        "from": "The tenant’s agent",
+        "to": "The letting agency’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:3b961a5e8f3…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The tenant’s agent to The letting agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:owner-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "party": "urn:fictional:tenancy-application:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:13c5df16dbcdc6126f625ec0f2fe778e0385d666a6d300e3f613ffebc62d2c15"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The tenant says The tenant’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:bbc2d43b1abda69e5a0d5f4353106e36:1794560400000",
+                "party": "urn:fictional:tenancy-application:owner",
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:7dcdc8f4b42630526b593b5f6d2eb565a87d1ca666cd6c0057df35305f71bea1"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 2) with new terms.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 1
+              },
+              "termsDigest": "sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2",
+              "round": 2,
+              "counters": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002"
+            },
+            "digest": "sha-256:72e206f027708ab64baf61ec9e24618014528a1c9737faf068fdf30500fb9f97"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request",
+              "turn": 1
+            },
+            "digest": "sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The tenant’s agent sends a propose message to The letting agency’s agent."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+        "from": "The tenant’s agent",
+        "to": "The letting agency’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:3b961a5e8f3…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The tenant’s agent to The letting agency’s agent; propose; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:owner-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "party": "urn:fictional:tenancy-application:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:13c5df16dbcdc6126f625ec0f2fe778e0385d666a6d300e3f613ffebc62d2c15"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The tenant says The tenant’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:bbc2d43b1abda69e5a0d5f4353106e36:1794560400000",
+                "party": "urn:fictional:tenancy-application:owner",
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:7dcdc8f4b42630526b593b5f6d2eb565a87d1ca666cd6c0057df35305f71bea1"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 2) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:tenancy-application\"; \"urn:purpose:tenancy-application\"; \"sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2\"; \"urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 1
+              },
+              "termsDigest": "sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2",
+              "round": 2,
+              "counters": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002"
+            },
+            "digest": "sha-256:72e206f027708ab64baf61ec9e24618014528a1c9737faf068fdf30500fb9f97",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:tenancy-application"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:tenancy-application"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2"
+              },
+              {
+                "path": "counters",
+                "text": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request",
+              "turn": 1
+            },
+            "digest": "sha-256:1e153bc68aa7be85eba805c786afb98bb7d4aac26d9d55d059aa18d343d9d6f2"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from The tenant’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The tenant’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:bbc2d43b1abda69e5a0d5f4353106e36:1794560400000",
+        "text": "A representation statement signed with The tenant's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The tenant signed a statement that The tenant’s agent acts for them in this operation."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 35,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Applying to rent a home with The tenant."
+    },
+    {
+      "seq": 36,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The letting agency's mandate covers this action."
+    },
+    {
+      "seq": 37,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The tenant a party I can send Applying to rent a home to?",
+        "path": [
+          {
+            "at": "The letting agency's own list",
+            "kind": "own-list",
+            "says": "The tenant is accepted for Applying to rent a home."
+          }
+        ],
+        "answer": "Accepted, for Applying to rent a home only."
+      },
+      "reason": "recipient-established",
+      "caption": "The tenant: Accepted, for Applying to rent a home only."
+    },
+    {
+      "seq": 38,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 39,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 40,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The letting agency's limits."
+    },
+    {
+      "seq": 41,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 42,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The letting agency’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 43,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The propose message goes to The tenant’s agent."
+    },
+    {
+      "seq": 44,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
+        "from": "The letting agency’s agent",
+        "to": "The tenant’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:091e5315f49…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The letting agency’s agent to The tenant’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "party": "urn:fictional:tenancy-application:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:aa87fb5d91644c928d8709ff4d42aa6397defa49779501983b948e532cad3c48"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The letting agency says The letting agency’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+                "party": "urn:fictional:tenancy-application:receiver",
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 3) with new terms.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 2
+              },
+              "termsDigest": "sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a",
+              "round": 3,
+              "counters": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001"
+            },
+            "digest": "sha-256:4ab968749df4191bb2cfbdbdac5b48e28b06dfdfbf1c7190d3c8f433634917fa"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request",
+              "turn": 2
+            },
+            "digest": "sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-tenancy-application-branch-2:owner-agent:0001.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The letting agency’s agent sends a propose message to The tenant’s agent."
+    },
+    {
+      "seq": 45,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
+        "from": "The letting agency’s agent",
+        "to": "The tenant’s agent",
+        "kind": "propose",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:091e5315f49…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The letting agency’s agent to The tenant’s agent; propose; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "kind": "propose",
+              "from": {
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:tenancy-application:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:tenancy-application:owner-agent:actor",
+                "party": "urn:fictional:tenancy-application:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:aa87fb5d91644c928d8709ff4d42aa6397defa49779501983b948e532cad3c48"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The letting agency says The letting agency’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+                "party": "urn:fictional:tenancy-application:receiver",
+                "actor": "urn:fictional:tenancy-application:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:tenancy-application",
+                  "urn:op:tenancy-application:request",
+                  "urn:op:tenancy-application:raw"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+          },
+          "content": {
+            "present": true,
+            "summary": "A counter-offer (round 3) with new terms. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:tenancy-application\"; \"urn:purpose:tenancy-application\"; \"sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a\"; \"urn:awp:engine-tenancy-application-branch-2:owner-agent:0001\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:tenancy-application",
+                "version": "0.1"
+              },
+              "terms": {
+                "purpose": "urn:purpose:tenancy-application",
+                "evidenceRequest": [
+                  {
+                    "claimType": "tenancy.application"
+                  }
+                ],
+                "topic": "application-request",
+                "turn": 2
+              },
+              "termsDigest": "sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a",
+              "round": 3,
+              "counters": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001"
+            },
+            "digest": "sha-256:4ab968749df4191bb2cfbdbdac5b48e28b06dfdfbf1c7190d3c8f433634917fa",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:tenancy-application"
+              },
+              {
+                "path": "terms.purpose",
+                "text": "urn:purpose:tenancy-application"
+              },
+              {
+                "path": "termsDigest",
+                "text": "sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a"
+              },
+              {
+                "path": "counters",
+                "text": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms: purpose urn:purpose:tenancy-application.",
+            "raw": {
+              "purpose": "urn:purpose:tenancy-application",
+              "evidenceRequest": [
+                {
+                  "claimType": "tenancy.application"
+                }
+              ],
+              "topic": "application-request",
+              "turn": 2
+            },
+            "digest": "sha-256:9a511eb1dd463c365b1902852d3e30a0dbfa180abd64e5928f3bee8ba9e9b26a"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-tenancy-application-branch-2:owner-agent:0001.",
+            "raw": {
+              "conversation": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0001",
+              "inReplyTo": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A propose message from The letting agency’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 46,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The letting agency’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 47,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 48,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:1435b5233a9877bc8c57c7079cea16ea:1794560400000",
+        "text": "A representation statement signed with The letting agency's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The letting agency signed a statement that The letting agency’s agent acts for them in this operation."
+    },
+    {
+      "seq": 49,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 50,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 51,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 52,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Applying to rent a home with The letting agency."
+    },
+    {
+      "seq": 53,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The tenant's mandate covers this action."
+    },
+    {
+      "seq": 54,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The letting agency a party I can send Applying to rent a home to?",
+        "path": [
+          {
+            "at": "The tenant's own list",
+            "kind": "own-list",
+            "says": "The letting agency is accepted for Applying to rent a home."
+          }
+        ],
+        "answer": "Accepted, for Applying to rent a home only."
+      },
+      "reason": "recipient-established",
+      "caption": "The letting agency: Accepted, for Applying to rent a home only."
+    },
+    {
+      "seq": 55,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 56,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 57,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The tenant's limits."
+    },
+    {
+      "seq": 58,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 59,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "round-limit",
+      "caption": "The proposal would exceed the conversation's round limit."
+    },
+    {
+      "seq": 60,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "round-limit",
+      "caption": "The round limit stops the message before release."
+    }
+  ]
+}

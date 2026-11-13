@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "research-data-access",
+  "parties": {
+    "party-1": "A researcher",
+    "party-2": "A data holder",
+    "party-3": "An ethics board"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

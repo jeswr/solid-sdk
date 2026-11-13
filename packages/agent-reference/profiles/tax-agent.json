@@ -1,0 +1,19 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "tax-agent",
+  "parties": {
+    "party-1": "A taxpayer",
+    "party-2": "An accountant",
+    "party-3": "The accountant's agent",
+    "party-4": "The tax authority",
+    "party-5": "A register of tax agents"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

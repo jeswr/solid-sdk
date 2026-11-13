@@ -32,6 +32,9 @@ export interface PrincipalLimits {
   readonly id: Iri;
   /** Longest retention the principal accepts without being asked. */
   readonly maxRetentionDays?: number;
+  readonly commitments?: Readonly<
+    Record<Iri, { readonly maxAmount: number; readonly currency: string }>
+  >;
 }
 
 /** The closed list of reasons a `not-applicable` verdict may carry (core section 9). */
@@ -68,6 +71,8 @@ export interface RelianceRule {
   /** Plain words for the rule, shown with the verdict. */
   readonly text: string;
   readonly corroboration?: { readonly sources: number; readonly independent: boolean };
+  /** An independently admitted, same-subject/period completeness claim required in this batch. */
+  readonly completeness?: string;
 }
 
 export interface RelianceProfile {

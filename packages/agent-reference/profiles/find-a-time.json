@@ -1,0 +1,81 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "find-a-time",
+  "parties": {
+    "owner": "The first person",
+    "receiver": "The second person",
+    "owner-agent": "The first person’s agent",
+    "receiver-agent": "The second person’s agent"
+  },
+  "claims": [
+    {
+      "kind": "calendar.busy-reason",
+      "sources": [
+        "urn:fictional:find-a-time:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:find-a-time",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:private-calendar",
+      "claims": [
+        "calendar.busy-reason"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "calendar.busy-reason"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:find-a-time",
+      "version": "0.1",
+      "label": "Two people's agents find a time to meet",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:find-a-time:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:find-a-time"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

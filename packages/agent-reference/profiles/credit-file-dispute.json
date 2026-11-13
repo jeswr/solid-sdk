@@ -1,0 +1,18 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "credit-file-dispute",
+  "parties": {
+    "party-1": "A person",
+    "party-2": "Their agent",
+    "party-3": "A credit reference agency",
+    "party-4": "A lender"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

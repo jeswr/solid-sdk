@@ -2,13 +2,13 @@
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-scenario/0.1",
   "id": "master-data-change",
-  "title": "master-data-change (entirely fictional)",
+  "title": "Changing a supplier's bank details in a business system",
   "profile": "master-data-change",
   "parties": [
     {
       "id": "business",
       "identity": "urn:fictional:business",
-      "name": "business",
+      "name": "The business",
       "role": "source",
       "runs": "issuer-only"
     },
@@ -16,7 +16,7 @@
       "id": "finance-agent",
       "identity": "urn:fictional:finance-agent",
       "actor": "urn:fictional:finance-agent:agent",
-      "name": "finance-agent",
+      "name": "The business’s finance agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "business"
@@ -24,49 +24,49 @@
     {
       "id": "supplier-bank",
       "identity": "urn:fictional:supplier-bank",
-      "name": "supplier-bank",
+      "name": "The supplier’s bank",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "directory",
       "identity": "urn:fictional:directory",
-      "name": "directory",
+      "name": "The staff directory",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "controller-one",
       "identity": "urn:fictional:controller-one",
-      "name": "controller-one",
+      "name": "The first financial controller",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "controller-two",
       "identity": "urn:fictional:controller-two",
-      "name": "controller-two",
+      "name": "The second financial controller",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "requester",
       "identity": "urn:fictional:requester",
-      "name": "requester",
+      "name": "The requesting staff member",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "email",
       "identity": "urn:fictional:email",
-      "name": "email",
+      "name": "An unverified email sender",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "erp",
       "identity": "urn:fictional:erp",
-      "name": "erp",
+      "name": "The business’s account system",
       "role": "source",
       "runs": "issuer-only"
     },
@@ -74,25 +74,34 @@
       "id": "erp-agent",
       "identity": "urn:fictional:erp:agent",
       "actor": "urn:fictional:erp:agent",
-      "name": "Fictional ERP agent",
+      "name": "The account system’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "erp"
     }
   ],
   "trust": {
-    "introductions": [["finance-agent", "erp-agent"]],
+    "introductions": [
+      [
+        "finance-agent",
+        "erp-agent"
+      ]
+    ],
     "ownLists": {
       "finance-agent": [
         {
           "party": "urn:fictional:erp",
-          "tasks": ["urn:op:master-data-change"]
+          "tasks": [
+            "urn:op:master-data-change"
+          ]
         }
       ],
       "erp-agent": [
         {
           "party": "urn:fictional:business",
-          "tasks": ["urn:op:master-data-change"]
+          "tasks": [
+            "urn:op:master-data-change"
+          ]
         }
       ]
     },
@@ -102,14 +111,18 @@
           "id": "urn:source-rule:supplier-bank",
           "version": "1",
           "source": "urn:fictional:supplier-bank",
-          "claimTypes": ["bank.account-owner"],
+          "claimTypes": [
+            "bank.account-owner"
+          ],
           "subjects": "any"
         },
         {
           "id": "urn:source-rule:directory",
           "version": "1",
           "source": "urn:fictional:directory",
-          "claimTypes": ["organization.role"],
+          "claimTypes": [
+            "organization.role"
+          ],
           "subjects": "any"
         }
       ],
@@ -118,7 +131,9 @@
           "id": "urn:source-rule:supplier-bank",
           "version": "1",
           "source": "urn:fictional:supplier-bank",
-          "claimTypes": ["bank.account-owner"],
+          "claimTypes": [
+            "bank.account-owner"
+          ],
           "subjects": "any"
         }
       ]
@@ -218,7 +233,9 @@
           "target": "urn:op:master-data-change",
           "approvals": {
             "count": 2,
-            "roles": ["finance-controller"],
+            "roles": [
+              "finance-controller"
+            ],
             "distinctFromRequester": true
           }
         }
@@ -245,7 +262,12 @@
       "id": "admit-account-role-controller-one-role-controller-two-role-requester",
       "agent": "finance-agent",
       "type": "admit",
-      "statements": ["account", "role-controller-one", "role-controller-two", "role-requester"],
+      "statements": [
+        "account",
+        "role-controller-one",
+        "role-controller-two",
+        "role-requester"
+      ],
       "purpose": "urn:purpose:master-data-change"
     },
     {
@@ -258,7 +280,9 @@
       "purpose": "urn:purpose:master-data-change",
       "contents": {
         "account": "urn:account:confirmed",
-        "support": ["urn:scenario:master-data-change:account"]
+        "support": [
+          "urn:scenario:master-data-change:account"
+        ]
       },
       "intent": {
         "action": "use",
@@ -268,7 +292,9 @@
         "purpose": "urn:purpose:master-data-change",
         "parameters": {
           "account": "urn:account:confirmed",
-          "support": ["urn:scenario:master-data-change:account"]
+          "support": [
+            "urn:scenario:master-data-change:account"
+          ]
         }
       }
     },
@@ -288,7 +314,9 @@
       "id": "erp-admits-bank-confirmation",
       "agent": "erp-agent",
       "type": "admit",
-      "statements": ["account"],
+      "statements": [
+        "account"
+      ],
       "purpose": "urn:purpose:master-data-change"
     },
     {
@@ -310,12 +338,16 @@
         "conversation": "urn:scenario:master-data-change:task",
         "parameters": {
           "account": "urn:account:confirmed",
-          "support": ["urn:scenario:master-data-change:account"]
+          "support": [
+            "urn:scenario:master-data-change:account"
+          ]
         }
       },
       "params": {
         "account": "urn:account:confirmed",
-        "support": ["urn:scenario:master-data-change:account"]
+        "support": [
+          "urn:scenario:master-data-change:account"
+        ]
       },
       "activityType": "urn:activity:erp-update"
     },
@@ -404,7 +436,9 @@
             "purpose": "urn:purpose:master-data-change",
             "contents": {
               "account": "urn:account:confirmed",
-              "support": ["urn:scenario:master-data-change:account"]
+              "support": [
+                "urn:scenario:master-data-change:account"
+              ]
             },
             "intent": {
               "action": "use",
@@ -414,7 +448,9 @@
               "purpose": "urn:purpose:master-data-change",
               "parameters": {
                 "account": "urn:account:confirmed",
-                "support": ["urn:scenario:master-data-change:account"]
+                "support": [
+                  "urn:scenario:master-data-change:account"
+                ]
               }
             }
           },
@@ -424,7 +460,12 @@
             "type": "organisation-approve",
             "signer": "requester"
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The business’s finance agent checks and admits the signed statements.",
+          "2": "The business’s finance agent sends a signed request.",
+          "3": "The business’s finance agent obtains a staff approval."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -745,7 +786,9 @@
             "purpose": "urn:purpose:master-data-change",
             "contents": {
               "account": "urn:account:confirmed",
-              "support": ["urn:scenario:master-data-change:account"]
+              "support": [
+                "urn:scenario:master-data-change:account"
+              ]
             },
             "intent": {
               "action": "use",
@@ -755,7 +798,9 @@
               "purpose": "urn:purpose:master-data-change",
               "parameters": {
                 "account": "urn:account:confirmed",
-                "support": ["urn:scenario:master-data-change:account"]
+                "support": [
+                  "urn:scenario:master-data-change:account"
+                ]
               }
             }
           }
@@ -838,7 +883,11 @@
             "method": "recorded-by-authority",
             "asOf": "2026-11-13T09:00:00.000Z"
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The business’s finance agent checks and admits the signed statements.",
+          "2": "The business’s finance agent sends a signed request."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -1717,8 +1766,27 @@
       "verdict": "pass"
     }
   ],
-  "stress": ["mandate", "limits-approval", "source"],
+  "stress": [
+    "mandate",
+    "limits-approval",
+    "source"
+  ],
   "suites": {},
   "assurance": null,
-  "blocked": []
+  "blocked": [],
+  "useCase": "master-data-change",
+  "traceSteps": {
+    "1": "The business’s finance agent checks and admits the signed statements.",
+    "2": "The business’s finance agent sends a signed request.",
+    "3": "The business’s finance agent obtains a staff approval.",
+    "4": "The business’s finance agent obtains a staff approval.",
+    "5": "The account system’s agent checks and admits the signed statements.",
+    "6": "The account system’s agent checks the incoming message and prepares a response.",
+    "7": "The account system’s agent proposes the local action.",
+    "8": "The account system’s agent checks the observed result.",
+    "9": "The account system’s agent completes the message step.",
+    "10": "The business’s finance agent checks the incoming message and prepares a response.",
+    "11": "The business’s finance agent checks the durable record.",
+    "12": "The account system’s agent checks the durable record."
+  }
 }

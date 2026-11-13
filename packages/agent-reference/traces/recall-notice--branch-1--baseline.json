@@ -1,0 +1,225 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "recall-notice",
+  "path": {
+    "index": 1,
+    "what": "The notice is not signed by the registered manufacturer"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The manufacturer"
+    },
+    {
+      "id": "receiver",
+      "name": "The product owner"
+    },
+    {
+      "id": "attacker",
+      "name": "The fictional attacker"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The manufacturer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The product owner’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "recall-notice--branch-1",
+    "title": "A product recall notice: The notice is not signed by the registered manufacturer",
+    "steps": {
+      "1": "The product owner’s agent checks the signed statements.",
+      "2": "The product owner’s agent proposes the local action.",
+      "3": "The manufacturer’s agent checks the message and prepares a response.",
+      "4": "The manufacturer’s agent sends the signed request.",
+      "5": "The product owner’s agent checks the message and prepares a response.",
+      "6": "The manufacturer’s agent checks the message and prepares a response.",
+      "7": "The product owner’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The manufacturer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The product owner’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Manufacturer registration and recall delivery",
+      "replacedBy": "A reviewed manufacturer-specific source rule accepts only its recall notices; the attacker’s real signature establishes authorship but not recall authority. No link is opened."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The fictional attacker's product.recall statement is intact and signed with The fictional attacker's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "The fictional attacker's product.recall statement: The fictional attacker is not accepted as a source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The fictional attacker's product.recall statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "refuse",
+      "reason": "source-not-authoritative",
+      "caption": "The fictional attacker's product.recall statement is refused and kept out of memory."
+    },
+    {
+      "seq": 5,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in A product recall notice with The product owner."
+    },
+    {
+      "seq": 6,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The product owner's mandate covers this action."
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "fail",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "source-not-authoritative",
+      "caption": "Required product.recall was refused: source-not-authoritative."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "source-not-authoritative",
+      "caption": "A refused source cannot authorize the action."
+    }
+  ]
+}

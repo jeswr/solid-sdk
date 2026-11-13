@@ -1,0 +1,19 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "carer-acts-for-parent",
+  "parties": {
+    "party-1": "A parent",
+    "party-2": "An adult child",
+    "party-3": "The child's agent",
+    "party-4": "A care provider",
+    "party-5": "A register of powers of attorney"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

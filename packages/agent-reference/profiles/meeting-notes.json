@@ -1,0 +1,114 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "meeting-notes",
+  "parties": {
+    "owner": "The fictional team",
+    "receiver": "The team’s coordination service",
+    "owner-agent": "The fictional team’s agent",
+    "receiver-agent": "The team’s coordination service’s agent"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:meeting-notes:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "meeting.note",
+      "sources": [
+        "urn:fictional:meeting-notes:receiver-agent:actor"
+      ],
+      "methods": [
+        "model-output"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:meeting-notes",
+      "claims": [
+        "unstructured-content",
+        "meeting.note"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "draft-from-notes"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:meeting-notes",
+      "version": "0.1",
+      "label": "An assistant that remembers meetings",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:meeting-notes"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:meeting-notes:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:meeting-notes"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:meeting-notes:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:meeting-notes"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "meeting.note",
+      "type": "date"
+    }
+  ]
+}

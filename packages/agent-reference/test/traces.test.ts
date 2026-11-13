@@ -110,7 +110,10 @@ describe("reference traces are reproducible and use the model's ids", () => {
       "register",
     ]);
     const bank = trace.events.find(
-      (e) => e.check === "source" && e.agent === "sams-agent" && e.caption.includes("Harbour Bank"),
+      (e) =>
+        e.check === "source" &&
+        e.agent === "sams-agent" &&
+        e.caption.includes("Sam’s fictional bank"),
     );
     expect(bank?.resolution?.path.map((p) => p.kind)).toEqual(["own-list"]);
   });

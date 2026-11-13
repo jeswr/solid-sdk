@@ -1,0 +1,78 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "recycled-content",
+  "parties": {
+    "owner": "The brand",
+    "receiver": "The certifier",
+    "tier": "The supplying tier",
+    "owner-agent": "The brand’s agent",
+    "receiver-agent": "The certifier’s agent"
+  },
+  "claims": [
+    {
+      "kind": "material.recycled-fraction",
+      "sources": [
+        "urn:fictional:recycled-content:tier"
+      ],
+      "methods": [
+        "audited-by-certifier"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:recycled-content",
+      "claims": [
+        "material.recycled-fraction"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "material.recycled-fraction"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:recycled-content",
+      "version": "0.1",
+      "label": "Proving recycled content along a supply chain",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recycled-content"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:recycled-content:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recycled-content"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

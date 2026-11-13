@@ -34,10 +34,20 @@ for (const file of readdirSync(join(root, "scenarios"))
     const stem = path.path === "main" ? id : `${id}--${path.path}`;
     status.paths.push({
       scenario: id,
+      useCase: scenario.useCase ?? scenario.id,
+      ...(scenario.cataloguePath ? { cataloguePath: scenario.cataloguePath } : {}),
       path: path.path,
+      ...(path.path !== "main"
+        ? { what: scenario.branches.find((b) => b.id === path.path).what }
+        : {}),
       ...(path.blocked
         ? { status: "blocked", reason: path.blocked }
-        : { status: "runs", trace: `${stem}--baseline.json` }),
+        : {
+            status: path.disagrees ? "disagrees" : "runs",
+            actual: path.actual,
+            expected: path.expected,
+            trace: `${stem}--baseline.json`,
+          }),
     });
     if (!path.trace) continue;
     const outline = outlineOf(path.trace);
@@ -81,5 +91,5 @@ writeFileSync(
   `${JSON.stringify([...existing.filter((item) => !newFiles.has(item.file)), ...index], null, 2)}\n`,
 );
 console.log(
-  `${status.paths.filter((p) => p.status === "runs").length} data paths ran; ${status.paths.filter((p) => p.status === "blocked").length} explicitly blocked`,
+  `${status.paths.filter((p) => p.status !== "blocked").length} data paths ran (${status.paths.filter((p) => p.status === "disagrees").length} disagree); ${status.paths.filter((p) => p.status === "blocked").length} explicitly blocked`,
 );

@@ -1,0 +1,284 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "recycled-content",
+  "useCase": "recycled-content",
+  "title": "Proving recycled content along a supply chain",
+  "profile": "recycled-content",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:recycled-content:owner",
+      "name": "The brand",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:recycled-content:receiver",
+      "name": "The certifier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "tier",
+      "identity": "urn:fictional:recycled-content:tier",
+      "name": "The supplying tier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:recycled-content:owner-agent",
+      "name": "The brand’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:recycled-content:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:recycled-content:receiver-agent",
+      "name": "The certifier’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:recycled-content:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:recycled-content:receiver",
+          "tasks": [
+            "urn:op:recycled-content",
+            "urn:op:recycled-content:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:recycled-content:owner",
+          "tasks": [
+            "urn:op:recycled-content",
+            "urn:op:recycled-content:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:recycled-content:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:recycled-content:material.recycled-fraction",
+          "version": "1",
+          "source": "urn:fictional:recycled-content:tier",
+          "claimTypes": [
+            "material.recycled-fraction"
+          ],
+          "subjects": [
+            "urn:fictional:recycled-content:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "self-declared-tier",
+      "issuer": "tier",
+      "subject": "urn:fictional:recycled-content:owner",
+      "kind": "material.recycled-fraction",
+      "value": {
+        "value": 0.35
+      },
+      "method": "self-reported",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:recycled-content:self-declared-tier",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:recycled-content:self-declared-tier",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:recycled-content:self-declared-tier",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:recycled-content"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:recycled-content"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:recycled-content:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "One tier's input is self-declared",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws"
+        },
+        "script": [
+          {
+            "id": "input-method-preflight",
+            "agent": "receiver-agent",
+            "type": "admit",
+            "statements": [
+              "self-declared-tier"
+            ],
+            "purpose": "urn:purpose:recycled-content"
+          }
+        ],
+        "traceSteps": {
+          "1": "The certifier’s agent checks the signed statements."
+        }
+      },
+      "expect": {
+        "outcome": "refuse",
+        "check": "fitness",
+        "reason": "method-not-accepted"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "method-not-accepted"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "method-not-accepted"
+      }
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source",
+    "fitness"
+  ],
+  "suites": {
+    "authenticity": "zk-query-proof"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Proof-free supplier-quality preflight",
+      "replacedBy": "The tier’s real signature verifies its self-declaration, but the input profile requires an audited method; no chain proof or 30-percent predicate proof is constructed"
+    }
+  ],
+  "traceSteps": {}
+}

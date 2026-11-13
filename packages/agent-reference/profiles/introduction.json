@@ -1,0 +1,78 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "introduction",
+  "parties": {
+    "owner": "The first person",
+    "receiver": "The second person",
+    "identity-provider": "The identity provider",
+    "owner-agent": "The first person’s agent",
+    "receiver-agent": "The second person’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.verified",
+      "sources": [
+        "urn:fictional:introduction:identity-provider"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:introduction",
+      "claims": [
+        "identity.verified"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.verified"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:introduction",
+      "version": "0.1",
+      "label": "Being introduced to a stranger safely",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:introduction:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:introduction"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

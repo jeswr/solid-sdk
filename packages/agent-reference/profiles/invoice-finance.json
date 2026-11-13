@@ -1,0 +1,18 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "invoice-finance",
+  "parties": {
+    "party-1": "A supplier",
+    "party-2": "A buyer",
+    "party-3": "Two finance providers",
+    "party-4": "An invoice register"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

@@ -1,19 +1,50 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "false-but-signed",
+  "path": {
+    "index": 1,
+    "what": "Nothing fails"
+  },
+  "parties": [
+    {
+      "id": "lender",
+      "name": "The lender"
+    },
+    {
+      "id": "lender-agent",
+      "name": "The lender’s agent"
+    },
+    {
+      "id": "employer",
+      "name": "The employer"
+    },
+    {
+      "id": "tax-register",
+      "name": "The fictional tax register"
+    },
+    {
+      "id": "employee",
+      "name": "The employee"
+    },
+    {
+      "id": "employer-agent",
+      "name": "The employer’s agent"
+    }
+  ],
   "scenario": {
     "id": "false-but-signed--branch-1",
-    "title": "false-but-signed (entirely fictional)",
+    "title": "A registered source signs something false: Nothing fails",
     "steps": {
-      "1": "issuer-admits",
-      "2": "request",
-      "3": "sender-delivers",
-      "4": "receiver-admits",
-      "5": "perform",
-      "6": "record",
-      "7": "issuer-record",
-      "8": "attribute-record",
-      "9": "attribute-issuer-record"
+      "1": "The employer’s agent checks and admits the signed statements.",
+      "2": "The lender’s agent sends a signed request.",
+      "3": "The employer’s agent checks the incoming message and prepares a response.",
+      "4": "The lender’s agent checks the incoming message and prepares a response.",
+      "5": "The lender’s agent proposes the local action.",
+      "6": "The lender’s agent checks the durable record.",
+      "7": "The employer’s agent checks the durable record.",
+      "8": "The lender’s agent checks the observed result.",
+      "9": "The employer’s agent checks the observed result."
     }
   },
   "configuration": {
@@ -35,19 +66,19 @@
   "agents": [
     {
       "id": "lender-agent",
-      "name": "lender-agent",
+      "name": "The lender’s agent",
       "actsFor": "lender",
       "role": "agent"
     },
     {
       "id": "employer-agent",
-      "name": "Employer agent",
+      "name": "The employer’s agent",
       "actsFor": "employer",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -82,7 +113,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "employer's annual-income statement is intact and signed with employer's pinned key."
+      "caption": "The employer's annual-income statement is intact and signed with The employer's pinned key."
     },
     {
       "seq": 2,
@@ -107,20 +138,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:rule:own-records",
-        "text": "employer is accepted for annual-income claims."
+        "text": "The employer is accepted for annual-income claims."
       },
       "resolution": {
-        "question": "Is employer an authority for annual-income claims about employee?",
+        "question": "Is The employer an authority for annual-income claims about The employee?",
         "path": [
           {
-            "at": "employer's own list",
+            "at": "The employer's own list",
             "kind": "own-list",
-            "says": "employer is accepted for annual-income."
+            "says": "The employer is accepted for annual-income."
           }
         ],
         "answer": "Accepted, for annual-income claims only."
       },
-      "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+      "caption": "The employer's annual-income statement: The employer is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -138,7 +169,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "employer's annual-income statement asks for nothing, so there is no authority to check."
+      "caption": "The employer's annual-income statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -165,7 +196,7 @@
         "id": "urn:terms:income",
         "text": "Its terms allow this: ."
       },
-      "caption": "employer's annual-income statement: its terms allow this: ."
+      "caption": "The employer's annual-income statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -187,7 +218,7 @@
         "id": "urn:profile:false-but-signed:annual-income",
         "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+      "caption": "The employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -197,7 +228,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "employer's annual-income statement is admitted."
+      "caption": "The employer's annual-income statement is admitted."
     },
     {
       "seq": 7,
@@ -207,7 +238,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:false-but-signed:false-income",
-        "label": "employer's annual-income statement",
+        "label": "The employer's annual-income statement",
         "claimType": "annual-income",
         "subject": "urn:fictional:employee",
         "value": null,
@@ -218,9 +249,9 @@
           "id": "urn:terms:income",
           "summary": ""
         },
-        "provenance": "signed by employer"
+        "provenance": "signed by The employer"
       },
-      "caption": "employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -228,7 +259,7 @@
       "agent": "lender-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:income decision with employer."
+      "caption": "The core proposes to take the next step in false-but-signed with The employer."
     },
     {
       "seq": 9,
@@ -252,10 +283,10 @@
       ],
       "rule": {
         "id": "urn:rule:authorised",
-        "text": "lender's mandate lets the agent use urn:op:income decision, on its own."
+        "text": "The lender's mandate lets the agent use urn:op:income decision, on its own."
       },
       "reason": "within-mandate",
-      "caption": "lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action."
     },
     {
       "seq": 10,
@@ -278,18 +309,18 @@
         }
       ],
       "resolution": {
-        "question": "Is employer a party I can send urn:op:income decision to?",
+        "question": "Is The employer a party I can send false-but-signed to?",
         "path": [
           {
-            "at": "lender's own list",
+            "at": "The lender's own list",
             "kind": "own-list",
-            "says": "employer is accepted for urn:op:income decision."
+            "says": "The employer is accepted for false-but-signed."
           }
         ],
-        "answer": "Accepted, for urn:op:income decision only."
+        "answer": "Accepted, for false-but-signed only."
       },
       "reason": "recipient-established",
-      "caption": "employer: Accepted, for urn:op:income decision only."
+      "caption": "The employer: Accepted, for false-but-signed only."
     },
     {
       "seq": 11,
@@ -343,7 +374,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits."
     },
     {
       "seq": 14,
@@ -388,7 +419,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with lender-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The lender’s agent's pinned key, and written to the record."
     },
     {
       "seq": 16,
@@ -398,7 +429,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to Employer agent."
+      "caption": "The invoke message goes to The employer’s agent."
     },
     {
       "seq": 17,
@@ -408,8 +439,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
-        "from": "lender-agent",
-        "to": "Employer agent",
+        "from": "The lender’s agent",
+        "to": "The employer’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -418,7 +449,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From lender-agent to Employer agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
+            "summary": "From The lender’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
@@ -445,7 +476,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): lender says lender-agent acts for it.",
+            "summary": "1 representation statement(s): The lender says The lender’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -516,7 +547,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "lender-agent sends an invoke message to Employer agent."
+      "caption": "The lender’s agent sends an invoke message to The employer’s agent."
     },
     {
       "seq": 18,
@@ -526,8 +557,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
-        "from": "lender-agent",
-        "to": "Employer agent",
+        "from": "The lender’s agent",
+        "to": "The employer’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -536,7 +567,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From lender-agent to Employer agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
+            "summary": "From The lender’s agent to The employer’s agent; invoke; signed (JWS EdDSA, pinned key frwojrokaHd4…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:lender-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
@@ -563,7 +594,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): lender says lender-agent acts for it.",
+            "summary": "1 representation statement(s): The lender says The lender’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -644,7 +675,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from lender-agent reaches the inbound gate."
+      "caption": "An invoke message from The lender’s agent reaches the inbound gate."
     },
     {
       "seq": 19,
@@ -671,7 +702,7 @@
         "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with lender-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The lender’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 20,
@@ -714,9 +745,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:3f4231a3233bb93b95ed4153b688d283:1794560400000",
-        "text": "A representation statement signed with lender's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The lender's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "lender signed a statement that lender-agent acts for them in this operation."
+      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation."
     },
     {
       "seq": 22,
@@ -813,18 +844,18 @@
         }
       ],
       "resolution": {
-        "question": "Is lender a party I can send urn:op:income decision to?",
+        "question": "Is The lender a party I can send false-but-signed to?",
         "path": [
           {
-            "at": "employer's own list",
+            "at": "The employer's own list",
             "kind": "own-list",
-            "says": "lender is accepted for urn:op:income decision."
+            "says": "The lender is accepted for false-but-signed."
           }
         ],
-        "answer": "Accepted, for urn:op:income decision only."
+        "answer": "Accepted, for false-but-signed only."
       },
       "reason": "recipient-established",
-      "caption": "lender: Accepted, for urn:op:income decision only."
+      "caption": "The lender: Accepted, for false-but-signed only."
     },
     {
       "seq": 27,
@@ -864,7 +895,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "employer's annual-income statement: its terms allow this: ."
+      "caption": "The employer's annual-income statement: its terms allow this: ."
     },
     {
       "seq": 29,
@@ -904,7 +935,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "employer's annual-income statement: its terms allow this: ."
+      "caption": "The employer's annual-income statement: its terms allow this: ."
     },
     {
       "seq": 31,
@@ -949,7 +980,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with Employer agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The employer’s agent's pinned key, and written to the record."
     },
     {
       "seq": 33,
@@ -959,7 +990,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The deliver message goes to lender-agent."
+      "caption": "The deliver message goes to The lender’s agent."
     },
     {
       "seq": 34,
@@ -969,8 +1000,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
-        "from": "Employer agent",
-        "to": "lender-agent",
+        "from": "The employer’s agent",
+        "to": "The lender’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -979,7 +1010,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Employer agent to lender-agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
+            "summary": "From The employer’s agent to The lender’s agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
@@ -1030,7 +1061,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: annual-income from employer.",
+            "summary": "1 statement(s) signed by their sources: annual-income from The employer.",
             "raw": [
               {
                 "value": 90000,
@@ -1073,7 +1104,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by Employer agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by The employer’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
               "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
@@ -1103,7 +1134,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "Employer agent sends a deliver message to lender-agent."
+      "caption": "The employer’s agent sends a deliver message to The lender’s agent."
     },
     {
       "seq": 35,
@@ -1113,8 +1144,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
-        "from": "Employer agent",
-        "to": "lender-agent",
+        "from": "The employer’s agent",
+        "to": "The lender’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -1123,7 +1154,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Employer agent to lender-agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
+            "summary": "From The employer’s agent to The lender’s agent; deliver; signed (JWS EdDSA, pinned key by5WySidQe2B…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-false-but-signed-branch-1:employer-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
@@ -1192,7 +1223,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: annual-income from employer.",
+            "summary": "1 statement(s) signed by their sources: annual-income from The employer.",
             "raw": [
               {
                 "value": 90000,
@@ -1235,7 +1266,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by Employer agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Answers urn:awp:engine-false-but-signed-branch-1:lender-agent:0002. The statements were issued by their sources and are relayed, not authored, by The employer’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0001",
               "inReplyTo": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
@@ -1265,7 +1296,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A deliver message from Employer agent reaches the inbound gate."
+      "caption": "A deliver message from The employer’s agent reaches the inbound gate."
     },
     {
       "seq": 36,
@@ -1292,7 +1323,7 @@
         "id": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with Employer agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The employer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 37,
@@ -1317,20 +1348,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:employer",
-        "text": "employer is accepted for annual-income claims."
+        "text": "The employer is accepted for annual-income claims."
       },
       "resolution": {
-        "question": "Is employer an authority for annual-income claims about employee?",
+        "question": "Is The employer an authority for annual-income claims about The employee?",
         "path": [
           {
-            "at": "lender's own list",
+            "at": "The lender's own list",
             "kind": "own-list",
-            "says": "employer is accepted for annual-income."
+            "says": "The employer is accepted for annual-income."
           }
         ],
         "answer": "Accepted, for annual-income claims only."
       },
-      "caption": "employer's annual-income statement: employer is an accepted source for this kind of claim."
+      "caption": "The employer's annual-income statement: The employer is an accepted source for this kind of claim."
     },
     {
       "seq": 38,
@@ -1375,7 +1406,7 @@
         "id": "urn:terms:income",
         "text": "Its terms allow this: ."
       },
-      "caption": "employer's annual-income statement: its terms allow this: ."
+      "caption": "The employer's annual-income statement: its terms allow this: ."
     },
     {
       "seq": 40,
@@ -1397,7 +1428,7 @@
         "id": "urn:profile:false-but-signed:annual-income",
         "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
       },
-      "caption": "employer's annual-income statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+      "caption": "The employer's annual-income statement is fit for false-but-signed: recorded-by-authority, 0 days old."
     },
     {
       "seq": 41,
@@ -1417,7 +1448,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:false-but-signed:false-income",
-        "label": "employer's annual-income statement",
+        "label": "The employer's annual-income statement",
         "claimType": "annual-income",
         "subject": "urn:fictional:employee",
         "value": null,
@@ -1428,9 +1459,9 @@
           "id": "urn:terms:income",
           "summary": ""
         },
-        "provenance": "signed by employer"
+        "provenance": "signed by The employer"
       },
-      "caption": "employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's annual-income statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 43,
@@ -1438,7 +1469,7 @@
       "agent": "lender-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:income decision with lender."
+      "caption": "The core proposes to take the next step in false-but-signed with The lender."
     },
     {
       "seq": 44,
@@ -1462,10 +1493,10 @@
       ],
       "rule": {
         "id": "urn:rule:authorised",
-        "text": "lender's mandate lets the agent use urn:op:income decision, on its own."
+        "text": "The lender's mandate lets the agent use urn:op:income decision, on its own."
       },
       "reason": "within-mandate",
-      "caption": "lender's mandate covers this action."
+      "caption": "The lender's mandate covers this action."
     },
     {
       "seq": 45,
@@ -1488,18 +1519,18 @@
         }
       ],
       "resolution": {
-        "question": "Is lender a party I can send urn:op:income decision to?",
+        "question": "Is The lender a party I can send false-but-signed to?",
         "path": [
           {
-            "at": "lender's own list",
+            "at": "The lender's own list",
             "kind": "own-list",
-            "says": "lender is accepted for urn:op:income decision."
+            "says": "The lender is accepted for false-but-signed."
           }
         ],
-        "answer": "Accepted, for urn:op:income decision only."
+        "answer": "Accepted, for false-but-signed only."
       },
       "reason": "recipient-established",
-      "caption": "lender: Accepted, for urn:op:income decision only."
+      "caption": "The lender: Accepted, for false-but-signed only."
     },
     {
       "seq": 46,
@@ -1553,7 +1584,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within lender's limits."
+      "caption": "Inside what the agent may do on its own, and within The lender's limits."
     },
     {
       "seq": 49,
@@ -1590,7 +1621,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: use urn:op:income decision with lender."
+      "caption": "The action goes: take the next step in false-but-signed with The lender."
     },
     {
       "seq": 51,

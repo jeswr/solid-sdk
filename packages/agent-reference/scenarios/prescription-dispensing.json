@@ -1,0 +1,92 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "prescription-dispensing",
+  "useCase": "prescription-dispensing",
+  "title": "Dispensing a prescription",
+  "profile": "prescription-dispensing",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:prescription-dispensing:party-1",
+      "name": "A patient",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:prescription-dispensing:party-2",
+      "name": "A prescriber",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:prescription-dispensing:party-3",
+      "name": "A pharmacy",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-4",
+      "identity": "urn:fictional:prescription-dispensing:party-4",
+      "name": "The professional register",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-5",
+      "identity": "urn:fictional:prescription-dispensing:party-5",
+      "name": "A dispensing register",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The same prescription is presented at a second pharmacy",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "source"
+      },
+      "outline": []
+    },
+    {
+      "id": "branch-2",
+      "what": "The prescriber's registration lapsed last month",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "status-withdrawn",
+        "check": "source"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source",
+    "integrity",
+    "evidence"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "*",
+      "reason": "Needs an authoritative dispensing register with atomic single-use redemption and professional-registration status binding; signed issuer status alone cannot prevent two pharmacies redeeming concurrently."
+    }
+  ]
+}

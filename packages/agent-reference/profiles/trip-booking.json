@@ -1,0 +1,136 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "trip-booking",
+  "parties": {
+    "owner": "The hotel",
+    "receiver": "The traveller",
+    "owner-agent": "The hotel’s agent",
+    "receiver-agent": "The traveller’s agent",
+    "identity-issuer": "The identity issuer"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:trip-booking:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "identity.passport",
+      "sources": [
+        "urn:fictional:trip-booking:identity-issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 365
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:trip-booking",
+      "claims": [
+        "unstructured-content"
+      ]
+    },
+    {
+      "id": "urn:purpose:passport-management",
+      "claims": [
+        "identity.passport"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "book-agreed-hotel"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content",
+        "identity.passport"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:trip-booking",
+      "version": "0.1",
+      "label": "Booking a trip",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trip-booking"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trip-booking:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trip-booking"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trip-booking:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trip-booking"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trip-booking:passport",
+      "version": "0.1",
+      "label": "Attempt passport release while searching",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trip-booking"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "content.opinion",
+      "type": "code",
+      "values": [
+        "requires-review"
+      ]
+    }
+  ]
+}

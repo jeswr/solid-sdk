@@ -1,0 +1,1504 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "subject-access-request",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The person"
+    },
+    {
+      "id": "receiver",
+      "name": "The company"
+    },
+    {
+      "id": "identity-office",
+      "name": "The identity office"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The person’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The company’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "subject-access-request",
+    "title": "Asking a company what it holds about you",
+    "steps": {
+      "1": "The company’s agent checks the signed statements.",
+      "2": "The person’s agent sends the signed request.",
+      "3": "The company’s agent checks the message and prepares a response.",
+      "4": "The person’s agent checks the message and prepares a response.",
+      "5": "The person’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The person’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The company’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Company data-access endpoint",
+      "replacedBy": "The fictional company signs a scoped data copy and its source attribution after verifying the requester’s actual representation; no live personal-data inventory or statutory completeness claim is made"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The company's personal.data-copy statement is intact and signed with The company's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:subject-access-request:personal.data-copy",
+        "text": "The company is accepted for personal.data-copy claims."
+      },
+      "resolution": {
+        "question": "Is The company an authority for personal.data-copy claims about The person?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The company is accepted for personal.data-copy."
+          }
+        ],
+        "answer": "Accepted, for personal.data-copy claims only."
+      },
+      "caption": "The company's personal.data-copy statement: The company is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The company's personal.data-copy statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:subject-access-request:data-copy",
+        "text": "Its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+      },
+      "caption": "The company's personal.data-copy statement: its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:subject-access-request:personal.data-copy",
+        "text": "Accept personal.data-copy from urn:fictional:subject-access-request:receiver by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The company's personal.data-copy statement is fit for urn:scenario:subject-access-request:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The company's personal.data-copy statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:subject-access-request:data-copy",
+        "label": "The company's personal.data-copy statement",
+        "claimType": "personal.data-copy",
+        "subject": "urn:fictional:subject-access-request:owner",
+        "value": null,
+        "source": "urn:fictional:subject-access-request:receiver",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:subject-access-request:data-copy",
+          "summary": "use for urn:purpose:subject access request; share for urn:purpose:subject access request"
+        },
+        "provenance": "signed by The company"
+      },
+      "caption": "The company's personal.data-copy statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Asking a company what it holds about you with The company."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The person's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The company a party I can send Asking a company what it holds about you to?",
+        "path": [
+          {
+            "at": "The person's own list",
+            "kind": "own-list",
+            "says": "The company is accepted for Asking a company what it holds about you."
+          }
+        ],
+        "answer": "Accepted, for Asking a company what it holds about you only."
+      },
+      "reason": "recipient-established",
+      "caption": "The company: Accepted, for Asking a company what it holds about you only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The person's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The person’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The company’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+        "from": "The person’s agent",
+        "to": "The company’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:d7e6fcf6a6e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The person’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:subject-access-request:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:subject-access-request:receiver-agent:actor",
+                "party": "urn:fictional:subject-access-request:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:80acf3c88ff85da731b0cf4f7dcb6d7c715359ee40e60b117d63047a9719fde5"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The person says The person’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:dae75880fa2e3e2095f0bf88fb07af3b:1794560400000",
+                "party": "urn:fictional:subject-access-request:owner",
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:subject-access-request",
+                  "urn:op:subject-access-request:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d50b7899a8e18e476b447d97eaa12f4db653d588f18beb73f77984a6b21e4263"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:subject-access-request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "personal.data-copy"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:subject-access-request"
+            },
+            "digest": "sha-256:0adf4b9ca9380954969fea0e0355c3e22d986785c79b1a950772b1d95ab9aca1"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The person’s agent sends an invoke message to The company’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+        "from": "The person’s agent",
+        "to": "The company’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:d7e6fcf6a6e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The person’s agent to The company’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:subject-access-request:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:subject-access-request:receiver-agent:actor",
+                "party": "urn:fictional:subject-access-request:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:80acf3c88ff85da731b0cf4f7dcb6d7c715359ee40e60b117d63047a9719fde5"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The person says The person’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:dae75880fa2e3e2095f0bf88fb07af3b:1794560400000",
+                "party": "urn:fictional:subject-access-request:owner",
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:subject-access-request",
+                  "urn:op:subject-access-request:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d50b7899a8e18e476b447d97eaa12f4db653d588f18beb73f77984a6b21e4263"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:subject-access-request\"; \"urn:purpose:subject-access-request\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:subject-access-request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "personal.data-copy"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:subject-access-request"
+            },
+            "digest": "sha-256:0adf4b9ca9380954969fea0e0355c3e22d986785c79b1a950772b1d95ab9aca1",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:subject-access-request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:subject-access-request"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The person’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The person’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:dae75880fa2e3e2095f0bf88fb07af3b:1794560400000",
+        "text": "A representation statement signed with The person's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The person signed a statement that The person’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The person a party I can send Asking a company what it holds about you to?",
+        "path": [
+          {
+            "at": "The company's own list",
+            "kind": "own-list",
+            "says": "The person is accepted for Asking a company what it holds about you."
+          }
+        ],
+        "answer": "Accepted, for Asking a company what it holds about you only."
+      },
+      "reason": "recipient-established",
+      "caption": "The person: Accepted, for Asking a company what it holds about you only."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:subject-access-request:data-copy",
+        "text": "The issuer's terms: use for urn:purpose:subject access request; share for urn:purpose:subject access request. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The company's personal.data-copy statement: its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the carried statements against the conversation's purpose."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:subject-access-request:data-copy",
+        "text": "The issuer's terms: use for urn:purpose:subject access request; share for urn:purpose:subject access request. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The company's personal.data-copy statement: its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 32,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The company’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 33,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The deliver message goes to The person’s agent."
+    },
+    {
+      "seq": 34,
+      "step": 3,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
+        "from": "The company’s agent",
+        "to": "The person’s agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:e4100ce3e57…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The company’s agent to The person’s agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:receiver-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:subject-access-request:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:subject-access-request:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "party": "urn:fictional:subject-access-request:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c9501da7f885bc9fdf224952264c8d157565ab7ec781e1ceb70ee2e073c40430"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement.",
+            "raw": {
+              "ref": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:subject-access-request",
+                "version": "0.1"
+              },
+              "output": {
+                "items": [
+                  "urn:scenario:subject-access-request:data-copy"
+                ]
+              }
+            },
+            "digest": "sha-256:d73d83148f37c6c8af7d25405e7cf2feed4479c87f32f14b5dc6a25ed62c6d37"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: personal.data-copy from The company.",
+            "raw": [
+              {
+                "items": [
+                  {
+                    "id": "urn:fictional:company-record",
+                    "source": "urn:fictional:subject-access-request:receiver",
+                    "value": 42
+                  }
+                ],
+                "id": "urn:scenario:subject-access-request:data-copy",
+                "issuer": "urn:fictional:subject-access-request:receiver",
+                "subject": "urn:fictional:subject-access-request:owner",
+                "claimType": "personal.data-copy",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:subject-access-request:data-copy",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:subject-access-request:data-copy",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:subject-access-request"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:subject-access-request:data-copy",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:subject-access-request"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:c1197d0e703f4dd1fe351d1ff748f29d13339f06617f805d88a685d9ae591525"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+            },
+            "digest": "sha-256:530dc218750d0d1fccbf3e3bb4bccf1cbff5fb52fef59bc6e09119ccc75b9f76"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-subject-access-request-main:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by The company’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "statements": [
+                {
+                  "id": "urn:scenario:subject-access-request:data-copy",
+                  "issuer": "urn:fictional:subject-access-request:receiver",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The company’s agent sends a deliver message to The person’s agent."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
+        "from": "The company’s agent",
+        "to": "The person’s agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:e4100ce3e57…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The company’s agent to The person’s agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-subject-access-request-main:receiver-agent:0001.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:subject-access-request:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:subject-access-request:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:subject-access-request:owner-agent:actor",
+                "party": "urn:fictional:subject-access-request:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c9501da7f885bc9fdf224952264c8d157565ab7ec781e1ceb70ee2e073c40430"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-subject-access-request-main:owner-agent:0002\"; \"urn:awp:engine-subject-access-request-main:owner-agent:0002\"; \"urn:op:subject-access-request\"; \"urn:scenario:subject-access-request:data-copy\"",
+            "raw": {
+              "ref": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:subject-access-request",
+                "version": "0.1"
+              },
+              "output": {
+                "items": [
+                  "urn:scenario:subject-access-request:data-copy"
+                ]
+              }
+            },
+            "digest": "sha-256:d73d83148f37c6c8af7d25405e7cf2feed4479c87f32f14b5dc6a25ed62c6d37",
+            "untrusted": [
+              {
+                "path": "ref",
+                "text": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+              },
+              {
+                "path": "basis.invocation",
+                "text": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+              },
+              {
+                "path": "operation.id",
+                "text": "urn:op:subject-access-request"
+              },
+              {
+                "path": "output.items.0",
+                "text": "urn:scenario:subject-access-request:data-copy"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: personal.data-copy from The company.",
+            "raw": [
+              {
+                "items": [
+                  {
+                    "id": "urn:fictional:company-record",
+                    "source": "urn:fictional:subject-access-request:receiver",
+                    "value": 42
+                  }
+                ],
+                "id": "urn:scenario:subject-access-request:data-copy",
+                "issuer": "urn:fictional:subject-access-request:receiver",
+                "subject": "urn:fictional:subject-access-request:owner",
+                "claimType": "personal.data-copy",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:subject-access-request:data-copy",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:subject-access-request:data-copy",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:subject-access-request"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:subject-access-request:data-copy",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:subject-access-request"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:c1197d0e703f4dd1fe351d1ff748f29d13339f06617f805d88a685d9ae591525"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-subject-access-request-main:owner-agent:0002"
+            },
+            "digest": "sha-256:530dc218750d0d1fccbf3e3bb4bccf1cbff5fb52fef59bc6e09119ccc75b9f76"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-subject-access-request-main:owner-agent:0002. The statements were issued by their sources and are relayed, not authored, by The company’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-subject-access-request-main:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
+              "statements": [
+                {
+                  "id": "urn:scenario:subject-access-request:data-copy",
+                  "issuer": "urn:fictional:subject-access-request:receiver",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A deliver message from The company’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The company’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:subject-access-request:personal.data-copy",
+        "text": "The company is accepted for personal.data-copy claims."
+      },
+      "resolution": {
+        "question": "Is The company an authority for personal.data-copy claims about The person?",
+        "path": [
+          {
+            "at": "The person's own list",
+            "kind": "own-list",
+            "says": "The company is accepted for personal.data-copy."
+          }
+        ],
+        "answer": "Accepted, for personal.data-copy claims only."
+      },
+      "caption": "The company's personal.data-copy statement: The company is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This message asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:subject-access-request:data-copy",
+        "text": "Its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+      },
+      "caption": "The company's personal.data-copy statement: its terms allow this: use for urn:purpose:subject access request; share for urn:purpose:subject access request."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:subject-access-request:personal.data-copy",
+        "text": "Accept personal.data-copy from urn:fictional:subject-access-request:receiver by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The company's personal.data-copy statement is fit for Asking a company what it holds about you: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 41,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 42,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:subject-access-request:data-copy",
+        "label": "The company's personal.data-copy statement",
+        "claimType": "personal.data-copy",
+        "subject": "urn:fictional:subject-access-request:owner",
+        "value": null,
+        "source": "urn:fictional:subject-access-request:receiver",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:subject-access-request:data-copy",
+          "summary": "use for urn:purpose:subject access request; share for urn:purpose:subject access request"
+        },
+        "provenance": "signed by The company"
+      },
+      "caption": "The company's personal.data-copy statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "7 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

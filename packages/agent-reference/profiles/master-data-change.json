@@ -5,21 +5,32 @@
   "claims": [
     {
       "kind": "bank.account-owner",
-      "sources": ["urn:fictional:supplier-bank"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:supplier-bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30
     },
     {
       "kind": "organization.role",
-      "sources": ["urn:fictional:directory"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:directory"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30
     }
   ],
   "purposes": [
     {
       "id": "urn:purpose:master-data-change",
-      "claims": ["bank.account-owner", "organization.role"]
+      "claims": [
+        "bank.account-owner",
+        "organization.role"
+      ]
     }
   ],
   "rules": [],
@@ -35,7 +46,9 @@
     },
     "output.status": {
       "type": "code",
-      "values": ["updated"]
+      "values": [
+        "updated"
+      ]
     },
     "output.account": {
       "type": "identifier",
@@ -50,7 +63,9 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": ["urn:purpose:master-data-change"],
+      "purposes": [
+        "urn:purpose:master-data-change"
+      ],
       "requiresRepresentation": true
     }
   ],
@@ -75,5 +90,17 @@
       "what": "Enterprise master-data system",
       "replacedBy": "Fictional ERP agent with its own key, inbound and outbound gates, and local update ledger"
     }
-  ]
+  ],
+  "parties": {
+    "business": "The business",
+    "finance-agent": "The business’s finance agent",
+    "supplier-bank": "The supplier’s bank",
+    "directory": "The staff directory",
+    "controller-one": "The first financial controller",
+    "controller-two": "The second financial controller",
+    "requester": "The requesting staff member",
+    "email": "An unverified email sender",
+    "erp": "The business’s account system",
+    "erp-agent": "The account system’s agent"
+  }
 }

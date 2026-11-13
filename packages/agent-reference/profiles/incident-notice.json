@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "incident-notice",
+  "parties": {
+    "party-1": "A service provider",
+    "party-2": "Its customers",
+    "party-3": "A regulator"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

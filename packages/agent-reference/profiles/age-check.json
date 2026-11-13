@@ -1,0 +1,82 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "age-check",
+  "parties": {
+    "owner": "The customer",
+    "receiver": "The merchant",
+    "identity-issuer": "The identity issuer",
+    "owner-agent": "The customer’s agent",
+    "receiver-agent": "The merchant’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.document",
+      "sources": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:age-check",
+      "claims": []
+    },
+    {
+      "id": "urn:purpose:identity-management",
+      "claims": [
+        "identity.document"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.document"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:age-check",
+      "version": "0.1",
+      "label": "Proving age to buy something",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

@@ -1,0 +1,288 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "degree-recognition",
+  "useCase": "degree-recognition",
+  "title": "Showing a degree to an employer abroad",
+  "profile": "degree-recognition",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:degree-recognition:owner",
+      "name": "The graduate",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:degree-recognition:receiver",
+      "name": "The foreign employer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "university",
+      "identity": "urn:fictional:degree-recognition:university",
+      "name": "The fictional university",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "national-root",
+      "identity": "urn:fictional:degree-recognition:national-root",
+      "name": "The employer’s national register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:degree-recognition:owner-agent",
+      "name": "The graduate’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:degree-recognition:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:degree-recognition:receiver-agent",
+      "name": "The foreign employer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:degree-recognition:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:degree-recognition:receiver",
+          "tasks": [
+            "urn:op:degree-recognition",
+            "urn:op:degree-recognition:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:degree-recognition:owner",
+          "tasks": [
+            "urn:op:degree-recognition",
+            "urn:op:degree-recognition:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:degree-recognition:education.degree",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:degree-recognition:education.degree",
+          "version": "1",
+          "source": "urn:fictional:degree-recognition:university",
+          "claimTypes": [
+            "education.degree"
+          ],
+          "subjects": [
+            "urn:fictional:degree-recognition:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "degree",
+      "issuer": "university",
+      "subject": "urn:fictional:degree-recognition:owner",
+      "kind": "education.degree",
+      "value": {
+        "degree": "fictional-degree",
+        "awarded": "2025-06-30"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:degree-recognition:degree",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:degree-recognition:degree",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:degree-recognition:degree",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:degree-recognition"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:degree-recognition"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:degree-recognition:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "No chain links the two national registers",
+      "change": {
+        "assurance": null,
+        "suites": {
+          "authenticity": "jws",
+          "trust": "register-chain"
+        },
+        "trust": {
+          "sources": {
+            "receiver-agent": []
+          },
+          "root": {
+            "id": "urn:fictional:degree-recognition:national-root",
+            "name": "The employer’s national trust root",
+            "delegates": []
+          }
+        },
+        "script": [
+          {
+            "id": "foreign-university-preflight",
+            "agent": "receiver-agent",
+            "type": "admit",
+            "statements": [
+              "degree"
+            ],
+            "purpose": "urn:purpose:degree-recognition"
+          }
+        ],
+        "traceSteps": {
+          "1": "The foreign employer’s agent checks the signed statements."
+        }
+      },
+      "expect": {
+        "outcome": "refuse",
+        "check": "source",
+        "reason": "source-unknown"
+      },
+      "outline": [
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-unknown"
+        }
+      ],
+      "catalogueExpected": {
+        "outcome": "ask-more",
+        "reason": "lookup-failed"
+      }
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source"
+  ],
+  "suites": {
+    "authenticity": "selective-disclosure",
+    "trust": "federation"
+  },
+  "assurance": "proved",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs a proof system"
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Foreign university trust preflight",
+      "replacedBy": "The locally introduced university key verifies its degree statement, but no register chain reaches it; no selective hidden-value proof is made"
+    }
+  ],
+  "traceSteps": {}
+}

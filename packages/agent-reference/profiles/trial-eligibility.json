@@ -1,0 +1,91 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "trial-eligibility",
+  "parties": {
+    "owner": "The volunteer",
+    "receiver": "The trial sponsor",
+    "practice": "The family practice",
+    "owner-agent": "The volunteer’s agent",
+    "receiver-agent": "The trial sponsor’s agent"
+  },
+  "claims": [
+    {
+      "kind": "medication.list",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "medication.completeness"
+    },
+    {
+      "kind": "medication.completeness",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:trial-eligibility",
+      "claims": [
+        "medication.list",
+        "medication.completeness"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "medication.list",
+        "medication.completeness"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:trial-eligibility",
+      "version": "0.1",
+      "label": "Proving eligibility for a clinical trial",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

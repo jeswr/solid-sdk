@@ -222,6 +222,9 @@ export class OutboundGate {
 
   private exceededLimit(intent: ActionIntent): string | undefined {
     const limits = this.deps.gate.principalLimits;
+    const commitment = limits?.commitments?.[intent.operation];
+    if (commitment && Number(intent.parameters.amount) > commitment.maxAmount)
+      return `This commitment exceeds the principal's ${commitment.currency} ${commitment.maxAmount} limit.`;
     const days = intent.parameters.retentionDays;
     if (
       limits?.maxRetentionDays !== undefined &&
@@ -371,6 +374,13 @@ export class OutboundGate {
       `${this.owner}'s mandate covers this action${matched?.withApproval ? ", with approval" : ""}.`,
       ruleRef,
     );
+
+    if (!this.commitmentShape(intent))
+      return {
+        outcome: "stop",
+        verdicts,
+        decision: { ...decision, outcome: "deny", reason: "malformed" },
+      };
 
     const taskItems = this.deps.memory.context(ctx.taskId ?? intent.conversation);
     const requiredClaims = ctx.actionClaims?.find((r) => r.action === intent.action)?.claims ?? [];
@@ -1649,7 +1659,12 @@ export class OutboundGate {
   }
 
   checkEffect(intent: ActionIntent, parameters: JsonObject): boolean {
-    if (intent.action !== "pay" || digestOf(parameters) === digestOf(intent.parameters))
+    if (!this.commitmentShape(intent)) return false;
+    const bounded = !!this.deps.gate.principalLimits?.commitments?.[intent.operation];
+    if (
+      (!bounded && intent.action !== "pay") ||
+      digestOf(parameters) === digestOf(intent.parameters)
+    )
       return true;
     const verdicts: CheckVerdict[] = [];
     this.verdict(
@@ -1657,10 +1672,34 @@ export class OutboundGate {
       actionDigest(intent),
       "mandate",
       "fail",
-      "The actual payment adapter parameters differ from the authorised action.",
+      "The actual adapter parameters differ from the authorised action.",
       { reason: "not-authorised" },
     );
-    this.decide("stop", "The actual payment was not authorised.", "not-authorised");
+    this.decide("stop", "The actual effect was not authorised.", "not-authorised");
+    return false;
+  }
+
+  private commitmentShape(intent: ActionIntent): boolean {
+    const cap = this.deps.gate.principalLimits?.commitments?.[intent.operation];
+    if (!cap) return true;
+    const amount = intent.parameters.amount;
+    if (
+      typeof amount === "number" &&
+      Number.isFinite(amount) &&
+      amount >= 0 &&
+      Math.abs(amount * 100 - Math.round(amount * 100)) < 1e-7 &&
+      intent.parameters.currency === cap.currency
+    )
+      return true;
+    this.verdict(
+      [],
+      actionDigest(intent),
+      "limits-approval",
+      "fail",
+      "A bounded commitment requires a nonnegative amount in the configured currency.",
+      { reason: "malformed" },
+    );
+    this.decide("stop", "The bounded commitment is malformed.", "malformed");
     return false;
   }
 

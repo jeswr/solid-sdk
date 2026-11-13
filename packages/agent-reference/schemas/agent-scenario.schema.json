@@ -13,8 +13,261 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
+    "useCase": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "cataloguePath": {
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991
+        },
+        "what": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "what"
+      ],
+      "additionalProperties": false
+    },
     "title": {
       "type": "string"
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "go",
+            "stop",
+            "ask-more",
+            "ask-principal",
+            "admit",
+            "refuse"
+          ]
+        },
+        "check": {
+          "type": "string",
+          "enum": [
+            "integrity",
+            "source",
+            "authority",
+            "terms",
+            "fitness",
+            "mandate",
+            "recipient",
+            "disclosure",
+            "data-terms",
+            "limits-approval",
+            "evidence"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "malformed",
+            "bounds-exceeded",
+            "unsigned-not-allowed",
+            "unknown-key",
+            "bad-signature",
+            "configuration-mismatch",
+            "sender-key-mismatch",
+            "wrong-audience",
+            "expired",
+            "not-yet-valid",
+            "lifetime-too-long",
+            "replay-conflict",
+            "unsupported-configuration",
+            "unsupported-operation",
+            "unsupported-kind",
+            "unsupported-term",
+            "protocol-violation",
+            "terms-digest-mismatch",
+            "round-limit",
+            "conversation-closed",
+            "source-accepted",
+            "source-not-authoritative",
+            "source-unknown",
+            "lookup-failed",
+            "status-withdrawn",
+            "rule-not-accepted",
+            "deriver-not-accepted",
+            "representation-missing",
+            "representation-invalid",
+            "representation-expired",
+            "representation-out-of-scope",
+            "mandate-invalid",
+            "mandate-withdrawn",
+            "assurance-insufficient",
+            "not-authorised",
+            "prohibited",
+            "purpose-not-permitted",
+            "insufficient-scope",
+            "missing-context",
+            "indeterminate-policy",
+            "terms-not-acceptable",
+            "no-agreement",
+            "stale-data",
+            "method-not-accepted",
+            "confidence-too-low",
+            "superseded-by-better-source",
+            "partial-result",
+            "completeness-not-established",
+            "structured-form-required",
+            "excessive-scope",
+            "minimal-disclosure",
+            "form-not-available",
+            "rule-unbounded",
+            "context-not-clear",
+            "approval-required",
+            "approval-denied",
+            "limit-exceeded",
+            "budget-exceeded",
+            "stopped-by-principal",
+            "evidence-invalid",
+            "evidence-missing",
+            "record-unavailable",
+            "derivation-not-verified",
+            "execution-failed",
+            "result-uncertain",
+            "intact",
+            "authority-valid",
+            "terms-acceptable",
+            "fit-for-use",
+            "within-mandate",
+            "recipient-established",
+            "terms-allow",
+            "within-limits",
+            "approval-given",
+            "evidence-complete",
+            "established-earlier",
+            "no-action",
+            "no-claims",
+            "no-principal",
+            "no-data",
+            "no-personal-data"
+          ]
+        }
+      },
+      "required": [
+        "outcome",
+        "check",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "catalogueExpected": {
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "go",
+            "stop",
+            "ask-more",
+            "ask-principal",
+            "admit",
+            "refuse"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "malformed",
+            "bounds-exceeded",
+            "unsigned-not-allowed",
+            "unknown-key",
+            "bad-signature",
+            "configuration-mismatch",
+            "sender-key-mismatch",
+            "wrong-audience",
+            "expired",
+            "not-yet-valid",
+            "lifetime-too-long",
+            "replay-conflict",
+            "unsupported-configuration",
+            "unsupported-operation",
+            "unsupported-kind",
+            "unsupported-term",
+            "protocol-violation",
+            "terms-digest-mismatch",
+            "round-limit",
+            "conversation-closed",
+            "source-accepted",
+            "source-not-authoritative",
+            "source-unknown",
+            "lookup-failed",
+            "status-withdrawn",
+            "rule-not-accepted",
+            "deriver-not-accepted",
+            "representation-missing",
+            "representation-invalid",
+            "representation-expired",
+            "representation-out-of-scope",
+            "mandate-invalid",
+            "mandate-withdrawn",
+            "assurance-insufficient",
+            "not-authorised",
+            "prohibited",
+            "purpose-not-permitted",
+            "insufficient-scope",
+            "missing-context",
+            "indeterminate-policy",
+            "terms-not-acceptable",
+            "no-agreement",
+            "stale-data",
+            "method-not-accepted",
+            "confidence-too-low",
+            "superseded-by-better-source",
+            "partial-result",
+            "completeness-not-established",
+            "structured-form-required",
+            "excessive-scope",
+            "minimal-disclosure",
+            "form-not-available",
+            "rule-unbounded",
+            "context-not-clear",
+            "approval-required",
+            "approval-denied",
+            "limit-exceeded",
+            "budget-exceeded",
+            "stopped-by-principal",
+            "evidence-invalid",
+            "evidence-missing",
+            "record-unavailable",
+            "derivation-not-verified",
+            "execution-failed",
+            "result-uncertain",
+            "intact",
+            "authority-valid",
+            "terms-acceptable",
+            "fit-for-use",
+            "within-mandate",
+            "recipient-established",
+            "terms-allow",
+            "within-limits",
+            "approval-given",
+            "evidence-complete",
+            "established-earlier",
+            "no-action",
+            "no-claims",
+            "no-principal",
+            "no-data",
+            "no-personal-data"
+          ]
+        }
+      },
+      "required": [
+        "outcome",
+        "reason"
+      ],
+      "additionalProperties": false
     },
     "profile": {
       "type": "string",
@@ -842,6 +1095,31 @@
               "maxRetentionDays": {
                 "type": "number",
                 "minimum": 0
+              },
+              "commitments": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9+.-]*:[^\\s<>\"{}|\\\\^`]+$"
+                },
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "maxAmount": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "currency": {
+                      "type": "string",
+                      "pattern": "^[A-Z]{3}$"
+                    }
+                  },
+                  "required": [
+                    "maxAmount",
+                    "currency"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "additionalProperties": false
@@ -1111,6 +1389,9 @@
               "from": {
                 "type": "string",
                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "stripSignature": {
+                "type": "boolean"
               },
               "reply": {
                 "type": "object",
@@ -1778,6 +2059,34 @@
               "type": {
                 "type": "string",
                 "const": "show-mandate"
+              }
+            },
+            "required": [
+              "id",
+              "agent",
+              "type"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "agent": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]*$"
+              },
+              "atStep": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "type": {
+                "type": "string",
+                "const": "revoke-mandate"
               }
             },
             "required": [
@@ -2480,6 +2789,113 @@
             "required": [
               "outcome",
               "check",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "catalogueExpected": {
+            "type": "object",
+            "properties": {
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "go",
+                  "stop",
+                  "ask-more",
+                  "ask-principal",
+                  "admit",
+                  "refuse"
+                ]
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "malformed",
+                  "bounds-exceeded",
+                  "unsigned-not-allowed",
+                  "unknown-key",
+                  "bad-signature",
+                  "configuration-mismatch",
+                  "sender-key-mismatch",
+                  "wrong-audience",
+                  "expired",
+                  "not-yet-valid",
+                  "lifetime-too-long",
+                  "replay-conflict",
+                  "unsupported-configuration",
+                  "unsupported-operation",
+                  "unsupported-kind",
+                  "unsupported-term",
+                  "protocol-violation",
+                  "terms-digest-mismatch",
+                  "round-limit",
+                  "conversation-closed",
+                  "source-accepted",
+                  "source-not-authoritative",
+                  "source-unknown",
+                  "lookup-failed",
+                  "status-withdrawn",
+                  "rule-not-accepted",
+                  "deriver-not-accepted",
+                  "representation-missing",
+                  "representation-invalid",
+                  "representation-expired",
+                  "representation-out-of-scope",
+                  "mandate-invalid",
+                  "mandate-withdrawn",
+                  "assurance-insufficient",
+                  "not-authorised",
+                  "prohibited",
+                  "purpose-not-permitted",
+                  "insufficient-scope",
+                  "missing-context",
+                  "indeterminate-policy",
+                  "terms-not-acceptable",
+                  "no-agreement",
+                  "stale-data",
+                  "method-not-accepted",
+                  "confidence-too-low",
+                  "superseded-by-better-source",
+                  "partial-result",
+                  "completeness-not-established",
+                  "structured-form-required",
+                  "excessive-scope",
+                  "minimal-disclosure",
+                  "form-not-available",
+                  "rule-unbounded",
+                  "context-not-clear",
+                  "approval-required",
+                  "approval-denied",
+                  "limit-exceeded",
+                  "budget-exceeded",
+                  "stopped-by-principal",
+                  "evidence-invalid",
+                  "evidence-missing",
+                  "record-unavailable",
+                  "derivation-not-verified",
+                  "execution-failed",
+                  "result-uncertain",
+                  "intact",
+                  "authority-valid",
+                  "terms-acceptable",
+                  "fit-for-use",
+                  "within-mandate",
+                  "recipient-established",
+                  "terms-allow",
+                  "within-limits",
+                  "approval-given",
+                  "evidence-complete",
+                  "established-earlier",
+                  "no-action",
+                  "no-claims",
+                  "no-principal",
+                  "no-data",
+                  "no-personal-data"
+                ]
+              }
+            },
+            "required": [
+              "outcome",
               "reason"
             ],
             "additionalProperties": false

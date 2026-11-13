@@ -1,16 +1,52 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "discharge-letter",
+  "path": {
+    "index": 1,
+    "what": "An agent turns \"cannot be ruled out\" into a coded diagnosis"
+  },
+  "parties": [
+    {
+      "id": "patient",
+      "name": "The patient"
+    },
+    {
+      "id": "practice",
+      "name": "The family practice"
+    },
+    {
+      "id": "hospital",
+      "name": "The hospital"
+    },
+    {
+      "id": "patient-agent",
+      "name": "The patient’s agent"
+    },
+    {
+      "id": "practice-agent",
+      "name": "The family practice’s agent"
+    },
+    {
+      "id": "hospital-agent",
+      "name": "The hospital’s agent"
+    }
+  ],
   "scenario": {
     "id": "discharge-letter--branch-1",
-    "title": "A discharge letter in a doctor's own words",
+    "title": "A discharge letter in a doctor's own words: An agent turns \"cannot be ruled out\" into a coded diagnosis",
     "steps": {
-      "1": "relay-holds-letter",
-      "2": "hospital-holds-diagnosis",
-      "3": "letter-sent",
-      "4": "letter-arrives",
-      "5": "read-letter",
-      "6": "wrong-diagnosis"
+      "1": "The patient’s agent checks and admits the signed statements.",
+      "2": "The hospital’s agent checks and admits the signed statements.",
+      "3": "The patient’s agent sends a signed request.",
+      "4": "The family practice’s agent checks the incoming message and prepares a response.",
+      "5": "The family practice’s agent completes the read content step.",
+      "6": "The family practice’s agent proposes the local action.",
+      "7": "The family practice’s agent completes the request structured step.",
+      "8": "The hospital’s agent checks the incoming message and prepares a response.",
+      "9": "The family practice’s agent checks the incoming message and prepares a response.",
+      "10": "The family practice’s agent proposes the local action.",
+      "11": "The family practice’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -32,25 +68,25 @@
   "agents": [
     {
       "id": "patient-agent",
-      "name": "patient-agent",
+      "name": "The patient’s agent",
       "actsFor": "patient",
       "role": "agent"
     },
     {
       "id": "practice-agent",
-      "name": "practice-agent",
+      "name": "The family practice’s agent",
       "actsFor": "practice",
       "role": "agent"
     },
     {
       "id": "hospital-agent",
-      "name": "hospital-agent",
+      "name": "The hospital’s agent",
       "actsFor": "hospital",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -85,7 +121,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "hospital's unstructured-content statement is intact and signed with hospital's pinned key."
+      "caption": "The hospital's unstructured-content statement is intact and signed with The hospital's pinned key."
     },
     {
       "seq": 2,
@@ -110,20 +146,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:hospital",
-        "text": "hospital is accepted for unstructured-content claims."
+        "text": "The hospital is accepted for unstructured-content claims."
       },
       "resolution": {
-        "question": "Is hospital an authority for unstructured-content claims about patient?",
+        "question": "Is The hospital an authority for unstructured-content claims about The patient?",
         "path": [
           {
-            "at": "patient's own list",
+            "at": "The patient's own list",
             "kind": "own-list",
-            "says": "hospital is accepted for unstructured-content."
+            "says": "The hospital is accepted for unstructured-content."
           }
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "hospital's unstructured-content statement: hospital is an accepted source for this kind of claim."
+      "caption": "The hospital's unstructured-content statement: The hospital is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -141,7 +177,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "hospital's unstructured-content statement asks for nothing, so there is no authority to check."
+      "caption": "The hospital's unstructured-content statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -168,7 +204,7 @@
         "id": "urn:terms:letter",
         "text": "Its terms allow this: ."
       },
-      "caption": "hospital's unstructured-content statement: its terms allow this: ."
+      "caption": "The hospital's unstructured-content statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -190,7 +226,7 @@
         "id": "urn:profile:discharge-letter:unstructured-content",
         "text": "Accept unstructured-content from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "hospital's unstructured-content statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
+      "caption": "The hospital's unstructured-content statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -200,7 +236,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "hospital's unstructured-content statement is admitted."
+      "caption": "The hospital's unstructured-content statement is admitted."
     },
     {
       "seq": 7,
@@ -210,7 +246,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:discharge-letter:letter",
-        "label": "hospital's unstructured-content statement",
+        "label": "The hospital's unstructured-content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:patient",
         "value": null,
@@ -221,9 +257,9 @@
           "id": "urn:terms:letter",
           "summary": ""
         },
-        "provenance": "signed by hospital"
+        "provenance": "signed by The hospital"
       },
-      "caption": "hospital's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -246,7 +282,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "hospital's clinical.diagnosis statement is intact and signed with hospital's pinned key."
+      "caption": "The hospital's clinical.diagnosis statement is intact and signed with The hospital's pinned key."
     },
     {
       "seq": 9,
@@ -271,20 +307,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:hospital",
-        "text": "hospital is accepted for clinical.diagnosis claims."
+        "text": "The hospital is accepted for clinical.diagnosis claims."
       },
       "resolution": {
-        "question": "Is hospital an authority for clinical.diagnosis claims about patient?",
+        "question": "Is The hospital an authority for clinical.diagnosis claims about The patient?",
         "path": [
           {
-            "at": "hospital's own list",
+            "at": "The hospital's own list",
             "kind": "own-list",
-            "says": "hospital is accepted for clinical.diagnosis."
+            "says": "The hospital is accepted for clinical.diagnosis."
           }
         ],
         "answer": "Accepted, for clinical.diagnosis claims only."
       },
-      "caption": "hospital's clinical.diagnosis statement: hospital is an accepted source for this kind of claim."
+      "caption": "The hospital's clinical.diagnosis statement: The hospital is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -302,7 +338,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "hospital's clinical.diagnosis statement asks for nothing, so there is no authority to check."
+      "caption": "The hospital's clinical.diagnosis statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -329,7 +365,7 @@
         "id": "urn:terms:diagnosis",
         "text": "Its terms allow this: ."
       },
-      "caption": "hospital's clinical.diagnosis statement: its terms allow this: ."
+      "caption": "The hospital's clinical.diagnosis statement: its terms allow this: ."
     },
     {
       "seq": 12,
@@ -351,7 +387,7 @@
         "id": "urn:profile:discharge-letter:clinical.diagnosis",
         "text": "Accept clinical.diagnosis from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "hospital's clinical.diagnosis statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
+      "caption": "The hospital's clinical.diagnosis statement is fit for urn:scenario:discharge-letter:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -361,7 +397,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "hospital's clinical.diagnosis statement is admitted."
+      "caption": "The hospital's clinical.diagnosis statement is admitted."
     },
     {
       "seq": 14,
@@ -371,7 +407,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:discharge-letter:diagnosis",
-        "label": "hospital's clinical.diagnosis statement",
+        "label": "The hospital's clinical.diagnosis statement",
         "claimType": "clinical.diagnosis",
         "subject": "urn:fictional:patient",
         "value": null,
@@ -382,9 +418,9 @@
           "id": "urn:terms:diagnosis",
           "summary": ""
         },
-        "provenance": "signed by hospital"
+        "provenance": "signed by The hospital"
       },
-      "caption": "hospital's clinical.diagnosis statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's clinical.diagnosis statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -392,7 +428,7 @@
       "agent": "patient-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:letter with practice."
+      "caption": "The core proposes to use urn:op:letter with The family practice."
     },
     {
       "seq": 16,
@@ -415,7 +451,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "patient's mandate covers this action."
+      "caption": "The patient's mandate covers this action."
     },
     {
       "seq": 17,
@@ -438,18 +474,18 @@
         }
       ],
       "resolution": {
-        "question": "Is practice a party I can send urn:op:letter to?",
+        "question": "Is The family practice a party I can send urn:op:letter to?",
         "path": [
           {
-            "at": "patient's own list",
+            "at": "The patient's own list",
             "kind": "own-list",
-            "says": "practice is accepted for urn:op:letter."
+            "says": "The family practice is accepted for urn:op:letter."
           }
         ],
         "answer": "Accepted, for urn:op:letter only."
       },
       "reason": "recipient-established",
-      "caption": "practice: Accepted, for urn:op:letter only."
+      "caption": "The family practice: Accepted, for urn:op:letter only."
     },
     {
       "seq": 18,
@@ -503,7 +539,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within patient's limits."
+      "caption": "Inside what the agent may do on its own, and within The patient's limits."
     },
     {
       "seq": 21,
@@ -543,7 +579,7 @@
         "text": "The issuer's terms: . They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "hospital's unstructured-content statement: its terms allow this: ."
+      "caption": "The hospital's unstructured-content statement: its terms allow this: ."
     },
     {
       "seq": 23,
@@ -579,7 +615,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item hospital's unstructured-content statement (urn:fictional:patient) is needed for this purpose."
+      "caption": "Context item The hospital's unstructured-content statement (urn:fictional:patient) is needed for this purpose."
     },
     {
       "seq": 25,
@@ -597,7 +633,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "hospital's unstructured-content statement: Its terms allow this: ."
+      "caption": "The hospital's unstructured-content statement: Its terms allow this: ."
     },
     {
       "seq": 26,
@@ -624,7 +660,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with patient-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The patient’s agent's pinned key, and written to the record."
     },
     {
       "seq": 27,
@@ -634,7 +670,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to practice-agent."
+      "caption": "The invoke message goes to The family practice’s agent."
     },
     {
       "seq": 28,
@@ -644,8 +680,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0002",
-        "from": "patient-agent",
-        "to": "practice-agent",
+        "from": "The patient’s agent",
+        "to": "The family practice’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -654,7 +690,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From patient-agent to practice-agent; invoke; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-discharge-letter-branch-1:patient-agent:0002.",
+            "summary": "From The patient’s agent to The family practice’s agent; invoke; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-discharge-letter-branch-1:patient-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
@@ -681,7 +717,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): patient says patient-agent acts for it.",
+            "summary": "1 representation statement(s): The patient says The patient’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -735,7 +771,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: unstructured-content from hospital.",
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The hospital.",
             "raw": [
               {
                 "contentDigest": "sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3",
@@ -776,7 +812,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by patient-agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The patient’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0001",
               "statements": [
@@ -805,7 +841,7 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "patient-agent sends an invoke message to practice-agent."
+      "caption": "The patient’s agent sends an invoke message to The family practice’s agent."
     },
     {
       "seq": 29,
@@ -815,8 +851,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0002",
-        "from": "patient-agent",
-        "to": "practice-agent",
+        "from": "The patient’s agent",
+        "to": "The family practice’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -825,7 +861,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From patient-agent to practice-agent; invoke; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-discharge-letter-branch-1:patient-agent:0002.",
+            "summary": "From The patient’s agent to The family practice’s agent; invoke; signed (JWS EdDSA, pinned key 0ybVTK_b9JwX…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-discharge-letter-branch-1:patient-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
@@ -852,7 +888,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): patient says patient-agent acts for it.",
+            "summary": "1 representation statement(s): The patient says The patient’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -914,7 +950,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: unstructured-content from hospital.",
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The hospital.",
             "raw": [
               {
                 "contentDigest": "sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3",
@@ -955,7 +991,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by patient-agent; as of 2026-11-13T09:00:00.000Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The patient’s agent; as of 2026-11-13T09:00:00.000Z.",
             "raw": {
               "conversation": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0001",
               "statements": [
@@ -984,7 +1020,7 @@
           "suite": "plain-language-upgrade"
         }
       ],
-      "caption": "An invoke message from patient-agent reaches the inbound gate."
+      "caption": "An invoke message from The patient’s agent reaches the inbound gate."
     },
     {
       "seq": 30,
@@ -1011,7 +1047,7 @@
         "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with patient-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The patient’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 31,
@@ -1036,20 +1072,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:hospital",
-        "text": "hospital is accepted for unstructured-content claims."
+        "text": "The hospital is accepted for unstructured-content claims."
       },
       "resolution": {
-        "question": "Is hospital an authority for unstructured-content claims about patient?",
+        "question": "Is The hospital an authority for unstructured-content claims about The patient?",
         "path": [
           {
-            "at": "practice's own list",
+            "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "hospital is accepted for unstructured-content."
+            "says": "The hospital is accepted for unstructured-content."
           }
         ],
         "answer": "Accepted, for unstructured-content claims only."
       },
-      "caption": "hospital's unstructured-content statement: hospital is an accepted source for this kind of claim."
+      "caption": "The hospital's unstructured-content statement: The hospital is an accepted source for this kind of claim."
     },
     {
       "seq": 32,
@@ -1069,9 +1105,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:4c2a8d821ac2ca3641487b4859bfe636:1794560400000",
-        "text": "A representation statement signed with patient's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The patient's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "patient signed a statement that patient-agent acts for them in this operation."
+      "caption": "The patient signed a statement that The patient’s agent acts for them in this operation."
     },
     {
       "seq": 33,
@@ -1098,7 +1134,7 @@
         "id": "urn:terms:letter",
         "text": "Its terms allow this: ."
       },
-      "caption": "hospital's unstructured-content statement: its terms allow this: ."
+      "caption": "The hospital's unstructured-content statement: its terms allow this: ."
     },
     {
       "seq": 34,
@@ -1120,7 +1156,7 @@
         "id": "urn:profile:discharge-letter:unstructured-content",
         "text": "Accept unstructured-content from urn:fictional:hospital by recorded-by-authority, at most 30 days old."
       },
-      "caption": "hospital's unstructured-content statement is fit for a mortgage application: recorded-by-authority, 0 days old."
+      "caption": "The hospital's unstructured-content statement is fit for urn:op:letter: recorded-by-authority, 0 days old."
     },
     {
       "seq": 35,
@@ -1140,7 +1176,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:discharge-letter:letter",
-        "label": "hospital's unstructured-content statement",
+        "label": "The hospital's unstructured-content statement",
         "claimType": "unstructured-content",
         "subject": "urn:fictional:patient",
         "value": null,
@@ -1151,9 +1187,9 @@
           "id": "urn:terms:letter",
           "summary": ""
         },
-        "provenance": "signed by hospital"
+        "provenance": "signed by The hospital"
       },
-      "caption": "hospital's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 37,
@@ -1177,7 +1213,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:clinical record with practice."
+      "caption": "The core proposes to use urn:op:clinical record with The family practice."
     },
     {
       "seq": 40,
@@ -1200,7 +1236,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "practice's mandate covers this action."
+      "caption": "The family practice's mandate covers this action."
     },
     {
       "seq": 41,

@@ -1,0 +1,7445 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "change-of-address",
+  "useCase": "change-of-address",
+  "title": "Telling everyone about a new address",
+  "profile": "change-of-address",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:change-of-address:owner",
+      "name": "The person",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "address-register",
+      "identity": "urn:fictional:change-of-address:address-register",
+      "name": "The fictional address register",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:change-of-address:owner-agent",
+      "name": "The person’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:change-of-address:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "organization-1",
+      "identity": "urn:fictional:change-of-address:organization-1",
+      "name": "Fictional organization 1",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-1-agent",
+      "identity": "urn:fictional:change-of-address:organization-1-agent",
+      "actor": "urn:fictional:change-of-address:organization-1-agent:actor",
+      "name": "Fictional organization 1’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-1"
+    },
+    {
+      "id": "organization-2",
+      "identity": "urn:fictional:change-of-address:organization-2",
+      "name": "Fictional organization 2",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-2-agent",
+      "identity": "urn:fictional:change-of-address:organization-2-agent",
+      "actor": "urn:fictional:change-of-address:organization-2-agent:actor",
+      "name": "Fictional organization 2’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-2"
+    },
+    {
+      "id": "organization-3",
+      "identity": "urn:fictional:change-of-address:organization-3",
+      "name": "Fictional organization 3",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-3-agent",
+      "identity": "urn:fictional:change-of-address:organization-3-agent",
+      "actor": "urn:fictional:change-of-address:organization-3-agent:actor",
+      "name": "Fictional organization 3’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-3"
+    },
+    {
+      "id": "organization-4",
+      "identity": "urn:fictional:change-of-address:organization-4",
+      "name": "Fictional organization 4",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-4-agent",
+      "identity": "urn:fictional:change-of-address:organization-4-agent",
+      "actor": "urn:fictional:change-of-address:organization-4-agent:actor",
+      "name": "Fictional organization 4’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-4"
+    },
+    {
+      "id": "organization-5",
+      "identity": "urn:fictional:change-of-address:organization-5",
+      "name": "Fictional organization 5",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-5-agent",
+      "identity": "urn:fictional:change-of-address:organization-5-agent",
+      "actor": "urn:fictional:change-of-address:organization-5-agent:actor",
+      "name": "Fictional organization 5’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-5"
+    },
+    {
+      "id": "organization-6",
+      "identity": "urn:fictional:change-of-address:organization-6",
+      "name": "Fictional organization 6",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-6-agent",
+      "identity": "urn:fictional:change-of-address:organization-6-agent",
+      "actor": "urn:fictional:change-of-address:organization-6-agent:actor",
+      "name": "Fictional organization 6’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-6"
+    },
+    {
+      "id": "organization-7",
+      "identity": "urn:fictional:change-of-address:organization-7",
+      "name": "Fictional organization 7",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-7-agent",
+      "identity": "urn:fictional:change-of-address:organization-7-agent",
+      "actor": "urn:fictional:change-of-address:organization-7-agent:actor",
+      "name": "Fictional organization 7’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-7"
+    },
+    {
+      "id": "organization-8",
+      "identity": "urn:fictional:change-of-address:organization-8",
+      "name": "Fictional organization 8",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-8-agent",
+      "identity": "urn:fictional:change-of-address:organization-8-agent",
+      "actor": "urn:fictional:change-of-address:organization-8-agent:actor",
+      "name": "Fictional organization 8’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-8"
+    },
+    {
+      "id": "organization-9",
+      "identity": "urn:fictional:change-of-address:organization-9",
+      "name": "Fictional organization 9",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-9-agent",
+      "identity": "urn:fictional:change-of-address:organization-9-agent",
+      "actor": "urn:fictional:change-of-address:organization-9-agent:actor",
+      "name": "Fictional organization 9’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-9"
+    },
+    {
+      "id": "organization-10",
+      "identity": "urn:fictional:change-of-address:organization-10",
+      "name": "Fictional organization 10",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-10-agent",
+      "identity": "urn:fictional:change-of-address:organization-10-agent",
+      "actor": "urn:fictional:change-of-address:organization-10-agent:actor",
+      "name": "Fictional organization 10’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-10"
+    },
+    {
+      "id": "organization-11",
+      "identity": "urn:fictional:change-of-address:organization-11",
+      "name": "Fictional organization 11",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-11-agent",
+      "identity": "urn:fictional:change-of-address:organization-11-agent",
+      "actor": "urn:fictional:change-of-address:organization-11-agent:actor",
+      "name": "Fictional organization 11’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-11"
+    },
+    {
+      "id": "organization-12",
+      "identity": "urn:fictional:change-of-address:organization-12",
+      "name": "Fictional organization 12",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-12-agent",
+      "identity": "urn:fictional:change-of-address:organization-12-agent",
+      "actor": "urn:fictional:change-of-address:organization-12-agent:actor",
+      "name": "Fictional organization 12’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-12"
+    },
+    {
+      "id": "organization-13",
+      "identity": "urn:fictional:change-of-address:organization-13",
+      "name": "Fictional organization 13",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-13-agent",
+      "identity": "urn:fictional:change-of-address:organization-13-agent",
+      "actor": "urn:fictional:change-of-address:organization-13-agent:actor",
+      "name": "Fictional organization 13’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-13"
+    },
+    {
+      "id": "organization-14",
+      "identity": "urn:fictional:change-of-address:organization-14",
+      "name": "Fictional organization 14",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-14-agent",
+      "identity": "urn:fictional:change-of-address:organization-14-agent",
+      "actor": "urn:fictional:change-of-address:organization-14-agent:actor",
+      "name": "Fictional organization 14’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-14"
+    },
+    {
+      "id": "organization-15",
+      "identity": "urn:fictional:change-of-address:organization-15",
+      "name": "Fictional organization 15",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-15-agent",
+      "identity": "urn:fictional:change-of-address:organization-15-agent",
+      "actor": "urn:fictional:change-of-address:organization-15-agent:actor",
+      "name": "Fictional organization 15’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-15"
+    },
+    {
+      "id": "organization-16",
+      "identity": "urn:fictional:change-of-address:organization-16",
+      "name": "Fictional organization 16",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-16-agent",
+      "identity": "urn:fictional:change-of-address:organization-16-agent",
+      "actor": "urn:fictional:change-of-address:organization-16-agent:actor",
+      "name": "Fictional organization 16’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-16"
+    },
+    {
+      "id": "organization-17",
+      "identity": "urn:fictional:change-of-address:organization-17",
+      "name": "Fictional organization 17",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-17-agent",
+      "identity": "urn:fictional:change-of-address:organization-17-agent",
+      "actor": "urn:fictional:change-of-address:organization-17-agent:actor",
+      "name": "Fictional organization 17’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-17"
+    },
+    {
+      "id": "organization-18",
+      "identity": "urn:fictional:change-of-address:organization-18",
+      "name": "Fictional organization 18",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-18-agent",
+      "identity": "urn:fictional:change-of-address:organization-18-agent",
+      "actor": "urn:fictional:change-of-address:organization-18-agent:actor",
+      "name": "Fictional organization 18’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-18"
+    },
+    {
+      "id": "organization-19",
+      "identity": "urn:fictional:change-of-address:organization-19",
+      "name": "Fictional organization 19",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-19-agent",
+      "identity": "urn:fictional:change-of-address:organization-19-agent",
+      "actor": "urn:fictional:change-of-address:organization-19-agent:actor",
+      "name": "Fictional organization 19’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-19"
+    },
+    {
+      "id": "organization-20",
+      "identity": "urn:fictional:change-of-address:organization-20",
+      "name": "Fictional organization 20",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-20-agent",
+      "identity": "urn:fictional:change-of-address:organization-20-agent",
+      "actor": "urn:fictional:change-of-address:organization-20-agent:actor",
+      "name": "Fictional organization 20’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-20"
+    },
+    {
+      "id": "organization-21",
+      "identity": "urn:fictional:change-of-address:organization-21",
+      "name": "Fictional organization 21",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "organization-21-agent",
+      "identity": "urn:fictional:change-of-address:organization-21-agent",
+      "actor": "urn:fictional:change-of-address:organization-21-agent:actor",
+      "name": "Fictional organization 21’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actsFor": "organization-21"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "organization-1-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-2-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-3-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-4-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-5-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-6-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-7-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-8-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-9-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-10-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-11-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-12-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-13-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-14-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-15-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-16-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-17-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-18-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-19-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-20-agent"
+      ],
+      [
+        "owner-agent",
+        "organization-21-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:change-of-address:organization-1",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-2",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-3",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-4",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-5",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-6",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-7",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-8",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-9",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-10",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-11",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-12",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-13",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-14",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-15",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-16",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-17",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-18",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-19",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-20",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        },
+        {
+          "party": "urn:fictional:change-of-address:organization-21",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-1-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-2-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-3-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-4-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-5-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-6-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-7-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-8-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-9-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-10-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-11-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-12-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-13-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-14-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-15-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-16-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-17-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-18-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-19-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-20-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ],
+      "organization-21-agent": [
+        {
+          "party": "urn:fictional:change-of-address:owner",
+          "tasks": [
+            "urn:op:change-of-address"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-1-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-2-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-3-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-4-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-5-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-6-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-7-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-8-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-9-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-10-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-11-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-12-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-13-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-14-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-15-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-16-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-17-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-18-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-19-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-20-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ],
+      "organization-21-agent": [
+        {
+          "id": "urn:source:change-of-address:contact.address",
+          "version": "1",
+          "source": "urn:fictional:change-of-address:address-register",
+          "claimTypes": [
+            "contact.address"
+          ],
+          "subjects": [
+            "urn:fictional:change-of-address:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "new-address",
+      "issuer": "address-register",
+      "subject": "urn:fictional:change-of-address:owner",
+      "kind": "contact.address",
+      "value": {
+        "address": "urn:fictional:new-home"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:change-of-address:new-address",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:change-of-address:new-address",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:change-of-address"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:change-of-address:new-address",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:change-of-address"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-1"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-2"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-3"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-4"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-5"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-6"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-7"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-8"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-9"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-10"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-11"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-12"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-13"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-14"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-15"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-16"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-17"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-18"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-19"
+            }
+          ]
+        },
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address",
+          "constraints": [
+            {
+              "leftOperand": "recipient",
+              "operator": "eq",
+              "rightOperand": "urn:fictional:change-of-address:organization-20"
+            }
+          ]
+        }
+      ],
+      "withApproval": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:change-of-address"
+        }
+      ]
+    },
+    {
+      "agent": "organization-1-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-2-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-3-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-4-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-5-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-6-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-7-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-8-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-9-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-10-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-11-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-12-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-13-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-14-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-15-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-16-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-17-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-18-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-19-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-20-agent",
+      "autonomous": [],
+      "withApproval": []
+    },
+    {
+      "agent": "organization-21-agent",
+      "autonomous": [],
+      "withApproval": []
+    }
+  ],
+  "script": [
+    {
+      "id": "check-new-address",
+      "agent": "owner-agent",
+      "type": "admit",
+      "statements": [
+        "new-address"
+      ],
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "tell-1",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-1-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-1",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-1-checks",
+      "agent": "organization-1-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-1",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-1-agent"
+    },
+    {
+      "id": "tell-2",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-2-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-2",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-2-checks",
+      "agent": "organization-2-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-2",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-2-agent"
+    },
+    {
+      "id": "tell-3",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-3-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-3",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-3-checks",
+      "agent": "organization-3-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-3",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-3-agent"
+    },
+    {
+      "id": "tell-4",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-4-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-4",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-4-checks",
+      "agent": "organization-4-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-4",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-4-agent"
+    },
+    {
+      "id": "tell-5",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-5-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-5",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-5-checks",
+      "agent": "organization-5-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-5",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-5-agent"
+    },
+    {
+      "id": "tell-6",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-6-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-6",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-6-checks",
+      "agent": "organization-6-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-6",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-6-agent"
+    },
+    {
+      "id": "tell-7",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-7-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-7",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-7-checks",
+      "agent": "organization-7-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-7",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-7-agent"
+    },
+    {
+      "id": "tell-8",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-8-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-8",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-8-checks",
+      "agent": "organization-8-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-8",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-8-agent"
+    },
+    {
+      "id": "tell-9",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-9-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-9",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-9-checks",
+      "agent": "organization-9-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-9",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-9-agent"
+    },
+    {
+      "id": "tell-10",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-10-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-10",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-10-checks",
+      "agent": "organization-10-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-10",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-10-agent"
+    },
+    {
+      "id": "tell-11",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-11-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-11",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-11-checks",
+      "agent": "organization-11-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-11",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-11-agent"
+    },
+    {
+      "id": "tell-12",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-12-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-12",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-12-checks",
+      "agent": "organization-12-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-12",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-12-agent"
+    },
+    {
+      "id": "tell-13",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-13-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-13",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-13-checks",
+      "agent": "organization-13-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-13",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-13-agent"
+    },
+    {
+      "id": "tell-14",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-14-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-14",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-14-checks",
+      "agent": "organization-14-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-14",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-14-agent"
+    },
+    {
+      "id": "tell-15",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-15-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-15",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-15-checks",
+      "agent": "organization-15-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-15",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-15-agent"
+    },
+    {
+      "id": "tell-16",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-16-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-16",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-16-checks",
+      "agent": "organization-16-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-16",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-16-agent"
+    },
+    {
+      "id": "tell-17",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-17-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-17",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-17-checks",
+      "agent": "organization-17-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-17",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-17-agent"
+    },
+    {
+      "id": "tell-18",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-18-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-18",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-18-checks",
+      "agent": "organization-18-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-18",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-18-agent"
+    },
+    {
+      "id": "tell-19",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-19-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-19",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-19-checks",
+      "agent": "organization-19-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-19",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-19-agent"
+    },
+    {
+      "id": "tell-20",
+      "agent": "owner-agent",
+      "type": "start",
+      "peer": "organization-20-agent",
+      "kind": "invoke",
+      "operation": "urn:op:change-of-address",
+      "contents": {
+        "addressRecord": "urn:scenario:change-of-address:new-address"
+      },
+      "evidence": [
+        "new-address"
+      ],
+      "intent": {
+        "action": "distribute",
+        "operation": "urn:op:change-of-address",
+        "target": "urn:op:change-of-address",
+        "recipient": "urn:fictional:change-of-address:organization-20",
+        "purpose": "urn:purpose:change-of-address",
+        "parameters": {}
+      },
+      "purpose": "urn:purpose:change-of-address"
+    },
+    {
+      "id": "organization-20-checks",
+      "agent": "organization-20-agent",
+      "type": "receive",
+      "from": "owner-agent",
+      "reply": {
+        "type": "deliver",
+        "output": {
+          "status": "received"
+        }
+      }
+    },
+    {
+      "id": "acknowledgement-20",
+      "agent": "owner-agent",
+      "type": "receive",
+      "from": "organization-20-agent"
+    },
+    {
+      "id": "check-address-update-record",
+      "agent": "owner-agent",
+      "type": "record"
+    }
+  ],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A recipient the person never dealt with is on the list",
+      "change": {
+        "script": [
+          {
+            "id": "check-new-address",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "new-address"
+            ],
+            "purpose": "urn:purpose:change-of-address"
+          },
+          {
+            "id": "tell-21",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "organization-21-agent",
+            "kind": "invoke",
+            "operation": "urn:op:change-of-address",
+            "contents": {
+              "addressRecord": "urn:scenario:change-of-address:new-address"
+            },
+            "evidence": [
+              "new-address"
+            ],
+            "intent": {
+              "action": "distribute",
+              "operation": "urn:op:change-of-address",
+              "target": "urn:op:change-of-address",
+              "recipient": "urn:fictional:change-of-address:organization-21",
+              "purpose": "urn:purpose:change-of-address",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:change-of-address"
+          }
+        ],
+        "traceSteps": {
+          "1": "The person’s agent checks the signed statements.",
+          "2": "The person’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "ask-principal",
+          "reason": "approval-required"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "principal",
+          "kind": "ask-principal"
+        }
+      ]
+    }
+  ],
+  "expect": [
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-1-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-2-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-3-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-4-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-5-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-6-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-7-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-8-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-9-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-10-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-11-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-12-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-13-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-14-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-15-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-16-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-17-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-18-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-19-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "reason": "within-mandate"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "reason": "within-limits"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "reason": "minimal-disclosure"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "reason": "terms-allow"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "reason": "source-accepted"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "reason": "authority-valid"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "reason": "terms-acceptable"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "reason": "fit-for-use"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "reason": "recipient-established"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "reason": "no-personal-data"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "reason": "evidence-complete"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    },
+    {
+      "agent": "organization-20-agent",
+      "part": "transport",
+      "kind": "message-out"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "reason": "intact"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "reason": "no-action"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "reason": "no-data"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "reason": "no-claims"
+    },
+    {
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass"
+    }
+  ],
+  "stress": [
+    "recipient",
+    "disclosure",
+    "limits-approval"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [],
+  "standIns": [
+    {
+      "what": "Twenty address-update destinations and address proof",
+      "replacedBy": "Twenty separately keyed fictional organization agents each verify the register-signed address record and sign an acknowledgement; the twenty-first identity is known but absent from the principal’s autonomous recipient list"
+    }
+  ],
+  "result": {
+    "outcome": "go",
+    "check": "evidence",
+    "reason": "evidence-complete"
+  },
+  "traceSteps": {
+    "1": "The person’s agent checks the signed statements.",
+    "2": "The person’s agent sends the signed request.",
+    "3": "Fictional organization 1’s agent checks the message and prepares a response.",
+    "4": "The person’s agent checks the message and prepares a response.",
+    "5": "The person’s agent sends the signed request.",
+    "6": "Fictional organization 2’s agent checks the message and prepares a response.",
+    "7": "The person’s agent checks the message and prepares a response.",
+    "8": "The person’s agent sends the signed request.",
+    "9": "Fictional organization 3’s agent checks the message and prepares a response.",
+    "10": "The person’s agent checks the message and prepares a response.",
+    "11": "The person’s agent sends the signed request.",
+    "12": "Fictional organization 4’s agent checks the message and prepares a response.",
+    "13": "The person’s agent checks the message and prepares a response.",
+    "14": "The person’s agent sends the signed request.",
+    "15": "Fictional organization 5’s agent checks the message and prepares a response.",
+    "16": "The person’s agent checks the message and prepares a response.",
+    "17": "The person’s agent sends the signed request.",
+    "18": "Fictional organization 6’s agent checks the message and prepares a response.",
+    "19": "The person’s agent checks the message and prepares a response.",
+    "20": "The person’s agent sends the signed request.",
+    "21": "Fictional organization 7’s agent checks the message and prepares a response.",
+    "22": "The person’s agent checks the message and prepares a response.",
+    "23": "The person’s agent sends the signed request.",
+    "24": "Fictional organization 8’s agent checks the message and prepares a response.",
+    "25": "The person’s agent checks the message and prepares a response.",
+    "26": "The person’s agent sends the signed request.",
+    "27": "Fictional organization 9’s agent checks the message and prepares a response.",
+    "28": "The person’s agent checks the message and prepares a response.",
+    "29": "The person’s agent sends the signed request.",
+    "30": "Fictional organization 10’s agent checks the message and prepares a response.",
+    "31": "The person’s agent checks the message and prepares a response.",
+    "32": "The person’s agent sends the signed request.",
+    "33": "Fictional organization 11’s agent checks the message and prepares a response.",
+    "34": "The person’s agent checks the message and prepares a response.",
+    "35": "The person’s agent sends the signed request.",
+    "36": "Fictional organization 12’s agent checks the message and prepares a response.",
+    "37": "The person’s agent checks the message and prepares a response.",
+    "38": "The person’s agent sends the signed request.",
+    "39": "Fictional organization 13’s agent checks the message and prepares a response.",
+    "40": "The person’s agent checks the message and prepares a response.",
+    "41": "The person’s agent sends the signed request.",
+    "42": "Fictional organization 14’s agent checks the message and prepares a response.",
+    "43": "The person’s agent checks the message and prepares a response.",
+    "44": "The person’s agent sends the signed request.",
+    "45": "Fictional organization 15’s agent checks the message and prepares a response.",
+    "46": "The person’s agent checks the message and prepares a response.",
+    "47": "The person’s agent sends the signed request.",
+    "48": "Fictional organization 16’s agent checks the message and prepares a response.",
+    "49": "The person’s agent checks the message and prepares a response.",
+    "50": "The person’s agent sends the signed request.",
+    "51": "Fictional organization 17’s agent checks the message and prepares a response.",
+    "52": "The person’s agent checks the message and prepares a response.",
+    "53": "The person’s agent sends the signed request.",
+    "54": "Fictional organization 18’s agent checks the message and prepares a response.",
+    "55": "The person’s agent checks the message and prepares a response.",
+    "56": "The person’s agent sends the signed request.",
+    "57": "Fictional organization 19’s agent checks the message and prepares a response.",
+    "58": "The person’s agent checks the message and prepares a response.",
+    "59": "The person’s agent sends the signed request.",
+    "60": "Fictional organization 20’s agent checks the message and prepares a response.",
+    "61": "The person’s agent checks the message and prepares a response.",
+    "62": "The person’s agent checks the durable record."
+  }
+}

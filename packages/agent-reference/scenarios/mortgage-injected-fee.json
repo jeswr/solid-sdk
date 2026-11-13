@@ -2,20 +2,20 @@
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-scenario/0.1",
   "id": "mortgage-injected-fee",
-  "title": "A message carries an instruction to pay a fee",
+  "title": "A mortgage in principle: A message tells the agent to pay a valuer",
   "profile": "mortgage",
   "parties": [
     {
       "id": "sam",
       "identity": "https://sam.example/#me",
-      "name": "Sam",
+      "name": "Sam, the fictional applicant",
       "role": "principal",
       "runs": "issuer-only"
     },
     {
       "id": "north",
       "identity": "https://northbank.example/#org",
-      "name": "North Bank",
+      "name": "The fictional lender",
       "role": "principal",
       "runs": "issuer-only"
     },
@@ -23,7 +23,7 @@
       "id": "sam-agent",
       "identity": "https://agents.hostco.example/sam#agent",
       "actor": "https://agents.hostco.example/sam#agent",
-      "name": "Sam's agent",
+      "name": "Sam’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "sam",
@@ -37,7 +37,7 @@
       "id": "north-agent",
       "identity": "https://northbank.example/agents/intake#agent",
       "actor": "https://northbank.example/agents/intake#agent",
-      "name": "North Bank's agent",
+      "name": "The fictional lender’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "north",
@@ -50,14 +50,14 @@
     {
       "id": "paywell",
       "identity": "https://paywell.example/#org",
-      "name": "Paywell",
+      "name": "The fictional payroll provider",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "harbour",
       "identity": "https://harbourbank.example/#org",
-      "name": "Harbour Bank",
+      "name": "Sam’s fictional bank",
       "role": "source",
       "runs": "issuer-only"
     }
@@ -2356,14 +2356,19 @@
     }
   },
   "traceSteps": {
-    "2": "Sam asks for a mortgage in principle",
-    "3": "Sam's agent looks North Bank up before contacting it",
-    "4": "The agents describe themselves and Sam's agent applies",
-    "5": "North Bank says what evidence it needs",
-    "10": "Sam's agent checks the statements it holds",
-    "11": "Sam is asked, and the agent shares the evidence",
-    "12": "North Bank's gate checks the evidence",
-    "13": "North Bank returns a signed decision in principle",
-    "14": "Each side checks its own record"
+    "2": "Sam asks for a mortgage in principle.",
+    "3": "Sam's agent looks North Bank up before contacting it.",
+    "4": "The agents describe themselves and Sam's agent applies.",
+    "5": "North Bank says what evidence it needs.",
+    "10": "Sam's agent checks the statements it holds.",
+    "11": "Sam is asked, and the agent shares the evidence.",
+    "12": "North Bank's gate checks the evidence.",
+    "13": "North Bank returns a signed decision in principle.",
+    "14": "Each side checks its own record."
+  },
+  "useCase": "mortgage-in-principle",
+  "cataloguePath": {
+    "index": 2,
+    "what": "A message tells the agent to pay a valuer"
   }
 }

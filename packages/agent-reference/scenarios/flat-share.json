@@ -2,13 +2,13 @@
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-scenario/0.1",
   "id": "flat-share",
-  "title": "flat-share (entirely fictional)",
+  "title": "Two people agree to share a flat",
   "profile": "flat-share",
   "parties": [
     {
       "id": "alex",
       "identity": "urn:fictional:alex",
-      "name": "alex",
+      "name": "Alex, a fictional flatmate",
       "role": "source",
       "runs": "issuer-only"
     },
@@ -16,7 +16,7 @@
       "id": "alex-agent",
       "identity": "urn:fictional:alex-agent",
       "actor": "urn:fictional:alex-agent:agent",
-      "name": "alex-agent",
+      "name": "Alex’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "alex"
@@ -24,7 +24,7 @@
     {
       "id": "blair",
       "identity": "urn:fictional:blair",
-      "name": "blair",
+      "name": "Blair, a fictional flatmate",
       "role": "source",
       "runs": "issuer-only"
     },
@@ -32,20 +32,29 @@
       "id": "blair-agent",
       "identity": "urn:fictional:blair-agent",
       "actor": "urn:fictional:blair-agent:agent",
-      "name": "blair-agent",
+      "name": "Blair’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "blair"
     }
   ],
   "trust": {
-    "introductions": [["alex-agent", "blair-agent"]],
+    "introductions": [
+      [
+        "alex-agent",
+        "blair-agent"
+      ]
+    ],
     "ownLists": {
       "alex-agent": [
         {
           "party": "urn:fictional:blair",
-          "tasks": ["urn:op:flat-share"],
-          "purposes": ["urn:purpose:flat-share"],
+          "tasks": [
+            "urn:op:flat-share"
+          ],
+          "purposes": [
+            "urn:purpose:flat-share"
+          ],
           "expiresAt": "2026-12-31T00:00:00.000Z"
         }
       ],
@@ -200,7 +209,11 @@
             "type": "receive",
             "from": "alex-agent"
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "Alex’s agent sends a signed request.",
+          "2": "Blair’s agent checks the incoming message and prepares a response."
+        }
       },
       "expect": {
         "outcome": "ask-principal",
@@ -576,10 +589,23 @@
       "verdict": "pass"
     }
   ],
-  "stress": ["recipient", "source", "limits-approval"],
+  "stress": [
+    "recipient",
+    "source",
+    "limits-approval"
+  ],
   "suites": {
     "trust": "pinned-list"
   },
   "assurance": null,
-  "blocked": []
+  "blocked": [],
+  "useCase": "flat-share",
+  "traceSteps": {
+    "1": "Alex’s agent sends a signed request.",
+    "2": "Blair’s agent checks the incoming message and prepares a response.",
+    "3": "Blair’s agent completes the trust decision step.",
+    "4": "Alex’s agent checks the incoming message and prepares a response.",
+    "5": "Blair’s agent checks the durable record.",
+    "6": "Alex’s agent checks the durable record."
+  }
 }

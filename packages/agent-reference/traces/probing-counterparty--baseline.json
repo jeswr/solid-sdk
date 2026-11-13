@@ -1,17 +1,37 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "probing-counterparty",
+  "path": "main",
+  "parties": [
+    {
+      "id": "rowan",
+      "name": "Rowan, a fictional customer"
+    },
+    {
+      "id": "cedar",
+      "name": "The fictional service"
+    },
+    {
+      "id": "person-agent",
+      "name": "Rowan’s agent"
+    },
+    {
+      "id": "service-agent",
+      "name": "The service’s agent"
+    }
+  ],
   "scenario": {
     "id": "probing-counterparty",
     "title": "A service agent that keeps asking",
     "steps": {
-      "1": "instruct",
-      "2": "load-contact",
-      "3": "request",
-      "4": "answer",
-      "5": "acceptance-arrives",
-      "6": "contact-arrives",
-      "7": "audit"
+      "1": "Rowan’s agent receives the principal’s instruction.",
+      "2": "Rowan’s agent checks and admits the signed statements.",
+      "3": "The service’s agent sends a signed request.",
+      "4": "Rowan’s agent checks the incoming message and prepares a response.",
+      "5": "The service’s agent checks the incoming message and prepares a response.",
+      "6": "The service’s agent checks the incoming message and prepares a response.",
+      "7": "Rowan’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -33,19 +53,19 @@
   "agents": [
     {
       "id": "person-agent",
-      "name": "Rowan's agent",
+      "name": "Rowan’s agent",
       "actsFor": "rowan",
       "role": "agent"
     },
     {
       "id": "service-agent",
-      "name": "Cedar's agent",
+      "name": "The service’s agent",
       "actsFor": "cedar",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [],
@@ -60,7 +80,7 @@
         "who": "principal",
         "text": "Share my contact code only for this service query."
       },
-      "caption": "Rowan Vale asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
+      "caption": "Rowan, a fictional customer asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
     },
     {
       "seq": 2,
@@ -83,7 +103,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "Rowan Vale's contact statement is intact and signed with Rowan Vale's pinned key."
+      "caption": "Rowan, a fictional customer's contact statement is intact and signed with Rowan, a fictional customer's pinned key."
     },
     {
       "seq": 3,
@@ -108,20 +128,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:rule:rowan-contact",
-        "text": "Rowan Vale is accepted for contact claims."
+        "text": "Rowan, a fictional customer is accepted for contact claims."
       },
       "resolution": {
-        "question": "Is Rowan Vale an authority for contact claims about Rowan Vale?",
+        "question": "Is Rowan, a fictional customer an authority for contact claims about Rowan, a fictional customer?",
         "path": [
           {
-            "at": "Rowan Vale's own list",
+            "at": "Rowan, a fictional customer's own list",
             "kind": "own-list",
-            "says": "Rowan Vale is accepted for contact."
+            "says": "Rowan, a fictional customer is accepted for contact."
           }
         ],
         "answer": "Accepted, for contact claims only."
       },
-      "caption": "Rowan Vale's contact statement: Rowan Vale is an accepted source for this kind of claim."
+      "caption": "Rowan, a fictional customer's contact statement: Rowan, a fictional customer is an accepted source for this kind of claim."
     },
     {
       "seq": 4,
@@ -139,7 +159,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "Rowan Vale's contact statement asks for nothing, so there is no authority to check."
+      "caption": "Rowan, a fictional customer's contact statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 5,
@@ -166,7 +186,7 @@
         "id": "urn:terms:contact",
         "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
       },
-      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
       "seq": 6,
@@ -188,7 +208,7 @@
         "id": "urn:profile:probing-counterparty:contact",
         "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
       },
-      "caption": "Rowan Vale's contact statement is fit for urn:scenario:probing-counterparty:task: self-reported, 0 days old."
+      "caption": "Rowan, a fictional customer's contact statement is fit for urn:scenario:probing-counterparty:task: self-reported, 0 days old."
     },
     {
       "seq": 7,
@@ -198,7 +218,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "Rowan Vale's contact statement is admitted."
+      "caption": "Rowan, a fictional customer's contact statement is admitted."
     },
     {
       "seq": 8,
@@ -208,7 +228,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:probing-counterparty:contact",
-        "label": "Rowan Vale's contact statement",
+        "label": "Rowan, a fictional customer's contact statement",
         "claimType": "contact",
         "subject": "urn:fictional:rowan",
         "value": null,
@@ -219,9 +239,9 @@
           "id": "urn:terms:contact",
           "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
         },
-        "provenance": "signed by Rowan Vale"
+        "provenance": "signed by Rowan, a fictional customer"
       },
-      "caption": "Rowan Vale's contact statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 9,
@@ -229,7 +249,7 @@
       "agent": "service-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:operation:service query with Rowan Vale."
+      "caption": "The core proposes to take the next step in A bounded request for contact details with Rowan, a fictional customer."
     },
     {
       "seq": 10,
@@ -252,7 +272,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "Cedar Service's mandate covers this action."
+      "caption": "The fictional service's mandate covers this action."
     },
     {
       "seq": 11,
@@ -275,18 +295,18 @@
         }
       ],
       "resolution": {
-        "question": "Is Rowan Vale a party I can send urn:operation:service query to?",
+        "question": "Is Rowan, a fictional customer a party I can send A bounded request for contact details to?",
         "path": [
           {
-            "at": "Cedar Service's own list",
+            "at": "The fictional service's own list",
             "kind": "own-list",
-            "says": "Rowan Vale is accepted for urn:operation:service query."
+            "says": "Rowan, a fictional customer is accepted for A bounded request for contact details."
           }
         ],
-        "answer": "Accepted, for urn:operation:service query only."
+        "answer": "Accepted, for A bounded request for contact details only."
       },
       "reason": "recipient-established",
-      "caption": "Rowan Vale: Accepted, for urn:operation:service query only."
+      "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only."
     },
     {
       "seq": 12,
@@ -340,7 +360,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within Cedar Service's limits."
+      "caption": "Inside what the agent may do on its own, and within The fictional service's limits."
     },
     {
       "seq": 15,
@@ -385,7 +405,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with Cedar's agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The service’s agent's pinned key, and written to the record."
     },
     {
       "seq": 17,
@@ -395,7 +415,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The propose message goes to Rowan's agent."
+      "caption": "The propose message goes to Rowan’s agent."
     },
     {
       "seq": 18,
@@ -405,8 +425,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
-        "from": "Cedar's agent",
-        "to": "Rowan's agent",
+        "from": "The service’s agent",
+        "to": "Rowan’s agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
@@ -415,7 +435,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "summary": "From The service’s agent to Rowan’s agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -442,7 +462,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+            "summary": "1 representation statement(s): The fictional service says The service’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -523,7 +543,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "Cedar's agent sends a propose message to Rowan's agent."
+      "caption": "The service’s agent sends a propose message to Rowan’s agent."
     },
     {
       "seq": 19,
@@ -533,8 +553,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
-        "from": "Cedar's agent",
-        "to": "Rowan's agent",
+        "from": "The service’s agent",
+        "to": "Rowan’s agent",
         "kind": "propose",
         "carriage": {
           "suite": "direct-http",
@@ -543,7 +563,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Cedar's agent to Rowan's agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
+            "summary": "From The service’s agent to Rowan’s agent; propose; signed (JWS EdDSA, pinned key bl8gaNvvMntz…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:service-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -570,7 +590,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): Cedar Service says Cedar's agent acts for it.",
+            "summary": "1 representation statement(s): The fictional service says The service’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -665,7 +685,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A propose message from Cedar's agent reaches the inbound gate."
+      "caption": "A propose message from The service’s agent reaches the inbound gate."
     },
     {
       "seq": 20,
@@ -692,7 +712,7 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with Cedar's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The service’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 21,
@@ -735,9 +755,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:2a26df0df87f54e40c0217cc5834a93f:1794560400000",
-        "text": "A representation statement signed with Cedar Service's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The fictional service's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "Cedar Service signed a statement that Cedar's agent acts for them in this operation."
+      "caption": "The fictional service signed a statement that The service’s agent acts for them in this operation."
     },
     {
       "seq": 23,
@@ -796,7 +816,7 @@
       "agent": "person-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share Rowan Vale's contact statement with Cedar Service."
+      "caption": "The core proposes to share Rowan, a fictional customer's contact statement with The fictional service."
     },
     {
       "seq": 27,
@@ -819,7 +839,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "Rowan Vale's mandate covers this action."
+      "caption": "Rowan, a fictional customer's mandate covers this action."
     },
     {
       "seq": 28,
@@ -842,18 +862,18 @@
         }
       ],
       "resolution": {
-        "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+        "question": "Is The fictional service a party I can send A bounded request for contact details to?",
         "path": [
           {
-            "at": "Rowan Vale's own list",
+            "at": "Rowan, a fictional customer's own list",
             "kind": "own-list",
-            "says": "Cedar Service is accepted for urn:operation:service query."
+            "says": "The fictional service is accepted for A bounded request for contact details."
           }
         ],
-        "answer": "Accepted, for urn:operation:service query only."
+        "answer": "Accepted, for A bounded request for contact details only."
       },
       "reason": "recipient-established",
-      "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+      "caption": "The fictional service: Accepted, for A bounded request for contact details only."
     },
     {
       "seq": 29,
@@ -875,7 +895,7 @@
         "id": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
         "text": "The request asks for contact; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: Rowan Vale's contact statement."
+      "caption": "Only what the request needs goes: Rowan, a fictional customer's contact statement."
     },
     {
       "seq": 30,
@@ -897,7 +917,7 @@
         "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
       "seq": 31,
@@ -915,7 +935,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within Rowan Vale's limits."
+      "caption": "Inside what the agent may do on its own, and within Rowan, a fictional customer's limits."
     },
     {
       "seq": 32,
@@ -942,7 +962,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with Rowan’s agent's pinned key, and written to the record."
     },
     {
       "seq": 33,
@@ -952,7 +972,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The accept message goes to Cedar's agent."
+      "caption": "The accept message goes to The service’s agent."
     },
     {
       "seq": 34,
@@ -962,8 +982,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
-        "from": "Rowan's agent",
-        "to": "Cedar's agent",
+        "from": "Rowan’s agent",
+        "to": "The service’s agent",
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
@@ -972,7 +992,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
+            "summary": "From Rowan’s agent to The service’s agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1000,7 +1020,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+            "summary": "1 representation statement(s): Rowan, a fictional customer says Rowan’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -1064,7 +1084,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "Rowan's agent sends an accept message to Cedar's agent."
+      "caption": "Rowan’s agent sends an accept message to The service’s agent."
     },
     {
       "seq": 35,
@@ -1072,7 +1092,7 @@
       "agent": "person-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to share Rowan Vale's contact statement with Cedar Service."
+      "caption": "The core proposes to share Rowan, a fictional customer's contact statement with The fictional service."
     },
     {
       "seq": 36,
@@ -1095,7 +1115,7 @@
         }
       ],
       "reason": "within-mandate",
-      "caption": "Rowan Vale's mandate covers this action."
+      "caption": "Rowan, a fictional customer's mandate covers this action."
     },
     {
       "seq": 37,
@@ -1118,18 +1138,18 @@
         }
       ],
       "resolution": {
-        "question": "Is Cedar Service a party I can send urn:operation:service query to?",
+        "question": "Is The fictional service a party I can send A bounded request for contact details to?",
         "path": [
           {
-            "at": "Rowan Vale's own list",
+            "at": "Rowan, a fictional customer's own list",
             "kind": "own-list",
-            "says": "Cedar Service is accepted for urn:operation:service query."
+            "says": "The fictional service is accepted for A bounded request for contact details."
           }
         ],
-        "answer": "Accepted, for urn:operation:service query only."
+        "answer": "Accepted, for A bounded request for contact details only."
       },
       "reason": "recipient-established",
-      "caption": "Cedar Service: Accepted, for urn:operation:service query only."
+      "caption": "The fictional service: Accepted, for A bounded request for contact details only."
     },
     {
       "seq": 38,
@@ -1151,7 +1171,7 @@
         "id": "sha-256:eb3cbb0fe4af04d442a6388b5bdc1126fef349dc25193a0f677653341503fac6",
         "text": "The request asks for contact; by value is the only form in this configuration."
       },
-      "caption": "Only what the request needs goes: Rowan Vale's contact statement."
+      "caption": "Only what the request needs goes: Rowan, a fictional customer's contact statement."
     },
     {
       "seq": 39,
@@ -1173,7 +1193,7 @@
         "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
       "seq": 40,
@@ -1191,7 +1211,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within Rowan Vale's limits."
+      "caption": "Inside what the agent may do on its own, and within Rowan, a fictional customer's limits."
     },
     {
       "seq": 41,
@@ -1231,7 +1251,7 @@
         "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
       },
       "reason": "terms-allow",
-      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
       "seq": 43,
@@ -1276,7 +1296,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with Rowan's agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with Rowan’s agent's pinned key, and written to the record."
     },
     {
       "seq": 45,
@@ -1286,7 +1306,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The deliver message goes to Cedar's agent."
+      "caption": "The deliver message goes to The service’s agent."
     },
     {
       "seq": 46,
@@ -1296,8 +1316,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
-        "from": "Rowan's agent",
-        "to": "Cedar's agent",
+        "from": "Rowan’s agent",
+        "to": "The service’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -1306,7 +1326,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Rowan's agent to Cedar's agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
+            "summary": "From Rowan’s agent to The service’s agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1358,7 +1378,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: contact from Rowan Vale.",
+            "summary": "1 statement(s) signed by their sources: contact from Rowan, a fictional customer.",
             "raw": [
               {
                 "value": 42,
@@ -1414,7 +1434,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan's agent; as of 2026-11-13T09:00:00Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan’s agent; as of 2026-11-13T09:00:00Z.",
             "raw": {
               "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
               "statements": [
@@ -1443,7 +1463,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "Rowan's agent sends a deliver message to Cedar's agent."
+      "caption": "Rowan’s agent sends a deliver message to The service’s agent."
     },
     {
       "seq": 47,
@@ -1453,8 +1473,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
-        "from": "Rowan's agent",
-        "to": "Cedar's agent",
+        "from": "Rowan’s agent",
+        "to": "The service’s agent",
         "kind": "accept",
         "carriage": {
           "suite": "direct-http",
@@ -1463,7 +1483,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Rowan's agent to Cedar's agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
+            "summary": "From Rowan’s agent to The service’s agent; accept; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0001.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1491,7 +1511,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): Rowan Vale says Rowan's agent acts for it.",
+            "summary": "1 representation statement(s): Rowan, a fictional customer says Rowan’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -1569,7 +1589,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An accept message from Rowan's agent reaches the inbound gate."
+      "caption": "An accept message from Rowan’s agent reaches the inbound gate."
     },
     {
       "seq": 48,
@@ -1596,7 +1616,7 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with Rowan’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 49,
@@ -1639,9 +1659,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
-        "text": "A representation statement signed with Rowan Vale's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with Rowan, a fictional customer's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "Rowan Vale signed a statement that Rowan's agent acts for them in this operation."
+      "caption": "Rowan, a fictional customer signed a statement that Rowan’s agent acts for them in this operation."
     },
     {
       "seq": 51,
@@ -1702,8 +1722,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
-        "from": "Rowan's agent",
-        "to": "Cedar's agent",
+        "from": "Rowan’s agent",
+        "to": "The service’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -1712,7 +1732,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From Rowan's agent to Cedar's agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
+            "summary": "From Rowan’s agent to The service’s agent; deliver; signed (JWS EdDSA, pinned key VZdR3KLfwo2Z…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-probing-counterparty-main:person-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
@@ -1782,7 +1802,7 @@
           },
           "evidence": {
             "present": true,
-            "summary": "1 statement(s) signed by their sources: contact from Rowan Vale.",
+            "summary": "1 statement(s) signed by their sources: contact from Rowan, a fictional customer.",
             "raw": [
               {
                 "value": 42,
@@ -1838,7 +1858,7 @@
           },
           "provenance": {
             "present": true,
-            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan's agent; as of 2026-11-13T09:00:00Z.",
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by Rowan’s agent; as of 2026-11-13T09:00:00Z.",
             "raw": {
               "conversation": "urn:awp:engine-probing-counterparty-main:service-agent:0001",
               "statements": [
@@ -1867,7 +1887,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A deliver message from Rowan's agent reaches the inbound gate."
+      "caption": "A deliver message from Rowan’s agent reaches the inbound gate."
     },
     {
       "seq": 55,
@@ -1894,7 +1914,7 @@
         "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with Rowan's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with Rowan’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 56,
@@ -1919,20 +1939,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:rule:rowan-contact",
-        "text": "Rowan Vale is accepted for contact claims."
+        "text": "Rowan, a fictional customer is accepted for contact claims."
       },
       "resolution": {
-        "question": "Is Rowan Vale an authority for contact claims about Rowan Vale?",
+        "question": "Is Rowan, a fictional customer an authority for contact claims about Rowan, a fictional customer?",
         "path": [
           {
-            "at": "Cedar Service's own list",
+            "at": "The fictional service's own list",
             "kind": "own-list",
-            "says": "Rowan Vale is accepted for contact."
+            "says": "Rowan, a fictional customer is accepted for contact."
           }
         ],
         "answer": "Accepted, for contact claims only."
       },
-      "caption": "Rowan Vale's contact statement: Rowan Vale is an accepted source for this kind of claim."
+      "caption": "Rowan, a fictional customer's contact statement: Rowan, a fictional customer is an accepted source for this kind of claim."
     },
     {
       "seq": 57,
@@ -1954,7 +1974,7 @@
         "id": "urn:awp:representation:8085bb433c522764582542add66f79ce:1794560400000",
         "text": "The representation accepted earlier in this conversation, still valid."
       },
-      "caption": "Settled when this conversation opened: Rowan Vale's signed representation statement still covers it."
+      "caption": "Settled when this conversation opened: Rowan, a fictional customer's signed representation statement still covers it."
     },
     {
       "seq": 58,
@@ -1981,7 +2001,7 @@
         "id": "urn:terms:contact",
         "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
       },
-      "caption": "Rowan Vale's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+      "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
     },
     {
       "seq": 59,
@@ -2003,7 +2023,7 @@
         "id": "urn:profile:probing-counterparty:contact",
         "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
       },
-      "caption": "Rowan Vale's contact statement is fit for a mortgage application: self-reported, 0 days old."
+      "caption": "Rowan, a fictional customer's contact statement is fit for A bounded request for contact details: self-reported, 0 days old."
     },
     {
       "seq": 60,
@@ -2023,7 +2043,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:probing-counterparty:contact",
-        "label": "Rowan Vale's contact statement",
+        "label": "Rowan, a fictional customer's contact statement",
         "claimType": "contact",
         "subject": "urn:fictional:rowan",
         "value": null,
@@ -2034,9 +2054,9 @@
           "id": "urn:terms:contact",
           "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
         },
-        "provenance": "signed by Rowan Vale"
+        "provenance": "signed by Rowan, a fictional customer"
       },
-      "caption": "Rowan Vale's contact statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 62,

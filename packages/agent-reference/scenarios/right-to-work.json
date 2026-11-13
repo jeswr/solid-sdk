@@ -8,35 +8,35 @@
     {
       "id": "candidate",
       "identity": "urn:fictional:candidate",
-      "name": "candidate",
+      "name": "The candidate",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "employer",
       "identity": "urn:fictional:employer",
-      "name": "employer",
+      "name": "The employer",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "immigration-office",
       "identity": "urn:fictional:immigration-office",
-      "name": "immigration-office",
+      "name": "The fictional immigration office",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "university",
       "identity": "urn:fictional:university",
-      "name": "university",
+      "name": "The fictional university",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "candidate-agent",
       "identity": "urn:fictional:candidate-agent",
-      "name": "candidate-agent",
+      "name": "The candidate’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:candidate-agent:agent",
@@ -45,7 +45,7 @@
     {
       "id": "employer-agent",
       "identity": "urn:fictional:employer-agent",
-      "name": "employer-agent",
+      "name": "The employer’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:employer-agent:agent",
@@ -412,7 +412,13 @@
               "passport"
             ]
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The employer’s agent sends a signed request.",
+          "2": "The candidate’s agent checks the incoming message and prepares a response.",
+          "3": "The candidate’s agent checks and admits the signed statements.",
+          "4": "The candidate’s agent sends a signed request."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -1074,5 +1080,12 @@
         "degree"
       ]
     }
-  ]
+  ],
+  "useCase": "right-to-work",
+  "traceSteps": {
+    "1": "The candidate’s agent checks and admits the signed statements.",
+    "2": "The candidate’s agent sends a signed request.",
+    "3": "The employer’s agent checks the incoming message and prepares a response.",
+    "4": "The employer’s agent checks the durable record."
+  }
 }

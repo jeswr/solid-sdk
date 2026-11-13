@@ -1,0 +1,17 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "records-to-new-practice",
+  "parties": {
+    "party-1": "A patient",
+    "party-2": "The old practice",
+    "party-3": "The new practice"
+  },
+  "claims": [],
+  "purposes": [],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {},
+  "operations": []
+}

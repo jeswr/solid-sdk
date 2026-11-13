@@ -5,8 +5,13 @@
   "claims": [
     {
       "kind": "annual-income",
-      "sources": ["urn:fictional:employer", "urn:fictional:tax-register"],
-      "methods": ["recorded-by-authority"],
+      "sources": [
+        "urn:fictional:employer",
+        "urn:fictional:tax-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
       "maxAgeDays": 30,
       "corroboration": {
         "sources": 2,
@@ -17,7 +22,9 @@
   "purposes": [
     {
       "id": "urn:purpose:false-but-signed",
-      "claims": ["annual-income"]
+      "claims": [
+        "annual-income"
+      ]
     }
   ],
   "rules": [],
@@ -26,7 +33,9 @@
   "vocabulary": {
     "input.request": {
       "type": "code",
-      "values": ["income"]
+      "values": [
+        "income"
+      ]
     },
     "output.statement": {
       "type": "identifier"
@@ -40,7 +49,9 @@
       "pattern": "invoke",
       "access": "represented",
       "models": [],
-      "purposes": ["urn:purpose:false-but-signed"],
+      "purposes": [
+        "urn:purpose:false-but-signed"
+      ],
       "requiresRepresentation": true
     }
   ],
@@ -53,5 +64,13 @@
       "what": "Tax register",
       "replacedBy": "Fictional tax-register, issuer-only key"
     }
-  ]
+  ],
+  "parties": {
+    "lender": "The lender",
+    "lender-agent": "The lender’s agent",
+    "employer": "The employer",
+    "tax-register": "The fictional tax register",
+    "employee": "The employee",
+    "employer-agent": "The employer’s agent"
+  }
 }

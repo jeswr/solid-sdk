@@ -1,20 +1,48 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "pay-an-invoice",
+  "path": "main",
+  "parties": [
+    {
+      "id": "business",
+      "name": "The business"
+    },
+    {
+      "id": "business-agent",
+      "name": "The business’s agent"
+    },
+    {
+      "id": "bank",
+      "name": "The supplier’s bank"
+    },
+    {
+      "id": "bank-agent",
+      "name": "The supplier’s bank’s agent"
+    },
+    {
+      "id": "supplier",
+      "name": "The supplier"
+    },
+    {
+      "id": "email",
+      "name": "An unverified email sender"
+    }
+  ],
   "scenario": {
     "id": "pay-an-invoice",
-    "title": "pay-an-invoice (entirely fictional)",
+    "title": "Paying a supplier's invoice",
     "steps": {
-      "1": "admit-account-invoice",
-      "2": "bank-admits-account",
-      "3": "pay",
-      "4": "bank-receives",
-      "5": "bank-submits",
-      "6": "completed-effect",
-      "7": "bank-receipt",
-      "8": "receipt-received",
-      "9": "record",
-      "10": "bank-record"
+      "1": "The business’s agent checks and admits the signed statements.",
+      "2": "The supplier’s bank’s agent checks and admits the signed statements.",
+      "3": "The business’s agent sends a signed request.",
+      "4": "The supplier’s bank’s agent checks the incoming message and prepares a response.",
+      "5": "The supplier’s bank’s agent proposes the local action.",
+      "6": "The supplier’s bank’s agent checks the observed result.",
+      "7": "The supplier’s bank’s agent completes the message step.",
+      "8": "The business’s agent checks the incoming message and prepares a response.",
+      "9": "The business’s agent checks the durable record.",
+      "10": "The supplier’s bank’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -36,19 +64,19 @@
   "agents": [
     {
       "id": "business-agent",
-      "name": "business-agent",
+      "name": "The business’s agent",
       "actsFor": "business",
       "role": "agent"
     },
     {
       "id": "bank-agent",
-      "name": "bank-agent",
+      "name": "The supplier’s bank’s agent",
       "actsFor": "bank",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -79,7 +107,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "bank's payee-account statement is intact and signed with bank's pinned key."
+      "caption": "The supplier’s bank's payee-account statement is intact and signed with The supplier’s bank's pinned key."
     },
     {
       "seq": 2,
@@ -104,20 +132,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:bank",
-        "text": "bank is accepted for payee-account claims."
+        "text": "The supplier’s bank is accepted for payee-account claims."
       },
       "resolution": {
-        "question": "Is bank an authority for payee-account claims about supplier?",
+        "question": "Is The supplier’s bank an authority for payee-account claims about The supplier?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "bank is accepted for payee-account."
+            "says": "The supplier’s bank is accepted for payee-account."
           }
         ],
         "answer": "Accepted, for payee-account claims only."
       },
-      "caption": "bank's payee-account statement: bank is an accepted source for this kind of claim."
+      "caption": "The supplier’s bank's payee-account statement: The supplier’s bank is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -135,7 +163,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "bank's payee-account statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's payee-account statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -162,7 +190,7 @@
         "id": "urn:terms:payee-account",
         "text": "Its terms allow this: ."
       },
-      "caption": "bank's payee-account statement: its terms allow this: ."
+      "caption": "The supplier’s bank's payee-account statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -184,7 +212,7 @@
         "id": "urn:profile:pay-an-invoice:payee-account",
         "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "bank's payee-account statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+      "caption": "The supplier’s bank's payee-account statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -194,7 +222,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "bank's payee-account statement is admitted."
+      "caption": "The supplier’s bank's payee-account statement is admitted."
     },
     {
       "seq": 7,
@@ -204,7 +232,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:pay-an-invoice:account",
-        "label": "bank's payee-account statement",
+        "label": "The supplier’s bank's payee-account statement",
         "claimType": "payee-account",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -215,9 +243,9 @@
           "id": "urn:terms:payee-account",
           "summary": ""
         },
-        "provenance": "signed by bank"
+        "provenance": "signed by The supplier’s bank"
       },
-      "caption": "bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -240,7 +268,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "supplier's invoice statement is intact and signed with supplier's pinned key."
+      "caption": "The supplier's invoice statement is intact and signed with The supplier's pinned key."
     },
     {
       "seq": 9,
@@ -265,20 +293,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source-rule:supplier",
-        "text": "supplier is accepted for invoice claims."
+        "text": "The supplier is accepted for invoice claims."
       },
       "resolution": {
-        "question": "Is supplier an authority for invoice claims about business?",
+        "question": "Is The supplier an authority for invoice claims about The business?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "supplier is accepted for invoice."
+            "says": "The supplier is accepted for invoice."
           }
         ],
         "answer": "Accepted, for invoice claims only."
       },
-      "caption": "supplier's invoice statement: supplier is an accepted source for this kind of claim."
+      "caption": "The supplier's invoice statement: The supplier is an accepted source for this kind of claim."
     },
     {
       "seq": 10,
@@ -296,7 +324,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "supplier's invoice statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier's invoice statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 11,
@@ -323,7 +351,7 @@
         "id": "default-terms",
         "text": "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
       },
-      "caption": "supplier's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
+      "caption": "The supplier's invoice statement: no terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends."
     },
     {
       "seq": 12,
@@ -345,7 +373,7 @@
         "id": "urn:profile:pay-an-invoice:invoice",
         "text": "Accept invoice from urn:fictional:supplier by recorded-by-authority, at most 30 days old."
       },
-      "caption": "supplier's invoice statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+      "caption": "The supplier's invoice statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 13,
@@ -355,7 +383,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "supplier's invoice statement is admitted."
+      "caption": "The supplier's invoice statement is admitted."
     },
     {
       "seq": 14,
@@ -365,16 +393,16 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:pay-an-invoice:invoice",
-        "label": "supplier's invoice statement",
+        "label": "The supplier's invoice statement",
         "claimType": "invoice",
         "subject": "urn:fictional:business",
         "value": null,
         "source": "urn:fictional:supplier",
         "method": "recorded-by-authority",
         "asOf": "2026-11-13T09:00:00.000Z",
-        "provenance": "signed by supplier"
+        "provenance": "signed by The supplier"
       },
-      "caption": "supplier's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier's invoice statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 15,
@@ -397,7 +425,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "bank's payee-account statement is intact and signed with bank's pinned key."
+      "caption": "The supplier’s bank's payee-account statement is intact and signed with The supplier’s bank's pinned key."
     },
     {
       "seq": 16,
@@ -422,20 +450,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:rule:own-accounts",
-        "text": "bank is accepted for payee-account claims."
+        "text": "The supplier’s bank is accepted for payee-account claims."
       },
       "resolution": {
-        "question": "Is bank an authority for payee-account claims about supplier?",
+        "question": "Is The supplier’s bank an authority for payee-account claims about The supplier?",
         "path": [
           {
-            "at": "bank's own list",
+            "at": "The supplier’s bank's own list",
             "kind": "own-list",
-            "says": "bank is accepted for payee-account."
+            "says": "The supplier’s bank is accepted for payee-account."
           }
         ],
         "answer": "Accepted, for payee-account claims only."
       },
-      "caption": "bank's payee-account statement: bank is an accepted source for this kind of claim."
+      "caption": "The supplier’s bank's payee-account statement: The supplier’s bank is an accepted source for this kind of claim."
     },
     {
       "seq": 17,
@@ -453,7 +481,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "bank's payee-account statement asks for nothing, so there is no authority to check."
+      "caption": "The supplier’s bank's payee-account statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 18,
@@ -480,7 +508,7 @@
         "id": "urn:terms:payee-account",
         "text": "Its terms allow this: ."
       },
-      "caption": "bank's payee-account statement: its terms allow this: ."
+      "caption": "The supplier’s bank's payee-account statement: its terms allow this: ."
     },
     {
       "seq": 19,
@@ -502,7 +530,7 @@
         "id": "urn:profile:pay-an-invoice:payee-account",
         "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
       },
-      "caption": "bank's payee-account statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
+      "caption": "The supplier’s bank's payee-account statement is fit for urn:scenario:pay-an-invoice:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 20,
@@ -512,7 +540,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "bank's payee-account statement is admitted."
+      "caption": "The supplier’s bank's payee-account statement is admitted."
     },
     {
       "seq": 21,
@@ -522,7 +550,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:pay-an-invoice:account",
-        "label": "bank's payee-account statement",
+        "label": "The supplier’s bank's payee-account statement",
         "claimType": "payee-account",
         "subject": "urn:fictional:supplier",
         "value": null,
@@ -533,9 +561,9 @@
           "id": "urn:terms:payee-account",
           "summary": ""
         },
-        "provenance": "signed by bank"
+        "provenance": "signed by The supplier’s bank"
       },
-      "caption": "bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's payee-account statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 22,
@@ -543,7 +571,7 @@
       "agent": "business-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to pay urn:op:payment with bank."
+      "caption": "The core proposes to take the next step in pay-an-invoice with The supplier’s bank."
     },
     {
       "seq": 23,
@@ -567,10 +595,10 @@
       ],
       "rule": {
         "id": "urn:rule:monthly-payments",
-        "text": "business's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The business's mandate lets the agent pay urn:op:payment, on its own."
       },
       "reason": "within-mandate",
-      "caption": "business's mandate covers this action."
+      "caption": "The business's mandate covers this action."
     },
     {
       "seq": 24,
@@ -593,18 +621,18 @@
         }
       ],
       "resolution": {
-        "question": "Is bank a party I can send urn:op:payment to?",
+        "question": "Is The supplier’s bank a party I can send pay-an-invoice to?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "bank is accepted for urn:op:payment."
+            "says": "The supplier’s bank is accepted for pay-an-invoice."
           }
         ],
-        "answer": "Accepted, for urn:op:payment only."
+        "answer": "Accepted, for pay-an-invoice only."
       },
       "reason": "recipient-established",
-      "caption": "bank: Accepted, for urn:op:payment only."
+      "caption": "The supplier’s bank: Accepted, for pay-an-invoice only."
     },
     {
       "seq": 25,
@@ -658,7 +686,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within business's limits."
+      "caption": "Inside what the agent may do on its own, and within The business's limits."
     },
     {
       "seq": 28,
@@ -676,7 +704,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "bank's payee-account statement: Its terms allow this: ."
+      "caption": "The supplier’s bank's payee-account statement: Its terms allow this: ."
     },
     {
       "seq": 29,
@@ -702,7 +730,7 @@
       "agent": "business-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to pay urn:op:payment with bank."
+      "caption": "The core proposes to take the next step in pay-an-invoice with The supplier’s bank."
     },
     {
       "seq": 31,
@@ -726,10 +754,10 @@
       ],
       "rule": {
         "id": "urn:rule:monthly-payments",
-        "text": "business's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The business's mandate lets the agent pay urn:op:payment, on its own."
       },
       "reason": "within-mandate",
-      "caption": "business's mandate covers this action."
+      "caption": "The business's mandate covers this action."
     },
     {
       "seq": 32,
@@ -752,18 +780,18 @@
         }
       ],
       "resolution": {
-        "question": "Is bank a party I can send urn:op:payment to?",
+        "question": "Is The supplier’s bank a party I can send pay-an-invoice to?",
         "path": [
           {
-            "at": "business's own list",
+            "at": "The business's own list",
             "kind": "own-list",
-            "says": "bank is accepted for urn:op:payment."
+            "says": "The supplier’s bank is accepted for pay-an-invoice."
           }
         ],
-        "answer": "Accepted, for urn:op:payment only."
+        "answer": "Accepted, for pay-an-invoice only."
       },
       "reason": "recipient-established",
-      "caption": "bank: Accepted, for urn:op:payment only."
+      "caption": "The supplier’s bank: Accepted, for pay-an-invoice only."
     },
     {
       "seq": 33,
@@ -817,7 +845,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within business's limits."
+      "caption": "Inside what the agent may do on its own, and within The business's limits."
     },
     {
       "seq": 36,
@@ -844,7 +872,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with business-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The business’s agent's pinned key, and written to the record."
     },
     {
       "seq": 37,
@@ -854,7 +882,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to bank-agent."
+      "caption": "The invoke message goes to The supplier’s bank’s agent."
     },
     {
       "seq": 38,
@@ -864,8 +892,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-pay-an-invoice-main:business-agent:0002",
-        "from": "business-agent",
-        "to": "bank-agent",
+        "from": "The business’s agent",
+        "to": "The supplier’s bank’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -874,7 +902,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From business-agent to bank-agent; invoke; signed (JWS EdDSA, pinned key 1Xc_pm0Ejxdi…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:business-agent:0002.",
+            "summary": "From The business’s agent to The supplier’s bank’s agent; invoke; signed (JWS EdDSA, pinned key 1Xc_pm0Ejxdi…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:business-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
@@ -901,7 +929,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): business says business-agent acts for it.",
+            "summary": "1 representation statement(s): The business says The business’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -976,7 +1004,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "business-agent sends an invoke message to bank-agent."
+      "caption": "The business’s agent sends an invoke message to The supplier’s bank’s agent."
     },
     {
       "seq": 39,
@@ -986,8 +1014,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-pay-an-invoice-main:business-agent:0002",
-        "from": "business-agent",
-        "to": "bank-agent",
+        "from": "The business’s agent",
+        "to": "The supplier’s bank’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -996,7 +1024,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From business-agent to bank-agent; invoke; signed (JWS EdDSA, pinned key 1Xc_pm0Ejxdi…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:business-agent:0002.",
+            "summary": "From The business’s agent to The supplier’s bank’s agent; invoke; signed (JWS EdDSA, pinned key 1Xc_pm0Ejxdi…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:business-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
@@ -1023,7 +1051,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): business says business-agent acts for it.",
+            "summary": "1 representation statement(s): The business says The business’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -1120,7 +1148,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from business-agent reaches the inbound gate."
+      "caption": "An invoke message from The business’s agent reaches the inbound gate."
     },
     {
       "seq": 40,
@@ -1147,7 +1175,7 @@
         "id": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with business-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The business’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 41,
@@ -1190,9 +1218,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:9fd984aaf190ce686021fc3fb08baf37:1794560400000",
-        "text": "A representation statement signed with business's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The business's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "business signed a statement that business-agent acts for them in this operation."
+      "caption": "The business signed a statement that The business’s agent acts for them in this operation."
     },
     {
       "seq": 43,
@@ -1251,7 +1279,7 @@
       "agent": "bank-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to pay urn:op:payment with business."
+      "caption": "The core proposes to take the next step in pay-an-invoice with The business."
     },
     {
       "seq": 47,
@@ -1275,10 +1303,10 @@
       ],
       "rule": {
         "id": "urn:rule:bank-submission",
-        "text": "bank's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The supplier’s bank's mandate lets the agent pay urn:op:payment, on its own."
       },
       "reason": "within-mandate",
-      "caption": "bank's mandate covers this action."
+      "caption": "The supplier’s bank's mandate covers this action."
     },
     {
       "seq": 48,
@@ -1301,18 +1329,18 @@
         }
       ],
       "resolution": {
-        "question": "Is business a party I can send urn:op:payment to?",
+        "question": "Is The business a party I can send pay-an-invoice to?",
         "path": [
           {
-            "at": "bank's own list",
+            "at": "The supplier’s bank's own list",
             "kind": "own-list",
-            "says": "business is accepted for urn:op:payment."
+            "says": "The business is accepted for pay-an-invoice."
           }
         ],
-        "answer": "Accepted, for urn:op:payment only."
+        "answer": "Accepted, for pay-an-invoice only."
       },
       "reason": "recipient-established",
-      "caption": "business: Accepted, for urn:op:payment only."
+      "caption": "The business: Accepted, for pay-an-invoice only."
     },
     {
       "seq": 49,
@@ -1366,7 +1394,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within bank's limits."
+      "caption": "Inside what the agent may do on its own, and within The supplier’s bank's limits."
     },
     {
       "seq": 52,
@@ -1374,7 +1402,7 @@
       "agent": "bank-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to pay urn:op:payment with business."
+      "caption": "The core proposes to take the next step in pay-an-invoice with The business."
     },
     {
       "seq": 53,
@@ -1398,10 +1426,10 @@
       ],
       "rule": {
         "id": "urn:rule:bank-submission",
-        "text": "bank's mandate lets the agent pay urn:op:payment, on its own."
+        "text": "The supplier’s bank's mandate lets the agent pay urn:op:payment, on its own."
       },
       "reason": "within-mandate",
-      "caption": "bank's mandate covers this action."
+      "caption": "The supplier’s bank's mandate covers this action."
     },
     {
       "seq": 54,
@@ -1424,18 +1452,18 @@
         }
       ],
       "resolution": {
-        "question": "Is business a party I can send urn:op:payment to?",
+        "question": "Is The business a party I can send pay-an-invoice to?",
         "path": [
           {
-            "at": "bank's own list",
+            "at": "The supplier’s bank's own list",
             "kind": "own-list",
-            "says": "business is accepted for urn:op:payment."
+            "says": "The business is accepted for pay-an-invoice."
           }
         ],
-        "answer": "Accepted, for urn:op:payment only."
+        "answer": "Accepted, for pay-an-invoice only."
       },
       "reason": "recipient-established",
-      "caption": "business: Accepted, for urn:op:payment only."
+      "caption": "The business: Accepted, for pay-an-invoice only."
     },
     {
       "seq": 55,
@@ -1489,7 +1517,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within bank's limits."
+      "caption": "Inside what the agent may do on its own, and within The supplier’s bank's limits."
     },
     {
       "seq": 58,
@@ -1526,7 +1554,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The action goes: pay urn:op:payment with business."
+      "caption": "The action goes: take the next step in pay-an-invoice with The business."
     },
     {
       "seq": 60,
@@ -1572,18 +1600,18 @@
         }
       ],
       "resolution": {
-        "question": "Is business a party I can send urn:op:payment to?",
+        "question": "Is The business a party I can send pay-an-invoice to?",
         "path": [
           {
-            "at": "bank's own list",
+            "at": "The supplier’s bank's own list",
             "kind": "own-list",
-            "says": "business is accepted for urn:op:payment."
+            "says": "The business is accepted for pay-an-invoice."
           }
         ],
-        "answer": "Accepted, for urn:op:payment only."
+        "answer": "Accepted, for pay-an-invoice only."
       },
       "reason": "recipient-established",
-      "caption": "business: Accepted, for urn:op:payment only."
+      "caption": "The business: Accepted, for pay-an-invoice only."
     },
     {
       "seq": 62,
@@ -1664,7 +1692,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with bank-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The supplier’s bank’s agent's pinned key, and written to the record."
     },
     {
       "seq": 66,
@@ -1674,7 +1702,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The deliver message goes to business-agent."
+      "caption": "The deliver message goes to The business’s agent."
     },
     {
       "seq": 67,
@@ -1684,8 +1712,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-pay-an-invoice-main:bank-agent:0002",
-        "from": "bank-agent",
-        "to": "business-agent",
+        "from": "The supplier’s bank’s agent",
+        "to": "The business’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -1694,7 +1722,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From bank-agent to business-agent; deliver; signed (JWS EdDSA, pinned key K3EKNFhIgZSl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:bank-agent:0002.",
+            "summary": "From The supplier’s bank’s agent to The business’s agent; deliver; signed (JWS EdDSA, pinned key K3EKNFhIgZSl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:bank-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
@@ -1779,7 +1807,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "bank-agent sends a deliver message to business-agent."
+      "caption": "The supplier’s bank’s agent sends a deliver message to The business’s agent."
     },
     {
       "seq": 68,
@@ -1789,8 +1817,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-pay-an-invoice-main:bank-agent:0002",
-        "from": "bank-agent",
-        "to": "business-agent",
+        "from": "The supplier’s bank’s agent",
+        "to": "The business’s agent",
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
@@ -1799,7 +1827,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From bank-agent to business-agent; deliver; signed (JWS EdDSA, pinned key K3EKNFhIgZSl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:bank-agent:0002.",
+            "summary": "From The supplier’s bank’s agent to The business’s agent; deliver; signed (JWS EdDSA, pinned key K3EKNFhIgZSl…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-pay-an-invoice-main:bank-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
@@ -1902,7 +1930,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "A deliver message from bank-agent reaches the inbound gate."
+      "caption": "A deliver message from The supplier’s bank’s agent reaches the inbound gate."
     },
     {
       "seq": 69,
@@ -1929,7 +1957,7 @@
         "id": "https://w3id.org/jeswr/awp#config/payment-local/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with bank-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The supplier’s bank’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 70,

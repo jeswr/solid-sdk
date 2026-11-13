@@ -1,0 +1,2113 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "employment-reference",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The former employer"
+    },
+    {
+      "id": "receiver",
+      "name": "The new employer"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The former employer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The new employer’s agent"
+    },
+    {
+      "id": "subject",
+      "name": "The candidate"
+    }
+  ],
+  "scenario": {
+    "id": "employment-reference",
+    "title": "A reference from a former employer",
+    "steps": {
+      "1": "The former employer’s agent checks the signed statements.",
+      "2": "The new employer’s agent sends the signed request.",
+      "3": "The former employer’s agent checks the message and prepares a response.",
+      "4": "The former employer’s agent sends the signed request.",
+      "5": "The former employer’s agent completes the approve step.",
+      "6": "The new employer’s agent checks the message and prepares a response.",
+      "7": "The new employer’s agent completes the read content step.",
+      "8": "The new employer’s agent proposes the local action."
+    }
+  },
+  "configuration": {
+    "id": "employment-reference-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "plain-language-upgrade",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The former employer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The new employer’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The former employer's unstructured-content statement is intact and signed with The former employer's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:employment-reference:unstructured-content",
+        "text": "The former employer is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The former employer an authority for unstructured-content claims about The candidate?",
+        "path": [
+          {
+            "at": "The former employer's own list",
+            "kind": "own-list",
+            "says": "The former employer is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The former employer's unstructured-content statement: The former employer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The former employer's unstructured-content statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:employment-reference:original",
+        "text": "Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+      },
+      "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:employment-reference:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:employment-reference:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The former employer's unstructured-content statement is fit for urn:scenario:employment-reference:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The former employer's unstructured-content statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:employment-reference:original",
+        "label": "The former employer's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:employment-reference:subject",
+        "value": null,
+        "source": "urn:fictional:employment-reference:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:employment-reference:original",
+          "summary": "use for urn:purpose:employment reference; share for urn:purpose:employment reference"
+        },
+        "provenance": "signed by The former employer"
+      },
+      "caption": "The former employer's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The former employer."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The new employer's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The former employer a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The new employer's own list",
+            "kind": "own-list",
+            "says": "The former employer is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The former employer: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The new employer's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The new employer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The former employer’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
+        "from": "The new employer’s agent",
+        "to": "The former employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:94731fd700e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The new employer’s agent to The former employer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-employment-reference-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-employment-reference-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:employment-reference:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "party": "urn:fictional:employment-reference:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:8cc16d023b0b5ce9abcc10c1ff29a6b7302f627d5d5dc2610b09b20c49394d97"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The new employer says The new employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9d2ebb95bd611d49e149777f814d2ac0:1794560400000",
+                "party": "urn:fictional:employment-reference:receiver",
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:employment-reference",
+                  "urn:op:employment-reference:request",
+                  "urn:op:employment-reference:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:bebd5f6e546f6c52d264ccbdeaa11e8edd7b9985f31dcebed1ce8a6e4b8750a1"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:employment-reference:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:employment-reference"
+            },
+            "digest": "sha-256:745ca0364e472253a7f1ecfcd29d73012c31cbf493a62249a1c5be5d5f629bc1"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-employment-reference-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The new employer’s agent sends an invoke message to The former employer’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
+        "from": "The new employer’s agent",
+        "to": "The former employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:94731fd700e…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The new employer’s agent to The former employer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-employment-reference-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-employment-reference-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:employment-reference:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "party": "urn:fictional:employment-reference:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:8cc16d023b0b5ce9abcc10c1ff29a6b7302f627d5d5dc2610b09b20c49394d97"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The new employer says The new employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:9d2ebb95bd611d49e149777f814d2ac0:1794560400000",
+                "party": "urn:fictional:employment-reference:receiver",
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:employment-reference",
+                  "urn:op:employment-reference:request",
+                  "urn:op:employment-reference:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:bebd5f6e546f6c52d264ccbdeaa11e8edd7b9985f31dcebed1ce8a6e4b8750a1"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:employment-reference:request\"; \"urn:purpose:employment-reference\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:employment-reference:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:employment-reference"
+            },
+            "digest": "sha-256:745ca0364e472253a7f1ecfcd29d73012c31cbf493a62249a1c5be5d5f629bc1",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:employment-reference:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:employment-reference"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-employment-reference-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The new employer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The new employer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:9d2ebb95bd611d49e149777f814d2ac0:1794560400000",
+        "text": "A representation statement signed with The new employer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The new employer signed a statement that The new employer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:employment reference with The new employer."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The former employer's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The new employer a party I can send A reference from a former employer to?",
+        "path": [
+          {
+            "at": "The former employer's own list",
+            "kind": "own-list",
+            "says": "The new employer is accepted for A reference from a former employer."
+          }
+        ],
+        "answer": "Accepted, for A reference from a former employer only."
+      },
+      "reason": "recipient-established",
+      "caption": "The new employer: Accepted, for A reference from a former employer only."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The former employer's limits."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:employment-reference:original",
+        "text": "The issuer's terms: use for urn:purpose:employment reference; share for urn:purpose:employment reference. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The former employer's unstructured-content statement (urn:fictional:employment-reference:subject) is needed for this purpose."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The former employer's unstructured-content statement: Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:employment-reference:receiver-agent:actor (urn:fictional:employment-reference:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:employment-reference:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "context-not-clear",
+      "caption": "The task context is not clear for this text, recipient and purpose."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "context-not-clear",
+      "chat": {
+        "who": "agent",
+        "text": "May I send this exact text to The new employer for urn:purpose:employment-reference?\nThe candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines."
+      },
+      "caption": "The text is held before release; approval binds message digest sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "Send this exact original reference to this employer."
+      },
+      "caption": "Approves by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The former employer's mandate covers this action."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The new employer a party I can send A reference from a former employer to?",
+        "path": [
+          {
+            "at": "The former employer's own list",
+            "kind": "own-list",
+            "says": "The new employer is accepted for A reference from a former employer."
+          }
+        ],
+        "answer": "Accepted, for A reference from a former employer only."
+      },
+      "reason": "recipient-established",
+      "caption": "The new employer: Accepted, for A reference from a former employer only."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The former employer's limits."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:employment-reference:original",
+        "text": "The issuer's terms: use for urn:purpose:employment reference; share for urn:purpose:employment reference. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The former employer's unstructured-content statement (urn:fictional:employment-reference:subject) is needed for this purpose."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The former employer's unstructured-content statement: Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:employment-reference:receiver-agent:actor (urn:fictional:employment-reference:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:employment-reference:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 53,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "approval-given",
+      "caption": "The principal approved these exact bytes for this recipient and purpose."
+    },
+    {
+      "seq": 54,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 55,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The former employer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 56,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The new employer’s agent."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-employment-reference-main:owner-agent:0002",
+        "from": "The former employer’s agent",
+        "to": "The new employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:449104fdeaa…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The former employer’s agent to The new employer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-employment-reference-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-employment-reference-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-employment-reference-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:employment-reference:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "party": "urn:fictional:employment-reference:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The former employer says The former employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:535ed5a670f0130b7c8dcbce58aeedf4:1794560400000",
+                "party": "urn:fictional:employment-reference:owner",
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:employment-reference",
+                  "urn:op:employment-reference:request",
+                  "urn:op:employment-reference:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d037bd273de531c362548b2ff5e63c8dc66d60c5119ae29ae542ac08596a4bf2"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:employment-reference",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:employment-reference:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:employment-reference"
+              },
+              "content": [
+                {
+                  "id": "urn:content:employment-reference:original",
+                  "mediaType": "text/plain",
+                  "bytes": "The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines.",
+                  "digest": "sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84"
+                }
+              ]
+            },
+            "digest": "sha-256:727fe1ac4c8320f49967b66932eee08e04ae26dfbe8d50970cd5bbcad68cd7cb",
+            "untrusted": [
+              {
+                "path": "content.0.bytes",
+                "text": "The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The former employer.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84",
+                "id": "urn:scenario:employment-reference:original",
+                "issuer": "urn:fictional:employment-reference:owner",
+                "subject": "urn:fictional:employment-reference:subject",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:employment-reference:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:employment-reference:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:employment-reference"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:employment-reference:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:employment-reference"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:2c962e74fc2e0b3194350e3a2574e6a6ca071dc9baed55e0e109757b6af04f87"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The former employer’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-employment-reference-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:employment-reference:original",
+                  "issuer": "urn:fictional:employment-reference:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The former employer’s agent sends an invoke message to The new employer’s agent."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-employment-reference-main:owner-agent:0002",
+        "from": "The former employer’s agent",
+        "to": "The new employer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:449104fdeaa…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The former employer’s agent to The new employer’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-employment-reference-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-employment-reference-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-employment-reference-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:employment-reference:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:employment-reference:receiver-agent:actor",
+                "party": "urn:fictional:employment-reference:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The former employer says The former employer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:535ed5a670f0130b7c8dcbce58aeedf4:1794560400000",
+                "party": "urn:fictional:employment-reference:owner",
+                "actor": "urn:fictional:employment-reference:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:employment-reference",
+                  "urn:op:employment-reference:request",
+                  "urn:op:employment-reference:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d037bd273de531c362548b2ff5e63c8dc66d60c5119ae29ae542ac08596a4bf2"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:employment-reference\"; \"urn:scenario:employment-reference:original\"; \"urn:purpose:employment-reference\"; \"The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:employment-reference",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:employment-reference:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:employment-reference"
+              },
+              "content": [
+                {
+                  "id": "urn:content:employment-reference:original",
+                  "mediaType": "text/plain",
+                  "bytes": "The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines.",
+                  "digest": "sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84"
+                }
+              ]
+            },
+            "digest": "sha-256:727fe1ac4c8320f49967b66932eee08e04ae26dfbe8d50970cd5bbcad68cd7cb",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:employment-reference"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:employment-reference:original"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:employment-reference"
+              },
+              {
+                "path": "content.0.bytes",
+                "text": "The candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The former employer.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84",
+                "id": "urn:scenario:employment-reference:original",
+                "issuer": "urn:fictional:employment-reference:owner",
+                "subject": "urn:fictional:employment-reference:subject",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:employment-reference:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:employment-reference:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:employment-reference"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:employment-reference:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:employment-reference"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:2c962e74fc2e0b3194350e3a2574e6a6ca071dc9baed55e0e109757b6af04f87"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The former employer’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-employment-reference-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:employment-reference:original",
+                  "issuer": "urn:fictional:employment-reference:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The former employer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The former employer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 60,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:employment-reference:unstructured-content",
+        "text": "The former employer is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The former employer an authority for unstructured-content claims about The candidate?",
+        "path": [
+          {
+            "at": "The new employer's own list",
+            "kind": "own-list",
+            "says": "The former employer is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The former employer's unstructured-content statement: The former employer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 61,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:535ed5a670f0130b7c8dcbce58aeedf4:1794560400000",
+        "text": "A representation statement signed with The former employer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The former employer signed a statement that The former employer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 62,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:employment-reference:original",
+        "text": "Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+      },
+      "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    },
+    {
+      "seq": 63,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:employment-reference:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:employment-reference:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The former employer's unstructured-content statement is fit for A reference from a former employer: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 64,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 65,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:employment-reference:original",
+        "label": "The former employer's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:employment-reference:subject",
+        "value": null,
+        "source": "urn:fictional:employment-reference:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:employment-reference:original",
+          "summary": "use for urn:purpose:employment reference; share for urn:purpose:employment reference"
+        },
+        "provenance": "signed by The former employer"
+      },
+      "caption": "The former employer's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 66,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; not instructions; source urn:fictional:employment-reference:owner."
+    },
+    {
+      "seq": 67,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Model-output reading of unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; claim content.opinion."
+    },
+    {
+      "seq": 68,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in A person decides on the original content with The new employer."
+    },
+    {
+      "seq": 69,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The new employer's mandate covers this action."
+    },
+    {
+      "seq": 70,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The new employer a party I can send A person decides on the original content to?",
+        "path": [
+          {
+            "at": "The new employer's own list",
+            "kind": "own-list",
+            "says": "The new employer is accepted for A person decides on the original content."
+          }
+        ],
+        "answer": "Accepted, for A person decides on the original content only."
+      },
+      "reason": "recipient-established",
+      "caption": "The new employer: Accepted, for A person decides on the original content only."
+    },
+    {
+      "seq": 71,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 72,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 73,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "approval-required",
+      "rule": {
+        "id": "sha-256:182a9c47894034260dc0b1ed7cd8901af482d8ee8add953eaa9fec184e71a420",
+        "text": "Requires 1 approval(s) from the principal."
+      },
+      "caption": "The required people must decide this exact action."
+    },
+    {
+      "seq": 74,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "caption": "The action is held for the named decision makers."
+    },
+    {
+      "seq": 75,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "approval-required",
+      "chat": {
+        "who": "agent",
+        "text": "The new employer asks me to take the next step in A person decides on the original content with The new employer for urn:purpose:employment reference. May I go ahead? Action digest: sha-256:182a9c47894034260dc0b1ed7cd8901af482d8ee8add953eaa9fec184e71a420. Parameters: {\"decision\":\"review-reference\",\"originalDigest\":\"sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84\",\"support\":[\"urn:scenario:employment-reference:original\"]}"
+      },
+      "caption": "The gate built this request from the action and the approval rule."
+    }
+  ]
+}

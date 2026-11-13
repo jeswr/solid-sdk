@@ -1,0 +1,100 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "change-of-address",
+  "parties": {
+    "owner": "The person",
+    "address-register": "The fictional address register",
+    "owner-agent": "The person’s agent",
+    "organization-1": "Fictional organization 1",
+    "organization-1-agent": "Fictional organization 1’s agent",
+    "organization-2": "Fictional organization 2",
+    "organization-2-agent": "Fictional organization 2’s agent",
+    "organization-3": "Fictional organization 3",
+    "organization-3-agent": "Fictional organization 3’s agent",
+    "organization-4": "Fictional organization 4",
+    "organization-4-agent": "Fictional organization 4’s agent",
+    "organization-5": "Fictional organization 5",
+    "organization-5-agent": "Fictional organization 5’s agent",
+    "organization-6": "Fictional organization 6",
+    "organization-6-agent": "Fictional organization 6’s agent",
+    "organization-7": "Fictional organization 7",
+    "organization-7-agent": "Fictional organization 7’s agent",
+    "organization-8": "Fictional organization 8",
+    "organization-8-agent": "Fictional organization 8’s agent",
+    "organization-9": "Fictional organization 9",
+    "organization-9-agent": "Fictional organization 9’s agent",
+    "organization-10": "Fictional organization 10",
+    "organization-10-agent": "Fictional organization 10’s agent",
+    "organization-11": "Fictional organization 11",
+    "organization-11-agent": "Fictional organization 11’s agent",
+    "organization-12": "Fictional organization 12",
+    "organization-12-agent": "Fictional organization 12’s agent",
+    "organization-13": "Fictional organization 13",
+    "organization-13-agent": "Fictional organization 13’s agent",
+    "organization-14": "Fictional organization 14",
+    "organization-14-agent": "Fictional organization 14’s agent",
+    "organization-15": "Fictional organization 15",
+    "organization-15-agent": "Fictional organization 15’s agent",
+    "organization-16": "Fictional organization 16",
+    "organization-16-agent": "Fictional organization 16’s agent",
+    "organization-17": "Fictional organization 17",
+    "organization-17-agent": "Fictional organization 17’s agent",
+    "organization-18": "Fictional organization 18",
+    "organization-18-agent": "Fictional organization 18’s agent",
+    "organization-19": "Fictional organization 19",
+    "organization-19-agent": "Fictional organization 19’s agent",
+    "organization-20": "Fictional organization 20",
+    "organization-20-agent": "Fictional organization 20’s agent",
+    "organization-21": "Fictional organization 21",
+    "organization-21-agent": "Fictional organization 21’s agent"
+  },
+  "claims": [
+    {
+      "kind": "contact.address",
+      "sources": [
+        "urn:fictional:change-of-address:address-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:change-of-address",
+      "claims": [
+        "contact.address"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.addressRecord": {
+      "type": "identifier"
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:change-of-address",
+      "version": "0.1",
+      "label": "Telling everyone about a new address",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:change-of-address"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "sell-a-car",
+  "parties": {
+    "owner": "The seller",
+    "receiver": "The buyer",
+    "vehicle-register": "The fictional vehicle register",
+    "other-owner": "The other fictional keeper",
+    "owner-agent": "The seller’s agent",
+    "receiver-agent": "The buyer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "vehicle.keeper",
+      "sources": [
+        "urn:fictional:sell-a-car:vehicle-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:sell-a-car",
+      "claims": [
+        "vehicle.keeper"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "vehicle.keeper"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:sell-a-car",
+      "version": "0.1",
+      "label": "Selling a used car to a stranger",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:sell-a-car"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:sell-a-car:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:sell-a-car"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "vehicle.keeper"
+      ]
+    }
+  ]
+}

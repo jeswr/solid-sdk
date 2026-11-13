@@ -13,6 +13,17 @@
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$"
     },
+    "parties": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "sources": {
       "default": {},
       "type": "object",
@@ -48,6 +59,9 @@
           "maxAgeDays": {
             "type": "number",
             "minimum": 0
+          },
+          "completeness": {
+            "type": "string"
           },
           "corroboration": {
             "type": "object",
@@ -1029,6 +1043,7 @@
     "x-authored-by",
     "schema",
     "id",
+    "parties",
     "sources",
     "claims",
     "purposes",

@@ -1,0 +1,501 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "home-purchase",
+  "useCase": "home-purchase",
+  "title": "Buying a home",
+  "profile": "home-purchase",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:home-purchase:owner",
+      "name": "The buyer",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:home-purchase:receiver",
+      "name": "The seller",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "bank",
+      "identity": "urn:fictional:home-purchase:bank",
+      "name": "The conveyancer’s deposit bank",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "email",
+      "identity": "urn:fictional:home-purchase:email",
+      "name": "The unverified account sender",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "land-register",
+      "identity": "urn:fictional:home-purchase:land-register",
+      "name": "The fictional land registry",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "other-person",
+      "identity": "urn:fictional:home-purchase:other-person",
+      "name": "The other fictional owner",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:home-purchase:owner-agent",
+      "name": "The buyer’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:home-purchase:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:home-purchase:receiver-agent",
+      "name": "The seller’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:home-purchase:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:home-purchase:receiver",
+          "tasks": [
+            "urn:op:home-purchase",
+            "urn:op:home-purchase:request"
+          ]
+        },
+        {
+          "party": "urn:fictional:home-purchase:owner",
+          "tasks": [
+            "urn:op:home-purchase"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:home-purchase:owner",
+          "tasks": [
+            "urn:op:home-purchase",
+            "urn:op:home-purchase:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:home-purchase:deposit.account",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:bank",
+          "claimTypes": [
+            "deposit.account"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:owner"
+          ]
+        },
+        {
+          "id": "urn:source:home-purchase:land.ownership",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:land-register",
+          "claimTypes": [
+            "land.ownership"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:receiver"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:home-purchase:deposit.account",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:bank",
+          "claimTypes": [
+            "deposit.account"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:owner"
+          ]
+        },
+        {
+          "id": "urn:source:home-purchase:land.ownership",
+          "version": "1",
+          "source": "urn:fictional:home-purchase:land-register",
+          "claimTypes": [
+            "land.ownership"
+          ],
+          "subjects": [
+            "urn:fictional:home-purchase:receiver"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "new-account",
+      "issuer": "email",
+      "subject": "urn:fictional:home-purchase:owner",
+      "kind": "deposit.account",
+      "value": {
+        "account": "urn:fictional:new-deposit-account"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:home-purchase:new-account",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:home-purchase:new-account",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:home-purchase:new-account",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ownership",
+      "issuer": "land-register",
+      "subject": "urn:fictional:home-purchase:other-person",
+      "kind": "land.ownership",
+      "value": {
+        "property": "urn:fictional:home"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:home-purchase:ownership",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:home-purchase:ownership",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:home-purchase:ownership",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:home-purchase"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "read",
+          "target": "urn:op:home-purchase"
+        },
+        {
+          "type": "permission",
+          "action": "transfer",
+          "target": "urn:op:home-purchase"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:home-purchase:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A message gives a new account for the deposit",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "source-preflight",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "new-account"
+            ],
+            "purpose": "urn:purpose:home-purchase"
+          },
+          {
+            "id": "proposed-completion",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "transfer",
+              "operation": "urn:op:home-purchase",
+              "target": "urn:op:home-purchase",
+              "recipient": "urn:fictional:home-purchase:owner",
+              "purpose": "urn:purpose:home-purchase",
+              "conversation": "urn:scenario:home-purchase:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:conveyancing-step"
+          }
+        ],
+        "traceSteps": {
+          "1": "The buyer’s agent checks the signed statements.",
+          "2": "The buyer’s agent proposes the local action."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    },
+    {
+      "id": "branch-2",
+      "what": "The seller is not the registered owner",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "source-preflight",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "ownership"
+            ],
+            "purpose": "urn:purpose:home-purchase"
+          },
+          {
+            "id": "proposed-completion",
+            "agent": "owner-agent",
+            "type": "effect",
+            "intent": {
+              "action": "read",
+              "operation": "urn:op:home-purchase",
+              "target": "urn:op:home-purchase",
+              "recipient": "urn:fictional:home-purchase:owner",
+              "purpose": "urn:purpose:home-purchase",
+              "conversation": "urn:scenario:home-purchase:task",
+              "parameters": {}
+            },
+            "params": {},
+            "activityType": "urn:activity:conveyancing-step"
+          }
+        ],
+        "traceSteps": {
+          "1": "The buyer’s agent checks the signed statements.",
+          "2": "The buyer’s agent proposes the local action."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "source-not-authoritative",
+        "check": "fitness"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "source-not-authoritative"
+        }
+      ]
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "source",
+    "fitness"
+  ],
+  "suites": {
+    "commitments": "agreement-credential"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Needs a durable multi-party conveyancing agreement chain, escrow/funds conditions and coordinated completion; the local submission adapter does not implement a home purchase."
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Conveyancing source preflights",
+      "replacedBy": "An email author signs an unauthoritative deposit account; the registry signs ownership by someone other than the seller. No funds, escrow or completion are simulated"
+    }
+  ],
+  "traceSteps": {}
+}

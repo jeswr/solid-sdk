@@ -1,21 +1,371 @@
 [
   {
+    "file": "age-check--branch-1--baseline.json",
+    "scenario": {
+      "id": "age-check--branch-1",
+      "title": "Proving age to buy something: The merchant asks for the identity document itself",
+      "steps": {
+        "1": "The customer’s agent checks the signed statements.",
+        "2": "The merchant’s agent sends the signed request.",
+        "3": "The customer’s agent checks the message and prepares a response.",
+        "4": "The customer’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
+    "file": "agent-handoff--branch-1--baseline.json",
+    "scenario": {
+      "id": "agent-handoff--branch-1",
+      "title": "A service agent hands a customer to a partner's agent: The partner's agent uses the address for marketing",
+      "steps": {
+        "1": "The retailer’s agent checks the signed statements.",
+        "2": "The delivery partner’s agent sends the signed request.",
+        "3": "The retailer’s agent checks the message and prepares a response.",
+        "4": "The retailer’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 33
+  },
+  {
+    "file": "benefit-claim--baseline.json",
+    "scenario": {
+      "id": "benefit-claim",
+      "title": "Claiming a benefit",
+      "steps": {
+        "1": "The claimant’s agent checks the signed statements.",
+        "2": "The benefits office’s agent sends the signed request.",
+        "3": "The claimant’s agent checks the message and prepares a response.",
+        "4": "The claimant’s agent sends the signed request.",
+        "5": "The benefits office’s agent checks the message and prepares a response.",
+        "6": "The claimant’s agent checks the message and prepares a response.",
+        "7": "The benefits office’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 86
+  },
+  {
+    "file": "benefit-claim--branch-1--baseline.json",
+    "scenario": {
+      "id": "benefit-claim--branch-1",
+      "title": "Claiming a benefit: Household composition is self-reported only",
+      "steps": {
+        "1": "The claimant’s agent checks the signed statements.",
+        "2": "The benefits office’s agent sends the signed request.",
+        "3": "The claimant’s agent checks the message and prepares a response.",
+        "4": "The claimant’s agent sends the signed request.",
+        "5": "The benefits office’s agent checks the message and prepares a response.",
+        "6": "The claimant’s agent checks the message and prepares a response.",
+        "7": "The benefits office’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 41
+  },
+  {
+    "file": "cancel-subscription--baseline.json",
+    "scenario": {
+      "id": "cancel-subscription",
+      "title": "Cancelling a subscription",
+      "steps": {
+        "1": "The subscriber’s agent checks the signed statements.",
+        "2": "The subscription service’s agent sends the signed request.",
+        "3": "The subscriber’s agent checks the message and prepares a response.",
+        "4": "The subscriber’s agent sends the signed request.",
+        "5": "The subscription service’s agent checks the message and prepares a response.",
+        "6": "The subscription service’s agent proposes the local action.",
+        "7": "The subscription service’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 52
+  },
+  {
+    "file": "cancel-subscription--branch-1--baseline.json",
+    "scenario": {
+      "id": "cancel-subscription--branch-1",
+      "title": "Cancelling a subscription: The service offers three months free to stay",
+      "steps": {
+        "1": "The subscriber’s agent checks the signed statements.",
+        "2": "The subscription service’s agent sends the signed request.",
+        "3": "The subscriber’s agent checks the message and prepares a response.",
+        "4": "The subscriber’s agent sends the signed request.",
+        "5": "The subscription service’s agent checks the message and prepares a response.",
+        "6": "The subscription service’s agent sends the signed request.",
+        "7": "The subscriber’s agent checks the message and prepares a response.",
+        "8": "The subscriber’s agent proposes the local action."
+      }
+    },
+    "configuration": "baseline",
+    "events": 64
+  },
+  {
+    "file": "change-of-address--baseline.json",
+    "scenario": {
+      "id": "change-of-address",
+      "title": "Telling everyone about a new address",
+      "steps": {
+        "1": "The person’s agent checks the signed statements.",
+        "2": "The person’s agent sends the signed request.",
+        "3": "Fictional organization 1’s agent checks the message and prepares a response.",
+        "4": "The person’s agent checks the message and prepares a response.",
+        "5": "The person’s agent sends the signed request.",
+        "6": "Fictional organization 2’s agent checks the message and prepares a response.",
+        "7": "The person’s agent checks the message and prepares a response.",
+        "8": "The person’s agent sends the signed request.",
+        "9": "Fictional organization 3’s agent checks the message and prepares a response.",
+        "10": "The person’s agent checks the message and prepares a response.",
+        "11": "The person’s agent sends the signed request.",
+        "12": "Fictional organization 4’s agent checks the message and prepares a response.",
+        "13": "The person’s agent checks the message and prepares a response.",
+        "14": "The person’s agent sends the signed request.",
+        "15": "Fictional organization 5’s agent checks the message and prepares a response.",
+        "16": "The person’s agent checks the message and prepares a response.",
+        "17": "The person’s agent sends the signed request.",
+        "18": "Fictional organization 6’s agent checks the message and prepares a response.",
+        "19": "The person’s agent checks the message and prepares a response.",
+        "20": "The person’s agent sends the signed request.",
+        "21": "Fictional organization 7’s agent checks the message and prepares a response.",
+        "22": "The person’s agent checks the message and prepares a response.",
+        "23": "The person’s agent sends the signed request.",
+        "24": "Fictional organization 8’s agent checks the message and prepares a response.",
+        "25": "The person’s agent checks the message and prepares a response.",
+        "26": "The person’s agent sends the signed request.",
+        "27": "Fictional organization 9’s agent checks the message and prepares a response.",
+        "28": "The person’s agent checks the message and prepares a response.",
+        "29": "The person’s agent sends the signed request.",
+        "30": "Fictional organization 10’s agent checks the message and prepares a response.",
+        "31": "The person’s agent checks the message and prepares a response.",
+        "32": "The person’s agent sends the signed request.",
+        "33": "Fictional organization 11’s agent checks the message and prepares a response.",
+        "34": "The person’s agent checks the message and prepares a response.",
+        "35": "The person’s agent sends the signed request.",
+        "36": "Fictional organization 12’s agent checks the message and prepares a response.",
+        "37": "The person’s agent checks the message and prepares a response.",
+        "38": "The person’s agent sends the signed request.",
+        "39": "Fictional organization 13’s agent checks the message and prepares a response.",
+        "40": "The person’s agent checks the message and prepares a response.",
+        "41": "The person’s agent sends the signed request.",
+        "42": "Fictional organization 14’s agent checks the message and prepares a response.",
+        "43": "The person’s agent checks the message and prepares a response.",
+        "44": "The person’s agent sends the signed request.",
+        "45": "Fictional organization 15’s agent checks the message and prepares a response.",
+        "46": "The person’s agent checks the message and prepares a response.",
+        "47": "The person’s agent sends the signed request.",
+        "48": "Fictional organization 16’s agent checks the message and prepares a response.",
+        "49": "The person’s agent checks the message and prepares a response.",
+        "50": "The person’s agent sends the signed request.",
+        "51": "Fictional organization 17’s agent checks the message and prepares a response.",
+        "52": "The person’s agent checks the message and prepares a response.",
+        "53": "The person’s agent sends the signed request.",
+        "54": "Fictional organization 18’s agent checks the message and prepares a response.",
+        "55": "The person’s agent checks the message and prepares a response.",
+        "56": "The person’s agent sends the signed request.",
+        "57": "Fictional organization 19’s agent checks the message and prepares a response.",
+        "58": "The person’s agent checks the message and prepares a response.",
+        "59": "The person’s agent sends the signed request.",
+        "60": "Fictional organization 20’s agent checks the message and prepares a response.",
+        "61": "The person’s agent checks the message and prepares a response.",
+        "62": "The person’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 708
+  },
+  {
+    "file": "change-of-address--branch-1--baseline.json",
+    "scenario": {
+      "id": "change-of-address--branch-1",
+      "title": "Telling everyone about a new address: A recipient the person never dealt with is on the list",
+      "steps": {
+        "1": "The person’s agent checks the signed statements.",
+        "2": "The person’s agent sends the signed request.",
+        "3": "Fictional organization 1’s agent checks the message and prepares a response.",
+        "4": "The person’s agent checks the message and prepares a response.",
+        "5": "The person’s agent sends the signed request.",
+        "6": "Fictional organization 2’s agent checks the message and prepares a response.",
+        "7": "The person’s agent checks the message and prepares a response.",
+        "8": "The person’s agent sends the signed request.",
+        "9": "Fictional organization 3’s agent checks the message and prepares a response.",
+        "10": "The person’s agent checks the message and prepares a response.",
+        "11": "The person’s agent sends the signed request.",
+        "12": "Fictional organization 4’s agent checks the message and prepares a response.",
+        "13": "The person’s agent checks the message and prepares a response.",
+        "14": "The person’s agent sends the signed request.",
+        "15": "Fictional organization 5’s agent checks the message and prepares a response.",
+        "16": "The person’s agent checks the message and prepares a response.",
+        "17": "The person’s agent sends the signed request.",
+        "18": "Fictional organization 6’s agent checks the message and prepares a response.",
+        "19": "The person’s agent checks the message and prepares a response.",
+        "20": "The person’s agent sends the signed request.",
+        "21": "Fictional organization 7’s agent checks the message and prepares a response.",
+        "22": "The person’s agent checks the message and prepares a response.",
+        "23": "The person’s agent sends the signed request.",
+        "24": "Fictional organization 8’s agent checks the message and prepares a response.",
+        "25": "The person’s agent checks the message and prepares a response.",
+        "26": "The person’s agent sends the signed request.",
+        "27": "Fictional organization 9’s agent checks the message and prepares a response.",
+        "28": "The person’s agent checks the message and prepares a response.",
+        "29": "The person’s agent sends the signed request.",
+        "30": "Fictional organization 10’s agent checks the message and prepares a response.",
+        "31": "The person’s agent checks the message and prepares a response.",
+        "32": "The person’s agent sends the signed request.",
+        "33": "Fictional organization 11’s agent checks the message and prepares a response.",
+        "34": "The person’s agent checks the message and prepares a response.",
+        "35": "The person’s agent sends the signed request.",
+        "36": "Fictional organization 12’s agent checks the message and prepares a response.",
+        "37": "The person’s agent checks the message and prepares a response.",
+        "38": "The person’s agent sends the signed request.",
+        "39": "Fictional organization 13’s agent checks the message and prepares a response.",
+        "40": "The person’s agent checks the message and prepares a response.",
+        "41": "The person’s agent sends the signed request.",
+        "42": "Fictional organization 14’s agent checks the message and prepares a response.",
+        "43": "The person’s agent checks the message and prepares a response.",
+        "44": "The person’s agent sends the signed request.",
+        "45": "Fictional organization 15’s agent checks the message and prepares a response.",
+        "46": "The person’s agent checks the message and prepares a response.",
+        "47": "The person’s agent sends the signed request.",
+        "48": "Fictional organization 16’s agent checks the message and prepares a response.",
+        "49": "The person’s agent checks the message and prepares a response.",
+        "50": "The person’s agent sends the signed request.",
+        "51": "Fictional organization 17’s agent checks the message and prepares a response.",
+        "52": "The person’s agent checks the message and prepares a response.",
+        "53": "The person’s agent sends the signed request.",
+        "54": "Fictional organization 18’s agent checks the message and prepares a response.",
+        "55": "The person’s agent checks the message and prepares a response.",
+        "56": "The person’s agent sends the signed request.",
+        "57": "Fictional organization 19’s agent checks the message and prepares a response.",
+        "58": "The person’s agent checks the message and prepares a response.",
+        "59": "The person’s agent sends the signed request.",
+        "60": "Fictional organization 20’s agent checks the message and prepares a response.",
+        "61": "The person’s agent checks the message and prepares a response.",
+        "62": "The person’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 15
+  },
+  {
+    "file": "content-licence--branch-1--baseline.json",
+    "scenario": {
+      "id": "content-licence--branch-1",
+      "title": "Licensing a photograph: The publisher's agent would pass the image to a sister company",
+      "steps": {
+        "1": "The publisher’s agent checks the signed statements.",
+        "2": "The sister company’s agent sends the signed request.",
+        "3": "The publisher’s agent checks the message and prepares a response.",
+        "4": "The publisher’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 33
+  },
+  {
+    "file": "contract-wording--baseline.json",
+    "scenario": {
+      "id": "contract-wording",
+      "title": "Negotiating the wording of a contract",
+      "steps": {
+        "1": "The first fictional company’s agent checks the signed statements.",
+        "2": "The second fictional company’s agent sends the signed request.",
+        "3": "The first fictional company’s agent checks the message and prepares a response.",
+        "4": "The first fictional company’s agent sends the signed request.",
+        "5": "The first fictional company’s agent completes the approve step.",
+        "6": "The second fictional company’s agent checks the message and prepares a response.",
+        "7": "The second fictional company’s agent completes the read content step.",
+        "8": "The second fictional company’s agent proposes the local action."
+      }
+    },
+    "configuration": "contract-wording-local",
+    "events": 75
+  },
+  {
+    "file": "contract-wording--branch-1--baseline.json",
+    "scenario": {
+      "id": "contract-wording--branch-1",
+      "title": "Negotiating the wording of a contract: An agent accepts a clause its principal's policy does not cover",
+      "steps": {
+        "1": "The first fictional company’s agent checks the signed statements.",
+        "2": "The second fictional company’s agent sends the signed request.",
+        "3": "The first fictional company’s agent checks the message and prepares a response.",
+        "4": "The first fictional company’s agent sends the signed request.",
+        "5": "The first fictional company’s agent completes the approve step.",
+        "6": "The second fictional company’s agent checks the message and prepares a response.",
+        "7": "The second fictional company’s agent completes the read content step.",
+        "8": "The second fictional company’s agent proposes the local action."
+      }
+    },
+    "configuration": "contract-wording-local",
+    "events": 75
+  },
+  {
+    "file": "cross-department-request--baseline.json",
+    "scenario": {
+      "id": "cross-department-request",
+      "title": "One department's agent asks another's for data",
+      "steps": {
+        "1": "The finance department’s agent checks the signed statements.",
+        "2": "The people team’s agent sends the signed request.",
+        "3": "The finance department’s agent checks the message and prepares a response.",
+        "4": "The finance department’s agent sends the signed request.",
+        "5": "The people team’s agent checks the message and prepares a response.",
+        "6": "The finance department’s agent checks the message and prepares a response.",
+        "7": "The people team’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "cross-department-request--branch-1--baseline.json",
+    "scenario": {
+      "id": "cross-department-request--branch-1",
+      "title": "One department's agent asks another's for data: The request would reveal one named person's salary",
+      "steps": {
+        "1": "The finance department’s agent checks the signed statements.",
+        "2": "The people team’s agent sends the signed request.",
+        "3": "The finance department’s agent checks the message and prepares a response.",
+        "4": "The finance department’s agent sends the signed request.",
+        "5": "The people team’s agent checks the message and prepares a response.",
+        "6": "The finance department’s agent checks the message and prepares a response.",
+        "7": "The people team’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
+    "file": "degree-recognition--branch-1--baseline.json",
+    "scenario": {
+      "id": "degree-recognition--branch-1",
+      "title": "Showing a degree to an employer abroad: No chain links the two national registers",
+      "steps": {
+        "1": "The foreign employer’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 4
+  },
+  {
     "file": "discharge-letter--baseline.json",
     "scenario": {
       "id": "discharge-letter",
       "title": "A discharge letter in a doctor's own words",
       "steps": {
-        "1": "relay-holds-letter",
-        "2": "hospital-holds-diagnosis",
-        "3": "letter-sent",
-        "4": "letter-arrives",
-        "5": "read-letter",
-        "6": "needs-structured",
-        "7": "ask-hospital",
-        "8": "hospital-answers",
-        "9": "structured-arrives",
-        "10": "record-clinical-entry",
-        "11": "record-check"
+        "1": "The patient’s agent checks and admits the signed statements.",
+        "2": "The hospital’s agent checks and admits the signed statements.",
+        "3": "The patient’s agent sends a signed request.",
+        "4": "The family practice’s agent checks the incoming message and prepares a response.",
+        "5": "The family practice’s agent completes the read content step.",
+        "6": "The family practice’s agent proposes the local action.",
+        "7": "The family practice’s agent completes the request structured step.",
+        "8": "The hospital’s agent checks the incoming message and prepares a response.",
+        "9": "The family practice’s agent checks the incoming message and prepares a response.",
+        "10": "The family practice’s agent proposes the local action.",
+        "11": "The family practice’s agent checks the durable record."
       }
     },
     "configuration": "discharge-letter-local",
@@ -25,18 +375,63 @@
     "file": "discharge-letter--branch-1--baseline.json",
     "scenario": {
       "id": "discharge-letter--branch-1",
-      "title": "A discharge letter in a doctor's own words",
+      "title": "A discharge letter in a doctor's own words: An agent turns \"cannot be ruled out\" into a coded diagnosis",
       "steps": {
-        "1": "relay-holds-letter",
-        "2": "hospital-holds-diagnosis",
-        "3": "letter-sent",
-        "4": "letter-arrives",
-        "5": "read-letter",
-        "6": "wrong-diagnosis"
+        "1": "The patient’s agent checks and admits the signed statements.",
+        "2": "The hospital’s agent checks and admits the signed statements.",
+        "3": "The patient’s agent sends a signed request.",
+        "4": "The family practice’s agent checks the incoming message and prepares a response.",
+        "5": "The family practice’s agent completes the read content step.",
+        "6": "The family practice’s agent proposes the local action.",
+        "7": "The family practice’s agent completes the request structured step.",
+        "8": "The hospital’s agent checks the incoming message and prepares a response.",
+        "9": "The family practice’s agent checks the incoming message and prepares a response.",
+        "10": "The family practice’s agent proposes the local action.",
+        "11": "The family practice’s agent checks the durable record."
       }
     },
     "configuration": "discharge-letter-local",
     "events": 42
+  },
+  {
+    "file": "disruption-rebooking--baseline.json",
+    "scenario": {
+      "id": "disruption-rebooking",
+      "title": "Rebooking after a cancelled flight",
+      "steps": {
+        "1": "The traveller’s agent checks the signed statements.",
+        "2": "The airline’s agent sends the signed request.",
+        "3": "The traveller’s agent checks the message and prepares a response.",
+        "4": "The airline’s agent checks the message and prepares a response.",
+        "5": "The traveller’s agent checks the durable record.",
+        "6": "The airline’s agent checks the durable record.",
+        "7": "The traveller’s agent completes the conversation step.",
+        "8": "The airline’s agent completes the conversation step.",
+        "9": "The traveller’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 42
+  },
+  {
+    "file": "disruption-rebooking--branch-1--baseline.json",
+    "scenario": {
+      "id": "disruption-rebooking--branch-1",
+      "title": "Rebooking after a cancelled flight: The only alternative costs more than the pre-agreed margin",
+      "steps": {
+        "1": "The traveller’s agent checks the signed statements.",
+        "2": "The airline’s agent sends the signed request.",
+        "3": "The traveller’s agent checks the message and prepares a response.",
+        "4": "The airline’s agent checks the message and prepares a response.",
+        "5": "The traveller’s agent checks the durable record.",
+        "6": "The airline’s agent checks the durable record.",
+        "7": "The traveller’s agent completes the conversation step.",
+        "8": "The airline’s agent completes the conversation step.",
+        "9": "The traveller’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
   },
   {
     "file": "emergency-access--baseline.json",
@@ -44,18 +439,18 @@
       "id": "emergency-access",
       "title": "Access to allergies in an emergency",
       "steps": {
-        "1": "clinician-evidence",
-        "2": "patient-summary",
-        "3": "request",
-        "4": "record-answers",
-        "5": "release-summary",
-        "6": "summary-received",
-        "7": "notify",
-        "8": "patient-told",
-        "9": "contact-told",
-        "10": "duties",
-        "11": "two-duties",
-        "12": "second-duty"
+        "1": "The clinician’s agent checks and admits the signed statements.",
+        "2": "The patient’s record agent checks and admits the signed statements.",
+        "3": "The clinician’s agent sends a signed request.",
+        "4": "The patient’s record agent checks the incoming message and prepares a response.",
+        "5": "The patient’s record agent completes the message step.",
+        "6": "The clinician’s agent checks the incoming message and prepares a response.",
+        "7": "The patient’s record agent completes the notifications step.",
+        "8": "The patient’s agent checks the incoming message and prepares a response.",
+        "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+        "10": "The patient’s record agent completes the duties step.",
+        "11": "The patient’s record agent checks the observed result.",
+        "12": "The patient’s record agent checks the observed result."
       }
     },
     "configuration": "baseline",
@@ -65,20 +460,20 @@
     "file": "emergency-access--branch-1--baseline.json",
     "scenario": {
       "id": "emergency-access--branch-1",
-      "title": "Access to allergies in an emergency",
+      "title": "Access to allergies in an emergency: The request comes from a registered clinician with an emergency flag",
       "steps": {
-        "1": "clinician-evidence",
-        "2": "patient-summary",
-        "3": "request",
-        "4": "record-answers",
-        "5": "release-summary",
-        "6": "summary-received",
-        "7": "notify",
-        "8": "patient-told",
-        "9": "contact-told",
-        "10": "duties",
-        "11": "two-duties",
-        "12": "second-duty"
+        "1": "The clinician’s agent checks and admits the signed statements.",
+        "2": "The patient’s record agent checks and admits the signed statements.",
+        "3": "The clinician’s agent sends a signed request.",
+        "4": "The patient’s record agent checks the incoming message and prepares a response.",
+        "5": "The patient’s record agent completes the message step.",
+        "6": "The clinician’s agent checks the incoming message and prepares a response.",
+        "7": "The patient’s record agent completes the notifications step.",
+        "8": "The patient’s agent checks the incoming message and prepares a response.",
+        "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+        "10": "The patient’s record agent completes the duties step.",
+        "11": "The patient’s record agent checks the observed result.",
+        "12": "The patient’s record agent checks the observed result."
       }
     },
     "configuration": "baseline",
@@ -88,26 +483,134 @@
     "file": "emergency-access--branch-2--baseline.json",
     "scenario": {
       "id": "emergency-access--branch-2",
-      "title": "Access to allergies in an emergency",
+      "title": "Access to allergies in an emergency: The same flag is used by someone not on the register",
       "steps": {
-        "1": "clinician-evidence",
-        "2": "patient-summary",
-        "3": "request",
-        "4": "record-answers",
-        "5": "release-summary"
+        "1": "The clinician’s agent checks and admits the signed statements.",
+        "2": "The patient’s record agent checks and admits the signed statements.",
+        "3": "The clinician’s agent sends a signed request.",
+        "4": "The patient’s record agent checks the incoming message and prepares a response.",
+        "5": "The patient’s record agent completes the message step.",
+        "6": "The clinician’s agent checks the incoming message and prepares a response.",
+        "7": "The patient’s record agent completes the notifications step.",
+        "8": "The patient’s agent checks the incoming message and prepares a response.",
+        "9": "The trusted contact’s agent checks the incoming message and prepares a response.",
+        "10": "The patient’s record agent completes the duties step.",
+        "11": "The patient’s record agent checks the observed result.",
+        "12": "The patient’s record agent checks the observed result."
       }
     },
     "configuration": "baseline",
     "events": 38
   },
   {
+    "file": "employment-reference--baseline.json",
+    "scenario": {
+      "id": "employment-reference",
+      "title": "A reference from a former employer",
+      "steps": {
+        "1": "The former employer’s agent checks the signed statements.",
+        "2": "The new employer’s agent sends the signed request.",
+        "3": "The former employer’s agent checks the message and prepares a response.",
+        "4": "The former employer’s agent sends the signed request.",
+        "5": "The former employer’s agent completes the approve step.",
+        "6": "The new employer’s agent checks the message and prepares a response.",
+        "7": "The new employer’s agent completes the read content step.",
+        "8": "The new employer’s agent proposes the local action."
+      }
+    },
+    "configuration": "employment-reference-local",
+    "events": 75
+  },
+  {
+    "file": "employment-reference--branch-1--baseline.json",
+    "scenario": {
+      "id": "employment-reference--branch-1",
+      "title": "A reference from a former employer: An agent scores the reference and rejects the candidate on the score",
+      "steps": {
+        "1": "The former employer’s agent checks the signed statements.",
+        "2": "The new employer’s agent sends the signed request.",
+        "3": "The former employer’s agent checks the message and prepares a response.",
+        "4": "The former employer’s agent sends the signed request.",
+        "5": "The former employer’s agent completes the approve step.",
+        "6": "The new employer’s agent checks the message and prepares a response.",
+        "7": "The new employer’s agent completes the read content step.",
+        "8": "The new employer’s agent proposes the local action."
+      }
+    },
+    "configuration": "employment-reference-local",
+    "events": 75
+  },
+  {
+    "file": "energy-switch--branch-1--baseline.json",
+    "scenario": {
+      "id": "energy-switch--branch-1",
+      "title": "Switching energy supplier: A supplier asks for half-hourly data to quote",
+      "steps": {
+        "1": "The household’s agent checks the signed statements.",
+        "2": "The energy supplier’s agent sends the signed request.",
+        "3": "The household’s agent checks the message and prepares a response.",
+        "4": "The household’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
+    "file": "expenses--baseline.json",
+    "scenario": {
+      "id": "expenses",
+      "title": "Claiming expenses",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employee’s agent sends the signed request.",
+        "3": "The finance agent checks the message and prepares a response.",
+        "4": "The finance agent checks the signed statements.",
+        "5": "The reimbursement bank’s agent checks the signed statements.",
+        "6": "The finance agent sends the signed request.",
+        "7": "The reimbursement bank’s agent checks the message and prepares a response.",
+        "8": "The reimbursement bank’s agent proposes the local action.",
+        "9": "The reimbursement bank’s agent checks the observed result.",
+        "10": "The reimbursement bank’s agent completes the message step.",
+        "11": "The finance agent checks the message and prepares a response.",
+        "12": "The finance agent checks the durable record.",
+        "13": "The reimbursement bank’s agent checks the durable record."
+      }
+    },
+    "configuration": "expenses-local",
+    "events": 96
+  },
+  {
+    "file": "expenses--branch-1--baseline.json",
+    "scenario": {
+      "id": "expenses--branch-1",
+      "title": "Claiming expenses: A meal is above the policy limit",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employee’s agent sends the signed request.",
+        "3": "The finance agent checks the message and prepares a response.",
+        "4": "The finance agent checks the signed statements.",
+        "5": "The reimbursement bank’s agent checks the signed statements.",
+        "6": "The finance agent sends the signed request.",
+        "7": "The reimbursement bank’s agent checks the message and prepares a response.",
+        "8": "The reimbursement bank’s agent proposes the local action.",
+        "9": "The reimbursement bank’s agent checks the observed result.",
+        "10": "The reimbursement bank’s agent completes the message step.",
+        "11": "The finance agent checks the message and prepares a response.",
+        "12": "The finance agent checks the durable record.",
+        "13": "The reimbursement bank’s agent checks the durable record."
+      }
+    },
+    "configuration": "expenses-local",
+    "events": 49
+  },
+  {
     "file": "false-but-signed--baseline.json",
     "scenario": {
       "id": "false-but-signed",
-      "title": "false-but-signed (entirely fictional)",
+      "title": "A registered source signs something false",
       "steps": {
-        "1": "admit-false-income-true-income",
-        "2": "record"
+        "1": "The lender’s agent checks and admits the signed statements.",
+        "2": "The lender’s agent checks the durable record."
       }
     },
     "configuration": "false-but-signed-local",
@@ -117,34 +620,85 @@
     "file": "false-but-signed--branch-1--baseline.json",
     "scenario": {
       "id": "false-but-signed--branch-1",
-      "title": "false-but-signed (entirely fictional)",
+      "title": "A registered source signs something false: Nothing fails",
       "steps": {
-        "1": "issuer-admits",
-        "2": "request",
-        "3": "sender-delivers",
-        "4": "receiver-admits",
-        "5": "perform",
-        "6": "record",
-        "7": "issuer-record",
-        "8": "attribute-record",
-        "9": "attribute-issuer-record"
+        "1": "The employer’s agent checks and admits the signed statements.",
+        "2": "The lender’s agent sends a signed request.",
+        "3": "The employer’s agent checks the incoming message and prepares a response.",
+        "4": "The lender’s agent checks the incoming message and prepares a response.",
+        "5": "The lender’s agent proposes the local action.",
+        "6": "The lender’s agent checks the durable record.",
+        "7": "The employer’s agent checks the durable record.",
+        "8": "The lender’s agent checks the observed result.",
+        "9": "The employer’s agent checks the observed result."
       }
     },
     "configuration": "false-but-signed-local",
     "events": 52
   },
   {
+    "file": "find-a-time--branch-1--baseline.json",
+    "scenario": {
+      "id": "find-a-time--branch-1",
+      "title": "Two people's agents find a time to meet: One agent asks why the other person is busy on Tuesday",
+      "steps": {
+        "1": "The first person’s agent checks the signed statements.",
+        "2": "The second person’s agent sends the signed request.",
+        "3": "The first person’s agent checks the message and prepares a response.",
+        "4": "The first person’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
+    "file": "fit-note-to-employer--baseline.json",
+    "scenario": {
+      "id": "fit-note-to-employer",
+      "title": "Telling an employer about fitness for work",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employer’s agent sends the signed request.",
+        "3": "The employee’s agent checks the message and prepares a response.",
+        "4": "The employee’s agent sends the signed request.",
+        "5": "The employer’s agent checks the message and prepares a response.",
+        "6": "The employee’s agent checks the message and prepares a response.",
+        "7": "The employer’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "fit-note-to-employer--branch-1--baseline.json",
+    "scenario": {
+      "id": "fit-note-to-employer--branch-1",
+      "title": "Telling an employer about fitness for work: The employer's agent asks what the condition is",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employer’s agent sends the signed request.",
+        "3": "The employee’s agent checks the message and prepares a response.",
+        "4": "The employee’s agent sends the signed request.",
+        "5": "The employer’s agent checks the message and prepares a response.",
+        "6": "The employee’s agent checks the message and prepares a response.",
+        "7": "The employer’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
     "file": "flat-share--baseline.json",
     "scenario": {
       "id": "flat-share",
-      "title": "flat-share (entirely fictional)",
+      "title": "Two people agree to share a flat",
       "steps": {
-        "1": "offer",
-        "2": "unknown-sender",
-        "3": "trust-yes",
-        "4": "accepted-offer",
-        "5": "record",
-        "6": "alex-record"
+        "1": "Alex’s agent sends a signed request.",
+        "2": "Blair’s agent checks the incoming message and prepares a response.",
+        "3": "Blair’s agent completes the trust decision step.",
+        "4": "Alex’s agent checks the incoming message and prepares a response.",
+        "5": "Blair’s agent checks the durable record.",
+        "6": "Alex’s agent checks the durable record."
       }
     },
     "configuration": "flat-share-local",
@@ -154,14 +708,58 @@
     "file": "flat-share--branch-1--baseline.json",
     "scenario": {
       "id": "flat-share--branch-1",
-      "title": "flat-share (entirely fictional)",
+      "title": "Two people agree to share a flat: One side's identity cannot be tied to any source the other accepts",
       "steps": {
-        "1": "offer",
-        "2": "unknown-sender"
+        "1": "Alex’s agent sends a signed request.",
+        "2": "Blair’s agent checks the incoming message and prepares a response.",
+        "3": "Blair’s agent completes the trust decision step.",
+        "4": "Alex’s agent checks the incoming message and prepares a response.",
+        "5": "Blair’s agent checks the durable record.",
+        "6": "Alex’s agent checks the durable record."
       }
     },
     "configuration": "flat-share-local",
     "events": 15
+  },
+  {
+    "file": "hardship-request--baseline.json",
+    "scenario": {
+      "id": "hardship-request",
+      "title": "Asking a lender for breathing space",
+      "steps": {
+        "1": "The borrower’s agent checks the signed statements.",
+        "2": "The lender’s agent sends the signed request.",
+        "3": "The borrower’s agent checks the message and prepares a response.",
+        "4": "The borrower’s agent sends the signed request.",
+        "5": "The borrower’s agent completes the approve step.",
+        "6": "The borrower’s agent completes the approve step.",
+        "7": "The lender’s agent checks the message and prepares a response.",
+        "8": "The lender’s agent completes the read content step.",
+        "9": "The lender’s agent proposes the local action."
+      }
+    },
+    "configuration": "hardship-request-local",
+    "events": 83
+  },
+  {
+    "file": "hardship-request--branch-1--baseline.json",
+    "scenario": {
+      "id": "hardship-request--branch-1",
+      "title": "Asking a lender for breathing space: The agent would send a diagnosis to explain the request",
+      "steps": {
+        "1": "The borrower’s agent checks the signed statements.",
+        "2": "The lender’s agent sends the signed request.",
+        "3": "The borrower’s agent checks the message and prepares a response.",
+        "4": "The borrower’s agent sends the signed request.",
+        "5": "The borrower’s agent completes the approve step.",
+        "6": "The borrower’s agent completes the approve step.",
+        "7": "The lender’s agent checks the message and prepares a response.",
+        "8": "The lender’s agent completes the read content step.",
+        "9": "The lender’s agent proposes the local action."
+      }
+    },
+    "configuration": "hardship-request-local",
+    "events": 33
   },
   {
     "file": "health-referral--baseline.json",
@@ -169,13 +767,13 @@
       "id": "health-referral",
       "title": "A referral from a family doctor to a specialist",
       "steps": {
-        "1": "registered-role",
-        "2": "select-relevant-history",
-        "3": "clinician-selects",
-        "4": "clinic-receives",
-        "5": "read-relevant-history",
-        "6": "history-admitted",
-        "7": "check-clinic-record"
+        "1": "The family practice’s agent checks and admits the signed statements.",
+        "2": "The family practice’s agent sends a signed request.",
+        "3": "The family practice’s agent obtains a staff approval.",
+        "4": "The specialist clinic’s agent checks the incoming message and prepares a response.",
+        "5": "The specialist clinic’s agent requests the permitted record item.",
+        "6": "The specialist clinic’s agent checks the observed result.",
+        "7": "The specialist clinic’s agent checks the durable record."
       }
     },
     "configuration": "health-referral-local",
@@ -185,12 +783,15 @@
     "file": "health-referral--branch-1--baseline.json",
     "scenario": {
       "id": "health-referral--branch-1",
-      "title": "A referral from a family doctor to a specialist",
+      "title": "A referral from a family doctor to a specialist: The clinic asks for the full record",
       "steps": {
-        "1": "clinic-asks-for-full-record",
-        "2": "full-record-request-arrives",
-        "3": "registered-role",
-        "4": "select-relevant-history"
+        "1": "The specialist clinic’s agent sends a signed request.",
+        "2": "The family practice’s agent checks the incoming message and prepares a response.",
+        "3": "The family practice’s agent checks and admits the signed statements.",
+        "4": "The family practice’s agent sends a signed request.",
+        "5": "The specialist clinic’s agent requests the permitted record item.",
+        "6": "The specialist clinic’s agent checks the observed result.",
+        "7": "The specialist clinic’s agent checks the durable record."
       }
     },
     "configuration": "health-referral-local",
@@ -200,33 +801,194 @@
     "file": "health-referral--branch-2--baseline.json",
     "scenario": {
       "id": "health-referral--branch-2",
-      "title": "A referral from a family doctor to a specialist",
+      "title": "A referral from a family doctor to a specialist: The referrer is not on the professional register",
       "steps": {
-        "1": "registered-role",
-        "2": "select-relevant-history"
+        "1": "The family practice’s agent checks and admits the signed statements.",
+        "2": "The family practice’s agent sends a signed request.",
+        "3": "The family practice’s agent obtains a staff approval.",
+        "4": "The specialist clinic’s agent checks the incoming message and prepares a response.",
+        "5": "The specialist clinic’s agent requests the permitted record item.",
+        "6": "The specialist clinic’s agent checks the observed result.",
+        "7": "The specialist clinic’s agent checks the durable record."
       }
     },
     "configuration": "health-referral-local",
     "events": 8
   },
   {
+    "file": "home-purchase--branch-1--baseline.json",
+    "scenario": {
+      "id": "home-purchase--branch-1",
+      "title": "Buying a home: A message gives a new account for the deposit",
+      "steps": {
+        "1": "The buyer’s agent checks the signed statements.",
+        "2": "The buyer’s agent proposes the local action."
+      }
+    },
+    "configuration": "baseline",
+    "events": 8
+  },
+  {
+    "file": "home-purchase--branch-2--baseline.json",
+    "scenario": {
+      "id": "home-purchase--branch-2",
+      "title": "Buying a home: The seller is not the registered owner",
+      "steps": {
+        "1": "The buyer’s agent checks the signed statements.",
+        "2": "The buyer’s agent proposes the local action."
+      }
+    },
+    "configuration": "baseline",
+    "events": 8
+  },
+  {
+    "file": "insurance-claim-photos--baseline.json",
+    "scenario": {
+      "id": "insurance-claim-photos",
+      "title": "An insurance claim with photographs",
+      "steps": {
+        "1": "The policyholder’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The policyholder’s agent checks the message and prepares a response.",
+        "4": "The policyholder’s agent sends the signed request.",
+        "5": "The policyholder’s agent completes the approve step.",
+        "6": "The insurer’s agent checks the message and prepares a response.",
+        "7": "The insurer’s agent completes the read content step.",
+        "8": "The insurer’s agent completes the read content step.",
+        "9": "The insurer’s agent proposes the local action."
+      }
+    },
+    "configuration": "insurance-claim-photos-local",
+    "events": 115
+  },
+  {
+    "file": "insurance-claim-photos--branch-1--baseline.json",
+    "scenario": {
+      "id": "insurance-claim-photos--branch-1",
+      "title": "An insurance claim with photographs: The insurer's model reads the photo as minor damage; the garage says otherwise",
+      "steps": {
+        "1": "The policyholder’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The policyholder’s agent checks the message and prepares a response.",
+        "4": "The policyholder’s agent sends the signed request.",
+        "5": "The policyholder’s agent completes the approve step.",
+        "6": "The insurer’s agent checks the message and prepares a response.",
+        "7": "The insurer’s agent completes the read content step.",
+        "8": "The insurer’s agent completes the read content step.",
+        "9": "The insurer’s agent proposes the local action."
+      }
+    },
+    "configuration": "insurance-claim-photos-local",
+    "events": 111
+  },
+  {
+    "file": "insurance-claim-photos--branch-2--baseline.json",
+    "scenario": {
+      "id": "insurance-claim-photos--branch-2",
+      "title": "An insurance claim with photographs: The estimate is from a garage the insurer does not accept",
+      "steps": {
+        "1": "The policyholder’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The policyholder’s agent checks the message and prepares a response.",
+        "4": "The policyholder’s agent sends the signed request.",
+        "5": "The policyholder’s agent completes the approve step.",
+        "6": "The insurer’s agent checks the message and prepares a response.",
+        "7": "The insurer’s agent proposes the local action.",
+        "8": "The insurer’s agent completes the read content step.",
+        "9": "The insurer’s agent proposes the local action."
+      }
+    },
+    "configuration": "insurance-claim-photos-local",
+    "events": 106
+  },
+  {
+    "file": "insurance-quote--branch-1--baseline.json",
+    "scenario": {
+      "id": "insurance-quote--branch-1",
+      "title": "An insurance quote with the least disclosure: An insurer's agent asks for date of birth and full address before quoting",
+      "steps": {
+        "1": "The driver’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The driver’s agent checks the message and prepares a response.",
+        "4": "The driver’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
+  },
+  {
+    "file": "insurance-quote--branch-2--baseline.json",
+    "scenario": {
+      "id": "insurance-quote--branch-2",
+      "title": "An insurance quote with the least disclosure: No register can state completeness",
+      "steps": {
+        "1": "The insurer’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 14
+  },
+  {
+    "file": "introduction--branch-1--baseline.json",
+    "scenario": {
+      "id": "introduction--branch-1",
+      "title": "Being introduced to a stranger safely: One side can show only a self-made profile",
+      "steps": {
+        "1": "The second person’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 4
+  },
+  {
+    "file": "joint-mortgage--branch-1--baseline.json",
+    "scenario": {
+      "id": "joint-mortgage--branch-1",
+      "title": "A joint mortgage for two people: One applicant withdraws their mandate mid-way",
+      "steps": {
+        "1": "The first applicant’s agent checks the signed statements.",
+        "2": "The lender’s agent sends the signed request.",
+        "3": "The first applicant’s agent checks the message and prepares a response.",
+        "4": "The first applicant’s agent completes the revoke mandate step.",
+        "5": "The first applicant’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
+  },
+  {
+    "file": "joint-mortgage--branch-2--baseline.json",
+    "scenario": {
+      "id": "joint-mortgage--branch-2",
+      "title": "A joint mortgage for two people: One agent tries to send the other applicant's payslip",
+      "steps": {
+        "1": "The first applicant’s agent checks the signed statements.",
+        "2": "The lender’s agent sends the signed request.",
+        "3": "The first applicant’s agent checks the message and prepares a response.",
+        "4": "The first applicant’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 33
+  },
+  {
     "file": "master-data-change--baseline.json",
     "scenario": {
       "id": "master-data-change",
-      "title": "master-data-change (entirely fictional)",
+      "title": "Changing a supplier's bank details in a business system",
       "steps": {
-        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
-        "2": "perform",
-        "3": "first-approval",
-        "4": "second-approval",
-        "5": "erp-admits-bank-confirmation",
-        "6": "erp-receives-approved-request",
-        "7": "update",
-        "8": "updated",
-        "9": "erp-receipt",
-        "10": "finance-receives-result",
-        "11": "record",
-        "12": "erp-record"
+        "1": "The business’s finance agent checks and admits the signed statements.",
+        "2": "The business’s finance agent sends a signed request.",
+        "3": "The business’s finance agent obtains a staff approval.",
+        "4": "The business’s finance agent obtains a staff approval.",
+        "5": "The account system’s agent checks and admits the signed statements.",
+        "6": "The account system’s agent checks the incoming message and prepares a response.",
+        "7": "The account system’s agent proposes the local action.",
+        "8": "The account system’s agent checks the observed result.",
+        "9": "The account system’s agent completes the message step.",
+        "10": "The business’s finance agent checks the incoming message and prepares a response.",
+        "11": "The business’s finance agent checks the durable record.",
+        "12": "The account system’s agent checks the durable record."
       }
     },
     "configuration": "baseline",
@@ -236,11 +998,20 @@
     "file": "master-data-change--branch-1--baseline.json",
     "scenario": {
       "id": "master-data-change--branch-1",
-      "title": "master-data-change (entirely fictional)",
+      "title": "Changing a supplier's bank details in a business system: The same role requests and approves",
       "steps": {
-        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
-        "2": "perform",
-        "3": "self-approval"
+        "1": "The business’s finance agent checks and admits the signed statements.",
+        "2": "The business’s finance agent sends a signed request.",
+        "3": "The business’s finance agent obtains a staff approval.",
+        "4": "The business’s finance agent obtains a staff approval.",
+        "5": "The account system’s agent checks and admits the signed statements.",
+        "6": "The account system’s agent checks the incoming message and prepares a response.",
+        "7": "The account system’s agent proposes the local action.",
+        "8": "The account system’s agent checks the observed result.",
+        "9": "The account system’s agent completes the message step.",
+        "10": "The business’s finance agent checks the incoming message and prepares a response.",
+        "11": "The business’s finance agent checks the durable record.",
+        "12": "The account system’s agent checks the durable record."
       }
     },
     "configuration": "baseline",
@@ -250,30 +1021,82 @@
     "file": "master-data-change--branch-2--baseline.json",
     "scenario": {
       "id": "master-data-change--branch-2",
-      "title": "master-data-change (entirely fictional)",
+      "title": "Changing a supplier's bank details in a business system: The new details come from an email",
       "steps": {
-        "1": "admit-account-role-controller-one-role-controller-two-role-requester",
-        "2": "perform"
+        "1": "The business’s finance agent checks and admits the signed statements.",
+        "2": "The business’s finance agent sends a signed request.",
+        "3": "The business’s finance agent obtains a staff approval.",
+        "4": "The business’s finance agent obtains a staff approval.",
+        "5": "The account system’s agent checks and admits the signed statements.",
+        "6": "The account system’s agent checks the incoming message and prepares a response.",
+        "7": "The account system’s agent proposes the local action.",
+        "8": "The account system’s agent checks the observed result.",
+        "9": "The account system’s agent completes the message step.",
+        "10": "The business’s finance agent checks the incoming message and prepares a response.",
+        "11": "The business’s finance agent checks the durable record.",
+        "12": "The account system’s agent checks the durable record."
       }
     },
     "configuration": "baseline",
     "events": 29
   },
   {
+    "file": "meeting-notes--baseline.json",
+    "scenario": {
+      "id": "meeting-notes",
+      "title": "An assistant that remembers meetings",
+      "steps": {
+        "1": "The fictional team’s agent checks the signed statements.",
+        "2": "The team’s coordination service’s agent sends the signed request.",
+        "3": "The fictional team’s agent checks the message and prepares a response.",
+        "4": "The fictional team’s agent sends the signed request.",
+        "5": "The fictional team’s agent completes the approve step.",
+        "6": "The team’s coordination service’s agent checks the message and prepares a response.",
+        "7": "The team’s coordination service’s agent completes the read content step.",
+        "8": "The team’s coordination service’s agent completes the advance step.",
+        "9": "The team’s coordination service’s agent proposes the local action.",
+        "10": "The team’s coordination service’s agent checks the observed result."
+      }
+    },
+    "configuration": "meeting-notes-local",
+    "events": 82
+  },
+  {
+    "file": "meeting-notes--branch-1--baseline.json",
+    "scenario": {
+      "id": "meeting-notes--branch-1",
+      "title": "An assistant that remembers meetings: The assistant commits to a date because its notes say the team agreed it",
+      "steps": {
+        "1": "The fictional team’s agent checks the signed statements.",
+        "2": "The team’s coordination service’s agent sends the signed request.",
+        "3": "The fictional team’s agent checks the message and prepares a response.",
+        "4": "The fictional team’s agent sends the signed request.",
+        "5": "The fictional team’s agent completes the approve step.",
+        "6": "The team’s coordination service’s agent checks the message and prepares a response.",
+        "7": "The team’s coordination service’s agent completes the read content step.",
+        "8": "The team’s coordination service’s agent completes the advance step.",
+        "9": "The team’s coordination service’s agent proposes the local action.",
+        "10": "The team’s coordination service’s agent checks the observed result."
+      }
+    },
+    "configuration": "meeting-notes-local",
+    "events": 82
+  },
+  {
     "file": "mortgage-core--baseline.json",
     "scenario": {
       "id": "mortgage-core",
-      "title": "Sam's mortgage in principle, core flow (no index, no step-up)",
+      "title": "A mortgage in principle",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent looks North Bank up before contacting it.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
       }
     },
     "configuration": "baseline",
@@ -283,17 +1106,17 @@
     "file": "mortgage-injected-fee--baseline.json",
     "scenario": {
       "id": "mortgage-injected-fee",
-      "title": "A message carries an instruction to pay a fee",
+      "title": "A mortgage in principle: A message tells the agent to pay a valuer",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent looks North Bank up before contacting it.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
       }
     },
     "configuration": "baseline",
@@ -303,22 +1126,22 @@
     "file": "mortgage-main--baseline.json",
     "scenario": {
       "id": "mortgage-main",
-      "title": "Sam's mortgage in principle, all 14 steps: the product index, the register chain and a stronger approval at his bank",
+      "title": "A mortgage in principle",
       "steps": {
-        "1": "Sam signs a mandate",
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "6": "Sam's agent asks Harbour Bank for a signed balance statement",
-        "7": "Harbour Bank asks for a stronger approval",
-        "8": "Sam does a face check and the request is sent again",
-        "9": "Harbour Bank returns a signed statement with its terms",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "12": "North Bank's gate checks the evidence",
-        "13": "North Bank returns a signed decision in principle",
-        "14": "Each side checks its own record"
+        "1": "Sam signs a mandate.",
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+        "7": "Harbour Bank asks for a stronger approval.",
+        "8": "Sam does a face check and the request is sent again.",
+        "9": "Harbour Bank returns a signed statement with its terms.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "12": "North Bank's gate checks the evidence.",
+        "13": "North Bank returns a signed decision in principle.",
+        "14": "Each side checks its own record."
       }
     },
     "configuration": "baseline",
@@ -328,15 +1151,15 @@
     "file": "mortgage-out-of-limit--baseline.json",
     "scenario": {
       "id": "mortgage-out-of-limit",
-      "title": "The lender's terms are outside Sam's limits",
+      "title": "A mortgage in principle: The offer is outside Sam's limits",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent looks North Bank up before contacting it.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "14": "Each side checks its own record."
       }
     },
     "configuration": "baseline",
@@ -346,36 +1169,89 @@
     "file": "mortgage-over-ask--baseline.json",
     "scenario": {
       "id": "mortgage-over-ask",
-      "title": "The lender asks for more than Sam's mandate allows",
+      "title": "A mortgage in principle: The lender asks for full statements",
       "steps": {
-        "2": "Sam asks for a mortgage in principle",
-        "3": "Sam's agent looks North Bank up before contacting it",
-        "4": "The agents describe themselves and Sam's agent applies",
-        "5": "North Bank says what evidence it needs",
-        "10": "Sam's agent checks the statements it holds",
-        "11": "Sam is asked, and the agent shares the evidence",
-        "14": "Each side checks its own record"
+        "2": "Sam asks for a mortgage in principle.",
+        "3": "Sam's agent looks North Bank up before contacting it.",
+        "4": "The agents describe themselves and Sam's agent applies.",
+        "5": "North Bank says what evidence it needs.",
+        "10": "Sam's agent checks the statements it holds.",
+        "11": "Sam is asked, and the agent shares the evidence.",
+        "14": "Each side checks its own record."
       }
     },
     "configuration": "baseline",
     "events": 99
   },
   {
+    "file": "no-training-terms--baseline.json",
+    "scenario": {
+      "id": "no-training-terms",
+      "title": "Content that must not be used for training",
+      "steps": {
+        "1": "The publisher’s agent checks the signed statements.",
+        "2": "The model developer’s agent sends the signed request.",
+        "3": "The publisher’s agent checks the message and prepares a response.",
+        "4": "The publisher’s agent sends the signed request.",
+        "5": "The publisher’s agent completes the approve step.",
+        "6": "The model developer’s agent checks the message and prepares a response.",
+        "7": "The model developer’s agent completes the read content step.",
+        "8": "The model developer’s agent proposes the local action."
+      }
+    },
+    "configuration": "no-training-terms-local",
+    "events": 75
+  },
+  {
+    "file": "no-training-terms--branch-1--baseline.json",
+    "scenario": {
+      "id": "no-training-terms--branch-1",
+      "title": "Content that must not be used for training: The fetching agent has no rule for \"training\"",
+      "steps": {
+        "1": "The publisher’s agent checks the signed statements.",
+        "2": "The model developer’s agent sends the signed request.",
+        "3": "The publisher’s agent checks the message and prepares a response.",
+        "4": "The publisher’s agent sends the signed request.",
+        "5": "The publisher’s agent completes the approve step.",
+        "6": "The model developer’s agent checks the message and prepares a response.",
+        "7": "The model developer’s agent completes the read content step.",
+        "8": "The model developer’s agent proposes the local action."
+      }
+    },
+    "configuration": "no-training-terms-local",
+    "events": 75
+  },
+  {
+    "file": "onward-leak--branch-1--baseline.json",
+    "scenario": {
+      "id": "onward-leak--branch-1",
+      "title": "A receiver passes data on against its terms: The lender's own gate, if it is used, stops the transfer",
+      "steps": {
+        "1": "The lender’s agent checks the signed statements.",
+        "2": "The marketing company’s agent sends the signed request.",
+        "3": "The lender’s agent checks the message and prepares a response.",
+        "4": "The lender’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 33
+  },
+  {
     "file": "pay-an-invoice--baseline.json",
     "scenario": {
       "id": "pay-an-invoice",
-      "title": "pay-an-invoice (entirely fictional)",
+      "title": "Paying a supplier's invoice",
       "steps": {
-        "1": "admit-account-invoice",
-        "2": "bank-admits-account",
-        "3": "pay",
-        "4": "bank-receives",
-        "5": "bank-submits",
-        "6": "completed-effect",
-        "7": "bank-receipt",
-        "8": "receipt-received",
-        "9": "record",
-        "10": "bank-record"
+        "1": "The business’s agent checks and admits the signed statements.",
+        "2": "The supplier’s bank’s agent checks and admits the signed statements.",
+        "3": "The business’s agent sends a signed request.",
+        "4": "The supplier’s bank’s agent checks the incoming message and prepares a response.",
+        "5": "The supplier’s bank’s agent proposes the local action.",
+        "6": "The supplier’s bank’s agent checks the observed result.",
+        "7": "The supplier’s bank’s agent completes the message step.",
+        "8": "The business’s agent checks the incoming message and prepares a response.",
+        "9": "The business’s agent checks the durable record.",
+        "10": "The supplier’s bank’s agent checks the durable record."
       }
     },
     "configuration": "pay-an-invoice-local",
@@ -385,10 +1261,18 @@
     "file": "pay-an-invoice--branch-1--baseline.json",
     "scenario": {
       "id": "pay-an-invoice--branch-1",
-      "title": "pay-an-invoice (entirely fictional)",
+      "title": "Paying a supplier's invoice: A message gives new bank details for a known supplier",
       "steps": {
-        "1": "admit-account-invoice",
-        "2": "pay"
+        "1": "The business’s agent checks and admits the signed statements.",
+        "2": "The business’s agent sends a signed request.",
+        "3": "The business’s agent sends a signed request.",
+        "4": "The supplier’s bank’s agent checks the incoming message and prepares a response.",
+        "5": "The supplier’s bank’s agent proposes the local action.",
+        "6": "The supplier’s bank’s agent checks the observed result.",
+        "7": "The supplier’s bank’s agent completes the message step.",
+        "8": "The business’s agent checks the incoming message and prepares a response.",
+        "9": "The business’s agent checks the durable record.",
+        "10": "The supplier’s bank’s agent checks the durable record."
       }
     },
     "configuration": "pay-an-invoice-local",
@@ -398,14 +1282,112 @@
     "file": "pay-an-invoice--branch-2--baseline.json",
     "scenario": {
       "id": "pay-an-invoice--branch-2",
-      "title": "pay-an-invoice (entirely fictional)",
+      "title": "Paying a supplier's invoice: An invoice is above the limit",
       "steps": {
-        "1": "admit-account-invoice",
-        "2": "pay"
+        "1": "The business’s agent checks and admits the signed statements.",
+        "2": "The business’s agent sends a signed request.",
+        "3": "The business’s agent sends a signed request.",
+        "4": "The supplier’s bank’s agent checks the incoming message and prepares a response.",
+        "5": "The supplier’s bank’s agent proposes the local action.",
+        "6": "The supplier’s bank’s agent checks the observed result.",
+        "7": "The supplier’s bank’s agent completes the message step.",
+        "8": "The business’s agent checks the incoming message and prepares a response.",
+        "9": "The business’s agent checks the durable record.",
+        "10": "The supplier’s bank’s agent checks the durable record."
       }
     },
     "configuration": "pay-an-invoice-local",
     "events": 22
+  },
+  {
+    "file": "permit-application--baseline.json",
+    "scenario": {
+      "id": "permit-application",
+      "title": "Applying for a building permit",
+      "steps": {
+        "1": "The architect’s agent checks the signed statements.",
+        "2": "The planning office’s agent sends the signed request.",
+        "3": "The architect’s agent checks the message and prepares a response.",
+        "4": "The architect’s agent sends the signed request.",
+        "5": "The architect’s agent completes the approve step.",
+        "6": "The planning office’s agent checks the message and prepares a response.",
+        "7": "The planning office’s agent completes the read content step.",
+        "8": "The planning office’s agent proposes the local action."
+      }
+    },
+    "configuration": "permit-application-local",
+    "events": 94
+  },
+  {
+    "file": "permit-application--branch-1--baseline.json",
+    "scenario": {
+      "id": "permit-application--branch-1",
+      "title": "Applying for a building permit: The agent declares the extension height from a model's reading of the drawing",
+      "steps": {
+        "1": "The architect’s agent checks the signed statements.",
+        "2": "The planning office’s agent sends the signed request.",
+        "3": "The architect’s agent checks the message and prepares a response.",
+        "4": "The architect’s agent sends the signed request.",
+        "5": "The architect’s agent completes the approve step.",
+        "6": "The planning office’s agent checks the message and prepares a response.",
+        "7": "The planning office’s agent completes the read content step.",
+        "8": "The planning office’s agent proposes the local action."
+      }
+    },
+    "configuration": "permit-application-local",
+    "events": 90
+  },
+  {
+    "file": "platform-income--branch-1--baseline.json",
+    "scenario": {
+      "id": "platform-income--branch-1",
+      "title": "Proving income from several platforms: The receiver requires a complete total",
+      "steps": {
+        "1": "The lender’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 7
+  },
+  {
+    "file": "price-negotiation--baseline.json",
+    "scenario": {
+      "id": "price-negotiation",
+      "title": "Negotiating a price",
+      "steps": {
+        "1": "The buyer’s agent checks the signed statements.",
+        "2": "The seller’s agent sends the signed request.",
+        "3": "The buyer’s agent checks the message and prepares a response.",
+        "4": "The seller’s agent checks the message and prepares a response.",
+        "5": "The buyer’s agent checks the durable record.",
+        "6": "The seller’s agent checks the durable record.",
+        "7": "The buyer’s agent completes the conversation step.",
+        "8": "The seller’s agent completes the conversation step.",
+        "9": "The buyer’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 42
+  },
+  {
+    "file": "price-negotiation--branch-1--baseline.json",
+    "scenario": {
+      "id": "price-negotiation--branch-1",
+      "title": "Negotiating a price: The seller's agent asks what the buyer's maximum is",
+      "steps": {
+        "1": "The buyer’s agent checks the signed statements.",
+        "2": "The seller’s agent sends the signed request.",
+        "3": "The buyer’s agent checks the message and prepares a response.",
+        "4": "The buyer’s agent sends the signed request.",
+        "5": "The buyer’s agent checks the durable record.",
+        "6": "The seller’s agent checks the durable record.",
+        "7": "The buyer’s agent completes the conversation step.",
+        "8": "The seller’s agent completes the conversation step.",
+        "9": "The buyer’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
   },
   {
     "file": "probing-counterparty--baseline.json",
@@ -413,13 +1395,13 @@
       "id": "probing-counterparty",
       "title": "A service agent that keeps asking",
       "steps": {
-        "1": "instruct",
-        "2": "load-contact",
-        "3": "request",
-        "4": "answer",
-        "5": "acceptance-arrives",
-        "6": "contact-arrives",
-        "7": "audit"
+        "1": "Rowan’s agent receives the principal’s instruction.",
+        "2": "Rowan’s agent checks and admits the signed statements.",
+        "3": "The service’s agent sends a signed request.",
+        "4": "Rowan’s agent checks the incoming message and prepares a response.",
+        "5": "The service’s agent checks the incoming message and prepares a response.",
+        "6": "The service’s agent checks the incoming message and prepares a response.",
+        "7": "Rowan’s agent checks the durable record."
       }
     },
     "configuration": "baseline",
@@ -429,41 +1411,41 @@
     "file": "probing-counterparty--tenth-request--baseline.json",
     "scenario": {
       "id": "probing-counterparty--tenth-request",
-      "title": "A service agent that keeps asking",
+      "title": "A service agent that keeps asking: The tenth request, like the first, is outside the mandate",
       "steps": {
-        "1": "request",
-        "2": "open-channel",
-        "3": "channel-accepted",
-        "4": "probe-1",
-        "5": "probe-arrives-1",
-        "6": "outside-1",
-        "7": "probe-2",
-        "8": "probe-arrives-2",
-        "9": "outside-2",
-        "10": "probe-3",
-        "11": "probe-arrives-3",
-        "12": "outside-3",
-        "13": "probe-4",
-        "14": "probe-arrives-4",
-        "15": "outside-4",
-        "16": "probe-5",
-        "17": "probe-arrives-5",
-        "18": "outside-5",
-        "19": "probe-6",
-        "20": "probe-arrives-6",
-        "21": "outside-6",
-        "22": "probe-7",
-        "23": "probe-arrives-7",
-        "24": "outside-7",
-        "25": "probe-8",
-        "26": "probe-arrives-8",
-        "27": "outside-8",
-        "28": "probe-9",
-        "29": "probe-arrives-9",
-        "30": "outside-9",
-        "31": "probe-10",
-        "32": "probe-arrives-10",
-        "33": "outside-10"
+        "1": "The service’s agent sends a signed request.",
+        "2": "Rowan’s agent checks the incoming message and prepares a response.",
+        "3": "The service’s agent checks the incoming message and prepares a response.",
+        "4": "The service’s agent completes the message step.",
+        "5": "Rowan’s agent checks the incoming message and prepares a response.",
+        "6": "Rowan’s agent proposes the local action.",
+        "7": "The service’s agent completes the message step.",
+        "8": "Rowan’s agent checks the incoming message and prepares a response.",
+        "9": "Rowan’s agent proposes the local action.",
+        "10": "The service’s agent completes the message step.",
+        "11": "Rowan’s agent checks the incoming message and prepares a response.",
+        "12": "Rowan’s agent proposes the local action.",
+        "13": "The service’s agent completes the message step.",
+        "14": "Rowan’s agent checks the incoming message and prepares a response.",
+        "15": "Rowan’s agent proposes the local action.",
+        "16": "The service’s agent completes the message step.",
+        "17": "Rowan’s agent checks the incoming message and prepares a response.",
+        "18": "Rowan’s agent proposes the local action.",
+        "19": "The service’s agent completes the message step.",
+        "20": "Rowan’s agent checks the incoming message and prepares a response.",
+        "21": "Rowan’s agent proposes the local action.",
+        "22": "The service’s agent completes the message step.",
+        "23": "Rowan’s agent checks the incoming message and prepares a response.",
+        "24": "Rowan’s agent proposes the local action.",
+        "25": "The service’s agent completes the message step.",
+        "26": "Rowan’s agent checks the incoming message and prepares a response.",
+        "27": "Rowan’s agent proposes the local action.",
+        "28": "The service’s agent completes the message step.",
+        "29": "Rowan’s agent checks the incoming message and prepares a response.",
+        "30": "Rowan’s agent proposes the local action.",
+        "31": "The service’s agent completes the message step.",
+        "32": "Rowan’s agent checks the incoming message and prepares a response.",
+        "33": "Rowan’s agent proposes the local action."
       }
     },
     "configuration": "baseline",
@@ -473,16 +1455,307 @@
     "file": "probing-counterparty--round-limit--baseline.json",
     "scenario": {
       "id": "probing-counterparty--round-limit",
-      "title": "A service agent that keeps asking",
+      "title": "A service agent that keeps asking: The conversation passes the round limit",
       "steps": {
-        "1": "request",
-        "2": "counter-1",
-        "3": "counter-2",
-        "4": "counter-3"
+        "1": "The service’s agent sends a signed request.",
+        "2": "Rowan’s agent checks the incoming message and prepares a response.",
+        "3": "The service’s agent checks the incoming message and prepares a response.",
+        "4": "Rowan’s agent checks the incoming message and prepares a response.",
+        "5": "The service’s agent checks the incoming message and prepares a response.",
+        "6": "The service’s agent checks the incoming message and prepares a response.",
+        "7": "Rowan’s agent checks the durable record."
       }
     },
     "configuration": "baseline",
     "events": 60
+  },
+  {
+    "file": "production-change--baseline.json",
+    "scenario": {
+      "id": "production-change",
+      "title": "An operations agent changes a live system",
+      "steps": {
+        "1": "The monitoring service’s agent checks the signed statements.",
+        "2": "The operations team’s agent sends the signed request.",
+        "3": "The monitoring service’s agent checks the message and prepares a response.",
+        "4": "The monitoring service’s agent sends the signed request.",
+        "5": "The monitoring service’s agent completes the approve step.",
+        "6": "The operations team’s agent checks the message and prepares a response.",
+        "7": "The operations team’s agent completes the read content step.",
+        "8": "The operations team’s agent proposes the local action.",
+        "9": "The operations team’s agent checks the observed result."
+      }
+    },
+    "configuration": "production-change-local",
+    "events": 75
+  },
+  {
+    "file": "production-change--branch-1--baseline.json",
+    "scenario": {
+      "id": "production-change--branch-1",
+      "title": "An operations agent changes a live system: A log line says \"run this command to fix\"",
+      "steps": {
+        "1": "The monitoring service’s agent checks the signed statements.",
+        "2": "The operations team’s agent sends the signed request.",
+        "3": "The monitoring service’s agent checks the message and prepares a response.",
+        "4": "The monitoring service’s agent sends the signed request.",
+        "5": "The monitoring service’s agent completes the approve step.",
+        "6": "The operations team’s agent checks the message and prepares a response.",
+        "7": "The operations team’s agent completes the read content step.",
+        "8": "The operations team’s agent proposes the local action.",
+        "9": "The operations team’s agent checks the observed result."
+      }
+    },
+    "configuration": "production-change-local",
+    "events": 70
+  },
+  {
+    "file": "production-change--branch-2--baseline.json",
+    "scenario": {
+      "id": "production-change--branch-2",
+      "title": "An operations agent changes a live system: The change is outside the approved window",
+      "steps": {
+        "1": "The monitoring service’s agent checks the signed statements.",
+        "2": "The operations team’s agent sends the signed request.",
+        "3": "The monitoring service’s agent checks the message and prepares a response.",
+        "4": "The monitoring service’s agent sends the signed request.",
+        "5": "The monitoring service’s agent completes the approve step.",
+        "6": "The operations team’s agent checks the message and prepares a response.",
+        "7": "The operations team’s agent completes the read content step.",
+        "8": "The operations team’s agent completes the advance step.",
+        "9": "The operations team’s agent proposes the local action."
+      }
+    },
+    "configuration": "production-change-local",
+    "events": 75
+  },
+  {
+    "file": "recall-notice--baseline.json",
+    "scenario": {
+      "id": "recall-notice",
+      "title": "A product recall notice",
+      "steps": {
+        "1": "The manufacturer’s agent checks the signed statements.",
+        "2": "The product owner’s agent sends the signed request.",
+        "3": "The manufacturer’s agent checks the message and prepares a response.",
+        "4": "The manufacturer’s agent sends the signed request.",
+        "5": "The product owner’s agent checks the message and prepares a response.",
+        "6": "The manufacturer’s agent checks the message and prepares a response.",
+        "7": "The product owner’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "recall-notice--branch-1--baseline.json",
+    "scenario": {
+      "id": "recall-notice--branch-1",
+      "title": "A product recall notice: The notice is not signed by the registered manufacturer",
+      "steps": {
+        "1": "The product owner’s agent checks the signed statements.",
+        "2": "The product owner’s agent proposes the local action.",
+        "3": "The manufacturer’s agent checks the message and prepares a response.",
+        "4": "The manufacturer’s agent sends the signed request.",
+        "5": "The product owner’s agent checks the message and prepares a response.",
+        "6": "The manufacturer’s agent checks the message and prepares a response.",
+        "7": "The product owner’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 8
+  },
+  {
+    "file": "recycled-content--branch-1--baseline.json",
+    "scenario": {
+      "id": "recycled-content--branch-1",
+      "title": "Proving recycled content along a supply chain: One tier's input is self-declared",
+      "steps": {
+        "1": "The certifier’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 6
+  },
+  {
+    "file": "repair-request--baseline.json",
+    "scenario": {
+      "id": "repair-request",
+      "title": "Reporting a repair",
+      "steps": {
+        "1": "The tenant’s agent checks the signed statements.",
+        "2": "The landlord’s agent sends the signed request.",
+        "3": "The tenant’s agent checks the message and prepares a response.",
+        "4": "The tenant’s agent sends the signed request.",
+        "5": "The tenant’s agent completes the approve step.",
+        "6": "The landlord’s agent checks the message and prepares a response.",
+        "7": "The landlord’s agent completes the read content step.",
+        "8": "The landlord’s agent proposes the local action.",
+        "9": "The landlord’s agent checks the observed result."
+      }
+    },
+    "configuration": "repair-request-local",
+    "events": 82
+  },
+  {
+    "file": "repair-request--branch-1--baseline.json",
+    "scenario": {
+      "id": "repair-request--branch-1",
+      "title": "Reporting a repair: The contractor quotes above the landlord's limit",
+      "steps": {
+        "1": "The tenant’s agent checks the signed statements.",
+        "2": "The landlord’s agent sends the signed request.",
+        "3": "The tenant’s agent checks the message and prepares a response.",
+        "4": "The tenant’s agent sends the signed request.",
+        "5": "The tenant’s agent completes the approve step.",
+        "6": "The landlord’s agent checks the message and prepares a response.",
+        "7": "The landlord’s agent completes the read content step.",
+        "8": "The landlord’s agent proposes the local action.",
+        "9": "The landlord’s agent checks the observed result."
+      }
+    },
+    "configuration": "repair-request-local",
+    "events": 82
+  },
+  {
+    "file": "request-for-quotes--baseline.json",
+    "scenario": {
+      "id": "request-for-quotes",
+      "title": "Asking suppliers for quotes",
+      "steps": {
+        "1": "Fictional supplier 1’s agent checks the signed statements.",
+        "2": "The buyer company’s agent sends the signed request.",
+        "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+        "4": "The buyer company’s agent checks the message and prepares a response.",
+        "5": "Fictional supplier 2’s agent checks the signed statements.",
+        "6": "The buyer company’s agent sends the signed request.",
+        "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+        "8": "The buyer company’s agent checks the message and prepares a response.",
+        "9": "Fictional supplier 3’s agent checks the signed statements.",
+        "10": "The buyer company’s agent sends the signed request.",
+        "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "12": "The buyer company’s agent checks the message and prepares a response.",
+        "13": "Fictional supplier 4’s agent checks the signed statements.",
+        "14": "The buyer company’s agent sends the signed request.",
+        "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+        "16": "The buyer company’s agent checks the message and prepares a response.",
+        "17": "Fictional supplier 5’s agent checks the signed statements.",
+        "18": "The buyer company’s agent sends the signed request.",
+        "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+        "20": "The buyer company’s agent checks the message and prepares a response.",
+        "21": "The buyer company’s agent sends the signed request.",
+        "22": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "23": "The buyer company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "baseline",
+    "events": 243
+  },
+  {
+    "file": "request-for-quotes--branch-1--baseline.json",
+    "scenario": {
+      "id": "request-for-quotes--branch-1",
+      "title": "Asking suppliers for quotes: The agent would quote a rival's price to get a discount",
+      "steps": {
+        "1": "Fictional supplier 1’s agent checks the signed statements.",
+        "2": "The buyer company’s agent sends the signed request.",
+        "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+        "4": "The buyer company’s agent checks the message and prepares a response.",
+        "5": "Fictional supplier 2’s agent checks the signed statements.",
+        "6": "The buyer company’s agent sends the signed request.",
+        "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+        "8": "The buyer company’s agent checks the message and prepares a response.",
+        "9": "Fictional supplier 3’s agent checks the signed statements.",
+        "10": "The buyer company’s agent sends the signed request.",
+        "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "12": "The buyer company’s agent checks the message and prepares a response.",
+        "13": "Fictional supplier 4’s agent checks the signed statements.",
+        "14": "The buyer company’s agent sends the signed request.",
+        "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+        "16": "The buyer company’s agent checks the message and prepares a response.",
+        "17": "Fictional supplier 5’s agent checks the signed statements.",
+        "18": "The buyer company’s agent sends the signed request.",
+        "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+        "20": "The buyer company’s agent checks the message and prepares a response.",
+        "21": "The buyer company’s agent sends the signed request.",
+        "22": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "23": "The buyer company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "baseline",
+    "events": 219
+  },
+  {
+    "file": "request-for-quotes--branch-2--baseline.json",
+    "scenario": {
+      "id": "request-for-quotes--branch-2",
+      "title": "Asking suppliers for quotes: The order is above the employee's signing limit",
+      "steps": {
+        "1": "Fictional supplier 1’s agent checks the signed statements.",
+        "2": "The buyer company’s agent sends the signed request.",
+        "3": "Fictional supplier 1’s agent checks the message and prepares a response.",
+        "4": "The buyer company’s agent checks the message and prepares a response.",
+        "5": "Fictional supplier 2’s agent checks the signed statements.",
+        "6": "The buyer company’s agent sends the signed request.",
+        "7": "Fictional supplier 2’s agent checks the message and prepares a response.",
+        "8": "The buyer company’s agent checks the message and prepares a response.",
+        "9": "Fictional supplier 3’s agent checks the signed statements.",
+        "10": "The buyer company’s agent sends the signed request.",
+        "11": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "12": "The buyer company’s agent checks the message and prepares a response.",
+        "13": "Fictional supplier 4’s agent checks the signed statements.",
+        "14": "The buyer company’s agent sends the signed request.",
+        "15": "Fictional supplier 4’s agent checks the message and prepares a response.",
+        "16": "The buyer company’s agent checks the message and prepares a response.",
+        "17": "Fictional supplier 5’s agent checks the signed statements.",
+        "18": "The buyer company’s agent sends the signed request.",
+        "19": "Fictional supplier 5’s agent checks the message and prepares a response.",
+        "20": "The buyer company’s agent checks the message and prepares a response.",
+        "21": "The buyer company’s agent sends the signed request.",
+        "22": "Fictional supplier 3’s agent checks the message and prepares a response.",
+        "23": "The buyer company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "baseline",
+    "events": 218
+  },
+  {
+    "file": "return-and-refund--baseline.json",
+    "scenario": {
+      "id": "return-and-refund",
+      "title": "Returning a faulty item",
+      "steps": {
+        "1": "The customer’s agent checks the signed statements.",
+        "2": "The merchant’s agent sends the signed request.",
+        "3": "The customer’s agent checks the message and prepares a response.",
+        "4": "The customer’s agent sends the signed request.",
+        "5": "The customer’s agent completes the approve step.",
+        "6": "The merchant’s agent checks the message and prepares a response.",
+        "7": "The merchant’s agent proposes the local action.",
+        "8": "The merchant’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 93
+  },
+  {
+    "file": "return-and-refund--branch-1--baseline.json",
+    "scenario": {
+      "id": "return-and-refund--branch-1",
+      "title": "Returning a faulty item: The customer's agent asks for a refund outside the return window",
+      "steps": {
+        "1": "The customer’s agent completes the advance step.",
+        "2": "The customer’s agent checks the signed statements.",
+        "3": "The merchant’s agent sends the signed request.",
+        "4": "The customer’s agent checks the message and prepares a response.",
+        "5": "The customer’s agent sends the signed request.",
+        "6": "The customer’s agent completes the approve step.",
+        "7": "The merchant’s agent checks the message and prepares a response.",
+        "8": "The merchant’s agent proposes the local action."
+      }
+    },
+    "configuration": "baseline",
+    "events": 88
   },
   {
     "file": "right-to-work--baseline.json",
@@ -490,10 +1763,10 @@
       "id": "right-to-work",
       "title": "Hiring: right to work and qualifications",
       "steps": {
-        "1": "holder-admits-revealed-claims",
-        "2": "show-required-claims",
-        "3": "employer-verifies",
-        "4": "employer-record"
+        "1": "The candidate’s agent checks and admits the signed statements.",
+        "2": "The candidate’s agent sends a signed request.",
+        "3": "The employer’s agent checks the incoming message and prepares a response.",
+        "4": "The employer’s agent checks the durable record."
       }
     },
     "configuration": "right-to-work-local",
@@ -503,16 +1776,226 @@
     "file": "right-to-work--branch-1--baseline.json",
     "scenario": {
       "id": "right-to-work--branch-1",
-      "title": "Hiring: right to work and qualifications",
+      "title": "Hiring: right to work and qualifications: The employer asks for a passport scan",
       "steps": {
-        "1": "employer-asks-for-passport",
-        "2": "passport-request-arrives",
-        "3": "holder-admits-revealed-claims",
-        "4": "show-required-claims"
+        "1": "The employer’s agent sends a signed request.",
+        "2": "The candidate’s agent checks the incoming message and prepares a response.",
+        "3": "The candidate’s agent checks and admits the signed statements.",
+        "4": "The candidate’s agent sends a signed request."
       }
     },
     "configuration": "right-to-work-local",
     "events": 50
+  },
+  {
+    "file": "salary-account-change--baseline.json",
+    "scenario": {
+      "id": "salary-account-change",
+      "title": "A request to change where salary is paid",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employer’s agent sends the signed request.",
+        "3": "The employee’s agent checks the message and prepares a response.",
+        "4": "The employee’s agent sends the signed request.",
+        "5": "The employer’s agent checks the message and prepares a response.",
+        "6": "The employer’s agent proposes the local action.",
+        "7": "The employer’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 52
+  },
+  {
+    "file": "salary-account-change--branch-1--baseline.json",
+    "scenario": {
+      "id": "salary-account-change--branch-1",
+      "title": "A request to change where salary is paid: The message is unsigned email",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employer’s agent sends the signed request.",
+        "3": "The employee’s agent checks the message and prepares a response.",
+        "4": "The employee’s agent sends the signed request.",
+        "5": "The employer’s agent checks the message and prepares a response.",
+        "6": "The employer’s agent proposes the local action.",
+        "7": "The employer’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 43
+  },
+  {
+    "file": "salary-account-change--branch-2--baseline.json",
+    "scenario": {
+      "id": "salary-account-change--branch-2",
+      "title": "A request to change where salary is paid: It is signed, but not under the employee's mandate",
+      "steps": {
+        "1": "The employee’s agent checks the signed statements.",
+        "2": "The employer’s agent sends the signed request.",
+        "3": "The employee’s agent checks the message and prepares a response.",
+        "4": "The employee’s agent sends the signed request.",
+        "5": "The employer’s agent checks the message and prepares a response.",
+        "6": "The employer’s agent proposes the local action.",
+        "7": "The employer’s agent checks the observed result."
+      }
+    },
+    "configuration": "baseline",
+    "events": 53
+  },
+  {
+    "file": "sell-a-car--branch-1--baseline.json",
+    "scenario": {
+      "id": "sell-a-car--branch-1",
+      "title": "Selling a used car to a stranger: The seller is not the registered keeper",
+      "steps": {
+        "1": "The seller’s agent checks the signed statements.",
+        "2": "The seller’s agent proposes the local action."
+      }
+    },
+    "configuration": "baseline",
+    "events": 8
+  },
+  {
+    "file": "shopping-agent--baseline.json",
+    "scenario": {
+      "id": "shopping-agent",
+      "title": "Buying something within a budget",
+      "steps": {
+        "1": "The shopper’s agent checks the signed statements.",
+        "2": "The payment provider’s agent checks the signed statements.",
+        "3": "The shopper’s agent sends the signed request.",
+        "4": "The payment provider’s agent checks the message and prepares a response.",
+        "5": "The payment provider’s agent proposes the local action.",
+        "6": "The payment provider’s agent checks the observed result.",
+        "7": "The payment provider’s agent completes the message step.",
+        "8": "The shopper’s agent checks the message and prepares a response.",
+        "9": "The shopper’s agent checks the durable record.",
+        "10": "The payment provider’s agent checks the durable record."
+      }
+    },
+    "configuration": "shopping-agent-local",
+    "events": 83
+  },
+  {
+    "file": "shopping-agent--branch-1--baseline.json",
+    "scenario": {
+      "id": "shopping-agent--branch-1",
+      "title": "Buying something within a budget: Fees at checkout take the price above the budget",
+      "steps": {
+        "1": "The shopper’s agent checks the signed statements.",
+        "2": "The payment provider’s agent checks the signed statements.",
+        "3": "The shopper’s agent sends the signed request.",
+        "4": "The payment provider’s agent checks the message and prepares a response.",
+        "5": "The payment provider’s agent proposes the local action.",
+        "6": "The payment provider’s agent checks the observed result.",
+        "7": "The payment provider’s agent completes the message step.",
+        "8": "The shopper’s agent checks the message and prepares a response.",
+        "9": "The shopper’s agent checks the durable record.",
+        "10": "The payment provider’s agent checks the durable record."
+      }
+    },
+    "configuration": "shopping-agent-local",
+    "events": 36
+  },
+  {
+    "file": "shopping-agent--branch-2--baseline.json",
+    "scenario": {
+      "id": "shopping-agent--branch-2",
+      "title": "Buying something within a budget: A merchant's message tells the agent to pay to a different account",
+      "steps": {
+        "1": "The shopper’s agent checks the signed statements.",
+        "2": "The payment provider’s agent checks the signed statements.",
+        "3": "The shopper’s agent sends the signed request.",
+        "4": "The payment provider’s agent checks the message and prepares a response.",
+        "5": "The payment provider’s agent proposes the local action.",
+        "6": "The payment provider’s agent checks the observed result.",
+        "7": "The payment provider’s agent completes the message step.",
+        "8": "The shopper’s agent checks the message and prepares a response.",
+        "9": "The shopper’s agent checks the durable record.",
+        "10": "The payment provider’s agent checks the durable record."
+      }
+    },
+    "configuration": "shopping-agent-local",
+    "events": 32
+  },
+  {
+    "file": "small-business-loan--baseline.json",
+    "scenario": {
+      "id": "small-business-loan",
+      "title": "A loan for a small company",
+      "steps": {
+        "1": "The company’s agent checks the signed statements.",
+        "2": "The company’s agent sends the signed request.",
+        "3": "The company’s agent completes the organisation approve step.",
+        "4": "The lender’s agent checks the message and prepares a response.",
+        "5": "The company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "small-business-loan-local",
+    "events": 75
+  },
+  {
+    "file": "small-business-loan--branch-1--baseline.json",
+    "scenario": {
+      "id": "small-business-loan--branch-1",
+      "title": "A loan for a small company: The director's role does not cover borrowing",
+      "steps": {
+        "1": "The company’s agent checks the signed statements.",
+        "2": "The company’s agent sends the signed request.",
+        "3": "The company’s agent completes the organisation approve step.",
+        "4": "The lender’s agent checks the message and prepares a response.",
+        "5": "The company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "small-business-loan-local",
+    "events": 36
+  },
+  {
+    "file": "small-business-loan--branch-2--baseline.json",
+    "scenario": {
+      "id": "small-business-loan--branch-2",
+      "title": "A loan for a small company: Management accounts are self-reported, not filed",
+      "steps": {
+        "1": "The company’s agent checks the signed statements.",
+        "2": "The company’s agent sends the signed request.",
+        "3": "The company’s agent completes the organisation approve step.",
+        "4": "The lender’s agent checks the message and prepares a response.",
+        "5": "The company’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "small-business-loan-local",
+    "events": 24
+  },
+  {
+    "file": "subject-access-request--baseline.json",
+    "scenario": {
+      "id": "subject-access-request",
+      "title": "Asking a company what it holds about you",
+      "steps": {
+        "1": "The company’s agent checks the signed statements.",
+        "2": "The person’s agent sends the signed request.",
+        "3": "The company’s agent checks the message and prepares a response.",
+        "4": "The person’s agent checks the message and prepares a response.",
+        "5": "The person’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 43
+  },
+  {
+    "file": "subject-access-request--branch-1--baseline.json",
+    "scenario": {
+      "id": "subject-access-request--branch-1",
+      "title": "Asking a company what it holds about you: The company demands a passport scan before answering",
+      "steps": {
+        "1": "The person’s agent checks the signed statements.",
+        "2": "The company’s agent sends the signed request.",
+        "3": "The person’s agent checks the message and prepares a response.",
+        "4": "The person’s agent sends the signed request.",
+        "5": "The person’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 32
   },
   {
     "file": "supplier-onboarding--baseline.json",
@@ -520,12 +2003,12 @@
       "id": "supplier-onboarding",
       "title": "Taking on a new supplier",
       "steps": {
-        "1": "supplier-evidence",
-        "2": "supplier-applies",
-        "3": "buyer-checks",
-        "4": "buyer-onboards",
-        "5": "onboarded",
-        "6": "buyer-record"
+        "1": "The supplier’s agent checks and admits the signed statements.",
+        "2": "The supplier’s agent sends a signed request.",
+        "3": "The buyer’s agent checks the incoming message and prepares a response.",
+        "4": "The buyer’s agent proposes the local action.",
+        "5": "The buyer’s agent checks the observed result.",
+        "6": "The buyer’s agent checks the durable record."
       }
     },
     "configuration": "supplier-onboarding-local",
@@ -535,10 +2018,14 @@
     "file": "supplier-onboarding--branch-1--baseline.json",
     "scenario": {
       "id": "supplier-onboarding--branch-1",
-      "title": "Taking on a new supplier",
+      "title": "Taking on a new supplier: A certificate was withdrawn last week",
       "steps": {
-        "1": "supplier-evidence",
-        "2": "supplier-applies"
+        "1": "The supplier’s agent checks and admits the signed statements.",
+        "2": "The supplier’s agent sends a signed request.",
+        "3": "The buyer’s agent checks the incoming message and prepares a response.",
+        "4": "The buyer’s agent proposes the local action.",
+        "5": "The buyer’s agent checks the observed result.",
+        "6": "The buyer’s agent checks the durable record."
       }
     },
     "configuration": "supplier-onboarding-local",
@@ -548,13 +2035,179 @@
     "file": "supplier-onboarding--branch-2--baseline.json",
     "scenario": {
       "id": "supplier-onboarding--branch-2",
-      "title": "Taking on a new supplier",
+      "title": "Taking on a new supplier: The account belongs to a different legal entity",
       "steps": {
-        "1": "supplier-evidence",
-        "2": "supplier-applies"
+        "1": "The supplier’s agent checks and admits the signed statements.",
+        "2": "The supplier’s agent sends a signed request.",
+        "3": "The buyer’s agent checks the incoming message and prepares a response.",
+        "4": "The buyer’s agent proposes the local action.",
+        "5": "The buyer’s agent checks the observed result.",
+        "6": "The buyer’s agent checks the durable record."
       }
     },
     "configuration": "supplier-onboarding-local",
     "events": 22
+  },
+  {
+    "file": "telecom-fault--baseline.json",
+    "scenario": {
+      "id": "telecom-fault",
+      "title": "Fixing a broadband fault together",
+      "steps": {
+        "1": "The customer’s agent completes the instruct step.",
+        "2": "The customer’s agent checks the signed statements.",
+        "3": "The broadband provider’s agent sends the signed request.",
+        "4": "The customer’s agent checks the message and prepares a response.",
+        "5": "The customer’s agent sends the signed request.",
+        "6": "The broadband provider’s agent checks the message and prepares a response.",
+        "7": "The customer’s agent checks the message and prepares a response.",
+        "8": "The broadband provider’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 61
+  },
+  {
+    "file": "telecom-fault--branch-1--baseline.json",
+    "scenario": {
+      "id": "telecom-fault--branch-1",
+      "title": "Fixing a broadband fault together: The provider's agent asks the customer's agent to change account settings",
+      "steps": {
+        "1": "The customer’s agent completes the instruct step.",
+        "2": "The customer’s agent checks the signed statements.",
+        "3": "The broadband provider’s agent sends the signed request.",
+        "4": "The customer’s agent checks the message and prepares a response.",
+        "5": "The customer’s agent proposes the local action.",
+        "6": "The broadband provider’s agent checks the message and prepares a response.",
+        "7": "The customer’s agent checks the message and prepares a response.",
+        "8": "The broadband provider’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 33
+  },
+  {
+    "file": "tenancy-application--branch-1--baseline.json",
+    "scenario": {
+      "id": "tenancy-application--branch-1",
+      "title": "Applying to rent a home: The letting agent asks for six months of statements",
+      "steps": {
+        "1": "The tenant’s agent checks the signed statements.",
+        "2": "The letting agency’s agent sends the signed request.",
+        "3": "The tenant’s agent checks the message and prepares a response.",
+        "4": "The tenant’s agent sends the signed request."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
+  },
+  {
+    "file": "tenancy-application--branch-2--baseline.json",
+    "scenario": {
+      "id": "tenancy-application--branch-2",
+      "title": "Applying to rent a home: The letting agent's agent keeps asking in different words",
+      "steps": {
+        "1": "The letting agency’s agent sends the signed request.",
+        "2": "The tenant’s agent checks the message and prepares a response.",
+        "3": "The letting agency’s agent checks the message and prepares a response.",
+        "4": "The tenant’s agent checks the message and prepares a response."
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "trial-eligibility--branch-1--baseline.json",
+    "scenario": {
+      "id": "trial-eligibility--branch-1",
+      "title": "Proving eligibility for a clinical trial: The practice cannot state the medication list is complete",
+      "steps": {
+        "1": "The volunteer’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 14
+  },
+  {
+    "file": "trip-booking--branch-1--baseline.json",
+    "scenario": {
+      "id": "trip-booking--branch-1",
+      "title": "Booking a trip: A hotel listing contains text telling the agent to book a different, dearer hotel",
+      "steps": {
+        "1": "The hotel’s agent checks the signed statements.",
+        "2": "The traveller’s agent sends the signed request.",
+        "3": "The hotel’s agent checks the message and prepares a response.",
+        "4": "The hotel’s agent sends the signed request.",
+        "5": "The hotel’s agent completes the approve step.",
+        "6": "The traveller’s agent checks the message and prepares a response.",
+        "7": "The traveller’s agent completes the read content step.",
+        "8": "The traveller’s agent proposes the local action."
+      }
+    },
+    "configuration": "trip-booking-local",
+    "events": 70
+  },
+  {
+    "file": "trip-booking--branch-2--baseline.json",
+    "scenario": {
+      "id": "trip-booking--branch-2",
+      "title": "Booking a trip: A search form asks for passport number",
+      "steps": {
+        "1": "The traveller’s agent checks the signed statements.",
+        "2": "The hotel’s agent sends the signed request.",
+        "3": "The traveller’s agent checks the message and prepares a response.",
+        "4": "The traveller’s agent sends the signed request."
+      }
+    },
+    "configuration": "trip-booking-local",
+    "events": 32
+  },
+  {
+    "file": "visa-application--branch-1--baseline.json",
+    "scenario": {
+      "id": "visa-application--branch-1",
+      "title": "Applying for a visa: The consulate cannot verify the foreign bank",
+      "steps": {
+        "1": "The consulate’s agent checks the signed statements."
+      }
+    },
+    "configuration": "baseline",
+    "events": 4
+  },
+  {
+    "file": "wearable-data--baseline.json",
+    "scenario": {
+      "id": "wearable-data",
+      "title": "Sharing activity data for a discount",
+      "steps": {
+        "1": "The person’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The person’s agent checks the message and prepares a response.",
+        "4": "The person’s agent sends the signed request.",
+        "5": "The insurer’s agent checks the message and prepares a response.",
+        "6": "The person’s agent checks the message and prepares a response.",
+        "7": "The insurer’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 60
+  },
+  {
+    "file": "wearable-data--branch-1--baseline.json",
+    "scenario": {
+      "id": "wearable-data--branch-1",
+      "title": "Sharing activity data for a discount: The insurer's terms allow use in underwriting",
+      "steps": {
+        "1": "The person’s agent checks the signed statements.",
+        "2": "The insurer’s agent sends the signed request.",
+        "3": "The person’s agent checks the message and prepares a response.",
+        "4": "The person’s agent sends the signed request.",
+        "5": "The insurer’s agent checks the message and prepares a response.",
+        "6": "The person’s agent checks the message and prepares a response.",
+        "7": "The insurer’s agent checks the durable record."
+      }
+    },
+    "configuration": "baseline",
+    "events": 27
   }
 ]

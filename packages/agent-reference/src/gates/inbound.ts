@@ -852,6 +852,30 @@ export class InboundGate {
       { ...(f.reason ? { reason: f.reason } : {}), ...(f.rule ? { rule: f.rule } : {}) },
     );
     if (termsOk.get(item.value) !== true || f.verdict !== "pass") return false;
+    const completeness = this.deps.gate.reliance?.rules.find(
+      (r) => r.claimType === c.claimType,
+    )?.completeness;
+    if (
+      completeness &&
+      !this.corroborationPool.some(
+        (candidate) =>
+          candidate.claimType === completeness &&
+          candidate.subject === c.subject &&
+          candidate.complete === true &&
+          candidate.forClaim === c.claimType &&
+          this.deps.memory.facts.get(candidate.id ?? "")?.digest === digestOf(candidate) &&
+          digestOf(candidate.period ?? null) === digestOf(c.period ?? null),
+      )
+    ) {
+      this.verdictEvent(
+        "fitness",
+        "ask-more",
+        `An accepted completeness statement for ${c.claimType}, its subject and period is required.`,
+        { reason: "completeness-not-established" },
+      );
+      this.claimFailure = { outcome: "ask-more", reason: "completeness-not-established" };
+      return false;
+    }
     const corroboration = this.deps.gate.reliance?.rules.find(
       (r) => r.claimType === c.claimType,
     )?.corroboration;

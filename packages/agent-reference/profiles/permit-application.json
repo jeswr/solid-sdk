@@ -1,0 +1,115 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "permit-application",
+  "parties": {
+    "owner": "The architect",
+    "receiver": "The planning office",
+    "owner-agent": "The architect’s agent",
+    "receiver-agent": "The planning office’s agent",
+    "subject": "The homeowner"
+  },
+  "claims": [
+    {
+      "kind": "unstructured-content",
+      "sources": [
+        "urn:fictional:permit-application:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "building.height",
+      "sources": [
+        "urn:fictional:permit-application:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:permit-application",
+      "claims": [
+        "unstructured-content",
+        "building.height"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [
+    "review-design"
+  ],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "unstructured-content"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:permit-application",
+      "version": "0.1",
+      "label": "Applying for a building permit",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:permit-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:permit-application:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:permit-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:permit-application:decision",
+      "version": "0.1",
+      "label": "A person decides on the original content",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:permit-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "personDecisions": [
+    {
+      "action": "transfer",
+      "decider": "principal"
+    }
+  ],
+  "readings": [
+    {
+      "claimType": "building.height",
+      "type": "number"
+    }
+  ]
+}

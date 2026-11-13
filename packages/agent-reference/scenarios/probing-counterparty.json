@@ -8,14 +8,14 @@
     {
       "id": "rowan",
       "identity": "urn:fictional:rowan",
-      "name": "Rowan Vale",
+      "name": "Rowan, a fictional customer",
       "role": "principal",
       "runs": "issuer-only"
     },
     {
       "id": "cedar",
       "identity": "urn:fictional:cedar-service",
-      "name": "Cedar Service",
+      "name": "The fictional service",
       "role": "principal",
       "runs": "issuer-only"
     },
@@ -23,7 +23,7 @@
       "id": "person-agent",
       "identity": "urn:fictional:rowan-agent",
       "actor": "urn:fictional:rowan-agent",
-      "name": "Rowan's agent",
+      "name": "Rowan’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "rowan"
@@ -32,25 +32,34 @@
       "id": "service-agent",
       "identity": "urn:fictional:cedar-agent",
       "actor": "urn:fictional:cedar-agent",
-      "name": "Cedar's agent",
+      "name": "The service’s agent",
       "role": "agent",
       "runs": "agent",
       "actsFor": "cedar"
     }
   ],
   "trust": {
-    "introductions": [["person-agent", "service-agent"]],
+    "introductions": [
+      [
+        "person-agent",
+        "service-agent"
+      ]
+    ],
     "ownLists": {
       "person-agent": [
         {
           "party": "urn:fictional:cedar-service",
-          "tasks": ["urn:operation:service-query"]
+          "tasks": [
+            "urn:operation:service-query"
+          ]
         }
       ],
       "service-agent": [
         {
           "party": "urn:fictional:rowan",
-          "tasks": ["urn:operation:service-query"]
+          "tasks": [
+            "urn:operation:service-query"
+          ]
         }
       ]
     },
@@ -60,8 +69,12 @@
           "id": "urn:rule:rowan-contact",
           "version": "1",
           "source": "urn:fictional:rowan",
-          "claimTypes": ["contact"],
-          "subjects": ["urn:fictional:rowan"]
+          "claimTypes": [
+            "contact"
+          ],
+          "subjects": [
+            "urn:fictional:rowan"
+          ]
         }
       ],
       "service-agent": [
@@ -69,8 +82,12 @@
           "id": "urn:rule:rowan-contact",
           "version": "1",
           "source": "urn:fictional:rowan",
-          "claimTypes": ["contact"],
-          "subjects": ["urn:fictional:rowan"]
+          "claimTypes": [
+            "contact"
+          ],
+          "subjects": [
+            "urn:fictional:rowan"
+          ]
         }
       ]
     }
@@ -196,7 +213,9 @@
       "id": "load-contact",
       "agent": "person-agent",
       "type": "admit",
-      "statements": ["contact"],
+      "statements": [
+        "contact"
+      ],
       "purpose": "urn:purpose:service-query",
       "subject": "urn:fictional:rowan"
     },
@@ -245,7 +264,9 @@
             "$ref": "current.conversation.id"
           },
           "parameters": {
-            "evidence": ["urn:scenario:probing-counterparty:contact"],
+            "evidence": [
+              "urn:scenario:probing-counterparty:contact"
+            ],
             "termsDigest": {
               "$ref": "current.message.body.termsDigest"
             }
@@ -272,7 +293,9 @@
                 "version": "0.1"
               },
               "output": {
-                "items": ["urn:scenario:probing-counterparty:contact"]
+                "items": [
+                  "urn:scenario:probing-counterparty:contact"
+                ]
               }
             },
             "intent": {
@@ -287,7 +310,9 @@
                 "$ref": "current.conversation.id"
               },
               "parameters": {
-                "evidence": ["urn:scenario:probing-counterparty:contact"],
+                "evidence": [
+                  "urn:scenario:probing-counterparty:contact"
+                ],
                 "termsDigest": {
                   "$ref": "steps.request.outbound.0.message.body.termsDigest"
                 }
@@ -1018,7 +1043,42 @@
             "params": {},
             "activityType": "urn:activity:request"
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The service’s agent sends a signed request.",
+          "2": "Rowan’s agent checks the incoming message and prepares a response.",
+          "3": "The service’s agent checks the incoming message and prepares a response.",
+          "4": "The service’s agent completes the message step.",
+          "5": "Rowan’s agent checks the incoming message and prepares a response.",
+          "6": "Rowan’s agent proposes the local action.",
+          "7": "The service’s agent completes the message step.",
+          "8": "Rowan’s agent checks the incoming message and prepares a response.",
+          "9": "Rowan’s agent proposes the local action.",
+          "10": "The service’s agent completes the message step.",
+          "11": "Rowan’s agent checks the incoming message and prepares a response.",
+          "12": "Rowan’s agent proposes the local action.",
+          "13": "The service’s agent completes the message step.",
+          "14": "Rowan’s agent checks the incoming message and prepares a response.",
+          "15": "Rowan’s agent proposes the local action.",
+          "16": "The service’s agent completes the message step.",
+          "17": "Rowan’s agent checks the incoming message and prepares a response.",
+          "18": "Rowan’s agent proposes the local action.",
+          "19": "The service’s agent completes the message step.",
+          "20": "Rowan’s agent checks the incoming message and prepares a response.",
+          "21": "Rowan’s agent proposes the local action.",
+          "22": "The service’s agent completes the message step.",
+          "23": "Rowan’s agent checks the incoming message and prepares a response.",
+          "24": "Rowan’s agent proposes the local action.",
+          "25": "The service’s agent completes the message step.",
+          "26": "Rowan’s agent checks the incoming message and prepares a response.",
+          "27": "Rowan’s agent proposes the local action.",
+          "28": "The service’s agent completes the message step.",
+          "29": "Rowan’s agent checks the incoming message and prepares a response.",
+          "30": "Rowan’s agent proposes the local action.",
+          "31": "The service’s agent completes the message step.",
+          "32": "Rowan’s agent checks the incoming message and prepares a response.",
+          "33": "Rowan’s agent proposes the local action."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -2476,7 +2536,13 @@
               }
             }
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The service’s agent sends a signed request.",
+          "2": "Rowan’s agent checks the incoming message and prepares a response.",
+          "3": "The service’s agent checks the incoming message and prepares a response.",
+          "4": "Rowan’s agent checks the incoming message and prepares a response."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -3314,8 +3380,22 @@
       "verdict": "pass"
     }
   ],
-  "stress": ["disclosure", "mandate", "limits-approval"],
+  "stress": [
+    "disclosure",
+    "mandate",
+    "limits-approval"
+  ],
   "suites": {},
   "assurance": null,
-  "blocked": []
+  "blocked": [],
+  "useCase": "probing-counterparty",
+  "traceSteps": {
+    "1": "Rowan’s agent receives the principal’s instruction.",
+    "2": "Rowan’s agent checks and admits the signed statements.",
+    "3": "The service’s agent sends a signed request.",
+    "4": "Rowan’s agent checks the incoming message and prepares a response.",
+    "5": "The service’s agent checks the incoming message and prepares a response.",
+    "6": "The service’s agent checks the incoming message and prepares a response.",
+    "7": "Rowan’s agent checks the durable record."
+  }
 }

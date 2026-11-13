@@ -1,0 +1,2773 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "return-and-refund",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The customer"
+    },
+    {
+      "id": "receiver",
+      "name": "The merchant"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The customer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The merchant’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "return-and-refund",
+    "title": "Returning a faulty item",
+    "steps": {
+      "1": "The customer’s agent checks the signed statements.",
+      "2": "The merchant’s agent sends the signed request.",
+      "3": "The customer’s agent checks the message and prepares a response.",
+      "4": "The customer’s agent sends the signed request.",
+      "5": "The customer’s agent completes the approve step.",
+      "6": "The merchant’s agent checks the message and prepares a response.",
+      "7": "The merchant’s agent proposes the local action.",
+      "8": "The merchant’s agent checks the observed result."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The customer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The merchant’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Return and refund service",
+      "replacedBy": "The merchant’s source-signed receipt and a local credit-record adapter; this fixture policy permits returns within November only, and no cash settlement is claimed"
+    },
+    {
+      "what": "Fault photograph",
+      "replacedBy": "A synthetic PNG carried whole with its customer-signed digest; refund relies on the merchant receipt and date policy, not a model diagnosis of the image"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The merchant's merchant.receipt statement is intact and signed with The merchant's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:return-and-refund:merchant.receipt",
+        "text": "The merchant is accepted for merchant.receipt claims."
+      },
+      "resolution": {
+        "question": "Is The merchant an authority for merchant.receipt claims about The customer?",
+        "path": [
+          {
+            "at": "The customer's own list",
+            "kind": "own-list",
+            "says": "The merchant is accepted for merchant.receipt."
+          }
+        ],
+        "answer": "Accepted, for merchant.receipt claims only."
+      },
+      "caption": "The merchant's merchant.receipt statement: The merchant is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The merchant's merchant.receipt statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:return-and-refund:receipt",
+        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      },
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:return-and-refund:merchant.receipt",
+        "text": "Accept merchant.receipt from urn:fictional:return-and-refund:receiver by recorded-by-authority, at most 365 days old."
+      },
+      "caption": "The merchant's merchant.receipt statement is fit for urn:scenario:return-and-refund:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The merchant's merchant.receipt statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:return-and-refund:receipt",
+        "label": "The merchant's merchant.receipt statement",
+        "claimType": "merchant.receipt",
+        "subject": "urn:fictional:return-and-refund:owner",
+        "value": "urn:fictional:kettle",
+        "source": "urn:fictional:return-and-refund:receiver",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:return-and-refund:receipt",
+          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+        },
+        "provenance": "signed by The merchant"
+      },
+      "caption": "The merchant's merchant.receipt statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The customer's unstructured-content statement is intact and signed with The customer's pinned key."
+    },
+    {
+      "seq": 9,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:customer-photo",
+        "text": "The customer is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The customer an authority for unstructured-content claims about The customer?",
+        "path": [
+          {
+            "at": "The customer's own list",
+            "kind": "own-list",
+            "says": "The customer is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The customer's unstructured-content statement: The customer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 10,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The customer's unstructured-content statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 11,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:return-and-refund:photo",
+        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      },
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 12,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:return-and-refund:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:return-and-refund:owner by self-reported, at most 365 days old."
+      },
+      "caption": "The customer's unstructured-content statement is fit for urn:scenario:return-and-refund:task: self-reported, 0 days old."
+    },
+    {
+      "seq": 13,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The customer's unstructured-content statement is admitted."
+    },
+    {
+      "seq": 14,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:return-and-refund:photo",
+        "label": "The customer's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:return-and-refund:owner",
+        "value": null,
+        "source": "urn:fictional:return-and-refund:owner",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:return-and-refund:photo",
+          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+        },
+        "provenance": "signed by The customer"
+      },
+      "caption": "The customer's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The customer."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The merchant's mandate covers this action."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The customer a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The merchant's own list",
+            "kind": "own-list",
+            "says": "The customer is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The customer: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 18,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 19,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 20,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The merchant's limits."
+    },
+    {
+      "seq": 21,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 22,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The merchant’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 23,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The customer’s agent."
+    },
+    {
+      "seq": 24,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
+        "from": "The merchant’s agent",
+        "to": "The customer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:6a63d078ec1…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The merchant’s agent to The customer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-return-and-refund-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-return-and-refund-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:return-and-refund:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "party": "urn:fictional:return-and-refund:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2fa782e3997d3490929d260eaf8885c3733fd21d70f9f2cfce88ee3a0ba13df4"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The merchant says The merchant’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:91c62f7daea09f08feea3119a705ee0a:1794560400000",
+                "party": "urn:fictional:return-and-refund:receiver",
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:return-and-refund",
+                  "urn:op:return-and-refund:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d27d92ddbe844d2b3ae45a1b87d6c2c34f3919cdb6c0cb5dec09abc7ef66475e"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:return-and-refund:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "merchant.receipt"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:return-and-refund"
+            },
+            "digest": "sha-256:07edfb800359694c77b5025a34bc37205497da9502c6ac9963afa9d4075235ce"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-return-and-refund-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The merchant’s agent sends an invoke message to The customer’s agent."
+    },
+    {
+      "seq": 25,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
+        "from": "The merchant’s agent",
+        "to": "The customer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:6a63d078ec1…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The merchant’s agent to The customer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-return-and-refund-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-return-and-refund-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:return-and-refund:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "party": "urn:fictional:return-and-refund:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:2fa782e3997d3490929d260eaf8885c3733fd21d70f9f2cfce88ee3a0ba13df4"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The merchant says The merchant’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:91c62f7daea09f08feea3119a705ee0a:1794560400000",
+                "party": "urn:fictional:return-and-refund:receiver",
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:return-and-refund",
+                  "urn:op:return-and-refund:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:d27d92ddbe844d2b3ae45a1b87d6c2c34f3919cdb6c0cb5dec09abc7ef66475e"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:return-and-refund:request\"; \"urn:purpose:return-and-refund\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:return-and-refund:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "merchant.receipt"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:return-and-refund"
+            },
+            "digest": "sha-256:07edfb800359694c77b5025a34bc37205497da9502c6ac9963afa9d4075235ce",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:return-and-refund:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:return-and-refund"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-return-and-refund-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The merchant’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 26,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The merchant’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 27,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 28,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:91c62f7daea09f08feea3119a705ee0a:1794560400000",
+        "text": "A representation statement signed with The merchant's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The merchant signed a statement that The merchant’s agent acts for them in this operation."
+    },
+    {
+      "seq": 29,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 30,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 31,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:return and refund with The merchant."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The customer's mandate covers this action."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The merchant a party I can send Returning a faulty item to?",
+        "path": [
+          {
+            "at": "The customer's own list",
+            "kind": "own-list",
+            "says": "The merchant is accepted for Returning a faulty item."
+          }
+        ],
+        "answer": "Accepted, for Returning a faulty item only."
+      },
+      "reason": "recipient-established",
+      "caption": "The merchant: Accepted, for Returning a faulty item only."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The customer's limits."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:return-and-refund:receipt",
+        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 40,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 41,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:return-and-refund:photo",
+        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 42,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 43,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The merchant's merchant.receipt statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+    },
+    {
+      "seq": 44,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 45,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The customer's unstructured-content statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+    },
+    {
+      "seq": 46,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The customer's unstructured-content statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 47,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:return-and-refund:receiver-agent:actor (urn:fictional:return-and-refund:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 48,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:return-and-refund:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 49,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "context-not-clear",
+      "caption": "The task context is not clear for this text, recipient and purpose."
+    },
+    {
+      "seq": 50,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "context-not-clear",
+      "chat": {
+        "who": "agent",
+        "text": "May I send this exact text to The merchant for urn:purpose:return-and-refund?\nUnstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+      },
+      "caption": "The text is held before release; approval binds message digest sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "Send this exact synthetic photograph and merchant receipt for this return."
+      },
+      "caption": "Approves by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The customer's mandate covers this action."
+    },
+    {
+      "seq": 53,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The merchant a party I can send Returning a faulty item to?",
+        "path": [
+          {
+            "at": "The customer's own list",
+            "kind": "own-list",
+            "says": "The merchant is accepted for Returning a faulty item."
+          }
+        ],
+        "answer": "Accepted, for Returning a faulty item only."
+      },
+      "reason": "recipient-established",
+      "caption": "The merchant: Accepted, for Returning a faulty item only."
+    },
+    {
+      "seq": 54,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 55,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 56,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The customer's limits."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 58,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:return-and-refund:receipt",
+        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 59,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 60,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:return-and-refund:photo",
+        "text": "The issuer's terms: use for urn:purpose:return and refund; share for urn:purpose:return and refund. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 61,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 62,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The merchant's merchant.receipt statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+    },
+    {
+      "seq": 63,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The merchant's merchant.receipt statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 64,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The customer's unstructured-content statement (urn:fictional:return-and-refund:owner) is needed for this purpose."
+    },
+    {
+      "seq": 65,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The customer's unstructured-content statement: Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 66,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:return-and-refund:receiver-agent:actor (urn:fictional:return-and-refund:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 67,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:return-and-refund:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 68,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "approval-given",
+      "caption": "The principal approved these exact bytes for this recipient and purpose."
+    },
+    {
+      "seq": 69,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 70,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The customer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 71,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The merchant’s agent."
+    },
+    {
+      "seq": 72,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
+        "from": "The customer’s agent",
+        "to": "The merchant’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:5428b514776…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The customer’s agent to The merchant’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-return-and-refund-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-return-and-refund-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:return-and-refund:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "party": "urn:fictional:return-and-refund:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The customer says The customer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:065bf59cb282bb46ec9c3ebfd7802657:1794560400000",
+                "party": "urn:fictional:return-and-refund:owner",
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:return-and-refund",
+                  "urn:op:return-and-refund:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:3ba28ea9af68ce21dfd1d048a848d1c9e157e536d05e6c38036118c16b063a87"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"Unstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:return-and-refund",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:return-and-refund:receipt"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:return-and-refund"
+              },
+              "content": [
+                {
+                  "id": "urn:content:return-photo",
+                  "mediaType": "image/png",
+                  "bytes": [
+                    137,
+                    80,
+                    78,
+                    71,
+                    13,
+                    10,
+                    26,
+                    10,
+                    0,
+                    0,
+                    0,
+                    13,
+                    73,
+                    72,
+                    68,
+                    82,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    1,
+                    8,
+                    4,
+                    0,
+                    0,
+                    0,
+                    181,
+                    28,
+                    12,
+                    2,
+                    0,
+                    0,
+                    0,
+                    11,
+                    73,
+                    68,
+                    65,
+                    84,
+                    120,
+                    218,
+                    99,
+                    252,
+                    255,
+                    31,
+                    0,
+                    3,
+                    3,
+                    2,
+                    0,
+                    239,
+                    163,
+                    241,
+                    119,
+                    0,
+                    0,
+                    0,
+                    0,
+                    73,
+                    69,
+                    78,
+                    68,
+                    174,
+                    66,
+                    96,
+                    130
+                  ],
+                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+                }
+              ]
+            },
+            "digest": "sha-256:1f4238829e580a2dc92da9cb5eeb22070b6364da26f9398673dd8fc09340e2d8",
+            "untrusted": [
+              {
+                "path": "content.0.bytes",
+                "text": "Unstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: merchant.receipt from The merchant; unstructured-content from The customer.",
+            "raw": [
+              {
+                "product": "urn:fictional:kettle",
+                "amount": 40,
+                "currency": "GBP",
+                "purchased": "2026-11-01",
+                "id": "urn:scenario:return-and-refund:receipt",
+                "issuer": "urn:fictional:return-and-refund:receiver",
+                "subject": "urn:fictional:return-and-refund:owner",
+                "claimType": "merchant.receipt",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:return-and-refund:receipt",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:return-and-refund:receipt",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:return-and-refund:receipt",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "contentDigest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2",
+                "id": "urn:scenario:return-and-refund:photo",
+                "issuer": "urn:fictional:return-and-refund:owner",
+                "subject": "urn:fictional:return-and-refund:owner",
+                "claimType": "unstructured-content",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:return-and-refund:photo",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:return-and-refund:photo",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:return-and-refund:photo",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:a7a6a5a957557be7c42c236db3c2cf33dcfd58402efa48c1fc6101d6b998d07f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The customer’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-return-and-refund-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:return-and-refund:receipt",
+                  "issuer": "urn:fictional:return-and-refund:receiver",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:return-and-refund:photo",
+                  "issuer": "urn:fictional:return-and-refund:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The customer’s agent sends an invoke message to The merchant’s agent."
+    },
+    {
+      "seq": 73,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
+        "from": "The customer’s agent",
+        "to": "The merchant’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:5428b514776…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The customer’s agent to The merchant’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-return-and-refund-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-return-and-refund-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:return-and-refund:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:return-and-refund:receiver-agent:actor",
+                "party": "urn:fictional:return-and-refund:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The customer says The customer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:065bf59cb282bb46ec9c3ebfd7802657:1794560400000",
+                "party": "urn:fictional:return-and-refund:owner",
+                "actor": "urn:fictional:return-and-refund:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:return-and-refund",
+                  "urn:op:return-and-refund:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:3ba28ea9af68ce21dfd1d048a848d1c9e157e536d05e6c38036118c16b063a87"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:return-and-refund\"; \"urn:scenario:return-and-refund:receipt\"; \"urn:purpose:return-and-refund\"; \"Unstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:return-and-refund",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:return-and-refund:receipt"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:return-and-refund"
+              },
+              "content": [
+                {
+                  "id": "urn:content:return-photo",
+                  "mediaType": "image/png",
+                  "bytes": [
+                    137,
+                    80,
+                    78,
+                    71,
+                    13,
+                    10,
+                    26,
+                    10,
+                    0,
+                    0,
+                    0,
+                    13,
+                    73,
+                    72,
+                    68,
+                    82,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    1,
+                    8,
+                    4,
+                    0,
+                    0,
+                    0,
+                    181,
+                    28,
+                    12,
+                    2,
+                    0,
+                    0,
+                    0,
+                    11,
+                    73,
+                    68,
+                    65,
+                    84,
+                    120,
+                    218,
+                    99,
+                    252,
+                    255,
+                    31,
+                    0,
+                    3,
+                    3,
+                    2,
+                    0,
+                    239,
+                    163,
+                    241,
+                    119,
+                    0,
+                    0,
+                    0,
+                    0,
+                    73,
+                    69,
+                    78,
+                    68,
+                    174,
+                    66,
+                    96,
+                    130
+                  ],
+                  "digest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+                }
+              ]
+            },
+            "digest": "sha-256:1f4238829e580a2dc92da9cb5eeb22070b6364da26f9398673dd8fc09340e2d8",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:return-and-refund"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:return-and-refund:receipt"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:return-and-refund"
+              },
+              {
+                "path": "content.0.bytes",
+                "text": "Unstructured image/png part sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "2 statement(s) signed by their sources: merchant.receipt from The merchant; unstructured-content from The customer.",
+            "raw": [
+              {
+                "product": "urn:fictional:kettle",
+                "amount": 40,
+                "currency": "GBP",
+                "purchased": "2026-11-01",
+                "id": "urn:scenario:return-and-refund:receipt",
+                "issuer": "urn:fictional:return-and-refund:receiver",
+                "subject": "urn:fictional:return-and-refund:owner",
+                "claimType": "merchant.receipt",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:return-and-refund:receipt",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:return-and-refund:receipt",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:return-and-refund:receipt",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "contentDigest": "sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2",
+                "id": "urn:scenario:return-and-refund:photo",
+                "issuer": "urn:fictional:return-and-refund:owner",
+                "subject": "urn:fictional:return-and-refund:owner",
+                "claimType": "unstructured-content",
+                "method": "self-reported",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:return-and-refund:photo",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:return-and-refund:photo",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:return-and-refund:photo",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:return-and-refund"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:a7a6a5a957557be7c42c236db3c2cf33dcfd58402efa48c1fc6101d6b998d07f"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The customer’s agent; as of 2026-11-13T09:00:00.000Z, 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-return-and-refund-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:return-and-refund:receipt",
+                  "issuer": "urn:fictional:return-and-refund:receiver",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                },
+                {
+                  "id": "urn:scenario:return-and-refund:photo",
+                  "issuer": "urn:fictional:return-and-refund:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The customer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 74,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The customer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 75,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:return-and-refund:merchant.receipt",
+        "text": "The merchant is accepted for merchant.receipt claims."
+      },
+      "resolution": {
+        "question": "Is The merchant an authority for merchant.receipt claims about The customer?",
+        "path": [
+          {
+            "at": "The merchant's own list",
+            "kind": "own-list",
+            "says": "The merchant is accepted for merchant.receipt."
+          }
+        ],
+        "answer": "Accepted, for merchant.receipt claims only."
+      },
+      "caption": "The merchant's merchant.receipt statement: The merchant is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 76,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:customer-photo",
+        "text": "The customer is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The customer an authority for unstructured-content claims about The customer?",
+        "path": [
+          {
+            "at": "The merchant's own list",
+            "kind": "own-list",
+            "says": "The customer is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The customer's unstructured-content statement: The customer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 77,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:065bf59cb282bb46ec9c3ebfd7802657:1794560400000",
+        "text": "A representation statement signed with The customer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The customer signed a statement that The customer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 78,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:return-and-refund:receipt",
+        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      },
+      "caption": "The merchant's merchant.receipt statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 79,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:return-and-refund:photo",
+        "text": "Its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+      },
+      "caption": "The customer's unstructured-content statement: its terms allow this: use for urn:purpose:return and refund; share for urn:purpose:return and refund."
+    },
+    {
+      "seq": 80,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:return-and-refund:merchant.receipt",
+        "text": "Accept merchant.receipt from urn:fictional:return-and-refund:receiver by recorded-by-authority, at most 365 days old."
+      },
+      "caption": "The merchant's merchant.receipt statement is fit for Returning a faulty item: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 81,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:return-and-refund:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:return-and-refund:owner by self-reported, at most 365 days old."
+      },
+      "caption": "The customer's unstructured-content statement is fit for Returning a faulty item: self-reported, 0 days old."
+    },
+    {
+      "seq": 82,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 83,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:return-and-refund:receipt",
+        "label": "The merchant's merchant.receipt statement",
+        "claimType": "merchant.receipt",
+        "subject": "urn:fictional:return-and-refund:owner",
+        "value": "urn:fictional:kettle",
+        "source": "urn:fictional:return-and-refund:receiver",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:return-and-refund:receipt",
+          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+        },
+        "provenance": "signed by The merchant"
+      },
+      "caption": "The merchant's merchant.receipt statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 84,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:return-and-refund:photo",
+        "label": "The customer's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:return-and-refund:owner",
+        "value": null,
+        "source": "urn:fictional:return-and-refund:owner",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:return-and-refund:photo",
+          "summary": "use for urn:purpose:return and refund; share for urn:purpose:return and refund"
+        },
+        "provenance": "signed by The customer"
+      },
+      "caption": "The customer's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 85,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; not instructions; source urn:fictional:return-and-refund:owner."
+    },
+    {
+      "seq": 86,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Returning a faulty item with The merchant."
+    },
+    {
+      "seq": 87,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The merchant's mandate covers this action."
+    },
+    {
+      "seq": 88,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The merchant a party I can send Returning a faulty item to?",
+        "path": [
+          {
+            "at": "The merchant's own list",
+            "kind": "own-list",
+            "says": "The merchant is accepted for Returning a faulty item."
+          }
+        ],
+        "answer": "Accepted, for Returning a faulty item only."
+      },
+      "reason": "recipient-established",
+      "caption": "The merchant: Accepted, for Returning a faulty item only."
+    },
+    {
+      "seq": 89,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 90,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 91,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The merchant's limits."
+    },
+    {
+      "seq": 92,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:a2912bbc254cc8dd761dc075d6300596e052484aef3627d98470f29aab299170",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 93,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in Returning a faulty item with The merchant."
+    }
+  ]
+}

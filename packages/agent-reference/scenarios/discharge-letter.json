@@ -8,28 +8,28 @@
     {
       "id": "patient",
       "identity": "urn:fictional:patient",
-      "name": "patient",
+      "name": "The patient",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "practice",
       "identity": "urn:fictional:practice",
-      "name": "practice",
+      "name": "The family practice",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "hospital",
       "identity": "urn:fictional:hospital",
-      "name": "hospital",
+      "name": "The hospital",
       "role": "source",
       "runs": "issuer-only"
     },
     {
       "id": "patient-agent",
       "identity": "urn:fictional:patient-agent",
-      "name": "patient-agent",
+      "name": "The patient’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:patient-agent:agent",
@@ -38,7 +38,7 @@
     {
       "id": "practice-agent",
       "identity": "urn:fictional:practice-agent",
-      "name": "practice-agent",
+      "name": "The family practice’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:practice-agent:agent",
@@ -47,7 +47,7 @@
     {
       "id": "hospital-agent",
       "identity": "urn:fictional:hospital-agent",
-      "name": "hospital-agent",
+      "name": "The hospital’s agent",
       "role": "agent",
       "runs": "agent",
       "actor": "urn:fictional:hospital-agent:agent",
@@ -553,7 +553,15 @@
             "params": {},
             "activityType": "urn:activity:clinical-entry"
           }
-        ]
+        ],
+        "traceSteps": {
+          "1": "The patient’s agent checks and admits the signed statements.",
+          "2": "The hospital’s agent checks and admits the signed statements.",
+          "3": "The patient’s agent sends a signed request.",
+          "4": "The family practice’s agent checks the incoming message and prepares a response.",
+          "5": "The family practice’s agent completes the read content step.",
+          "6": "The family practice’s agent proposes the local action."
+        }
       },
       "expect": {
         "outcome": "stop",
@@ -1406,5 +1414,19 @@
     "meaning": "plain-language-upgrade"
   },
   "assurance": null,
-  "blocked": []
+  "blocked": [],
+  "useCase": "discharge-letter",
+  "traceSteps": {
+    "1": "The patient’s agent checks and admits the signed statements.",
+    "2": "The hospital’s agent checks and admits the signed statements.",
+    "3": "The patient’s agent sends a signed request.",
+    "4": "The family practice’s agent checks the incoming message and prepares a response.",
+    "5": "The family practice’s agent completes the read content step.",
+    "6": "The family practice’s agent proposes the local action.",
+    "7": "The family practice’s agent completes the request structured step.",
+    "8": "The hospital’s agent checks the incoming message and prepares a response.",
+    "9": "The family practice’s agent checks the incoming message and prepares a response.",
+    "10": "The family practice’s agent proposes the local action.",
+    "11": "The family practice’s agent checks the durable record."
+  }
 }

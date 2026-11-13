@@ -41,6 +41,7 @@ export const domainProfileSchema = z.strictObject({
   "x-authored-by": z.string(),
   schema: z.literal("agent-profile/0.1"),
   id: slug,
+  parties: z.record(slug, z.string()).default({}),
   sources: z.record(z.string(), iri).default({}),
   claims: z.array(
     z.strictObject({
@@ -48,6 +49,7 @@ export const domainProfileSchema = z.strictObject({
       sources: z.array(iri),
       methods: strings,
       maxAgeDays: z.number().nonnegative(),
+      completeness: z.string().optional(),
       corroboration: z
         .strictObject({ sources: z.number().int().min(2), independent: z.boolean() })
         .optional(),
@@ -151,6 +153,7 @@ const expectation = z.strictObject({
   check: check,
   reason,
 });
+const catalogueExpectation = expectation.omit({ check: true });
 const party = z.strictObject({
   id: slug,
   identity: iri,
@@ -240,6 +243,7 @@ const step = z.discriminatedUnion("type", [
     ...base,
     type: z.literal("receive"),
     from: slug.optional(),
+    stripSignature: z.boolean().optional(),
     reply: object.optional(),
     outboundAtStep: z.number().int().positive().optional(),
     agreementPlan: object.optional(),
@@ -324,6 +328,7 @@ const step = z.discriminatedUnion("type", [
   z.strictObject({ ...base, type: z.literal("notifications") }),
   z.strictObject({ ...base, type: z.literal("duties") }),
   z.strictObject({ ...base, type: z.literal("show-mandate") }),
+  z.strictObject({ ...base, type: z.literal("revoke-mandate") }),
   z.strictObject({ ...base, type: z.literal("mint") }),
   z.strictObject({ ...base, type: z.literal("pending") }),
   z.strictObject({ ...base, type: z.literal("conversation"), conversation: json }),
@@ -379,7 +384,13 @@ export const scenarioSchema = z.strictObject({
   "x-authored-by": z.string(),
   schema: z.literal("agent-scenario/0.1"),
   id: slug,
+  useCase: slug.optional(),
+  cataloguePath: z
+    .strictObject({ index: z.number().int().positive(), what: z.string() })
+    .optional(),
   title: z.string(),
+  result: expectation.optional(),
+  catalogueExpected: catalogueExpectation.optional(),
   profile: slug,
   parties: z.array(party),
   trust: z.strictObject({
@@ -487,7 +498,20 @@ export const scenarioSchema = z.strictObject({
       autonomous: z.array(object),
       withApproval: z.array(object),
       prohibitions: z.array(object).default([]),
-      limits: z.strictObject({ maxRetentionDays: z.number().nonnegative().optional() }).optional(),
+      limits: z
+        .strictObject({
+          maxRetentionDays: z.number().nonnegative().optional(),
+          commitments: z
+            .record(
+              iri,
+              z.strictObject({
+                maxAmount: z.number().nonnegative(),
+                currency: z.string().regex(/^[A-Z]{3}$/),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
       standingRules: z.array(object).default([]),
     }),
   ),
@@ -508,6 +532,7 @@ export const scenarioSchema = z.strictObject({
       change: object,
       profileChange: object.optional(),
       expect: expectation,
+      catalogueExpected: catalogueExpectation.optional(),
       outline: outlineSchema,
       blocked: z.string().optional(),
     }),

@@ -1,0 +1,66 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "erasure-request",
+  "useCase": "erasure-request",
+  "title": "Withdrawing consent and asking for deletion",
+  "profile": "erasure-request",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:erasure-request:party-1",
+      "name": "A person",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:erasure-request:party-2",
+      "name": "A company",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:erasure-request:party-3",
+      "name": "Parties the company passed the data to",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The company passed the data on with no duty to inform",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "no-agreement",
+        "check": "evidence"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "terms",
+    "evidence"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "*",
+      "reason": "Needs a general erasure/onward-notification duty executor and agreement-chain discovery. The engine only has assessment-specific local erasure and emergency notification duties."
+    }
+  ]
+}

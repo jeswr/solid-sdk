@@ -1,0 +1,101 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "fit-note-to-employer",
+  "parties": {
+    "owner": "The employee",
+    "receiver": "The employer",
+    "clinician": "The clinician",
+    "owner-agent": "The employee’s agent",
+    "receiver-agent": "The employer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "work.fitness",
+      "sources": [
+        "urn:fictional:fit-note-to-employer:clinician"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "health.diagnosis",
+      "sources": [
+        "urn:fictional:fit-note-to-employer:clinician"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:fit-note-to-employer",
+      "claims": [
+        "work.fitness"
+      ]
+    },
+    {
+      "id": "urn:purpose:clinical-care",
+      "claims": [
+        "health.diagnosis"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "work.fitness",
+        "health.diagnosis"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "statement.claims.fitness": {
+      "type": "code",
+      "values": [
+        "fit-with-adjustments"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:fit-note-to-employer",
+      "version": "0.1",
+      "label": "Telling an employer about fitness for work",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:fit-note-to-employer"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:fit-note-to-employer:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:fit-note-to-employer"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

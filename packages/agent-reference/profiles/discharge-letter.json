@@ -113,5 +113,13 @@
       "what": "Unstructured-content reading model",
       "replacedBy": "Scenario-scripted capability-free reader returning only declared typed values"
     }
-  ]
+  ],
+  "parties": {
+    "patient": "The patient",
+    "practice": "The family practice",
+    "hospital": "The hospital",
+    "patient-agent": "The patient’s agent",
+    "practice-agent": "The family practice’s agent",
+    "hospital-agent": "The hospital’s agent"
+  }
 }

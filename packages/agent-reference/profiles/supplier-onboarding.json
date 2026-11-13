@@ -113,5 +113,15 @@
       "what": "Company register, bank and certificate authority",
       "replacedBy": "Separately keyed fictional issuer-only sources"
     }
-  ]
+  ],
+  "parties": {
+    "supplier": "The supplier",
+    "buyer": "The buyer",
+    "company-register": "The fictional company register",
+    "supplier-bank": "The supplier’s bank",
+    "certifier": "The fictional certifier",
+    "registrar": "The local registrar",
+    "supplier-agent": "The supplier’s agent",
+    "buyer-agent": "The buyer’s agent"
+  }
 }

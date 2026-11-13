@@ -1,0 +1,67 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "consent-for-a-child",
+  "useCase": "consent-for-a-child",
+  "title": "A parent consents for a child",
+  "profile": "consent-for-a-child",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:consent-for-a-child:party-1",
+      "name": "A child",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:consent-for-a-child:party-2",
+      "name": "A parent",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-3",
+      "identity": "urn:fictional:consent-for-a-child:party-3",
+      "name": "A school",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The second parent has objected",
+      "change": {},
+      "expect": {
+        "outcome": "ask-principal",
+        "reason": "approval-required",
+        "check": "limits-approval"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "authority",
+    "data-terms",
+    "terms"
+  ],
+  "suites": {},
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "*",
+      "reason": "Needs child-to-parent authority, current objections and a policy for whose consent is sufficient; organization roles do not establish parental power or resolve conflicting parents."
+    }
+  ]
+}

@@ -653,5 +653,17 @@
       "purpose": "https://w3id.org/jeswr/awp#purpose/credit-assessment",
       "annualRule": "https://w3id.org/jeswr/awp#rule/annualise-12-consecutive-months"
     }
-  ]
+  ],
+  "parties": {
+    "sam": "Sam, the fictional applicant",
+    "north": "The fictional lender",
+    "sam-agent": "Sam’s agent",
+    "north-agent": "The fictional lender’s agent",
+    "paywell": "The fictional payroll provider",
+    "harbour": "Sam’s fictional bank",
+    "index": "The mortgage product index",
+    "identity-provider": "The fictional identity provider",
+    "index-agent": "The mortgage product index’s agent",
+    "harbour-agent": "Sam’s fictional bank’s agent"
+  }
 }

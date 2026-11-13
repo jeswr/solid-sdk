@@ -1,0 +1,86 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "recall-notice",
+  "parties": {
+    "owner": "The manufacturer",
+    "receiver": "The product owner",
+    "attacker": "The fictional attacker",
+    "owner-agent": "The manufacturer’s agent",
+    "receiver-agent": "The product owner’s agent"
+  },
+  "claims": [
+    {
+      "kind": "product.recall",
+      "sources": [
+        "urn:fictional:recall-notice:owner"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:recall-notice",
+      "claims": [
+        "product.recall"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "product.recall"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:recall-notice",
+      "version": "0.1",
+      "label": "A product recall notice",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recall-notice"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:recall-notice:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:recall-notice"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "read",
+      "claims": [
+        "product.recall"
+      ]
+    }
+  ]
+}

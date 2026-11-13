@@ -1,0 +1,2123 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "production-change",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The monitoring service"
+    },
+    {
+      "id": "receiver",
+      "name": "The operations team"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The monitoring service’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The operations team’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "production-change",
+    "title": "An operations agent changes a live system",
+    "steps": {
+      "1": "The monitoring service’s agent checks the signed statements.",
+      "2": "The operations team’s agent sends the signed request.",
+      "3": "The monitoring service’s agent checks the message and prepares a response.",
+      "4": "The monitoring service’s agent sends the signed request.",
+      "5": "The monitoring service’s agent completes the approve step.",
+      "6": "The operations team’s agent checks the message and prepares a response.",
+      "7": "The operations team’s agent completes the read content step.",
+      "8": "The operations team’s agent proposes the local action.",
+      "9": "The operations team’s agent checks the observed result."
+    }
+  },
+  "configuration": {
+    "id": "production-change-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "plain-language-upgrade",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The monitoring service’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The operations team’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Production system and monitoring",
+      "replacedBy": "Original signed fictional log content and a local restart-record adapter; the adapter runs no shell and changes no live infrastructure. The owner mandate pre-approves only the named restart within its window"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The monitoring service's unstructured-content statement is intact and signed with The monitoring service's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:production-change:unstructured-content",
+        "text": "The monitoring service is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The monitoring service an authority for unstructured-content claims about The monitoring service?",
+        "path": [
+          {
+            "at": "The monitoring service's own list",
+            "kind": "own-list",
+            "says": "The monitoring service is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The monitoring service's unstructured-content statement: The monitoring service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The monitoring service's unstructured-content statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:production-change:original",
+        "text": "Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+      },
+      "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:production-change:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:production-change:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The monitoring service's unstructured-content statement is fit for urn:scenario:production-change:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The monitoring service's unstructured-content statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:production-change:original",
+        "label": "The monitoring service's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:production-change:owner",
+        "value": null,
+        "source": "urn:fictional:production-change:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:production-change:original",
+          "summary": "use for urn:purpose:production change; share for urn:purpose:production change"
+        },
+        "provenance": "signed by The monitoring service"
+      },
+      "caption": "The monitoring service's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The monitoring service."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The operations team's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The monitoring service a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The operations team's own list",
+            "kind": "own-list",
+            "says": "The monitoring service is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The monitoring service: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The operations team's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The operations team’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The monitoring service’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-production-change-main:receiver-agent:0002",
+        "from": "The operations team’s agent",
+        "to": "The monitoring service’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:ee81a1936d9…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The operations team’s agent to The monitoring service’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-production-change-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-production-change-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-production-change-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:production-change:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "party": "urn:fictional:production-change:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:33dea480bdec25c49ad259c020aa8079e7112f11924896c161f8cd38e9dd9002"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The operations team says The operations team’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:c5e4531779475b6a3fdba42428f0b9bd:1794560400000",
+                "party": "urn:fictional:production-change:receiver",
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:production-change",
+                  "urn:op:production-change:request",
+                  "urn:op:production-change:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:c0c2fc1f051f63adf2284dd43b730b1a06580cb109547af08962226b05e1bdf8"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:production-change:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:production-change"
+            },
+            "digest": "sha-256:11a39c5dc9b57816ad80a8ac6248ebca74ce39d22f06eab55425efde9b73a3be"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-production-change-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The operations team’s agent sends an invoke message to The monitoring service’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-production-change-main:receiver-agent:0002",
+        "from": "The operations team’s agent",
+        "to": "The monitoring service’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:ee81a1936d9…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The operations team’s agent to The monitoring service’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-production-change-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-production-change-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-production-change-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:production-change:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "party": "urn:fictional:production-change:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:33dea480bdec25c49ad259c020aa8079e7112f11924896c161f8cd38e9dd9002"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The operations team says The operations team’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:c5e4531779475b6a3fdba42428f0b9bd:1794560400000",
+                "party": "urn:fictional:production-change:receiver",
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:production-change",
+                  "urn:op:production-change:request",
+                  "urn:op:production-change:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:c0c2fc1f051f63adf2284dd43b730b1a06580cb109547af08962226b05e1bdf8"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:production-change:request\"; \"urn:purpose:production-change\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:production-change:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "unstructured-content"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:production-change"
+            },
+            "digest": "sha-256:11a39c5dc9b57816ad80a8ac6248ebca74ce39d22f06eab55425efde9b73a3be",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:production-change:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:production-change"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-production-change-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The operations team’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The operations team’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:c5e4531779475b6a3fdba42428f0b9bd:1794560400000",
+        "text": "A representation statement signed with The operations team's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The operations team signed a statement that The operations team’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:production change with The operations team."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The monitoring service's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The operations team a party I can send An operations agent changes a live system to?",
+        "path": [
+          {
+            "at": "The monitoring service's own list",
+            "kind": "own-list",
+            "says": "The operations team is accepted for An operations agent changes a live system."
+          }
+        ],
+        "answer": "Accepted, for An operations agent changes a live system only."
+      },
+      "reason": "recipient-established",
+      "caption": "The operations team: Accepted, for An operations agent changes a live system only."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The monitoring service's limits."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:production-change:original",
+        "text": "The issuer's terms: use for urn:purpose:production change; share for urn:purpose:production change. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The monitoring service's unstructured-content statement (urn:fictional:production-change:owner) is needed for this purpose."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:production-change:receiver-agent:actor (urn:fictional:production-change:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 37,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:production-change:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 38,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "context-not-clear",
+      "caption": "The task context is not clear for this text, recipient and purpose."
+    },
+    {
+      "seq": 39,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "context-not-clear",
+      "chat": {
+        "who": "agent",
+        "text": "May I send this exact text to The operations team for urn:purpose:production-change?\nThe worker is stalled. Its supervised restart is an approved operation during the maintenance window."
+      },
+      "caption": "The text is held before release; approval binds message digest sha-256:0da39c2f632108d1a79f045ff02c14d0485be2ae2c26e135968257c66ef6442e."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "chat": {
+        "who": "principal",
+        "text": "Release this exact fictional log entry."
+      },
+      "caption": "Approves by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The monitoring service's mandate covers this action."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The operations team a party I can send An operations agent changes a live system to?",
+        "path": [
+          {
+            "at": "The monitoring service's own list",
+            "kind": "own-list",
+            "says": "The operations team is accepted for An operations agent changes a live system."
+          }
+        ],
+        "answer": "Accepted, for An operations agent changes a live system only."
+      },
+      "reason": "recipient-established",
+      "caption": "The operations team: Accepted, for An operations agent changes a live system only."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The monitoring service's limits."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:production-change:original",
+        "text": "The issuer's terms: use for urn:purpose:production change; share for urn:purpose:production change. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "Context item The monitoring service's unstructured-content statement (urn:fictional:production-change:owner) is needed for this purpose."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "Context item invoke from urn:fictional:production-change:receiver-agent:actor (urn:fictional:production-change:receiver) is not established as needed for this purpose."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "context-not-clear",
+      "caption": "invoke from urn:fictional:production-change:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+    },
+    {
+      "seq": 53,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "approval-given",
+      "caption": "The principal approved these exact bytes for this recipient and purpose."
+    },
+    {
+      "seq": 54,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "terms-allow",
+      "caption": "The context rule permits this text."
+    },
+    {
+      "seq": 55,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The monitoring service’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 56,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The operations team’s agent."
+    },
+    {
+      "seq": 57,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-production-change-main:owner-agent:0002",
+        "from": "The monitoring service’s agent",
+        "to": "The operations team’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:685728b21b5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The monitoring service’s agent to The operations team’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-production-change-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-production-change-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-production-change-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:production-change:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "party": "urn:fictional:production-change:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:0da39c2f632108d1a79f045ff02c14d0485be2ae2c26e135968257c66ef6442e"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The monitoring service says The monitoring service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:ab6c6aa9fd73a358d90e73bd98475bbb:1794560400000",
+                "party": "urn:fictional:production-change:owner",
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:production-change",
+                  "urn:op:production-change:request",
+                  "urn:op:production-change:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2a75fd5a62872be2666178c24c4d12e681a97feb279281f3936588807313ecd4"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"The worker is stalled. Its supervised restart is an approved operation during the maintenance window.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:production-change",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:production-change:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:production-change"
+              },
+              "content": [
+                {
+                  "id": "urn:content:production-change:original",
+                  "mediaType": "text/plain",
+                  "bytes": "The worker is stalled. Its supervised restart is an approved operation during the maintenance window.",
+                  "digest": "sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5"
+                }
+              ]
+            },
+            "digest": "sha-256:32a0aa7d2f57ce225f289cf791cc061e8b40f44f78c1bbdcef6e6371a1bfd07b",
+            "untrusted": [
+              {
+                "path": "content.0.bytes",
+                "text": "The worker is stalled. Its supervised restart is an approved operation during the maintenance window."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The monitoring service.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5",
+                "id": "urn:scenario:production-change:original",
+                "issuer": "urn:fictional:production-change:owner",
+                "subject": "urn:fictional:production-change:owner",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:production-change:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:production-change:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:production-change"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:production-change:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:production-change"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:7a2babb11b2a7c4b633dc34b0c1907cf66474d0dfa5f54df63a9cec46b528743"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The monitoring service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-production-change-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:production-change:original",
+                  "issuer": "urn:fictional:production-change:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The monitoring service’s agent sends an invoke message to The operations team’s agent."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-production-change-main:owner-agent:0002",
+        "from": "The monitoring service’s agent",
+        "to": "The operations team’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:685728b21b5…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The monitoring service’s agent to The operations team’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-production-change-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-production-change-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-production-change-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:production-change:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:production-change:receiver-agent:actor",
+                "party": "urn:fictional:production-change:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:0da39c2f632108d1a79f045ff02c14d0485be2ae2c26e135968257c66ef6442e"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The monitoring service says The monitoring service’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:ab6c6aa9fd73a358d90e73bd98475bbb:1794560400000",
+                "party": "urn:fictional:production-change:owner",
+                "actor": "urn:fictional:production-change:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:production-change",
+                  "urn:op:production-change:request",
+                  "urn:op:production-change:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:2a75fd5a62872be2666178c24c4d12e681a97feb279281f3936588807313ecd4"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:production-change\"; \"urn:scenario:production-change:original\"; \"urn:purpose:production-change\"; \"The worker is stalled. Its supervised restart is an approved operation during the maintenance window.\"",
+            "raw": {
+              "body": {
+                "operation": {
+                  "id": "urn:op:production-change",
+                  "version": "0.1"
+                },
+                "input": {
+                  "items": [
+                    "urn:scenario:production-change:original"
+                  ]
+                },
+                "basis": {
+                  "kind": "represented"
+                },
+                "purpose": "urn:purpose:production-change"
+              },
+              "content": [
+                {
+                  "id": "urn:content:production-change:original",
+                  "mediaType": "text/plain",
+                  "bytes": "The worker is stalled. Its supervised restart is an approved operation during the maintenance window.",
+                  "digest": "sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5"
+                }
+              ]
+            },
+            "digest": "sha-256:32a0aa7d2f57ce225f289cf791cc061e8b40f44f78c1bbdcef6e6371a1bfd07b",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:production-change"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:production-change:original"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:production-change"
+              },
+              {
+                "path": "content.0.bytes",
+                "text": "The worker is stalled. Its supervised restart is an approved operation during the maintenance window."
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: unstructured-content from The monitoring service.",
+            "raw": [
+              {
+                "contentDigest": "sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5",
+                "id": "urn:scenario:production-change:original",
+                "issuer": "urn:fictional:production-change:owner",
+                "subject": "urn:fictional:production-change:owner",
+                "claimType": "unstructured-content",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:production-change:original",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:production-change:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:production-change"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:production-change:original",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:production-change"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:7a2babb11b2a7c4b633dc34b0c1907cf66474d0dfa5f54df63a9cec46b528743"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The monitoring service’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-production-change-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:production-change:original",
+                  "issuer": "urn:fictional:production-change:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The monitoring service’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The monitoring service’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 60,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:production-change:unstructured-content",
+        "text": "The monitoring service is accepted for unstructured-content claims."
+      },
+      "resolution": {
+        "question": "Is The monitoring service an authority for unstructured-content claims about The monitoring service?",
+        "path": [
+          {
+            "at": "The operations team's own list",
+            "kind": "own-list",
+            "says": "The monitoring service is accepted for unstructured-content."
+          }
+        ],
+        "answer": "Accepted, for unstructured-content claims only."
+      },
+      "caption": "The monitoring service's unstructured-content statement: The monitoring service is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 61,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:ab6c6aa9fd73a358d90e73bd98475bbb:1794560400000",
+        "text": "A representation statement signed with The monitoring service's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The monitoring service signed a statement that The monitoring service’s agent acts for them in this operation."
+    },
+    {
+      "seq": 62,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:production-change:original",
+        "text": "Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+      },
+      "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    },
+    {
+      "seq": 63,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:production-change:unstructured-content",
+        "text": "Accept unstructured-content from urn:fictional:production-change:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The monitoring service's unstructured-content statement is fit for An operations agent changes a live system: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 64,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 65,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:production-change:original",
+        "label": "The monitoring service's unstructured-content statement",
+        "claimType": "unstructured-content",
+        "subject": "urn:fictional:production-change:owner",
+        "value": null,
+        "source": "urn:fictional:production-change:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:production-change:original",
+          "summary": "use for urn:purpose:production change; share for urn:purpose:production change"
+        },
+        "provenance": "signed by The monitoring service"
+      },
+      "caption": "The monitoring service's unstructured-content statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 66,
+      "step": 6,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Unstructured data sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5; not instructions; source urn:fictional:production-change:owner."
+    },
+    {
+      "seq": 67,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "caption": "Model-output reading of unstructured data sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5; claim content.opinion."
+    },
+    {
+      "seq": 68,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in A person decides on the original content with The operations team."
+    },
+    {
+      "seq": 69,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The operations team's mandate covers this action."
+    },
+    {
+      "seq": 70,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The operations team a party I can send A person decides on the original content to?",
+        "path": [
+          {
+            "at": "The operations team's own list",
+            "kind": "own-list",
+            "says": "The operations team is accepted for A person decides on the original content."
+          }
+        ],
+        "answer": "Accepted, for A person decides on the original content only."
+      },
+      "reason": "recipient-established",
+      "caption": "The operations team: Accepted, for A person decides on the original content only."
+    },
+    {
+      "seq": 71,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 72,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 73,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The operations team's limits."
+    },
+    {
+      "seq": 74,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "sha-256:de7598dff153162966f707d0186a39eef27eae46fe6bd99f2158596a902e299a",
+        "text": "Write-ahead: the intended activity is recorded first."
+      },
+      "reason": "evidence-complete",
+      "caption": "The activity is written to the record before it runs."
+    },
+    {
+      "seq": 75,
+      "step": 8,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The action goes: take the next step in A person decides on the original content with The operations team."
+    }
+  ]
+}

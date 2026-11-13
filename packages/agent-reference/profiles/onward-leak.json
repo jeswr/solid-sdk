@@ -1,0 +1,84 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "onward-leak",
+  "parties": {
+    "owner": "The lender",
+    "receiver": "The marketing company",
+    "bank": "The person’s bank",
+    "owner-agent": "The lender’s agent",
+    "receiver-agent": "The marketing company’s agent"
+  },
+  "claims": [
+    {
+      "kind": "income.total",
+      "sources": [
+        "urn:fictional:onward-leak:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:onward-leak",
+      "claims": [
+        "income.total"
+      ]
+    },
+    {
+      "id": "urn:purpose:lending",
+      "claims": [
+        "income.total"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "income.total"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:onward-leak",
+      "version": "0.1",
+      "label": "A receiver passes data on against its terms",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:onward-leak"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:onward-leak:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:onward-leak"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

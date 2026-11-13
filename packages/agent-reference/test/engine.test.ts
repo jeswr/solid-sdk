@@ -22,6 +22,7 @@ const loaded = () => loadCase(root, "probing-counterparty");
 it("loads every declared case and preserves every catalogue branch, without claiming blocked paths ran", async () => {
   let runs = 0;
   let blocked = 0;
+  const manifest = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8"));
   for (const file of readdirSync(join(root, "scenarios"))) {
     const { profile, scenario } = loadCase(root, file.slice(0, -5));
     const results = await runScenario(profile, scenario);
@@ -33,12 +34,33 @@ it("loads every declared case and preserves every catalogue branch, without clai
       } else {
         runs++;
         expect(result.matches).toBe(true);
+        expect(result.trace?.useCase).toBe(scenario.useCase ?? scenario.id);
+        expect(result.trace?.path).toEqual(
+          result.path === "main"
+            ? (scenario.cataloguePath ?? "main")
+            : {
+                index: scenario.branches.findIndex((b) => b.id === result.path) + 1,
+                what: required(scenario.branches.find((b) => b.id === result.path)).what,
+              },
+        );
+        expect(result.trace?.scenario.title).toBe(
+          result.path === "main"
+            ? scenario.title
+            : `${scenario.title}: ${required(scenario.branches.find((b) => b.id === result.path)).what}`,
+        );
+        for (const agent of result.trace?.agents ?? []) expect(agent.name).not.toBe(agent.id);
+        for (const caption of Object.values(result.trace?.scenario.steps ?? {}))
+          expect(caption).toMatch(/[.!?]$/);
       }
     }
   }
-  expect(runs).toBe(31);
-  expect(blocked).toBe(1);
-});
+  expect(runs).toBe(
+    manifest.paths.filter((p: { status: string }) => p.status !== "blocked").length,
+  );
+  expect(blocked).toBe(
+    manifest.paths.filter((p: { status: string }) => p.status === "blocked").length,
+  );
+}, 60_000);
 
 it("runs both probing branches through real gates, with no later disclosure or effect after a stop", async () => {
   const { profile, scenario } = loaded();

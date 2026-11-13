@@ -1,0 +1,142 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "small-business-loan",
+  "parties": {
+    "owner": "The company",
+    "receiver": "The lender",
+    "accounting": "The accounting platform",
+    "tax": "The fictional tax authority",
+    "register": "The company register",
+    "registrar": "The local registrar",
+    "director": "The director",
+    "owner-agent": "The company’s agent",
+    "receiver-agent": "The lender’s agent"
+  },
+  "claims": [
+    {
+      "kind": "business.accounts",
+      "sources": [
+        "urn:fictional:small-business-loan:accounting"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "business.tax-filing",
+      "sources": [
+        "urn:fictional:small-business-loan:tax"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "organization.role",
+      "sources": [
+        "urn:fictional:small-business-loan:register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:small-business-loan",
+      "claims": [
+        "business.accounts",
+        "business.tax-filing",
+        "organization.role"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "business.accounts",
+        "business.tax-filing",
+        "organization.role"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": [
+        "GBP"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:small-business-loan",
+      "version": "0.1",
+      "label": "A loan for a small company",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:small-business-loan"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:small-business-loan:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:small-business-loan"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "organizations": {
+    "registrar": "urn:fictional:small-business-loan:registrar",
+    "maxStatusAgeSeconds": 3600,
+    "requiredRoles": {
+      "urn:op:small-business-loan": [
+        "business-signatory"
+      ]
+    },
+    "actionKinds": {
+      "urn:op:small-business-loan": "loan-application"
+    }
+  },
+  "actionClaims": [
+    {
+      "action": "use",
+      "claims": [
+        "business.accounts",
+        "business.tax-filing"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Corporate registrar, company register, accounting platform and tax authority",
+      "replacedBy": "Separately keyed fictional local documents, role statements and account/tax records; an exact-action director signature binds the GBP 25000 application, with no loan disbursement"
+    }
+  ]
+}

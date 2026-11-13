@@ -119,5 +119,16 @@
       "what": "Patient's clinical record",
       "replacedBy": "Fictional issuer-only practice signs the summary; a patient-owned record agent enforces the patient-signed standing mandate"
     }
-  ]
+  ],
+  "parties": {
+    "clinician": "The clinician",
+    "patient": "The patient",
+    "contact": "The trusted contact",
+    "register": "The professional register",
+    "practice": "The family practice",
+    "clinician-agent": "The clinician’s agent",
+    "record-agent": "The patient’s record agent",
+    "patient-agent": "The patient’s agent",
+    "contact-agent": "The trusted contact’s agent"
+  }
 }

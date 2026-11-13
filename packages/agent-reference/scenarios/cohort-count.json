@@ -1,0 +1,80 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "cohort-count",
+  "useCase": "cohort-count",
+  "title": "Hospitals count a cohort together",
+  "profile": "cohort-count",
+  "parties": [
+    {
+      "id": "party-1",
+      "identity": "urn:fictional:cohort-count:party-1",
+      "name": "Several hospitals",
+      "role": "principal",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "party-2",
+      "identity": "urn:fictional:cohort-count:party-2",
+      "name": "A research group",
+      "role": "principal",
+      "runs": "issuer-only"
+    }
+  ],
+  "trust": {
+    "introductions": [],
+    "ownLists": {},
+    "sources": {}
+  },
+  "statements": [],
+  "mandates": [],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "The result would cover fewer than the minimum number of patients",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "prohibited",
+        "check": "data-terms"
+      },
+      "outline": []
+    },
+    {
+      "id": "branch-2",
+      "what": "One hospital does not attest its input",
+      "change": {},
+      "expect": {
+        "outcome": "stop",
+        "reason": "derivation-not-verified",
+        "check": "evidence"
+      },
+      "outline": []
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "data-terms",
+    "disclosure"
+  ],
+  "suites": {
+    "data-access": "aggregate-mpc"
+  },
+  "assurance": "joint",
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "needs joint computation"
+    },
+    {
+      "path": "branch-1",
+      "reason": "needs joint computation"
+    },
+    {
+      "path": "branch-2",
+      "reason": "needs attestation"
+    }
+  ]
+}

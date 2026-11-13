@@ -1,0 +1,2039 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "recall-notice",
+  "path": "main",
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The manufacturer"
+    },
+    {
+      "id": "receiver",
+      "name": "The product owner"
+    },
+    {
+      "id": "attacker",
+      "name": "The fictional attacker"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The manufacturer’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The product owner’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "recall-notice",
+    "title": "A product recall notice",
+    "steps": {
+      "1": "The manufacturer’s agent checks the signed statements.",
+      "2": "The product owner’s agent sends the signed request.",
+      "3": "The manufacturer’s agent checks the message and prepares a response.",
+      "4": "The manufacturer’s agent sends the signed request.",
+      "5": "The product owner’s agent checks the message and prepares a response.",
+      "6": "The manufacturer’s agent checks the message and prepares a response.",
+      "7": "The product owner’s agent checks the durable record."
+    }
+  },
+  "configuration": {
+    "id": "baseline",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "fixed-vocabulary",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The manufacturer’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The product owner’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Manufacturer registration and recall delivery",
+      "replacedBy": "A reviewed manufacturer-specific source rule accepts only its recall notices; the attacker’s real signature establishes authorship but not recall authority. No link is opened."
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The manufacturer's product.recall statement is intact and signed with The manufacturer's pinned key."
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:recall-notice:product.recall",
+        "text": "The manufacturer is accepted for product.recall claims."
+      },
+      "resolution": {
+        "question": "Is The manufacturer an authority for product.recall claims about The manufacturer?",
+        "path": [
+          {
+            "at": "The manufacturer's own list",
+            "kind": "own-list",
+            "says": "The manufacturer is accepted for product.recall."
+          }
+        ],
+        "answer": "Accepted, for product.recall claims only."
+      },
+      "caption": "The manufacturer's product.recall statement: The manufacturer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The manufacturer's product.recall statement asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:recall-notice:recall",
+        "text": "Its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+      },
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:recall-notice:product.recall",
+        "text": "Accept product.recall from urn:fictional:recall-notice:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The manufacturer's product.recall statement is fit for urn:scenario:recall-notice:task: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The manufacturer's product.recall statement is admitted."
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:recall-notice:recall",
+        "label": "The manufacturer's product.recall statement",
+        "claimType": "product.recall",
+        "subject": "urn:fictional:recall-notice:owner",
+        "value": "urn:fictional:product",
+        "source": "urn:fictional:recall-notice:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:recall-notice:recall",
+          "summary": "use for urn:purpose:recall notice; share for urn:purpose:recall notice"
+        },
+        "provenance": "signed by The manufacturer"
+      },
+      "caption": "The manufacturer's product.recall statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The manufacturer."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The product owner's mandate covers this action."
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The manufacturer a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The product owner's own list",
+            "kind": "own-list",
+            "says": "The manufacturer is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The manufacturer: Accepted, for Request the needed information only."
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The product owner's limits."
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The product owner’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The manufacturer’s agent."
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
+        "from": "The product owner’s agent",
+        "to": "The manufacturer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:c3666c55830…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The product owner’s agent to The manufacturer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-recall-notice-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "party": "urn:fictional:recall-notice:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:b4066cdb1a8a3f3b606c892bb787dc48573ff15afc0d134106a74ac6d8c32096"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The product owner says The product owner’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a808ca813358483f700544f7fd00624e:1794560400000",
+                "party": "urn:fictional:recall-notice:receiver",
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:recall-notice",
+                  "urn:op:recall-notice:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:bc947e54c7f0299b579dd96d3d3060d7edcfbe66d35a106e12b8d1cc363e2d86"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:recall-notice:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "product.recall"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:recall-notice"
+            },
+            "digest": "sha-256:1c4e789b12f01e2114b9e7b7e94a212054aa188a328a3725b17e0ac2227f905d"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The product owner’s agent sends an invoke message to The manufacturer’s agent."
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
+        "from": "The product owner’s agent",
+        "to": "The manufacturer’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:c3666c55830…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The product owner’s agent to The manufacturer’s agent; invoke; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:receiver-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
+              "conversation": "urn:awp:engine-recall-notice-main:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "party": "urn:fictional:recall-notice:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:b4066cdb1a8a3f3b606c892bb787dc48573ff15afc0d134106a74ac6d8c32096"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The product owner says The product owner’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:a808ca813358483f700544f7fd00624e:1794560400000",
+                "party": "urn:fictional:recall-notice:receiver",
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:recall-notice",
+                  "urn:op:recall-notice:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:bc947e54c7f0299b579dd96d3d3060d7edcfbe66d35a106e12b8d1cc363e2d86"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:recall-notice:request\"; \"urn:purpose:recall-notice\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:recall-notice:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "product.recall"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:recall-notice"
+            },
+            "digest": "sha-256:1c4e789b12f01e2114b9e7b7e94a212054aa188a328a3725b17e0ac2227f905d",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:recall-notice:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:recall-notice"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The product owner’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The product owner’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:a808ca813358483f700544f7fd00624e:1794560400000",
+        "text": "A representation statement signed with The product owner's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The product owner signed a statement that The product owner’s agent acts for them in this operation."
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share urn:op:recall notice with The product owner."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The manufacturer's mandate covers this action."
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The product owner a party I can send A product recall notice to?",
+        "path": [
+          {
+            "at": "The manufacturer's own list",
+            "kind": "own-list",
+            "says": "The product owner is accepted for A product recall notice."
+          }
+        ],
+        "answer": "Accepted, for A product recall notice only."
+      },
+      "reason": "recipient-established",
+      "caption": "The product owner: Accepted, for A product recall notice only."
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data."
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The manufacturer's limits."
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "minimal-disclosure",
+      "caption": "The gate checks the actual credential against the declared purpose."
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "rule": {
+        "id": "urn:terms:recall-notice:recall",
+        "text": "The issuer's terms: use for urn:purpose:recall notice; share for urn:purpose:recall notice. They go out with the data."
+      },
+      "reason": "terms-allow",
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+    },
+    {
+      "seq": 33,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+    },
+    {
+      "seq": 34,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The manufacturer’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 35,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The invoke message goes to The product owner’s agent."
+    },
+    {
+      "seq": 36,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+        "from": "The manufacturer’s agent",
+        "to": "The product owner’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:239ddeca211…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The manufacturer’s agent to The product owner’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "party": "urn:fictional:recall-notice:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c818338439eaa4bffb04fb220d209b1842e316d04fa42e89eae142724e30f511"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The manufacturer says The manufacturer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:6f178d94e437b22c98a1ccb8a25fd264:1794560400000",
+                "party": "urn:fictional:recall-notice:owner",
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:recall-notice",
+                  "urn:op:recall-notice:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:365f037f9de1e41898b98038ca0279dab205fcc37e2b98fa6e710b8f9d78f32a"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:recall-notice",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:recall-notice:recall"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:recall-notice"
+            },
+            "digest": "sha-256:34719e0399d93b1afa72eb52bc78a9c85b812710024efb49244c3f3d976789a6"
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: product.recall from The manufacturer.",
+            "raw": [
+              {
+                "product": "urn:fictional:product",
+                "notice": "urn:fictional:recall",
+                "action": "stop-using",
+                "id": "urn:scenario:recall-notice:recall",
+                "issuer": "urn:fictional:recall-notice:owner",
+                "subject": "urn:fictional:recall-notice:owner",
+                "claimType": "product.recall",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:recall-notice:recall",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:recall-notice:recall",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:recall-notice"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:recall-notice:recall",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:recall-notice"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:c7dcf89c39e4c2217faed4388625839c27f2799da8eca54d618f2da9ba7349f9"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The manufacturer’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:recall-notice:recall",
+                  "issuer": "urn:fictional:recall-notice:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The manufacturer’s agent sends an invoke message to The product owner’s agent."
+    },
+    {
+      "seq": 37,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+        "from": "The manufacturer’s agent",
+        "to": "The product owner’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:239ddeca211…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The manufacturer’s agent to The product owner’s agent; invoke; signed (JWS EdDSA, pinned key 83sqRHf38Sz2…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:owner-agent:0002.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:owner"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "party": "urn:fictional:recall-notice:receiver"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:c818338439eaa4bffb04fb220d209b1842e316d04fa42e89eae142724e30f511"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The manufacturer says The manufacturer’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:6f178d94e437b22c98a1ccb8a25fd264:1794560400000",
+                "party": "urn:fictional:recall-notice:owner",
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "actorKid": "83sqRHf38Sz2fB8CbVs71tnnfbCnk-8s3abceyAV5RY",
+                "operations": [
+                  "urn:op:recall-notice",
+                  "urn:op:recall-notice:request"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:365f037f9de1e41898b98038ca0279dab205fcc37e2b98fa6e710b8f9d78f32a"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:op:recall-notice\"; \"urn:scenario:recall-notice:recall\"; \"urn:purpose:recall-notice\"",
+            "raw": {
+              "operation": {
+                "id": "urn:op:recall-notice",
+                "version": "0.1"
+              },
+              "input": {
+                "items": [
+                  "urn:scenario:recall-notice:recall"
+                ]
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:recall-notice"
+            },
+            "digest": "sha-256:34719e0399d93b1afa72eb52bc78a9c85b812710024efb49244c3f3d976789a6",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:recall-notice"
+              },
+              {
+                "path": "input.items.0",
+                "text": "urn:scenario:recall-notice:recall"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:recall-notice"
+              }
+            ]
+          },
+          "evidence": {
+            "present": true,
+            "summary": "1 statement(s) signed by their sources: product.recall from The manufacturer.",
+            "raw": [
+              {
+                "product": "urn:fictional:product",
+                "notice": "urn:fictional:recall",
+                "action": "stop-using",
+                "id": "urn:scenario:recall-notice:recall",
+                "issuer": "urn:fictional:recall-notice:owner",
+                "subject": "urn:fictional:recall-notice:owner",
+                "claimType": "product.recall",
+                "method": "recorded-by-authority",
+                "asOf": "2026-11-13T09:00:00.000Z",
+                "terms": {
+                  "policy": {
+                    "id": "urn:terms:recall-notice:recall",
+                    "permissions": [
+                      {
+                        "type": "permission",
+                        "action": "use",
+                        "target": "urn:scenario:recall-notice:recall",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:recall-notice"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "permission",
+                        "action": "distribute",
+                        "target": "urn:scenario:recall-notice:recall",
+                        "constraints": [
+                          {
+                            "leftOperand": "purpose",
+                            "operator": "eq",
+                            "rightOperand": "urn:purpose:recall-notice"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "digest": "sha-256:c7dcf89c39e4c2217faed4388625839c27f2799da8eca54d618f2da9ba7349f9"
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Opens or continues the conversation. The statements were issued by their sources and are relayed, not authored, by The manufacturer’s agent; as of 2026-11-13T09:00:00.000Z.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "statements": [
+                {
+                  "id": "urn:scenario:recall-notice:recall",
+                  "issuer": "urn:fictional:recall-notice:owner",
+                  "issuedAt": null,
+                  "asOf": "2026-11-13T09:00:00.000Z"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "An invoke message from The manufacturer’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 38,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The manufacturer’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 39,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:recall-notice:product.recall",
+        "text": "The manufacturer is accepted for product.recall claims."
+      },
+      "resolution": {
+        "question": "Is The manufacturer an authority for product.recall claims about The manufacturer?",
+        "path": [
+          {
+            "at": "The product owner's own list",
+            "kind": "own-list",
+            "says": "The manufacturer is accepted for product.recall."
+          }
+        ],
+        "answer": "Accepted, for product.recall claims only."
+      },
+      "caption": "The manufacturer's product.recall statement: The manufacturer is an accepted source for this kind of claim."
+    },
+    {
+      "seq": 40,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:6f178d94e437b22c98a1ccb8a25fd264:1794560400000",
+        "text": "A representation statement signed with The manufacturer's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The manufacturer signed a statement that The manufacturer’s agent acts for them in this operation."
+    },
+    {
+      "seq": 41,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:recall-notice:recall",
+        "text": "Its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+      },
+      "caption": "The manufacturer's product.recall statement: its terms allow this: use for urn:purpose:recall notice; share for urn:purpose:recall notice."
+    },
+    {
+      "seq": 42,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:recall-notice:product.recall",
+        "text": "Accept product.recall from urn:fictional:recall-notice:owner by recorded-by-authority, at most 30 days old."
+      },
+      "caption": "The manufacturer's product.recall statement is fit for A product recall notice: recorded-by-authority, 0 days old."
+    },
+    {
+      "seq": 43,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 44,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:recall-notice:recall",
+        "label": "The manufacturer's product.recall statement",
+        "claimType": "product.recall",
+        "subject": "urn:fictional:recall-notice:owner",
+        "value": "urn:fictional:product",
+        "source": "urn:fictional:recall-notice:owner",
+        "method": "recorded-by-authority",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:recall-notice:recall",
+          "summary": "use for urn:purpose:recall notice; share for urn:purpose:recall notice"
+        },
+        "provenance": "signed by The manufacturer"
+      },
+      "caption": "The manufacturer's product.recall statement is stored with its source, how it was produced, its date and its terms."
+    },
+    {
+      "seq": 45,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This protocol message proposes no additional action."
+    },
+    {
+      "seq": 46,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The manufacturer a party I can send A product recall notice to?",
+        "path": [
+          {
+            "at": "The product owner's own list",
+            "kind": "own-list",
+            "says": "The manufacturer is accepted for A product recall notice."
+          }
+        ],
+        "answer": "Accepted, for A product recall notice only."
+      },
+      "reason": "recipient-established",
+      "caption": "The manufacturer: Accepted, for A product recall notice only."
+    },
+    {
+      "seq": 47,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no personal data in this protocol message."
+    },
+    {
+      "seq": 48,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate finds no data terms to apply."
+    },
+    {
+      "seq": 49,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The message release check is complete."
+    },
+    {
+      "seq": 50,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS EdDSA) with The product owner’s agent's pinned key, and written to the record."
+    },
+    {
+      "seq": 51,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "caption": "The deliver message goes to The manufacturer’s agent."
+    },
+    {
+      "seq": 52,
+      "step": 5,
+      "agent": "receiver-agent",
+      "part": "transport",
+      "kind": "message-out",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
+        "from": "The product owner’s agent",
+        "to": "The manufacturer’s agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries sha-256:b3a7c9fc7a3…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The product owner’s agent to The manufacturer’s agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "party": "urn:fictional:recall-notice:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:16e8879194e0731b8f143fe546438de640a7b10f2e0289500331ec7e26f56b92"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement.",
+            "raw": {
+              "ref": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:recall-notice",
+                "version": "0.1"
+              },
+              "output": {
+                "status": "received"
+              }
+            },
+            "digest": "sha-256:a8842ebb54e43773e4a457875fa1067f74daafa75ed69d4a58dff849ccfa9ef7"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+            },
+            "digest": "sha-256:cbacfcac23d62379ae8988ef2a4e982ca4cf790f26efabda9bd39be41c1b9368"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-recall-notice-main:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "The product owner’s agent sends a deliver message to The manufacturer’s agent."
+    },
+    {
+      "seq": 53,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "packet": {
+        "id": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
+        "from": "The product owner’s agent",
+        "to": "The manufacturer’s agent",
+        "kind": "deliver",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:b3a7c9fc7a3…; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The product owner’s agent to The manufacturer’s agent; deliver; signed (JWS EdDSA, pinned key 0NghzaW0Bqs5…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-recall-notice-main:receiver-agent:0003.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+              "id": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "kind": "deliver",
+              "from": {
+                "actor": "urn:fictional:recall-notice:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:recall-notice:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:recall-notice:owner-agent:actor",
+                "party": "urn:fictional:recall-notice:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "inReplyTo": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "proof": {
+                "alg": "EdDSA",
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-message+jws"
+              }
+            },
+            "digest": "sha-256:16e8879194e0731b8f143fe546438de640a7b10f2e0289500331ec7e26f56b92"
+          },
+          "authority": {
+            "present": false,
+            "summary": "No statement of who the sender acts for."
+          },
+          "content": {
+            "present": true,
+            "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-recall-notice-main:owner-agent:0002\"; \"urn:awp:engine-recall-notice-main:owner-agent:0002\"; \"urn:op:recall-notice\"",
+            "raw": {
+              "ref": "urn:awp:engine-recall-notice-main:owner-agent:0002",
+              "basis": {
+                "kind": "invocation",
+                "invocation": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+              },
+              "operation": {
+                "id": "urn:op:recall-notice",
+                "version": "0.1"
+              },
+              "output": {
+                "status": "received"
+              }
+            },
+            "digest": "sha-256:a8842ebb54e43773e4a457875fa1067f74daafa75ed69d4a58dff849ccfa9ef7",
+            "untrusted": [
+              {
+                "path": "ref",
+                "text": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+              },
+              {
+                "path": "basis.invocation",
+                "text": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+              },
+              {
+                "path": "operation.id",
+                "text": "urn:op:recall-notice"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "invocation",
+              "invocation": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+            },
+            "digest": "sha-256:cbacfcac23d62379ae8988ef2a4e982ca4cf790f26efabda9bd39be41c1b9368"
+          },
+          "provenance": {
+            "present": true,
+            "summary": "Answers urn:awp:engine-recall-notice-main:owner-agent:0002.",
+            "raw": {
+              "conversation": "urn:awp:engine-recall-notice-main:owner-agent:0001",
+              "inReplyTo": "urn:awp:engine-recall-notice-main:owner-agent:0002"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "fixed-vocabulary"
+        }
+      ],
+      "caption": "A deliver message from The product owner’s agent reaches the inbound gate."
+    },
+    {
+      "seq": 54,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The product owner’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+    },
+    {
+      "seq": 55,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties."
+    },
+    {
+      "seq": 56,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "This message asks for nothing, so there is no authority to check."
+    },
+    {
+      "seq": 57,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms."
+    },
+    {
+      "seq": 58,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters."
+    },
+    {
+      "seq": 59,
+      "step": 6,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+    },
+    {
+      "seq": 60,
+      "step": 7,
+      "agent": "receiver-agent",
+      "part": "record",
+      "kind": "record",
+      "caption": "10 entries in this agent's hash-chained record; the chain verifies."
+    }
+  ]
+}

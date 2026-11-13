@@ -1,0 +1,98 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.1",
+  "id": "subject-access-request",
+  "parties": {
+    "owner": "The person",
+    "receiver": "The company",
+    "identity-office": "The identity office",
+    "owner-agent": "The person’s agent",
+    "receiver-agent": "The company’s agent"
+  },
+  "claims": [
+    {
+      "kind": "personal.data-copy",
+      "sources": [
+        "urn:fictional:subject-access-request:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "identity.passport",
+      "sources": [
+        "urn:fictional:subject-access-request:identity-office"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:subject-access-request",
+      "claims": [
+        "personal.data-copy"
+      ]
+    },
+    {
+      "id": "urn:purpose:identity-management",
+      "claims": [
+        "identity.passport"
+      ]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "personal.data-copy",
+        "identity.passport"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    },
+    "output.items.*": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:subject-access-request",
+      "version": "0.1",
+      "label": "Asking a company what it holds about you",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:subject-access-request"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:subject-access-request:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:subject-access-request"
+      ],
+      "requiresRepresentation": true
+    }
+  ]
+}

@@ -1,0 +1,570 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-scenario/0.1",
+  "id": "energy-switch",
+  "useCase": "energy-switch",
+  "title": "Switching energy supplier",
+  "profile": "energy-switch",
+  "parties": [
+    {
+      "id": "owner",
+      "identity": "urn:fictional:energy-switch:owner",
+      "name": "The household",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "receiver",
+      "identity": "urn:fictional:energy-switch:receiver",
+      "name": "The energy supplier",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "meter-service",
+      "identity": "urn:fictional:energy-switch:meter-service",
+      "name": "The meter data service",
+      "role": "source",
+      "runs": "issuer-only"
+    },
+    {
+      "id": "owner-agent",
+      "identity": "urn:fictional:energy-switch:owner-agent",
+      "name": "The household’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:energy-switch:owner-agent:actor",
+      "actsFor": "owner"
+    },
+    {
+      "id": "receiver-agent",
+      "identity": "urn:fictional:energy-switch:receiver-agent",
+      "name": "The energy supplier’s agent",
+      "role": "agent",
+      "runs": "agent",
+      "actor": "urn:fictional:energy-switch:receiver-agent:actor",
+      "actsFor": "receiver"
+    }
+  ],
+  "trust": {
+    "introductions": [
+      [
+        "owner-agent",
+        "receiver-agent"
+      ]
+    ],
+    "ownLists": {
+      "owner-agent": [
+        {
+          "party": "urn:fictional:energy-switch:receiver",
+          "tasks": [
+            "urn:op:energy-switch",
+            "urn:op:energy-switch:request"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "party": "urn:fictional:energy-switch:owner",
+          "tasks": [
+            "urn:op:energy-switch",
+            "urn:op:energy-switch:request"
+          ]
+        }
+      ]
+    },
+    "sources": {
+      "owner-agent": [
+        {
+          "id": "urn:source:energy-switch:energy.annual-total",
+          "version": "1",
+          "source": "urn:fictional:energy-switch:meter-service",
+          "claimTypes": [
+            "energy.annual-total"
+          ],
+          "subjects": [
+            "urn:fictional:energy-switch:owner"
+          ]
+        },
+        {
+          "id": "urn:source:energy-switch:energy.half-hourly",
+          "version": "1",
+          "source": "urn:fictional:energy-switch:meter-service",
+          "claimTypes": [
+            "energy.half-hourly"
+          ],
+          "subjects": [
+            "urn:fictional:energy-switch:owner"
+          ]
+        }
+      ],
+      "receiver-agent": [
+        {
+          "id": "urn:source:energy-switch:energy.annual-total",
+          "version": "1",
+          "source": "urn:fictional:energy-switch:meter-service",
+          "claimTypes": [
+            "energy.annual-total"
+          ],
+          "subjects": [
+            "urn:fictional:energy-switch:owner"
+          ]
+        },
+        {
+          "id": "urn:source:energy-switch:energy.half-hourly",
+          "version": "1",
+          "source": "urn:fictional:energy-switch:meter-service",
+          "claimTypes": [
+            "energy.half-hourly"
+          ],
+          "subjects": [
+            "urn:fictional:energy-switch:owner"
+          ]
+        }
+      ]
+    }
+  },
+  "statements": [
+    {
+      "id": "annual",
+      "issuer": "meter-service",
+      "subject": "urn:fictional:energy-switch:owner",
+      "kind": "energy.annual-total",
+      "value": {
+        "value": 2500,
+        "unit": "kWh"
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:energy-switch:annual",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:energy-switch:annual",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:energy-switch"
+                }
+              ]
+            },
+            {
+              "type": "permission",
+              "action": "distribute",
+              "target": "urn:scenario:energy-switch:annual",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:energy-switch"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "readings",
+      "issuer": "meter-service",
+      "subject": "urn:fictional:energy-switch:owner",
+      "kind": "energy.half-hourly",
+      "value": {
+        "values": [
+          0.2,
+          0.4,
+          0.1
+        ]
+      },
+      "method": "recorded-by-authority",
+      "asOf": "2026-11-13T09:00:00.000Z",
+      "terms": {
+        "policy": {
+          "id": "urn:terms:energy-switch:readings",
+          "permissions": [
+            {
+              "type": "permission",
+              "action": "use",
+              "target": "urn:scenario:energy-switch:readings",
+              "constraints": [
+                {
+                  "leftOperand": "purpose",
+                  "operator": "eq",
+                  "rightOperand": "urn:purpose:meter-billing"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "mandates": [
+    {
+      "agent": "owner-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "distribute",
+          "target": "urn:op:energy-switch"
+        }
+      ],
+      "withApproval": []
+    },
+    {
+      "agent": "receiver-agent",
+      "autonomous": [
+        {
+          "type": "permission",
+          "action": "use",
+          "target": "urn:op:energy-switch:request"
+        }
+      ],
+      "withApproval": []
+    }
+  ],
+  "script": [],
+  "inject": [],
+  "branches": [
+    {
+      "id": "branch-1",
+      "what": "A supplier asks for half-hourly data to quote",
+      "change": {
+        "suites": {
+          "commitments": "signed-offer-acceptance"
+        },
+        "script": [
+          {
+            "id": "admit-source",
+            "agent": "owner-agent",
+            "type": "admit",
+            "statements": [
+              "readings"
+            ],
+            "purpose": "urn:purpose:meter-billing"
+          },
+          {
+            "id": "request",
+            "agent": "receiver-agent",
+            "type": "start",
+            "peer": "owner-agent",
+            "kind": "invoke",
+            "operation": "urn:op:energy-switch:request",
+            "contents": {
+              "request": "energy.half-hourly"
+            },
+            "intent": {
+              "action": "use",
+              "target": "urn:op:energy-switch:request",
+              "operation": "urn:op:energy-switch:request",
+              "recipient": "urn:fictional:energy-switch:owner",
+              "purpose": "urn:purpose:energy-switch",
+              "parameters": {}
+            },
+            "purpose": "urn:purpose:energy-switch"
+          },
+          {
+            "id": "request-arrives",
+            "agent": "owner-agent",
+            "type": "receive",
+            "from": "receiver-agent"
+          },
+          {
+            "id": "share",
+            "agent": "owner-agent",
+            "type": "start",
+            "peer": "receiver-agent",
+            "kind": "invoke",
+            "operation": "urn:op:energy-switch",
+            "contents": {
+              "items": [
+                "urn:scenario:energy-switch:readings"
+              ]
+            },
+            "intent": {
+              "action": "distribute",
+              "target": "urn:op:energy-switch",
+              "operation": "urn:op:energy-switch",
+              "recipient": "urn:fictional:energy-switch:receiver",
+              "purpose": "urn:purpose:energy-switch",
+              "parameters": {},
+              "evidence": [
+                {
+                  "itemId": "urn:scenario:energy-switch:readings",
+                  "claimType": "energy.half-hourly"
+                }
+              ]
+            },
+            "evidence": [
+              "readings"
+            ],
+            "purpose": "urn:purpose:energy-switch"
+          }
+        ],
+        "traceSteps": {
+          "1": "The household’s agent checks the signed statements.",
+          "2": "The energy supplier’s agent sends the signed request.",
+          "3": "The household’s agent checks the message and prepares a response.",
+          "4": "The household’s agent sends the signed request."
+        }
+      },
+      "expect": {
+        "outcome": "stop",
+        "reason": "excessive-scope",
+        "check": "disclosure"
+      },
+      "outline": [
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "pass",
+          "reason": "source-accepted"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "not-applicable",
+          "reason": "no-action"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "pass",
+          "reason": "terms-acceptable"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "pass",
+          "reason": "fit-for-use"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "evidence",
+          "verdict": "pass",
+          "reason": "evidence-complete"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "receiver-agent",
+          "part": "transport",
+          "kind": "message-out"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "transport",
+          "kind": "message-in"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "integrity",
+          "verdict": "pass",
+          "reason": "intact"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "source",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "authority",
+          "verdict": "pass",
+          "reason": "authority-valid"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "terms",
+          "verdict": "not-applicable",
+          "reason": "no-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "check",
+          "check": "fitness",
+          "verdict": "not-applicable",
+          "reason": "no-claims"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "inbound-gate",
+          "kind": "decision",
+          "verdict": "pass"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "mandate",
+          "verdict": "pass",
+          "reason": "within-mandate"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "recipient",
+          "verdict": "pass",
+          "reason": "recipient-established"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "data-terms",
+          "verdict": "not-applicable",
+          "reason": "no-personal-data"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "limits-approval",
+          "verdict": "pass",
+          "reason": "within-limits"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "check",
+          "check": "disclosure",
+          "verdict": "indeterminate",
+          "reason": "excessive-scope"
+        },
+        {
+          "agent": "owner-agent",
+          "part": "outbound-gate",
+          "kind": "decision",
+          "verdict": "fail",
+          "reason": "excessive-scope"
+        }
+      ]
+    }
+  ],
+  "expect": [],
+  "stress": [
+    "disclosure",
+    "data-terms",
+    "limits-approval"
+  ],
+  "suites": {
+    "commitments": "agreement-credential"
+  },
+  "assurance": null,
+  "blocked": [
+    {
+      "path": "main",
+      "reason": "Needs a transferable supply agreement credential and service-switch completion/rollback binding; an ordinary local offer/acceptance is not the catalogue’s switching workflow."
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    },
+    {
+      "what": "Energy quote scope preflight",
+      "replacedBy": "The supplier signs a real request, while the household holds meter-service-signed readings for billing only; no supplier switch or contract credential is produced"
+    }
+  ],
+  "traceSteps": {}
+}

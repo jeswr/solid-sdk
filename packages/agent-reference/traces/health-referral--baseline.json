@@ -1,17 +1,49 @@
 {
   "x-authored-by": "Codex GPT-6",
   "schema": "agent-trace/0.1",
+  "useCase": "health-referral",
+  "path": "main",
+  "parties": [
+    {
+      "id": "practice",
+      "name": "The family practice"
+    },
+    {
+      "id": "clinic",
+      "name": "The specialist clinic"
+    },
+    {
+      "id": "record-holder",
+      "name": "The local record holder"
+    },
+    {
+      "id": "register",
+      "name": "The professional register"
+    },
+    {
+      "id": "clinician",
+      "name": "The clinician"
+    },
+    {
+      "id": "practice-agent",
+      "name": "The family practice’s agent"
+    },
+    {
+      "id": "clinic-agent",
+      "name": "The specialist clinic’s agent"
+    }
+  ],
   "scenario": {
     "id": "health-referral",
     "title": "A referral from a family doctor to a specialist",
     "steps": {
-      "1": "registered-role",
-      "2": "select-relevant-history",
-      "3": "clinician-selects",
-      "4": "clinic-receives",
-      "5": "read-relevant-history",
-      "6": "history-admitted",
-      "7": "check-clinic-record"
+      "1": "The family practice’s agent checks and admits the signed statements.",
+      "2": "The family practice’s agent sends a signed request.",
+      "3": "The family practice’s agent obtains a staff approval.",
+      "4": "The specialist clinic’s agent checks the incoming message and prepares a response.",
+      "5": "The specialist clinic’s agent requests the permitted record item.",
+      "6": "The specialist clinic’s agent checks the observed result.",
+      "7": "The specialist clinic’s agent checks the durable record."
     }
   },
   "configuration": {
@@ -33,19 +65,19 @@
   "agents": [
     {
       "id": "practice-agent",
-      "name": "practice-agent",
+      "name": "The family practice’s agent",
       "actsFor": "practice",
       "role": "agent"
     },
     {
       "id": "clinic-agent",
-      "name": "clinic-agent",
+      "name": "The specialist clinic’s agent",
       "actsFor": "clinic",
       "role": "agent"
     }
   ],
   "generated": {
-    "commit": "7a8db7ac8273a62efb721fc104f148712b2bd980",
+    "commit": "87b695972f328116e4cfc440405c243268beca39",
     "core": "scripted"
   },
   "standIns": [
@@ -80,7 +112,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "register's organization.role statement is intact and signed with register's pinned key."
+      "caption": "The professional register's organization.role statement is intact and signed with The professional register's pinned key."
     },
     {
       "seq": 2,
@@ -105,20 +137,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:register:organization.role",
-        "text": "register is accepted for organization.role claims."
+        "text": "The professional register is accepted for organization.role claims."
       },
       "resolution": {
-        "question": "Is register an authority for organization.role claims about clinician?",
+        "question": "Is The professional register an authority for organization.role claims about The clinician?",
         "path": [
           {
-            "at": "practice's own list",
+            "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "register is accepted for organization.role."
+            "says": "The professional register is accepted for organization.role."
           }
         ],
         "answer": "Accepted, for organization.role claims only."
       },
-      "caption": "register's organization.role statement: register is an accepted source for this kind of claim."
+      "caption": "The professional register's organization.role statement: The professional register is an accepted source for this kind of claim."
     },
     {
       "seq": 3,
@@ -136,7 +168,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "register's organization.role statement asks for nothing, so there is no authority to check."
+      "caption": "The professional register's organization.role statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 4,
@@ -163,7 +195,7 @@
         "id": "urn:terms:role",
         "text": "Its terms allow this: ."
       },
-      "caption": "register's organization.role statement: its terms allow this: ."
+      "caption": "The professional register's organization.role statement: its terms allow this: ."
     },
     {
       "seq": 5,
@@ -185,7 +217,7 @@
         "id": "urn:profile:health-referral:organization.role",
         "text": "Accept organization.role from urn:fictional:register by recorded-by-authority, at most 90 days old."
       },
-      "caption": "register's organization.role statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+      "caption": "The professional register's organization.role statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 6,
@@ -195,7 +227,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "register's organization.role statement is admitted."
+      "caption": "The professional register's organization.role statement is admitted."
     },
     {
       "seq": 7,
@@ -205,7 +237,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:health-referral:role",
-        "label": "register's organization.role statement",
+        "label": "The professional register's organization.role statement",
         "claimType": "organization.role",
         "subject": "urn:fictional:clinician",
         "value": null,
@@ -216,9 +248,9 @@
           "id": "urn:terms:role",
           "summary": ""
         },
-        "provenance": "signed by register"
+        "provenance": "signed by The professional register"
       },
-      "caption": "register's organization.role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The professional register's organization.role statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 8,
@@ -226,7 +258,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:health referral with clinic."
+      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
     },
     {
       "seq": 9,
@@ -250,10 +282,10 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
       },
       "reason": "within-mandate",
-      "caption": "practice's mandate covers this action."
+      "caption": "The family practice's mandate covers this action."
     },
     {
       "seq": 10,
@@ -276,18 +308,18 @@
         }
       ],
       "resolution": {
-        "question": "Is clinic a party I can send urn:op:health referral to?",
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
         "path": [
           {
-            "at": "practice's own list",
+            "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "clinic is accepted for urn:op:health referral."
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
           }
         ],
-        "answer": "Accepted, for urn:op:health referral only."
+        "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "clinic: Accepted, for urn:op:health referral only."
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
     },
     {
       "seq": 11,
@@ -367,7 +399,7 @@
       "reason": "approval-required",
       "chat": {
         "who": "agent",
-        "text": "To clinician: clinic asks me to use urn:op:health referral with clinic for urn:purpose:health referral. May I go ahead? Action digest: sha-256:fbdaea6fb9795796bb0b9d7c2aa1bf62a9c808d8468a04ffcb5663b282f1115b. Parameters: {\"resource\":\"urn:resource:patient-history\",\"items\":[\"urn:scenario:health-referral:history\"],\"grantDigest\":\"sha-256:9e0d10a53932c0ec7658f805a44b5a911c86be7e4dac482f95a9170cde23b8b4\"}"
+        "text": "To clinician: The specialist clinic asks me to use urn:op:health referral with The specialist clinic for urn:purpose:health referral. May I go ahead? Action digest: sha-256:fbdaea6fb9795796bb0b9d7c2aa1bf62a9c808d8468a04ffcb5663b282f1115b. Parameters: {\"resource\":\"urn:resource:patient-history\",\"items\":[\"urn:scenario:health-referral:history\"],\"grantDigest\":\"sha-256:9e0d10a53932c0ec7658f805a44b5a911c86be7e4dac482f95a9170cde23b8b4\"}"
       },
       "caption": "The gate built this request from the action and the approval rule."
     },
@@ -377,7 +409,7 @@
       "agent": "practice-agent",
       "part": "core",
       "kind": "propose",
-      "caption": "The core proposes to use urn:op:health referral with clinic."
+      "caption": "The core proposes to use urn:op:health referral with The specialist clinic."
     },
     {
       "seq": 17,
@@ -401,10 +433,10 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
       },
       "reason": "within-mandate",
-      "caption": "practice's mandate covers this action."
+      "caption": "The family practice's mandate covers this action."
     },
     {
       "seq": 18,
@@ -427,18 +459,18 @@
         }
       ],
       "resolution": {
-        "question": "Is clinic a party I can send urn:op:health referral to?",
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
         "path": [
           {
-            "at": "practice's own list",
+            "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "clinic is accepted for urn:op:health referral."
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
           }
         ],
-        "answer": "Accepted, for urn:op:health referral only."
+        "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "clinic: Accepted, for urn:op:health referral only."
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
     },
     {
       "seq": 19,
@@ -492,7 +524,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within practice's limits."
+      "caption": "Inside what the agent may do on its own, and within The family practice's limits."
     },
     {
       "seq": 22,
@@ -516,10 +548,10 @@
       ],
       "rule": {
         "id": "urn:rule:refer",
-        "text": "practice's mandate lets the agent use urn:op:health referral, on its own."
+        "text": "The family practice's mandate lets the agent use urn:op:health referral, on its own."
       },
       "reason": "within-mandate",
-      "caption": "practice's mandate covers this action."
+      "caption": "The family practice's mandate covers this action."
     },
     {
       "seq": 23,
@@ -542,18 +574,18 @@
         }
       ],
       "resolution": {
-        "question": "Is clinic a party I can send urn:op:health referral to?",
+        "question": "Is The specialist clinic a party I can send urn:op:health-referral to?",
         "path": [
           {
-            "at": "practice's own list",
+            "at": "The family practice's own list",
             "kind": "own-list",
-            "says": "clinic is accepted for urn:op:health referral."
+            "says": "The specialist clinic is accepted for urn:op:health-referral."
           }
         ],
-        "answer": "Accepted, for urn:op:health referral only."
+        "answer": "Accepted, for urn:op:health-referral only."
       },
       "reason": "recipient-established",
-      "caption": "clinic: Accepted, for urn:op:health referral only."
+      "caption": "The specialist clinic: Accepted, for urn:op:health-referral only."
     },
     {
       "seq": 24,
@@ -607,7 +639,7 @@
         }
       ],
       "reason": "within-limits",
-      "caption": "Inside what the agent may do on its own, and within practice's limits."
+      "caption": "Inside what the agent may do on its own, and within The family practice's limits."
     },
     {
       "seq": 27,
@@ -643,7 +675,7 @@
         }
       ],
       "reason": "minimal-disclosure",
-      "caption": "Context item register's organization.role statement (urn:fictional:clinician) is needed for this purpose."
+      "caption": "Context item The professional register's organization.role statement (urn:fictional:clinician) is needed for this purpose."
     },
     {
       "seq": 29,
@@ -661,7 +693,7 @@
         }
       ],
       "reason": "terms-allow",
-      "caption": "register's organization.role statement: Its terms allow this: ."
+      "caption": "The professional register's organization.role statement: Its terms allow this: ."
     },
     {
       "seq": 30,
@@ -688,7 +720,7 @@
         "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
       },
       "reason": "evidence-complete",
-      "caption": "Signed (JWS EdDSA) with practice-agent's pinned key, and written to the record."
+      "caption": "Signed (JWS EdDSA) with The family practice’s agent's pinned key, and written to the record."
     },
     {
       "seq": 31,
@@ -698,7 +730,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "go",
-      "caption": "The invoke message goes to clinic-agent."
+      "caption": "The invoke message goes to The specialist clinic’s agent."
     },
     {
       "seq": 32,
@@ -708,8 +740,8 @@
       "kind": "message-out",
       "packet": {
         "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
-        "from": "practice-agent",
-        "to": "clinic-agent",
+        "from": "The family practice’s agent",
+        "to": "The specialist clinic’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -718,7 +750,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From practice-agent to clinic-agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
+            "summary": "From The family practice’s agent to The specialist clinic’s agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -745,7 +777,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): practice says practice-agent acts for it.",
+            "summary": "1 representation statement(s): The family practice says The family practice’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -823,7 +855,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "practice-agent sends an invoke message to clinic-agent."
+      "caption": "The family practice’s agent sends an invoke message to The specialist clinic’s agent."
     },
     {
       "seq": 33,
@@ -833,8 +865,8 @@
       "kind": "message-in",
       "packet": {
         "id": "urn:awp:engine-health-referral-main:practice-agent:0002",
-        "from": "practice-agent",
-        "to": "clinic-agent",
+        "from": "The family practice’s agent",
+        "to": "The specialist clinic’s agent",
         "kind": "invoke",
         "carriage": {
           "suite": "direct-http",
@@ -843,7 +875,7 @@
         "layers": {
           "header": {
             "present": true,
-            "summary": "From practice-agent to clinic-agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
+            "summary": "From The family practice’s agent to The specialist clinic’s agent; invoke; signed (JWS EdDSA, pinned key ym5YNP3DYgvr…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-health-referral-main:practice-agent:0002.",
             "raw": {
               "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
               "configuration": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
@@ -870,7 +902,7 @@
           },
           "authority": {
             "present": true,
-            "summary": "1 representation statement(s): practice says practice-agent acts for it.",
+            "summary": "1 representation statement(s): The family practice says The family practice’s agent acts for it.",
             "raw": [
               {
                 "type": "RepresentationStatement",
@@ -970,7 +1002,7 @@
           "suite": "fixed-vocabulary"
         }
       ],
-      "caption": "An invoke message from practice-agent reaches the inbound gate."
+      "caption": "An invoke message from The family practice’s agent reaches the inbound gate."
     },
     {
       "seq": 34,
@@ -997,7 +1029,7 @@
         "id": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
         "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
       },
-      "caption": "The message is intact, signed with practice-agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+      "caption": "The message is intact, signed with The family practice’s agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
     },
     {
       "seq": 35,
@@ -1040,9 +1072,9 @@
       "reason": "authority-valid",
       "rule": {
         "id": "urn:awp:representation:b910d30a2623d9b16abca10c0dd34392:1794560400000",
-        "text": "A representation statement signed with practice's pinned key must name this agent, this operation and a current validity period."
+        "text": "A representation statement signed with The family practice's pinned key must name this agent, this operation and a current validity period."
       },
-      "caption": "practice signed a statement that practice-agent acts for them in this operation."
+      "caption": "The family practice signed a statement that The family practice’s agent acts for them in this operation."
     },
     {
       "seq": 37,
@@ -1116,7 +1148,7 @@
         }
       ],
       "reason": "intact",
-      "caption": "record-holder's referral.history statement is intact and signed with record-holder's pinned key."
+      "caption": "The local record holder's referral.history statement is intact and signed with The local record holder's pinned key."
     },
     {
       "seq": 41,
@@ -1141,20 +1173,20 @@
       "reason": "source-accepted",
       "rule": {
         "id": "urn:source:record-holder:referral.history",
-        "text": "record-holder is accepted for referral.history claims."
+        "text": "The local record holder is accepted for referral.history claims."
       },
       "resolution": {
-        "question": "Is record-holder an authority for referral.history claims about urn:fictional:patient?",
+        "question": "Is The local record holder an authority for referral.history claims about urn:fictional:patient?",
         "path": [
           {
-            "at": "clinic's own list",
+            "at": "The specialist clinic's own list",
             "kind": "own-list",
-            "says": "record-holder is accepted for referral.history."
+            "says": "The local record holder is accepted for referral.history."
           }
         ],
         "answer": "Accepted, for referral.history claims only."
       },
-      "caption": "record-holder's referral.history statement: record-holder is an accepted source for this kind of claim."
+      "caption": "The local record holder's referral.history statement: The local record holder is an accepted source for this kind of claim."
     },
     {
       "seq": 42,
@@ -1172,7 +1204,7 @@
         }
       ],
       "reason": "no-action",
-      "caption": "record-holder's referral.history statement asks for nothing, so there is no authority to check."
+      "caption": "The local record holder's referral.history statement asks for nothing, so there is no authority to check."
     },
     {
       "seq": 43,
@@ -1199,7 +1231,7 @@
         "id": "urn:grant:health-referral:history-grant",
         "text": "Its terms allow this: use for urn:purpose:health referral."
       },
-      "caption": "record-holder's referral.history statement: its terms allow this: use for urn:purpose:health referral."
+      "caption": "The local record holder's referral.history statement: its terms allow this: use for urn:purpose:health referral."
     },
     {
       "seq": 44,
@@ -1221,7 +1253,7 @@
         "id": "urn:profile:health-referral:referral.history",
         "text": "Accept referral.history from urn:fictional:record-holder by recorded-by-authority, at most 90 days old."
       },
-      "caption": "record-holder's referral.history statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
+      "caption": "The local record holder's referral.history statement is fit for urn:scenario:health-referral:task: recorded-by-authority, 0 days old."
     },
     {
       "seq": 45,
@@ -1231,7 +1263,7 @@
       "kind": "decision",
       "verdict": "pass",
       "outcome": "admit",
-      "caption": "record-holder's referral.history statement is admitted."
+      "caption": "The local record holder's referral.history statement is admitted."
     },
     {
       "seq": 46,
@@ -1241,7 +1273,7 @@
       "kind": "store",
       "fact": {
         "id": "urn:scenario:health-referral:history",
-        "label": "record-holder's referral.history statement",
+        "label": "The local record holder's referral.history statement",
         "claimType": "referral.history",
         "subject": "urn:fictional:patient",
         "value": null,
@@ -1252,9 +1284,9 @@
           "id": "urn:grant:health-referral:history-grant",
           "summary": "use for urn:purpose:health referral"
         },
-        "provenance": "signed by record-holder"
+        "provenance": "signed by The local record holder"
       },
-      "caption": "record-holder's referral.history statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The local record holder's referral.history statement is stored with its source, how it was produced, its date and its terms."
     },
     {
       "seq": 47,

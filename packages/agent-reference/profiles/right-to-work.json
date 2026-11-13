@@ -97,5 +97,13 @@
       "what": "Immigration authority and university credential issuance",
       "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
     }
-  ]
+  ],
+  "parties": {
+    "candidate": "The candidate",
+    "employer": "The employer",
+    "immigration-office": "The fictional immigration office",
+    "university": "The fictional university",
+    "candidate-agent": "The candidate’s agent",
+    "employer-agent": "The employer’s agent"
+  }
 }
