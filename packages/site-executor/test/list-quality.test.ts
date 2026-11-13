@@ -106,6 +106,7 @@ it("a displayed order list total cannot authorize payment", async () => {
             method: "POST",
             url: new URL("https://shop.test/pay"),
             headers: {},
+            modelHeaders: [],
             csrf: [],
           },
         },
