@@ -145,6 +145,30 @@ const expirySkewMs = 30_000;
 const revocationTimeoutMs = 5_000;
 
 /**
+ * The key under which an {@link OidcSession} constructed with `callbackUri` and `options` stores (in its
+ * cache and session store) and locks the session for `issuer` and the caller-supplied `context`. It lets a
+ * composing layer address one stored session without re-deriving this formula.
+ *
+ * The dynamically registered client_id is not part of the key: it changes after reload while a persisted
+ * refresh token must still be found. Records store the client they were issued to.
+ */
+export async function oidcSessionKey(
+  callbackUri: string,
+  options: Pick<OidcSessionOptions, "namespace" | "account" | "scopes">,
+  issuer: string,
+  context: string,
+): Promise<string> {
+  return await contextKey("oidc", [
+    options.namespace ?? "default",
+    options.account ?? "default",
+    issuer,
+    callbackUri,
+    (options.scopes ?? ["openid", "webid"]).join(" "),
+    context,
+  ]);
+}
+
+/**
  * OpenID Connect session management shared by {@link DPoPTokenProvider} (Solid-OIDC) and
  * {@link OidcIdTokenSource} (LWS OpenID suite): sessions obtained by authorization code grant and renewed
  * by (rotating) refresh grants, one per credential context (namespace, account, issuer, redirect URI,
@@ -647,17 +671,7 @@ export class OidcSession {
   }
 
   async #key(issuer: string, context: string): Promise<string> {
-    // The dynamically registered client_id is not part of the key: it changes after reload while a
-    // persisted refresh token must still be found. Records store the client they were issued to.
-    const o = this.#options;
-    return await contextKey("oidc", [
-      o.namespace ?? "default",
-      o.account ?? "default",
-      issuer,
-      this.#callbackUri,
-      (o.scopes ?? ["openid", "webid"]).join(" "),
-      context,
-    ]);
+    return await oidcSessionKey(this.#callbackUri, this.#options, issuer, context);
   }
 
   async #lockName(key: string): Promise<string> {

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Solid Suite
 
 The Next.js application is `@jeswr/app-suite`. Use Node 24 and the root pnpm workspace.
@@ -25,6 +26,15 @@ without query or fragment. Session-opening failures offer Retry, which reopens t
 The audit, Contacts and agent readers share guarded-fetch's bounded strict UTF-8 reader;
 malformed UTF-8 fails closed. Their existing byte budgets and size-error messages remain.
 Assistant visual snapshots run only for 375-light and 1280-dark; axe runs in all six projects.
+
+## Solid session ownership
+
+The Solid session backend retains the accepted pod-auth Identity, including its public `grantId`,
+beside the shell account. Sign-out, expired-session cleanup and rejected identities use conditional
+retirement. A newer grant, even for the same WebID, survives stale cleanup; skipped retirement
+preserves backend state and blocks reauthentication. Missing ownership metadata produces a warning;
+ownership changes produce an informational diagnostic. A remembered account row without an accepted
+Identity cannot authorize retirement after reload; restore must establish its grant snapshot first.
 
 ## Pilot feedback
 

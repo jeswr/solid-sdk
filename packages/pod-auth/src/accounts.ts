@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createBrowserCaches, nonReactiveFetch, withLock } from "@jeswr/reactive-authentication";
 import { createPodAuth } from "./index.js";
 import { protectStore, scopedStore } from "./kv.js";
@@ -201,6 +202,7 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     remembered: async () => [],
     login: (hint, loginOptions) => api.add(hint, loginOptions),
     logout: async () => {},
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     on: () => () => {},
   };
   const api: AccountManager = {

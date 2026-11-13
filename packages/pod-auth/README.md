@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/pod-auth
 
@@ -36,9 +37,34 @@ abort, and the call rejects once the attempt has wound down, with stored session
 grant had already arrived when the abort was seen, pod-auth discards it with a full `logout()` first. Protocol validation, PKCE,
 DPoP proofs, refresh machinery and discovery stay in the protocol engine. A missing issuer chooser
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
-Explicit WebID and issuer hints must agree with the profile and the authenticated identity.
+Explicit WebID and issuer hints must agree with the profile and the authenticated identity. An
+authenticated identity that disagrees is rejected, and only that attempt's new grant is discarded,
+restoring any grant it displaced for the same context; other contexts' grants, the owner record and
+the pointer stay as they were, and nothing is revoked or superseded.
 Concurrent logins with the same hint share one promise; different hints reject while login is pending.
 Call `logout()` before switching accounts on the same instance.
+
+Pass `expectRemembered` with the `remembered()` result a decision to sign in was based on. Login then
+rejects with `OwnershipChangedError` before authorization if the pointer differs. Under the namespace
+mutation lock, immediately before the attempt publishes a new grant owner and again before it writes
+the pointer, pod-auth checks that the pointer and the stored grant owner are unchanged since the
+attempt began. If another tab signed in meanwhile, the attempt discards only its own new grant and
+rejects with `OwnershipChangedError`. A pointer another tab already wrote for this attempt's own
+renewed grant (same WebID, issuer and context) is not a conflict, and nor is a pointer write by
+another upgrade in the same instance. `reauthorize: true` (WebID hints only) authorizes
+interactively without redeeming the stored refresh credential of its own login context; other
+contexts still refresh, and logout or retirement during the attempt still revokes it. Use it when a grant
+persistently fails refresh with an error other than `invalid_grant`, such as `invalid_client`, which
+restore and a plain login retry without reaching authorization. It rejects with
+`OwnershipChangedError` if the pointer or stored owner names another account. The new grant replaces
+the old one for that context; the old one stays catalogued so logout revokes it, also when the new
+grant has no refresh token. A rejected attempt restores the owner its own write replaced, and only
+while the stored owner is still that attempt's grant. A discarded grant is
+removed locally but not revoked, because per-grant revocation would supersede the shared fence.
+Outside a login attempt, an identity mismatch (a later upgrade authenticates someone else, or a
+restore's engine identity contradicts the pointer) signs out as `logout()` does: every catalogued grant
+is revoked before all grants, the owner and the pointer are cleared.
+Ownership-guarded attempts are never shared with concurrent logins.
 
 For an issuer-only Solid login, the returned WebID must list that issuer as `solid:oidcIssuer`.
 The protocol engine enforces this binding with `verifyWebId: true` before storing a session or reporting
@@ -365,6 +391,48 @@ and emits `logout`. It also works on a fresh instance without redeeming the stor
 and storage failures reject after cleanup has been attempted and the event emitted. Caller-owned data
 outside the auth namespace is preserved. Local logout does not sign out the OP browser session.
 Listen for `logout` to clear application capability caches. A subsequent login can select another account.
+
+Use `retireIfOwnedBy(identity)` when rejecting an earlier login/restore result. Pass the original
+credential-free identity snapshot (or its `{ webId, issuer, grantId }` fields): an account comparison
+alone cannot distinguish a newer sign-in for the same WebID. OIDC identities now include an opaque
+`grantId`, derived from the grant's public DPoP key, account, client and fence generation. Refresh
+rotation retains it; a new authorization gets a new value. Installing any new grant in this namespace,
+including another storage context, advances the stored owner. Refreshing an older grant never reclaims
+ownership. The owner is public metadata only; access tokens and issuer-only credentials remain in memory.
+`grantId` is an ownership tag, not a secret or a capability; knowing it does not authorize access.
+
+**Breaking interface change for external implementers:** `PodAuth.retireIfOwnedBy(expected)` is
+required. Update custom implementations and test fakes to return `GrantRetirementResult`, comparing
+the exact `{ webId, issuer, grantId }` under the same lock as credential commits and cleanup.
+Implementations without a stored OIDC grant return `{ retired: false, reason: 'no-grant' }`.
+Do not emulate conditional retirement with ownership reads followed by unconditional `logout()`.
+
+```ts
+const identity = await auth.login(hint);
+if (!applicationAccepts(identity)) {
+  const result = await auth.retireIfOwnedBy(identity);
+  // result: { retired: true } or { retired: false, reason }
+}
+```
+
+The ownership check and the complete logout cleanup/revocation hold one exclusive namespace mutation
+lock. Every credential commit takes this lock before the engine's fence lock, including commits from
+login, refresh, restore, UMA and LWS. New commits wait through cleanup; work from a superseded generation
+cannot subsequently publish credentials. Success has the same namespace-wide purge and `logout` event
+as `logout()`, including cleanup attempts and notification before rejecting a revocation/storage failure.
+Skipped results leave credentials, fence generation, identity and events untouched. Reasons are
+`missing-grant` (no identifier supplied), `no-grant` (no usable owner record, including legacy sessions
+until their next commit), `owner-changed` (different WebID/issuer), and `grant-changed` (newer grant for
+the same account). Agents have no stored OIDC namespace and return `no-grant`; use their `logout()`.
+If retirement wins the lock before another tab's in-flight sign-in commits, retirement supersedes
+that sign-in: its stale commit fails with `SessionSupersededError`. A sign-in that commits first
+changes ownership, so retirement of the earlier snapshot skips.
+
+Web Locks coordinate cooperating pod-auth instances in all tabs/workers sharing the origin's storage
+partition and the same client/callback namespace and stores. Node's keyed FIFO fallback coordinates
+only the current realm, not separate processes/workers. Browsers without Web Locks fail closed.
+Custom stores must preserve the same namespace and fence across participating instances. Direct store
+edits and older pod-auth versions that do not take the mutation lock cannot participate in this guarantee.
 
 `on` returns an idempotent unsubscribe function. `login` fires once when an identity is established,
 including reactive authentication; `challenge` fires when a provider accepts an authorized 401.
