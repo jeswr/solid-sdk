@@ -5,8 +5,8 @@
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
 
 Source API and export-file adapters extracted with history from Pod Manager. The default
-catalog is unconfigured and uses recorded fixtures for demos. No environment variables are
-read by this package: the host injects public OAuth client ids and token proxy URLs.
+catalog is unconfigured and uses recorded fixtures for demos. The host injects public OAuth client ids and token proxy URLs; only the Node CLI reads
+`CONNECTOR_VAULT_KEY` for explicit vault configuration.
 
 ```ts
 import { createRegistry, createFetchPodWriter, runImport } from '@jeswr/pod-connectors';
@@ -64,7 +64,7 @@ and refuses redirects; pass a fifth argument to supply additional API origins ex
 Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
 pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. Pass the
 auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
-fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
+fetch for source API requests or token exchange. Access tokens stay in memory; hosts may inject the encrypted refresh vault. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
 `{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
 confines document reads, writes and every redirect hop to the connector container. Type
@@ -84,8 +84,9 @@ retains read preconditions for subsequent writes; explicit write conditions over
 Entry points:
 
 - `.`: contracts, runners, catalog, config factory, fetch-backed and storage-backed writers, errors.
-- `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
-- `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE and state store.
+- `./oauth`: PKCE, refresh, vault-backed source sessions and popup flow (only `authorize` touches `window`).
+- `./vault`: browser-safe WebCrypto vault, memory/IndexedDB stores and key helpers.
+- `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE, state and file vault stores.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
@@ -271,6 +272,21 @@ size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI
 loads their entire upload. `text()` remains capped at 64 MiB. The whole-upload size limit
 applies only to adapters without `streaming: true`.
 
+Add `--vault <private-directory>` and set `CONNECTOR_VAULT_KEY` to canonical padded
+standard base64 encoding of exactly 32 random bytes to retain encrypted refresh credentials.
+`--vault` without `CONNECTOR_VAULT_KEY` exits 2 and names the missing variable on stderr.
+A key without `--vault` prints one stderr warning and continues with memory-only credentials.
+An invalid key with both settings fails closed. The CLI deletes `CONNECTOR_VAULT_KEY` from
+`process.env` immediately after reading it, so child processes never inherit it. The CLI tries refresh before interactive login and persists
+rotation before using the access token. Revocation deletes the record and reports exit 3
+with a reconnect message; re-run explicitly to log in again. An unreadable record (for example
+after a key rotation) starts loopback login, whose code exchange replaces it. Library hosts may
+pass `interactiveLogin: false` to `runCli` to never start login: missing or unreadable
+credentials then exit 3. Set `connectors[id].account`
+to a stable provider account id or owner-chosen label (default `default`). Use a separate
+directory per owner/configuration and label per provider account. Changing either selects
+a different record. Access tokens, Pod credentials and client secrets remain in memory.
+
 The CLI reads `~/.config/solid-mcp/config.json` (W9 MCP-12's location). It refuses symlinks,
 non-regular files, another user's files, and any mode other than **0600**, including 0400.
 Set `chmod 600 ~/.config/solid-mcp/config.json`. The current MCP-12 spec has no JSON schema;
@@ -301,8 +317,12 @@ fragment is used and any redirect is refused. URLs use HTTPS. `readOnly: true` r
 import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-app
 `clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
 endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
-proxy mode is preserved. These secrets and all session/source tokens remain in memory.
-Direct exchanges request JSON token responses, including GitHub. The provider's `tokenRequest`
+proxy mode is preserved. Client secrets and access tokens remain in memory; refresh
+credentials may use the optional encrypted vault described below.
+Token endpoints and proxies require HTTPS, except HTTP on `localhost`, `127.0.0.1` or
+`[::1]` for development proxies. Direct exchanges request JSON token responses, including
+GitHub; form-encoded token responses are unsupported. `scope` accepts a string or an array
+of strings (Twitch), normalized with `join(" ")`; other scope types are dropped. The provider's `tokenRequest`
 selects form-post secrets (the default), HTTP Basic with a form body (Fitbit), or HTTP Basic
 with a JSON body (Notion) for a local secret. Proxy flows keep the shared form contract.
 
@@ -328,7 +348,9 @@ all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
 Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
 After source login, the CLI selects the adapter's optional `createSourceAuth` factory,
 falling back to the generic bearer transport. Spotify refreshes expired access tokens in
-memory through this factory. An explicit `options.sourceAuth` bypasses login and the factory.
+memory through this factory. With a vault configured, the CLI uses the shared OAuth source
+session so every rotation is persisted. An explicit `options.sourceAuth` bypasses login,
+the factory and vault wiring.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
@@ -778,3 +800,148 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+
+## Encrypted refresh vault (CON-A1)
+
+```ts
+import {
+  ConnectorTokenVault, importVaultKey,
+} from '@jeswr/pod-connectors/vault';
+import { FileVaultStore } from '@jeswr/pod-connectors/node';
+import { getOAuthToken, createOAuthSourceAuth } from '@jeswr/pod-connectors/oauth';
+
+// Node host: exact base64 from CONNECTOR_VAULT_KEY or a private key file.
+const vault = new ConnectorTokenVault(await importVaultKey(encodedKey), new FileVaultStore(directory));
+const options = { vault, account: 'work' };
+const token = await getOAuthToken(adapter.metadata.id, adapter.oauth, sourceFetch, options);
+// If undefined, use authorize/authorizeLoopback with the same vault/account options.
+const sourceAuth = createOAuthSourceAuth(adapter, adapter.oauth, sourceFetch, { ...options, token });
+// On explicit disconnect:
+await sourceAuth.disconnect();
+```
+
+A browser host imports only the browser-safe entry:
+
+```ts
+import { ConnectorTokenVault, IndexedDbVaultStore } from '@jeswr/pod-connectors/vault';
+
+// An owner-specific DB holds ciphertexts and its non-extractable CryptoKey.
+const store = new IndexedDbVaultStore('connector-vault-owner-label');
+const browserVault = new ConnectorTokenVault(await store.getOrCreateKey(), store);
+// Or keep only a passphrase-wrapped key at rest (prompt the user; never store the passphrase).
+const protectedStore = new IndexedDbVaultStore('connector-vault-protected-owner-label');
+const protectedKey = await protectedStore.getOrCreateKey({ passphrase: userPassphrase });
+```
+
+**IndexedDB key boundary.** Without a passphrase the non-extractable key is stored in the same
+database as the ciphertexts. Anyone with a copy of the browser profile, and any script running on
+the same origin, can use that key and decrypt the refresh tokens; non-extractable only stops the
+raw key bytes being exported. With `getOrCreateKey({ passphrase })` the database holds only the
+key wrapped by AES-256-GCM under a PBKDF2-SHA-256 key (600,000 iterations, random 16-byte salt
+stored beside it), so a copied profile is unusable without the passphrase. Same-origin script
+running while the vault is unlocked can still use the returned key, and script that persists on
+the origin (an injected or compromised dependency) can capture the passphrase at the next unlock.
+Passphrases are 8 to 1,024 UTF-16 code units; strength is the host's responsibility. A copied
+profile allows offline guessing at 600,000 PBKDF2 iterations per guess, so an 8-character minimum
+is a floor, not a recommendation: prefer a long passphrase. A wrong passphrase, a tampered wrapped
+key, or mixing passphrase and unprotected modes in one database raises the generic
+`ConnectorVaultError`. A forgotten passphrase requires reauthorisation. To switch an existing
+unprotected database to passphrase mode, delete the old database (its unprotected key and
+ciphertexts stay usable otherwise) and reauthorise. Do not record the chosen mode or the
+passphrase in localStorage, IndexedDB or any other browser storage.
+
+`ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
+`delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only). The
+constructor refuses an extractable CryptoKey with the generic error.
+`put` replaces ciphertext without decrypting the old record, so a fresh login with a rotated
+key can recover it. Refreshing an unreadable record raises `UnreadableCredentialError`, an
+`IntegrationAuthError` subclass with `reason: 'reauthorise'`, so hosts may start login. Records
+contain `refreshToken`, epoch-ms `obtainedAt`, optional `scope`, `tokenType`, refresh-credential `expiresAt`, and `providerMeta`.
+Access-token expiry stays in the live `TokenSet`. Unknown record fields are rejected.
+Metadata is plain JSON with credential-shaped fields refused; keep secrets out of metadata
+and account labels. Connector ids are 1–64 lowercase ASCII letters/digits/hyphens, starting
+with a letter/digit; account labels are 1–256 well-formed UTF-16 code units without surrounding
+whitespace or ASCII controls. Refresh tokens are at most 16,384 code units, scope 4,096 and
+token type 64. Metadata is capped at 4 KiB UTF-8, 256 nodes and depth 8; plaintext at 32 KiB
+UTF-8, sealed input at 64 KiB characters and each store/list at 1,000 records. Bounds fail closed.
+
+WebCrypto AES-256-GCM uses fresh random 12-byte IVs, 128-bit tags and canonical
+`JSON.stringify([1, connectorId, account])` AAD. The sealed string is
+`1.<canonical-unpadded-base64url-IV>.<canonical-unpadded-base64url-ciphertext-and-tag>`.
+Parse, validation, authentication and storage failures all raise `ConnectorVaultError`
+with the same constant message and no underlying cause. Key helpers never read environment;
+only the Node CLI host reads `CONNECTOR_VAULT_KEY`. Imported keys and
+`generateBrowserVaultKey()` are non-extractable. Keep the original Node key safe: losing it
+requires reauthorisation. Hosts reading a key file must keep it private and pass its exact
+canonical base64 contents to `importVaultKey`, without whitespace/newline trimming.
+
+`VaultStore` receives canonical JSON `[connectorId, account]` ids and ciphertext strings.
+`MemoryVaultStore` is a bounded single-process fixture with a per-key mutex.
+`FileVaultStore` is exported only from `./node`: SHA-256 filenames, 0700 directories, 0600 files, owner checks, symlink and
+hardlink refusal, bounded descriptor reads, exclusive temporary files, file fsync, atomic
+rename and directory fsync. Existing group/world-accessible stores are refused, not repaired.
+A record file whose mode was loosened is refused by `get` and `put` and skipped by `list`, but
+`delete` still unlinks any regular record file owned by the current user (never a symlink or
+another user's file), so disconnect keeps working.
+Ancestor directories must be controlled by the host user or root; shared writable ancestors
+require the sticky bit. Construction resolves ancestor aliases with `realpath` once and
+checks the canonical path; a symlinked final directory or record is still refused.
+These ancestor checks prevent another user from replacing the private store's path.
+`FileVaultStore` requires a POSIX filesystem and throws at construction on Windows.
+It removes its own regular, current-uid temp files older than ten minutes on construction
+and before list/put budget checks; temp files never consume the name budget. Enumeration
+has a separate 10,000-entry work cap. Refreshes use per-record exclusive 0600 lock files;
+stale locks break after 60 seconds by mtime, active owners renew mtime, and release runs in
+`finally`. A waiter takes over a stale lock by renaming it to `<lock>.<uuid>.stale` and deletes
+that file only if its device and inode match the lock it judged stale. Otherwise the file is
+another owner's live lock: it is restored with a non-clobbering `link` back to the lock name and
+the renamed name is removed; if a third lock already holds that name, the renamed file is left
+to age out (its owner's release then sees a mismatch). Either way the waiter retries.
+Leftover `.stale` files age out like temp files. A newly created lock that fails its safety check is unlinked, after the same
+device/inode comparison, before failing. A failed release never replaces the callback's value
+or error; the unreleased lock goes stale. Contention waits at most 65 seconds before failing
+closed.
+`IndexedDbVaultStore.getOrCreateKey()` elects one key in a read/write transaction and stores
+it via structured clone in the same database as records; writes resolve only after commit.
+Version changes close and clear the cached handle; the next call reopens.
+Account locks use `navigator.locks.request` where available, otherwise a shared in-process
+mutex (cross-tab ownership then requires host coordination). Clearing that database removes
+both records and key. Hosts retain their origin/script security responsibilities (see the key
+boundary above).
+
+Pass `{ vault, account, signal? }` as the final argument to code exchange, `authorize`, or
+refresh helpers. `authorizeLoopback` accepts these in its options. `getOAuthToken` returns a
+live supplied token, refreshes saved credentials, or returns undefined for interactive login.
+With a vault, a missing record means disconnected: an in-memory refresh credential raises
+`reauthorise` instead of reviving the account (vault-less sessions keep their in-memory
+credential). Undefined is returned only when neither a record nor an in-memory credential exists.
+Refresh holds the optional store lock across reread, token exchange and put/delete, using
+any newer saved refresh token before sending. On `invalid_grant`, compare with the sent
+token before deleting; if a newer token exists, retry once with it and never loop. A rejected
+current credential raises `IntegrationAuthError` with `reason: 'reauthorise'`; other failures
+retain it. Token requests (code exchange and refresh) never use the caller's signal: once sent
+they run on a private controller with a 30-second timeout (`TOKEN_REQUEST_TIMEOUT_MS`), so a
+cancellation cannot cut off a response carrying a rotated credential. A caller abort before
+sending prevents the request; one during the exchange is honored after the response is
+validated and persisted, with a generic `AbortError`. A code exchange that returns no refresh
+token deletes any stored record for that `{ connectorId, account }`, so another provider account
+cannot silently reuse the previous login's credential. `createOAuthSourceAuth` restores lazily,
+refreshes expired tokens, shares concurrent refreshes and retries a GET once after 401.
+`disconnect()` waits for pending refresh before deleting so it cannot repopulate the vault.
+When the OAuth config has a `revocationEndpoint` (RFC 7009), disconnect first POSTs the stored
+and session refresh tokens there (`token_type_hint=refresh_token`, same client authentication
+and private-controller timeout rule, not sent once cancelled), ignoring every failure, then
+deletes locally. The Google configurations declare `https://oauth2.googleapis.com/revoke`.
+Revoking at Google removes the whole grant for that OAuth client, so disconnecting one Google
+connector also signs out every other Google connector that shares the client ID; those need
+reauthorising. A disconnect cancelled part-way can revoke one of the two tokens and not the other,
+and still deletes the local record; remove any remaining access in the provider's account
+settings (for Google, the account's third-party access page).
+Other providers have no RFC 7009 endpoint configured: revoke the app's access in the provider's
+account settings.
+The built-in stores provide account locks for the shared engine, including CLI cron runs
+using the file store. Custom stores without `withLock` require hosts to serialize mutations.
+`createSpotifySourceAuth` throws when given a vault: vault hosts must use
+`createOAuthSourceAuth` so every refresh follows the shared persistence contract.
+Tokens never enter the pod, localStorage, sessionStorage or cookies.

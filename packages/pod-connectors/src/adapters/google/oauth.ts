@@ -26,6 +26,7 @@ export function createGoogleOAuthConfig(
     clientId: options.clientId,
     authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
     tokenEndpoint: "https://oauth2.googleapis.com/token",
+    revocationEndpoint: "https://oauth2.googleapis.com/revoke",
     scopes: GOOGLE_SCOPES[product],
     tokenExchange: options.clientType === "desktop" ? "public" : "proxy",
     tokenProxyUrl: options.clientType === "desktop" ? undefined : options.tokenProxyUrl,

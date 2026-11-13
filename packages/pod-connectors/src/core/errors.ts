@@ -30,6 +30,7 @@ export type AuthFailureReason =
   | "popup-blocked"
   | "cancelled" // user closed the popup / denied the grant
   | "state-mismatch" // possible CSRF — always surfaced, never retried silently
+  | "reauthorise" // refresh credential revoked/expired; reconnect explicitly
   | "exchange-failed"; // token endpoint said no
 
 /** The OAuth dance failed before we ever had a token. */
@@ -44,6 +45,18 @@ export class IntegrationAuthError extends IntegrationError {
     super(adapterId, message ?? `Authorization failed (${reason}).`, options);
     this.name = "IntegrationAuthError";
     this.reason = reason;
+  }
+}
+
+/**
+ * A saved refresh credential exists but cannot be decrypted or validated (for example after a
+ * vault key rotation). `reason` stays `reauthorise`; a fresh code exchange replaces the record
+ * without reading it, so interactive hosts may start login instead of stopping.
+ */
+export class UnreadableCredentialError extends IntegrationAuthError {
+  constructor(adapterId: string) {
+    super(adapterId, "reauthorise", "Reconnect this source account.");
+    this.name = "UnreadableCredentialError";
   }
 }
 

@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Integrations catalog — connect your accounts to your pod
 
 > Status: SPEC. Drives `src/lib/integrations/` and the `/connect` surface.
@@ -11,7 +12,7 @@ Every integration implements `IntegrationAdapter` (`src/lib/integrations/core/ty
 | Member | Contract |
 |---|---|
 | `metadata` | id, name, tier, `authKind`, OAuth scopes, pod categories it writes, plain-language "what you get" copy, and an honest `requirements` list (what the maintainer must register for live mode). |
-| `authorize()` | End-user **OAuth2 authorization-code + PKCE** in a popup, via the shared engine (`core/oauth.ts`). Tokens live **in memory only** — never `localStorage`, never sent anywhere except the app's own platform token endpoint (or the adapter's declared token-exchange proxy, when the platform refuses secretless PKCE). |
+| `authorize()` | End-user **OAuth2 authorization-code + PKCE** in a popup, via the shared engine (`core/oauth.ts`). Access tokens live **in memory only**; hosts may opt into `@jeswr/pod-connectors/vault` for encrypted refresh credentials (CON-A1). Tokens never enter the pod or `localStorage` and are sent only to the app's own platform token endpoint (or the adapter's declared token-exchange proxy, when the platform refuses secretless PKCE). |
 | `import(ctx)` | Pull from the source API (`ctx.api` — token-backed when live, fixture-backed in demo), normalise to RDF with **standard vocabularies** (schema.org / FOAF via typed `@rdfjs/wrapper` classes — never hand-built triples), and write into the pod through `ctx.write(...)` → `src/lib/pod-data.writeResource` + Type-Index registration. Returns an incremental `cursor` where the API supports one. |
 
 **Idempotency**: imports write whole collection documents at deterministic URLs
@@ -32,6 +33,12 @@ re-import overwrites in place, never duplicates.
   shown as "Coming soon — needs platform approval".
 - **Tier C** apps have no user-grade API → shown as "Import from export file"; each has
   a shipped parser for its official data export (`src/lib/integrations/file-adapters.ts`).
+
+Token-proxy env values require HTTPS, with HTTP allowed only on `localhost`, `127.0.0.1`
+or `[::1]` for development. Responses must be JSON (GitHub is requested with JSON Accept);
+`scope` may be a string or a string array (Twitch), normalized with spaces; other scope
+types are ignored. The Node CLI vault key is `CONNECTOR_VAULT_KEY`, never a public Next.js
+env value. `--vault` without it exits 2; a key alone warns and leaves credentials in memory.
 
 ## Live robustness (sparse-response contract)
 

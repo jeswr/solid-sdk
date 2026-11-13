@@ -3,9 +3,10 @@
 import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
-import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { env as nodeEnv, stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
+import { IntegrationAuthError, UnreadableCredentialError } from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -13,18 +14,22 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
+import { createOAuthSourceAuth, getOAuthToken, TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import { adapterContainer } from "../core/pod-writer-policy.js";
 import { createStoragePodWriter } from "../core/storage-pod-writer.js";
-import type { ConnectorState, SourceAuth } from "../core/types.js";
+import type { ConnectorState, SourceAuth, TokenSet } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
+import { ConnectorTokenVault, importVaultKey } from "../vault.js";
 import { readNodeConfig } from "./config.js";
 import { NodeRuntimeError } from "./errors.js";
 import { authorizeLoopback } from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
 import { createStateStore } from "./state.js";
+import { FileVaultStore } from "./vault-store.js";
 
-const USAGE = "Usage: pod-connectors import <id> [--file <path>] [--since]\n";
+const USAGE =
+  "Usage: pod-connectors import <id> [--file <path>] [--since] [--vault <dir>]\nRefresh credentials are encrypted only with --vault and CONNECTOR_VAULT_KEY (canonical base64, 32 bytes).\n";
 
 /** Stable process exit codes; library users receive the code without terminating their host. */
 export const EXIT_CODES = { success: 0, import: 1, config: 2, auth: 3, cancelled: 130 } as const;
@@ -32,12 +37,19 @@ export const EXIT_CODES = { success: 0, import: 1, config: 2, auth: 3, cancelled
 /** Injectable Node host ports. Fixture SourceAuth bypasses interactive source login only. */
 export interface CliOptions {
   readonly configPath?: string;
+  /** Defaults to CONNECTOR_VAULT_KEY in the Node CLI host only. */
+  readonly vaultKey?: string;
   readonly stdout?: (message: string) => void;
   readonly stderr?: (message: string) => void;
   readonly podTransport?: typeof fetch;
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
+  /**
+   * Defaults to true. False never starts loopback login: a missing or unreadable refresh
+   * credential exits with the auth code (3) and a reconnect message instead.
+   */
+  readonly interactiveLogin?: boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -46,22 +58,26 @@ export function parseImportArgs(args: readonly string[]): {
   id: string;
   file?: string;
   since: boolean;
+  vault?: string;
 } {
   const [command, id, ...flags] = args;
   if (command !== "import" || !id || !/^[a-z0-9-]+$/.test(id))
     throw new NodeRuntimeError("config", USAGE.trim());
   let file: string | undefined;
   let since = false;
+  let vault: string | undefined;
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i];
     if (flag === "--since" && !since) since = true;
     else if (flag === "--file" && !file && flags[i + 1] && !flags[i + 1]?.startsWith("--"))
       file = flags[++i];
+    else if (flag === "--vault" && !vault && flags[i + 1] && !flags[i + 1]?.startsWith("--"))
+      vault = flags[++i];
     else throw new NodeRuntimeError("config", USAGE.trim());
   }
   if (file && since)
     throw new NodeRuntimeError("config", "--since is only supported for API imports.");
-  return { id, file, since };
+  return { id, file, since, ...(vault && { vault }) };
 }
 
 export async function importFile(path: string, adapter: FileImportAdapter): Promise<ImportFile> {
@@ -148,6 +164,18 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
   try {
     options.signal?.throwIfAborted();
     const command = parseImportArgs(args);
+    let encodedKey = options.vaultKey;
+    if (encodedKey === undefined) {
+      encodedKey = nodeEnv.CONNECTOR_VAULT_KEY;
+      // Child processes and later diagnostics never inherit the key.
+      delete nodeEnv.CONNECTOR_VAULT_KEY;
+    }
+    if (command.vault && !encodedKey)
+      throw new NodeRuntimeError("config", "--vault requires CONNECTOR_VAULT_KEY.");
+    if (encodedKey && !command.vault)
+      stderr(
+        "CONNECTOR_VAULT_KEY supplied without --vault; refresh credentials remain in memory.\n",
+      );
     const config = await readNodeConfig(options.configPath);
     const registry = createRegistry(config.connectors);
     const adapter = registry.adapterById(command.id);
@@ -161,11 +189,19 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
     // Every Pod and source request, including checkpoint reads/writes and the import's own
-    // Pod writes, refuses to send once the command is cancelled.
+    // Pod writes, refuses to send once the command is cancelled. Token and revocation
+    // requests keep their own controller once sent, so a rotated credential is never lost.
     const withSignal =
-      (transport: typeof fetch): typeof fetch =>
+      (transport: typeof fetch, ownController?: ReadonlySet<string>): typeof fetch =>
       async (input, init) => {
         options.signal?.throwIfAborted();
+        if (ownController?.has(String(input instanceof Request ? input.url : input)))
+          return transport(
+            input,
+            init?.signal
+              ? init
+              : { ...init, signal: AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS) },
+          );
         return transport(input, {
           ...init,
           signal:
@@ -196,17 +232,54 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     if (!file && !sourceAuth) {
       if (!adapter?.oauth)
         throw new NodeRuntimeError("auth", "This connector has no source OAuth configuration.");
-      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch);
       const sourceConfig = { ...adapter.oauth, ...config.connectors[command.id] };
-      const token = await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+      if (sourceConfig.clientSecret) sourceConfig.tokenExchange = "public";
+      const tokenUrls = new Set(
+        [
+          sourceConfig.tokenEndpoint,
+          sourceConfig.tokenProxyUrl,
+          sourceConfig.revocationEndpoint,
+        ].filter((url): url is string => typeof url === "string"),
+      );
+      const sourceFetch = withSignal(options.sourceTransport ?? globalThis.fetch, tokenUrls);
+      let vault: ConnectorTokenVault | undefined;
+      if (command.vault && encodedKey) {
+        try {
+          vault = new ConnectorTokenVault(
+            await importVaultKey(encodedKey),
+            new FileVaultStore(command.vault),
+          );
+        } catch {
+          throw new NodeRuntimeError("config", "Cannot initialize connector vault.");
+        }
+      }
+      const vaultOptions = {
+        vault,
+        account: sourceConfig.account ?? "default",
+        signal: options.signal,
+      };
+      const interactive = options.interactiveLogin !== false;
+      let token: TokenSet | undefined;
+      try {
+        token = await getOAuthToken(command.id, sourceConfig, sourceFetch, vaultOptions);
+      } catch (error) {
+        // An undecryptable record (e.g. a rotated key) would fail every rerun; the code exchange
+        // below replaces it without reading it. Revocation still requires an explicit rerun.
+        if (!(error instanceof UnreadableCredentialError) || !interactive) throw error;
+      }
+      if (!token && !interactive)
+        throw new IntegrationAuthError(command.id, "reauthorise", "Reconnect this source account.");
+      token ??= await authorizeLoopback(command.id, sourceConfig, sourceFetch, {
+        ...vaultOptions,
         openAuthorizationUrl:
           options.openAuthorizationUrl ??
           ((url) => stderr(`Open this URL to connect the source:\n${url}\n`)),
         signal: options.signal,
       });
-      sourceAuth =
-        adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
-        createSourceAuth(command.id, adapter, token, sourceFetch);
+      sourceAuth = vault
+        ? createOAuthSourceAuth(adapter, sourceConfig, sourceFetch, { ...vaultOptions, token })
+        : (adapter.createSourceAuth?.(sourceConfig, token, sourceFetch) ??
+          createSourceAuth(command.id, adapter, token, sourceFetch));
     }
     let next: ConnectorState | undefined;
     const state = previous && !command.since ? { ...previous, cursor: undefined } : previous;
@@ -227,11 +300,12 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
           mode: "live",
           sourceAuth,
         });
-    } catch {
+    } catch (error) {
       if (next) {
         // A full import still preserves the last successful checkpoint on failure.
         await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
       }
+      if (error instanceof IntegrationAuthError) throw error;
       throw new NodeRuntimeError(
         "import",
         "Import failed; the last successful checkpoint was retained.",
@@ -248,7 +322,14 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       ? new NodeRuntimeError("cancelled", "Import cancelled.")
       : error instanceof NodeRuntimeError
         ? error
-        : new NodeRuntimeError("import", "Import failed.");
+        : error instanceof IntegrationAuthError
+          ? new NodeRuntimeError(
+              "auth",
+              error.reason === "reauthorise"
+                ? "Reconnect this source account."
+                : "Source authentication failed.",
+            )
+          : new NodeRuntimeError("import", "Import failed.");
     stderr(`${failure.message}\n`);
     return EXIT_CODES[failure.kind];
   }

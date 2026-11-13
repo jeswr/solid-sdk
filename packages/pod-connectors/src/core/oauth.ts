@@ -5,7 +5,7 @@
  * `OAuthAppConfig`.
  *
  * Security posture (docs/integrations-catalog.md):
- * - tokens live in memory only (`token-store.ts`);
+ * - access tokens live in memory; refresh credentials may use an injected encrypted vault;
  * - the code is exchanged directly with the platform's token endpoint
  *   (public PKCE client), or with the adapter's declared token proxy when the
  *   platform refuses secretless exchanges — never anywhere else;
@@ -15,8 +15,12 @@
  * The pure pieces (PKCE pair, URL building, callback parsing, code exchange)
  * are exported for vitest; only `authorize()` touches `window`.
  */
-import { IntegrationAuthError } from "./errors.js";
-import type { OAuthAppConfig, TokenSet } from "./types.js";
+import { type ConnectorTokenVault, ConnectorVaultError, type VaultRecord } from "../vault.js";
+import { readJson } from "./budget.js";
+import { IntegrationAuthError, UnreadableCredentialError } from "./errors.js";
+import { createSourceAuth } from "./import-runner.js";
+import { clearToken } from "./token-store.js";
+import type { IntegrationAdapter, OAuthAppConfig, SourceAuth, TokenSet } from "./types.js";
 
 /** Where the popup lands; must exist in `public/` and postMessage back. */
 export const OAUTH_CALLBACK_PATH = "/oauth-callback.html";
@@ -80,14 +84,23 @@ export function parseCallbackUrl(
   callbackUrl: string,
   expectedState: string,
 ): { code: string } {
-  const url = new URL(callbackUrl);
+  let url: URL;
+  try {
+    url = new URL(callbackUrl);
+  } catch {
+    throw new IntegrationAuthError(adapterId, "exchange-failed", "Invalid authorization callback.");
+  }
   const params = url.searchParams;
   const error = params.get("error");
   if (error === "access_denied") {
     throw new IntegrationAuthError(adapterId, "cancelled", "You declined the connection.");
   }
   if (error) {
-    throw new IntegrationAuthError(adapterId, "exchange-failed", `The platform said: ${error}.`);
+    throw new IntegrationAuthError(
+      adapterId,
+      "exchange-failed",
+      "The platform refused authorization.",
+    );
   }
   if (params.get("state") !== expectedState) {
     throw new IntegrationAuthError(
@@ -103,65 +116,457 @@ export function parseCallbackUrl(
   return { code };
 }
 
-interface TokenEndpointAnswer {
-  access_token?: string;
-  token_type?: string;
-  refresh_token?: string;
-  expires_in?: number;
+/** Optional, host-owned persistence. account must remain stable between runs. */
+export interface OAuthVaultOptions {
+  readonly vault?: ConnectorTokenVault;
+  readonly account: string;
+  readonly signal?: AbortSignal;
+}
+
+/** Token and revocation requests run on their own controller, never the caller's signal. */
+export const TOKEN_REQUEST_TIMEOUT_MS = 30_000;
+
+function cancelledError(): DOMException {
+  return new DOMException("Source authorization cancelled.", "AbortError");
+}
+
+/** HTTPS, or HTTP on a loopback host for development; never embedded credentials. */
+function checkEndpoint(endpoint: string): void {
+  const url = new URL(endpoint);
+  if (
+    (url.protocol !== "https:" &&
+      !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))) ||
+    url.username ||
+    url.password
+  )
+    throw new Error();
+}
+
+/** Client authentication shared by token and revocation requests. */
+function clientRequest(
+  cfg: OAuthAppConfig,
+  clientId: string,
+  body: URLSearchParams,
+): { headers: Headers; body: string } {
+  body.set("client_id", clientId);
+  const headers = new Headers({
+    "content-type": "application/x-www-form-urlencoded",
+    accept: "application/json",
+  });
+  if (cfg.tokenExchange === "public" && cfg.clientSecret) {
+    if (cfg.tokenRequest === "basic-form" || cfg.tokenRequest === "basic-json") {
+      headers.set("authorization", `Basic ${btoa(`${clientId}:${cfg.clientSecret}`)}`);
+      if (cfg.tokenRequest === "basic-json") {
+        body.delete("client_id");
+        headers.set("content-type", "application/json");
+        return { headers, body: JSON.stringify(Object.fromEntries(body)) };
+      }
+    } else body.set("client_secret", cfg.clientSecret);
+  } else if (cfg.basicAuthForToken) headers.set("authorization", `Basic ${btoa(`${clientId}:`)}`);
+  return { headers, body: body.toString() };
 }
 
 /**
- * Exchange the code for tokens. Public clients post straight to the platform;
- * `tokenExchange: "proxy"` posts the same form to the maintainer's proxy
- * (which adds the client secret server-side and forwards the answer).
- *
- * @param fetchImpl - pristine source transport, captured before Pod auth patching.
+ * Send and fully read one request on a private controller with a fixed timeout. A caller
+ * abort cannot cut off a response that may carry a rotated credential.
  */
+async function ownRequest<T>(
+  fetchImpl: typeof fetch,
+  endpoint: string,
+  request: { headers: Headers; body: string },
+  read: (response: Response) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetchImpl(endpoint, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      redirect: "error",
+      credentials: "omit",
+      signal: controller.signal,
+    });
+    return await read(response);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function tokenRequest(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  body: URLSearchParams,
+  fetchImpl: typeof fetch,
+  options?: OAuthVaultOptions,
+): Promise<TokenSet> {
+  const endpoint = cfg.tokenExchange === "proxy" ? cfg.tokenProxyUrl : cfg.tokenEndpoint;
+  if (!endpoint || !cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
+  // Never start a request after the caller cancelled.
+  if (options?.signal?.aborted) throw cancelledError();
+  const refresh = body.get("grant_type") === "refresh_token";
+  let failureStatus: number | undefined;
+  let token: TokenSet;
+  try {
+    checkEndpoint(endpoint);
+    const { ok, json } = await ownRequest(
+      fetchImpl,
+      endpoint,
+      clientRequest(cfg, cfg.clientId, body),
+      async (response) => {
+        if (!response.ok) {
+          failureStatus = response.status;
+          if (!refresh) {
+            await response.body?.cancel();
+            throw new Error();
+          }
+        }
+        return {
+          ok: response.ok,
+          json: (await readJson(response, adapterId, endpoint, 64 * 1024)) as Record<
+            string,
+            unknown
+          >,
+        };
+      },
+    );
+    if (!ok) {
+      if (refresh && json?.error === "invalid_grant") {
+        throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+      }
+      throw new Error();
+    }
+    if (
+      !json ||
+      typeof json.access_token !== "string" ||
+      !json.access_token.trim() ||
+      json.access_token.length > 16384 ||
+      (json.token_type !== undefined &&
+        (typeof json.token_type !== "string" || json.token_type.toLowerCase() !== "bearer")) ||
+      (json.refresh_token !== undefined &&
+        (typeof json.refresh_token !== "string" ||
+          !json.refresh_token.trim() ||
+          json.refresh_token.length > 16384)) ||
+      (json.expires_in !== undefined &&
+        (typeof json.expires_in !== "number" ||
+          !Number.isFinite(json.expires_in) ||
+          json.expires_in <= 0 ||
+          json.expires_in > 315360000))
+    )
+      throw new Error();
+    let scope: string | undefined;
+    if (typeof json.scope === "string") scope = json.scope;
+    else if (Array.isArray(json.scope) && json.scope.every((item) => typeof item === "string"))
+      scope = json.scope.join(" ");
+    if (scope !== undefined && scope.length > 4096) throw new Error();
+    token = {
+      accessToken: json.access_token,
+      tokenType: (json.token_type as string | undefined) ?? "Bearer",
+      refreshToken:
+        (json.refresh_token as string | undefined) ?? body.get("refresh_token") ?? undefined,
+      scope: scope || undefined,
+      expiresAt:
+        typeof json.expires_in === "number" ? Date.now() + json.expires_in * 1000 : undefined,
+    };
+    if (options?.vault) {
+      const key = { connectorId: adapterId, account: options.account };
+      if (json.refresh_token) {
+        const previous = refresh ? await options.vault.get(key) : undefined;
+        await options.vault.put(key, {
+          refreshToken: json.refresh_token as string,
+          scope: token.scope ?? previous?.scope,
+          tokenType: token.tokenType,
+          obtainedAt: Date.now(),
+          providerMeta: previous?.providerMeta,
+        });
+      } else if (!refresh) {
+        // A login without a refresh credential (possibly another provider account) must not
+        // leave this account label restoring the previous login's credential.
+        await options.vault.delete(key);
+      }
+    }
+  } catch (error) {
+    if (error instanceof IntegrationAuthError && error.reason === "reauthorise") throw error;
+    throw new IntegrationAuthError(
+      adapterId,
+      "exchange-failed",
+      failureStatus === undefined
+        ? "Source token exchange failed."
+        : `Token exchange failed (${failureStatus}).`,
+    );
+  }
+  // Rotation is durable; only now honor a cancellation that arrived during the exchange.
+  if (options?.signal?.aborted) throw cancelledError();
+  return token;
+}
+
+/**
+ * Best-effort RFC 7009 revocation of a refresh credential. Failures are ignored: local
+ * deletion always follows. Never sent once the caller has cancelled.
+ */
+async function revokeRefreshToken(
+  cfg: OAuthAppConfig,
+  refreshToken: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<void> {
+  const endpoint = cfg.revocationEndpoint;
+  if (!endpoint || !cfg.clientId || signal?.aborted) return;
+  try {
+    checkEndpoint(endpoint);
+    await ownRequest(
+      fetchImpl,
+      endpoint,
+      clientRequest(
+        cfg,
+        cfg.clientId,
+        new URLSearchParams({ token: refreshToken, token_type_hint: "refresh_token" }),
+      ),
+      async (response) => {
+        await response.body?.cancel();
+      },
+    );
+  } catch {
+    /* Revocation is advisory; the local record is deleted regardless. */
+  }
+}
+
+/** Code exchange; persistence completes before returning any access token. */
 export async function exchangeCodeForToken(
   adapterId: string,
   cfg: OAuthAppConfig,
   params: { code: string; verifier: string; redirectUri: string },
   fetchImpl: typeof fetch,
+  options?: OAuthVaultOptions,
 ): Promise<TokenSet> {
-  const endpoint = cfg.tokenExchange === "proxy" ? cfg.tokenProxyUrl : cfg.tokenEndpoint;
-  if (!endpoint || !cfg.clientId) {
-    throw new IntegrationAuthError(adapterId, "not-configured");
-  }
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code: params.code,
-    redirect_uri: params.redirectUri,
-    client_id: cfg.clientId,
-    code_verifier: params.verifier,
-  });
-  if (cfg.tokenExchange === "public" && cfg.clientSecret) {
-    body.set("client_secret", cfg.clientSecret);
-  }
-  const headers: Record<string, string> = {
-    "content-type": "application/x-www-form-urlencoded",
-  };
-  if (cfg.basicAuthForToken) {
-    // Reddit installed-app convention: Basic auth with an empty secret.
-    headers.authorization = `Basic ${btoa(`${cfg.clientId}:`)}`;
-  }
-  const init: RequestInit = { method: "POST", headers, body: body.toString(), redirect: "error" };
-  const res = await fetchImpl(endpoint, init);
-  if (!res.ok) {
-    throw new IntegrationAuthError(
+  return withVaultLock(adapterId, options, () =>
+    tokenRequest(
       adapterId,
-      "exchange-failed",
-      `Token exchange failed (${res.status}).`,
+      cfg,
+      new URLSearchParams({
+        grant_type: "authorization_code",
+        code: params.code,
+        redirect_uri: params.redirectUri,
+        code_verifier: params.verifier,
+      }),
+      fetchImpl,
+      options,
+    ),
+  );
+}
+
+function withVaultLock<T>(
+  adapterId: string,
+  options: OAuthVaultOptions | undefined,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return options?.vault?.withLock
+    ? options.vault.withLock({ connectorId: adapterId, account: options.account }, fn)
+    : fn();
+}
+
+/** Refresh without sending an API bearer credential to the token endpoint. */
+export async function refreshAccessToken(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  refreshToken: string,
+  fetchImpl: typeof fetch,
+  options?: OAuthVaultOptions,
+): Promise<TokenSet> {
+  return withVaultLock(adapterId, options, async () => {
+    const token = await refreshWithinLock(adapterId, cfg, refreshToken, fetchImpl, options);
+    if (!token)
+      throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+    return token;
+  });
+}
+
+async function readSaved(
+  adapterId: string,
+  options?: OAuthVaultOptions,
+): Promise<VaultRecord | undefined> {
+  try {
+    return await options?.vault?.get({ connectorId: adapterId, account: options.account });
+  } catch (error) {
+    if (error instanceof ConnectorVaultError) throw new UnreadableCredentialError(adapterId);
+    throw error;
+  }
+}
+
+/** Caller holds the store's account lock across reads, network exchange and mutations. */
+async function refreshWithinLock(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  refreshToken: string | undefined,
+  fetchImpl: typeof fetch,
+  options?: OAuthVaultOptions,
+): Promise<TokenSet | undefined> {
+  const key = { connectorId: adapterId, account: options?.account ?? "default" };
+  const saved = await readSaved(adapterId, options);
+  if (saved?.expiresAt !== undefined && saved.expiresAt <= Date.now()) {
+    await options?.vault?.delete(key);
+    throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+  }
+  // With a vault, the record is the source of truth: a missing record means another session
+  // disconnected (or revocation deleted it), so an in-memory credential must not revive it.
+  // Without a stored or in-memory credential the host may still start interactive login.
+  if (options?.vault && !saved && refreshToken)
+    throw new IntegrationAuthError(adapterId, "reauthorise", "Reconnect this source account.");
+  let sent = saved?.refreshToken ?? refreshToken;
+  if (!sent) return undefined;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const token = await tokenRequest(
+        adapterId,
+        cfg,
+        new URLSearchParams({ grant_type: "refresh_token", refresh_token: sent }),
+        fetchImpl,
+        options,
+      );
+      return { ...token, scope: token.scope ?? saved?.scope };
+    } catch (error) {
+      if (!(error instanceof IntegrationAuthError) || error.reason !== "reauthorise") throw error;
+      const latest = await readSaved(adapterId, options);
+      // A writer without locking may have replaced the rejected credential. Never delete it.
+      if (latest && latest.refreshToken !== sent) {
+        if (attempt === 0) {
+          sent = latest.refreshToken;
+          continue;
+        }
+      } else if (latest?.refreshToken === sent) await options?.vault?.delete(key);
+      throw error;
+    }
+  }
+  return undefined;
+}
+
+/** Return a live token, restore from the vault, or let the host start interactive login. */
+export async function getOAuthToken(
+  adapterId: string,
+  cfg: OAuthAppConfig,
+  fetchImpl: typeof fetch,
+  options: OAuthVaultOptions & { token?: TokenSet },
+): Promise<TokenSet | undefined> {
+  if (options.signal?.aborted)
+    throw new IntegrationAuthError(adapterId, "cancelled", "Source authorization cancelled.");
+  if (
+    options.token &&
+    (options.token.expiresAt === undefined || options.token.expiresAt > Date.now())
+  )
+    return options.token;
+  return withVaultLock(adapterId, options, async () => {
+    const token = await refreshWithinLock(
+      adapterId,
+      cfg,
+      options.token?.refreshToken,
+      fetchImpl,
+      options,
     );
-  }
-  const json = (await res.json()) as TokenEndpointAnswer;
-  if (!json.access_token) {
-    throw new IntegrationAuthError(adapterId, "exchange-failed", "No access token in the answer.");
-  }
+    return token ? { ...token, scope: token.scope ?? options.token?.scope } : undefined;
+  });
+}
+
+/** A per-account session: bounded retries, single-flight refresh, durable disconnect. */
+export function createOAuthSourceAuth(
+  adapter: IntegrationAdapter,
+  cfg: OAuthAppConfig,
+  sourceFetch: typeof fetch,
+  options: OAuthVaultOptions & { token?: TokenSet },
+): SourceAuth & { disconnect(): Promise<void> } {
+  let token = options.token;
+  let refreshing: Promise<TokenSet | undefined> | undefined;
+  let disconnected = false;
+  const id = adapter.metadata.id;
+  const safeSource: typeof fetch = async (input, init) => {
+    try {
+      return await sourceFetch(input, init);
+    } catch {
+      throw new IntegrationAuthError(id, "exchange-failed", "Source request failed.");
+    }
+  };
+  const refresh = (force: boolean) => {
+    refreshing ??= getOAuthToken(id, cfg, sourceFetch, {
+      ...options,
+      token: force && token ? { ...token, expiresAt: 0 } : token,
+    })
+      .then((next) => {
+        if (!disconnected) token = next;
+        return next;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof IntegrationAuthError && error.reason === "reauthorise") {
+          token = undefined;
+          disconnected = true;
+        }
+        throw error;
+      })
+      .finally(() => {
+        refreshing = undefined;
+      });
+    return refreshing;
+  };
+  const check = () => {
+    if (options.signal?.aborted)
+      throw new IntegrationAuthError(id, "cancelled", "Source authorization cancelled.");
+    if (disconnected || !token)
+      throw new IntegrationAuthError(id, "reauthorise", "Reconnect this source account.");
+  };
   return {
-    accessToken: json.access_token,
-    tokenType: json.token_type ?? "Bearer",
-    refreshToken: json.refresh_token,
-    expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+    async fetch(input, init) {
+      const requestSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      const checkRequest = () => {
+        if (requestSignal?.aborted)
+          throw new IntegrationAuthError(id, "cancelled", "Source request cancelled.");
+      };
+      checkRequest();
+      if (options.signal?.aborted)
+        throw new IntegrationAuthError(id, "cancelled", "Source authorization cancelled.");
+      if (disconnected) check();
+      if (!token || (token.expiresAt !== undefined && token.expiresAt <= Date.now()))
+        await refresh(false);
+      check();
+      checkRequest();
+      const used = token;
+      const transport = () => createSourceAuth(id, adapter, token, safeSource);
+      const response = await transport().fetch(input, init);
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      if (response.status !== 401 || method.toUpperCase() !== "GET") return response;
+      try {
+        await response.body?.cancel();
+      } catch {
+        throw new IntegrationAuthError(id, "exchange-failed", "Source request failed.");
+      }
+      if (token === used) await refresh(true);
+      check();
+      checkRequest();
+      return transport().fetch(input, init);
+    },
+    async disconnect() {
+      const live = token?.refreshToken;
+      disconnected = true;
+      token = undefined;
+      clearToken(id);
+      try {
+        await refreshing;
+      } catch {
+        /* Deletion must still follow a failed refresh. */
+      }
+      await withVaultLock(id, options, async () => {
+        const credentials = new Set<string>();
+        if (cfg.revocationEndpoint) {
+          try {
+            const saved = await readSaved(id, options);
+            if (saved) credentials.add(saved.refreshToken);
+          } catch {
+            /* An unreadable record cannot be revoked remotely; it is still deleted. */
+          }
+          if (live) credentials.add(live);
+        }
+        for (const credential of credentials)
+          await revokeRefreshToken(cfg, credential, sourceFetch, options.signal);
+        await options.vault?.delete({ connectorId: id, account: options.account });
+      });
+    },
   };
 }
 
@@ -173,6 +578,7 @@ export async function authorize(
   adapterId: string,
   cfg: OAuthAppConfig,
   sourceFetch: typeof fetch,
+  options?: OAuthVaultOptions,
 ): Promise<TokenSet> {
   if (!cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
   const redirectUri = new URL(OAUTH_CALLBACK_PATH, window.location.href).toString();
@@ -185,7 +591,13 @@ export async function authorize(
 
   const callbackUrl = await waitForCallback(adapterId, popup);
   const { code } = parseCallbackUrl(adapterId, callbackUrl, state);
-  return exchangeCodeForToken(adapterId, cfg, { code, verifier, redirectUri }, sourceFetch);
+  return exchangeCodeForToken(
+    adapterId,
+    cfg,
+    { code, verifier, redirectUri },
+    sourceFetch,
+    options,
+  );
 }
 
 /** Resolve with the callback URL posted by the popup; reject if it closes first. */
