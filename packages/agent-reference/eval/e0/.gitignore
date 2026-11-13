@@ -1,0 +1,4 @@
+# Full result files are large; they are written by `pnpm run eval:e0` and not committed.
+a-worst-case.json
+b-mutations.json
+c-faults.json
