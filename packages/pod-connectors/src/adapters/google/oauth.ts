@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { OAuthAppConfig } from "../../core/types.js";
+import { GOOGLE_HEALTH_SCOPES } from "../../google-health/api.js";
 
 /** Request only the scopes for the product the user is connecting. */
 export const GOOGLE_SCOPES = {
@@ -7,6 +8,7 @@ export const GOOGLE_SCOPES = {
   contacts: ["https://www.googleapis.com/auth/contacts.readonly"],
   drive: ["https://www.googleapis.com/auth/drive.readonly"],
   gmail: ["https://www.googleapis.com/auth/gmail.readonly"],
+  health: GOOGLE_HEALTH_SCOPES,
 } as const;
 
 /** Products supported by the shared Google authorization configuration. */

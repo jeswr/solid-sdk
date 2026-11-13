@@ -22,6 +22,7 @@ import { gmailAdapter } from "./gmail/adapter.js";
 import { googleCalendarAdapter } from "./google-calendar/adapter.js";
 import { googleContactsAdapter } from "./google-contacts/adapter.js";
 import { googleDriveAdapter } from "./google-drive/adapter.js";
+import { googleHealthAdapter } from "./google-health/adapter.js";
 import { googlePhotosAdapter } from "./google-photos/adapter.js";
 import { instagramAdapter } from "./instagram/adapter.js";
 import { linkedinAdapter } from "./linkedin/adapter.js";
@@ -60,7 +61,7 @@ export const ADAPTERS: readonly IntegrationAdapter[] = [
 ];
 
 /**
- * The 14 Tier-B adapters — real OAuth APIs with working fixture-backed
+ * The 15 Tier-B adapters — real OAuth APIs with working fixture-backed
  * imports, but platform app-review gates any **live** user connect. They are
  * full {@link IntegrationAdapter}s (so the demo import is real), yet
  * {@link statusOf} keeps them `"approval-needed"`: even with a client id, the
@@ -73,7 +74,7 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   googlePhotosAdapter,
   gmailAdapter,
   youtubeAdapter,
-  fitbitAdapter,
+  googleHealthAdapter,
   garminAdapter,
   instagramAdapter,
   facebookAdapter,
@@ -84,8 +85,12 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   pinterestAdapter,
 ];
 
-/** Every adapter the app can run an import for (Tier A live/demo + Tier B demo). */
-export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [...ADAPTERS, ...TIER_B_ADAPTERS];
+/** Runnable adapters, including the retired Fitbit fixture/demo compatibility oracle. */
+export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [
+  ...ADAPTERS,
+  ...TIER_B_ADAPTERS,
+  fitbitAdapter,
+];
 
 const byId = new Map(ALL_ADAPTERS.map((a) => [a.metadata.id, a]));
 
@@ -98,6 +103,7 @@ export function adapterById(id: string): IntegrationAdapter | undefined {
  * refuse secretless PKCE, the token proxy is too. Nothing else flips it.
  */
 export function isLive(adapter: IntegrationAdapter): boolean {
+  if (adapter.metadata.deprecated) return false;
   const oauth = adapter.oauth;
   if (!oauth?.clientId) return false;
   if (oauth.tokenExchange === "proxy" && !oauth.tokenProxyUrl) return false;
@@ -208,7 +214,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All 32 catalog entries, A → B → C, in display order. */
+/** All 33 new-connection catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }
@@ -238,7 +244,9 @@ export function createRegistry(config: ConnectorConfigs = {}) {
   });
   const byId = new Map(configured.map((adapter) => [adapter.metadata.id, adapter]));
   const tierA = configured.filter((adapter) => adapter.metadata.tier === "A");
-  const tierB = configured.filter((adapter) => adapter.metadata.tier === "B");
+  const tierB = configured.filter(
+    (adapter) => adapter.metadata.tier === "B" && !adapter.metadata.deprecated,
+  );
   return {
     ADAPTERS: tierA,
     TIER_B_ADAPTERS: tierB,

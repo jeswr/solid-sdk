@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError } from "./errors.js";
 
 /** Resolve connector slugs identically for every transport. */
@@ -22,7 +24,10 @@ export function containerResolver(container: string, adapterId: string) {
 export function adapterContainer(adapterId: string, podRoot: string): string {
   if (!/^[a-z0-9-]+$/.test(adapterId))
     throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
-  return assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
+  return assertWithinPodScope(
+    podRoot,
+    new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).href,
+  );
 }
 
 const RDF_MEDIA_TYPES = new Set([

@@ -978,6 +978,23 @@ describe("Pod client credentials", () => {
 });
 
 describe("CLI import", () => {
+  it("directs retired Fitbit connections to Google Health before Pod or source login", async () => {
+    const transport = vi.fn<typeof fetch>();
+    const stderr = vi.fn();
+    const openAuthorizationUrl = vi.fn();
+    expect(
+      await runCli(["import", "fitbit"], {
+        configPath: await configPath(),
+        podTransport: transport,
+        sourceTransport: transport,
+        stderr,
+        openAuthorizationUrl,
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(stderr.mock.calls.flat().join(" ")).toContain("Google Health");
+    expect(transport).not.toHaveBeenCalled();
+    expect(openAuthorizationUrl).not.toHaveBeenCalled();
+  });
   it("reports missing Twitch callbackPort as a configuration error before opening the browser", async () => {
     const path = await configPath();
     await writeFile(
