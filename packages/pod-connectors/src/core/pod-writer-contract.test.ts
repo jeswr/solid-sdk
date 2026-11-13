@@ -52,7 +52,10 @@ describe.each(["fetch", "solid", "memory"])("%s PodWriter contract", (backend) =
     const { port, pod } = await setup();
     expect(await port.read(doc.slug)).toBeUndefined();
     const written = await port.write(doc, { ifNoneMatch: "*" });
-    expect(written).toEqual({
+    // `etag` is optional on WrittenDoc: the fetch writer returns the write's own validator.
+    const { etag: writtenEtag, ...writtenRest } = written;
+    if (writtenEtag !== undefined) expect(writtenEtag).toMatch(/^"/);
+    expect(writtenRest).toEqual({
       url: `${container}${doc.slug}`,
       category: doc.category,
       forClass: doc.forClass,

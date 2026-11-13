@@ -6,7 +6,7 @@ description: Use when importing canonical suite namespace constants or comparing
 
 # Suite vocabulary constants
 
-Import `NS`, `LEGACY_NAMESPACES`, `canonicalize`, `isLegacy`, and `termsEqual` from
+Import `NS`, `CONNECTOR_SYNC` (connector sync link-store terms), `LEGACY_NAMESPACES`, `canonicalize`, `isLegacy`, and `termsEqual` from
 `@jeswr/suite-vocab`. Writers use `NS` canonical bases. Readers compare classes with
 `termsEqual` or canonicalize vocabulary predicates before typed access. Preserve resource
 identifiers and literal contents. Type Index discovery must accept canonical and legacy

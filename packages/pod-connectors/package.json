@@ -30,6 +30,10 @@
       "types": "./dist/core/testing.d.ts",
       "default": "./dist/core/testing.js"
     },
+    "./sync": {
+      "types": "./dist/core/sync/index.d.ts",
+      "default": "./dist/core/sync/index.js"
+    },
     "./registry": {
       "types": "./dist/registry.d.ts",
       "default": "./dist/registry.js"

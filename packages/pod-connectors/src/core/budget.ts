@@ -15,6 +15,14 @@ export class ResponseTooLargeError extends IntegrationSyncError {
   }
 }
 
+/** A run exceeded its request, item or byte budget; a run-level failure, never per item. */
+export class RunBudgetExceededError extends IntegrationSyncError {
+  constructor(adapterId: string, message: string) {
+    super(adapterId, message);
+    this.name = "RunBudgetExceededError";
+  }
+}
+
 export const MAX_JSON_BYTES = 32 * 1024 * 1024;
 
 export interface RunLimits {
@@ -47,14 +55,14 @@ export class RunBudget {
   /** Count one source request; throws once the run exceeds its request budget. */
   request(): void {
     if (++this.requests > this.limits.maxRequests)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its request budget.");
+      throw new RunBudgetExceededError(this.adapterId, "The import exceeded its request budget.");
   }
 
   /** Count `n` buffered source items; throws once the run exceeds its item budget. */
   items(n: number): void {
     this.itemCount += n;
     if (this.itemCount > this.limits.maxItems)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its item budget.");
+      throw new RunBudgetExceededError(this.adapterId, "The import exceeded its item budget.");
   }
 
   /** Count `n` response bytes read; throws once the run exceeds its byte budget. */
@@ -62,7 +70,7 @@ export class RunBudget {
     this.byteCount += n;
     const max = this.limits.maxBytes ?? DEFAULT_RUN_LIMITS.maxBytes ?? Number.POSITIVE_INFINITY;
     if (this.byteCount > max)
-      throw new IntegrationSyncError(this.adapterId, "The import exceeded its data budget.");
+      throw new RunBudgetExceededError(this.adapterId, "The import exceeded its data budget.");
   }
 }
 

@@ -283,6 +283,16 @@ export { fixtureFetch, getJson } from "./fixture-fetch.js";
 
 /** Fail-closed fixture recorder; hosts explicitly allowlist non-personal fields. */
 export { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";
+export { type TwoWayConformanceFixture, twoWayConformanceSuite } from "./sync/conformance.js";
+/** Synthetic reference implementation and provider conformance entry point. */
+export {
+  createFakeTwoWayAdapter,
+  createMemorySyncPod,
+  type FakeTwoWayOptions,
+  fakeOneWayImport,
+  fakeSyncDocument,
+  fakeSyncName,
+} from "./sync/fake-platform.js";
 
 /** Strict storage-client memory backend; every shared adapter fixture import uses this. */
 export function createStorageMemoryPod(): Promise<MemoryPod> {

@@ -143,6 +143,8 @@ export interface WrittenBinary {
 /** A doc the runner wrote, with its final URL. */
 export interface WrittenDoc {
   readonly url: string;
+  /** Validator returned by this write, when available (never a later read's validator). */
+  readonly etag?: string | null;
   readonly category: string;
   readonly forClass: string;
   readonly skipRegistration?: boolean;
@@ -246,6 +248,17 @@ export interface ConnectorState {
   readonly cursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+  /** Two-way health; details remain in the owner-only sync links and manifest. */
+  readonly sync?: {
+    readonly conflicts: number;
+    readonly pendingDeletes: number;
+    /** Items skipped this run with a fixed error class (retried or re-detected later). */
+    readonly failed?: number;
+    /** Imported items without a link; never created at the provider. */
+    readonly unlinkedImports?: number;
+    /** Items waiting on an unresolved create intent. */
+    readonly deferred?: number;
+  };
 }
 
 export interface ConnectorStateOptions {
@@ -287,7 +300,9 @@ export interface PodWriter {
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
-  read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
+  read(
+    slug: string,
+  ): Promise<{ dataset: DatasetCore; etag: string | null; lastModified?: string } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
