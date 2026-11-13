@@ -102,7 +102,9 @@
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
     "@jeswr/solid-environment",
-    "@jeswr/site-executor"
+    "@jeswr/site-executor",
+    "@jeswr/test-shop",
+    "@jeswr/site-profiler"
   ],
   "applications": [
     {
