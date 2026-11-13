@@ -83,10 +83,13 @@ extension's review window.
 No `tabs` permission is requested. Existing host access supports the tab-origin checks
 needed to send access updates only to the relevant pages.
 
-## Permissions: `cookies`, `nativeMessaging` and optional host access
+## Optional permission: `cookies`; `nativeMessaging` and optional host access
 
-The optional agent sign-in feature requests one selected origin from an explicit popup
-click. Existing Solid host access can satisfy this without a further browser prompt. It
+The optional agent sign-in feature requests the optional `cookies` permission together
+with one selected origin from an explicit popup review click. Cookie access is absent
+at installation. Existing required Solid host access remains unchanged and can satisfy
+the origin request without a further browser prompt; while held, the optional cookie
+permission combines with that existing host access and is extension-wide. The feature
 reads cookies matching that page URL, checks exact-host or explicitly vetted parent-domain
 scope (never public suffixes or sibling host-only cookies), and shows site/count/persona.
 Separate confirmation sends them to the person's local encrypted agent vault through a
@@ -94,6 +97,11 @@ Chrome native host registered for this extension ID. It does not send them to a 
 service or page, store them in extension storage, export passkey keys, or run automatically.
 Only the actual extension popup can invoke the worker channel. The native connection
 allows the vault's configured keep-alive jobs to continue while Chrome is open.
+Cookie access and any removable optional origin grant are released with separate
+`chrome.permissions.remove` calls in `finally` immediately after the cookie snapshot is
+prepared, before confirmation. Required-host removal refusal cannot block cookie removal. Failure, denial,
+cancellation and success leave no optional cookie access. A worker port's `onDisconnect`
+also removes permissions if the popup closes, including grants arriving after closure.
 
 ## Remote code
 

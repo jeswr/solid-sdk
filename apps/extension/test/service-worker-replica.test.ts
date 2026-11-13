@@ -167,8 +167,10 @@ function installChrome(): void {
       lastError: undefined as { message?: string } | undefined,
       onMessage: { addListener: (fn: MessageListener) => messageListeners.push(fn) },
       onInstalled: { addListener: (_fn: () => void) => {} },
+      onConnect: { addListener: () => {} },
       sendMessage: () => Promise.resolve(),
     },
+    permissions: { remove: async () => true, onAdded: { addListener: () => {} } },
     storage: {
       local: {
         get: async (key: string) => {

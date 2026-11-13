@@ -379,8 +379,11 @@ and cross-origin iframe refusal.
 
 Sign in to the site in your normal browser, using its passkey, SSO or 2FA flow. Open the
 extension popup on that site's signed-in page, choose a **Vault profile** and **Persona for
-this site**, and click **Review sign-in sharing**. The extension requests host permission
-for that exact origin, reads only cookies matching the chosen page, and shows the site,
+this site**, and click **Review sign-in sharing**. The extension requests optional cookie
+access together with that exact origin, reads only cookies matching the chosen page,
+and releases cookie access and any optional origin grant immediately after preparing the snapshot. Cleanup
+also covers errors, cancellation, popup closure and grants arriving after closure.
+The preview shows the site,
 cookie count and persona. Click **Share this sign-in with my agent** to send that snapshot
 to the local agent vault. Cancel, profile changes, navigation to another site and expired
 reviews prevent sending. Nothing is captured automatically or sent to the page.
@@ -393,6 +396,17 @@ for the vault's existing keep-alive scheduler after the popup closes. The manife
 Solid host access may mean Chrome grants the exact-origin request without another prompt;
 the review and explicit confirmation are always required. No site cookie is stored in
 extension storage, content scripts or the page bridge. Values are never rendered or logged.
+Required Solid host permissions remain unchanged; optional cookie access is extension-wide
+while held, so the exact-origin query and filtering remain necessary.
+Cleanup calls `chrome.permissions.remove` separately for cookies and the requested origin,
+so Chrome refusing removal of required host access cannot prevent cookie removal.
+
+Hostile same-OS-user processes are outside the vault's threat model: they can read its
+store/key or forge the public extension-ID caller argument. No code-signature checks or
+independent browser-process authentication are performed, matching other local credential
+tools without such checks. The native host refuses TTY stdin/stdout as launch hardening.
+Every accepted capture marks its vault session `origin: "browser-capture"` and appends a
+pending "New sign-in from browser" entry that the host can list for a later approval UI.
 
 Exact-host cookies are supported by default; parent-domain cookies require a vetted vault
 configuration and must pass public/private suffix checks. Sibling host-only cookies and

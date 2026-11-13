@@ -15,7 +15,7 @@ import type { Profiles } from "./profiles.js";
 import { origin, parse, VaultError } from "./safe.js";
 import type { LoginTransaction, SessionStore } from "./sessions.js";
 
-/** One authenticated Chrome port. Tokens are bounded, short lived and single use. */
+/** One caller-ID-checked port. Same-user processes are outside the threat model. */
 export class NativeVault {
   readonly #pending = new Map<
     string,
@@ -105,7 +105,13 @@ export class NativeVault {
       if (!request.message.cookies.length && !request.message.tokens)
         throw new VaultError("invalid");
       // The bundle never crosses stdout. acceptCapture checks time and the persisted generation.
-      await acceptCapture(sessions, sessionCapture(request.message), transaction, now);
+      await acceptCapture(
+        sessions,
+        sessionCapture(request.message),
+        transaction,
+        now,
+        "browser-capture",
+      );
       // Capture is durable even if optional scheduler setup fails; never ask for an automatic retry.
       try {
         await this.#options.captured?.(transaction.site, transaction.account);

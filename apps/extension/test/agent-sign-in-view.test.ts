@@ -39,10 +39,17 @@ it('shows the site, cookie count and persona before the confirm click sends anyt
     },
   ]);
   const browser = {
-    runtime: { sendMessage },
+    runtime: {
+      sendMessage,
+      connect: () => ({
+        postMessage: vi.fn(),
+        disconnect: vi.fn(),
+        onDisconnect: { addListener: vi.fn() },
+      }),
+    },
     tabs: { query: async () => [{ id: 3, url: 'https://shop.test/account' }] },
     cookies: { getAll },
-    permissions: { request: vi.fn(async () => true) },
+    permissions: { request: vi.fn(async () => true), remove: vi.fn(async () => true) },
   } as unknown as typeof chrome;
   const root = document.getElementById('agent-sign-in')!;
   mountAgentSignIn(root, browser);

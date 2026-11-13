@@ -44,6 +44,17 @@ const bundleSchema = z.strictObject({
   cookies: z.array(cookieSchema).max(300),
   headers: z.record(z.string(), z.string().max(8192)).optional(),
 });
+const browserSignInSchema = z.strictObject({
+  id: z.string().uuid(),
+  label: z.literal("New sign-in from browser"),
+  origin: z.literal("browser-capture"),
+  status: z.literal("pending"),
+  capturedAt: z.number().finite(),
+});
+export type PendingBrowserSignIn = z.infer<typeof browserSignInSchema> & {
+  site: string;
+  account: string;
+};
 export const stateSchema = z.strictObject({
   site: z.string(),
   account: identifier,
@@ -53,6 +64,8 @@ export const stateSchema = z.strictObject({
   stale: z.boolean(),
   revision: z.string().uuid().optional(),
   generation: z.string().uuid().optional(),
+  origin: z.literal("browser-capture").optional(),
+  pendingBrowserSignIns: z.array(browserSignInSchema).optional(),
 });
 export type SessionState = z.infer<typeof stateSchema>;
 export class SessionStore implements SessionProvider {
@@ -106,6 +119,19 @@ export class SessionStore implements SessionProvider {
       return new Secret(r);
     });
   }
+  /** Host-only display metadata for a future approval UI; never returns session material. */
+  async listPendingBrowserSignIns(site: string, account: string): Promise<PendingBrowserSignIn[]> {
+    const state = await this.state(site, account);
+    return (
+      (await state?.use((r) =>
+        (r.pendingBrowserSignIns ?? []).map((entry) => ({
+          ...entry,
+          site: r.site,
+          account: r.account,
+        })),
+      )) ?? []
+    );
+  }
   #prepare(state: SessionState): SessionState {
     const r = parse(stateSchema, state);
     r.site = origin(r.site);
@@ -129,7 +155,11 @@ export class SessionStore implements SessionProvider {
       (current) => {
         if (current?.revision !== revision || !!current !== !!snapshot)
           throw new VaultError("denied");
-        written = this.#prepare({ ...input, generation: randomUUID() });
+        written = this.#prepare({
+          ...input,
+          pendingBrowserSignIns: current?.pendingBrowserSignIns,
+          generation: randomUUID(),
+        });
         return written;
       },
     );
@@ -163,7 +193,20 @@ export class SessionStore implements SessionProvider {
         stateSchema,
         (current) => {
           if (!this.#sameLogin(current, expected) || current?.stale) throw new VaultError("denied");
-          return this.#prepare({ ...snapshot, generation: expected.generation });
+          const entries = [...(current?.pendingBrowserSignIns ?? [])];
+          if (snapshot.origin === "browser-capture")
+            entries.push({
+              id: randomUUID(),
+              label: "New sign-in from browser",
+              origin: "browser-capture",
+              status: "pending",
+              capturedAt: snapshot.capturedAt,
+            });
+          return this.#prepare({
+            ...snapshot,
+            pendingBrowserSignIns: entries,
+            generation: expected.generation,
+          });
         },
       );
     });
