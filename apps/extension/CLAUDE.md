@@ -49,7 +49,8 @@ styles to `#login-form`** (the suite CSS-leak guards).
 
 `popup/agent-sign-in*.ts` offers explicit, reviewed sharing of the active site's browser
 cookies with the local agent vault. This is independent of Solid-OIDC tokens. The popup
-asks for the selected exact origin before reading cookies, shows site/count/persona, and
+checks existing Chrome access to the selected exact origin before any native message and
+again on review, shows site/count/persona, and
 requires confirmation. Never expose this action through window.solid or the content bridge.
 `background/agent-vault.ts` admits only Chrome-attested popup senders, never a content-script
 sender/tab. Its single native port is retained for the vault's keep-alive owner. Native host
@@ -64,11 +65,17 @@ other local credential tools without such checks. Native stdin/stdout TTY refusa
 accidental interactive launches; it does not establish caller identity. Each accepted
 capture marks its vault session `origin: "browser-capture"` and records a pending
 "New sign-in from browser" entry for the host's later agent approval UI.
-Request optional `cookies` together with the chosen origin only on review. Remove both in
-finally after reading the snapshot using separate remove calls, with worker onDisconnect/late-grant cleanup for popup
-closure. Required Solid host permissions remain in place, so the temporary cookies grant
-is extension-wide while held; exact-origin filtering and explicit confirmation still apply.
-Chrome refusing required-origin removal must never prevent independent cookie removal.
+Capture never requests or removes a host origin. Withheld site access refuses without a
+permission request or native message; tell the person to allow the extension on this site
+through Chrome's own extension menu first, then try again. Request only optional `cookies`
+on the review click once host access is confirmed, and recheck host access before sending
+the confirmed capture. Remove cookies in finally after the snapshot
+and verify absence with permissions.contains, with worker onDisconnect/late-grant cleanup
+for popup closure. Removal rejection or unconfirmed absence must display a warning alongside
+the actual capture outcome; worker cleanup failure sets a toolbar `!` badge. A surviving
+cookie grant warns when the popup reopens. Required `<all_urls>` stays in place and host grants
+never change; temporary cookie access is extension-wide, so exact-origin filtering and
+explicit confirmation still apply.
 
 ## Gate
 

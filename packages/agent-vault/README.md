@@ -234,6 +234,17 @@ cookie count, then confirms **Share this sign-in with my agent**. The page and c
 script have no capture capability and receive no credentials. Solid sign-in in the
 extension is independent of this site's sign-in.
 
+Before any native message, and again on review, the popup checks existing Chrome access
+to this exact origin. If access is withheld, it refuses without requesting permission or
+sending a native message and asks the person to allow the extension on this site through
+Chrome's extension menu first, then try again. Capture never requests or removes an origin;
+required `<all_urls>` remains unchanged. The review click requests only optional `cookies`.
+After the snapshot, all exits remove cookie access and verify it is absent, including
+permission denial, native failure, cancellation, popup close and late grants. Original host
+grants stay unchanged. Removal rejection or unconfirmed absence shows a popup warning
+alongside the actual capture result; worker cleanup failure sets a toolbar `!` badge, and
+a surviving cookie grant warns when the popup reopens.
+
 Provision the profile/account for the **exact site origin** in the same CredentialStore
 used by the agent (see Compose the host). Account id is the executor persona. A learned
 route is optional for capture and required for keep-alive, for example:
@@ -260,7 +271,8 @@ node packages/agent-vault/scripts/native-manifest.mjs \
 
 Create both store and output directories first with mode 0700. Use absolute paths with
 no `..` components or symlinked ancestors (on macOS, use the real path rather than a
-symlink such as `/var`). Every ancestor must be free of group/world write permission;
+symlink such as `/var`). The leaves must belong to the current effective uid. Every ancestor,
+through the filesystem root, must belong to that effective uid or uid 0 and be free of group/world write permission;
 world-writable temporary directories are refused, even with the sticky bit. The generator
 checks both existing directories, resolves each once with `realpath`, and uses only those
 canonical paths. It refuses existing files. It exclusively creates an owner-only config

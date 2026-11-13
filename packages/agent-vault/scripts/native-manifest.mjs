@@ -12,11 +12,13 @@ import { nativeConfigSchema, validateNativeCaller } from "../dist/native-config.
 function canonicalDirectory(input) {
   if (!isAbsolute(input) || input.split("/").includes("..")) throw 0;
   const leaf = resolve(input);
+  const uid = process.geteuid?.();
+  if (uid === undefined) throw 0;
   for (let path = leaf; ; path = dirname(path)) {
     const stat = lstatSync(path);
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.mode & 0o022) throw 0;
-    if (path === leaf && (stat.mode & 0o077 || (process.getuid && stat.uid !== process.getuid())))
-      throw 0;
+    if (stat.uid !== uid && stat.uid !== 0) throw 0;
+    if (path === leaf && (stat.mode & 0o077 || stat.uid !== uid)) throw 0;
     if (dirname(path) === path) break;
   }
   return realpathSync(leaf);

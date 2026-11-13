@@ -16,23 +16,31 @@ consent, independently checked by the worker, controls which pages can use that 
 | `nativeMessaging` | One worker-owned port to `org.jeswr.agent_vault`, whose registration pins this extension ID. Only the popup can call the worker seam; content-script/page senders refuse. Display metadata and capture acknowledgements return; credentials never do. |
 
 `optional_permissions: ["cookies"]` enables the optional sign-in sharing feature only
-on demand. The review click requests `cookies` and one exact scheme/hostname/port pattern
-together through `chrome.permissions.request`. `optional_host_permissions` declares HTTPS
-and loopback HTTP sites, never wildcard hosts or parent origins in the actual request.
-The popup reads cookies matching only the selected active page URL and filters domains
-and flags again. It calls `chrome.permissions.remove` separately for cookies and the chosen
-origin in `finally` immediately after preparing the in-memory snapshot, including failures and
-denials. Success, cancellation and confirmation failures retain no cookie permission.
-A popup-to-worker port supplies `onDisconnect` cleanup on popup closure; the worker also
-removes late grants when a permission prompt outlives the popup.
+on demand. Before contacting the native host, and again on the review click, the popup checks
+`chrome.permissions.contains({ origins: [origin] })` using the selected site's exact
+scheme/hostname/port pattern. Withheld site access (Chrome's "On click" or "On specific sites")
+refuses capture without a permission request or native message. The person must allow the
+extension on this site through Chrome's own extension menu first, then try again.
+Capture never requests or removes an origin, including the manifest's declared optional
+host patterns. Required `<all_urls>` remains unchanged; requesting a withheld required host
+could promote it to persistent access that Chrome would refuse to remove.
+Confirmation rechecks site access before sending the capture, so withdrawal during review
+also refuses without a native message.
 
-Existing required `<all_urls>` access for Solid remains unchanged and can satisfy the
-host request without another prompt. Optional `cookies` is extension-wide while held;
-the origin request does not narrow that existing host grant. The popup's exact-origin
-cookie query, review and separate confirmation remain mandatory.
-Chrome can reject removing a host covered by required access. That failure never blocks
-the independent removal of optional cookie access; any acquired optional origin is removed.
-See [Chromium's removal implementation](https://github.com/chromium/chromium/blob/main/extensions/browser/api/permissions/permissions_api.cc).
+With host access already granted, the review click requests only `{ permissions: ["cookies"] }`.
+The popup reads cookies matching only the selected active page URL and filters domains
+and flags again. It removes `cookies` in `finally` immediately after preparing the in-memory
+snapshot, including failures and permission denial, then verifies absence with
+`chrome.permissions.contains({ permissions: ["cookies"] })`. Success, native-host failure,
+cancellation and confirmation leave the original host grants and no cookie permission.
+A popup-to-worker port supplies `onDisconnect` cleanup on popup closure; the worker also
+removes and verifies late grants when a permission prompt outlives the popup.
+Removal rejection or unconfirmed absence produces a visible popup warning, alongside the
+actual capture result; worker cleanup failure sets a toolbar `!` badge. A surviving cookie
+grant also warns when the popup reopens. Cleanup failure is never reported as clean success.
+
+Optional `cookies` is extension-wide while held because of existing host access. The popup's
+exact-origin cookie query, review and separate confirmation remain mandatory.
 Parent-domain cookies require explicit vault configuration and public/private suffix checks.
 
 The native host checks a public extension-ID argument and rejects TTY stdin/stdout;

@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6
-import { AgentSignIn } from './agent-sign-in';
+import { AgentSignIn, AgentSiteAccessRequired } from './agent-sign-in';
 
 /** The only capture UI. No page messages, credential rendering, storage or automatic capture. */
 export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   const element = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}`)!;
   const status = element('agent-sign-in-status');
+  const warning = element('agent-permission-warning');
   const profile = element<HTMLSelectElement>('agent-profile');
   const persona = element<HTMLSelectElement>('agent-persona');
   const review = element<HTMLButtonElement>('agent-review');
@@ -24,6 +25,9 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     return response.result;
   });
   let busy = false;
+  const showWarning = () => {
+    warning.hidden = !controller.permissionWarning;
+  };
   const discard = () => {
     controller.cancel();
     preview.hidden = true;
@@ -46,7 +50,7 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   review.addEventListener('click', () => {
     if (busy) return;
     discard();
-    // Initiate before yielding the user gesture to any asynchronous work.
+    // Keep the cookies request in this click's call chain, after the host-access check.
     const pending = controller.review(profile.value, persona.value);
     setBusy(true);
     status.textContent = 'Preparing sign-in review…';
@@ -57,13 +61,16 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
           preview.hidden = false;
           status.textContent = 'Review, then confirm to send to your local vault.';
         },
-        () => {
+        (error: unknown) => {
           discard();
           status.textContent =
-            'Could not prepare sharing. Check the native host, selected site and cookie permission.';
+            error instanceof AgentSiteAccessRequired
+              ? error.message
+              : 'Could not prepare sharing. Check the native host, selected site and cookie permission.';
         },
       )
       .finally(() => {
+        showWarning();
         setBusy(false);
         if (!preview.hidden) confirm.focus();
       });
@@ -78,17 +85,22 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
           status.textContent =
             'Sign-in shared. When the vault reports it stale, sign in here and share again.';
         },
-        () => {
-          status.textContent = 'Sharing was not confirmed. Review again to retry.';
+        (error: unknown) => {
+          status.textContent =
+            error instanceof AgentSiteAccessRequired
+              ? error.message
+              : 'Sharing was not confirmed. Review again to retry.';
         },
       )
       .finally(() => {
+        showWarning();
         discard();
         setBusy(false);
       });
   });
   void controller.load().then(
     ({ site, choices }) => {
+      showWarning();
       element('agent-site').textContent = site;
       const option = (value: string, label: string) => {
         const node = document.createElement('option');
@@ -112,9 +124,12 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
         ? 'Sign in on this site, then choose your vault profile and persona.'
         : 'Add an account for this exact site in the vault, then reopen this popup.';
     },
-    () => {
+    (error: unknown) => {
+      showWarning();
       status.textContent =
-        'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.';
+        error instanceof AgentSiteAccessRequired
+          ? error.message
+          : 'Open a signed-in HTTPS site and install the agent vault native host to share its sign-in.';
     },
   );
 }
