@@ -448,6 +448,9 @@ importers:
 
   apps/extension:
     dependencies:
+      '@jeswr/agent-vault':
+        specifier: workspace:*
+        version: link:../../packages/agent-vault
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
@@ -2835,6 +2838,9 @@ importers:
       '@jeswr/agent-credentials':
         specifier: workspace:*
         version: link:../agent-credentials
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/site-executor':
         specifier: workspace:*
         version: link:../site-executor

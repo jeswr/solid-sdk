@@ -4,6 +4,7 @@
 import type { Cookie, SessionBundle as ExecutorSessionBundle } from "@jeswr/site-executor";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import { cookieSchema, tokensSchema } from "./browser.js";
 import {
   boundary,
   identifier,
@@ -15,30 +16,8 @@ import {
   VaultError,
 } from "./safe.js";
 import type { EncryptedRecords } from "./storage.js";
-export const cookieSchema = z.strictObject({
-  name: z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/),
-  value: z
-    .string()
-    .max(8192)
-    .regex(/^[\x21-\x3A\x3C-\x7E]*$/),
-  domain: z.string().min(1).max(253),
-  path: z.string().startsWith("/").max(2000),
-  expires: z.number().finite().optional(),
-  httpOnly: z.boolean().optional(),
-  secure: z.boolean().optional(),
-  hostOnly: z.boolean().optional(),
-  sameSite: z.enum(["Strict", "Lax", "None"]).optional(),
-});
-export const tokensSchema = z.strictObject({
-  access: z
-    .string()
-    .min(1)
-    .max(8192)
-    .regex(/^[\x21-\x7e]+$/),
-  refresh: z.string().min(1).max(8192).optional(),
-  expiresAt: z.number().finite().nonnegative(),
-  tokenEndpoint: z.string().optional(),
-});
+
+export { cookieSchema, tokensSchema } from "./browser.js";
 export type Tokens = z.infer<typeof tokensSchema>;
 // Structural until the executor's additive revision field is available in this lane.
 export type SessionBundle = ExecutorSessionBundle & { revision?: string };

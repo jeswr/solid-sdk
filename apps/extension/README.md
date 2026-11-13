@@ -375,6 +375,33 @@ The E2E fixture is [`test-site/address-form.html`](test-site/address-form.html);
 seed includes a private address record. `e2e/tests/formfill.spec.ts` covers approval, denial,
 and cross-origin iframe refusal.
 
+## Share a site's sign-in with your agent
+
+Sign in to the site in your normal browser, using its passkey, SSO or 2FA flow. Open the
+extension popup on that site's signed-in page, choose a **Vault profile** and **Persona for
+this site**, and click **Review sign-in sharing**. The extension requests host permission
+for that exact origin, reads only cookies matching the chosen page, and shows the site,
+cookie count and persona. Click **Share this sign-in with my agent** to send that snapshot
+to the local agent vault. Cancel, profile changes, navigation to another site and expired
+reviews prevent sending. Nothing is captured automatically or sent to the page.
+
+Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
+accounts. Configure an account for the exact site in the agent's store first. Install the
+pinned Chrome native host using the [vault setup instructions](../../packages/agent-vault/README.md#real-browser-sign-in-through-chrome-native-messaging).
+The worker accepts this channel only from the actual popup, and retains the native port
+for the vault's existing keep-alive scheduler after the popup closes. The manifest's existing
+Solid host access may mean Chrome grants the exact-origin request without another prompt;
+the review and explicit confirmation are always required. No site cookie is stored in
+extension storage, content scripts or the page bridge. Values are never rendered or logged.
+
+Exact-host cookies are supported by default; parent-domain cookies require a vetted vault
+configuration and must pass public/private suffix checks. Sibling host-only cookies and
+other sites never qualify. Cookie flags and expiry are preserved. Partitioned cookies,
+incognito sessions, localStorage tokens and passkey keys are not exported. Cookies only
+for another URL path are excluded; open the signed-in application page before sharing.
+The site's SSO session can expire or require fresh authentication despite keep-alive.
+When the vault reports it stale, sign in on the site and explicitly share again.
+
 ## Build & load the unpacked extension
 
 ```bash

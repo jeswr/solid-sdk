@@ -45,6 +45,18 @@ for access decisions and cached data are used to provide the connection you appr
 
 ## What is sent and who receives it
 
+If you choose **Share this sign-in with my agent**, the popup reads cookies matching the
+active site's page after you request a review. It displays the site, cookie count, vault
+profile and persona before a separate confirmation sends that snapshot to your local
+encrypted agent vault through Chrome native messaging. These cookies give your agent
+the site's session; they are not sent to a developer service or web page, saved in extension
+storage, or captured automatically. Passkey private keys, passwords and other sites'
+cookie jars are not exported. The vault's configured keep-alive may use those cookies with
+that site; the site's expiry and authentication requirements still apply. Re-share only
+when you choose, after signing in again if the vault reports the session stale. Copies
+already stored in the vault must be revoked/deleted through the vault; uninstalling the
+extension does not delete them.
+
 Sign-in requests go directly to your chosen identity provider. Token exchanges and renewals
 send the sign-in information that provider needs. Requests for your data go directly to
 your chosen pods. Tokens and signed security proofs are sent only to the appropriate

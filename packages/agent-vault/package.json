@@ -8,6 +8,10 @@
   "x-authored-by": "Codex GPT-6.1-Sol",
   "securityCritical": true,
   "sideEffects": false,
+  "bin": {
+    "agent-vault-native": "./dist/native-cli.js",
+    "agent-vault-native-manifest": "./scripts/native-manifest.mjs"
+  },
   "engines": {
     "node": ">=24"
   },
@@ -15,10 +19,19 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
+    "./native-host": {
+      "types": "./dist/native-host.d.ts",
+      "default": "./dist/native-host.js"
     }
   },
   "files": [
     "dist",
+    "scripts",
     "README.md",
     "SKILL.md"
   ],
@@ -30,6 +43,7 @@
   },
   "dependencies": {
     "@jeswr/agent-credentials": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/site-executor": "workspace:*",
     "@jeswr/site-model": "workspace:*",
     "n3": "^2.1.1",

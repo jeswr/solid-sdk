@@ -1,22 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { z } from "zod";
-import { boundary, identifier, origin, parse, Secret, VaultError } from "./safe.js";
-import {
-  cookieSchema,
-  type LoginTransaction,
-  type SessionBundle,
-  type SessionStore,
-  tokensSchema,
-} from "./sessions.js";
-export const captureSchema = z.strictObject({
-  site: z.string(),
-  account: identifier.optional(),
-  cookies: z.array(cookieSchema).max(300),
-  tokens: tokensSchema.optional(),
-  capturedAt: z.number().finite().nonnegative(),
-});
-export type SessionCapture = z.infer<typeof captureSchema>;
+import { captureSchema, type SessionCapture } from "./browser.js";
+import { boundary, origin, parse, Secret, VaultError } from "./safe.js";
+import type { LoginTransaction, SessionBundle, SessionStore } from "./sessions.js";
+
+export { captureSchema, type SessionCapture } from "./browser.js";
 /** Validate at the trusted extension/popup boundary. The host must authenticate the sender/tab. */
 export function sessionCapture(input: unknown): Secret<SessionCapture> {
   return new Secret(parse(captureSchema, input));

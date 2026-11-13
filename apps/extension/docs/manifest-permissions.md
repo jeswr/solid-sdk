@@ -13,6 +13,14 @@ consent, independently checked by the worker, controls which pages can use that 
 | `contextMenus` | The toolbar's “Open Solid side panel” menu entry and the “Fill from pod” entry on editable controls. Form-fill clicks are routed only to the clicked tab and frame. |
 | `scripting` | Register the MAIN-world fetch-patch entry only for explicitly granted origins, with one exact `scheme://host:port/*` match per origin (including explicit default ports), no wildcard hosts or schemes, top frame only. Reconcile on worker wake, install/update, grant changes, and expiry. Remove the legacy `solid-main-world-inject` all-origins registration. |
 | `alarms` | Wake the worker at the earliest origin-grant expiry to unregister scripts and clear page capabilities. Alarms are a cleanup mechanism: every request independently checks expiry, even if the alarm is late. |
+| `cookies` | After a popup review click and an exact-origin permission request, read cookies matching the selected active page URL. Filter domains/flags again, preview site/count/persona, and send only after separate confirmation. No automatic capture, page API or persistent extension cookie storage. |
+| `nativeMessaging` | One worker-owned port to `org.jeswr.agent_vault`, whose registration pins this extension ID. Only the popup can call the worker seam; content-script/page senders refuse. Display metadata and capture acknowledgements return; credentials never do. |
+
+`optional_host_permissions` declares HTTPS and loopback HTTP sites. The sharing action
+requests one exact scheme/hostname/port pattern from the review click, never a wildcard
+host or parent origin. Existing `<all_urls>` access for Solid may satisfy Chrome's request
+without an additional browser prompt; the popup's review and confirmation remain mandatory.
+Parent-domain cookies require explicit vault configuration and public/private suffix checks.
 
 No `tabs` permission is requested. Existing host access permits tab-URL visibility for
 scoped state broadcasts. Each tab receives only its bound profile's WebID; other tabs
