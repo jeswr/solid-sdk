@@ -11,7 +11,7 @@ import { type OwnerMandate, signApproval } from "../mechanisms/mandate.js";
 import { signStatement, TYP } from "../mechanisms/statements.js";
 import { type SourceAuthorityRule, TrustStore, type TrustStoreData } from "../mechanisms/trust.js";
 import { CONFIG_ED25519 } from "../profile/configurations.js";
-import { AgentRuntime } from "../runtime/agent.js";
+import { AgentRuntime, type AgentRuntimeOptions } from "../runtime/agent.js";
 import type { EffectAdapter, OperationHandler } from "../runtime/operations.js";
 import {
   addSourceRule,
@@ -111,11 +111,22 @@ export function permit(
   };
 }
 
+/** Options for reproducible runs: fixed keys and deterministic identifiers. */
+export interface CastOptions {
+  /** Fixed owner and actor keys per agent name (reference traces). */
+  readonly keys?: (name: string) => Promise<{ owner: SigningKey; actor: SigningKey }>;
+  /** Identifier source for approvals and each runtime (default: random URNs). */
+  readonly ids?: (scope: string) => () => string;
+}
+
 export class Cast {
   readonly agents = new Map<string, ProvisionedAgent>();
   readonly trust = new Map<string, TrustStoreData>();
 
-  constructor(private readonly now: () => Date) {}
+  constructor(
+    private readonly now: () => Date,
+    private readonly options: CastOptions = {},
+  ) {}
 
   async add(
     identity: Identity,
@@ -123,12 +134,14 @@ export class Cast {
     representationOps: readonly Iri[],
     opts: { ownerKey?: SigningKey } = {},
   ): Promise<ProvisionedAgent> {
+    const fixedKeys = await this.options.keys?.(identity.name);
     const p = await provisionAgent({
       identity,
       now: this.now(),
       mandate,
       representationOperations: representationOps,
       validityDays: 60,
+      ...(fixedKeys ? { fixedKeys } : {}),
     });
     let agent = p;
     if (opts.ownerKey) {
@@ -197,6 +210,7 @@ export class Cast {
     handlers: OperationHandler[],
     effects: EffectAdapter[] = [],
     accepted: string[] = [CONFIG_ED25519],
+    extra: Pick<AgentRuntimeOptions, "gates"> = {},
   ): Promise<{ runtime: AgentRuntime; ledger: MemoryLedger }> {
     const p = this.get(name);
     const ledger = new MemoryLedger();
@@ -217,6 +231,8 @@ export class Cast {
       ledger,
       now: this.now,
       ...(scenarioPolicyEngine() ? { policyEngine: scenarioPolicyEngine() } : {}),
+      ...(this.options.ids ? { newId: this.options.ids(name) } : {}),
+      ...extra,
     });
     return { runtime, ledger };
   }
@@ -227,11 +243,12 @@ export class Cast {
     actionDigest: string,
     conversation: Iri,
     decision: "approve" | "deny" = "approve",
+    note = "synthetic owner decision (scripted in the scenario driver)",
   ): Promise<string> {
     const p = this.get(name);
     return signApproval(p.ownerKey, {
       type: "OwnerApproval",
-      id: newUrn(),
+      id: this.options.ids ? this.options.ids(`${name}-approval`)() : newUrn(),
       issuer: p.identity.party,
       actor: p.identity.actor,
       actionDigest,
@@ -239,7 +256,7 @@ export class Cast {
       decision,
       issuedAt: this.now().toISOString(),
       validUntil: new Date(this.now().getTime() + 3_600_000).toISOString(),
-      note: "synthetic owner decision (scripted in the scenario driver)",
+      note,
     });
   }
 }
