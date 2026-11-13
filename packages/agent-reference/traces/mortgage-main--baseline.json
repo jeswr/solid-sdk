@@ -63,7 +63,7 @@
     }
   ],
   "generated": {
-    "commit": "cf878bd908922b356c275d84a13e7e8cf0989b12",
+    "commit": "f70e61dabe101f82df60be95df78945406e001e6",
     "core": "scripted"
   },
   "events": [
@@ -5362,7 +5362,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:5588300e913…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:66793b00ed6…; never trusted."
         },
         "layers": {
           "header": {
@@ -5392,7 +5392,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:32e9738e9e955c8e07f7038201db2e61afd178cb226f8c37925b858d791e48e0"
+            "digest": "sha-256:62e1d5821bada5306cce8573cf9e00750a3c11379497eaf07ccd48e24d33781e"
           },
           "authority": {
             "present": false,
@@ -5479,6 +5479,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -5497,7 +5511,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -5505,7 +5518,7 @@
                 }
               }
             ],
-            "digest": "sha-256:c930ef345d976385099fc704cc8be557bf23912ac03119911bdf07644292b7cd"
+            "digest": "sha-256:85f1cded3a327cfbb4578dbbc88aaf5a9b2777862d2d9cbbac9d167bff3bc49f"
           },
           "terms": {
             "present": true,
@@ -5563,7 +5576,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:5588300e913…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:66793b00ed6…; never trusted."
         },
         "layers": {
           "header": {
@@ -5593,7 +5606,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:32e9738e9e955c8e07f7038201db2e61afd178cb226f8c37925b858d791e48e0"
+            "digest": "sha-256:62e1d5821bada5306cce8573cf9e00750a3c11379497eaf07ccd48e24d33781e"
           },
           "authority": {
             "present": false,
@@ -5680,6 +5693,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -5698,7 +5725,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -5706,7 +5732,7 @@
                 }
               }
             ],
-            "digest": "sha-256:c930ef345d976385099fc704cc8be557bf23912ac03119911bdf07644292b7cd"
+            "digest": "sha-256:85f1cded3a327cfbb4578dbbc88aaf5a9b2777862d2d9cbbac9d167bff3bc49f"
           },
           "terms": {
             "present": true,
@@ -7201,7 +7227,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:263520599cc…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:5c78566f021…; never trusted."
         },
         "layers": {
           "header": {
@@ -7230,7 +7256,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a7e8b4624ee7cc384ba6dbbdb25368cc88d66976e2fc49915a127c3dae034ca7"
+            "digest": "sha-256:97198882047b4a5829805ce93a60da14a48af469f155a1fda4eac67c6eb2346f"
           },
           "authority": {
             "present": false,
@@ -7365,6 +7391,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:paywell-income-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
@@ -7383,7 +7423,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -7447,6 +7486,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -7465,7 +7518,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -7473,7 +7525,7 @@
                 }
               }
             ],
-            "digest": "sha-256:f8a120c5f0aef6f9d49df713bd859fb11528551ccdda8f52e466069289993029"
+            "digest": "sha-256:346610017f4e4b1ca3bcee68d2cc65720518e9a1e284fc9371e0d5456fdb7921"
           },
           "terms": {
             "present": true,
@@ -7775,7 +7827,7 @@
         "kind": "deliver",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:263520599cc…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:5c78566f021…; never trusted."
         },
         "layers": {
           "header": {
@@ -7804,7 +7856,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:a7e8b4624ee7cc384ba6dbbdb25368cc88d66976e2fc49915a127c3dae034ca7"
+            "digest": "sha-256:97198882047b4a5829805ce93a60da14a48af469f155a1fda4eac67c6eb2346f"
           },
           "authority": {
             "present": false,
@@ -7939,6 +7991,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/paywell-income#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:paywell-income-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/paywell-income#no-marketing",
@@ -7957,7 +8023,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -8021,6 +8086,20 @@
                         ]
                       }
                     ],
+                    "obligations": [
+                      {
+                        "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#delete",
+                        "action": "delete",
+                        "target": "urn:awp:evidence:harbourbank-deposit-2026-10",
+                        "constraints": [
+                          {
+                            "leftOperand": "elapsedTime",
+                            "operator": "lteq",
+                            "rightOperand": "P90D"
+                          }
+                        ]
+                      }
+                    ],
                     "prohibitions": [
                       {
                         "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit#no-marketing",
@@ -8039,7 +8118,6 @@
                       }
                     ]
                   },
-                  "deleteWithinDays": 90,
                   "recipientMustBe": {
                     "task": "mortgage lending",
                     "label": "a regulated lender"
@@ -8047,7 +8125,7 @@
                 }
               }
             ],
-            "digest": "sha-256:f8a120c5f0aef6f9d49df713bd859fb11528551ccdda8f52e466069289993029"
+            "digest": "sha-256:346610017f4e4b1ca3bcee68d2cc65720518e9a1e284fc9371e0d5456fdb7921"
           },
           "terms": {
             "present": true,
@@ -8602,7 +8680,7 @@
         "kind": "receipt",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Handed to the carriage. Carries sha-256:31154bcea13…; never trusted."
+          "summary": "Handed to the carriage. Carries sha-256:9c7b9bb9636…; never trusted."
         },
         "layers": {
           "header": {
@@ -8632,7 +8710,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:9996269b7a792d7b08948f8abd5a0afdef75bdf8e18838ebb34dbfc94d078649"
+            "digest": "sha-256:907367c8004c3dda64085f4551034a39e865e0d9a8a7e2295bfbd973fc38a3b1"
           },
           "authority": {
             "present": false,
@@ -8651,7 +8729,7 @@
                 "checked": [
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:06cac76b58ab2514a2621079b9df34745ec6119c515ae4214e9d09d6108e043e",
+                    "protectedObject": "sha-256:e21fa2c0a78a8cc4b62a3696d4abd487d5c2a8a1825e08a73e8c5b0ef759f45f",
                     "id": "urn:awp:evidence:paywell-income-2026-10",
                     "claimType": "income.gross.monthly-series",
                     "issuer": "https://paywell.example/#org",
@@ -8660,7 +8738,7 @@
                   },
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:a7c24b651b46ffdbd9e59dcce71383a2d440029d157b2291f90acf02c58c9f42",
+                    "protectedObject": "sha-256:0391ed8d6a621e0fd4c4f95cd19f9c6c5ee92f7614e4ce84799cd4679e38f0a0",
                     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
                     "claimType": "deposit.balance",
                     "issuer": "https://harbourbank.example/#org",
@@ -8684,7 +8762,7 @@
               },
               "final": false
             },
-            "digest": "sha-256:cb42339118469aaa88e5ba23f13145e0f26c189c1f2836550641b0ceadafc451"
+            "digest": "sha-256:b4516f41fd9593ad0cdb1da9ac12592e40406cd59d5a69bd36bc5e144eb1a1c6"
           },
           "evidence": {
             "present": false,
@@ -8733,7 +8811,7 @@
         "kind": "receipt",
         "carriage": {
           "suite": "direct-http",
-          "summary": "Arrived over direct-local/0.1. Carries sha-256:31154bcea13…; never trusted."
+          "summary": "Arrived over direct-local/0.1. Carries sha-256:9c7b9bb9636…; never trusted."
         },
         "layers": {
           "header": {
@@ -8763,7 +8841,7 @@
                 "typ": "awp-message+jws"
               }
             },
-            "digest": "sha-256:9996269b7a792d7b08948f8abd5a0afdef75bdf8e18838ebb34dbfc94d078649"
+            "digest": "sha-256:907367c8004c3dda64085f4551034a39e865e0d9a8a7e2295bfbd973fc38a3b1"
           },
           "authority": {
             "present": false,
@@ -8782,7 +8860,7 @@
                 "checked": [
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:06cac76b58ab2514a2621079b9df34745ec6119c515ae4214e9d09d6108e043e",
+                    "protectedObject": "sha-256:e21fa2c0a78a8cc4b62a3696d4abd487d5c2a8a1825e08a73e8c5b0ef759f45f",
                     "id": "urn:awp:evidence:paywell-income-2026-10",
                     "claimType": "income.gross.monthly-series",
                     "issuer": "https://paywell.example/#org",
@@ -8791,7 +8869,7 @@
                   },
                   {
                     "integrity": "valid",
-                    "protectedObject": "sha-256:a7c24b651b46ffdbd9e59dcce71383a2d440029d157b2291f90acf02c58c9f42",
+                    "protectedObject": "sha-256:0391ed8d6a621e0fd4c4f95cd19f9c6c5ee92f7614e4ce84799cd4679e38f0a0",
                     "id": "urn:awp:evidence:harbourbank-deposit-2026-10",
                     "claimType": "deposit.balance",
                     "issuer": "https://harbourbank.example/#org",
@@ -8815,7 +8893,7 @@
               },
               "final": false
             },
-            "digest": "sha-256:cb42339118469aaa88e5ba23f13145e0f26c189c1f2836550641b0ceadafc451"
+            "digest": "sha-256:b4516f41fd9593ad0cdb1da9ac12592e40406cd59d5a69bd36bc5e144eb1a1c6"
           },
           "evidence": {
             "present": false,

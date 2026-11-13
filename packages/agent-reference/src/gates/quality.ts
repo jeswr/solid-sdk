@@ -92,7 +92,7 @@ export function termsSummary(terms: ItemTerms | undefined): string {
     shares.size > 0
       ? `share${terms.recipientMustBe ? ` with ${terms.recipientMustBe.label}` : ""} for ${[...shares].join(" or ")}`
       : "",
-    terms.deleteWithinDays ? `delete within ${terms.deleteWithinDays} days` : "",
+    deletionDays(terms) ? `delete within ${deletionDays(terms)} days` : "",
     never.size > 0 ? `never for ${[...never].join(" or ")}` : "",
   ]
     .filter(Boolean)
@@ -122,7 +122,10 @@ export function evaluateItemTerms(
       verdict: "pass",
       text: "No terms came with it, so the default applies: use for this interaction only, no onward sharing, delete when it ends.",
     };
-  const v = engine.evaluate(terms.policy, {
+  // The rules decide whether this use is allowed; the duties (deletion) are what the receiver
+  // takes on, checked below against how long it would keep the data (CORE-IN-10).
+  const { obligations: _duties, ...rules } = terms.policy;
+  const v = engine.evaluate(rules, {
     agent: need.agent,
     action: need.action,
     target: need.target,
@@ -145,11 +148,27 @@ export function evaluateItemTerms(
       reason: "purpose-not-permitted",
       text: `Its terms do not allow this purpose (${summary}).`,
     };
-  if (terms.deleteWithinDays !== undefined && (need.retentionDays ?? 0) > terms.deleteWithinDays)
+  const keep = deletionDays(terms);
+  if (keep !== undefined && (need.retentionDays ?? 0) > keep)
     return {
       verdict: "fail",
       reason: "terms-not-acceptable",
-      text: `Its terms say delete within ${terms.deleteWithinDays} days; this needs ${need.retentionDays}.`,
+      text: `Its terms say delete within ${keep} days; this needs ${need.retentionDays}.`,
     };
   return { verdict: "pass", text: `Its terms allow this: ${summary}.` };
+}
+
+/**
+ * The deletion duty of a statement's terms, in days: an ODRL obligation to `delete` with an
+ * `elapsedTime` constraint (`P<n>D`) inside the policy, else the older side field.
+ */
+export function deletionDays(terms: ItemTerms): number | undefined {
+  for (const duty of terms.policy.obligations ?? []) {
+    if (duty.action !== "delete") continue;
+    for (const c of duty.constraints ?? []) {
+      const m = c.leftOperand === "elapsedTime" ? /^P(\d+)D$/.exec(String(c.rightOperand)) : null;
+      if (m) return Number(m[1]);
+    }
+  }
+  return terms.deleteWithinDays;
 }

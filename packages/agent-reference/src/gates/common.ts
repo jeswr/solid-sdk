@@ -75,7 +75,10 @@ export interface RelianceProfile {
 /** Terms an issuer attaches to a statement: ODRL (pilot subset) plus a deletion duty. */
 export interface ItemTerms {
   readonly policy: import("@jeswr/solid-odrl").OdrlPolicy;
-  /** OPEN-DESIGN: the pilot ODRL subset has no duties, so deletion travels beside the policy. */
+  /**
+   * Superseded by an ODRL obligation in `policy` (`delete` with an `elapsedTime` constraint);
+   * read only when the policy carries no such duty.
+   */
   readonly deleteWithinDays?: number;
   /** Recipients must be registered for this kind of business (checked through the resolver). */
   readonly recipientMustBe?: { readonly task: string; readonly label: string };

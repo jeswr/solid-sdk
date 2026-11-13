@@ -45,6 +45,15 @@ export function issuerTerms(issuer: Iri, statement: Iri, label: string): ItemTer
         constraints: [{ leftOperand: "purpose", operator: "isAnyOf", rightOperand: purposes }],
       },
     ],
+    // The deletion duty sits inside the policy: delete within 90 days of receipt.
+    obligations: [
+      {
+        id: `${AWP}terms/${label}#delete`,
+        action: "delete",
+        target: statement,
+        constraints: [{ leftOperand: "elapsedTime", operator: "lteq", rightOperand: "P90D" }],
+      },
+    ],
     prohibitions: [
       {
         id: `${AWP}terms/${label}#no-marketing`,
@@ -59,7 +68,6 @@ export function issuerTerms(issuer: Iri, statement: Iri, label: string): ItemTer
   };
   return {
     policy,
-    deleteWithinDays: 90,
     recipientMustBe: { task: "mortgage lending", label: "a regulated lender" },
   };
 }
