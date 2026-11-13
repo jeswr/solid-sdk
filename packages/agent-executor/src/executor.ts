@@ -175,14 +175,17 @@ export function createExecutor(options: ExecutorOptions) {
     await o.proposals.writeDisposition(id, result);
     return result;
   }
-  async function tamper(id: string): Promise<Disposition> {
+  async function tamper(
+    id: string,
+    reason: "wire-mismatch" | "preview-mismatch" = "wire-mismatch",
+  ): Promise<Disposition> {
     await o.audit.append({
       type: "tamper-suspected",
       proposal: id,
       at: o.clock.now().toISOString(),
-      outcome: "wire-mismatch",
+      outcome: reason,
     });
-    return disposition(id, { status: "refused", reason: "wire-mismatch" });
+    return disposition(id, { status: "refused", reason });
   }
 
   async function persist(record: TransmissionRecord): Promise<TransmissionRecord> {
@@ -298,6 +301,12 @@ export function createExecutor(options: ExecutorOptions) {
         throw new Error("Invalid wire");
     } catch {
       return tamper(id);
+    }
+    try {
+      if ((await binding.send.preview(entry.wire)) !== entry.proposal.renderedPreview)
+        throw new Error("Invalid preview");
+    } catch {
+      return tamper(id, "preview-mismatch");
     }
     const now = o.clock.now();
     if (!(Date.parse(entry.proposal.validUntil) >= now.getTime()))

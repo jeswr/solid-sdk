@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
 import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { ChannelBinding } from "../binding.js";
 import { accountId } from "../direct/shared.js";
@@ -10,7 +11,8 @@ import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, TEAMS_CARD } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
-import { card, envelopes } from "./card.js";
+import { card, envelopes, htmlFor } from "./card.js";
+import { preview } from "./preview.js";
 import { BASE, graphTeamsRest, id, json, responseJson } from "./rest.js";
 
 const MEDIA_TYPE = "application/vnd.jeswr.teams-message+json";
@@ -75,14 +77,7 @@ export function createGraphTeamsSend(
     const attachmentId = attachmentIdFor(compactJws);
     if (typeof attachmentId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(attachmentId))
       throw new ChannelParseError("invalid Teams attachment id");
-    const content = `${text
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;")
-      // HTML collapses newlines; <br> keeps the visible lines (ingest maps it back to "\n").
-      .replaceAll("\n", "<br>")}<attachment id="${attachmentId}"></attachment>`;
+    const content = htmlFor(text, attachmentId);
     const bytes = canonicalJson({
       account: account.id,
       chat,
@@ -124,6 +119,7 @@ export function createGraphTeamsSend(
   }
   return {
     render,
+    preview,
     async validate(input, proposal) {
       try {
         const wire = snapshot(input);

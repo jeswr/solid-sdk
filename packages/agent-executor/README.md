@@ -18,6 +18,24 @@ is the default; both the executor and binding must explicitly enable effects.
 Dry runs record a `ready(dry-run)` evaluation and leave the proposal queued. They do not
 call the send binding, reserve a commitment or consume a provider attempt.
 
+Wire integrity also requires `await binding.send.preview(entry.wire)` to equal
+`proposal.renderedPreview` byte for byte. The required pure, bounded preview parser
+reads the actual wire, rather than rendering from the proposal. A mismatch or parser
+exception records `refused(preview-mismatch)` and `tamper-suspected` / decision audit
+outcomes just like `wire-mismatch`, before any mandate, approval-store, token or
+transport request. Every retry, resend and pre-dispatch re-evaluation checks again.
+Existing uncertain commitments survive a preview refusal.
+
+Email previews contain `To: <To header>\nSubject: <Subject header>\n\n` followed by
+the decoded text/plain body and footer (only CRLF becomes LF). Matrix uses content.body;
+Teams uses its card TextBlock; Mastodon uses request.status; Discord joins content and
+embed footer with LF. When the wire also delivers the signed envelope (email, Teams,
+native Matrix), the preview starts with the complete signed message as one line of
+canonical JSON, then the human text. Entries queued under an older preview format refuse
+as preview-mismatch after deploy; drain or re-propose them first.
+Direct's native envelope carries no human text, so its preview is the signed message. Reserved scaffolds
+such as Slack have no send half yet. See agent-channels for parsing bounds.
+
 `runOutboxOnce()` processes the trusted outbox queue. The daemon must call
 `onControlOrMandateChange()` on **every** notification or polling-detected change in
 control statements or mandate/status. It re-evaluates every queued item without sending.
@@ -61,7 +79,8 @@ lookup and before handing over send credentials, closing asynchronous revocation
   items, including those waiting for approval or control/mandate re-evaluation.
   Send/event/audit persistence errors propagate; an audit failure never authorizes a send.
 - `proposalTermsDigest(entry)` defines approval identity. Build the wire first, set
-  `wireDigest`, then set `proposal.intent.termsDigest` using this helper before approval.
+  `wireDigest` and `proposal.renderedPreview = await binding.send.preview(wire)`, then
+  set `proposal.intent.termsDigest` using this helper before approval.
   It covers the complete intent except the digest itself, proposal id, preview, expiry,
   signed carrier, account, wire digest and media type. Changing any term invalidates old approvals.
   `proposalApprovalTerms(entry)` returns the body-free preimage shared with agent-audit:

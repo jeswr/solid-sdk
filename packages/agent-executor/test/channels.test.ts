@@ -35,6 +35,7 @@ it("registers a channel send half with only the trusted validation adapter", asy
   const renderable = signed(original.renderable.message);
   const wire = await channel.send.render(renderable, channel.carriage);
   const entry: OutboxEntry = { ...original, renderable, wire, wireDigest: wire.digest };
+  entry.proposal.renderedPreview = await channel.send.preview(wire);
   seal(entry);
   h.entries.set(entry.proposal.id, entry);
 
@@ -128,6 +129,7 @@ it.each([
     const profile = bindingId === "matrix" ? MATRIX_CONTENT : EMAIL_MIME;
     const wire = await send.render(renderable, profile);
     const entry = { ...original, renderable, wire, wireDigest: wire.digest };
+    entry.proposal.renderedPreview = await send.preview(wire);
     seal(entry);
     h.entries.set(entry.proposal.id, entry);
     const executor = createExecutor({
@@ -282,6 +284,7 @@ for (const bindingId of ["gmail", "graph-mail", "matrix", "mastodon", "discord"]
               : EMAIL_MIME;
       const wire = await send.render(renderable, profile);
       const entry = { ...original, renderable, wire, wireDigest: wire.digest };
+      entry.proposal.renderedPreview = await send.preview(wire);
       seal(entry);
       h.entries.set(entry.proposal.id, entry);
       h.needsApproval();
@@ -390,6 +393,7 @@ it.each([
           : EMAIL_MIME;
   const wire = await send.render(renderable, profile);
   const entry = { ...original, renderable, wire, wireDigest: wire.digest };
+  entry.proposal.renderedPreview = await send.preview(wire);
   seal(entry);
   h.entries.set(entry.proposal.id, entry);
   h.needsApproval();

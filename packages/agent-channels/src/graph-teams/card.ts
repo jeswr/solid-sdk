@@ -6,13 +6,25 @@ import { record } from "../graph-mail/rest.js";
 import { json } from "./rest.js";
 
 export const CARD_TYPE = "application/vnd.microsoft.card.adaptive";
+export const CARD_SCHEMA = "http://adaptivecards.io/schemas/adaptive-card.json";
+/** The chat body Teams shows: the card text, HTML-escaped, then the card attachment marker. */
+export function htmlFor(text: string, attachmentId: string): string {
+  return `${text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;")
+    // HTML collapses newlines; <br> keeps the visible lines (ingest maps it back to "\n").
+    .replaceAll("\n", "<br>")}<attachment id="${attachmentId}"></attachment>`;
+}
 export function card(text: string, compactJws: string, attachmentId = "agent-envelope") {
   return {
     id: attachmentId,
     contentType: CARD_TYPE,
     content: canonicalJson({
       // biome-ignore lint/style/useNamingConvention: Adaptive Card schema key
-      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      $schema: CARD_SCHEMA,
       type: "AdaptiveCard",
       version: "1.2",
       body: [{ type: "TextBlock", text, wrap: true }],

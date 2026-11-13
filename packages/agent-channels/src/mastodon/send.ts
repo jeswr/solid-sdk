@@ -16,6 +16,7 @@ import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, MASTODON_FOOTER } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
 import type { AccountRef, RenderableProposal, Wire } from "../types.js";
+import { preview } from "./preview.js";
 import {
   DEFAULT_INSTANCE,
   id,
@@ -135,6 +136,7 @@ export function createMastodonSend(
   }
   return {
     render,
+    preview,
     async validate(wire, proposal) {
       try {
         const actual = snapshot(wire);

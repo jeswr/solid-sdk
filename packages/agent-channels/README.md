@@ -11,6 +11,50 @@ Channel contracts, carriage profiles, capability RDF and origin enforcement for 
 and Discord (A-030 / sst-r57).
 The `ChannelBinding` and `CarriageProfile` declarations follow §3.1.
 
+Every implemented send half exposes `preview(wire): Promise<string>`. It parses the
+exact wire without re-rendering, signature verification, credentials or I/O. Parsing
+is bounded and fails with `ChannelParseError` on malformed, oversized, truncated or
+unsupported input. The executor compares this result byte for byte with the approved
+`proposal.renderedPreview` on every attempt, before mandate/approval work or transport;
+a difference or parse refusal records `refused(preview-mismatch)` and a
+`tamper-suspected` audit outcome, like `wire-mismatch`.
+
+Preview strings preserve visible text and whitespace, with LF line endings. Where the
+wire also delivers the signed envelope to the recipient's agent (email, Teams, native
+Matrix), the preview starts with `Signed message sent to the recipient's agent:\n`, the
+canonical JSON of the raw JWS payload on one line, then `\n\nWhat the recipient sees:\n`
+and the human text, so the owner approves everything that is sent, not only the summary.
+Human text containing either heading refuses, so it can't imitate the signed section.
+Any preview longer than the proposal record's 16384-character `renderedPreview` limit
+refuses. Character classes come from the runtime's Unicode tables, so run the proposer and
+the executor on the same Node version: otherwise a newly assigned emoji can preview on one
+side and refuse on the other, which the executor records as preview-mismatch.
+Proposals queued before this format change fail the executor's preview check
+(preview-mismatch); drain or re-propose them when deploying.
+
+| Send family | Preview |
+| --- | --- |
+| MIME renderer, Gmail, Graph mail (including Workspace) | `To: <To header>\nSubject: <Subject header>\n\n<decoded text/plain>` (footer included, only decoded CRLF becomes LF), after the signed message. The HTML alternative must equal the renderer's HTML for that text and carrier; any header beyond the renderer's own (Cc, Bcc, Reply-To…) refuses |
+| Matrix | The signed message from the native envelope, then exact `content.body`. Content must be exactly `msgtype: m.text`, `body` and the envelope: edits, relations and formatted bodies refuse |
+| Signal/WhatsApp bridges | Exact `content.body` (bridges send no envelope; the body already includes every body value) |
+| Graph Teams | The signed message from the card data, then the card's single `TextBlock.text`. The HTML chat body must equal that text, escaped, plus the attachment marker; extra card, request or attachment fields refuse |
+| Mastodon | Exact `request.status`; the request must be exactly a `direct` status (no spoiler, poll or media) |
+| Discord | Exact `content`, LF, then the embed `footer.text`; no components, polls or mention changes |
+| Direct | The signed message as canonical JSON, decoded from the JWS payload: native carriage has no human text, so the owner approves the message itself |
+
+All preview text refuses characters that render as nothing: controls, bidi and other
+format characters, default-ignorable code points (other variation selectors, Hangul
+fillers), U+2800, line/paragraph separators, private use, unassigned code points and
+noncharacters. Some legitimate text therefore refuses (ZWNJ/ZWJ in Persian or Indic
+conjuncts, subdivision flags, CJK ideographic variation selectors), and in envelope
+carriages that applies to the whole signed message. Emoji sequences survive: a
+variation selector directly after a pictograph or keycap base, and a zero-width joiner
+only between pictographs. Markdown is not interpreted: Discord and Teams may render
+markup in the text differently from the plain preview.
+
+Reserved send scaffolds, including Slack, have no renderer or send capability yet.
+When implemented, their preview must decode the wire's visible text and footer.
+
 The root exports the shared legacy `BridgeMessage`, email projection helpers,
 `ChannelAdapter`, explicit-parser `InMemoryChannelAdapter`, `TokenProvider`, profile
 constants, `toRdf` and `capabilityToTurtle`. RDF delegates to agent-model's validated

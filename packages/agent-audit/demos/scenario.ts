@@ -186,7 +186,7 @@ export async function seedWalkthrough(options: {
             parameters: {},
             conversation: "urn:demo:conversation",
           },
-          renderedPreview: "Synthetic private body",
+          renderedPreview: wire.bytes,
           wasGeneratedBy: "urn:demo:deterministic",
           createdAt: at,
           validUntil: until,
@@ -277,6 +277,7 @@ export async function seedWalkthrough(options: {
               },
               send: {
                 render: async () => wire,
+                preview: async (wire) => wire.bytes,
                 validate: async (candidate, context) =>
                   candidate.digest === wire.digest &&
                   context.account.id === entry.account.id &&
