@@ -2,8 +2,18 @@
 import { formatDue } from "../format/due";
 import type { StoredTask } from "../model/store";
 import type { TaskView } from "../views/types";
-import { createMemoryFiredStore, type FiredReminderStore } from "./fired-store";
-import { collectDueReminders, type DueReminder, type ReminderTask } from "./scheduler";
+import {
+  createMemoryFiredStore,
+  type FiredReminderStore,
+  isLegacyReminderKey,
+} from "./fired-store";
+import {
+  collectDueReminders,
+  type DueReminder,
+  type ReminderTask,
+  reminderFireTimes,
+  reminderSchedule,
+} from "./scheduler";
 
 /** The slice of the Tasks cache snapshot the reminder runner reads. */
 export interface ReminderSnapshot {
@@ -24,6 +34,8 @@ export interface ReminderEvent extends DueReminder {
   tag: string;
   /** Due-time text, e.g. "Due today 17:00". */
   body: string;
+  /** Scheduling inputs for delivery retries; unrelated task edits keep these unchanged. */
+  schedules?: readonly string[];
 }
 export type ReminderNotifier = (event: ReminderEvent) => void | Promise<void>;
 export interface ReminderRun {
@@ -35,7 +47,7 @@ export interface ReminderRun {
 export interface ReminderTickOptions {
   /** Earlier undelivered events, kept while their task is still due-able and in the window. */
   retry?: readonly ReminderEvent[];
-  /** Checked before each delivery, so a stopped scheduler delivers nothing more. */
+  /** Checked before each claim and delivery, so a stopped scheduler leaves later keys untouched. */
   active?: () => boolean;
 }
 const WINDOW = 86400000;
@@ -97,7 +109,7 @@ export async function runReminderTick(
   const { tasks, errors } = reminderTasks(snapshot);
   let due: DueReminder[] = [];
   try {
-    const result = await collectDueReminders(tasks, now, store);
+    const result = await collectDueReminders(tasks, now, store, WINDOW, options.active);
     due = result.due;
     errors.push(...result.errors);
   } catch (error) {
@@ -105,13 +117,38 @@ export async function runReminderTick(
   }
   const byUrl = new Map(tasks.map((task) => [task.url, task]));
   const events: ReminderEvent[] = [
-    ...(options.retry ?? []).filter(
-      (event) => byUrl.has(event.taskUrl) && event.fireTime.getTime() > now.getTime() - WINDOW,
-    ),
+    ...(options.retry ?? []).filter((event) => {
+      const task = byUrl.get(event.taskUrl);
+      if (!task || event.fireTime > now || event.fireTime.getTime() <= now.getTime() - WINDOW)
+        return false;
+      return task.reminders.some((reminder) => {
+        try {
+          return reminderFireTimes(task, reminder).some(
+            (time) =>
+              time.at.getTime() === event.fireTime.getTime() &&
+              (!event.schedules || event.schedules.includes(reminderSchedule(task, reminder))),
+          );
+        } catch {
+          return false;
+        }
+      });
+    }),
     ...due.map((reminder) => ({
       ...reminder,
       tag: `${reminder.taskUrl}@${reminder.fireTime.toISOString()}`,
       body: reminderBody(byUrl.get(reminder.taskUrl) as ReminderTask, now),
+      schedules: (byUrl.get(reminder.taskUrl) as ReminderTask).reminders.flatMap((trigger) => {
+        const task = byUrl.get(reminder.taskUrl) as ReminderTask;
+        try {
+          return reminderFireTimes(task, trigger).some(
+            (time) => time.at.getTime() === reminder.fireTime.getTime(),
+          )
+            ? [reminderSchedule(task, trigger)]
+            : [];
+        } catch {
+          return [];
+        }
+      }),
     })),
   ];
   const delivered: ReminderEvent[] = [];
@@ -132,25 +169,72 @@ export async function runReminderTick(
   return { delivered, errors, undelivered };
 }
 
-/** Keep reminders firing (deduplicated per tab only) when the durable store is unavailable.
- * Reports only the first failure; later claims still try the durable store first. */
+/** Keep a tab-local claim cache across primary/fallback transitions. Reports the first failure. */
 export function fallbackFiredStore(
   primary: FiredReminderStore,
   onError: (error: unknown) => void,
   fallback: FiredReminderStore = createMemoryFiredStore(),
 ): FiredReminderStore {
   let reported = false;
+  const known = new Set<string>();
+  function report(error: unknown) {
+    if (!reported) {
+      reported = true;
+      onError(error);
+    }
+  }
   return {
-    async claim(key) {
+    async claim(key, legacy) {
+      if (known.has(key)) return false;
+      // Reserve synchronously so overlapping callers in this tab cannot both win.
+      known.add(key);
       try {
-        return await primary.claim(key);
-      } catch (error) {
-        if (!reported) {
-          reported = true;
-          onError(error);
+        // Keep consulting and merging the durable fallback, including after page reload.
+        // Mirroring new claims there also covers the next primary outage.
+        let previousKeys: string[] = [];
+        try {
+          previousKeys = (await fallback.keys?.()) ?? [];
+        } catch (error) {
+          report(error);
         }
-        return fallback.claim(key);
+        // Legacy suppression depends on its original recorded time. Keep consulting
+        // those records in the fallback rather than recreating them with today's time.
+        for (const previous of previousKeys)
+          if (!isLegacyReminderKey(previous)) await primary.claim(previous);
+        if (!(await primary.claim(key, legacy))) return false;
+        try {
+          return await fallback.claim(key, legacy);
+        } catch (error) {
+          report(error);
+          return true;
+        }
+      } catch (error) {
+        report(error);
+        try {
+          return await fallback.claim(key, legacy);
+        } catch (error) {
+          known.delete(key);
+          throw error;
+        }
       }
+    },
+    async keys() {
+      let primaryKeys: string[] = [];
+      try {
+        primaryKeys = (await primary.keys?.()) ?? [];
+      } catch (error) {
+        report(error);
+      }
+      return [...new Set([...known, ...primaryKeys, ...((await fallback.keys?.()) ?? [])])];
+    },
+    // Retention applies to every durable layer. A failing primary must not stop the fallback.
+    async prune() {
+      try {
+        await primary.prune?.();
+      } catch (error) {
+        report(error);
+      }
+      await fallback.prune?.();
     },
   };
 }
