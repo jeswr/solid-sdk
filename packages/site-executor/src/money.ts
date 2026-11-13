@@ -17,6 +17,7 @@ import {
   jsonValue,
   RDF,
 } from "./values.js";
+import { csrfFieldName, effectiveWireFields, type WireField } from "./wire.js";
 
 export class MoneyRefusal extends BindingError {}
 
@@ -37,6 +38,7 @@ export interface MoneyEvidence {
       identity: [string, string[]][];
       inputs: Record<string, string>;
       sources: Record<string, string[]>;
+      wire: WireField[];
     }[];
   };
 }
@@ -48,6 +50,7 @@ export interface MoneyRead {
   values?: Record<string, string>;
   sources?: Record<string, string[]>;
   truncation?: { items: boolean; values: boolean };
+  compiled?: CompiledRequest;
 }
 export interface MoneyWrite {
   step: number;
@@ -185,58 +188,6 @@ function assertSent(
     throw new BindingError("monetary input must be sent exactly once as a whole value");
 }
 
-/** Static fields named for a quote or checked identity can override the checked value. */
-function assertNoStaticShadows(payment: MoneyWrite, names: ReadonlySet<string>): void {
-  const prefix = `sab_${randomUUID().replaceAll("-", "")}_`;
-  const marked = Object.fromEntries(
-    payment.operation.inputs.flatMap((p) =>
-      (payment.values[p.name] ?? p.default) === undefined ? [] : [[p.name, prefix + p.name]],
-    ),
-  );
-  const dynamic = (value: unknown): boolean => {
-    if (typeof value === "string") return value.includes(prefix);
-    if (Array.isArray(value)) return value.some(dynamic);
-    return value !== null && typeof value === "object" && Object.values(value).some(dynamic);
-  };
-  const inspect = (name: string, value: unknown): void => {
-    if (names.has(name) && !dynamic(value))
-      throw new BindingError("static payment field shadows a quoted input or checked identity");
-  };
-  const url = new URL(
-    expandTemplate(payment.operation.request.urlTemplate, marked),
-    payment.compiled.url,
-  );
-  for (const [name, value] of url.searchParams) inspect(name, value);
-  const template = payment.operation.request.bodyTemplate;
-  if (template === undefined || !payment.compiled.body) return;
-  if (payment.compiled.body.kind === "json") {
-    const walk = (node: unknown): void => {
-      if (Array.isArray(node)) node.forEach(walk);
-      else if (node !== null && typeof node === "object")
-        for (const [name, value] of Object.entries(node)) {
-          inspect(name, value);
-          walk(value);
-        }
-    };
-    walk(
-      fillJsonTemplate(
-        template,
-        marked,
-        new Map(payment.operation.inputs.map((p) => [p.name, p])),
-        new Set(Object.keys(marked)),
-      ),
-    );
-  } else
-    for (const [name, value] of new URLSearchParams(template))
-      inspect(
-        name,
-        value.replace(
-          /\{([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*)\}/g,
-          (_all, p: string) => marked[p] ?? "",
-        ),
-      );
-}
-
 export interface ItemIdentity {
   type: "iri" | "fallback" | string;
   value: string;
@@ -315,16 +266,24 @@ export function factsMoney(
     : "needs one unambiguous product price";
   for (const read of window) {
     const ex = read.operation.extraction;
-    const couldSupplyMoney =
+    const couldSupplyMoneyOrIdentity =
       ex &&
-      ([`${SCHEMA}Order`, `${SCHEMA}Invoice`].includes(expandIri(ex.itemType)) ||
+      (ex.idField !== undefined ||
+        [`${SCHEMA}Order`, `${SCHEMA}Invoice`].includes(expandIri(ex.itemType)) ||
         ex.fields.some(
           (f) =>
             !f.untrusted &&
-            [...AMOUNTS, ...CURRENCIES, `${RDF}type`].includes(expandIri(f.property)),
+            [
+              ...AMOUNTS,
+              ...CURRENCIES,
+              ...ID_PROPERTIES,
+              `${SCHEMA}orderNumber`,
+              `${SCHEMA}url`,
+              `${RDF}type`,
+            ].includes(expandIri(f.property)),
         ));
-    if (couldSupplyMoney && (read.truncation?.items || read.truncation?.values))
-      throw new MoneyRefusal(`${refusal}: incomplete extracted money evidence`);
+    if (couldSupplyMoneyOrIdentity && (read.truncation?.items || read.truncation?.values))
+      throw new MoneyRefusal(`${refusal}: incomplete extracted money or identity evidence`);
   }
   const candidates = window.flatMap((read) =>
     read.items.flatMap((item, index) => {
@@ -388,7 +347,7 @@ export function factsMoney(
   let quantity = "1";
   if (!totalRequired) {
     if (normaliseEffect(payment.operation.effect) === "payment")
-      assertPaymentConfiguration(payment, origin);
+      assertWireConfiguration(payment, origin);
     const quantities = payment.operation.inputs.flatMap((p) => {
       if ((kind(p.path) ?? kind(payment.sources[p.name] ?? [])) !== "quantity") return [];
       const v = payment.values[p.name] ?? p.default;
@@ -453,7 +412,12 @@ export function factsMoney(
       (amounts.length || currencies.length) &&
       normaliseEffect(payment.operation.effect) === "payment"
     )
-      assertPaymentConfiguration(payment, origin, read);
+      assertWireConfiguration(
+        payment,
+        origin,
+        read,
+        selected.map((record) => record.item),
+      );
     records.push({
       step: read.step,
       operation: read.operation.id,
@@ -467,6 +431,9 @@ export function factsMoney(
       ),
       inputs: { ...read.values },
       sources: { ...read.sources },
+      wire: effectiveWireFields(
+        read.compiled ?? compileOperation(read.operation, read.values ?? {}, origin),
+      ),
     });
   }
   if (allAmounts.size !== 1 || allCurrencies.size !== 1)
@@ -479,100 +446,139 @@ export function factsMoney(
   };
 }
 
-/** Every payment option must be covered by the evidence's concrete configuration. */
-function assertPaymentConfiguration(payment: MoneyWrite, origin: string, total?: MoneyRead): void {
-  const path = (p: Parameter, sources: Record<string, string[]> = {}) =>
-    (p.path.length ? p.path : (sources[p.name] ?? [])).map(expandIri);
-  const protectedNames = new Set(
-    total?.operation.inputs
-      .filter((p) => (total.values?.[p.name] ?? p.default) !== undefined)
-      .map((p) => p.name),
-  );
+/** Rule W: closed-world equality of concrete fields, with narrowly checked exemptions. */
+function assertWireConfiguration(
+  payment: MoneyWrite,
+  origin: string,
+  total?: MoneyRead,
+  orderRecords: readonly ExtractedItem[] = [],
+): void {
+  const unique = (fields: WireField[]): Map<string, WireField> => {
+    const result = new Map<string, WireField>();
+    for (const field of fields) {
+      if (result.has(field.name)) throw new MoneyRefusal(`duplicate wire field ${field.name}`);
+      result.set(field.name, field);
+    }
+    return result;
+  };
+  const sent = unique(effectiveWireFields(payment.compiled));
+  const quoted = total
+    ? unique(
+        effectiveWireFields(
+          total.compiled ?? compileOperation(total.operation, total.values ?? {}, origin),
+        ),
+      )
+    : new Map<string, WireField>();
+  const exempt = new Set<string>();
+  const checked = (p: Parameter): void => {
+    try {
+      assertSent(payment.operation, p, payment.values, payment.compiled);
+      const marker = `sab_${randomUUID().replaceAll("-", "")}`;
+      const probe = compileOperation(
+        payment.operation,
+        { ...payment.values, [p.name]: marker },
+        origin,
+        { placeholders: new Set([p.name]) },
+      );
+      const field = effectiveWireFields(probe).find((f) => f.value === marker);
+      const actual = field && sent.get(field.name);
+      const value = payment.values[p.name] ?? p.default;
+      if (
+        !actual ||
+        value === undefined ||
+        actual.value !==
+          (actual.location === "body" && payment.compiled.body?.kind === "json"
+            ? String(jsonValue(p, value))
+            : canonicalValue(p, value))
+      )
+        throw new BindingError("checked input does not reach a whole wire field");
+      exempt.add(actual.name);
+    } catch {
+      throw new MoneyRefusal(
+        "checked identity or quantity must be sent exactly once as a whole value",
+      );
+    }
+  };
   for (const p of payment.operation.inputs) {
     const value = payment.values[p.name] ?? p.default;
     if (value === undefined) continue;
-    const semantic = path(p, payment.sources);
-    const ids = inputIdentities(semantic, value);
-    const quoted = total?.operation.inputs.some(
-      (candidate) =>
-        candidate.name === p.name ||
-        (semantic.length > 0 && semantic.join("\0") === path(candidate, total.sources).join("\0")),
-    );
-    // CSRF/session decoration is attached separately, after evidence and approval.
-    if (
-      !ids.length &&
-      !semantic.length &&
-      !quoted &&
-      payment.operation.csrf?.some(
-        (rule) =>
-          rule.target.name === p.name &&
-          (rule.target.kind === p.location ||
-            (rule.target.kind === "form" && p.location === "body")),
-      )
-    )
-      continue;
-    // Quote matching and identity checks are meaningful only for the effective
-    // payment request, with no unused, embedded, duplicated or shadowed values.
+    const path = p.path.length ? p.path : (payment.sources[p.name] ?? []);
+    // Retain the whole-value invariant for bound inputs; configuration coverage
+    // itself is determined only by the concrete wire inventory below.
     try {
       assertSent(payment.operation, p, payment.values, payment.compiled);
     } catch {
-      throw new MoneyRefusal(
-        "needs a fresh basket total for these options: payment input must be sent exactly once as a whole value",
-      );
+      throw new MoneyRefusal("payment input must be sent exactly once as a whole value");
     }
-    protectedNames.add(p.name);
-    // Identity checks above already bind these identifiers to the evidence.
+    const ids = inputIdentities(path, value);
     if (
       ids.length &&
       (!total ||
-        ids.every((id) =>
-          ["iri", "fallback", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type),
-        ))
+        ids.every((id) => ["iri", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type)))
     )
-      continue;
-    // Direct-buy arithmetic and resolvedMoney cross-check every monetary mapping.
-    if (!total && kind(semantic)) continue;
-    if (
-      total?.operation.inputs.some((candidate) => {
-        const readValue = total.values?.[candidate.name] ?? candidate.default;
-        const readPath = path(candidate, total.sources);
-        const same =
-          candidate.name === p.name ||
-          (semantic.length > 0 && semantic.join("\0") === readPath.join("\0"));
-        if (
-          !same ||
-          readValue === undefined ||
-          canonicalValue(candidate, readValue) !== canonicalValue(p, value)
-        )
-          return false;
-        // A declared but unused value cannot establish the site's quoted configuration.
-        try {
-          const inputs = total.values ?? {};
-          assertSent(
-            total.operation,
-            candidate,
-            inputs,
-            compileOperation(total.operation, inputs, origin),
-          );
-          return true;
-        } catch {
-          return false;
-        }
-      })
-    )
-      continue;
-    throw new MoneyRefusal("needs a fresh basket total for these options");
+      checked(p);
+    else if (!total && kind(path) === "quantity") checked(p);
   }
-  if (payment.operation.csrf?.some((rule) => protectedNames.has(rule.target.name)))
-    throw new MoneyRefusal(
-      "needs a fresh basket total for these options: CSRF target shadows a quoted input or checked identity",
-    );
-  try {
-    assertNoStaticShadows(payment, protectedNames);
-  } catch {
-    throw new MoneyRefusal(
-      "needs a fresh basket total for these options: static payment field shadows a quoted input or checked identity",
-    );
+  for (const rule of payment.compiled.csrf) {
+    const name = csrfFieldName(payment.compiled, rule);
+    const field = sent.get(name);
+    if (!field || quoted.has(name) || exempt.has(name))
+      throw new MoneyRefusal(`CSRF target ${name} collides with a checked wire field`);
+    exempt.add(name);
+  }
+  for (const field of sent.values()) {
+    if (exempt.has(field.name)) continue;
+    if (total && quoted.get(field.name)?.value === field.value) continue;
+    throw new MoneyRefusal(`payment sends ${field.name}, which the basket total did not cover`);
+  }
+  if (total) {
+    const totalIds = new Set<string>();
+    for (const p of total.operation.inputs) {
+      const value = total.values?.[p.name] ?? p.default;
+      const path = p.path.length ? p.path : (total.sources?.[p.name] ?? []);
+      const ids = inputIdentities(path, value);
+      // Only identities actually checked against the selected order may be omitted by P.
+      if (
+        value === undefined ||
+        !ids.length ||
+        !ids.every(
+          (id) =>
+            ["iri", `${SCHEMA}orderNumber`, `${SCHEMA}identifier`].includes(id.type) &&
+            orderRecords.some((item) => identityMatches(item, id)),
+        )
+      )
+        continue;
+      try {
+        assertSent(
+          total.operation,
+          p,
+          total.values ?? {},
+          total.compiled ?? compileOperation(total.operation, total.values ?? {}, origin),
+        );
+        const marker = `sab_${randomUUID().replaceAll("-", "")}`;
+        const probe = compileOperation(
+          total.operation,
+          { ...total.values, [p.name]: marker },
+          origin,
+          { placeholders: new Set([p.name]) },
+        );
+        const field = effectiveWireFields(probe).find((f) => f.value === marker);
+        const actual = field && quoted.get(field.name);
+        if (
+          actual &&
+          actual.value ===
+            (actual.location === "body" && total.compiled?.body?.kind === "json"
+              ? String(jsonValue(p, value))
+              : canonicalValue(p, value))
+        )
+          totalIds.add(actual.name);
+      } catch {
+        /* A transformed identity is an ordinary field and must be covered. */
+      }
+    }
+    for (const field of quoted.values())
+      if (!totalIds.has(field.name) && sent.get(field.name)?.value !== field.value)
+        throw new MoneyRefusal(`basket total sends ${field.name}, which the payment did not cover`);
   }
 }
 

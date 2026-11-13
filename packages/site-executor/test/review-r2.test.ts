@@ -474,11 +474,7 @@ describe("review r2 execution regressions", () => {
     "later",
   ])("retains a committed write before %s processing fails", async (failure) => {
     const f = fixture();
-    f.pay.inputs = [
-      param("id", ["object", "productID"], { default: "104" }),
-      param("amount", ["amount"], { default: "20" }),
-      param("currency", ["currency"], { default: "GBP" }),
-    ];
+    f.pay.inputs = [param("id", ["object", "productID"], { default: "104" })];
     f.pay.extraction = { format: "json", itemType: `${S}Order`, fields: [] };
     if (failure === "later") f.flow.steps.push({ operation: f.read.id, bind: {} });
     let reads = 0;

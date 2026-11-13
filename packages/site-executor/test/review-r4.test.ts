@@ -279,7 +279,7 @@ describe("r4 payment configuration and effects", () => {
     required(f.flow.steps.at(-1)).bind = { delivery: "express" };
     const result = await f.executor(f.transport()).execute(f.buy());
     expect(result.status).toBe("refused");
-    expect(result.error).toContain("needs a fresh basket total for these options");
+    expect(result.error).toContain("which the basket total did not cover");
   });
 
   it("#3 checks configuration against every contributing total read", async () => {
@@ -299,7 +299,7 @@ describe("r4 payment configuration and effects", () => {
     required(f.flow.steps.at(-1)).bind.delivery = "express";
     const result = await f.executor(f.transport()).execute(f.buy());
     expect(result.status).toBe("refused");
-    expect(result.error).toContain("needs a fresh basket total for these options");
+    expect(result.error).toContain("which the basket total did not cover");
   });
 
   it.each([
@@ -319,7 +319,7 @@ describe("r4 payment configuration and effects", () => {
       name === "qty" ? "1000" : name === "delivery" ? "express" : "extra";
     const result = await f.executor(f.transport()).execute(f.buy());
     expect(result.status).toBe("refused");
-    expect(result.error).toContain("needs a fresh basket total for these options");
+    expect(result.error).toContain("which the basket total did not cover");
     expect(result.committed).toHaveLength(1);
   });
 
@@ -333,14 +333,14 @@ describe("r4 payment configuration and effects", () => {
       required(f.flow.steps.at(-1)).bind[name] = "1000";
       const result = await f.executor(f.transport()).execute(f.buy());
       expect(result.status).toBe("refused");
-      expect(result.error).toContain("needs a fresh basket total for these options");
+      expect(result.error).toContain("which the basket total did not cover");
     }
   });
 
   it.each([
     "name",
     "path",
-  ])("#3 accepts canonical matching total configuration by %s", async (match) => {
+  ])("#3 Rule W refuses JSON pointer/name differences despite canonical matching by %s", async (match) => {
     const f = fixture(true);
     required(f.read.extraction).itemType = `${S}Order`;
     f.read.inputs = [
@@ -355,8 +355,8 @@ describe("r4 payment configuration and effects", () => {
     );
     required(f.flow.steps.at(-1)).bind.qty = "+1";
     const result = await f.executor(f.transport()).execute(f.buy());
-    expect(result.status).toBe("done");
-    expect(result.outcome?.amount).toBe("20");
+    expect(result.status).toBe("refused");
+    expect(result.error).toContain("payment sends /qty");
   });
 
   it("#3 accounts for a mapped direct-buy quantity by exact multiplication", async () => {
