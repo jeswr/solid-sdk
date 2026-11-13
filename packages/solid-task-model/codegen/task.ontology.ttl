@@ -1,0 +1,12 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Admission projection of the existing wf:Task vocabulary, not a new ontology.
+# All field predicates are reused from their original vocabularies; declarations
+# here do not claim ownership. The published contract remains shapes/task.ttl.
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+wf:Task a owl:Class ;
+    rdfs:label "Task"@en ;
+    skos:definition "A shared federated task or issue, with Dublin Core metadata and workflow state."@en .

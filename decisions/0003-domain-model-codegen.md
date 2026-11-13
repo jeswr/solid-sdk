@@ -2,6 +2,7 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 
 # 0003 Domain-model code generation in the workspace
 
@@ -68,6 +69,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
 | P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | drawing implemented: generated nine-field Scene plus facade; original 90-test oracle unchanged; remaining packages later | `packages/solid-drawing`, remaining model packages | sst-ild.4.7 |
+| Task-model split: generate wf:Task only | implemented: generated Task core with public wrapper/facade; tracker and contacts remain hand-written; qualified type-state, dual-description writes and first-valid lexical IRI reads stay facade policy | `packages/solid-task-model` | sst-ild.4.7 |
 | ild.9 `@jeswr/rdf-serialize/wrapper` helpers and consumer rewire | open | `packages/rdf-serialize` plus six consumers | sst-ild.9 |
 
 G5 deliberately preserves canonical-first singleton migration reads. With
