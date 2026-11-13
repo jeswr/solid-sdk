@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { ChunkSlices } from "./chunk-slices.js";
 import type { ImportFile } from "./file-import.js";
 import { fileText } from "./file-stream.js";
@@ -151,17 +152,23 @@ class JsonReader {
 export interface JsonEntry {
   readonly path: string;
   readonly value: unknown;
+  /** Set on a boundary entry: one member of the array at `path` has ended. */
+  readonly end?: true;
 }
 
 /** Select array members and optional root fields without retaining the export.
  * An oversized selected value is discarded and counted once through onSkip.
  * Overflow outside a selected value (including routing keys) fails the file.
+ * For each path in `boundaries` (an unselected array on a selector path, such as a list
+ * of chats), a `{ path, value: undefined, end: true }` entry follows each member, after
+ * every entry selected inside it, so callers can group entries by member.
  */
 export async function* jsonEntries(
   file: ImportFile,
   arrays: readonly string[],
   fields: readonly string[] = [],
   onSkip: () => void = () => {},
+  boundaries: readonly string[] = [],
 ): AsyncGenerator<JsonEntry> {
   const reader = new JsonReader(file);
   const next = async (retainString = false): Promise<Token> => {
@@ -206,6 +213,7 @@ export async function* jsonEntries(
       }
     } else if (first.kind === "[") {
       const select = !selected && !ignored && arrays.includes(path);
+      const bounded = !select && !selected && !ignored && boundaries.includes(path);
       let firstMember = true;
       while (true) {
         // Start before reading a member so its first token is also bounded.
@@ -216,6 +224,7 @@ export async function* jsonEntries(
           return;
         }
         yield* visit(`${path}[]`, value, depth + 1, selected || select, ignored);
+        if (bounded) yield { path, value: undefined, end: true };
         if (select) {
           const raw = reader.endRecord();
           if (raw === undefined) onSkip();

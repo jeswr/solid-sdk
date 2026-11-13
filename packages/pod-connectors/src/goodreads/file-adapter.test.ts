@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
@@ -58,6 +59,22 @@ describe("goodreads file adapter", () => {
     expect(book.isbn).toBeUndefined();
     expect(book.author).toBe("Hunt, Andrew");
     expect(book.readingStatus).toBe("to-read");
+  });
+
+  it("keeps distinct Goodreads books without an ISBN apart by Book Id", async () => {
+    const csv = `Book Id,Title,Author,ISBN,ISBN13,My Rating,Exclusive Shelf,Date Added
+111,Selected Poems,Jane Doe,"=""""","=""""",5,read,2020/01/01
+222,Selected Poems,Jane Doe,"=""""","=""""",1,to-read,2020/01/02
+111,Selected Poems,Jane Doe,"=""""","=""""",5,read,2020/01/01`;
+    const { pod } = await fileImport(goodreadsFileAdapter, memoryFile("lib.csv", csv, "text/csv"));
+    const ds = pod.dataset(DOC);
+    const books = [...ds]
+      .filter((q) => q.predicate.value === "https://schema.org/identifier")
+      .map((q) => new Book(q.subject.value, ds, DataFactory));
+    expect(books.map((b) => [b.identifier, b.ratingValue, b.readingStatus]).sort()).toEqual([
+      ["111", 5, "read"],
+      ["222", 1, "to-read"],
+    ]);
   });
 
   it("registers Book in the type index", async () => {

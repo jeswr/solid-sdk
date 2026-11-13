@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Typed RDF wrappers for everything the Tier-A adapters write — the only way
  * integration data becomes triples (house rule: never hand-build quads).
@@ -6,6 +7,7 @@
  * taxonomy's class lists (`src/lib/categories.ts`).
  */
 import { escapeIri, safeIri as sharedSafeIri } from "@jeswr/rdf-serialize";
+import { NS } from "@jeswr/suite-vocab";
 import {
   LiteralAs,
   LiteralFrom,
@@ -19,6 +21,11 @@ import {
 
 export const SCHEMA = "https://schema.org/";
 export const FOAF = "http://xmlns.com/foaf/0.1/";
+/**
+ * The `http://` schema.org spelling `@jeswr/solid-bookmark` writes for `schema:url` and
+ * `schema:keywords` on bookmarks; imported bookmarks keep that exact wire format.
+ */
+export const SCHEMA_HTTP = "http://schema.org/";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 /**
@@ -52,11 +59,33 @@ export const CLASSES = {
   VideoGame: `${SCHEMA}VideoGame`,
   Message: `${SCHEMA}Message`,
   Event: `${SCHEMA}Event`,
+  Movie: `${SCHEMA}Movie`,
+  /** `book:Bookmark`, the `@jeswr/solid-bookmark` class (Pocket). */
+  Bookmark: `${NS.BOOKMARK}Bookmark`,
   // Tier-B OAuth integrations (photos, videos, work positions).
   ImageObject: `${SCHEMA}ImageObject`,
   VideoObject: `${SCHEMA}VideoObject`,
   Organization: `${SCHEMA}Organization`,
 } as const;
+
+/**
+ * Compact typed accessors for the export-file wrappers below: the same @rdfjs/wrapper
+ * mappings as the hand-written getters, without repeating each mapping per property.
+ */
+const readText = (thing: TermWrapper, predicate: string) =>
+  OptionalFrom.subjectPredicate(thing, predicate, LiteralAs.string);
+const writeText = (thing: TermWrapper, predicate: string, value: string | undefined) =>
+  OptionalAs.object(thing, predicate, value, LiteralFrom.string);
+const readIri = (thing: TermWrapper, predicate: string) =>
+  OptionalFrom.subjectPredicate(thing, predicate, NamedNodeAs.string);
+const writeIri = (thing: TermWrapper, predicate: string, value: string | undefined) =>
+  OptionalAs.object(thing, predicate, safeIri(value), NamedNodeFrom.string);
+const readNumber = (thing: TermWrapper, predicate: string) =>
+  OptionalFrom.subjectPredicate(thing, predicate, LiteralAs.number);
+const writeDouble = (thing: TermWrapper, predicate: string, value: number | undefined) =>
+  OptionalAs.object(thing, predicate, value, LiteralFrom.double);
+const textSet = (thing: TermWrapper, predicate: string) =>
+  SetFrom.subjectPredicate(thing, predicate, LiteralAs.string, LiteralFrom.string);
 
 /** Shared schema.org basics every imported entity may carry. */
 export class PodThing extends TermWrapper {
@@ -107,6 +136,17 @@ export class PodThing extends TermWrapper {
   }
   set datePublished(v: Date | undefined) {
     OptionalAs.object(this, `${SCHEMA}datePublished`, v, LiteralFrom.dateTime);
+  }
+  /** The importing user's own review text. */
+  get reviewBody(): string | undefined {
+    return readText(this, `${SCHEMA}reviewBody`);
+  }
+  set reviewBody(v: string | undefined) {
+    writeText(this, `${SCHEMA}reviewBody`, v);
+  }
+  /** Live set of tags (one schema:keywords literal per tag). */
+  get keywords(): Set<string> {
+    return textSet(this, `${SCHEMA}keywords`);
   }
 }
 
@@ -229,6 +269,62 @@ export class WatchAction extends ActionThing {
   mark(): this {
     this.types.add(CLASSES.WatchAction);
     return this;
+  }
+  /** The watched work (schema:object → a {@link Movie} subject), when the export names one. */
+  get watchedWork(): string | undefined {
+    return readIri(this, `${SCHEMA}object`);
+  }
+  set watchedWork(v: string | undefined) {
+    writeIri(this, `${SCHEMA}object`, v);
+  }
+  /** The viewer's rating of this viewing, 0.5–5 stars (schema:ratingValue as a number). */
+  get ratingValue(): number | undefined {
+    return readNumber(this, `${SCHEMA}ratingValue`);
+  }
+  set ratingValue(v: number | undefined) {
+    writeDouble(this, `${SCHEMA}ratingValue`, v);
+  }
+  /**
+   * Whether this viewing was a rewatch. schema.org has no rewatch term, so the flag is
+   * the `rewatch` tag among {@link keywords} (Letterboxd shows rewatches as a marker).
+   */
+  get rewatch(): boolean {
+    return this.keywords.has(REWATCH_TAG);
+  }
+  set rewatch(v: boolean) {
+    if (v) this.keywords.add(REWATCH_TAG);
+    else this.keywords.delete(REWATCH_TAG);
+  }
+}
+
+const REWATCH_TAG = "rewatch";
+
+/** A film (Letterboxd) — schema:Movie → Media, with the reader-style status text Book uses. */
+export class Movie extends PodThing {
+  mark(): this {
+    this.types.add(CLASSES.Movie);
+    return this;
+  }
+  /** Release year (schema:copyrightYear, an integer). */
+  get copyrightYear(): number | undefined {
+    return readNumber(this, `${SCHEMA}copyrightYear`);
+  }
+  set copyrightYear(v: number | undefined) {
+    OptionalAs.object(this, `${SCHEMA}copyrightYear`, v, LiteralFrom.integer);
+  }
+  /** Status text ("watched", "watchlist"), the same schema:actionStatus text as Book. */
+  get watchStatus(): string | undefined {
+    return readText(this, `${SCHEMA}actionStatus`);
+  }
+  set watchStatus(v: string | undefined) {
+    writeText(this, `${SCHEMA}actionStatus`, v);
+  }
+  /** The viewer's overall rating of the film, 0.5–5 stars. */
+  get ratingValue(): number | undefined {
+    return readNumber(this, `${SCHEMA}ratingValue`);
+  }
+  set ratingValue(v: number | undefined) {
+    writeDouble(this, `${SCHEMA}ratingValue`, v);
   }
 }
 
@@ -367,7 +463,7 @@ export class Book extends PodThing {
   set isbn(v: string | undefined) {
     OptionalAs.object(this, `${SCHEMA}isbn`, v, LiteralFrom.string);
   }
-  /** The reader's own rating, 1–5 (schema:Rating value as a number). */
+  /** The reader's own rating, 0–5 (schema:Rating value as a number). */
   get ratingValue(): number | undefined {
     return OptionalFrom.subjectPredicate(this, `${SCHEMA}ratingValue`, LiteralAs.number);
   }
@@ -419,6 +515,34 @@ export class Message extends PodThing {
   }
   set sender(v: string | undefined) {
     OptionalAs.object(this, `${SCHEMA}sender`, v, LiteralFrom.string);
+  }
+  /** The chat the message belongs to, as its display name (schema:isPartOf text, as on posts). */
+  get conversation(): string | undefined {
+    return readText(this, `${SCHEMA}isPartOf`);
+  }
+  set conversation(v: string | undefined) {
+    writeText(this, `${SCHEMA}isPartOf`, v);
+  }
+  /** The message this one replies to (social:inReplyTo, never the inverse). */
+  get inReplyTo(): string | undefined {
+    return readIri(this, `${NS.SOCIAL}inReplyTo`);
+  }
+  set inReplyTo(v: string | undefined) {
+    writeIri(this, `${NS.SOCIAL}inReplyTo`, v);
+  }
+  /**
+   * For a forwarded message, the original author's display name: schema:creator text,
+   * while schema:sender stays the person who forwarded it.
+   */
+  get forwardedFrom(): string | undefined {
+    return readText(this, `${SCHEMA}creator`);
+  }
+  set forwardedFrom(v: string | undefined) {
+    writeText(this, `${SCHEMA}creator`, v);
+  }
+  /** Live set of attached file names (names only; files are never read). */
+  get attachmentNames(): Set<string> {
+    return textSet(this, `${SCHEMA}messageAttachment`);
   }
 }
 
@@ -549,6 +673,47 @@ export class WorkPosition extends PodThing {
   }
   set endDate(v: Date | undefined) {
     OptionalAs.object(this, `${SCHEMA}endDate`, v, LiteralFrom.dateTime);
+  }
+}
+
+/**
+ * A saved link (Pocket) in the `@jeswr/solid-bookmark` wire format: `book:Bookmark` with
+ * `schema:url` (the saved page, `http://` schema.org spelling), `dct:title`, `dct:created`,
+ * `book:archived` and one `schema:keywords` literal per tag. The saved page is deliberately
+ * not `https://schema.org/url` (PodThing.sourceUrl), which provenance reads as the record's
+ * origin: a bookmark is derived from the export, not from the page it points to.
+ */
+export class Bookmark extends PodThing {
+  mark(): this {
+    this.types.add(CLASSES.Bookmark);
+    return this;
+  }
+  get url(): string | undefined {
+    return readIri(this, `${SCHEMA_HTTP}url`);
+  }
+  set url(v: string | undefined) {
+    writeIri(this, `${SCHEMA_HTTP}url`, v);
+  }
+  get title(): string | undefined {
+    return readText(this, `${NS.DCT}title`);
+  }
+  set title(v: string | undefined) {
+    writeText(this, `${NS.DCT}title`, v);
+  }
+  get created(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, `${NS.DCT}created`, LiteralAs.date);
+  }
+  set created(v: Date | undefined) {
+    OptionalAs.object(this, `${NS.DCT}created`, v, LiteralFrom.dateTime);
+  }
+  get archived(): boolean | undefined {
+    return OptionalFrom.subjectPredicate(this, `${NS.BOOKMARK}archived`, LiteralAs.boolean);
+  }
+  set archived(v: boolean | undefined) {
+    OptionalAs.object(this, `${NS.BOOKMARK}archived`, v, LiteralFrom.boolean);
+  }
+  get tags(): Set<string> {
+    return textSet(this, `${SCHEMA_HTTP}keywords`);
   }
 }
 

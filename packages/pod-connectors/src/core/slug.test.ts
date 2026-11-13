@@ -1,5 +1,6 @@
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
-import { fnv1a, recordFragment, slugify } from "./slug.js";
+import { fnv1a, recordFragment, sha256Hex32, slugify, strongRecordFragment } from "./slug.js";
 
 describe("slugify", () => {
   it("lowercases, hyphenates and strips punctuation", () => {
@@ -35,5 +36,17 @@ describe("fnv1a", () => {
   it("is deterministic 8-hex-char output", () => {
     expect(fnv1a("hello")).toMatch(/^[0-9a-f]{8}$/);
     expect(fnv1a("hello")).toBe(fnv1a("hello"));
+  });
+});
+
+describe("strong record fragments", () => {
+  it("hashes with SHA-256 truncated to 128 bits", async () => {
+    expect(await sha256Hex32("abc")).toBe("ba7816bf8f01cfea414140de5dae2223");
+    expect(await sha256Hex32("")).toHaveLength(32);
+  });
+  it("keeps the readable slug and a 32-hex discriminator", async () => {
+    expect(await strongRecordFragment("Hello World", "k")).toMatch(/^hello-world-[0-9a-f]{32}$/);
+    expect(await strongRecordFragment("::", "k")).toMatch(/^[0-9a-f]{32}$/);
+    expect(await strongRecordFragment("x", "a")).not.toBe(await strongRecordFragment("x", "b"));
   });
 });

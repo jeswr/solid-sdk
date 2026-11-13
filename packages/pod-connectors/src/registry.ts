@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The integrations registry — every app in docs/integrations-catalog.md, all
- * 32 visible, each with its honest status:
+ * 37 visible, each with its honest status:
  *
  * - Tier A + client id (+ proxy where the platform demands one) → **live**
  * - Tier A unconfigured → **demo** (full UX against recorded fixtures)
@@ -206,9 +207,31 @@ export const TIER_C: readonly CatalogEntry[] = [
     "Mail, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
     "Takeout archive",
   ),
+  C(
+    "letterboxd",
+    "Letterboxd",
+    ["media"],
+    "Your film diary, ratings, reviews and watchlist into Media.",
+    "Data export (ZIP/CSV)",
+  ),
+  C("pocket", "Pocket", ["documents"], "Your saved links into Documents.", "Export (CSV/HTML)"),
+  C(
+    "storygraph",
+    "The StoryGraph",
+    ["documents"],
+    "Your reading log, ratings and reviews into Documents (StoryGraph or Open Library).",
+    "Library export CSV",
+  ),
+  C(
+    "telegram",
+    "Telegram",
+    ["social"],
+    "Chat history into Social & interests.",
+    "Chat export (JSON)",
+  ),
 ];
 
-/** All 32 catalog entries, A → B → C, in display order. */
+/** All 37 catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map((a) => ({ ...a.metadata })), ...TIER_B, ...TIER_C];
 }

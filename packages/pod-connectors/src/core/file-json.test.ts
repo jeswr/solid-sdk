@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { describe, expect, it, vi } from "vitest";
@@ -170,5 +171,45 @@ describe("JSON allocation limits", () => {
       script,
     ]);
     expect(Number(stdout.trim())).toBeLessThan(32 * 1024 * 1024);
+  });
+});
+
+describe("JSON array member boundaries", () => {
+  it("reports the end of each member of a requested array after its selected entries", async () => {
+    const text = JSON.stringify({
+      ignored: [{ name: "not routed" }],
+      chats: {
+        list: [
+          { messages: [1, 2], name: "late name", id: 7 },
+          { type: "no id", messages: [3] },
+          {},
+        ],
+      },
+    });
+    const entries = [];
+    for await (const entry of jsonEntries(
+      streamed(text, 5),
+      ["chats.list[].messages"],
+      ["chats.list[].name", "chats.list[].id"],
+      () => {},
+      ["chats.list"],
+    ))
+      entries.push(entry);
+    expect(entries).toEqual([
+      { path: "chats.list[].messages", value: 1 },
+      { path: "chats.list[].messages", value: 2 },
+      { path: "chats.list[].name", value: "late name" },
+      { path: "chats.list[].id", value: 7 },
+      { path: "chats.list", value: undefined, end: true },
+      { path: "chats.list[].messages", value: 3 },
+      { path: "chats.list", value: undefined, end: true },
+      { path: "chats.list", value: undefined, end: true },
+    ]);
+  });
+
+  it("reports no boundaries unless asked", async () => {
+    expect(await collect(streamed('{"games":[{"a":1}]}'))).toEqual([
+      { path: "games", value: { a: 1 } },
+    ]);
   });
 });
