@@ -76,6 +76,13 @@
           "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov.",
           "status": "doing",
           "owner": "Engine project, Codex"
+        },
+        {
+          "id": "P9.11",
+          "title": "Findings from the first evaluation pass, to adjudicate",
+          "detail": "The parked evaluation run flagged six cases, in three use cases, where a message was still admitted after a required credential had been removed from it, and a disagreement about whether a permission to use something covers narrower actions. Each is either a defect in a gate or in the test's reading of the specification. To be read and settled by Fable, with fixes built by Codex. The rest of the evaluation stays paused.",
+          "status": "next",
+          "owner": "Fable (adjudicate), Codex (fix)"
         }
       ]
     },

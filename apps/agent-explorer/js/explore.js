@@ -120,6 +120,9 @@
     root.querySelector('#inspector').addEventListener('click', function (e) {
       var j = e.target.closest('[data-jump]');
       if (j) { stop(); go(stopIndexFor(Number(j.dataset.jump))); }
+      var f = e.target.closest('[data-rdf-form]');
+      if (f) { S.rdfForm = f.dataset.rdfForm; renderInspector(); }
+      if (e.target.closest('[data-rdf-context]')) { S.rdfContext = !S.rdfContext; renderInspector(); }
     });
     E.apply(params || {});
   };
@@ -522,11 +525,48 @@
       return '<li><a href="' + AX.buildHash('layers', { select: r.layer + '/' + r.suite }) + '"><span class="ref-layer">' + esc(l ? AX.layerTitle(l) : r.layer) + '</span><span class="ref-suite">' + esc(AX.suiteName(r.layer, r.suite)) + '</span></a>' + (r.clause ? '<code>' + esc(r.clause) + '</code>' : '') + '</li>';
     }).join('') + '</ul></dd></dl>';
   }
+  // The whole message as linked data. JSON-LD first, with its context folded away;
+  // the same graph as Turtle (or TriG, where the proof sits in a named graph) one click behind.
+  // Traces made before messages were RDF have none of these fields and show nothing here.
+  function rdfHtml(p) {
+    if (!p || p.jsonld === undefined || p.jsonld === null) return '';
+    var text = p.turtle || p.trig || '';
+    var textName = p.turtle ? 'Turtle' : 'TriG';
+    var form = S.rdfForm === 'text' && text ? 'text' : 'jsonld';
+    var doc = p.jsonld;
+    var ctx = p.context !== undefined ? p.context : (doc && doc['@context']);
+    if (doc && typeof doc === 'object' && !Array.isArray(doc)) {
+      var shown = {};
+      if (S.rdfContext && ctx !== undefined) shown['@context'] = ctx;
+      Object.keys(doc).forEach(function (k) { if (k !== '@context') shown[k] = doc[k]; });
+      doc = shown;
+    }
+    var h = '<div class="rdf" data-anchor="inspector.message.rdf"><div class="rdf-head"><span class="ln">As linked data</span>';
+    if (text) {
+      h += '<span class="seg small" role="group" aria-label="Form">' +
+        '<button type="button" data-rdf-form="jsonld" aria-pressed="' + (form === 'jsonld') + '">JSON-LD</button>' +
+        '<button type="button" data-rdf-form="text" aria-pressed="' + (form === 'text') + '">' + textName + '</button></span>';
+    }
+    h += '</div>';
+    if (form === 'jsonld') {
+      h += '<pre class="json rdf-doc">' + esc(JSON.stringify(doc, null, 2)) + '</pre>';
+      if (ctx !== undefined) {
+        h += '<p class="rdf-note">' + (S.rdfContext
+          ? 'The context maps each short name to a full term. It is pinned: the gate never fetches it.'
+          : 'The context, which maps each short name to a full term, is folded away.') +
+          ' <button type="button" class="linkish" data-rdf-context="1">' + (S.rdfContext ? 'Hide context' : 'Show context') + '</button></p>';
+      }
+    } else {
+      h += '<pre class="json rdf-doc">' + esc(text) + '</pre><p class="rdf-note">The same graph, written out in full.</p>';
+    }
+    return h + '</div>';
+  }
   function packetHtml(p, e) {
     var sender = (e.pFrom && traceAgent(e.pFrom).name) || p.from;
     var receiver = (e.pTo && traceAgent(e.pTo).name) || p.to;
     var h = '<section class="msg" data-anchor="inspector.message"><h3>Verifiable message</h3>';
     h += '<p class="msg-meta"><code>' + esc(p.id) + '</code> <span class="kind-chip">' + esc(p.kind) + '</span> ' + esc(sender) + ' to ' + esc(receiver) + '</p>';
+    h += rdfHtml(p);
     h += '<div class="layer carriage"><div class="layer-head"><span class="ln">Carriage</span><span class="lstate untrusted">Never trusted</span></div><p>' + esc(AX.suiteName('transport', p.carriage.suite) + '. ' + p.carriage.summary) + '</p></div>';
     h += '<div class="signed"><div class="signed-label">Signed by ' + esc(sender) + '</div>';
     AX.model.message.layers.filter(function (l) { return l.signed; }).forEach(function (ml) {
