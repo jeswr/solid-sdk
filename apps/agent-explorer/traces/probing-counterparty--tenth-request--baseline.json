@@ -94,7 +94,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [],
@@ -1909,7 +1909,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 58,
@@ -1934,9 +1934,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 59,
@@ -2391,7 +2391,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 74,
@@ -2416,9 +2416,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 75,
@@ -2873,7 +2873,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 90,
@@ -2898,9 +2898,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 91,
@@ -3355,7 +3355,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 106,
@@ -3380,9 +3380,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 107,
@@ -3837,7 +3837,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 122,
@@ -3862,9 +3862,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 123,
@@ -4319,7 +4319,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 138,
@@ -4344,9 +4344,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 139,
@@ -4801,7 +4801,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 154,
@@ -4826,9 +4826,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 155,
@@ -5283,7 +5283,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 170,
@@ -5308,9 +5308,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 171,
@@ -5765,7 +5765,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 186,
@@ -5790,9 +5790,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 187,
@@ -6247,7 +6247,7 @@
    "agent": "person-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:operation:private history with The fictional service."
+   "caption": "The core proposes to take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 202,
@@ -6272,9 +6272,9 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:74c9456914fcdca0989b0382b0cabf90:probing-counterparty",
-    "text": "No rule in Rowan, a fictional customer's mandate lets the agent use urn:operation:private history with The fictional service for urn:purpose:service query (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
    },
-   "caption": "Rowan, a fictional customer's mandate does not allow this: use urn:operation:private history with The fictional service."
+   "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service."
   },
   {
    "seq": 203,

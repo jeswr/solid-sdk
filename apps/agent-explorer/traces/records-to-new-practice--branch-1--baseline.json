@@ -62,7 +62,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -174,9 +174,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:records-to-new-practice:patient-note",
-    "text": "Its terms allow this: use for urn:purpose:health record."
+    "text": "Its terms allow this: use for Health record."
    },
-   "caption": "The patient's health.allergy statement: its terms allow this: use for urn:purpose:health record."
+   "caption": "The patient's health.allergy statement: its terms allow this: use for Health record."
   },
   {
    "seq": 5,
@@ -191,14 +191,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:records-to-new-practice:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:records-to-new-practice:patient"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:records-to-new-practice:clinician"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:records-to-new-practice:health.allergy",
-    "text": "Accept health.allergy from urn:fictional:records-to-new-practice:patient, urn:fictional:records-to-new-practice:clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
+    "text": "Accept health.allergy from The patient, The clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
    },
-   "caption": "The patient's health.allergy statement is fit for urn:scenario:records-to-new-practice:task: reported-by-subject, 0 days old."
+   "caption": "The patient's health.allergy statement is fit for Moving a health record to a new practice: reported-by-subject, 0 days old."
   },
   {
    "seq": 6,
@@ -227,7 +242,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:records-to-new-practice:patient-note",
-     "summary": "use for urn:purpose:health record"
+     "summary": "use for Health record"
     },
     "provenance": "signed by The patient"
    },
@@ -335,9 +350,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:records-to-new-practice:clinical",
-    "text": "Its terms allow this: use for urn:purpose:health record."
+    "text": "Its terms allow this: use for Health record."
    },
-   "caption": "The clinician's health.allergy statement: its terms allow this: use for urn:purpose:health record."
+   "caption": "The clinician's health.allergy statement: its terms allow this: use for Health record."
   },
   {
    "seq": 12,
@@ -352,14 +367,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:records-to-new-practice:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:records-to-new-practice:patient"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:records-to-new-practice:clinician"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:records-to-new-practice:health.allergy",
-    "text": "Accept health.allergy from urn:fictional:records-to-new-practice:patient, urn:fictional:records-to-new-practice:clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
+    "text": "Accept health.allergy from The patient, The clinician by reported-by-subject, recorded-by-authority, at most 365 days old."
    },
-   "caption": "The clinician's health.allergy statement is fit for urn:scenario:records-to-new-practice:task: recorded-by-authority, 0 days old."
+   "caption": "The clinician's health.allergy statement is fit for Moving a health record to a new practice: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -388,7 +418,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:records-to-new-practice:clinical",
-     "summary": "use for urn:purpose:health record"
+     "summary": "use for Health record"
     },
     "provenance": "signed by The clinician"
    },
@@ -407,10 +437,20 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:records-to-new-practice:patient-note"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:records-to-new-practice:clinical"
     }
    ],
    "reason": "superseded-by-better-source",
-   "caption": "urn:scenario:records-to-new-practice:patient-note is retained but superseded by urn:scenario:records-to-new-practice:clinical for this purpose."
+   "caption": "The patient's health.allergy statement is retained but superseded by The clinician's health.allergy statement for this purpose."
   },
   {
    "seq": 16,
@@ -514,9 +554,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:records-to-new-practice:estimate",
-    "text": "Its terms allow this: use for urn:purpose:health record."
+    "text": "Its terms allow this: use for Health record."
    },
-   "caption": "The old practice holding original statements's old.estimate statement: its terms allow this: use for urn:purpose:health record."
+   "caption": "The old practice holding original statements's old.estimate statement: its terms allow this: use for Health record."
   },
   {
    "seq": 20,
@@ -531,14 +571,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:records-to-new-practice:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:records-to-new-practice:holder"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:records-to-new-practice:old.estimate",
-    "text": "Accept old.estimate from urn:fictional:records-to-new-practice:holder by estimated, at most 365 days old."
+    "text": "Accept old.estimate from The old practice holding original statements by estimated, at most 365 days old."
    },
-   "caption": "The old practice holding original statements's old.estimate statement is fit for urn:scenario:records-to-new-practice:task: estimated, 0 days old."
+   "caption": "The old practice holding original statements's old.estimate statement is fit for Moving a health record to a new practice: estimated, 0 days old."
   },
   {
    "seq": 21,
@@ -567,7 +617,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:records-to-new-practice:estimate",
-     "summary": "use for urn:purpose:health record"
+     "summary": "use for Health record"
     },
     "provenance": "signed by The old practice holding original statements"
    },

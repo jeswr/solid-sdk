@@ -106,7 +106,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -3458,7 +3458,54 @@
    "agent": "provider-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:585beea97f6b5ed4d953362908908c8f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:customer-agent:actor\",\"party\":\"urn:fictional:incident-notice:customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:second-agent:actor\",\"party\":\"urn:fictional:incident-notice:second\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:regulator-agent:actor\",\"party\":\"urn:fictional:incident-notice:regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"pending\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The customer's agent\",\"party\":\"The customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The second customer's agent\",\"party\":\"The second customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The regulator's agent\",\"party\":\"The regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"pending\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:585beea97f6b5ed4d953362908908c8f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator"
+    }
+   ]
   },
   {
    "seq": 101,
@@ -3466,7 +3513,54 @@
    "agent": "provider-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:585beea97f6b5ed4d953362908908c8f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:customer-agent:actor\",\"party\":\"urn:fictional:incident-notice:customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:second-agent:actor\",\"party\":\"urn:fictional:incident-notice:second\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:regulator-agent:actor\",\"party\":\"urn:fictional:incident-notice:regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"pending\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The customer's agent\",\"party\":\"The customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The second customer's agent\",\"party\":\"The second customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"pending\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The regulator's agent\",\"party\":\"The regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"pending\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:585beea97f6b5ed4d953362908908c8f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator"
+    }
+   ]
   },
   {
    "seq": 102,
@@ -5890,7 +5984,84 @@
    "agent": "provider-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:585beea97f6b5ed4d953362908908c8f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:customer-agent:actor\",\"party\":\"urn:fictional:incident-notice:customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"missed\",\"message\":\"urn:awp:engine-incident-notice-branch-1:provider-agent:0007\",\"conversation\":\"urn:awp:general-duty:cf042ad948d719797b8dcd0eb2c933df\",\"missedAt\":\"2026-11-13T09:01:00.001Z\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:second-agent:actor\",\"party\":\"urn:fictional:incident-notice:second\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"acknowledged\",\"message\":\"urn:awp:engine-incident-notice-branch-1:provider-agent:0008\",\"conversation\":\"urn:awp:general-duty:882fcf9eda462cf3f549e445148e3516\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"},{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"urn:fictional:incident-notice:regulator-agent:actor\",\"party\":\"urn:fictional:incident-notice:regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"acknowledged\",\"message\":\"urn:awp:engine-incident-notice-branch-1:provider-agent:0009\",\"conversation\":\"urn:awp:general-duty:c323ccbd1d4b556d81e25705761f69af\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The customer's agent\",\"party\":\"The customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:32c5b381f6594bf932a356b9407ab3462abeb18c017aa972e449ce547e939c05\",\"status\":\"missed\",\"message\":\"invoke message\",\"conversation\":\"the unlabelled resource\",\"missedAt\":\"2026-11-13T09:01:00.001Z\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The second customer's agent\",\"party\":\"The second customer\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:0248d73475f2f5d7e3d6b6b73051a37aa33f65520b9190ba0d495193670d87a9\",\"status\":\"acknowledged\",\"message\":\"invoke message\",\"conversation\":\"the unlabelled resource\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"},{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"security-incident\",\"recipient\":{\"actor\":\"The regulator's agent\",\"party\":\"The regulator\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:9712ee1c97bfbc0d1144309110594b9978dae672878c4030fe6f34041701b3af\",\"status\":\"acknowledged\",\"message\":\"invoke message\",\"conversation\":\"the unlabelled resource\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:585beea97f6b5ed4d953362908908c8f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:customer"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:engine-incident-notice-branch-1:provider-agent:0007"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:general-duty:cf042ad948d719797b8dcd0eb2c933df"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:abeb2e4bfa18297571d5bfc90a1a4fc0"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:second"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:general-duty:882fcf9eda462cf3f549e445148e3516"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:fabfbb447bfe57ee57332566bfe4101f"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:incident-notice:regulator"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:general-duty:c323ccbd1d4b556d81e25705761f69af"
+    }
+   ]
   }
  ]
 }

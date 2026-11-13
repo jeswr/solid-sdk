@@ -87,7 +87,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -199,9 +199,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:invoice-finance:item",
-    "text": "Its terms allow this: use for urn:purpose:invoice finance."
+    "text": "Its terms allow this: use for Invoice finance."
    },
-   "caption": "The buyer's invoice.valid statement: its terms allow this: use for urn:purpose:invoice finance."
+   "caption": "The buyer's invoice.valid statement: its terms allow this: use for Invoice finance."
   },
   {
    "seq": 5,
@@ -216,14 +216,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:invoice-finance:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:invoice-finance:authority"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:invoice-finance:invoice.valid",
-    "text": "Accept invoice.valid from urn:fictional:invoice-finance:authority by recorded-by-authority, at most 1 days old."
+    "text": "Accept invoice.valid from The buyer by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The buyer's invoice.valid statement is fit for urn:scenario:invoice-finance:task: recorded-by-authority, 0 days old."
+   "caption": "The buyer's invoice.valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -252,7 +262,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:invoice-finance:item",
-     "summary": "use for urn:purpose:invoice finance"
+     "summary": "use for Invoice finance"
     },
     "provenance": "signed by The buyer"
    },
@@ -646,9 +656,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:invoice-finance:item",
-    "text": "Its terms allow this: use for urn:purpose:invoice finance."
+    "text": "Its terms allow this: use for Invoice finance."
    },
-   "caption": "The buyer's invoice.valid statement: its terms allow this: use for urn:purpose:invoice finance."
+   "caption": "The buyer's invoice.valid statement: its terms allow this: use for Invoice finance."
   },
   {
    "seq": 32,
@@ -663,14 +673,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:invoice-finance:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:invoice-finance:authority"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:invoice-finance:invoice.valid",
-    "text": "Accept invoice.valid from urn:fictional:invoice-finance:authority by recorded-by-authority, at most 1 days old."
+    "text": "Accept invoice.valid from The buyer by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The buyer's invoice.valid statement is fit for urn:scenario:invoice-finance:task: recorded-by-authority, 0 days old."
+   "caption": "The buyer's invoice.valid statement is fit for Financing an invoice once: recorded-by-authority, 0 days old."
   },
   {
    "seq": 33,
@@ -699,7 +719,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:invoice-finance:item",
-     "summary": "use for urn:purpose:invoice finance"
+     "summary": "use for Invoice finance"
     },
     "provenance": "signed by The buyer"
    },

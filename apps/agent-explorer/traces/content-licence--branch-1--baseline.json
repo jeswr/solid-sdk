@@ -114,7 +114,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -238,9 +238,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:content-licence:image",
-    "text": "Its terms allow this: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver."
+    "text": "Its terms allow this: use for Content licence; share for Content licence; never for The sister company."
    },
-   "caption": "The photographer's photo.licensed-asset statement: its terms allow this: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver."
+   "caption": "The photographer's photo.licensed-asset statement: its terms allow this: use for Content licence; share for Content licence; never for The sister company."
   },
   {
    "seq": 5,
@@ -255,14 +255,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:content-licence:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:content-licence:photographer"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:content-licence:photo.licensed-asset",
-    "text": "Accept photo.licensed-asset from urn:fictional:content-licence:photographer by recorded-by-authority, at most 30 days old."
+    "text": "Accept photo.licensed-asset from The photographer by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The photographer's photo.licensed-asset statement is fit for urn:scenario:content-licence:task: recorded-by-authority, 0 days old."
+   "caption": "The photographer's photo.licensed-asset statement is fit for Licensing a photograph: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -291,7 +301,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:content-licence:image",
-     "summary": "use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver"
+     "summary": "use for Content licence; share for Content licence; never for The sister company"
     },
     "provenance": "signed by The photographer"
    },
@@ -850,7 +860,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:content licence with The sister company."
+   "caption": "The core proposes to share Licensing a photograph with The sister company."
   },
   {
    "seq": 26,
@@ -999,9 +1009,9 @@
    "reason": "prohibited",
    "rule": {
     "id": "urn:terms:content-licence:image",
-    "text": "The issuer's terms: use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver. They go out with the data."
+    "text": "The issuer's terms: use for Content licence; share for Content licence; never for The sister company. They go out with the data."
    },
-   "caption": "The photographer's photo.licensed-asset statement: its terms forbid this (use for urn:purpose:content licence; share for urn:purpose:content licence; never for urn:fictional:content licence:receiver)."
+   "caption": "The photographer's photo.licensed-asset statement: its terms forbid this (use for Content licence; share for Content licence; never for The sister company)."
   },
   {
    "seq": 33,

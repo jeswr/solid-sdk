@@ -83,7 +83,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -216,14 +216,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The credit reference agency's payment.status statement is fit for urn:scenario:credit-file-dispute:task: recorded-by-authority, 0 days old."
+   "caption": "The credit reference agency's payment.status statement is fit for Correcting an error on a credit file: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -381,14 +396,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The lender which received the payment's payment.status statement is fit for urn:scenario:credit-file-dispute:task: recorded-by-authority, 0 days old."
+   "caption": "The lender which received the payment's payment.status statement is fit for Correcting an error on a credit file: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -440,10 +470,20 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:copy"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:creditor"
     }
    ],
    "reason": "superseded-by-better-source",
-   "caption": "urn:scenario:credit-file-dispute:copy is retained but superseded by urn:scenario:credit-file-dispute:creditor for this purpose."
+   "caption": "The credit reference agency's payment.status statement is retained but superseded by The lender which received the payment's payment.status statement for this purpose."
   },
   {
    "seq": 16,
@@ -1170,12 +1210,22 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
    "caption": "The lender which received the payment's payment.status statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
   },

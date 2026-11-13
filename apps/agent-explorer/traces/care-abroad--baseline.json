@@ -60,7 +60,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -184,9 +184,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:fictional:care-abroad:medicine-terms",
-    "text": "Its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+    "text": "Its terms allow this: use for Care abroad; share for Care abroad."
    },
-   "caption": "A home practice's medicine.code statement: its terms allow this: use for urn:purpose:care abroad; share for urn:purpose:care abroad."
+   "caption": "A home practice's medicine.code statement: its terms allow this: use for Care abroad; share for Care abroad."
   },
   {
    "seq": 5,
@@ -201,14 +201,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "registry-lookup",
+     "id": "urn:scenario:care-abroad:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "registry-lookup",
+     "id": "urn:fictional:care-abroad:party-2"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:care-abroad:medicine.code",
-    "text": "Accept medicine.code from urn:fictional:care-abroad:party-2 by recorded-by-authority, derived, at most 30 days old."
+    "text": "Accept medicine.code from A home practice by recorded-by-authority, derived, at most 30 days old."
    },
-   "caption": "A home practice's medicine.code statement is fit for urn:scenario:care-abroad:task: recorded-by-authority, 0 days old."
+   "caption": "A home practice's medicine.code statement is fit for Health data across a border: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -245,7 +255,7 @@
    "part": "memory",
    "kind": "store",
    "fact": {
-    "id": "urn:scenario:care-abroad:medicine",
+    "id": "urn:mapped:45c14be1034c9b68c3ef7fc5edcad42a6f87c6df2fe20234f2aaaa40f75f3300",
     "label": "A home practice's medicine.code statement",
     "claimType": "medicine.code",
     "subject": "urn:fictional:care-abroad:party-1",
@@ -259,6 +269,7 @@
       "rule": "urn:fictional:care-abroad:mapping-table",
       "version": "1",
       "mappingDigest": "sha-256:d2b5210072b902791b4f1e5026134ff059405a88e754a0400ab4dc305ed95a4e",
+      "originalId": "urn:scenario:care-abroad:medicine",
       "originalDigest": "sha-256:ff238b1693cc964796bd661019fbd5faf209736f57eae0d7aad73356b0e8da4a",
       "originalSource": "urn:fictional:care-abroad:party-2",
       "originalQuality": {
@@ -294,8 +305,8 @@
     "method": "derived",
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
-     "id": "urn:fictional:care-abroad:medicine-terms",
-     "summary": "use for urn:purpose:care abroad; share for urn:purpose:care abroad"
+     "id": "urn:mapped-terms:301d7a12b46c7dfbaf79263e0a1fd3b0d571637954ff81662440d36758b58e08",
+     "summary": ""
     },
     "provenance": "Locally mapped; original signed by A home practice"
    },

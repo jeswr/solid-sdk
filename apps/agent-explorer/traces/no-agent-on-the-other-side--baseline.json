@@ -54,7 +54,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -86,7 +86,7 @@
    "agent": "reader-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:email with A small business with an email address."
+   "caption": "The core proposes to share Send an approved plain-text email with A small business with an email address."
   },
   {
    "seq": 3,
@@ -223,7 +223,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "A small business with an email address asks for 0 of your statements: nothing. They would use them for urn:purpose:business enquiry. May I share them? Action digest: sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72. Parameters: {\"id\":\"urn:scenario:no-agent-on-the-other-side:draft-enquiry\",\"from\":\"mailto:customer-agent@fictional.example\",\"to\":\"mailto:shop@fictional.example\",\"text\":\"Hello, is the advertised item available?\\n\\nWritten by an agent (model-generated) for The customer (urn:fictional:no-agent-on-the-other-side:party-1).\\nReply in structured form: https://fictional.example/structured-reply\",\"purpose\":\"urn:purpose:business-enquiry\"}"
+    "text": "A small business with an email address asks for 0 of your statements: nothing. They would use them for Business enquiry. May I share them? Action digest: sha-256:ad26a40dd8607a195801c447a0b4b453b492a589cb41bda10f553fe462826f72. Parameters: {\"id\":\"urn:scenario:no-agent-on-the-other-side:draft-enquiry\",\"from\":\"mailto:customer-agent@fictional.example\",\"to\":\"mailto:shop@fictional.example\",\"text\":\"Hello, is the advertised item available?\\n\\nWritten by an agent (model-generated) for The customer (urn:fictional:no-agent-on-the-other-side:party-1).\\nReply in structured form: https://fictional.example/structured-reply\",\"purpose\":\"urn:purpose:business-enquiry\"}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   },
@@ -397,7 +397,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The action goes: share urn:op:email with A small business with an email address."
+   "caption": "The action goes: share Send an approved plain-text email with A small business with an email address."
   },
   {
    "seq": 19,

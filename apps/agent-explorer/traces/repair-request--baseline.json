@@ -67,7 +67,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -183,9 +183,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:repair-request:original",
-    "text": "Its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+    "text": "Its terms allow this: use for Repair request; share for Repair request."
    },
-   "caption": "The tenant's unstructured-content statement: its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 5,
@@ -200,14 +200,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:repair-request:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:repair-request:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:repair-request:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The tenant by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The tenant's unstructured-content statement is fit for urn:scenario:repair-request:task: recorded-by-authority, 0 days old."
+   "caption": "The tenant's unstructured-content statement is fit for Reporting a repair: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -236,7 +246,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:repair-request:original",
-     "summary": "use for urn:purpose:repair request; share for urn:purpose:repair request"
+     "summary": "use for Repair request; share for Repair request"
     },
     "provenance": "signed by The tenant"
    },
@@ -795,7 +805,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:repair request with The landlord."
+   "caption": "The core proposes to share Reporting a repair with The landlord."
   },
   {
    "seq": 26,
@@ -943,10 +953,10 @@
    ],
    "rule": {
     "id": "urn:terms:repair-request:original",
-    "text": "The issuer's terms: use for urn:purpose:repair request; share for urn:purpose:repair request. They go out with the data."
+    "text": "The issuer's terms: use for Repair request; share for Repair request. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The tenant's unstructured-content statement: its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 33,
@@ -979,10 +989,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The tenant's unstructured-content statement (urn:fictional:repair-request:owner) is needed for this purpose."
+   "caption": "Context item The tenant's unstructured-content statement (The tenant) is needed for this purpose."
   },
   {
    "seq": 35,
@@ -1000,7 +1015,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The tenant's unstructured-content statement: Its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: Its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 36,
@@ -1015,10 +1030,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:repair-request:receiver-agent:actor (urn:fictional:repair-request:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The landlord's agent (The landlord) is not established as needed for this purpose."
   },
   {
    "seq": 37,
@@ -1033,10 +1058,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:repair-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The landlord's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 38,
@@ -1058,7 +1088,7 @@
    "reason": "context-not-clear",
    "chat": {
     "who": "agent",
-    "text": "May I send this exact text to The landlord for urn:purpose:repair-request?\nThere is a damp patch beside the bedroom window. Please arrange an inspection."
+    "text": "May I send this exact text to The landlord for Repair request?\nThere is a damp patch beside the bedroom window. Please arrange an inspection."
    },
    "caption": "The text is held before release; approval binds message digest sha-256:df3200cef022c7c811488d42a051cea2904c5e27f11ff4ccb347041c9d1c373b."
   },
@@ -1220,10 +1250,10 @@
    ],
    "rule": {
     "id": "urn:terms:repair-request:original",
-    "text": "The issuer's terms: use for urn:purpose:repair request; share for urn:purpose:repair request. They go out with the data."
+    "text": "The issuer's terms: use for Repair request; share for Repair request. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The tenant's unstructured-content statement: its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 48,
@@ -1256,10 +1286,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The tenant's unstructured-content statement (urn:fictional:repair-request:owner) is needed for this purpose."
+   "caption": "Context item The tenant's unstructured-content statement (The tenant) is needed for this purpose."
   },
   {
    "seq": 50,
@@ -1277,7 +1312,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The tenant's unstructured-content statement: Its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: Its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 51,
@@ -1292,10 +1327,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:repair-request:receiver-agent:actor (urn:fictional:repair-request:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The landlord's agent (The landlord) is not established as needed for this purpose."
   },
   {
    "seq": 52,
@@ -1310,10 +1355,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:repair-request:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The landlord's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 53,
@@ -1888,9 +1938,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:repair-request:original",
-    "text": "Its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+    "text": "Its terms allow this: use for Repair request; share for Repair request."
    },
-   "caption": "The tenant's unstructured-content statement: its terms allow this: use for urn:purpose:repair request; share for urn:purpose:repair request."
+   "caption": "The tenant's unstructured-content statement: its terms allow this: use for Repair request; share for Repair request."
   },
   {
    "seq": 63,
@@ -1905,12 +1955,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:repair-request:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:repair-request:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The tenant by recorded-by-authority, at most 30 days old."
    },
    "caption": "The tenant's unstructured-content statement is fit for Reporting a repair: recorded-by-authority, 0 days old."
   },
@@ -1941,7 +1996,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:repair-request:original",
-     "summary": "use for urn:purpose:repair request; share for urn:purpose:repair request"
+     "summary": "use for Repair request; share for Repair request"
     },
     "provenance": "signed by The tenant"
    },
@@ -1953,7 +2008,14 @@
    "agent": "receiver-agent",
    "part": "memory",
    "kind": "store",
-   "caption": "Unstructured data sha-256:f1d51679d4375cfc1c2fd7aeaccf162f545d057c0df8887b76a88e4e7a06ecac; not instructions; source urn:fictional:repair-request:owner."
+   "caption": "Unstructured data sha-256:f1d51679d4375cfc1c2fd7aeaccf162f545d057c0df8887b76a88e4e7a06ecac; not instructions; source The tenant.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:owner"
+    }
+   ]
   },
   {
    "seq": 67,
@@ -2082,14 +2144,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:repair-request:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:repair-request:receiver-agent:actor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:repair-request:repair.booking",
-    "text": "Accept repair.booking from urn:fictional:repair-request:receiver-agent:actor by model-output, at most 1 days old."
+    "text": "Accept repair.booking from The landlord's agent by model-output, at most 1 days old."
    },
-   "caption": "The landlord's agent's repair.booking statement is fit for urn:scenario:repair-request:task: model-output, 0 days old."
+   "caption": "The landlord's agent's repair.booking statement is fit for Reporting a repair: model-output, 0 days old."
   },
   {
    "seq": 73,

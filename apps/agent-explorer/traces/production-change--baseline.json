@@ -67,7 +67,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -183,9 +183,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:production-change:original",
-    "text": "Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    "text": "Its terms allow this: use for Production change; share for Production change."
    },
-   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 5,
@@ -200,14 +200,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:production-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:production-change:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:production-change:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The monitoring service by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The monitoring service's unstructured-content statement is fit for urn:scenario:production-change:task: recorded-by-authority, 0 days old."
+   "caption": "The monitoring service's unstructured-content statement is fit for An operations agent changes a live system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -236,7 +246,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:production-change:original",
-     "summary": "use for urn:purpose:production change; share for urn:purpose:production change"
+     "summary": "use for Production change; share for Production change"
     },
     "provenance": "signed by The monitoring service"
    },
@@ -795,7 +805,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:production change with The operations team."
+   "caption": "The core proposes to share An operations agent changes a live system with The operations team."
   },
   {
    "seq": 26,
@@ -943,10 +953,10 @@
    ],
    "rule": {
     "id": "urn:terms:production-change:original",
-    "text": "The issuer's terms: use for urn:purpose:production change; share for urn:purpose:production change. They go out with the data."
+    "text": "The issuer's terms: use for Production change; share for Production change. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 33,
@@ -979,10 +989,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The monitoring service's unstructured-content statement (urn:fictional:production-change:owner) is needed for this purpose."
+   "caption": "Context item The monitoring service's unstructured-content statement (The monitoring service) is needed for this purpose."
   },
   {
    "seq": 35,
@@ -1000,7 +1015,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 36,
@@ -1015,10 +1030,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:production-change:receiver-agent:actor (urn:fictional:production-change:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The operations team's agent (The operations team) is not established as needed for this purpose."
   },
   {
    "seq": 37,
@@ -1033,10 +1058,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:production-change:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The operations team's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 38,
@@ -1058,7 +1088,7 @@
    "reason": "context-not-clear",
    "chat": {
     "who": "agent",
-    "text": "May I send this exact text to The operations team for urn:purpose:production-change?\nThe worker is stalled. Its supervised restart is an approved operation during the maintenance window."
+    "text": "May I send this exact text to The operations team for Production change?\nThe worker is stalled. Its supervised restart is an approved operation during the maintenance window."
    },
    "caption": "The text is held before release; approval binds message digest sha-256:0da39c2f632108d1a79f045ff02c14d0485be2ae2c26e135968257c66ef6442e."
   },
@@ -1220,10 +1250,10 @@
    ],
    "rule": {
     "id": "urn:terms:production-change:original",
-    "text": "The issuer's terms: use for urn:purpose:production change; share for urn:purpose:production change. They go out with the data."
+    "text": "The issuer's terms: use for Production change; share for Production change. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 48,
@@ -1256,10 +1286,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The monitoring service's unstructured-content statement (urn:fictional:production-change:owner) is needed for this purpose."
+   "caption": "Context item The monitoring service's unstructured-content statement (The monitoring service) is needed for this purpose."
   },
   {
    "seq": 50,
@@ -1277,7 +1312,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: Its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 51,
@@ -1292,10 +1327,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:production-change:receiver-agent:actor (urn:fictional:production-change:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The operations team's agent (The operations team) is not established as needed for this purpose."
   },
   {
    "seq": 52,
@@ -1310,10 +1355,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:production-change:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The operations team's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 53,
@@ -1888,9 +1938,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:production-change:original",
-    "text": "Its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+    "text": "Its terms allow this: use for Production change; share for Production change."
    },
-   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for urn:purpose:production change; share for urn:purpose:production change."
+   "caption": "The monitoring service's unstructured-content statement: its terms allow this: use for Production change; share for Production change."
   },
   {
    "seq": 63,
@@ -1905,12 +1955,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:production-change:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:production-change:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The monitoring service by recorded-by-authority, at most 30 days old."
    },
    "caption": "The monitoring service's unstructured-content statement is fit for An operations agent changes a live system: recorded-by-authority, 0 days old."
   },
@@ -1941,7 +1996,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:production-change:original",
-     "summary": "use for urn:purpose:production change; share for urn:purpose:production change"
+     "summary": "use for Production change; share for Production change"
     },
     "provenance": "signed by The monitoring service"
    },
@@ -1953,7 +2008,14 @@
    "agent": "receiver-agent",
    "part": "memory",
    "kind": "store",
-   "caption": "Unstructured data sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5; not instructions; source urn:fictional:production-change:owner."
+   "caption": "Unstructured data sha-256:a2fd051cb812e3778dab757f3d12a9b9b43c56d6edc76747e5ccffbd90a462b5; not instructions; source The monitoring service.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:production-change:owner"
+    }
+   ]
   },
   {
    "seq": 67,

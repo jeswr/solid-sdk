@@ -23,7 +23,7 @@ const keep = head
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'index.html'), `${keep}\n${body.trim()}\n`);
-for (const f of ['styles.css', 'js', 'data/bundle.js']) {
+for (const f of ['styles.css', 'js', 'data/bundle.js', 'data/traces-1.js', 'data/traces-2.js', 'data/traces-3.js', 'data/traces-4.js']) {
   cpSync(join(root, f), join(out, f), { recursive: true });
 }
 console.log(`wrote ${out}`);

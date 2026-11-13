@@ -80,7 +80,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -213,14 +213,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The credit reference agency's payment.status statement is fit for urn:scenario:credit-file-dispute:task: recorded-by-authority, 0 days old."
+   "caption": "The credit reference agency's payment.status statement is fit for Correcting an error on a credit file: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -378,14 +393,29 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The lender which received the payment's payment.status statement is fit for urn:scenario:credit-file-dispute:task: recorded-by-authority, 0 days old."
+   "caption": "The lender which received the payment's payment.status statement is fit for Correcting an error on a credit file: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -437,10 +467,20 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:copy"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:credit-file-dispute:creditor"
     }
    ],
    "reason": "superseded-by-better-source",
-   "caption": "urn:scenario:credit-file-dispute:copy is retained but superseded by urn:scenario:credit-file-dispute:creditor for this purpose."
+   "caption": "The credit reference agency's payment.status statement is retained but superseded by The lender which received the payment's payment.status statement for this purpose."
   },
   {
    "seq": 16,
@@ -1167,12 +1207,22 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:agency"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:creditor"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:credit-file-dispute:payment.status",
-    "text": "Accept payment.status from urn:fictional:credit-file-dispute:agency, urn:fictional:credit-file-dispute:creditor by recorded-by-authority, at most 1 days old."
+    "text": "Accept payment.status from The credit reference agency, The lender which received the payment by recorded-by-authority, at most 1 days old."
    },
    "caption": "The lender which received the payment's payment.status statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
   },
@@ -1744,7 +1794,24 @@
    "agent": "agency-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"urn:fictional:credit-file-dispute:owner-agent:actor\",\"party\":\"urn:fictional:credit-file-dispute:owner\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"pending\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"The person's agent\",\"party\":\"The person\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"pending\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner"
+    }
+   ]
   },
   {
    "seq": 53,
@@ -1752,7 +1819,24 @@
    "agent": "agency-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"urn:fictional:credit-file-dispute:owner-agent:actor\",\"party\":\"urn:fictional:credit-file-dispute:owner\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"pending\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"The person's agent\",\"party\":\"The person\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"pending\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner"
+    }
+   ]
   },
   {
    "seq": 54,
@@ -2814,7 +2898,34 @@
    "agent": "agency-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"urn:fictional:credit-file-dispute:owner-agent:actor\",\"party\":\"urn:fictional:credit-file-dispute:owner\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"acknowledged\",\"message\":\"urn:awp:engine-credit-file-dispute-main:agency-agent:0002\",\"conversation\":\"urn:awp:general-duty:d17af5bf0e30a18ad4395e83b312462c\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]"
+   "caption": "Duty audit: [{\"kind\":\"notify\",\"source\":\"the unlabelled resource\",\"items\":[],\"event\":\"correction-complete\",\"recipient\":{\"actor\":\"The person's agent\",\"party\":\"The person\"},\"due\":\"2026-11-13T09:01:00.000Z\",\"id\":\"sha-256:b2f0adc14ede9b029b0928724402eb95da074add1f7f3ae1df97e076ee55b3ce\",\"status\":\"acknowledged\",\"message\":\"invoke message\",\"conversation\":\"the unlabelled resource\",\"acknowledgedAt\":\"2026-11-13T09:00:00.000Z\"}]",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:agreement:42a9064169a21afb9c2d6916857ed8eb"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:credit-file-dispute:owner"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:general-duty:d17af5bf0e30a18ad4395e83b312462c"
+    }
+   ]
   }
  ]
 }

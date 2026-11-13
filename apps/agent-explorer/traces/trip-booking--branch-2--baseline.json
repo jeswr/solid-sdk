@@ -107,7 +107,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -231,9 +231,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:trip-booking:passport",
-    "text": "Its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+    "text": "Its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing."
    },
-   "caption": "The identity issuer's identity.passport statement: its terms allow this: use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing."
+   "caption": "The identity issuer's identity.passport statement: its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing."
   },
   {
    "seq": 5,
@@ -248,14 +248,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:trip-booking:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:trip-booking:identity-issuer"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:trip-booking:identity.passport",
-    "text": "Accept identity.passport from urn:fictional:trip-booking:identity-issuer by recorded-by-authority, at most 365 days old."
+    "text": "Accept identity.passport from The identity issuer by recorded-by-authority, at most 365 days old."
    },
-   "caption": "The identity issuer's identity.passport statement is fit for urn:scenario:trip-booking:task: recorded-by-authority, 0 days old."
+   "caption": "The identity issuer's identity.passport statement is fit for Booking a trip: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -284,7 +294,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:trip-booking:passport",
-     "summary": "use for urn:purpose:passport management or urn:purpose:ticketing; share for urn:purpose:passport management or urn:purpose:ticketing"
+     "summary": "use for Passport management or Ticketing; share for Passport management or Ticketing"
     },
     "provenance": "signed by The identity issuer"
    },
@@ -849,7 +859,7 @@
    "agent": "receiver-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:trip booking:passport with The hotel."
+   "caption": "The core proposes to share Attempt passport release while searching with The hotel."
   },
   {
    "seq": 26,

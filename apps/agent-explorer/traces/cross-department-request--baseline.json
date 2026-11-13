@@ -65,7 +65,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -181,9 +181,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:cross-department-request:team-total",
-    "text": "Its terms allow this: use for urn:purpose:cross department request; share for urn:purpose:cross department request."
+    "text": "Its terms allow this: use for Cross department request; share for Cross department request."
    },
-   "caption": "The finance department's salary.team-total statement: its terms allow this: use for urn:purpose:cross department request; share for urn:purpose:cross department request."
+   "caption": "The finance department's salary.team-total statement: its terms allow this: use for Cross department request; share for Cross department request."
   },
   {
    "seq": 5,
@@ -198,14 +198,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:cross-department-request:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:cross-department-request:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:cross-department-request:salary.team-total",
-    "text": "Accept salary.team-total from urn:fictional:cross-department-request:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept salary.team-total from The finance department by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The finance department's salary.team-total statement is fit for urn:scenario:cross-department-request:task: recorded-by-authority, 0 days old."
+   "caption": "The finance department's salary.team-total statement is fit for One department's agent asks another's for data: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -234,7 +244,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:cross-department-request:team-total",
-     "summary": "use for urn:purpose:cross department request; share for urn:purpose:cross department request"
+     "summary": "use for Cross department request; share for Cross department request"
     },
     "provenance": "signed by The finance department"
    },
@@ -791,7 +801,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:cross department request with The people team."
+   "caption": "The core proposes to share One department's agent asks another's for data with The people team."
   },
   {
    "seq": 26,
@@ -939,10 +949,10 @@
    ],
    "rule": {
     "id": "urn:terms:cross-department-request:team-total",
-    "text": "The issuer's terms: use for urn:purpose:cross department request; share for urn:purpose:cross department request. They go out with the data."
+    "text": "The issuer's terms: use for Cross department request; share for Cross department request. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The finance department's salary.team-total statement: its terms allow this: use for urn:purpose:cross department request; share for urn:purpose:cross department request."
+   "caption": "The finance department's salary.team-total statement: its terms allow this: use for Cross department request; share for Cross department request."
   },
   {
    "seq": 33,
@@ -1471,9 +1481,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:cross-department-request:team-total",
-    "text": "Its terms allow this: use for urn:purpose:cross department request; share for urn:purpose:cross department request."
+    "text": "Its terms allow this: use for Cross department request; share for Cross department request."
    },
-   "caption": "The finance department's salary.team-total statement: its terms allow this: use for urn:purpose:cross department request; share for urn:purpose:cross department request."
+   "caption": "The finance department's salary.team-total statement: its terms allow this: use for Cross department request; share for Cross department request."
   },
   {
    "seq": 42,
@@ -1488,12 +1498,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:cross-department-request:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:cross-department-request:salary.team-total",
-    "text": "Accept salary.team-total from urn:fictional:cross-department-request:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept salary.team-total from The finance department by recorded-by-authority, at most 30 days old."
    },
    "caption": "The finance department's salary.team-total statement is fit for One department's agent asks another's for data: recorded-by-authority, 0 days old."
   },
@@ -1524,7 +1539,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:cross-department-request:team-total",
-     "summary": "use for urn:purpose:cross department request; share for urn:purpose:cross department request"
+     "summary": "use for Cross department request; share for Cross department request"
     },
     "provenance": "signed by The finance department"
    },

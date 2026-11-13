@@ -137,7 +137,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -249,9 +249,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-1",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 5,
@@ -266,14 +266,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:request-for-quotes:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-1"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-1",
-    "text": "Accept quote.supplier-1 from urn:fictional:request-for-quotes:supplier-1 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-1 from Fictional supplier 1 by recorded-by-authority, at most 7 days old."
    },
-   "caption": "Fictional supplier 1's quote.supplier-1 statement is fit for urn:scenario:request-for-quotes:task: recorded-by-authority, 0 days old."
+   "caption": "Fictional supplier 1's quote.supplier-1 statement is fit for Asking suppliers for quotes: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -302,7 +312,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-1",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 1"
    },
@@ -947,10 +957,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-1",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 29,
@@ -987,10 +997,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-1",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 31,
@@ -1601,9 +1611,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-1",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 1's quote.supplier-1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 40,
@@ -1618,12 +1628,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-1"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-1",
-    "text": "Accept quote.supplier-1 from urn:fictional:request-for-quotes:supplier-1 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-1 from Fictional supplier 1 by recorded-by-authority, at most 7 days old."
    },
    "caption": "Fictional supplier 1's quote.supplier-1 statement is fit for Request the needed information: recorded-by-authority, 0 days old."
   },
@@ -1654,7 +1669,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-1",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 1"
    },
@@ -1762,9 +1777,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-2",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 47,
@@ -1779,14 +1794,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:request-for-quotes:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-2"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-2",
-    "text": "Accept quote.supplier-2 from urn:fictional:request-for-quotes:supplier-2 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-2 from Fictional supplier 2 by recorded-by-authority, at most 7 days old."
    },
-   "caption": "Fictional supplier 2's quote.supplier-2 statement is fit for urn:scenario:request-for-quotes:task: recorded-by-authority, 0 days old."
+   "caption": "Fictional supplier 2's quote.supplier-2 statement is fit for Asking suppliers for quotes: recorded-by-authority, 0 days old."
   },
   {
    "seq": 48,
@@ -1815,7 +1840,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-2",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 2"
    },
@@ -2460,10 +2485,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-2",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 71,
@@ -2500,10 +2525,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-2",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 73,
@@ -3114,9 +3139,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-2",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 2's quote.supplier-2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 82,
@@ -3131,12 +3156,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-2"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-2",
-    "text": "Accept quote.supplier-2 from urn:fictional:request-for-quotes:supplier-2 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-2 from Fictional supplier 2 by recorded-by-authority, at most 7 days old."
    },
    "caption": "Fictional supplier 2's quote.supplier-2 statement is fit for Request the needed information: recorded-by-authority, 0 days old."
   },
@@ -3167,7 +3197,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-2",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 2"
    },
@@ -3275,9 +3305,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-3",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 89,
@@ -3292,14 +3322,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:request-for-quotes:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-3"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-3",
-    "text": "Accept quote.supplier-3 from urn:fictional:request-for-quotes:supplier-3 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-3 from Fictional supplier 3 by recorded-by-authority, at most 7 days old."
    },
-   "caption": "Fictional supplier 3's quote.supplier-3 statement is fit for urn:scenario:request-for-quotes:task: recorded-by-authority, 0 days old."
+   "caption": "Fictional supplier 3's quote.supplier-3 statement is fit for Asking suppliers for quotes: recorded-by-authority, 0 days old."
   },
   {
    "seq": 90,
@@ -3328,7 +3368,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-3",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 3"
    },
@@ -3973,10 +4013,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-3",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 113,
@@ -4013,10 +4053,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-3",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 115,
@@ -4627,9 +4667,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-3",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 3's quote.supplier-3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
   },
   {
    "seq": 124,
@@ -4644,12 +4684,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-3"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-3",
-    "text": "Accept quote.supplier-3 from urn:fictional:request-for-quotes:supplier-3 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-3 from Fictional supplier 3 by recorded-by-authority, at most 7 days old."
    },
    "caption": "Fictional supplier 3's quote.supplier-3 statement is fit for Request the needed information: recorded-by-authority, 0 days old."
   },
@@ -4680,7 +4725,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-3",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 4 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 3"
    },
@@ -4788,9 +4833,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-4",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
   },
   {
    "seq": 131,
@@ -4805,14 +4850,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:request-for-quotes:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-4"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-4",
-    "text": "Accept quote.supplier-4 from urn:fictional:request-for-quotes:supplier-4 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-4 from Fictional supplier 4 by recorded-by-authority, at most 7 days old."
    },
-   "caption": "Fictional supplier 4's quote.supplier-4 statement is fit for urn:scenario:request-for-quotes:task: recorded-by-authority, 0 days old."
+   "caption": "Fictional supplier 4's quote.supplier-4 statement is fit for Asking suppliers for quotes: recorded-by-authority, 0 days old."
   },
   {
    "seq": 132,
@@ -4841,7 +4896,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-4",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 4"
    },
@@ -5486,10 +5541,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-4",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
   },
   {
    "seq": 155,
@@ -5526,10 +5581,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-4",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
   },
   {
    "seq": 157,
@@ -6140,9 +6195,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-4",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
    },
-   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5."
+   "caption": "Fictional supplier 4's quote.supplier-4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
   },
   {
    "seq": 166,
@@ -6157,12 +6212,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-4"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-4",
-    "text": "Accept quote.supplier-4 from urn:fictional:request-for-quotes:supplier-4 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-4 from Fictional supplier 4 by recorded-by-authority, at most 7 days old."
    },
    "caption": "Fictional supplier 4's quote.supplier-4 statement is fit for Request the needed information: recorded-by-authority, 0 days old."
   },
@@ -6193,7 +6253,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-4",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 5"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5"
     },
     "provenance": "signed by Fictional supplier 4"
    },
@@ -6301,9 +6361,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-5",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
    },
-   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
   },
   {
    "seq": 173,
@@ -6318,14 +6378,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:request-for-quotes:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-5"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-5",
-    "text": "Accept quote.supplier-5 from urn:fictional:request-for-quotes:supplier-5 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-5 from Fictional supplier 5 by recorded-by-authority, at most 7 days old."
    },
-   "caption": "Fictional supplier 5's quote.supplier-5 statement is fit for urn:scenario:request-for-quotes:task: recorded-by-authority, 0 days old."
+   "caption": "Fictional supplier 5's quote.supplier-5 statement is fit for Asking suppliers for quotes: recorded-by-authority, 0 days old."
   },
   {
    "seq": 174,
@@ -6354,7 +6424,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-5",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4"
     },
     "provenance": "signed by Fictional supplier 5"
    },
@@ -6999,10 +7069,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-5",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
   },
   {
    "seq": 197,
@@ -7039,10 +7109,10 @@
    ],
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-5",
-    "text": "The issuer's terms: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4. They go out with the data."
+    "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
   },
   {
    "seq": 199,
@@ -7653,9 +7723,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:request-for-quotes:quote-5",
-    "text": "Its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+    "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
    },
-   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4."
+   "caption": "Fictional supplier 5's quote.supplier-5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
   },
   {
    "seq": 208,
@@ -7670,12 +7740,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:request-for-quotes:supplier-5"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:request-for-quotes:quote.supplier-5",
-    "text": "Accept quote.supplier-5 from urn:fictional:request-for-quotes:supplier-5 by recorded-by-authority, at most 7 days old."
+    "text": "Accept quote.supplier-5 from Fictional supplier 5 by recorded-by-authority, at most 7 days old."
    },
    "caption": "Fictional supplier 5's quote.supplier-5 statement is fit for Request the needed information: recorded-by-authority, 0 days old."
   },
@@ -7706,7 +7781,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:request-for-quotes:quote-5",
-     "summary": "use for urn:purpose:request for quotes; share for urn:purpose:request for quotes; never for urn:fictional:request for quotes:supplier 1 or urn:fictional:request for quotes:supplier 2 or urn:fictional:request for quotes:supplier 3 or urn:fictional:request for quotes:supplier 4"
+     "summary": "use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4"
     },
     "provenance": "signed by Fictional supplier 5"
    },

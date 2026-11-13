@@ -66,7 +66,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -194,9 +194,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:telecom-fault:observation",
-    "text": "Its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+    "text": "Its terms allow this: use for Telecom fault; share for Telecom fault."
    },
-   "caption": "The customer's router.light statement: its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+   "caption": "The customer's router.light statement: its terms allow this: use for Telecom fault; share for Telecom fault."
   },
   {
    "seq": 6,
@@ -211,14 +211,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:telecom-fault:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:telecom-fault:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:telecom-fault:router.light",
-    "text": "Accept router.light from urn:fictional:telecom-fault:owner by self-reported, at most 30 days old."
+    "text": "Accept router.light from The customer by self-reported, at most 30 days old."
    },
-   "caption": "The customer's router.light statement is fit for urn:scenario:telecom-fault:task: self-reported, 0 days old."
+   "caption": "The customer's router.light statement is fit for Fixing a broadband fault together: self-reported, 0 days old."
   },
   {
    "seq": 7,
@@ -247,7 +257,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:telecom-fault:observation",
-     "summary": "use for urn:purpose:telecom fault; share for urn:purpose:telecom fault"
+     "summary": "use for Telecom fault; share for Telecom fault"
     },
     "provenance": "signed by The customer"
    },
@@ -806,7 +816,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:telecom fault with The broadband provider."
+   "caption": "The core proposes to share Fixing a broadband fault together with The broadband provider."
   },
   {
    "seq": 27,
@@ -954,10 +964,10 @@
    ],
    "rule": {
     "id": "urn:terms:telecom-fault:observation",
-    "text": "The issuer's terms: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault. They go out with the data."
+    "text": "The issuer's terms: use for Telecom fault; share for Telecom fault. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The customer's router.light statement: its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+   "caption": "The customer's router.light statement: its terms allow this: use for Telecom fault; share for Telecom fault."
   },
   {
    "seq": 34,
@@ -1484,9 +1494,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:telecom-fault:observation",
-    "text": "Its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+    "text": "Its terms allow this: use for Telecom fault; share for Telecom fault."
    },
-   "caption": "The customer's router.light statement: its terms allow this: use for urn:purpose:telecom fault; share for urn:purpose:telecom fault."
+   "caption": "The customer's router.light statement: its terms allow this: use for Telecom fault; share for Telecom fault."
   },
   {
    "seq": 43,
@@ -1501,12 +1511,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:telecom-fault:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:telecom-fault:router.light",
-    "text": "Accept router.light from urn:fictional:telecom-fault:owner by self-reported, at most 30 days old."
+    "text": "Accept router.light from The customer by self-reported, at most 30 days old."
    },
    "caption": "The customer's router.light statement is fit for Fixing a broadband fault together: self-reported, 0 days old."
   },
@@ -1537,7 +1552,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:telecom-fault:observation",
-     "summary": "use for urn:purpose:telecom fault; share for urn:purpose:telecom fault"
+     "summary": "use for Telecom fault; share for Telecom fault"
     },
     "provenance": "signed by The customer"
    },

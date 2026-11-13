@@ -26,6 +26,18 @@
   {
    "id": "receiver-agent",
    "name": "The letting agency's agent"
+  },
+  {
+   "id": "employer",
+   "name": "The separately keyed fictional payroll employer"
+  },
+  {
+   "id": "landlord",
+   "name": "The independently keyed previous landlord"
+  },
+  {
+   "id": "rental-authority",
+   "name": "The independently keyed rental entitlement issuer"
   }
  ],
  "scenario": {
@@ -69,10 +81,14 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
+  {
+   "what": "Planned proof method sparq-zk-result/5",
+   "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
+  },
   {
    "what": "Outside organizations and data sources",
    "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -80,6 +96,10 @@
   {
    "what": "Proof-free tenancy preflights",
    "replacedBy": "The actual agency request cannot authorize raw statements, and a fresh signed negotiation hits the real runtime round cap; no income/rent proof is fabricated"
+  },
+  {
+   "what": "The income/rent rule",
+   "replacedBy": "One payroll employer signs monthly GBP income; the fixed rule asks whether it is at least three times the GBP 1000 monthly rent. It does not ask the result relation to sum bank statements."
   }
  ],
  "events": [
@@ -270,7 +290,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:f9614340861…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:7a754324d45…; never trusted."
     },
     "layers": {
      "header": {
@@ -298,7 +318,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:af4e56d0d3777e1da4271d07dbaea8a8d1648ef7715c17e5d192fef2d8618b18"
+      "digest": "sha-256:44022313fa667327ff3bcef4b5e37435c9043aecf4313e1aacab9c98acd87ff6"
      },
      "authority": {
       "present": true,
@@ -313,14 +333,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+      "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
      },
      "content": {
       "present": true,
@@ -400,7 +422,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:f9614340861…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:7a754324d45…; never trusted."
     },
     "layers": {
      "header": {
@@ -428,7 +450,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:af4e56d0d3777e1da4271d07dbaea8a8d1648ef7715c17e5d192fef2d8618b18"
+      "digest": "sha-256:44022313fa667327ff3bcef4b5e37435c9043aecf4313e1aacab9c98acd87ff6"
      },
      "authority": {
       "present": true,
@@ -443,14 +465,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+      "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
      },
      "content": {
       "present": true,
@@ -841,7 +865,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:3b961a5e8f3…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:91674f0004e…; never trusted."
     },
     "layers": {
      "header": {
@@ -870,7 +894,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:13c5df16dbcdc6126f625ec0f2fe778e0385d666a6d300e3f613ffebc62d2c15"
+      "digest": "sha-256:7ed58ebce54e5148a0d13016c613390a1223fea83a6ac929af8d567459bcfb77"
      },
      "authority": {
       "present": true,
@@ -885,14 +909,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:7dcdc8f4b42630526b593b5f6d2eb565a87d1ca666cd6c0057df35305f71bea1"
+      "digest": "sha-256:71159ff996f56b46c4a453f2eb21adf12a5482fc619305e8ba20480c26ca2eff"
      },
      "content": {
       "present": true,
@@ -976,7 +1002,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:3b961a5e8f3…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:91674f0004e…; never trusted."
     },
     "layers": {
      "header": {
@@ -1005,7 +1031,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:13c5df16dbcdc6126f625ec0f2fe778e0385d666a6d300e3f613ffebc62d2c15"
+      "digest": "sha-256:7ed58ebce54e5148a0d13016c613390a1223fea83a6ac929af8d567459bcfb77"
      },
      "authority": {
       "present": true,
@@ -1020,14 +1046,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:7dcdc8f4b42630526b593b5f6d2eb565a87d1ca666cd6c0057df35305f71bea1"
+      "digest": "sha-256:71159ff996f56b46c4a453f2eb21adf12a5482fc619305e8ba20480c26ca2eff"
      },
      "content": {
       "present": true,
@@ -1426,7 +1454,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:091e5315f49…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:bae3d17baa1…; never trusted."
     },
     "layers": {
      "header": {
@@ -1455,7 +1483,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:aa87fb5d91644c928d8709ff4d42aa6397defa49779501983b948e532cad3c48"
+      "digest": "sha-256:cba687a59f16083c2f17d42f15e438f52fa89113824dd3b5f126e1c3ae0cb70a"
      },
      "authority": {
       "present": true,
@@ -1470,14 +1498,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+      "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
      },
      "content": {
       "present": true,
@@ -1561,7 +1591,7 @@
     "kind": "propose",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:091e5315f49…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:bae3d17baa1…; never trusted."
     },
     "layers": {
      "header": {
@@ -1590,7 +1620,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:aa87fb5d91644c928d8709ff4d42aa6397defa49779501983b948e532cad3c48"
+      "digest": "sha-256:cba687a59f16083c2f17d42f15e438f52fa89113824dd3b5f126e1c3ae0cb70a"
      },
      "authority": {
       "present": true,
@@ -1605,14 +1635,16 @@
         "operations": [
          "urn:op:tenancy-application",
          "urn:op:tenancy-application:request",
-         "urn:op:tenancy-application:raw"
+         "urn:op:tenancy-application:raw",
+         "urn:op:tenancy-application:proof-request",
+         "urn:op:tenancy-application:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:177b04fa7add93088123ead7d2ab7a8660f903f8b855bcdd817a1515359b41e0"
+      "digest": "sha-256:287a7475436529e10b25bb151d55bb8abc4a1319cd910e786d4adf171e1bee26"
      },
      "content": {
       "present": true,

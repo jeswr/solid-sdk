@@ -112,7 +112,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -241,14 +241,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:erasure-request:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:erasure-request:subject"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:erasure-request:contact.data",
-    "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+    "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The data subject's contact.data statement is fit for urn:scenario:erasure-request:task: recorded-by-authority, 0 days old."
+   "caption": "The data subject's contact.data statement is fit for Withdrawing consent and asking for deletion: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -1377,7 +1387,7 @@
    "agent": "subject-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:erasure request:agreement with The company."
+   "caption": "The core proposes to share Form the data-use agreement with The company."
   },
   {
    "seq": 42,
@@ -2052,12 +2062,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:erasure-request:subject"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:erasure-request:contact.data",
-    "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+    "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
    },
    "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
   },
@@ -3172,7 +3187,7 @@
    "agent": "company-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:erasure request:agreement with The onward recipient."
+   "caption": "The core proposes to share Form the data-use agreement with The onward recipient."
   },
   {
    "seq": 95,
@@ -3847,12 +3862,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:erasure-request:subject"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:erasure-request:contact.data",
-    "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+    "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
    },
    "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
   },
@@ -4983,7 +5003,7 @@
    "agent": "partner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:erasure request:agreement with The second onward recipient."
+   "caption": "The core proposes to share Form the data-use agreement with The second onward recipient."
   },
   {
    "seq": 148,
@@ -5658,12 +5678,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:erasure-request:subject"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:erasure-request:contact.data",
-    "text": "Accept contact.data from urn:fictional:erasure-request:subject by recorded-by-authority, at most 1 days old."
+    "text": "Accept contact.data from The data subject by recorded-by-authority, at most 1 days old."
    },
    "caption": "The data subject's contact.data statement is fit for Form the data-use agreement: recorded-by-authority, 0 days old."
   },
@@ -6267,7 +6292,14 @@
    "agent": "company-agent",
    "part": "record",
    "kind": "record",
-   "caption": "Payloads deleted; digest tombstones retained for urn:scenario:erasure-request:data."
+   "caption": "Payloads deleted; digest tombstones retained for The data subject's contact.data statement.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:erasure-request:data"
+    }
+   ]
   },
   {
    "seq": 185,

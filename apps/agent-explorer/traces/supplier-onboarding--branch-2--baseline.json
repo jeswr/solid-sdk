@@ -83,7 +83,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -220,14 +220,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:supplier-onboarding:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:company-register"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:supplier-onboarding:company.exists",
-    "text": "Accept company.exists from urn:fictional:company-register by recorded-by-authority, at most 30 days old."
+    "text": "Accept company.exists from The fictional company register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The fictional company register's company.exists statement is fit for urn:scenario:supplier-onboarding:task: recorded-by-authority, 0 days old."
+   "caption": "The fictional company register's company.exists statement is fit for Taking on a new supplier: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -307,7 +317,7 @@
    ],
    "reason": "source-not-authoritative",
    "resolution": {
-    "question": "Is The supplier's bank an authority for bank.account-owner claims about urn:fictional:another-entity?",
+    "question": "Is The supplier's bank an authority for bank.account-owner claims about the unlabelled resource?",
     "path": [
      {
       "at": "The supplier's own list",
@@ -467,14 +477,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:supplier-onboarding:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:certifier"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:supplier-onboarding:certificate",
-    "text": "Accept certificate from urn:fictional:certifier by attested, at most 30 days old."
+    "text": "Accept certificate from The fictional certifier by attested, at most 30 days old."
    },
-   "caption": "The fictional certifier's certificate statement is fit for urn:scenario:supplier-onboarding:task: attested, 0 days old."
+   "caption": "The fictional certifier's certificate statement is fit for Taking on a new supplier: attested, 0 days old."
   },
   {
    "seq": 17,
@@ -515,7 +535,7 @@
    "agent": "supplier-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:onboard supplier with The buyer."
+   "caption": "The core proposes to use the unlabelled resource with The buyer."
   },
   {
    "seq": 20,

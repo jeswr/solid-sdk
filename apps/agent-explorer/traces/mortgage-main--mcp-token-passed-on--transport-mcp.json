@@ -1,0 +1,3013 @@
+{
+ "x-authored-by": "Codex GPT-6",
+ "schema": "agent-trace/0.1",
+ "useCase": "mortgage-in-principle",
+ "path": {
+  "index": 2,
+  "what": "The tool asks for its token at a different server; the hand-off is refused."
+ },
+ "parties": [
+  {
+   "id": "sam",
+   "name": "Sam, the fictional applicant"
+  },
+  {
+   "id": "north",
+   "name": "The fictional lender"
+  },
+  {
+   "id": "sam-agent",
+   "name": "Sam's agent"
+  },
+  {
+   "id": "north-agent",
+   "name": "The fictional lender's agent"
+  },
+  {
+   "id": "paywell",
+   "name": "The fictional payroll provider"
+  },
+  {
+   "id": "harbour",
+   "name": "Sam's fictional bank"
+  },
+  {
+   "id": "index",
+   "name": "The mortgage product index"
+  },
+  {
+   "id": "identity-provider",
+   "name": "The fictional identity provider"
+  },
+  {
+   "id": "index-agent",
+   "name": "The mortgage product index's agent"
+  },
+  {
+   "id": "harbour-agent",
+   "name": "Sam's fictional bank's agent"
+  },
+  {
+   "id": "channel-authority",
+   "name": "The fictional tool-channel authorization server"
+  }
+ ],
+ "scenario": {
+  "id": "mortgage-main--mcp-token-passed-on",
+  "title": "A mortgage in principle: The tool asks for its token at a different server; the hand-off is refused.",
+  "steps": {
+   "1": "Sam signs a mandate.",
+   "2": "Sam asks for a mortgage in principle.",
+   "3": "Sam's agent finds lenders through the index and looks North Bank up on the register.",
+   "4": "The agents describe themselves and Sam's agent applies.",
+   "5": "North Bank says what evidence it needs.",
+   "6": "Sam's agent asks Harbour Bank for a signed balance statement.",
+   "7": "Harbour Bank asks for a stronger approval.",
+   "8": "Sam does a face check and the request is sent again.",
+   "9": "Harbour Bank returns a signed statement with its terms.",
+   "10": "Sam's agent checks the statements it holds.",
+   "11": "Sam is asked, and the agent shares the evidence.",
+   "12": "North Bank's gate checks the evidence.",
+   "13": "North Bank returns a signed decision in principle.",
+   "14": "Each side checks its own record."
+  }
+ },
+ "configuration": {
+  "id": "transport-mcp",
+  "layers": {
+   "transport": "mcp",
+   "data-access": "by-value",
+   "identity": "pinned-key",
+   "meaning": "fixed-vocabulary",
+   "authority": "mandate-signed",
+   "authenticity": "jws",
+   "trust": "register-chain",
+   "reliance": "precedence-rules",
+   "usage-control": "odrl-rules",
+   "commitments": "signed-offer-acceptance",
+   "accountability": "local-ledger"
+  }
+ },
+ "agents": [
+  {
+   "id": "sams-agent",
+   "name": "Sam's agent",
+   "actsFor": "sam",
+   "role": "agent"
+  },
+  {
+   "id": "lender",
+   "name": "The fictional lender's agent",
+   "actsFor": "north",
+   "role": "agent"
+  },
+  {
+   "id": "index",
+   "name": "The mortgage product index's agent",
+   "actsFor": "index",
+   "role": "agent"
+  },
+  {
+   "id": "bank",
+   "name": "Sam's fictional bank's agent",
+   "actsFor": "harbour",
+   "role": "agent"
+  }
+ ],
+ "generated": {
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "core": "scripted"
+ },
+ "standIns": [
+  {
+   "what": "Lender, bank, payroll, product index, register and identity-provider services",
+   "replacedBy": "Fictional separately keyed local parties and issuer-only sources, serving the same checked mortgage protocol"
+  },
+  {
+   "what": "Network transport between Sam's agent and the lender's agent",
+   "replacedBy": "Fictional in-process HTTP exchanges with method, path, headers and body. The index, bank and register keep their baseline carriage."
+  },
+  {
+   "what": "Parties in the journey",
+   "replacedBy": "Every person, organisation and service is fictional; separate agents use their own signing keys."
+  },
+  {
+   "what": "Tool-channel authorization service",
+   "replacedBy": "A fictional authorization server issues one resource-bound channel token. The token grants no authority over signed messages."
+  }
+ ],
+ "events": [
+  {
+   "seq": 1,
+   "step": 1,
+   "agent": "sams-agent",
+   "part": "record",
+   "kind": "record",
+   "rule": {
+    "id": "urn:awp:mandate:4c52b19e2d73c62fa2ca06b6af81c0df:mortgage-main",
+    "text": "Sam, the fictional applicant's mandate lets the agent use Mortgage decision in principle for Mortgage Application with The fictional lender or the unlabelled resource, on its own. Sam, the fictional applicant's mandate lets the agent use the unlabelled resource for Product Search with The mortgage product index, on its own. Sam, the fictional applicant's mandate lets the agent use the unlabelled resource for Mortgage Application with Sam's fictional bank, on its own. Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves. Sam, the fictional applicant's mandate lets the agent compensate the unlabelled resource for Mortgage Application with The fictional lender, after Sam, the fictional applicant approves."
+   },
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules"
+    }
+   ],
+   "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 5 rules, valid until 2027-01-12."
+  },
+  {
+   "seq": 2,
+   "step": 2,
+   "agent": "sams-agent",
+   "part": "principal",
+   "kind": "principal-instruction",
+   "chat": {
+    "who": "principal",
+    "text": "I'd like a mortgage in principle for a flat: price $450,000, borrowing $380,000."
+   },
+   "caption": "Sam, the fictional applicant asks the agent in chat. This starts a task; it authorizes nothing by itself: the mandate does."
+  },
+  {
+   "seq": 3,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "The fictional lender's mortgage.product statement is intact and signed with The fictional lender's pinned key."
+  },
+  {
+   "seq": 4,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+    "text": "The fictional lender is accepted for mortgage.product claims."
+   },
+   "resolution": {
+    "question": "Is The fictional lender an authority for mortgage.product claims?",
+    "path": [
+     {
+      "at": "The mortgage product index's own list",
+      "kind": "own-list",
+      "says": "No entry for The fictional lender for this kind of claim."
+     },
+     {
+      "at": "National trust root",
+      "kind": "root",
+      "says": "Lenders are answered by the Sector register."
+     },
+     {
+      "at": "Sector register",
+      "kind": "register",
+      "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+     }
+    ],
+    "answer": "Accepted, for mortgage.product claims only."
+   },
+   "caption": "The fictional lender's mortgage.product statement: The fictional lender is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 5,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The fictional lender's mortgage.product statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 6,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:awp:product-terms:northbank-fixed-5",
+    "text": "Its terms allow this: use for Product Search; share for Product Search."
+   },
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 7,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:mortgage-main:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://northbank.example/#org"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://harbourbank.example/#org"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:mortgage:mortgage.product",
+    "text": "Accept mortgage.product from The fictional lender, Sam's fictional bank by published-by-lender, at most 31 days old."
+   },
+   "caption": "The fictional lender's mortgage.product statement is fit for A mortgage in principle: published-by-lender, 12 days old."
+  },
+  {
+   "seq": 8,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The fictional lender's mortgage.product statement is admitted."
+  },
+  {
+   "seq": 9,
+   "step": 3,
+   "agent": "index",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:awp:product:northbank-fixed-5",
+    "label": "The fictional lender's mortgage.product statement",
+    "claimType": "mortgage.product",
+    "subject": "unknown",
+    "value": {
+     "name": "5-year fixed",
+     "propertyUse": "residential",
+     "rateType": "fixed",
+     "ratePercent": 4.1,
+     "fixedYears": 5,
+     "maxLoanToValuePercent": 90
+    },
+    "source": "https://northbank.example/#org",
+    "method": "published-by-lender",
+    "terms": {
+     "id": "urn:awp:product-terms:northbank-fixed-5",
+     "summary": "use for Product Search; share for Product Search"
+    },
+    "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
+   },
+   "caption": "The fictional lender's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 10,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "caption": "Sam's fictional bank's mortgage.product statement is intact and signed with Sam's fictional bank's pinned key."
+  },
+  {
+   "seq": 11,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#fixture/sector-register/harbour-bank#2026-11-13",
+    "text": "Sam's fictional bank is accepted for mortgage.product claims."
+   },
+   "resolution": {
+    "question": "Is Sam's fictional bank an authority for mortgage.product claims?",
+    "path": [
+     {
+      "at": "The mortgage product index's own list",
+      "kind": "own-list",
+      "says": "No entry for Sam's fictional bank for this kind of claim."
+     },
+     {
+      "at": "National trust root",
+      "kind": "root",
+      "says": "Lenders are answered by the Sector register."
+     },
+     {
+      "at": "Sector register",
+      "kind": "register",
+      "says": "Sam's fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+     }
+    ],
+    "answer": "Accepted, for mortgage.product claims only."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement: Sam's fictional bank is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 12,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "Sam's fictional bank's mortgage.product statement asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 13,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:awp:product-terms:harbourbank-fixed-2",
+    "text": "Its terms allow this: use for Product Search; share for Product Search."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 14,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:mortgage-main:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://northbank.example/#org"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://harbourbank.example/#org"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:mortgage:mortgage.product",
+    "text": "Accept mortgage.product from The fictional lender, Sam's fictional bank by published-by-lender, at most 31 days old."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement is fit for A mortgage in principle: published-by-lender, 12 days old."
+  },
+  {
+   "seq": 15,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "Sam's fictional bank's mortgage.product statement is admitted."
+  },
+  {
+   "seq": 16,
+   "step": 3,
+   "agent": "index",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:awp:product:harbourbank-fixed-2",
+    "label": "Sam's fictional bank's mortgage.product statement",
+    "claimType": "mortgage.product",
+    "subject": "unknown",
+    "value": {
+     "name": "2-year fixed",
+     "propertyUse": "residential",
+     "rateType": "fixed",
+     "ratePercent": 3.8,
+     "fixedYears": 2,
+     "maxLoanToValuePercent": 80
+    },
+    "source": "https://harbourbank.example/#org",
+    "method": "published-by-lender",
+    "terms": {
+     "id": "urn:awp:product-terms:harbourbank-fixed-2",
+     "summary": "use for Product Search; share for Product Search"
+    },
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 17,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "core",
+   "kind": "propose",
+   "caption": "The core proposes to use the unlabelled resource with The mortgage product index."
+  },
+  {
+   "seq": 18,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "within-mandate",
+   "caption": "Sam, the fictional applicant's mandate covers this action."
+  },
+  {
+   "seq": 19,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+    }
+   ],
+   "resolution": {
+    "question": "Is The mortgage product index a party I can send https://w3id.org/jeswr/awp#op/mortgage-product-search to?",
+    "path": [
+     {
+      "at": "Sam, the fictional applicant's own list",
+      "kind": "own-list",
+      "says": "The mortgage product index is accepted for https://w3id.org/jeswr/awp#op/mortgage-product-search."
+     }
+    ],
+    "answer": "Accepted, for https://w3id.org/jeswr/awp#op/mortgage-product-search only."
+   },
+   "reason": "recipient-established",
+   "caption": "The mortgage product index: Accepted, for the unlabelled resource only."
+  },
+  {
+   "seq": 20,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-query",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 21,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "This action passes on no personal data."
+  },
+  {
+   "seq": 22,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "within-limits",
+   "caption": "Inside what the agent may do on its own, and within Sam, the fictional applicant's limits."
+  },
+  {
+   "seq": 23,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-query",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters."
+  },
+  {
+   "seq": 24,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Sent unsigned and with no identifier, as the public read configuration requires; written to the record."
+  },
+  {
+   "seq": 25,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The invoke message goes to The mortgage product index's agent."
+  },
+  {
+   "seq": 26,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+    "from": "Sam, the fictional applicant",
+    "to": "The mortgage product index's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Signed bytes passed directly in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From Sam, the fictional applicant to The mortgage product index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "kind": "invoke",
+       "from": {},
+       "to": {
+        "actor": "https://mortgage-index.example/agents/search#agent",
+        "party": "https://mortgage-index.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z"
+      },
+      "digest": "sha-256:d7f3040163add0189dc0c75f5f536b09a1abdd025045ff8f5308b57deba8253e"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation.",
+      "raw": {
+       "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "version": "0.1"
+       },
+       "input": {
+        "propertyUse": "residential",
+        "rateType": "fixed"
+       },
+       "basis": {
+        "kind": "public"
+       },
+       "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+      },
+      "digest": "sha-256:7c647e38a2e73ccc249ddaa4fb22830fa647c38bb750a18435468d65d5fa5a40"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "public"
+      },
+      "digest": "sha-256:3062dd445d62f4dea1493907c6d94fb62dbf0bb2ae5c8d8e061055cfd5f11f82"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-query"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "Sam, the fictional applicant sends an invoke message to The mortgage product index's agent."
+  },
+  {
+   "seq": 27,
+   "step": 3,
+   "agent": "index",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+    "from": "Sam, the fictional applicant",
+    "to": "The mortgage product index's agent",
+    "kind": "invoke",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Signed bytes passed directly in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From Sam, the fictional applicant to The mortgage product index's agent; invoke; unsigned; valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "kind": "invoke",
+       "from": {},
+       "to": {
+        "actor": "https://mortgage-index.example/agents/search#agent",
+        "party": "https://mortgage-index.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z"
+      },
+      "digest": "sha-256:d7f3040163add0189dc0c75f5f536b09a1abdd025045ff8f5308b57deba8253e"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Invokes an operation. It also carries free text, marked as untrusted content (data, never an instruction): \"https://w3id.org/jeswr/awp#op/mortgage-product-search\"; \"https://w3id.org/jeswr/awp#purpose/product-search\"",
+      "raw": {
+       "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "version": "0.1"
+       },
+       "input": {
+        "propertyUse": "residential",
+        "rateType": "fixed"
+       },
+       "basis": {
+        "kind": "public"
+       },
+       "purpose": "https://w3id.org/jeswr/awp#purpose/product-search"
+      },
+      "digest": "sha-256:7c647e38a2e73ccc249ddaa4fb22830fa647c38bb750a18435468d65d5fa5a40",
+      "untrusted": [
+       {
+        "path": "operation.id",
+        "text": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+       },
+       {
+        "path": "purpose",
+        "text": "https://w3id.org/jeswr/awp#purpose/product-search"
+       }
+      ]
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "public"
+      },
+      "digest": "sha-256:3062dd445d62f4dea1493907c6d94fb62dbf0bb2ae5c8d8e061055cfd5f11f82"
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-query"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "An invoke message from Sam, the fictional applicant reaches the inbound gate."
+  },
+  {
+   "seq": 28,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, unsigned, which its configuration allows for this kind, addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 29,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 30,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-principal",
+   "caption": "This request is made on no one's behalf: a public read, with no identifier for the asker."
+  },
+  {
+   "seq": 31,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 32,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 33,
+   "step": 3,
+   "agent": "index",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 34,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 35,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "reason": "no-principal",
+   "caption": "The message goes to no one in particular."
+  },
+  {
+   "seq": 36,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-query",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 37,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:awp:product-terms:northbank-fixed-5",
+    "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 38,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-query",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the actual credential against the declared purpose."
+  },
+  {
+   "seq": 39,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:awp:product-terms:harbourbank-fixed-2",
+    "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 40,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-query",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate checks the carried statements against the conversation's purpose."
+  },
+  {
+   "seq": 41,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:awp:product-terms:northbank-fixed-5",
+    "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 42,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "rule": {
+    "id": "urn:awp:product-terms:harbourbank-fixed-2",
+    "text": "The issuer's terms: use for Product Search; share for Product Search. They go out with the data."
+   },
+   "reason": "terms-allow",
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 43,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 44,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The mortgage product index's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 45,
+   "step": 3,
+   "agent": "index",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The deliver message goes to Sam, the fictional applicant."
+  },
+  {
+   "seq": 46,
+   "step": 3,
+   "agent": "index",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001",
+    "from": "The mortgage product index's agent",
+    "to": "Sam, the fictional applicant",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Signed bytes passed directly in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The mortgage product index's agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "https://mortgage-index.example/agents/search#agent",
+        "onBehalfOf": "https://mortgage-index.example/#org",
+        "operator": "https://mortgage-index.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "7mgkYNtR_MwEnhID9OPsV7nDrEluTXcwncxEGzyFseI",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:cf94c2b7663954c7c9d0a17dcd464262769659bd95f73632217c03f3566e88e9"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement.",
+      "raw": {
+       "ref": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+       },
+       "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "version": "0.1"
+       },
+       "output": {
+        "query": {
+         "propertyUse": "residential",
+         "rateType": "fixed"
+        },
+        "aggregatedAt": "2026-11-13T09:00:00.000Z",
+        "products": [
+         {
+          "id": "urn:awp:product:northbank-fixed-5",
+          "lender": "https://northbank.example/#org",
+          "publishedAt": "2026-11-01T09:00:00Z",
+          "retrievedFrom": "https://northbank.example/#org"
+         },
+         {
+          "id": "urn:awp:product:harbourbank-fixed-2",
+          "lender": "https://harbourbank.example/#org",
+          "publishedAt": "2026-11-01T09:00:00Z",
+          "retrievedFrom": "https://harbourbank.example/#org"
+         }
+        ]
+       }
+      },
+      "digest": "sha-256:5130ca79b14dbed7d2d7fb3e445ccb09d9439db7f94e6ad6aa37531fb46233d0"
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: mortgage.product from The fictional lender; mortgage.product from Sam's fictional bank.",
+      "raw": [
+       {
+        "type": "MortgageProduct",
+        "issuedAt": "2026-11-01T09:00:00Z",
+        "product": {
+         "name": "5-year fixed",
+         "propertyUse": "residential",
+         "rateType": "fixed",
+         "ratePercent": 4.1,
+         "fixedYears": 5,
+         "maxLoanToValuePercent": 90
+        },
+        "synthetic": true,
+        "id": "urn:awp:product:northbank-fixed-5",
+        "issuer": "https://northbank.example/#org",
+        "claimType": "mortgage.product",
+        "method": "published-by-lender",
+        "terms": {
+         "policy": {
+          "id": "urn:awp:product-terms:northbank-fixed-5",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:awp:product:northbank-fixed-5",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:awp:product:northbank-fixed-5",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "MortgageProduct",
+        "issuedAt": "2026-11-01T09:00:00Z",
+        "product": {
+         "name": "2-year fixed",
+         "propertyUse": "residential",
+         "rateType": "fixed",
+         "ratePercent": 3.8,
+         "fixedYears": 2,
+         "maxLoanToValuePercent": 80
+        },
+        "synthetic": true,
+        "id": "urn:awp:product:harbourbank-fixed-2",
+        "issuer": "https://harbourbank.example/#org",
+        "claimType": "mortgage.product",
+        "method": "published-by-lender",
+        "terms": {
+         "policy": {
+          "id": "urn:awp:product-terms:harbourbank-fixed-2",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:awp:product:harbourbank-fixed-2",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:awp:product:harbourbank-fixed-2",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:a270ae72afe6673e87ebf2c9c513a6acb78ce4551ce291832e1a5b6ea568cf72"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+      },
+      "digest": "sha-256:54eae922610862402bbc99e896b3fb7848c7406cb1f97058f87f53569bf1f7bc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "statements": [
+        {
+         "id": "urn:awp:product:northbank-fixed-5",
+         "issuer": "https://northbank.example/#org",
+         "issuedAt": "2026-11-01T09:00:00Z",
+         "asOf": null
+        },
+        {
+         "id": "urn:awp:product:harbourbank-fixed-2",
+         "issuer": "https://harbourbank.example/#org",
+         "issuedAt": "2026-11-01T09:00:00Z",
+         "asOf": null
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-query"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The mortgage product index's agent sends a deliver message to Sam, the fictional applicant."
+  },
+  {
+   "seq": 47,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001",
+    "from": "The mortgage product index's agent",
+    "to": "Sam, the fictional applicant",
+    "kind": "deliver",
+    "carriage": {
+     "suite": "direct-http",
+     "summary": "Signed bytes passed directly in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The mortgage product index's agent to Sam, the fictional applicant; deliver; signed (JWS EdDSA, pinned key 7mgkYNtR_MwE…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:index-agent:0001",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "kind": "deliver",
+       "from": {
+        "actor": "https://mortgage-index.example/agents/search#agent",
+        "onBehalfOf": "https://mortgage-index.example/#org",
+        "operator": "https://mortgage-index.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "7mgkYNtR_MwEnhID9OPsV7nDrEluTXcwncxEGzyFseI",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:cf94c2b7663954c7c9d0a17dcd464262769659bd95f73632217c03f3566e88e9"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Delivers the result under the agreement. It also carries free text, marked as untrusted content (data, never an instruction): \"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002\"; \"urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002\"; \"https://w3id.org/jeswr/awp#op/mortgage-product-search\"; \"urn:awp:product:northbank-fixed-5\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"urn:awp:product:harbourbank-fixed-2\"; \"https://harbourbank.example/#org\"; \"https://harbourbank.example/#org\"",
+      "raw": {
+       "ref": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "basis": {
+        "kind": "invocation",
+        "invocation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+       },
+       "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search",
+        "version": "0.1"
+       },
+       "output": {
+        "query": {
+         "propertyUse": "residential",
+         "rateType": "fixed"
+        },
+        "aggregatedAt": "2026-11-13T09:00:00.000Z",
+        "products": [
+         {
+          "id": "urn:awp:product:northbank-fixed-5",
+          "lender": "https://northbank.example/#org",
+          "publishedAt": "2026-11-01T09:00:00Z",
+          "retrievedFrom": "https://northbank.example/#org"
+         },
+         {
+          "id": "urn:awp:product:harbourbank-fixed-2",
+          "lender": "https://harbourbank.example/#org",
+          "publishedAt": "2026-11-01T09:00:00Z",
+          "retrievedFrom": "https://harbourbank.example/#org"
+         }
+        ]
+       }
+      },
+      "digest": "sha-256:5130ca79b14dbed7d2d7fb3e445ccb09d9439db7f94e6ad6aa37531fb46233d0",
+      "untrusted": [
+       {
+        "path": "ref",
+        "text": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+       },
+       {
+        "path": "basis.invocation",
+        "text": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+       },
+       {
+        "path": "operation.id",
+        "text": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+       },
+       {
+        "path": "output.products.0.id",
+        "text": "urn:awp:product:northbank-fixed-5"
+       },
+       {
+        "path": "output.products.0.lender",
+        "text": "https://northbank.example/#org"
+       },
+       {
+        "path": "output.products.0.retrievedFrom",
+        "text": "https://northbank.example/#org"
+       },
+       {
+        "path": "output.products.1.id",
+        "text": "urn:awp:product:harbourbank-fixed-2"
+       },
+       {
+        "path": "output.products.1.lender",
+        "text": "https://harbourbank.example/#org"
+       },
+       {
+        "path": "output.products.1.retrievedFrom",
+        "text": "https://harbourbank.example/#org"
+       }
+      ]
+     },
+     "evidence": {
+      "present": true,
+      "summary": "2 statement(s) signed by their sources: mortgage.product from The fictional lender; mortgage.product from Sam's fictional bank.",
+      "raw": [
+       {
+        "type": "MortgageProduct",
+        "issuedAt": "2026-11-01T09:00:00Z",
+        "product": {
+         "name": "5-year fixed",
+         "propertyUse": "residential",
+         "rateType": "fixed",
+         "ratePercent": 4.1,
+         "fixedYears": 5,
+         "maxLoanToValuePercent": 90
+        },
+        "synthetic": true,
+        "id": "urn:awp:product:northbank-fixed-5",
+        "issuer": "https://northbank.example/#org",
+        "claimType": "mortgage.product",
+        "method": "published-by-lender",
+        "terms": {
+         "policy": {
+          "id": "urn:awp:product-terms:northbank-fixed-5",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:awp:product:northbank-fixed-5",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:awp:product:northbank-fixed-5",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       },
+       {
+        "type": "MortgageProduct",
+        "issuedAt": "2026-11-01T09:00:00Z",
+        "product": {
+         "name": "2-year fixed",
+         "propertyUse": "residential",
+         "rateType": "fixed",
+         "ratePercent": 3.8,
+         "fixedYears": 2,
+         "maxLoanToValuePercent": 80
+        },
+        "synthetic": true,
+        "id": "urn:awp:product:harbourbank-fixed-2",
+        "issuer": "https://harbourbank.example/#org",
+        "claimType": "mortgage.product",
+        "method": "published-by-lender",
+        "terms": {
+         "policy": {
+          "id": "urn:awp:product-terms:harbourbank-fixed-2",
+          "permissions": [
+           {
+            "type": "permission",
+            "action": "use",
+            "target": "urn:awp:product:harbourbank-fixed-2",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           },
+           {
+            "type": "permission",
+            "action": "distribute",
+            "target": "urn:awp:product:harbourbank-fixed-2",
+            "constraints": [
+             {
+              "leftOperand": "purpose",
+              "operator": "eq",
+              "rightOperand": "https://w3id.org/jeswr/awp#purpose/product-search"
+             }
+            ]
+           }
+          ]
+         }
+        }
+       }
+      ],
+      "digest": "sha-256:a270ae72afe6673e87ebf2c9c513a6acb78ce4551ce291832e1a5b6ea568cf72"
+     },
+     "terms": {
+      "present": true,
+      "summary": "Terms of the offer (operation model fields).",
+      "raw": {
+       "kind": "invocation",
+       "invocation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002"
+      },
+      "digest": "sha-256:54eae922610862402bbc99e896b3fb7848c7406cb1f97058f87f53569bf1f7bc"
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002. The statements were issued by their sources and are relayed, not authored, by The mortgage product index's agent; as of 2026-11-01T09:00:00Z, 2026-11-01T09:00:00Z.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0001",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0002",
+       "statements": [
+        {
+         "id": "urn:awp:product:northbank-fixed-5",
+         "issuer": "https://northbank.example/#org",
+         "issuedAt": "2026-11-01T09:00:00Z",
+         "asOf": null
+        },
+        {
+         "id": "urn:awp:product:harbourbank-fixed-2",
+         "issuer": "https://harbourbank.example/#org",
+         "issuedAt": "2026-11-01T09:00:00Z",
+         "asOf": null
+        }
+       ]
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "direct-http"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-query"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A deliver message from The mortgage product index's agent reaches the inbound gate."
+  },
+  {
+   "seq": 48,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "anonymous",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with The mortgage product index's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 49,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+    "text": "The fictional lender is accepted for mortgage.product claims."
+   },
+   "resolution": {
+    "question": "Is The fictional lender an authority for mortgage.product claims about The mortgage product index?",
+    "path": [
+     {
+      "at": "Sam, the fictional applicant's own list",
+      "kind": "own-list",
+      "says": "No entry for The fictional lender for this kind of claim."
+     },
+     {
+      "at": "National trust root",
+      "kind": "root",
+      "says": "Lenders are answered by the Sector register."
+     },
+     {
+      "at": "Sector register",
+      "kind": "register",
+      "says": "The fictional lender is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+     }
+    ],
+    "answer": "Accepted, for mortgage.product claims only."
+   },
+   "caption": "The fictional lender's mortgage.product statement: The fictional lender is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 50,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "source-accepted",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#fixture/sector-register/harbour-bank#2026-11-13",
+    "text": "Sam's fictional bank is accepted for mortgage.product claims."
+   },
+   "resolution": {
+    "question": "Is Sam's fictional bank an authority for mortgage.product claims about The mortgage product index?",
+    "path": [
+     {
+      "at": "Sam, the fictional applicant's own list",
+      "kind": "own-list",
+      "says": "No entry for Sam's fictional bank for this kind of claim."
+     },
+     {
+      "at": "National trust root",
+      "kind": "root",
+      "says": "Lenders are answered by the Sector register."
+     },
+     {
+      "at": "Sector register",
+      "kind": "register",
+      "says": "Sam's fictional bank is authorized; it is an authority for mortgage.product. Checked 2026-11-13T09:00:00.000Z."
+     }
+    ],
+    "answer": "Accepted, for mortgage.product claims only."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement: Sam's fictional bank is an accepted source for this kind of claim."
+  },
+  {
+   "seq": 51,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 52,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:awp:product-terms:northbank-fixed-5",
+    "text": "Its terms allow this: use for Product Search; share for Product Search."
+   },
+   "caption": "The fictional lender's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 53,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "terms-acceptable",
+   "rule": {
+    "id": "urn:awp:product-terms:harbourbank-fixed-2",
+    "text": "Its terms allow this: use for Product Search; share for Product Search."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement: its terms allow this: use for Product Search; share for Product Search."
+  },
+  {
+   "seq": 54,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://northbank.example/#org"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://harbourbank.example/#org"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:mortgage:mortgage.product",
+    "text": "Accept mortgage.product from The fictional lender, Sam's fictional bank by published-by-lender, at most 31 days old."
+   },
+   "caption": "The fictional lender's mortgage.product statement is fit for the unlabelled resource: published-by-lender, 12 days old."
+  },
+  {
+   "seq": 55,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://northbank.example/#org"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "https://harbourbank.example/#org"
+    }
+   ],
+   "reason": "fit-for-use",
+   "rule": {
+    "id": "urn:profile:mortgage:mortgage.product",
+    "text": "Accept mortgage.product from The fictional lender, Sam's fictional bank by published-by-lender, at most 31 days old."
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement is fit for the unlabelled resource: published-by-lender, 12 days old."
+  },
+  {
+   "seq": 56,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 57,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:awp:product:northbank-fixed-5",
+    "label": "The fictional lender's mortgage.product statement",
+    "claimType": "mortgage.product",
+    "subject": "unknown",
+    "value": {
+     "name": "5-year fixed",
+     "propertyUse": "residential",
+     "rateType": "fixed",
+     "ratePercent": 4.1,
+     "fixedYears": 5,
+     "maxLoanToValuePercent": 90
+    },
+    "source": "https://northbank.example/#org",
+    "method": "published-by-lender",
+    "terms": {
+     "id": "urn:awp:product-terms:northbank-fixed-5",
+     "summary": "use for Product Search; share for Product Search"
+    },
+    "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
+   },
+   "caption": "The fictional lender's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 58,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "memory",
+   "kind": "store",
+   "fact": {
+    "id": "urn:awp:product:harbourbank-fixed-2",
+    "label": "Sam's fictional bank's mortgage.product statement",
+    "claimType": "mortgage.product",
+    "subject": "unknown",
+    "value": {
+     "name": "2-year fixed",
+     "propertyUse": "residential",
+     "rateType": "fixed",
+     "ratePercent": 3.8,
+     "fixedYears": 2,
+     "maxLoanToValuePercent": 80
+    },
+    "source": "https://harbourbank.example/#org",
+    "method": "published-by-lender",
+    "terms": {
+     "id": "urn:awp:product-terms:harbourbank-fixed-2",
+     "summary": "use for Product Search; share for Product Search"
+    },
+    "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
+   },
+   "caption": "Sam's fictional bank's mortgage.product statement is stored with its source, how it was produced, its date and its terms."
+  },
+  {
+   "seq": 59,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 60,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "resolution": {
+    "question": "Is The fictional lender a party I can send Mortgage decision in principle to?",
+    "path": [
+     {
+      "at": "Sam, the fictional applicant's own list",
+      "kind": "own-list",
+      "says": "No entry for The fictional lender."
+     },
+     {
+      "at": "National trust root",
+      "kind": "root",
+      "says": "Lenders are answered by the Sector register."
+     },
+     {
+      "at": "Sector register",
+      "kind": "register",
+      "says": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
+     }
+    ],
+    "answer": "Accepted, for Mortgage decision in principle only."
+   },
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#fixture/sector-register/north-bank#2026-11-13",
+    "text": "The fictional lender is authorized for Mortgage decision in principle. Checked 2026-11-13T09:00:00.000Z."
+   },
+   "reason": "recipient-established",
+   "caption": "The fictional lender: Accepted, for Mortgage decision in principle only."
+  },
+  {
+   "seq": 61,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 62,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "no-personal-data",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 63,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 64,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with Sam's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 65,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The describe message goes to The fictional lender's agent."
+  },
+  {
+   "seq": 66,
+   "step": 3,
+   "agent": "sams-agent",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004",
+    "from": "Sam's agent",
+    "to": "The fictional lender's agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "mcp",
+     "summary": "MCP carries the signed bytes in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003",
+       "kind": "describe",
+       "from": {
+        "actor": "https://agents.hostco.example/sam#agent",
+        "onBehalfOf": "https://sam.example/#me",
+        "operator": "https://agents.hostco.example/#org"
+       },
+       "to": {
+        "actor": "https://northbank.example/agents/intake#agent",
+        "party": "https://northbank.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c987ac5881e55004a4f9d917b7033cea9b10ca1f68e1585b57d0f98d711eb558"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "mcp"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "Sam's agent sends a describe message to The fictional lender's agent."
+  },
+  {
+   "seq": 67,
+   "step": 4,
+   "agent": "lender",
+   "part": "transport",
+   "kind": "record",
+   "caption": "The untrusted MCP tool description was dropped before the core: Exchange one signed Answerable message. Tool metadata grants no authority."
+  },
+  {
+   "seq": 68,
+   "step": 4,
+   "agent": "lender",
+   "part": "transport",
+   "kind": "record",
+   "caption": "The fictional authorization server issued a channel credential for this tool server only. No message check treats it as authority."
+  },
+  {
+   "seq": 69,
+   "step": 4,
+   "agent": "lender",
+   "part": "transport",
+   "kind": "message-in",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004",
+    "from": "Sam's agent",
+    "to": "The fictional lender's agent",
+    "kind": "describe",
+    "carriage": {
+     "suite": "mcp",
+     "summary": "MCP carries the signed bytes in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From Sam's agent to The fictional lender's agent; describe; signed (JWS EdDSA, pinned key GjorellClW5v…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003",
+       "kind": "describe",
+       "from": {
+        "actor": "https://agents.hostco.example/sam#agent",
+        "onBehalfOf": "https://sam.example/#me",
+        "operator": "https://agents.hostco.example/#org"
+       },
+       "to": {
+        "actor": "https://northbank.example/agents/intake#agent",
+        "party": "https://northbank.example/#org"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:c987ac5881e55004a4f9d917b7033cea9b10ca1f68e1585b57d0f98d711eb558"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Asks the other agent to describe itself: configurations, operations and models.",
+      "raw": {},
+      "digest": "sha-256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": false,
+      "summary": "Opens or continues the conversation.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "mcp"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "A describe message from Sam's agent reaches the inbound gate."
+  },
+  {
+   "seq": 70,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "intact",
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+    "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+   },
+   "caption": "The message is intact, signed with Sam's agent's pinned key (EdDSA), addressed here, inside its time window and not seen before."
+  },
+  {
+   "seq": 71,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "source",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-IN-4"
+    },
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-4"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no statements from third parties."
+  },
+  {
+   "seq": 72,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "authority",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-IN-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This message asks for nothing, so there is no authority to check."
+  },
+  {
+   "seq": 73,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "terms",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-IN-10"
+    },
+    {
+     "layer": "commitments",
+     "suite": "signed-offer-acceptance",
+     "clause": "CORE-IN-10"
+    }
+   ],
+   "reason": "no-data",
+   "caption": "The message carries no data that needs terms."
+  },
+  {
+   "seq": 74,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "fitness",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "reliance",
+     "suite": "precedence-rules",
+     "clause": "CORE-IN-13"
+    }
+   ],
+   "reason": "no-claims",
+   "caption": "The message carries no claims whose quality matters."
+  },
+  {
+   "seq": 75,
+   "step": 4,
+   "agent": "lender",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "admit",
+   "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality."
+  },
+  {
+   "seq": 76,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "mandate",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-2"
+    },
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-2"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "This protocol message proposes no additional action."
+  },
+  {
+   "seq": 77,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "recipient",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "trust",
+     "suite": "register-chain",
+     "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-OUT-3"
+    }
+   ],
+   "reason": "recipient-established",
+   "caption": "Sam, the fictional applicant's agent is reached through the key pinned when the two were introduced."
+  },
+  {
+   "seq": 78,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "disclosure",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "data-access",
+     "suite": "by-value",
+     "clause": "CORE-OUT-4"
+    }
+   ],
+   "reason": "minimal-disclosure",
+   "caption": "The gate finds no personal data in this protocol message."
+  },
+  {
+   "seq": 79,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "data-terms",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "usage-control",
+     "suite": "odrl-rules",
+     "clause": "CORE-OUT-5"
+    }
+   ],
+   "reason": "terms-allow",
+   "caption": "The gate finds no data terms to apply."
+  },
+  {
+   "seq": 80,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "limits-approval",
+   "verdict": "not-applicable",
+   "refs": [
+    {
+     "layer": "authority",
+     "suite": "mandate-signed",
+     "clause": "CORE-OUT-7"
+    }
+   ],
+   "reason": "no-action",
+   "caption": "The message release check is complete."
+  },
+  {
+   "seq": 81,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "check",
+   "check": "evidence",
+   "verdict": "pass",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-OUT-9"
+    },
+    {
+     "layer": "accountability",
+     "suite": "local-ledger",
+     "clause": "CORE-OUT-9"
+    }
+   ],
+   "rule": {
+    "id": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+    "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+   },
+   "reason": "evidence-complete",
+   "caption": "Signed (JWS EdDSA) with The fictional lender's agent's pinned key, and written to the record."
+  },
+  {
+   "seq": 82,
+   "step": 4,
+   "agent": "lender",
+   "part": "outbound-gate",
+   "kind": "decision",
+   "verdict": "pass",
+   "outcome": "go",
+   "caption": "The description message goes to Sam's agent."
+  },
+  {
+   "seq": 83,
+   "step": 4,
+   "agent": "lender",
+   "part": "transport",
+   "kind": "message-out",
+   "packet": {
+    "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001",
+    "from": "The fictional lender's agent",
+    "to": "Sam's agent",
+    "kind": "description",
+    "carriage": {
+     "suite": "mcp",
+     "summary": "MCP carries the signed bytes in process."
+    },
+    "layers": {
+     "header": {
+      "present": true,
+      "summary": "From The fictional lender's agent to Sam's agent; description; signed (JWS EdDSA, pinned key ifAsMvFydwVN…); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; one-time id urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001.",
+      "raw": {
+       "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+       "configuration": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+       "id": "urn:awp:engine-mortgage-main-mcp-token-passed-on:north-agent:0001",
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003",
+       "kind": "description",
+       "from": {
+        "actor": "https://northbank.example/agents/intake#agent",
+        "onBehalfOf": "https://northbank.example/#org",
+        "operator": "https://northbank.example/#org"
+       },
+       "to": {
+        "actor": "https://agents.hostco.example/sam#agent",
+        "party": "https://sam.example/#me"
+       },
+       "createdAt": "2026-11-13T09:00:00.000Z",
+       "expiresAt": "2026-11-13T15:00:00.000Z",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004",
+       "proof": {
+        "alg": "EdDSA",
+        "kid": "ifAsMvFydwVNnIbzlBPc6pPmgujO5o-h2owLw_CzdqQ",
+        "typ": "awp-message+jws"
+       }
+      },
+      "digest": "sha-256:636a5af3e66fe704a3ef8262090aab0c2be32a62a53fc715351e1d1594a691ea"
+     },
+     "authority": {
+      "present": false,
+      "summary": "No statement of who the sender acts for."
+     },
+     "content": {
+      "present": true,
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers.",
+      "raw": {
+       "description": {
+        "type": "ImplementationDescription",
+        "describes": "https://northbank.example/agents/intake#agent",
+        "onBehalfOf": "https://northbank.example/#org",
+        "operator": "https://northbank.example/#org",
+        "profile": {
+         "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+         "version": "0.1.2"
+        },
+        "acceptedProfiles": [
+         {
+          "id": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+          "versions": "0.1.x"
+         }
+        ],
+        "vocabularies": [
+         {
+          "iri": "http://www.w3.org/ns/prov#Agent",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#Activity",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Policy",
+          "relation": "narrower"
+         },
+         {
+          "iri": "http://www.w3.org/ns/odrl/2/Agreement",
+          "relation": "related"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dx/prof/Profile",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://schema.org/Action",
+          "relation": "related"
+         },
+         {
+          "iri": "https://schema.org/Event",
+          "relation": "uses"
+         },
+         {
+          "iri": "https://w3id.org/dpv#hasPurpose",
+          "relation": "uses"
+         },
+         {
+          "iri": "http://www.w3.org/ns/dcat#DataService",
+          "relation": "related"
+         }
+        ],
+        "configurations": {
+         "implemented": [
+          "https://w3id.org/jeswr/awp#config/transport-email/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+          "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
+          "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
+          "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
+          "https://w3id.org/jeswr/awp#config/local-record-forum/0.1",
+          "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+          "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1",
+          "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1",
+          "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1",
+          "https://w3id.org/jeswr/awp#config/payment-local/0.1",
+          "https://w3id.org/jeswr/awp#config/corroboration-local/0.1",
+          "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1",
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+          "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
+         ],
+         "accepted": [
+          "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
+          "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+         ]
+        },
+        "operations": [
+         {
+          "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+          "version": "0.1",
+          "label": "Mortgage decision in principle with a bounded evidence request (synthetic)",
+          "pattern": "negotiate",
+          "access": "represented",
+          "roles": [
+           "responder"
+          ],
+          "models": [
+           {
+            "id": "https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series",
+            "version": "0.1"
+           }
+          ],
+          "purposes": [
+           "https://w3id.org/jeswr/awp#purpose/mortgage-application",
+           "https://w3id.org/jeswr/awp#purpose/credit-assessment"
+          ],
+          "effects": [
+           "evidence disclosed under agreed terms",
+           "indicative eligibility (not approval)"
+          ],
+          "outcomes": [
+           "application-state receipt: received / checked / decided"
+          ],
+          "limitations": [
+           "synthetic lender; indicative only; no credit decision or institutional approval"
+          ]
+         }
+        ],
+        "bindings": [
+         {
+          "id": "mcp-tool/2026-07-28",
+          "endpoint": "https://northbank.example/mcp"
+         },
+         {
+          "id": "direct-local/0.1"
+         }
+        ],
+        "policyModule": {
+         "policyProfile": "https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1",
+         "evaluator": {
+          "name": "@jeswr/solid-odrl",
+          "version": "b8fabc729c56245f4b63846261f1f06b6503f1c8",
+          "interface": "evaluate() via awp pilot-subset adapter 0.1 (in-process)"
+         },
+         "status": "ready"
+        },
+        "conformance": [],
+        "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
+       }
+      },
+      "digest": "sha-256:705d08335bae9b06d5449696f02af1196518c0883204645a70e4780024835360"
+     },
+     "evidence": {
+      "present": false,
+      "summary": "No third-party statements."
+     },
+     "terms": {
+      "present": false,
+      "summary": "No terms travel with this message."
+     },
+     "provenance": {
+      "present": true,
+      "summary": "Answers urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004.",
+      "raw": {
+       "conversation": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0003",
+       "inReplyTo": "urn:awp:engine-mortgage-main-mcp-token-passed-on:sam-agent:0004"
+      }
+     }
+    }
+   },
+   "refs": [
+    {
+     "layer": "transport",
+     "suite": "mcp"
+    },
+    {
+     "layer": "data-access",
+     "suite": "by-value"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary"
+    }
+   ],
+   "caption": "The fictional lender's agent sends a description message to Sam's agent."
+  },
+  {
+   "seq": 84,
+   "step": 4,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "check",
+   "check": "integrity",
+   "verdict": "fail",
+   "refs": [
+    {
+     "layer": "authenticity",
+     "suite": "jws",
+     "clause": "CORE-IN-1"
+    },
+    {
+     "layer": "identity",
+     "suite": "pinned-key",
+     "clause": "CORE-IN-1"
+    }
+   ],
+   "reason": "not-authorised",
+   "caption": "Integrity fails: The carriage was refused before reaching the core.."
+  },
+  {
+   "seq": 85,
+   "step": 4,
+   "agent": "sams-agent",
+   "part": "inbound-gate",
+   "kind": "decision",
+   "verdict": "fail",
+   "outcome": "refuse",
+   "reason": "not-authorised",
+   "caption": "The message is refused (not-authorised: The carriage was refused before reaching the core.); the core never sees it."
+  }
+ ]
+}

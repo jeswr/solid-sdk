@@ -73,13 +73,17 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
   {
    "what": "Immigration authority and university credential issuance",
    "replacedBy": "Separately keyed fictional issuer-only sources issuing salted-digest credentials; ordinary disclosure only, no hidden-value proofs"
+  },
+  {
+   "what": "Planned proof method sparq-zk-result/5",
+   "replacedBy": "No adapter installed. Test-only doubles exercise the gate; actual runs require the external verifier. The named holder signature is attested and does not establish holder binding or unlinkability."
   }
  ],
  "events": [
@@ -270,7 +274,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:956a4d5b0d4…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:ea1c3a13cc6…; never trusted."
     },
     "layers": {
      "header": {
@@ -298,7 +302,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:7cb967b24dfa25a923d3bd95afad85f85383fce780b3909fc54044551ddfa34b"
+      "digest": "sha-256:0bf3c919b597b093f4b8e42edfaf8d0def5cb8857431bcddb7a82e74692e5ec5"
      },
      "authority": {
       "present": true,
@@ -312,14 +316,16 @@
         "actorKid": "by5WySidQe2BeF3P5Br8qgpACFxc5JKvXeI6wFgyKQs",
         "operations": [
          "urn:op:right-to-work",
-         "urn:op:employment-evidence-request"
+         "urn:op:employment-evidence-request",
+         "urn:op:right-to-work:proof-request",
+         "urn:op:right-to-work:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:adc55af19c534648b9613af90d69f1445fce8cd158721f377e1ebf30809c361b"
+      "digest": "sha-256:4f4ad27ab6717d90cced1f6c5264cb43c341c8652186b01c4706d0730550b6c8"
      },
      "content": {
       "present": true,
@@ -393,7 +399,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:956a4d5b0d4…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:ea1c3a13cc6…; never trusted."
     },
     "layers": {
      "header": {
@@ -421,7 +427,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:7cb967b24dfa25a923d3bd95afad85f85383fce780b3909fc54044551ddfa34b"
+      "digest": "sha-256:0bf3c919b597b093f4b8e42edfaf8d0def5cb8857431bcddb7a82e74692e5ec5"
      },
      "authority": {
       "present": true,
@@ -435,14 +441,16 @@
         "actorKid": "by5WySidQe2BeF3P5Br8qgpACFxc5JKvXeI6wFgyKQs",
         "operations": [
          "urn:op:right-to-work",
-         "urn:op:employment-evidence-request"
+         "urn:op:employment-evidence-request",
+         "urn:op:right-to-work:proof-request",
+         "urn:op:right-to-work:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:adc55af19c534648b9613af90d69f1445fce8cd158721f377e1ebf30809c361b"
+      "digest": "sha-256:4f4ad27ab6717d90cced1f6c5264cb43c341c8652186b01c4706d0730550b6c8"
      },
      "content": {
       "present": true,
@@ -755,14 +763,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:right-to-work:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:immigration-office"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:right-to-work:work.entitled",
-    "text": "Accept work.entitled from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+    "text": "Accept work.entitled from The fictional immigration office by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The fictional immigration office's work.entitled statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+   "caption": "The fictional immigration office's work.entitled statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
   },
   {
    "seq": 23,
@@ -916,14 +934,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:right-to-work:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:university"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:right-to-work:degree",
-    "text": "Accept degree from urn:fictional:university by recorded-by-authority, at most 3650 days old."
+    "text": "Accept degree from The fictional university by recorded-by-authority, at most 3650 days old."
    },
-   "caption": "The fictional university's degree statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+   "caption": "The fictional university's degree statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
   },
   {
    "seq": 30,
@@ -1077,14 +1105,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:right-to-work:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:immigration-office"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:right-to-work:passport.scan",
-    "text": "Accept passport.scan from urn:fictional:immigration-office by recorded-by-authority, at most 30 days old."
+    "text": "Accept passport.scan from The fictional immigration office by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The fictional immigration office's passport.scan statement is fit for urn:scenario:right-to-work:task: recorded-by-authority, 0 days old."
+   "caption": "The fictional immigration office's passport.scan statement is fit for Hiring: right to work and qualifications: recorded-by-authority, 0 days old."
   },
   {
    "seq": 37,
@@ -1125,7 +1163,7 @@
    "agent": "candidate-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to use urn:op:right to work with The employer."
+   "caption": "The core proposes to use the unlabelled resource with The employer."
   },
   {
    "seq": 40,
@@ -1168,6 +1206,11 @@
      "layer": "identity",
      "suite": "pinned-key",
      "clause": "CORE-OUT-3"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:op:right-to-work"
     }
    ],
    "resolution": {
@@ -1182,7 +1225,7 @@
     "answer": "Accepted, for urn:op:right-to-work only."
    },
    "reason": "recipient-established",
-   "caption": "The employer: Accepted, for urn:op:right-to-work only."
+   "caption": "The employer: Accepted, for the unlabelled resource only."
   },
   {
    "seq": 42,

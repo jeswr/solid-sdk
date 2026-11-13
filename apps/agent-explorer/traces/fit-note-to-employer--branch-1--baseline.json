@@ -72,7 +72,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -184,9 +184,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:fit-note-to-employer:diagnosis",
-    "text": "Its terms allow this: use for urn:purpose:clinical care; share for urn:purpose:clinical care."
+    "text": "Its terms allow this: use for Clinical care; share for Clinical care."
    },
-   "caption": "The clinician's health.diagnosis statement: its terms allow this: use for urn:purpose:clinical care; share for urn:purpose:clinical care."
+   "caption": "The clinician's health.diagnosis statement: its terms allow this: use for Clinical care; share for Clinical care."
   },
   {
    "seq": 5,
@@ -201,14 +201,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:fit-note-to-employer:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:fit-note-to-employer:clinician"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:fit-note-to-employer:health.diagnosis",
-    "text": "Accept health.diagnosis from urn:fictional:fit-note-to-employer:clinician by recorded-by-authority, at most 30 days old."
+    "text": "Accept health.diagnosis from The clinician by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The clinician's health.diagnosis statement is fit for urn:scenario:fit-note-to-employer:task: recorded-by-authority, 0 days old."
+   "caption": "The clinician's health.diagnosis statement is fit for Telling an employer about fitness for work: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -237,7 +247,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:fit-note-to-employer:diagnosis",
-     "summary": "use for urn:purpose:clinical care; share for urn:purpose:clinical care"
+     "summary": "use for Clinical care; share for Clinical care"
     },
     "provenance": "signed by The clinician"
    },
@@ -794,7 +804,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:fit note to employer with The employer."
+   "caption": "The core proposes to share Telling an employer about fitness for work with The employer."
   },
   {
    "seq": 26,

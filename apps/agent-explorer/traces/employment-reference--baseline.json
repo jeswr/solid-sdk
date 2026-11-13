@@ -70,7 +70,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -182,9 +182,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:employment-reference:original",
-    "text": "Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    "text": "Its terms allow this: use for Employment reference; share for Employment reference."
    },
-   "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 5,
@@ -199,14 +199,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:employment-reference:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:employment-reference:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:employment-reference:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The former employer by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The former employer's unstructured-content statement is fit for urn:scenario:employment-reference:task: recorded-by-authority, 0 days old."
+   "caption": "The former employer's unstructured-content statement is fit for A reference from a former employer: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -235,7 +245,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:employment-reference:original",
-     "summary": "use for urn:purpose:employment reference; share for urn:purpose:employment reference"
+     "summary": "use for Employment reference; share for Employment reference"
     },
     "provenance": "signed by The former employer"
    },
@@ -794,7 +804,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:employment reference with The new employer."
+   "caption": "The core proposes to share A reference from a former employer with The new employer."
   },
   {
    "seq": 26,
@@ -942,10 +952,10 @@
    ],
    "rule": {
     "id": "urn:terms:employment-reference:original",
-    "text": "The issuer's terms: use for urn:purpose:employment reference; share for urn:purpose:employment reference. They go out with the data."
+    "text": "The issuer's terms: use for Employment reference; share for Employment reference. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 33,
@@ -978,10 +988,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The former employer's unstructured-content statement (urn:fictional:employment-reference:subject) is needed for this purpose."
+   "caption": "Context item The former employer's unstructured-content statement (The candidate) is needed for this purpose."
   },
   {
    "seq": 35,
@@ -999,7 +1014,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The former employer's unstructured-content statement: Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: Its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 36,
@@ -1014,10 +1029,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:employment-reference:receiver-agent:actor (urn:fictional:employment-reference:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The new employer's agent (The new employer) is not established as needed for this purpose."
   },
   {
    "seq": 37,
@@ -1032,10 +1057,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:employment-reference:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The new employer's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 38,
@@ -1057,7 +1087,7 @@
    "reason": "context-not-clear",
    "chat": {
     "who": "agent",
-    "text": "May I send this exact text to The new employer for urn:purpose:employment-reference?\nThe candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines."
+    "text": "May I send this exact text to The new employer for Employment reference?\nThe candidate worked here from 2024 to 2026. They were thoughtful with colleagues and sometimes needed help meeting deadlines."
    },
    "caption": "The text is held before release; approval binds message digest sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d."
   },
@@ -1219,10 +1249,10 @@
    ],
    "rule": {
     "id": "urn:terms:employment-reference:original",
-    "text": "The issuer's terms: use for urn:purpose:employment reference; share for urn:purpose:employment reference. They go out with the data."
+    "text": "The issuer's terms: use for Employment reference; share for Employment reference. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 48,
@@ -1255,10 +1285,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The former employer's unstructured-content statement (urn:fictional:employment-reference:subject) is needed for this purpose."
+   "caption": "Context item The former employer's unstructured-content statement (The candidate) is needed for this purpose."
   },
   {
    "seq": 50,
@@ -1276,7 +1311,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The former employer's unstructured-content statement: Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: Its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 51,
@@ -1291,10 +1326,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:employment-reference:receiver-agent:actor (urn:fictional:employment-reference:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The new employer's agent (The new employer) is not established as needed for this purpose."
   },
   {
    "seq": 52,
@@ -1309,10 +1354,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:employment-reference:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The new employer's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 53,
@@ -1887,9 +1937,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:employment-reference:original",
-    "text": "Its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+    "text": "Its terms allow this: use for Employment reference; share for Employment reference."
    },
-   "caption": "The former employer's unstructured-content statement: its terms allow this: use for urn:purpose:employment reference; share for urn:purpose:employment reference."
+   "caption": "The former employer's unstructured-content statement: its terms allow this: use for Employment reference; share for Employment reference."
   },
   {
    "seq": 63,
@@ -1904,12 +1954,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:employment-reference:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:employment-reference:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The former employer by recorded-by-authority, at most 30 days old."
    },
    "caption": "The former employer's unstructured-content statement is fit for A reference from a former employer: recorded-by-authority, 0 days old."
   },
@@ -1940,7 +1995,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:employment-reference:original",
-     "summary": "use for urn:purpose:employment reference; share for urn:purpose:employment reference"
+     "summary": "use for Employment reference; share for Employment reference"
     },
     "provenance": "signed by The former employer"
    },
@@ -1952,7 +2007,14 @@
    "agent": "receiver-agent",
    "part": "memory",
    "kind": "store",
-   "caption": "Unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; not instructions; source urn:fictional:employment-reference:owner."
+   "caption": "Unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; not instructions; source The former employer.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:employment-reference:owner"
+    }
+   ]
   },
   {
    "seq": 67,
@@ -2105,7 +2167,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "The new employer asks me to take the next step in A person decides on the original content with The new employer for urn:purpose:employment reference. May I go ahead? Action digest: sha-256:182a9c47894034260dc0b1ed7cd8901af482d8ee8add953eaa9fec184e71a420. Parameters: {\"decision\":\"review-reference\",\"originalDigest\":\"sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84\",\"support\":[\"urn:scenario:employment-reference:original\"]}"
+    "text": "The new employer asks me to take the next step in A person decides on the original content with The new employer for Employment reference. May I go ahead? Action digest: sha-256:182a9c47894034260dc0b1ed7cd8901af482d8ee8add953eaa9fec184e71a420. Parameters: {\"decision\":\"review-reference\",\"originalDigest\":\"sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84\",\"support\":[\"urn:scenario:employment-reference:original\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   }

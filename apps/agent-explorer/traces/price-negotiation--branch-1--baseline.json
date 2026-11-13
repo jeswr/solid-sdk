@@ -70,7 +70,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -186,9 +186,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:price-negotiation:ceiling",
-    "text": "Its terms allow this: use for urn:purpose:buyer planning."
+    "text": "Its terms allow this: use for Buyer planning."
    },
-   "caption": "The buyer's buyer.ceiling statement: its terms allow this: use for urn:purpose:buyer planning."
+   "caption": "The buyer's buyer.ceiling statement: its terms allow this: use for Buyer planning."
   },
   {
    "seq": 5,
@@ -203,14 +203,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:price-negotiation:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:price-negotiation:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:price-negotiation:buyer.ceiling",
-    "text": "Accept buyer.ceiling from urn:fictional:price-negotiation:owner by self-reported, at most 30 days old."
+    "text": "Accept buyer.ceiling from The buyer by self-reported, at most 30 days old."
    },
-   "caption": "The buyer's buyer.ceiling statement is fit for urn:scenario:price-negotiation:task: self-reported, 0 days old."
+   "caption": "The buyer's buyer.ceiling statement is fit for Negotiating a price: self-reported, 0 days old."
   },
   {
    "seq": 6,
@@ -239,7 +249,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:price-negotiation:ceiling",
-     "summary": "use for urn:purpose:buyer planning"
+     "summary": "use for Buyer planning"
     },
     "provenance": "signed by The buyer"
    },
@@ -798,7 +808,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:price negotiation:disclose with The seller."
+   "caption": "The core proposes to share Disclose sale information with The seller."
   },
   {
    "seq": 26,

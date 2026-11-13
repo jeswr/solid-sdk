@@ -94,7 +94,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -161,7 +161,7 @@
     "text": "The supplier's bank is accepted for bank.account-owner claims."
    },
    "resolution": {
-    "question": "Is The supplier's bank an authority for bank.account-owner claims about urn:fictional:supplier?",
+    "question": "Is The supplier's bank an authority for bank.account-owner claims about the unlabelled resource?",
     "path": [
      {
       "at": "The business's own list",
@@ -231,14 +231,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:master-data-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:supplier-bank"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:master-data-change:bank.account-owner",
-    "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
+    "text": "Accept bank.account-owner from The supplier's bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The supplier's bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The supplier's bank's bank.account-owner statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -392,14 +402,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:master-data-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:directory"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:master-data-change:organization.role",
-    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+    "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -549,14 +569,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:master-data-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:directory"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:master-data-change:organization.role",
-    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+    "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 20,
@@ -706,14 +736,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:master-data-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:directory"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:master-data-change:organization.role",
-    "text": "Accept organization.role from urn:fictional:directory by recorded-by-authority, at most 30 days old."
+    "text": "Accept organization.role from The staff directory by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The staff directory's organization.role statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The staff directory's organization.role statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 27,
@@ -774,7 +814,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use master-data-change, on its own."
    },
    "reason": "within-mandate",
    "caption": "The business's mandate covers this action."
@@ -891,7 +931,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
+    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for Master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   },
@@ -925,7 +965,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use master-data-change, on its own."
    },
    "reason": "within-mandate",
    "caption": "The business's mandate covers this action."
@@ -1042,7 +1082,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for urn:purpose:master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
+    "text": "To finance-controller: The business's account system asks me to take the next step in master-data-change with The business's account system for Master data change. May I go ahead? Action digest: sha-256:a9f43754d35c4b3e80c70db4970832412e159051d569e34e7fdbdcc57d725764. Parameters: {\"account\":\"urn:account:confirmed\",\"support\":[\"urn:scenario:master-data-change:account\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   },
@@ -1076,7 +1116,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use master-data-change, on its own."
    },
    "reason": "within-mandate",
    "caption": "The business's mandate covers this action."
@@ -1191,7 +1231,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The business's mandate lets the agent use urn:op:master data change, on its own."
+    "text": "The business's mandate lets the agent use master-data-change, on its own."
    },
    "reason": "within-mandate",
    "caption": "The business's mandate covers this action."
@@ -1527,7 +1567,7 @@
     "text": "The supplier's bank is accepted for bank.account-owner claims."
    },
    "resolution": {
-    "question": "Is The supplier's bank an authority for bank.account-owner claims about urn:fictional:supplier?",
+    "question": "Is The supplier's bank an authority for bank.account-owner claims about the unlabelled resource?",
     "path": [
      {
       "at": "The business's account system's own list",
@@ -1597,14 +1637,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:master-data-change:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:supplier-bank"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:master-data-change:bank.account-owner",
-    "text": "Accept bank.account-owner from urn:fictional:supplier-bank by recorded-by-authority, at most 30 days old."
+    "text": "Accept bank.account-owner from The supplier's bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The supplier's bank's bank.account-owner statement is fit for urn:scenario:master-data-change:task: recorded-by-authority, 0 days old."
+   "caption": "The supplier's bank's bank.account-owner statement is fit for Changing a supplier's bank details in a business system: recorded-by-authority, 0 days old."
   },
   {
    "seq": 66,
@@ -1931,7 +1981,7 @@
    ],
    "rule": {
     "id": "urn:rule:erp-performance",
-    "text": "The business's account system's mandate lets the agent transfer urn:op:master data change, on its own."
+    "text": "The business's account system's mandate lets the agent transfer master-data-change, on its own."
    },
    "reason": "within-mandate",
    "caption": "The business's account system's mandate covers this action."

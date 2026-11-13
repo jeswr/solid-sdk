@@ -70,7 +70,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -182,9 +182,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:permit-application:original",
-    "text": "Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+    "text": "Its terms allow this: use for Permit application; share for Permit application."
    },
-   "caption": "The architect's unstructured-content statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 5,
@@ -199,14 +199,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:permit-application:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:permit-application:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:permit-application:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The architect by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The architect's unstructured-content statement is fit for urn:scenario:permit-application:task: recorded-by-authority, 0 days old."
+   "caption": "The architect's unstructured-content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -235,7 +245,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:permit-application:original",
-     "summary": "use for urn:purpose:permit application; share for urn:purpose:permit application"
+     "summary": "use for Permit application; share for Permit application"
     },
     "provenance": "signed by The architect"
    },
@@ -343,9 +353,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:permit-application:height",
-    "text": "Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+    "text": "Its terms allow this: use for Permit application; share for Permit application."
    },
-   "caption": "The architect's building.height statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 12,
@@ -360,14 +370,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:permit-application:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:permit-application:building.height",
-    "text": "Accept building.height from urn:fictional:permit-application:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept building.height from The architect by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The architect's building.height statement is fit for urn:scenario:permit-application:task: recorded-by-authority, 0 days old."
+   "caption": "The architect's building.height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
@@ -396,7 +416,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:permit-application:height",
-     "summary": "use for urn:purpose:permit application; share for urn:purpose:permit application"
+     "summary": "use for Permit application; share for Permit application"
     },
     "provenance": "signed by The architect"
    },
@@ -955,7 +975,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:permit application with The planning office."
+   "caption": "The core proposes to share Applying for a building permit with The planning office."
   },
   {
    "seq": 33,
@@ -1103,10 +1123,10 @@
    ],
    "rule": {
     "id": "urn:terms:permit-application:original",
-    "text": "The issuer's terms: use for urn:purpose:permit application; share for urn:purpose:permit application. They go out with the data."
+    "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The architect's unstructured-content statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 40,
@@ -1143,10 +1163,10 @@
    ],
    "rule": {
     "id": "urn:terms:permit-application:height",
-    "text": "The issuer's terms: use for urn:purpose:permit application; share for urn:purpose:permit application. They go out with the data."
+    "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The architect's building.height statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 42,
@@ -1179,10 +1199,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The architect's unstructured-content statement (urn:fictional:permit-application:subject) is needed for this purpose."
+   "caption": "Context item The architect's unstructured-content statement (The homeowner) is needed for this purpose."
   },
   {
    "seq": 44,
@@ -1200,7 +1225,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The architect's unstructured-content statement: Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: Its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 45,
@@ -1215,10 +1240,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The architect's building.height statement (urn:fictional:permit-application:subject) is needed for this purpose."
+   "caption": "Context item The architect's building.height statement (The homeowner) is needed for this purpose."
   },
   {
    "seq": 46,
@@ -1236,7 +1266,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The architect's building.height statement: Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: Its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 47,
@@ -1251,10 +1281,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:permit-application:receiver-agent:actor (urn:fictional:permit-application:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The planning office's agent (The planning office) is not established as needed for this purpose."
   },
   {
    "seq": 48,
@@ -1269,10 +1309,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:permit-application:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The planning office's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 49,
@@ -1294,7 +1339,7 @@
    "reason": "context-not-clear",
    "chat": {
     "who": "agent",
-    "text": "May I send this exact text to The planning office for urn:purpose:permit-application?\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"160\" height=\"100\"><path d=\"M10 90V20H150V90Z\"/><text x=\"20\" y=\"55\">Fictional extension: height 3.2 m</text></svg>"
+    "text": "May I send this exact text to The planning office for Permit application?\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"160\" height=\"100\"><path d=\"M10 90V20H150V90Z\"/><text x=\"20\" y=\"55\">Fictional extension: height 3.2 m</text></svg>"
    },
    "caption": "The text is held before release; approval binds message digest sha-256:cd9121c7eaefe8cd24b3a7ea16b09adc5832272fff4a39bb35a1d65e79346367."
   },
@@ -1456,10 +1501,10 @@
    ],
    "rule": {
     "id": "urn:terms:permit-application:original",
-    "text": "The issuer's terms: use for urn:purpose:permit application; share for urn:purpose:permit application. They go out with the data."
+    "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The architect's unstructured-content statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 59,
@@ -1496,10 +1541,10 @@
    ],
    "rule": {
     "id": "urn:terms:permit-application:height",
-    "text": "The issuer's terms: use for urn:purpose:permit application; share for urn:purpose:permit application. They go out with the data."
+    "text": "The issuer's terms: use for Permit application; share for Permit application. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The architect's building.height statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 61,
@@ -1532,10 +1577,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The architect's unstructured-content statement (urn:fictional:permit-application:subject) is needed for this purpose."
+   "caption": "Context item The architect's unstructured-content statement (The homeowner) is needed for this purpose."
   },
   {
    "seq": 63,
@@ -1553,7 +1603,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The architect's unstructured-content statement: Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: Its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 64,
@@ -1568,10 +1618,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:subject"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The architect's building.height statement (urn:fictional:permit-application:subject) is needed for this purpose."
+   "caption": "Context item The architect's building.height statement (The homeowner) is needed for this purpose."
   },
   {
    "seq": 65,
@@ -1589,7 +1644,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The architect's building.height statement: Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: Its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 66,
@@ -1604,10 +1659,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:permit-application:receiver-agent:actor (urn:fictional:permit-application:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The planning office's agent (The planning office) is not established as needed for this purpose."
   },
   {
    "seq": 67,
@@ -1622,10 +1687,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:permit-application:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The planning office's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 68,
@@ -2332,9 +2402,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:permit-application:original",
-    "text": "Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+    "text": "Its terms allow this: use for Permit application; share for Permit application."
    },
-   "caption": "The architect's unstructured-content statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's unstructured-content statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 79,
@@ -2359,9 +2429,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:permit-application:height",
-    "text": "Its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+    "text": "Its terms allow this: use for Permit application; share for Permit application."
    },
-   "caption": "The architect's building.height statement: its terms allow this: use for urn:purpose:permit application; share for urn:purpose:permit application."
+   "caption": "The architect's building.height statement: its terms allow this: use for Permit application; share for Permit application."
   },
   {
    "seq": 80,
@@ -2376,12 +2446,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:permit-application:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:permit-application:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The architect by recorded-by-authority, at most 30 days old."
    },
    "caption": "The architect's unstructured-content statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
   },
@@ -2398,12 +2473,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:permit-application:building.height",
-    "text": "Accept building.height from urn:fictional:permit-application:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept building.height from The architect by recorded-by-authority, at most 30 days old."
    },
    "caption": "The architect's building.height statement is fit for Applying for a building permit: recorded-by-authority, 0 days old."
   },
@@ -2434,7 +2514,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:permit-application:original",
-     "summary": "use for urn:purpose:permit application; share for urn:purpose:permit application"
+     "summary": "use for Permit application; share for Permit application"
     },
     "provenance": "signed by The architect"
    },
@@ -2457,7 +2537,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:permit-application:height",
-     "summary": "use for urn:purpose:permit application; share for urn:purpose:permit application"
+     "summary": "use for Permit application; share for Permit application"
     },
     "provenance": "signed by The architect"
    },
@@ -2469,7 +2549,14 @@
    "agent": "receiver-agent",
    "part": "memory",
    "kind": "store",
-   "caption": "Unstructured data sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6; not instructions; source urn:fictional:permit-application:owner."
+   "caption": "Unstructured data sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6; not instructions; source The architect.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:permit-application:owner"
+    }
+   ]
   },
   {
    "seq": 86,
@@ -2622,7 +2709,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "The planning office asks me to take the next step in A person decides on the original content with The planning office for urn:purpose:permit application. May I go ahead? Action digest: sha-256:f320eb3809bfffcbfa84683e267073bf1739f8c2d24c970ddc22eb5a8f204188. Parameters: {\"decision\":\"review-design\",\"originalDigest\":\"sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6\",\"support\":[\"urn:scenario:permit-application:height\"]}"
+    "text": "The planning office asks me to take the next step in A person decides on the original content with The planning office for Permit application. May I go ahead? Action digest: sha-256:f320eb3809bfffcbfa84683e267073bf1739f8c2d24c970ddc22eb5a8f204188. Parameters: {\"decision\":\"review-design\",\"originalDigest\":\"sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6\",\"support\":[\"urn:scenario:permit-application:height\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   }

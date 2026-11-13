@@ -72,7 +72,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -184,9 +184,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:wearable-data:weekly-total",
-    "text": "Its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+    "text": "Its terms allow this: use for Wearable data; share for Wearable data."
    },
-   "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for urn:purpose:wearable data; share for urn:purpose:wearable data."
+   "caption": "The device maker's activity.weekly-total statement: its terms allow this: use for Wearable data; share for Wearable data."
   },
   {
    "seq": 5,
@@ -201,14 +201,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:wearable-data:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:wearable-data:device-maker"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:wearable-data:activity.weekly-total",
-    "text": "Accept activity.weekly-total from urn:fictional:wearable-data:device-maker by recorded-by-authority, at most 30 days old."
+    "text": "Accept activity.weekly-total from The device maker by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The device maker's activity.weekly-total statement is fit for urn:scenario:wearable-data:task: recorded-by-authority, 0 days old."
+   "caption": "The device maker's activity.weekly-total statement is fit for Sharing activity data for a discount: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -241,7 +251,7 @@
     },
     "terms": {
      "id": "urn:terms:wearable-data:weekly-total",
-     "summary": "use for urn:purpose:wearable data; share for urn:purpose:wearable data"
+     "summary": "use for Wearable data; share for Wearable data"
     },
     "provenance": "signed by The device maker"
    },

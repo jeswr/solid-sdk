@@ -78,7 +78,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -211,14 +211,29 @@
      "layer": "reliance",
      "suite": "corroboration",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:false-but-signed:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:employer"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:tax-register"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:false-but-signed:annual-income",
-    "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+    "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The employer's annual-income statement is fit for urn:scenario:false-but-signed:task: recorded-by-authority, 0 days old."
+   "caption": "The employer's annual-income statement is fit for A registered source signs something false: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -283,7 +298,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The lender's mandate lets the agent use urn:op:income decision, on its own."
+    "text": "The lender's mandate lets the agent use false-but-signed, on its own."
    },
    "reason": "within-mandate",
    "caption": "The lender's mandate covers this action."
@@ -1421,12 +1436,22 @@
      "layer": "reliance",
      "suite": "corroboration",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:employer"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:tax-register"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:false-but-signed:annual-income",
-    "text": "Accept annual-income from urn:fictional:employer, urn:fictional:tax-register by recorded-by-authority, at most 30 days old."
+    "text": "Accept annual-income from The employer, The fictional tax register by recorded-by-authority, at most 30 days old."
    },
    "caption": "The employer's annual-income statement is fit for false-but-signed: recorded-by-authority, 0 days old."
   },
@@ -1493,7 +1518,7 @@
    ],
    "rule": {
     "id": "urn:rule:authorised",
-    "text": "The lender's mandate lets the agent use urn:op:income decision, on its own."
+    "text": "The lender's mandate lets the agent use false-but-signed, on its own."
    },
    "reason": "within-mandate",
    "caption": "The lender's mandate covers this action."

@@ -65,7 +65,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [],
@@ -184,9 +184,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:contact",
-    "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    "text": "Its terms allow this: use for Service query; share for Service query."
    },
-   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query."
   },
   {
    "seq": 6,
@@ -201,14 +201,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:probing-counterparty:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:rowan"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:probing-counterparty:contact",
-    "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
+    "text": "Accept contact from Rowan, a fictional customer by self-reported, at most 30 days old."
    },
-   "caption": "Rowan, a fictional customer's contact statement is fit for urn:scenario:probing-counterparty:task: self-reported, 0 days old."
+   "caption": "Rowan, a fictional customer's contact statement is fit for A service agent that keeps asking: self-reported, 0 days old."
   },
   {
    "seq": 7,
@@ -237,7 +247,7 @@
     "asOf": "2026-11-13T09:00:00Z",
     "terms": {
      "id": "urn:terms:contact",
-     "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
+     "summary": "use for Service query; share for Service query"
     },
     "provenance": "signed by Rowan, a fictional customer"
    },
@@ -914,10 +924,10 @@
    ],
    "rule": {
     "id": "urn:terms:contact",
-    "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+    "text": "The issuer's terms: use for Service query; share for Service query. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query."
   },
   {
    "seq": 31,
@@ -1190,10 +1200,10 @@
    ],
    "rule": {
     "id": "urn:terms:contact",
-    "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+    "text": "The issuer's terms: use for Service query; share for Service query. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query."
   },
   {
    "seq": 40,
@@ -1248,10 +1258,10 @@
    ],
    "rule": {
     "id": "urn:terms:contact",
-    "text": "The issuer's terms: use for urn:purpose:service query; share for urn:purpose:service query. They go out with the data."
+    "text": "The issuer's terms: use for Service query; share for Service query. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query."
   },
   {
    "seq": 43,
@@ -1999,9 +2009,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:contact",
-    "text": "Its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+    "text": "Its terms allow this: use for Service query; share for Service query."
    },
-   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for urn:purpose:service query; share for urn:purpose:service query."
+   "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query."
   },
   {
    "seq": 59,
@@ -2016,12 +2026,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:rowan"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:probing-counterparty:contact",
-    "text": "Accept contact from urn:fictional:rowan by self-reported, at most 30 days old."
+    "text": "Accept contact from Rowan, a fictional customer by self-reported, at most 30 days old."
    },
    "caption": "Rowan, a fictional customer's contact statement is fit for A bounded request for contact details: self-reported, 0 days old."
   },
@@ -2052,7 +2067,7 @@
     "asOf": "2026-11-13T09:00:00Z",
     "terms": {
      "id": "urn:terms:contact",
-     "summary": "use for urn:purpose:service query; share for urn:purpose:service query"
+     "summary": "use for Service query; share for Service query"
     },
     "provenance": "signed by Rowan, a fictional customer"
    },

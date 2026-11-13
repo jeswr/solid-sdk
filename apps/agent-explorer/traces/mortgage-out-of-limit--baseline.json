@@ -76,7 +76,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -703,7 +703,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:0a4794fddd6…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:c41d3f06933…; never trusted."
     },
     "layers": {
      "header": {
@@ -733,7 +733,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:ed804920577c3fdcc48e287ce6fcc382e9596eec9f1bf6c710d4b761cbab8655"
+      "digest": "sha-256:d2949b0efc3453e987d8750ffa9ccc7b12ef285fd087dce33e00d0cb4e4361d5"
      },
      "authority": {
       "present": false,
@@ -806,6 +806,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/transport-email/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
           "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
           "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
           "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
@@ -874,7 +877,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:c2740a25f3a6effaf36dce13712ba0dc1d31d74abe57181b68a0daadf4d26737"
+      "digest": "sha-256:101f633600b3b1cae0a4fd4c8cf2557fa9acbc7302017df2eb83db1517429bf6"
      },
      "evidence": {
       "present": false,
@@ -923,7 +926,7 @@
     "kind": "description",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:0a4794fddd6…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:c41d3f06933…; never trusted."
     },
     "layers": {
      "header": {
@@ -953,7 +956,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:ed804920577c3fdcc48e287ce6fcc382e9596eec9f1bf6c710d4b761cbab8655"
+      "digest": "sha-256:d2949b0efc3453e987d8750ffa9ccc7b12ef285fd087dce33e00d0cb4e4361d5"
      },
      "authority": {
       "present": false,
@@ -961,7 +964,7 @@
      },
      "content": {
       "present": true,
-      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1\"; \"https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1\"; \"https://w3id.org/jeswr/awp#config/local-approved-query/0.1\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
+      "summary": "Describes this agent: the configurations it accepts and the operations it offers. It also carries free text, marked as untrusted content (data, never an instruction): \"ImplementationDescription\"; \"https://northbank.example/agents/intake#agent\"; \"https://northbank.example/#org\"; \"https://northbank.example/#org\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.2\"; \"https://w3id.org/jeswr/awp/profile/pilot/0.1\"; \"0.1.x\"; \"http://www.w3.org/ns/prov#Agent\"; \"uses\"; \"http://www.w3.org/ns/prov#actedOnBehalfOf\"; \"uses\"; \"http://www.w3.org/ns/prov#Activity\"; \"uses\"; \"http://www.w3.org/ns/prov#wasDerivedFrom\"; \"uses\"; \"http://www.w3.org/ns/odrl/2/Policy\"; \"narrower\"; \"http://www.w3.org/ns/odrl/2/Agreement\"; \"related\"; \"http://www.w3.org/ns/dx/prof/Profile\"; \"uses\"; \"https://schema.org/Action\"; \"related\"; \"https://schema.org/Event\"; \"uses\"; \"https://w3id.org/dpv#hasPurpose\"; \"uses\"; \"http://www.w3.org/ns/dcat#DataService\"; \"related\"; \"https://w3id.org/jeswr/awp#config/transport-email/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-a2a/0.1\"; \"https://w3id.org/jeswr/awp#config/transport-mcp/0.1\"; \"https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1\"; \"https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1\"; \"https://w3id.org/jeswr/awp#config/local-approved-query/0.1\"; \"https://w3id.org/jeswr/awp#config/local-record-forum/0.1\"; \"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\"; \"https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1\"; \"https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1\"; \"https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1\"; \"https://w3id.org/jeswr/awp#config/payment-local/0.1\"; \"https://w3id.org/jeswr/awp#config/corroboration-local/0.1\"; \"https://w3id.org/jeswr/awp#config/pinned-list-local/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#config/signed-ed25519/0.1\"; \"https://w3id.org/jeswr/awp#op/mortgage-prequalification\"; \"0.1\"; \"Mortgage decision in principle with a bounded evidence request (synthetic)\"; \"negotiate\"; \"represented\"; \"responder\"; \"https://w3id.org/jeswr/awp#model/mortgage-evidence-monthly-series\"; \"0.1\"; \"https://w3id.org/jeswr/awp#purpose/mortgage-application\"; \"https://w3id.org/jeswr/awp#purpose/credit-assessment\"; \"evidence disclosed under agreed terms\"; \"indicative eligibility (not approval)\"; \"application-state receipt: received / checked / decided\"; \"synthetic lender; indicative only; no credit decision or institutional approval\"; \"direct-local/0.1\"; \"https://w3id.org/jeswr/awp#policy-profile/odrl-pilot-subset/0.1\"; \"@jeswr/solid-odrl\"; \"b8fabc729c56245f4b63846261f1f06b6503f1c8\"; \"evaluate() via awp pilot-subset adapter 0.1 (in-process)\"; \"ready\"; \"This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level.\"",
       "raw": {
        "description": {
         "type": "ImplementationDescription",
@@ -1026,6 +1029,9 @@
         ],
         "configurations": {
          "implemented": [
+          "https://w3id.org/jeswr/awp#config/transport-email/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-a2a/0.1",
+          "https://w3id.org/jeswr/awp#config/transport-mcp/0.1",
           "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1",
           "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1",
           "https://w3id.org/jeswr/awp#config/local-approved-query/0.1",
@@ -1094,7 +1100,7 @@
         "notice": "This description advertises supported and accepted behaviour. It grants no authority, carries no trusted verification material, and is not evidence of conformance beyond the listed claims at their stated evidence level."
        }
       },
-      "digest": "sha-256:c2740a25f3a6effaf36dce13712ba0dc1d31d74abe57181b68a0daadf4d26737",
+      "digest": "sha-256:101f633600b3b1cae0a4fd4c8cf2557fa9acbc7302017df2eb83db1517429bf6",
       "untrusted": [
        {
         "path": "description.type",
@@ -1218,54 +1224,66 @@
        },
        {
         "path": "description.configurations.implemented.0",
-        "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/transport-email/0.1"
        },
        {
         "path": "description.configurations.implemented.1",
-        "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/transport-a2a/0.1"
        },
        {
         "path": "description.configurations.implemented.2",
-        "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/transport-mcp/0.1"
        },
        {
         "path": "description.configurations.implemented.3",
-        "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-signed-code-mappings/0.1"
        },
        {
         "path": "description.configurations.implemented.4",
-        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-multiparty-agreement/0.1"
        },
        {
         "path": "description.configurations.implemented.5",
-        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-approved-query/0.1"
        },
        {
         "path": "description.configurations.implemented.6",
-        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/local-record-forum/0.1"
        },
        {
         "path": "description.configurations.implemented.7",
-        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1"
        },
        {
         "path": "description.configurations.implemented.8",
-        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/by-reference-local-holder/0.1"
        },
        {
         "path": "description.configurations.implemented.9",
-        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/organizations-local-resolver/0.1"
        },
        {
         "path": "description.configurations.implemented.10",
-        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/salted-selective-disclosure/0.1"
        },
        {
         "path": "description.configurations.implemented.11",
-        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+        "text": "https://w3id.org/jeswr/awp#config/payment-local/0.1"
        },
        {
         "path": "description.configurations.implemented.12",
+        "text": "https://w3id.org/jeswr/awp#config/corroboration-local/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.13",
+        "text": "https://w3id.org/jeswr/awp#config/pinned-list-local/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.14",
+        "text": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
+       },
+       {
+        "path": "description.configurations.implemented.15",
         "text": "https://w3id.org/jeswr/awp#config/public-readonly-ed25519/0.1"
        },
        {
@@ -1541,7 +1559,7 @@
    ],
    "rule": {
     "id": "urn:awp:rule:932134b682c37461fb4624fe2522034f:compare",
-    "text": "Sam, the fictional applicant's mandate lets the agent use mortgage prequalification for mortgage application with The fictional lender or https://valleybank.example/#org, on its own."
+    "text": "Sam, the fictional applicant's mandate lets the agent use Mortgage decision in principle for Mortgage Application with The fictional lender or the unlabelled resource, on its own."
    },
    "reason": "within-mandate",
    "caption": "Sam, the fictional applicant's mandate covers this action."
@@ -2134,7 +2152,7 @@
    ],
    "rule": {
     "id": "urn:awp:rule:89b3e6bd4918b1a0a0589d9d9519fda7:evidence-requests",
-    "text": "The fictional lender's mandate lets the agent use mortgage prequalification for credit assessment, on its own."
+    "text": "The fictional lender's mandate lets the agent use Mortgage decision in principle for Credit Assessment, on its own."
    },
    "reason": "within-mandate",
    "caption": "The fictional lender's mandate covers this action."
@@ -2604,9 +2622,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-    "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+    "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
    },
-   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
   },
   {
    "seq": 63,
@@ -2621,6 +2639,11 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:mortgage-out-of-limit:task"
     }
    ],
    "reason": "fit-for-use",
@@ -2628,7 +2651,7 @@
     "id": "urn:profile:mortgage:income.*",
     "text": "Accept income.* from  by recorded-by-authority, at most 92 days old."
    },
-   "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for urn:scenario:mortgage-out-of-limit:task: recorded-by-authority, 12 days old."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement is fit for A mortgage in principle: The offer is outside Sam's limits: recorded-by-authority, 12 days old."
   },
   {
    "seq": 64,
@@ -2709,7 +2732,7 @@
     },
     "terms": {
      "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-     "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
+     "summary": "use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource"
     },
     "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
    },
@@ -2817,9 +2840,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-    "text": "Its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+    "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
    },
-   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
   },
   {
    "seq": 70,
@@ -2834,6 +2857,11 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:mortgage-out-of-limit:task"
     }
    ],
    "reason": "fit-for-use",
@@ -2841,7 +2869,7 @@
     "id": "urn:profile:mortgage:deposit.*",
     "text": "Accept deposit.* from  by recorded-by-authority, at most 31 days old."
    },
-   "caption": "Sam's fictional bank's deposit.balance statement is fit for urn:scenario:mortgage-out-of-limit:task: recorded-by-authority, 12 days old."
+   "caption": "Sam's fictional bank's deposit.balance statement is fit for A mortgage in principle: The offer is outside Sam's limits: recorded-by-authority, 12 days old."
   },
   {
    "seq": 71,
@@ -2874,7 +2902,7 @@
     },
     "terms": {
      "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-     "summary": "use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing"
+     "summary": "use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource"
     },
     "provenance": "signed by Sam's fictional bank, issued 2026-11-01T09:00:00Z"
    },
@@ -3294,7 +3322,7 @@
    ],
    "rule": {
     "id": "urn:awp:rule:d84e791cef99858c0d7cdec9fca64719:disclose-with-approval",
-    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves."
    },
    "reason": "within-mandate",
    "caption": "Sam, the fictional applicant's mandate covers this action, with approval."
@@ -3386,10 +3414,10 @@
    ],
    "rule": {
     "id": "https://w3id.org/jeswr/awp#terms/harbourbank-deposit",
-    "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
+    "text": "The issuer's terms: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
+   "caption": "Sam's fictional bank's deposit.balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 85,
@@ -3408,10 +3436,10 @@
    ],
    "rule": {
     "id": "https://w3id.org/jeswr/awp#terms/paywell-income",
-    "text": "The issuer's terms: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. They go out with the data."
+    "text": "The issuer's terms: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for mortgage application or credit assessment; share with a regulated lender for mortgage application or credit assessment; delete within 90 days; never for marketing. The fictional lender is a regulated lender (sector register)."
+   "caption": "The fictional payroll provider's income.gross.monthly-series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register)."
   },
   {
    "seq": 86,
@@ -3431,7 +3459,7 @@
    "reason": "limit-exceeded",
    "rule": {
     "id": "urn:scenario:mortgage-out-of-limit:sam-agent:limits",
-    "text": "Sam, the fictional applicant's mandate lets the agent distribute evidence disclosure for credit assessment with The fictional lender or https://valleybank.example/#org, after Sam, the fictional applicant approves. You asked me not to let anyone keep your data for more than 60 days; this asks for 90."
+    "text": "Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves. You asked me not to let anyone keep your data for more than 60 days; this asks for 90."
    },
    "caption": "This is outside Sam, the fictional applicant's limits, so the gate asks Sam, the fictional applicant."
   },
@@ -3454,7 +3482,7 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "The fictional lender asks for two of your statements: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement. They would use them for credit assessment, keep them for 90 days and pass them on only to https://underwriter.example/#org. You asked me not to let anyone keep your data for more than 60 days; this asks for 90. May I share them?"
+    "text": "The fictional lender asks for two of your statements: Sam's fictional bank's deposit.balance statement and The fictional payroll provider's income.gross.monthly-series statement. They would use them for Credit Assessment, keep them for 90 days and pass them on only to the unlabelled resource. You asked me not to let anyone keep your data for more than 60 days; this asks for 90. May I share them?"
    },
    "caption": "Sam, the fictional applicant is asked to approve this exact action; the approval will be bound to its digest."
   },

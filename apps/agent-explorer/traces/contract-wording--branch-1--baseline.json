@@ -69,7 +69,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -181,9 +181,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:contract-wording:original",
-    "text": "Its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+    "text": "Its terms allow this: use for Contract wording; share for Contract wording."
    },
-   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 5,
@@ -198,14 +198,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:contract-wording:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:contract-wording:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:contract-wording:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The first fictional company by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The first fictional company's unstructured-content statement is fit for urn:scenario:contract-wording:task: recorded-by-authority, 0 days old."
+   "caption": "The first fictional company's unstructured-content statement is fit for Negotiating the wording of a contract: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -234,7 +244,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:contract-wording:original",
-     "summary": "use for urn:purpose:contract wording; share for urn:purpose:contract wording"
+     "summary": "use for Contract wording; share for Contract wording"
     },
     "provenance": "signed by The first fictional company"
    },
@@ -793,7 +803,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:contract wording with The second fictional company."
+   "caption": "The core proposes to share Negotiating the wording of a contract with The second fictional company."
   },
   {
    "seq": 26,
@@ -941,10 +951,10 @@
    ],
    "rule": {
     "id": "urn:terms:contract-wording:original",
-    "text": "The issuer's terms: use for urn:purpose:contract wording; share for urn:purpose:contract wording. They go out with the data."
+    "text": "The issuer's terms: use for Contract wording; share for Contract wording. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 33,
@@ -977,10 +987,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The first fictional company's unstructured-content statement (urn:fictional:contract-wording:owner) is needed for this purpose."
+   "caption": "Context item The first fictional company's unstructured-content statement (The first fictional company) is needed for this purpose."
   },
   {
    "seq": 35,
@@ -998,7 +1013,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The first fictional company's unstructured-content statement: Its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: Its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 36,
@@ -1013,10 +1028,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:contract-wording:receiver-agent:actor (urn:fictional:contract-wording:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The second fictional company's agent (The second fictional company) is not established as needed for this purpose."
   },
   {
    "seq": 37,
@@ -1031,10 +1056,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:contract-wording:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The second fictional company's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 38,
@@ -1056,7 +1086,7 @@
    "reason": "context-not-clear",
    "chat": {
     "who": "agent",
-    "text": "May I send this exact text to The second fictional company for urn:purpose:contract-wording?\nThe receiving company shall use reasonable endeavours to protect the confidential material."
+    "text": "May I send this exact text to The second fictional company for Contract wording?\nThe receiving company shall use reasonable endeavours to protect the confidential material."
    },
    "caption": "The text is held before release; approval binds message digest sha-256:0e31158e1d5c5a11346dcdc8365ba0696c11e5158f9e827e0e1095283458f96b."
   },
@@ -1218,10 +1248,10 @@
    ],
    "rule": {
     "id": "urn:terms:contract-wording:original",
-    "text": "The issuer's terms: use for urn:purpose:contract wording; share for urn:purpose:contract wording. They go out with the data."
+    "text": "The issuer's terms: use for Contract wording; share for Contract wording. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 48,
@@ -1254,10 +1284,15 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:owner"
     }
    ],
    "reason": "minimal-disclosure",
-   "caption": "Context item The first fictional company's unstructured-content statement (urn:fictional:contract-wording:owner) is needed for this purpose."
+   "caption": "Context item The first fictional company's unstructured-content statement (The first fictional company) is needed for this purpose."
   },
   {
    "seq": 50,
@@ -1275,7 +1310,7 @@
     }
    ],
    "reason": "terms-allow",
-   "caption": "The first fictional company's unstructured-content statement: Its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: Its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 51,
@@ -1290,10 +1325,20 @@
      "layer": "data-access",
      "suite": "by-value",
      "clause": "CORE-OUT-4"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver-agent:actor"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "Context item invoke from urn:fictional:contract-wording:receiver-agent:actor (urn:fictional:contract-wording:receiver) is not established as needed for this purpose."
+   "caption": "Context item invoke from The second fictional company's agent (The second fictional company) is not established as needed for this purpose."
   },
   {
    "seq": 52,
@@ -1308,10 +1353,15 @@
      "layer": "usage-control",
      "suite": "odrl-rules",
      "clause": "CORE-OUT-5"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:receiver-agent:actor"
     }
    ],
    "reason": "context-not-clear",
-   "caption": "invoke from urn:fictional:contract-wording:receiver-agent:actor: Default terms permit this interaction only and prohibit onward sharing."
+   "caption": "invoke from The second fictional company's agent: Default terms permit this interaction only and prohibit onward sharing."
   },
   {
    "seq": 53,
@@ -1886,9 +1936,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:contract-wording:original",
-    "text": "Its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+    "text": "Its terms allow this: use for Contract wording; share for Contract wording."
    },
-   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for urn:purpose:contract wording; share for urn:purpose:contract wording."
+   "caption": "The first fictional company's unstructured-content statement: its terms allow this: use for Contract wording; share for Contract wording."
   },
   {
    "seq": 63,
@@ -1903,12 +1953,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:contract-wording:unstructured-content",
-    "text": "Accept unstructured-content from urn:fictional:contract-wording:owner by recorded-by-authority, at most 30 days old."
+    "text": "Accept unstructured-content from The first fictional company by recorded-by-authority, at most 30 days old."
    },
    "caption": "The first fictional company's unstructured-content statement is fit for Negotiating the wording of a contract: recorded-by-authority, 0 days old."
   },
@@ -1939,7 +1994,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:contract-wording:original",
-     "summary": "use for urn:purpose:contract wording; share for urn:purpose:contract wording"
+     "summary": "use for Contract wording; share for Contract wording"
     },
     "provenance": "signed by The first fictional company"
    },
@@ -1951,7 +2006,14 @@
    "agent": "receiver-agent",
    "part": "memory",
    "kind": "store",
-   "caption": "Unstructured data sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0; not instructions; source urn:fictional:contract-wording:owner."
+   "caption": "Unstructured data sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0; not instructions; source The first fictional company.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:contract-wording:owner"
+    }
+   ]
   },
   {
    "seq": 67,
@@ -2104,7 +2166,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "The second fictional company asks me to take the next step in A person decides on the original content with The second fictional company for urn:purpose:contract wording. May I go ahead? Action digest: sha-256:7a5056a6ed817a5c43d757abd0af626c60bb393459a31a88716dc26c738db7ea. Parameters: {\"decision\":\"accept-unknown-clause\",\"originalDigest\":\"sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0\",\"support\":[\"urn:scenario:contract-wording:original\"]}"
+    "text": "The second fictional company asks me to take the next step in A person decides on the original content with The second fictional company for Contract wording. May I go ahead? Action digest: sha-256:7a5056a6ed817a5c43d757abd0af626c60bb393459a31a88716dc26c738db7ea. Parameters: {\"decision\":\"accept-unknown-clause\",\"originalDigest\":\"sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0\",\"support\":[\"urn:scenario:contract-wording:original\"]}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   }

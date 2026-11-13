@@ -588,6 +588,62 @@
     },
     {
      "path": "main",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--trans",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "email-readable-copy-differs",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--email-readable-copy-differs--trans",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "a2a-text-part-instruction",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--a2a-text-part-instruction--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "a2a-task-state-lies",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--a2a-task-state-lies--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mcp-tool-description-poisoned",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--mcp-tool-description-poisoned--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "mcp-token-passed-on",
+     "label": "All fourteen steps",
+     "status": "runs",
+     "scenario": "mortgage-main--mcp-token-passed-on--tra",
+     "mortgage": "mortgage-main"
+    },
+    {
+     "path": "main",
      "label": "The core flow",
      "status": "runs",
      "scenario": "mortgage-core",
@@ -860,7 +916,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
@@ -1353,7 +1409,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
@@ -1636,8 +1692,8 @@
    "fit": "fits",
    "fitNote": "",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "cohort-count",
    "strains": [
     "repeat"
    ],
@@ -1645,23 +1701,23 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "needs joint computation"
+     "status": "runs",
+     "scenario": "cohort-count"
     },
     {
      "path": "branch-1",
      "label": "The result would cover fewer than the minimum number of patients",
-     "status": "blocked",
-     "reason": "needs joint computation"
+     "status": "runs",
+     "scenario": "cohort-count--branch-1"
     },
     {
      "path": "branch-2",
      "label": "One hospital does not attest its input",
-     "status": "blocked",
-     "reason": "needs joint computation"
+     "status": "runs",
+     "scenario": "cohort-count--branch-2"
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "wearable-data",
@@ -1767,7 +1823,7 @@
      "path": "hidden-validity-proof",
      "label": "Show valid until at least a date while hiding the actual date",
      "status": "blocked",
-     "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     }
    ],
    "runState": "some"
@@ -1980,7 +2036,7 @@
    "fitNote": "The total is honest about being a total of what was supplied. A tax authority's figure, a year late, is the only complete one.",
    "benchmarks": [],
    "status": "worked",
-   "trace": "platform-income--branch-1",
+   "trace": "platform-income",
    "strains": [
     "absence"
    ],
@@ -1988,8 +2044,8 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "needs joint computation"
+     "status": "runs",
+     "scenario": "platform-income"
     },
     {
      "path": "branch-1",
@@ -1998,7 +2054,7 @@
      "scenario": "platform-income--branch-1"
     }
    ],
-   "runState": "some"
+   "runState": "all"
   },
   {
    "id": "tenancy-application",
@@ -2048,7 +2104,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
      "path": "branch-1",
@@ -2489,7 +2545,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
      "path": "branch-1",
@@ -2806,7 +2862,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
      "path": "branch-1",
@@ -3032,7 +3088,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
      "path": "branch-1",
@@ -3518,7 +3574,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
     },
     {
      "path": "branch-1",
@@ -3608,8 +3664,8 @@
    "fit": "fits",
    "fitNote": "",
    "benchmarks": [],
-   "status": "specified",
-   "trace": null,
+   "status": "worked",
+   "trace": "salary-benchmark",
    "strains": [
     "repeat"
    ],
@@ -3617,17 +3673,27 @@
     {
      "path": "main",
      "label": "The main path",
-     "status": "blocked",
-     "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+     "status": "runs",
+     "scenario": "salary-benchmark"
     },
     {
      "path": "branch-1",
      "label": "Only two employers contribute",
-     "status": "blocked",
-     "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+     "status": "disagrees",
+     "scenario": "salary-benchmark--branch-1",
+     "actual": {
+      "outcome": "admit",
+      "reason": "fit-for-use",
+      "check": "fitness"
+     },
+     "expected": {
+      "outcome": "stop",
+      "reason": "prohibited"
+     },
+     "notExercised": true
     }
    ],
-   "runState": "none"
+   "runState": "all"
   },
   {
    "id": "research-data-access",
@@ -4161,7 +4227,7 @@
      "path": "main",
      "label": "The main path",
      "status": "blocked",
-     "reason": "needs a proof system"
+     "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
      "path": "branch-1",

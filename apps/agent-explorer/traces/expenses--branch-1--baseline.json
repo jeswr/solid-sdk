@@ -96,7 +96,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -212,9 +212,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:expense-receipt",
-    "text": "Its terms allow this: use for urn:purpose:expenses; share for urn:purpose:expenses."
+    "text": "Its terms allow this: use for Expenses; share for Expenses."
    },
-   "caption": "The merchant's invoice statement: its terms allow this: use for urn:purpose:expenses; share for urn:purpose:expenses."
+   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
   },
   {
    "seq": 5,
@@ -229,14 +229,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:expenses:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:merchant"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:expenses:invoice",
-    "text": "Accept invoice from urn:fictional:merchant by recorded-by-authority, at most 30 days old."
+    "text": "Accept invoice from The merchant by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The merchant's invoice statement is fit for urn:scenario:expenses:task: recorded-by-authority, 0 days old."
+   "caption": "The merchant's invoice statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -265,7 +275,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:expense-receipt",
-     "summary": "use for urn:purpose:expenses; share for urn:purpose:expenses"
+     "summary": "use for Expenses; share for Expenses"
     },
     "provenance": "signed by The merchant"
    },
@@ -277,7 +287,7 @@
    "agent": "employee-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:expenses file with The employer."
+   "caption": "The core proposes to share File the merchant receipt with The employer."
   },
   {
    "seq": 9,
@@ -425,10 +435,10 @@
    ],
    "rule": {
     "id": "urn:terms:expense-receipt",
-    "text": "The issuer's terms: use for urn:purpose:expenses; share for urn:purpose:expenses. They go out with the data."
+    "text": "The issuer's terms: use for Expenses; share for Expenses. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The merchant's invoice statement: its terms allow this: use for urn:purpose:expenses; share for urn:purpose:expenses."
+   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
   },
   {
    "seq": 16,
@@ -953,9 +963,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:expense-receipt",
-    "text": "Its terms allow this: use for urn:purpose:expenses; share for urn:purpose:expenses."
+    "text": "Its terms allow this: use for Expenses; share for Expenses."
    },
-   "caption": "The merchant's invoice statement: its terms allow this: use for urn:purpose:expenses; share for urn:purpose:expenses."
+   "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses."
   },
   {
    "seq": 25,
@@ -970,12 +980,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:merchant"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:expenses:invoice",
-    "text": "Accept invoice from urn:fictional:merchant by recorded-by-authority, at most 30 days old."
+    "text": "Accept invoice from The merchant by recorded-by-authority, at most 30 days old."
    },
    "caption": "The merchant's invoice statement is fit for File the merchant receipt: recorded-by-authority, 0 days old."
   },
@@ -1006,7 +1021,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:expense-receipt",
-     "summary": "use for urn:purpose:expenses; share for urn:purpose:expenses"
+     "summary": "use for Expenses; share for Expenses"
     },
     "provenance": "signed by The merchant"
    },
@@ -1131,14 +1146,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:expenses:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:bank"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:expenses:payee-account",
-    "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+    "text": "Accept payee-account from The reimbursement bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The reimbursement bank's payee-account statement is fit for urn:scenario:expenses:task: recorded-by-authority, 0 days old."
+   "caption": "The reimbursement bank's payee-account statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
   },
   {
    "seq": 33,
@@ -1292,14 +1317,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:expenses:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:bank"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:expenses:payee-account",
-    "text": "Accept payee-account from urn:fictional:bank by recorded-by-authority, at most 30 days old."
+    "text": "Accept payee-account from The reimbursement bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The reimbursement bank's payee-account statement is fit for urn:scenario:expenses:task: recorded-by-authority, 0 days old."
+   "caption": "The reimbursement bank's payee-account statement is fit for Claiming expenses: recorded-by-authority, 0 days old."
   },
   {
    "seq": 40,
@@ -1364,7 +1399,7 @@
    ],
    "rule": {
     "id": "urn:rule:monthly-payments",
-    "text": "The employer's mandate lets the agent pay urn:op:payment, on its own."
+    "text": "The employer's mandate lets the agent pay expenses, on its own."
    },
    "reason": "within-mandate",
    "caption": "The employer's mandate covers this action."
@@ -1457,7 +1492,7 @@
    "reason": "limit-exceeded",
    "rule": {
     "id": "urn:rule:monthly-payments",
-    "text": "The employer's mandate lets the agent pay urn:op:payment, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
+    "text": "The employer's mandate lets the agent pay expenses, on its own. This payment exceeds the mandate's per-action or calendar-month limit."
    },
    "caption": "This is outside The employer's limits, so the gate asks The employer."
   },
@@ -1480,7 +1515,7 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "The reimbursement bank asks me to take the next step in expenses with The reimbursement bank for urn:purpose:expenses. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
+    "text": "The reimbursement bank asks me to take the next step in expenses with The reimbursement bank for Expenses. This payment exceeds the mandate's per-action or calendar-month limit. May I go ahead?"
    },
    "caption": "The employer is asked to approve this exact action; the approval will be bound to its digest."
   }

@@ -69,7 +69,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -181,9 +181,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:agent-handoff:address",
-    "text": "Its terms allow this: use for urn:purpose:delivery."
+    "text": "Its terms allow this: use for Delivery."
    },
-   "caption": "The customer's delivery.address statement: its terms allow this: use for urn:purpose:delivery."
+   "caption": "The customer's delivery.address statement: its terms allow this: use for Delivery."
   },
   {
    "seq": 5,
@@ -198,14 +198,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:agent-handoff:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:agent-handoff:customer"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:agent-handoff:delivery.address",
-    "text": "Accept delivery.address from urn:fictional:agent-handoff:customer by recorded-by-authority, at most 30 days old."
+    "text": "Accept delivery.address from The customer by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The customer's delivery.address statement is fit for urn:scenario:agent-handoff:task: recorded-by-authority, 0 days old."
+   "caption": "The customer's delivery.address statement is fit for A service agent hands a customer to a partner's agent: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -234,7 +244,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:agent-handoff:address",
-     "summary": "use for urn:purpose:delivery"
+     "summary": "use for Delivery"
     },
     "provenance": "signed by The customer"
    },
@@ -791,7 +801,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:agent handoff with The tax authority."
+   "caption": "The core proposes to share A service agent hands a customer to a partner's agent with The tax authority."
   },
   {
    "seq": 26,
@@ -940,9 +950,9 @@
    "reason": "prohibited",
    "rule": {
     "id": "urn:terms:agent-handoff:address",
-    "text": "The issuer's terms: use for urn:purpose:delivery. They go out with the data."
+    "text": "The issuer's terms: use for Delivery. They go out with the data."
    },
-   "caption": "The customer's delivery.address statement: its terms forbid this (use for urn:purpose:delivery)."
+   "caption": "The customer's delivery.address statement: its terms forbid this (use for Delivery)."
   },
   {
    "seq": 33,

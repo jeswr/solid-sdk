@@ -106,7 +106,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -226,9 +226,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:onward-leak:income",
-    "text": "Its terms allow this: use for urn:purpose:lending."
+    "text": "Its terms allow this: use for Lending."
    },
-   "caption": "The person's bank's income.total statement: its terms allow this: use for urn:purpose:lending."
+   "caption": "The person's bank's income.total statement: its terms allow this: use for Lending."
   },
   {
    "seq": 5,
@@ -243,14 +243,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:onward-leak:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:onward-leak:bank"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:onward-leak:income.total",
-    "text": "Accept income.total from urn:fictional:onward-leak:bank by recorded-by-authority, at most 30 days old."
+    "text": "Accept income.total from The person's bank by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The person's bank's income.total statement is fit for urn:scenario:onward-leak:task: recorded-by-authority, 0 days old."
+   "caption": "The person's bank's income.total statement is fit for A receiver passes data on against its terms: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -279,7 +289,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:onward-leak:income",
-     "summary": "use for urn:purpose:lending"
+     "summary": "use for Lending"
     },
     "provenance": "signed by The person's bank"
    },
@@ -842,7 +852,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:onward leak with The marketing company."
+   "caption": "The core proposes to share A receiver passes data on against its terms with The marketing company."
   },
   {
    "seq": 26,
@@ -991,9 +1001,9 @@
    "reason": "prohibited",
    "rule": {
     "id": "urn:terms:onward-leak:income",
-    "text": "The issuer's terms: use for urn:purpose:lending. They go out with the data."
+    "text": "The issuer's terms: use for Lending. They go out with the data."
    },
-   "caption": "The person's bank's income.total statement: its terms forbid this (use for urn:purpose:lending)."
+   "caption": "The person's bank's income.total statement: its terms forbid this (use for Lending)."
   },
   {
    "seq": 33,

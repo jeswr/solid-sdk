@@ -69,7 +69,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -185,9 +185,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:cancel-subscription:subscription",
-    "text": "Its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+    "text": "Its terms allow this: use for Cancel subscription; share for Cancel subscription."
    },
-   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription."
   },
   {
    "seq": 5,
@@ -202,14 +202,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:cancel-subscription:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:cancel-subscription:receiver"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:cancel-subscription:subscription.control",
-    "text": "Accept subscription.control from urn:fictional:cancel-subscription:receiver by recorded-by-authority, at most 30 days old."
+    "text": "Accept subscription.control from The subscription service by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The subscription service's subscription.control statement is fit for urn:scenario:cancel-subscription:task: recorded-by-authority, 0 days old."
+   "caption": "The subscription service's subscription.control statement is fit for Cancelling a subscription: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -238,7 +248,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:cancel-subscription:subscription",
-     "summary": "use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription"
+     "summary": "use for Cancel subscription; share for Cancel subscription"
     },
     "provenance": "signed by The subscription service"
    },
@@ -797,7 +807,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:cancel subscription with The subscription service."
+   "caption": "The core proposes to share Cancelling a subscription with The subscription service."
   },
   {
    "seq": 26,
@@ -945,10 +955,10 @@
    ],
    "rule": {
     "id": "urn:terms:cancel-subscription:subscription",
-    "text": "The issuer's terms: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription. They go out with the data."
+    "text": "The issuer's terms: use for Cancel subscription; share for Cancel subscription. They go out with the data."
    },
    "reason": "terms-allow",
-   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription."
   },
   {
    "seq": 33,
@@ -1477,9 +1487,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:cancel-subscription:subscription",
-    "text": "Its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+    "text": "Its terms allow this: use for Cancel subscription; share for Cancel subscription."
    },
-   "caption": "The subscription service's subscription.control statement: its terms allow this: use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription."
+   "caption": "The subscription service's subscription.control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription."
   },
   {
    "seq": 42,
@@ -1494,12 +1504,17 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:cancel-subscription:receiver"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:cancel-subscription:subscription.control",
-    "text": "Accept subscription.control from urn:fictional:cancel-subscription:receiver by recorded-by-authority, at most 30 days old."
+    "text": "Accept subscription.control from The subscription service by recorded-by-authority, at most 30 days old."
    },
    "caption": "The subscription service's subscription.control statement is fit for Cancelling a subscription: recorded-by-authority, 0 days old."
   },
@@ -1530,7 +1545,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:cancel-subscription:subscription",
-     "summary": "use for urn:purpose:cancel subscription; share for urn:purpose:cancel subscription"
+     "summary": "use for Cancel subscription; share for Cancel subscription"
     },
     "provenance": "signed by The subscription service"
    },
@@ -2110,7 +2125,7 @@
    "reason": "not-authorised",
    "rule": {
     "id": "urn:awp:mandate:ab7172f718933a8c9c65b8e026d057ba:cancel-subscription",
-    "text": "No rule in The subscriber's mandate lets the agent take the next step in Offer free months to stay with The subscription service for urn:purpose:cancel subscription (no applicable grant in the mandate (deny by default))."
+    "text": "No rule in The subscriber's mandate lets the agent take the next step in Offer free months to stay with The subscription service for Cancel subscription (no applicable grant in the mandate (deny by default))."
    },
    "caption": "The subscriber's mandate does not allow this: take the next step in Offer free months to stay with The subscription service."
   },

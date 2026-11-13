@@ -6,7 +6,7 @@
    "useCase": "age-check",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "age-check",
@@ -277,24 +277,85 @@
    "scenario": "cohort-count",
    "useCase": "cohort-count",
    "path": "main",
-   "status": "blocked",
-   "reason": "needs joint computation"
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "cohort-count--baseline.json",
+   "traceSha256": "4a4d210072521d91b6e6a2fdd9863f2a20ab43065369a3820a9e5f883e130711",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "cohort-count",
    "useCase": "cohort-count",
    "path": "branch-1",
    "what": "The result would cover fewer than the minimum number of patients",
-   "status": "blocked",
-   "reason": "needs joint computation"
+   "status": "runs",
+   "actual": {
+    "outcome": "stop",
+    "reason": "prohibited",
+    "check": "data-terms"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "prohibited"
+   },
+   "consequences": [
+    {
+     "seq": 932,
+     "agent": "computer-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 942,
+     "agent": "requester-agent",
+     "outcome": "admit"
+    }
+   ],
+   "trace": "cohort-count--branch-1--baseline.json",
+   "traceSha256": "77d962c909563622d7b88b830cdcf24e75cc82c8a21d32d003278d8f1aedbb8e",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "cohort-count",
    "useCase": "cohort-count",
    "path": "branch-2",
    "what": "One hospital does not attest its input",
-   "status": "blocked",
-   "reason": "needs joint computation"
+   "status": "runs",
+   "actual": {
+    "outcome": "stop",
+    "reason": "derivation-not-verified",
+    "check": "evidence"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "derivation-not-verified"
+   },
+   "consequences": [],
+   "trace": "cohort-count--branch-2--baseline.json",
+   "traceSha256": "d59223f2f2f793a511ef4591564a7688f1f21c08118d859cb726bb0c68fabf52",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "consent-for-a-child",
@@ -463,7 +524,7 @@
    "useCase": "degree-recognition",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "degree-recognition",
@@ -1278,7 +1339,7 @@
    "useCase": "insurance-quote",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
   },
   {
    "scenario": "insurance-quote",
@@ -1321,7 +1382,7 @@
    "useCase": "introduction",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "introduction",
@@ -1866,6 +1927,500 @@
    "trace": "mortgage-main--baseline.json"
   },
   {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "main",
+   "configuration": "transport-email",
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-more",
+    "reason": "assurance-insufficient",
+    "check": "authority"
+   },
+   "consequences": [
+    {
+     "seq": 137,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 145,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 152,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 159,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 171,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 179,
+     "agent": "bank",
+     "outcome": "admit"
+    },
+    {
+     "seq": 189,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 197,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 204,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 212,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 220,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 230,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 244,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 252,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 262,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 271,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 279,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 288,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 296,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 305,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 313,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 321,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 329,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    }
+   ],
+   "trace": "mortgage-main--transport-email.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "email-readable-copy-differs",
+   "configuration": "transport-email",
+   "what": "The readable email states a different loan amount.",
+   "status": "runs",
+   "actual": {
+    "outcome": "refuse",
+    "reason": "human-parity-mismatch",
+    "check": "integrity"
+   },
+   "expected": {
+    "outcome": "refuse",
+    "reason": "human-parity-mismatch"
+   },
+   "consequences": [],
+   "trace": "mortgage-main--email-readable-copy-differs--transport-email.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "main",
+   "configuration": "transport-a2a",
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-more",
+    "reason": "assurance-insufficient",
+    "check": "authority"
+   },
+   "consequences": [
+    {
+     "seq": 138,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 146,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 153,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 160,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 172,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 180,
+     "agent": "bank",
+     "outcome": "admit"
+    },
+    {
+     "seq": 190,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 198,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 205,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 213,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 221,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 231,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 245,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 253,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 263,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 272,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 281,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 290,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 298,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 307,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 316,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 324,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 333,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    }
+   ],
+   "trace": "mortgage-main--transport-a2a.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "a2a-text-part-instruction",
+   "configuration": "transport-a2a",
+   "what": "An A2A text part says approval is not needed; it is dropped and Sam is still asked.",
+   "status": "runs",
+   "actual": {
+    "outcome": "go",
+    "reason": "evidence-complete",
+    "check": "evidence"
+   },
+   "expected": {
+    "outcome": "go",
+    "reason": "evidence-complete"
+   },
+   "consequences": [],
+   "note": "branch does not diverge from the main path",
+   "trace": "mortgage-main--a2a-text-part-instruction--transport-a2a.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "a2a-task-state-lies",
+   "configuration": "transport-a2a",
+   "what": "The task says completed, while the signed reply refuses; the conversation remains refused.",
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "intact",
+    "check": "integrity"
+   },
+   "expected": {
+    "outcome": "admit",
+    "reason": "intact"
+   },
+   "consequences": [],
+   "note": "branch does not diverge from the main path",
+   "trace": "mortgage-main--a2a-task-state-lies--transport-a2a.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "main",
+   "configuration": "transport-mcp",
+   "status": "runs",
+   "actual": {
+    "outcome": "ask-more",
+    "reason": "assurance-insufficient",
+    "check": "authority"
+   },
+   "consequences": [
+    {
+     "seq": 139,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 147,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 154,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 161,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 173,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 181,
+     "agent": "bank",
+     "outcome": "admit"
+    },
+    {
+     "seq": 191,
+     "agent": "bank",
+     "outcome": "go"
+    },
+    {
+     "seq": 199,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 206,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 214,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 222,
+     "agent": "sams-agent",
+     "outcome": "ask-principal",
+     "reason": "approval-required"
+    },
+    {
+     "seq": 232,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 246,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 254,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 264,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 273,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 281,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 290,
+     "agent": "sams-agent",
+     "outcome": "go"
+    },
+    {
+     "seq": 298,
+     "agent": "lender",
+     "outcome": "admit"
+    },
+    {
+     "seq": 307,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 315,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    },
+    {
+     "seq": 323,
+     "agent": "lender",
+     "outcome": "go"
+    },
+    {
+     "seq": 331,
+     "agent": "sams-agent",
+     "outcome": "admit"
+    }
+   ],
+   "trace": "mortgage-main--transport-mcp.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "mcp-tool-description-poisoned",
+   "configuration": "transport-mcp",
+   "what": "The tool description tries to bypass approval; it is dropped and Sam is still asked.",
+   "status": "runs",
+   "actual": {
+    "outcome": "go",
+    "reason": "evidence-complete",
+    "check": "evidence"
+   },
+   "expected": {
+    "outcome": "go",
+    "reason": "evidence-complete"
+   },
+   "consequences": [],
+   "note": "branch does not diverge from the main path",
+   "trace": "mortgage-main--mcp-tool-description-poisoned--transport-mcp.json"
+  },
+  {
+   "scenario": "mortgage-main",
+   "useCase": "mortgage-in-principle",
+   "path": "mcp-token-passed-on",
+   "configuration": "transport-mcp",
+   "what": "The tool asks for its token at a different server; the hand-off is refused.",
+   "status": "runs",
+   "actual": {
+    "outcome": "refuse",
+    "reason": "not-authorised",
+    "check": "integrity"
+   },
+   "expected": {
+    "outcome": "refuse",
+    "reason": "not-authorised"
+   },
+   "consequences": [],
+   "trace": "mortgage-main--mcp-token-passed-on--transport-mcp.json"
+  },
+  {
    "scenario": "mortgage-out-of-limit",
    "useCase": "mortgage-in-principle",
    "cataloguePath": {
@@ -2191,8 +2746,22 @@
    "scenario": "platform-income",
    "useCase": "platform-income",
    "path": "main",
-   "status": "blocked",
-   "reason": "needs joint computation"
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "platform-income--baseline.json",
+   "traceSha256": "8b99f064dc80d3f684bc900ec357e4e97b7937a3fdfc092e3456570381e6bad6",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "platform-income",
@@ -2638,7 +3207,7 @@
    "useCase": "recycled-content",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
   },
   {
    "scenario": "recycled-content",
@@ -2887,7 +3456,7 @@
    "path": "hidden-validity-proof",
    "what": "Show valid until at least a date while hiding the actual date",
    "status": "blocked",
-   "reason": "Needs a real proof system for a predicate about hidden work.valid-until. Salted-digest disclosure does not prove hidden-value predicates."
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "salary-account-change",
@@ -2961,16 +3530,49 @@
    "scenario": "salary-benchmark",
    "useCase": "salary-benchmark",
    "path": "main",
-   "status": "blocked",
-   "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+   "status": "runs",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "consequences": [],
+   "trace": "salary-benchmark--baseline.json",
+   "traceSha256": "678ac4dba3006dedacb791cfa1c1836f0e81584e655aed4c8b8fb57c673a2261",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "salary-benchmark",
    "useCase": "salary-benchmark",
    "path": "branch-1",
    "what": "Only two employers contribute",
-   "status": "blocked",
-   "reason": "Main needs joint computation. The two-contributor refusal also needs an authenticated contribution/session roster and minimum-cohort admission bound to that joint protocol; no protocol/session interface exists to check it without inventing participants or substituting a signed result."
+   "status": "disagrees",
+   "actual": {
+    "outcome": "admit",
+    "reason": "fit-for-use",
+    "check": "fitness"
+   },
+   "expected": {
+    "outcome": "stop",
+    "reason": "prohibited"
+   },
+   "consequences": [],
+   "note": "branch does not diverge from the main path",
+   "trace": "salary-benchmark--branch-1--baseline.json",
+   "traceSha256": "ef97c7726f114641883dfa18f02ee67ee192d0b44e9dcda57e763bd6145a3b2e",
+   "recordedWith": {
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "commit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
+   }
   },
   {
    "scenario": "sell-a-car",
@@ -3309,7 +3911,7 @@
    "useCase": "tenancy-application",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "tenancy-application",
@@ -3352,7 +3954,7 @@
    "useCase": "trial-eligibility",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "Blocked: needs a Noir circuit for absence and totals, not yet delivered."
   },
   {
    "scenario": "trial-eligibility",
@@ -3443,7 +4045,7 @@
    "useCase": "visa-application",
    "path": "main",
    "status": "blocked",
-   "reason": "needs a proof system"
+   "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
   },
   {
    "scenario": "visa-application",

@@ -70,7 +70,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -182,9 +182,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:hardship-request:diagnosis",
-    "text": "Its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+    "text": "Its terms allow this: use for Hardship request; share for Hardship request."
    },
-   "caption": "The borrower's health.diagnosis statement: its terms allow this: use for urn:purpose:hardship request; share for urn:purpose:hardship request."
+   "caption": "The borrower's health.diagnosis statement: its terms allow this: use for Hardship request; share for Hardship request."
   },
   {
    "seq": 5,
@@ -199,14 +199,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:scenario:hardship-request:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "plain-language-upgrade",
+     "id": "urn:fictional:hardship-request:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:hardship-request:health.diagnosis",
-    "text": "Accept health.diagnosis from urn:fictional:hardship-request:owner by self-reported, at most 30 days old."
+    "text": "Accept health.diagnosis from The borrower by self-reported, at most 30 days old."
    },
-   "caption": "The borrower's health.diagnosis statement is fit for urn:scenario:hardship-request:task: self-reported, 0 days old."
+   "caption": "The borrower's health.diagnosis statement is fit for Asking a lender for breathing space: self-reported, 0 days old."
   },
   {
    "seq": 6,
@@ -235,7 +245,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:hardship-request:diagnosis",
-     "summary": "use for urn:purpose:hardship request; share for urn:purpose:hardship request"
+     "summary": "use for Hardship request; share for Hardship request"
     },
     "provenance": "signed by The borrower"
    },
@@ -822,7 +832,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:hardship request with The lender."
+   "caption": "The core proposes to share Asking a lender for breathing space with The lender."
   },
   {
    "seq": 27,
@@ -959,7 +969,7 @@
    "reason": "approval-required",
    "chat": {
     "who": "agent",
-    "text": "The lender asks for 0 of your statements: nothing. They would use them for urn:purpose:hardship request. May I share them? Action digest: sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9. Parameters: {}"
+    "text": "The lender asks for 0 of your statements: nothing. They would use them for Hardship request. May I share them? Action digest: sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9. Parameters: {}"
    },
    "caption": "The gate built this request from the action and the approval rule."
   }

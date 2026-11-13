@@ -79,7 +79,7 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
@@ -1746,7 +1746,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:forum claim with The independent fictional ombudsman."
+   "caption": "The core proposes to share Release an exact record segment to the forum with The independent fictional ombudsman."
   },
   {
    "seq": 52,
@@ -1868,7 +1868,7 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "The independent fictional ombudsman asks for 0 of your statements: nothing. They would use them for urn:purpose:redress. May I share them?"
+    "text": "The independent fictional ombudsman asks for 0 of your statements: nothing. They would use them for Redress. May I share them?"
    },
    "caption": "Sam is asked to approve this exact action; the approval will be bound to its digest."
   },
@@ -2020,7 +2020,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The action goes: share urn:op:forum claim with The independent fictional ombudsman."
+   "caption": "The action goes: share Release an exact record segment to the forum with The independent fictional ombudsman."
   },
   {
    "seq": 65,
@@ -2086,7 +2086,14 @@
    "check": "recipient",
    "verdict": "pass",
    "reason": "recipient-established",
-   "caption": "The forum requests urn:fictional:fee-dispute:lender's record by 2026-11-13T09:01:00.000Z."
+   "caption": "The forum requests The lender's record by 2026-11-13T09:01:00.000Z.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:fee-dispute:lender"
+    }
+   ]
   },
   {
    "seq": 71,
@@ -2094,7 +2101,7 @@
    "agent": "lender-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:forum answer with The independent fictional ombudsman."
+   "caption": "The core proposes to share Release an exact record segment to the forum with The independent fictional ombudsman."
   },
   {
    "seq": 72,
@@ -2216,7 +2223,7 @@
    "kind": "ask-principal",
    "chat": {
     "who": "agent",
-    "text": "The independent fictional ombudsman asks for 0 of your statements: nothing. They would use them for urn:purpose:redress. May I share them?"
+    "text": "The independent fictional ombudsman asks for 0 of your statements: nothing. They would use them for Redress. May I share them?"
    },
    "caption": "The lender is asked to approve this exact action; the approval will be bound to its digest."
   },
@@ -2368,7 +2375,7 @@
    "kind": "decision",
    "verdict": "pass",
    "outcome": "go",
-   "caption": "The action goes: share urn:op:forum answer with The independent fictional ombudsman."
+   "caption": "The action goes: share Release an exact record segment to the forum with The independent fictional ombudsman."
   },
   {
    "seq": 85,
@@ -2433,7 +2440,19 @@
    "kind": "decision",
    "outcome": "admit",
    "reason": "not-authorised",
-   "caption": "Forum decision: urn:fictional:fee-dispute:lender; {\"problem\":\"fee-not-agreed\",\"message\":\"urn:awp:engine-fee-dispute-main:lender-agent:0002\",\"agreedFee\":0,\"billedFee\":995}. No core was re-run."
+   "caption": "Forum decision: The lender; {\"problem\":\"fee-not-agreed\",\"message\":\"invoke message\",\"agreedFee\":0,\"billedFee\":995}. No core was re-run.",
+   "refs": [
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:fee-dispute:lender"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:awp:engine-fee-dispute-main:lender-agent:0002"
+    }
+   ]
   },
   {
    "seq": 91,
@@ -2554,14 +2573,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:fee-dispute:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:fee-dispute:forum"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:fee-dispute:forum.decision",
-    "text": "Accept forum.decision from urn:fictional:fee-dispute:forum by recorded-by-authority, at most 1 days old."
+    "text": "Accept forum.decision from The independent fictional ombudsman by recorded-by-authority, at most 1 days old."
    },
-   "caption": "The independent fictional ombudsman's forum.decision statement is fit for urn:scenario:fee-dispute:task: recorded-by-authority, 0 days old."
+   "caption": "The independent fictional ombudsman's forum.decision statement is fit for Taking a dispute to an ombudsman: recorded-by-authority, 0 days old."
   },
   {
    "seq": 96,

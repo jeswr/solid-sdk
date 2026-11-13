@@ -73,10 +73,14 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
+  {
+   "what": "Planned proof method sparq-noir-closed-world/0",
+   "replacedBy": "Purpose-built Noir circuits for absence and totals are not yet delivered. Native dataset commitment preparation remains an open gap from Brief 21."
+  },
   {
    "what": "Outside organizations and data sources",
    "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -189,9 +193,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:insurance-quote:identity-details",
-    "text": "Its terms allow this: use for urn:purpose:driver record; share for urn:purpose:driver record."
+    "text": "Its terms allow this: use for Driver record; share for Driver record."
    },
-   "caption": "The driver's identity.details statement: its terms allow this: use for urn:purpose:driver record; share for urn:purpose:driver record."
+   "caption": "The driver's identity.details statement: its terms allow this: use for Driver record; share for Driver record."
   },
   {
    "seq": 5,
@@ -206,14 +210,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:insurance-quote:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:insurance-quote:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:insurance-quote:identity.details",
-    "text": "Accept identity.details from urn:fictional:insurance-quote:owner by self-reported, at most 30 days old."
+    "text": "Accept identity.details from The driver by self-reported, at most 30 days old."
    },
-   "caption": "The driver's identity.details statement is fit for urn:scenario:insurance-quote:task: self-reported, 0 days old."
+   "caption": "The driver's identity.details statement is fit for An insurance quote with the least disclosure: self-reported, 0 days old."
   },
   {
    "seq": 6,
@@ -242,7 +256,7 @@
     "asOf": "2026-11-13T09:00:00.000Z",
     "terms": {
      "id": "urn:terms:insurance-quote:identity-details",
-     "summary": "use for urn:purpose:driver record; share for urn:purpose:driver record"
+     "summary": "use for Driver record; share for Driver record"
     },
     "provenance": "signed by The driver"
    },
@@ -435,7 +449,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Handed to the carriage. Carries sha-256:b3d0a0db7b3…; never trusted."
+     "summary": "Handed to the carriage. Carries sha-256:74a0bd5aaf8…; never trusted."
     },
     "layers": {
      "header": {
@@ -463,7 +477,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:a3bf2806fc8c2685f86d78c6062afa8377d21cfa3b6ef655da9f797cf316b1a8"
+      "digest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3"
      },
      "authority": {
       "present": true,
@@ -477,14 +491,16 @@
         "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
         "operations": [
          "urn:op:insurance-quote",
-         "urn:op:insurance-quote:request"
+         "urn:op:insurance-quote:request",
+         "urn:op:insurance-quote:proof-request",
+         "urn:op:insurance-quote:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:785bb59190569696e4a9eedcf14870a23a65f91ccd8f006b41352f54cddac148"
+      "digest": "sha-256:8f749977c0f4fb4b9f865df6eb322e84b5565a7d8c616cc130cace2d817cc3c5"
      },
      "content": {
       "present": true,
@@ -554,7 +570,7 @@
     "kind": "invoke",
     "carriage": {
      "suite": "direct-http",
-     "summary": "Arrived over direct-local/0.1. Carries sha-256:b3d0a0db7b3…; never trusted."
+     "summary": "Arrived over direct-local/0.1. Carries sha-256:74a0bd5aaf8…; never trusted."
     },
     "layers": {
      "header": {
@@ -582,7 +598,7 @@
         "typ": "awp-message+jws"
        }
       },
-      "digest": "sha-256:a3bf2806fc8c2685f86d78c6062afa8377d21cfa3b6ef655da9f797cf316b1a8"
+      "digest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3"
      },
      "authority": {
       "present": true,
@@ -596,14 +612,16 @@
         "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
         "operations": [
          "urn:op:insurance-quote",
-         "urn:op:insurance-quote:request"
+         "urn:op:insurance-quote:request",
+         "urn:op:insurance-quote:proof-request",
+         "urn:op:insurance-quote:proof-answer"
         ],
         "validFrom": "2026-11-13T08:59:00.000Z",
         "validUntil": "2027-01-12T09:00:00.000Z",
         "issuedAt": "2026-11-13T09:00:00.000Z"
        }
       ],
-      "digest": "sha-256:785bb59190569696e4a9eedcf14870a23a65f91ccd8f006b41352f54cddac148"
+      "digest": "sha-256:8f749977c0f4fb4b9f865df6eb322e84b5565a7d8c616cc130cace2d817cc3c5"
      },
      "content": {
       "present": true,
@@ -799,7 +817,7 @@
    "agent": "owner-agent",
    "part": "core",
    "kind": "propose",
-   "caption": "The core proposes to share urn:op:insurance quote with The insurer."
+   "caption": "The core proposes to share An insurance quote with the least disclosure with The insurer."
   },
   {
    "seq": 26,

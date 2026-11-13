@@ -48,7 +48,83 @@
   "id": "platform-income--branch-1",
   "title": "Proving income from several platforms: The receiver requires a complete total",
   "steps": {
-   "1": "The lender's agent checks the signed statements."
+   "1": "receiver-agent checks its signed local input statements.",
+   "2": "Fictional contributor-2 agent checks its signed local input statements.",
+   "3": "Fictional contributor-3 agent checks its signed local input statements.",
+   "4": "Fictional contributor-4 agent checks its signed local input statements.",
+   "5": "Fictional requester agent sends the complete roster and rules to Fictional contributor-1 agent through its outbound gate.",
+   "6": "Fictional contributor-1 agent checks the incoming message through its inbound gate.",
+   "7": "Fictional requester agent sends the complete roster and rules to Fictional contributor-2 agent through its outbound gate.",
+   "8": "Fictional contributor-2 agent checks the incoming message through its inbound gate.",
+   "9": "Fictional requester agent sends the complete roster and rules to Fictional contributor-3 agent through its outbound gate.",
+   "10": "Fictional contributor-3 agent checks the incoming message through its inbound gate.",
+   "11": "Fictional requester agent sends the complete roster and rules to Fictional contributor-4 agent through its outbound gate.",
+   "12": "Fictional contributor-4 agent checks the incoming message through its inbound gate.",
+   "13": "Fictional requester agent sends the complete roster and rules to Fictional computer agent through its outbound gate.",
+   "14": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "15": "Fictional computer agent commits and attests its own input.",
+   "16": "Fictional computer agent sends its signed contribution to Fictional contributor-1 agent through its outbound gate.",
+   "17": "Fictional contributor-1 agent checks the incoming message through its inbound gate.",
+   "18": "Fictional computer agent sends its signed contribution to Fictional contributor-2 agent through its outbound gate.",
+   "19": "Fictional contributor-2 agent checks the incoming message through its inbound gate.",
+   "20": "Fictional computer agent sends its signed contribution to Fictional contributor-3 agent through its outbound gate.",
+   "21": "Fictional contributor-3 agent checks the incoming message through its inbound gate.",
+   "22": "Fictional computer agent sends its signed contribution to Fictional contributor-4 agent through its outbound gate.",
+   "23": "Fictional contributor-4 agent checks the incoming message through its inbound gate.",
+   "24": "Fictional contributor-1 agent commits and attests its own input.",
+   "25": "Fictional contributor-1 agent sends its signed contribution to Fictional contributor-2 agent through its outbound gate.",
+   "26": "Fictional contributor-2 agent checks the incoming message through its inbound gate.",
+   "27": "Fictional contributor-1 agent sends its signed contribution to Fictional contributor-3 agent through its outbound gate.",
+   "28": "Fictional contributor-3 agent checks the incoming message through its inbound gate.",
+   "29": "Fictional contributor-1 agent sends its signed contribution to Fictional contributor-4 agent through its outbound gate.",
+   "30": "Fictional contributor-4 agent checks the incoming message through its inbound gate.",
+   "31": "Fictional contributor-1 agent sends its signed contribution to Fictional computer agent through its outbound gate.",
+   "32": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "33": "Fictional contributor-2 agent commits and attests its own input.",
+   "34": "Fictional contributor-2 agent sends its signed contribution to Fictional contributor-1 agent through its outbound gate.",
+   "35": "Fictional contributor-1 agent checks the incoming message through its inbound gate.",
+   "36": "Fictional contributor-2 agent sends its signed contribution to Fictional contributor-3 agent through its outbound gate.",
+   "37": "Fictional contributor-3 agent checks the incoming message through its inbound gate.",
+   "38": "Fictional contributor-2 agent sends its signed contribution to Fictional contributor-4 agent through its outbound gate.",
+   "39": "Fictional contributor-4 agent checks the incoming message through its inbound gate.",
+   "40": "Fictional contributor-2 agent sends its signed contribution to Fictional computer agent through its outbound gate.",
+   "41": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "42": "Fictional contributor-3 agent commits and attests its own input.",
+   "43": "Fictional contributor-3 agent sends its signed contribution to Fictional contributor-1 agent through its outbound gate.",
+   "44": "Fictional contributor-1 agent checks the incoming message through its inbound gate.",
+   "45": "Fictional contributor-3 agent sends its signed contribution to Fictional contributor-2 agent through its outbound gate.",
+   "46": "Fictional contributor-2 agent checks the incoming message through its inbound gate.",
+   "47": "Fictional contributor-3 agent sends its signed contribution to Fictional contributor-4 agent through its outbound gate.",
+   "48": "Fictional contributor-4 agent checks the incoming message through its inbound gate.",
+   "49": "Fictional contributor-3 agent sends its signed contribution to Fictional computer agent through its outbound gate.",
+   "50": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "51": "Fictional contributor-4 agent commits and attests its own input.",
+   "52": "Fictional contributor-4 agent sends its signed contribution to Fictional contributor-1 agent through its outbound gate.",
+   "53": "Fictional contributor-1 agent checks the incoming message through its inbound gate.",
+   "54": "Fictional contributor-4 agent sends its signed contribution to Fictional contributor-2 agent through its outbound gate.",
+   "55": "Fictional contributor-2 agent checks the incoming message through its inbound gate.",
+   "56": "Fictional contributor-4 agent sends its signed contribution to Fictional contributor-3 agent through its outbound gate.",
+   "57": "Fictional contributor-3 agent checks the incoming message through its inbound gate.",
+   "58": "Fictional contributor-4 agent sends its signed contribution to Fictional computer agent through its outbound gate.",
+   "59": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "60": "Fictional contributor-1 agent checks every attestation and computes its own private partial.",
+   "61": "Fictional contributor-1 agent sends a private encrypted partial to Fictional computer agent through its outbound gate.",
+   "62": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "63": "Fictional contributor-2 agent checks every attestation and computes its own private partial.",
+   "64": "Fictional contributor-2 agent sends a private encrypted partial to Fictional computer agent through its outbound gate.",
+   "65": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "66": "Fictional contributor-3 agent checks every attestation and computes its own private partial.",
+   "67": "Fictional contributor-3 agent sends a private encrypted partial to Fictional computer agent through its outbound gate.",
+   "68": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "69": "Fictional contributor-4 agent checks every attestation and computes its own private partial.",
+   "70": "Fictional contributor-4 agent sends a private encrypted partial to Fictional computer agent through its outbound gate.",
+   "71": "Fictional computer agent checks the incoming message through its inbound gate.",
+   "72": "Fictional computer agent checks every attestation and computes its own private partial.",
+   "73": "Fictional computer agent combines the encrypted partials and verifies the signed outcome.",
+   "74": "Fictional computer agent sends the verifiable outcome to Fictional requester agent through its outbound gate.",
+   "75": "Fictional requester agent checks the incoming message through its inbound gate.",
+   "76": "Fictional requester agent reads only the admitted facts.",
+   "77": "The scenario checks the gate result without changing it."
   }
  },
  "configuration": {
@@ -82,19 +158,28 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
-  "core": "scripted"
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
+  "core": "scripted",
+  "method": "sparq-aggregate/1",
+  "package": "sparq-verifiable-aggregate",
+  "packageCommit": "61989f5",
+  "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+  "notice": "Research-grade and unaudited."
  },
  "standIns": [
   {
-   "what": "Outside organizations and data sources",
-   "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+   "what": "Contributing organisations",
+   "replacedBy": "Fictional local parties, each with its own pinned identity key and aggregate keys. Joint computation uses the research-grade, unaudited sparq-aggregate/1 method."
   },
   {
-   "what": "Completeness-only preflight",
-   "replacedBy": "A worker-signed list of the four supplied platforms and a configured but absent tax-authority completeness statement; no platform values or joint total are supplied"
+   "what": "Research-grade, unaudited sparq-aggregate/1 participants",
+   "replacedBy": "Contributing organisations are fictional local parties with their own identity and aggregate keys. Real cryptographic evidence is checked by the research-grade, unaudited sparq-verifiable-aggregate package (61989f5)."
   }
  ],
+ "assurance": {
+  "kind": "joint",
+  "assumption": "Research-grade and unaudited. An input stays hidden from a coalition missing at least one other party, beyond what totals and its own inputs reveal; contributors can reconstruct both totals, including on refusal or a threshold verdict."
+ },
  "events": [
   {
    "seq": 1,
@@ -198,9 +283,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:platform-income:supplied-platforms",
-    "text": "Its terms allow this: use for urn:purpose:platform income; share for urn:purpose:platform income."
+    "text": "Its terms allow this: use for Platform income; share for Platform income."
    },
-   "caption": "The self-employed worker's income.platform-list statement: its terms allow this: use for urn:purpose:platform income; share for urn:purpose:platform income."
+   "caption": "The self-employed worker's income.platform-list statement: its terms allow this: use for Platform income; share for Platform income."
   },
   {
    "seq": 5,
@@ -215,14 +300,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:platform-income:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:platform-income:owner"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:platform-income:income.platform-list",
-    "text": "Accept income.platform-list from urn:fictional:platform-income:owner by self-reported, at most 30 days old."
+    "text": "Accept income.platform-list from The self-employed worker by self-reported, at most 30 days old."
    },
-   "caption": "The self-employed worker's income.platform-list statement is fit for urn:scenario:platform-income:task: self-reported, 0 days old."
+   "caption": "The self-employed worker's income.platform-list statement is fit for Proving income from several platforms: self-reported, 0 days old."
   },
   {
    "seq": 6,

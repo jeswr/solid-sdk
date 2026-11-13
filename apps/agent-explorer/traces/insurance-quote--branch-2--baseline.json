@@ -70,10 +70,14 @@
   }
  ],
  "generated": {
-  "commit": "4a6714886ff298451ecc34dcd4ab7ae01e929c3a",
+  "commit": "10c17ba196829248d47b50842b9ac16c4974317c",
   "core": "scripted"
  },
  "standIns": [
+  {
+   "what": "Planned proof method sparq-noir-closed-world/0",
+   "replacedBy": "Purpose-built Noir circuits for absence and totals are not yet delivered. Native dataset commitment preparation remains an open gap from Brief 21."
+  },
   {
    "what": "Outside organizations and data sources",
    "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
@@ -186,9 +190,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:insurance-quote:complete",
-    "text": "Its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+    "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
    },
-   "caption": "The claims register's claims.completeness statement: its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+   "caption": "The claims register's claims.completeness statement: its terms allow this: use for Insurance quote; share for Insurance quote."
   },
   {
    "seq": 5,
@@ -203,14 +207,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:insurance-quote:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:insurance-quote:claims-register"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:insurance-quote:claims.completeness",
-    "text": "Accept claims.completeness from urn:fictional:insurance-quote:claims-register by recorded-by-authority, at most 30 days old."
+    "text": "Accept claims.completeness from The claims register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The claims register's claims.completeness statement is fit for urn:scenario:insurance-quote:task: recorded-by-authority, 0 days old."
+   "caption": "The claims register's claims.completeness statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
   },
   {
    "seq": 6,
@@ -243,7 +257,7 @@
     },
     "terms": {
      "id": "urn:terms:insurance-quote:complete",
-     "summary": "use for urn:purpose:insurance quote; share for urn:purpose:insurance quote"
+     "summary": "use for Insurance quote; share for Insurance quote"
     },
     "provenance": "signed by The claims register"
    },
@@ -351,9 +365,9 @@
    "reason": "terms-acceptable",
    "rule": {
     "id": "urn:terms:insurance-quote:claims",
-    "text": "Its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+    "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
    },
-   "caption": "The claims register's claims.list statement: its terms allow this: use for urn:purpose:insurance quote; share for urn:purpose:insurance quote."
+   "caption": "The claims register's claims.list statement: its terms allow this: use for Insurance quote; share for Insurance quote."
   },
   {
    "seq": 12,
@@ -368,14 +382,24 @@
      "layer": "reliance",
      "suite": "precedence-rules",
      "clause": "CORE-IN-13"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:scenario:insurance-quote:task"
+    },
+    {
+     "layer": "meaning",
+     "suite": "fixed-vocabulary",
+     "id": "urn:fictional:insurance-quote:claims-register"
     }
    ],
    "reason": "fit-for-use",
    "rule": {
     "id": "urn:profile:insurance-quote:claims.list",
-    "text": "Accept claims.list from urn:fictional:insurance-quote:claims-register by recorded-by-authority, at most 30 days old."
+    "text": "Accept claims.list from The claims register by recorded-by-authority, at most 30 days old."
    },
-   "caption": "The claims register's claims.list statement is fit for urn:scenario:insurance-quote:task: recorded-by-authority, 0 days old."
+   "caption": "The claims register's claims.list statement is fit for An insurance quote with the least disclosure: recorded-by-authority, 0 days old."
   },
   {
    "seq": 13,
