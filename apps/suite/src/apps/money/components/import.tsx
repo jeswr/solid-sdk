@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, DropZoneOverlay, LoadingSkeleton } from "@jeswr/suite-ui";
+import { Button, DropZoneOverlay, EmptyState, LoadingSkeleton } from "@jeswr/suite-ui";
 import { Check, FileUp } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -191,66 +192,74 @@ export function ImportScreen() {
             </Button>
           </div>
         )}
-        {step === "choose" && (
-          <>
-            <div className="mon-filter-row">
-              <MoneySelect
-                label="Import into account"
-                value={accountId}
-                onChange={chooseAccount}
-                options={money.accounts.map((a) => ({
-                  value: a.id,
-                  label: `${a.label} · ${a.currency}`,
-                }))}
-              />
-              <Button variant="outline" onClick={() => setAdd(true)}>
-                Create an account
-              </Button>
-            </div>
-            <DropZoneOverlay
-              folderName="Money"
-              onFiles={(files) => {
-                if (files.files.length !== 1) {
-                  setError("Choose one statement at a time.");
-                  return;
-                }
-                return readFile(files.files[0]?.file);
-              }}
-            >
-              <div className="mon-drop">
-                <FileUp size={36} aria-hidden="true" />
-                <p>Drop a statement here</p>
-                <span className="mon-hint">CSV, OFX or QFX · up to 10 MiB</span>
-                <label className="mon-file-picker">
-                  Choose file
-                  <input
-                    ref={fileInput}
-                    aria-label="Statement file"
-                    type="file"
-                    accept=".csv,.tsv,.ofx,.qfx,.pdf,text/csv"
-                    onChange={(event) => void readFile(event.target.files?.[0])}
-                  />
-                </label>
+        {step === "choose" && !money.accounts.length ? (
+          <EmptyState
+            title="No account to import into yet"
+            body="Create an account to bring its transactions into Money from a statement."
+            primaryAction={<Button onClick={() => setAdd(true)}>Create an account</Button>}
+          />
+        ) : (
+          step === "choose" && (
+            <>
+              <div className="mon-filter-row">
+                <MoneySelect
+                  label="Import into account"
+                  value={accountId}
+                  onChange={chooseAccount}
+                  options={money.accounts.map((a) => ({
+                    value: a.id,
+                    label: `${a.label} · ${a.currency}`,
+                  }))}
+                />
+                <Button variant="outline" onClick={() => setAdd(true)}>
+                  Create an account
+                </Button>
               </div>
-            </DropZoneOverlay>
-            {file && (
-              <p role="status">
-                {file.name} · {file.format.toUpperCase()} ready
-              </p>
-            )}
-            {busy && <LoadingSkeleton preset="list" />}
-            <div className="mon-wizard-actions">
-              <Button
-                disabled={!file || !account || busy}
-                onClick={() => {
-                  if (file?.format === "csv") setStep("map");
-                  else void preview();
+              <DropZoneOverlay
+                folderName="Money"
+                onFiles={(files) => {
+                  if (files.files.length !== 1) {
+                    setError("Choose one statement at a time.");
+                    return;
+                  }
+                  return readFile(files.files[0]?.file);
                 }}
               >
-                Continue
-              </Button>
-            </div>
-          </>
+                <div className="mon-drop">
+                  <FileUp size={36} aria-hidden="true" />
+                  <p>Drop a statement here</p>
+                  <span className="mon-hint">CSV, OFX or QFX · up to 10 MiB</span>
+                  <label className="mon-file-picker">
+                    Choose file
+                    <input
+                      ref={fileInput}
+                      aria-label="Statement file"
+                      type="file"
+                      accept=".csv,.tsv,.ofx,.qfx,.pdf,text/csv"
+                      onChange={(event) => void readFile(event.target.files?.[0])}
+                    />
+                  </label>
+                </div>
+              </DropZoneOverlay>
+              {file && (
+                <p role="status">
+                  {file.name} · {file.format.toUpperCase()} ready
+                </p>
+              )}
+              {busy && <LoadingSkeleton preset="list" label="Reading statement" />}
+              <div className="mon-wizard-actions">
+                <Button
+                  disabled={!file || !account || busy}
+                  onClick={() => {
+                    if (file?.format === "csv") setStep("map");
+                    else void preview();
+                  }}
+                >
+                  Continue
+                </Button>
+              </div>
+            </>
+          )
         )}
         {step === "map" && mapping && (
           <>
@@ -501,7 +510,12 @@ export function ImportScreen() {
           </>
         )}
         {step === "import" && (
-          <div className="mon-import-progress" role="status" aria-live="polite">
+          <div
+            className="mon-import-progress"
+            role="status"
+            aria-label="Saving statement"
+            aria-live="polite"
+          >
             <p>Saving statement and transactions…</p>
             <progress
               value={progress.done}

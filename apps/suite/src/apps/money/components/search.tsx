@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState } from "@jeswr/suite-ui";
@@ -53,11 +54,23 @@ export function SearchScreen() {
           </ul>
         ) : (
           <EmptyState
-            variant="no-results"
+            variant={query ? "no-results" : "first-use"}
+            title={
+              query
+                ? undefined
+                : money.transactions.length
+                  ? "No transactions in the last 24 months"
+                  : "No transactions to search yet"
+            }
+            body={
+              query ? undefined : "Import a statement to search your transactions across accounts."
+            }
             query={query}
             primaryAction={
               <Button variant="outline" asChild>
-                <Link href="/money">Go to overview</Link>
+                <Link href={query ? "/money/search" : "/money/import"}>
+                  {query ? "Clear search" : "Import a statement"}
+                </Link>
               </Button>
             }
           />

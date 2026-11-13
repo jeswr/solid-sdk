@@ -1125,3 +1125,19 @@
     grid-column: 2;
   }
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.mon-read-notice {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-end: var(--space-5);
+}
+.mon-read-notice .mon-read-copy {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.mon-read-notice p {
+  margin: 0;
+}

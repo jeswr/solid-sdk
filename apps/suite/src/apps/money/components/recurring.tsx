@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { EmptyState } from "@jeswr/suite-ui";
+import { Button, EmptyState } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useMemo } from "react";
 import { encodeRef } from "@/lib/refs";
@@ -91,8 +92,13 @@ export function RecurringScreen() {
       {!payments.length ? (
         <section className="mon-panel">
           <EmptyState
-            title="Nothing repeating yet"
-            body="A payment shows up here once it has happened three times on a regular schedule: weekly, every 2 weeks, monthly or yearly."
+            title="No recurring payments yet"
+            body="Import statements to find bills and income that repeat at least three times on a regular schedule."
+            primaryAction={
+              <Button asChild>
+                <Link href="/money/import">Import a statement</Link>
+              </Button>
+            }
           />
         </section>
       ) : (

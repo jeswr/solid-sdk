@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState } from "@jeswr/suite-ui";
@@ -42,15 +43,10 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
         <section className="mon-panel">
           <h2>Get started</h2>
           <EmptyState
-            title="Your money starts here"
+            title="No accounts yet"
             body="Add an account, then bring in a statement to see the full picture."
             icon={<Wallet aria-hidden="true" />}
             primaryAction={<Button onClick={() => setAdd(true)}>Add an account</Button>}
-            secondaryAction={
-              <Button asChild variant="outline">
-                <Link href="/money/import">Import a statement</Link>
-              </Button>
-            }
           />
         </section>
       ) : (
