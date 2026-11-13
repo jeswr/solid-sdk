@@ -17,7 +17,11 @@ describe("fetch PodPort", () => {
       link: '<other>; title="view, not an ACL"; rel="alternate", <permissions>; rel="acl"',
     });
     const pod = createFetchPodPort({ fetch, podRoot: ROOT });
-    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}permissions` });
+    expect(await pod.head?.(FILE)).toEqual({
+      acl: `${ROOT}permissions`,
+      auxiliaryResources: [`${ROOT}permissions`],
+      exists: status !== 404,
+    });
     expect(fetch).toHaveBeenCalledWith(
       FILE,
       expect.objectContaining({ method: "HEAD", redirect: "manual", cache: "no-cache" }),
@@ -42,7 +46,7 @@ describe("fetch PodPort", () => {
     '<a>; rel="alternate"; title="rel=acl"',
   ])("retains an empty association set for valid metadata without auxiliary links: %s", async (link) => {
     const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
-    expect(await pod.head?.(FILE)).toEqual({});
+    expect((await pod.head?.(FILE))?.acl).toBeUndefined();
   });
 
   it.each([

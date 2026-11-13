@@ -16,7 +16,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
-import { auxiliaryLinks } from "./wac-link.js";
+import { auxiliaryLinks, auxiliaryResourceLinks } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -43,6 +43,10 @@ export interface PodHeadResult {
   acl?: string;
   /** Absolute targets of every unanchored server `rel="describedby"` Link. */
   describedby?: string[];
+  /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
+  auxiliaryResources?: readonly string[];
+  /** Whether the exact target exists (false on HTTP 404). */
+  exists?: boolean;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -157,13 +161,15 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       });
       void response.body?.cancel().catch(() => {});
       if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
-        throw new Error("WAC ACL discovery failed");
-      const links = auxiliaryLinks(response.headers.get("link") ?? "");
+        throw Object.assign(new Error("WAC ACL discovery failed"), { status: response.status });
+      const header = response.headers.get("link") ?? "";
+      // Preserve strict governing-association discovery as well as the complete link set.
+      // Never turn malformed, ambiguous or unsupported metadata into an empty success.
+      const links = auxiliaryLinks(header, target);
       return {
-        ...(links.acl ? { acl: new URL(links.acl, target).href } : {}),
-        ...(links.describedby
-          ? { describedby: links.describedby.map((url) => new URL(url, target).href) }
-          : {}),
+        ...links,
+        auxiliaryResources: auxiliaryResourceLinks(header, target),
+        exists: response.status !== 404,
       };
     },
     async read(url, options: PodReadOptions = {}) {

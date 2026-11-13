@@ -41,10 +41,12 @@ export function proofOf(request, token) {
   return { ...claims, jwk };
 }
 
-export function mockCss() {
+/** `chatAcl: false` withholds chat ACL discovery (no `rel="acl"` Link) to exercise refusal. */
+export function mockCss({ chatAcl = true } = {}) {
   const stats = { tokens: 0, discoveries: 0, reads: 0, writes: 0 };
   const proofs = [];
   const chats = new Map();
+  const written = new Map();
   const fetch = async (input, init) => {
     const request = new Request(input, init);
     assert.equal(request.redirect, "manual");
@@ -85,7 +87,7 @@ export function mockCss() {
       if (request.method === "HEAD")
         return new Response(null, {
           status: resource === undefined ? 404 : 200,
-          headers: { link: `<${request.url}.acl>; rel="acl"` },
+          headers: chatAcl ? { link: `<${request.url}.acl>; rel="acl"` } : {},
         });
       if (request.method === "PUT") {
         stats.writes++;
@@ -118,9 +120,19 @@ export function mockCss() {
       }
       return new Response(body, { headers: { "content-type": "text/turtle" } });
     }
+    if (request.method === "HEAD")
+      return new Response(null, {
+        status:
+          request.url === POD || request.url === `${POD}note` || written.has(request.url)
+            ? 200
+            : 404,
+      });
     if (request.method === "PUT") {
+      if (request.headers.get("if-none-match") === "*" && written.has(request.url))
+        return new Response(null, { status: 412 });
       stats.writes++;
       assert.equal(await request.text(), "hello fixture");
+      written.set(request.url, "hello fixture");
       return new Response(null, { status: 201 });
     }
     if (request.url === `${POD}stats`) return Response.json(stats);

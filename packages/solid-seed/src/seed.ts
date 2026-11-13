@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY GPT-5.6 Sol via codex
 // AUTHORED-BY Claude Opus 5.5
 
-import { parseLinkHeaders } from "@jeswr/storage-capabilities";
+import { isAuxiliaryResourceTarget, parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { GeneratedInstance } from "@jeswr/synthetic-rdf";
 import type { Quad, Term } from "@rdfjs/types";
 import { Parser } from "n3";
@@ -59,26 +60,11 @@ function instanceKey(shape: string, index = 0): string {
   return `${shape}\u0000${index}`;
 }
 
-/**
- * True when the path percent-encodes a character that needs no encoding (RFC 3986
- * unreserved), "/", "\\" or "%" (a double encoding whose meaning depends on how
- * many times the server decodes). Servers such as CSS decode and re-encode each segment
- * before lookup, so `/x.%61cl` would reach `/x.acl`; the only legitimate escapes
- * are for characters that must be escaped.
- */
-function encodesPlainCharacter(path: string): boolean {
-  for (const [, hex] of path.matchAll(/%([0-9a-f]{2})/gi)) {
-    if (/[A-Za-z0-9._~/\\%-]/.test(String.fromCharCode(Number.parseInt(hex as string, 16))))
-      return true;
-  }
-  return false;
-}
-
 function resolveResource(baseUrl: string, path: string): string {
   const base = assertHttpIri(baseUrl, "SeedTarget.baseUrl", { requireOrigin: true });
   // Auxiliary resources (.acl, .acr, .meta) are never seeded as data, including
   // through a percent-encoded dot a server may decode before mapping the path.
-  if (!path.startsWith("/") || /\.(acl|acr|meta)$/i.test(path) || encodesPlainCharacter(path)) {
+  if (!path.startsWith("/") || isAuxiliaryResourceTarget(path)) {
     throw new Error(
       `resource path must start with "/", must not target an auxiliary resource and must not percent-encode an unreserved character, "/" or "\\": ${path}`,
     );

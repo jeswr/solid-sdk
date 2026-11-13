@@ -99,6 +99,7 @@ export {
   CHAT_ROLES,
   ChatWriter,
   chatPortStatus,
+  ownerOnlyChatAcl,
   validateWacAcl,
 } from "./chat-writer.js";
 export { ConversationProvenanceDoc } from "./conversation-provenance.js";

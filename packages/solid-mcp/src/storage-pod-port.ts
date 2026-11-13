@@ -11,7 +11,9 @@ import {
   writesEnabled,
 } from "./auth.js";
 import { parseBoundedRdf } from "./bounded-rdf.js";
+import { requireContainerCreationBody } from "./container-mutation.js";
 import { limitedBody, mediaType, RDF_MEDIA_TYPES } from "./content.js";
+import { requireWriteConditions } from "./generic-mutation.js";
 import { podOperationFetch, withPodReadMode } from "./pod-operation.js";
 import {
   configurePodSearchLimits,
@@ -147,6 +149,7 @@ export function createStoragePodPort(
       // storage-client's '*' means unconditional; PodPort's explicit wildcard
       // requires an existing representation. Refuse rather than drop that guard.
       if (cond.ifMatch === "*") throw new Error("Unsupported wildcard update precondition");
+      requireWriteConditions(cond);
       const backend = await storage();
       let result: Awaited<ReturnType<StorageClient["write"]>>;
       if (cond.ifNoneMatch === "*") {
@@ -158,25 +161,7 @@ export function createStoragePodPort(
         if (parsed.search || parsed.hash || /[?#]/u.test(url))
           throw new Error("Invalid create target");
         const container = parsed.pathname.endsWith("/");
-        if (container && body.byteLength) {
-          const dataset = await parseBoundedRdf(
-            new TextDecoder().decode(body),
-            contentType,
-            target,
-          );
-          for (const quad of dataset) {
-            if (
-              quad.subject.value !== target ||
-              quad.predicate.value !== "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" ||
-              quad.object.termType !== "NamedNode" ||
-              !["Container", "BasicContainer", "DirectContainer", "IndirectContainer"].some(
-                (type) => quad.object.value === `http://www.w3.org/ns/ldp#${type}`,
-              ) ||
-              quad.graph.termType !== "DefaultGraph"
-            )
-              throw new Error("Container creation cannot preserve user metadata");
-          }
-        }
+        await requireContainerCreationBody(target, body, contentType);
         const path = target.replace(/\/$/u, "");
         const slash = path.lastIndexOf("/");
         const name = decodeURIComponent(path.slice(slash + 1));
@@ -192,7 +177,7 @@ export function createStoragePodPort(
       } else {
         result = await backend.write(target, body, {
           contentType,
-          ifMatch: cond.ifMatch ?? "*",
+          ifMatch: cond.ifMatch,
         });
       }
       return { etag: result.etag ?? undefined };

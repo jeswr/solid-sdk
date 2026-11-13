@@ -135,11 +135,16 @@ it("performs SDK DCR + PKCE + Solid login + consent and calls every tool on priv
   const json = async (name: string, args: Record<string, unknown>) =>
     JSON.parse(await call(name, args));
   const url = `${account.podRoot}private/mcp-note.txt`;
-  for (const name of ["pod_write", "solid_write"])
-    await call(name, { url, content: "roundtrip through MCP", contentType: "text/plain" });
+  const write = { url, content: "roundtrip through MCP", contentType: "text/plain" };
+  expect(await call("pod_write", write)).toContain("wrote");
+  // Replacement without the current ETag is refused; with it, the alias replaces in place.
+  expect(await call("solid_write", write, true)).toContain("ETag");
+  const etag = (await call("pod_read", { url })).match(/^ETag: (.+)$/m)?.[1];
+  expect(etag).toBeTruthy();
+  expect(await call("solid_write", { ...write, ifMatch: etag })).toContain("wrote");
   expect([401, 403]).toContain((await fetch(url)).status);
   for (const name of ["pod_read", "solid_read"])
-    expect(await call(name, { url })).toBe("roundtrip through MCP");
+    expect(await call(name, { url })).toMatch(/^roundtrip through MCP\nETag: "[^"\n]+"$/);
   for (const name of ["pod_list", "solid_list"])
     expect(await call(name, { container: `${account.podRoot}private/` })).toContain("mcp-note.txt");
   expect((await json("fetch", { id: url })).text).toBe("roundtrip through MCP");

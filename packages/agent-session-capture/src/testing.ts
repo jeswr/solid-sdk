@@ -15,6 +15,8 @@ export interface CaptureRequest {
 export function createCaptureTestTransport() {
   const requests: CaptureRequest[] = [];
   const resources = new Map<string, string>();
+  const etags = new Map<string, string>();
+  let revision = 0;
   const httpTransport: SolidMcpConfig["fetch"] = async (input, init) => {
     const request = new Request(input, init);
     const { url, method, headers } = request;
@@ -34,13 +36,20 @@ export function createCaptureTestTransport() {
     if (method === "PUT") {
       if (headers.get("if-none-match") === "*" && resources.has(url))
         return new Response(null, { status: 412 });
+      if (headers.has("if-match") && headers.get("if-match") !== etags.get(url))
+        return new Response(null, { status: 412 });
       resources.set(url, body);
-      return new Response(null, { status: 201 });
+      const etag = `"capture-${++revision}"`;
+      etags.set(url, etag);
+      return new Response(null, { status: 201, headers: { etag } });
     }
     const stored = resources.get(url);
     return new Response(stored, {
       status: stored === undefined ? 404 : 200,
-      headers: { "content-type": "text/turtle" },
+      headers: {
+        "content-type": "text/turtle",
+        ...(etags.has(url) ? { etag: etags.get(url) as string } : {}),
+      },
     });
   };
   return { fetch: httpTransport, requests, resources };
