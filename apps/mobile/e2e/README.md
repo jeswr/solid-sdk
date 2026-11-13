@@ -1,6 +1,6 @@
 <!-- AUTHORED-BY GPT-5.6 Codex -->
 <!-- AUTHORED-BY Codex GPT-6 -->
-# Mobile native WebView fixture harness (MOB-07a / MOB-07b)
+# Mobile native WebView end-to-end harnesses (MOB-07)
 
 iOS secure-store accepted residual (S4/S9): a commit after the final generation check but before Capacitor's queued JavaScript delivery may expose an already unlocked value to the allowed same-origin replacement document's `Capacitor.fromNative` wrapper; S9 cancels prompts and does not withdraw unlocked values.
 
@@ -247,21 +247,105 @@ xcresulttool execution require that macOS CI run; Linux host tests cannot verify
 **iOS share-in via another app's share sheet is deferred:** XCUITest cannot reliably drive
 another application's share sheet into this Share Extension. This lane does not simulate
 share-in through a debug bridge. `report-ios.json` records `shareIn` and `shareListener` as
-`deferred`, separately from the MOB-06-dependent real-suite scenario below. A subscription
+`deferred`, separately from the real-suite Android scenario below. A subscription
 request alone never establishes native listener registration or delivery.
 
-## Real-suite follow-up
+## Real-suite Android scenario (MOB-07, sst-8wx.7)
 
-The MOB-07 work tracked by **sst-8wx.7** retains the MOB-06-dependent real sign-in and
-authenticated pod read check. This fixture run explicitly records it as `deferred`, never
-as passing. The phase boundary is the fixture driver's exit and cleanup: add a following CI
-step that syncs/builds/installs a **separate debug build** whose SUITE_URL serves the real
-suite, then runs a dedicated real-suite scenario driver with its own report. Fixture globals
-must not be assumed there. Keep the fixture checks running independently.
+`android-real-suite.mjs` runs separately from the fixture drivers and writes
+`artifacts/report-real-suite.json`. It builds and installs a **separate debug APK** from the
+real native export. It never assumes fixture globals or inserts sessions/tokens into the
+WebView. The fixture report's legacy real-suite deferral describes that fixture's scope;
+this scenario supplies the separate integration evidence.
 
-The follow-up must seed a pinned local CSS instance, drive the real suite's native sign-in
-through the Custom Tab and scheme callback, and read a private pod resource through the
-suite's authenticated fetch. First assert an anonymous 401/403 for that resource and then
-assert the exact authenticated body. Wire readiness and result evidence through a dedicated
-scenario function, with login timeout as a failure. Do not emulate successful sign-in with
-fixture JavaScript, pass credentials/tokens through CDP logs, or label this run a sign-in test.
+Requires Node 24, pnpm, OpenSSL, Java 21, Android SDK 36/build-tools 36.0.0 and a **disposable,
+booted API 35 google_apis x86_64 emulator with Chrome and adb root**. The driver clears both
+Chrome and suite app data and selects Chrome as the default browser. `ANDROID_SERIAL` selects
+the emulator; otherwise exactly one connected device must be a booted emulator. Ports
+**8443**, **9223** and **9224** must be free. No Playwright/browser download or new dependency
+is needed: Custom Tab automation uses Chrome's on-device DevTools socket.
+
+From the workspace root:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm exec turbo run build --filter='@jeswr/app-suite^...'
+ANDROID_SERIAL=emulator-5554 node apps/mobile/e2e/android-real-suite.mjs
+```
+
+The driver owns these seven scenarios, each with bounded readiness/result waits and a report entry:
+
+1. Start the existing **CSS 7.2.0** pin from `tools/storage-conformance`, isolated using the web
+   suite's Components.js dependency-closure approach. Its in-memory backend listens on a private
+   temporary Unix socket behind a TLS listener bound only to **127.0.0.1:8443**. Seed a fresh
+   account, password login and pod through the same CSS account controls as `shell-css`, with
+   CSS's own profile templates providing name and storage links. Host-only client credentials
+   arrange a private text file and verify its exact body. Require anonymous **401/403**.
+   Serve `mobileClientIdDocument` at its exact local HTTPS client ID, dereferenceable by CSS.
+2. Build the real `build:native` export with `NEXT_PUBLIC_APP_BASE_URL=https://localhost`,
+   `NEXT_PUBLIC_PUBLIC_SUITE_URL=https://127.0.0.1:8443`, and
+   `NEXT_PUBLIC_CLIENT_ID_URL=https://127.0.0.1:8443/.well-known/solid-client-id-mobile.jsonld`.
+   CSS uses the IP literal because bundled builds refuse every other `localhost` origin.
+   Sync with `SUITE_MODE=bundled MOBILE_DEBUG=1`, verify no remote `server.url`, compile
+   `assembleDebug`, and retain a separate APK in the private temporary directory. No production
+   defaults change; the existing `org.jeswr.suite:/oauth/callback` scheme remains registered.
+3. Reverse 8443 through adb, install that APK, clear the suite's data and launch its real
+   `https://localhost` WebView. Only its PID's DevTools socket is selected. The app is bundled;
+   no fixture HTTP server participates.
+4. Submit the suite's WebID form. Observe the actual Chrome Custom Tab activity, drive CSS's
+   real email/password and consent forms through **the Custom Tab's CDP**, and wait for the
+   signed-in Home greeting from the suite's ready PodSession. CSS's outgoing scheme redirect must contain code/state/iss;
+   only a boolean is retained. The signed-in app and subsequent private read establish completion
+   of the native callback/token exchange; the suite's own driver validates state and issuer.
+   Require CSS to have fetched the Client ID Document. A login timeout **fails**, with no skip.
+5. Assert anonymous denial again, then open the actual Drive file preview route. Its production
+   `client.read()` goes through `PodSession.fetch`; read `.drv-preview-text` over CDP and compare
+   **the complete body exactly**, including newline and Unicode. No token is extracted.
+6. Send a unique `ACTION_SEND` text, including shell metacharacters, and require exactly that
+   item on `/share` with “Save to Suite” and the controls that render only for a ready
+   signed-in ShareSession. Discard through the UI.
+7. Create a real external MediaStore PDF, write and read back its exact source bytes, then send
+   its typed `content://media/external/file/...` URI with a read grant using `ACTION_SEND`.
+   Require its exact name, MIME type and byte count in the signed-in `/share` screen
+   (the shared-item list renders only after its session is ready).
+   Discard through the UI. No pod save is triggered.
+
+Each run creates a two-day localhost certificate and private key outside the repository. Node
+trusts that certificate through `NODE_EXTRA_CA_CERTS`. The debug APK temporarily includes that
+single certificate as a debug trust anchor. Chrome's test command line bypasses certificate
+errors only for that certificate's SHA-256 SPKI; it does not disable web security or OAuth
+validation. This tests native auth with a local TLS service, not public CA deployment.
+The driver restores the original iOS plist, Capacitor Gradle files/config and Android debug
+network policy in `finally`, removes its temporary trust resource, forwards/reverse, Chrome
+flags, source MediaStore entry, CSS server and temporary key/APK directory, and stops both apps.
+It leaves the chosen browser and cleared app data on the disposable emulator.
+
+Reports contain public evidence and fixed failure labels only. CSS/subprocess output and CDP
+console/network events are never printed. Credentials enter only CSS's actual system-browser
+form; protocol values are never returned by CDP or written to the report. Failure logcat is
+redacted before writing `artifacts/logcat-real-suite.txt`; callback URLs, token/credential lines
+and disposable secrets are removed. The independent
+`.github/workflows/mobile-real-suite.yml` uses the existing KVM/SDK/AVD setup and action versions,
+runs on scoped PRs/main pushes, and uploads the report, emulator log and sanitized logcat.
+The existing `mobile.yml` fixture job remains independent and unchanged.
+
+Host-only checks:
+
+```sh
+pnpm --filter @jeswr/app-mobile test
+node --check apps/mobile/e2e/android-real-suite.mjs
+node --check apps/mobile/e2e/real-suite-server.mjs
+# Starts/seeds/verifies CSS and shuts down, without an APK or sign-in claim:
+node apps/mobile/e2e/android-real-suite.mjs --seed-only
+```
+
+`--seed-only` records `status: "seed-only"`, never an end-to-end pass. It still requires local
+socket/listener permission. The host tests cover fail-closed login/private-body verdicts, share
+intent arguments/quoting, signed-in share DOM verdicts, report completion and log redaction.
+
+This lane proves the native browser leg, scheme return, authenticated private pod read and
+Android text/file intake **only when its emulator run passes**. Host tests and seed-only runs
+cannot establish those properties. It does not prove refresh/restore across process death,
+secure-store biometric behavior (covered separately by the fixture), saving incoming shares to
+a pod, file byte identity after intake, share-out/chooser UX, public TLS deployment, physical
+devices, iOS sign-in or iOS share-sheet intake. Those limitations remain explicit.
