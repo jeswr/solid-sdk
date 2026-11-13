@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The **file-import** adapter registry — the export-file analogue of the
- * OAuth `ADAPTERS` list in `registry.ts`. Each of the 10 Tier-C catalog entries
+ * OAuth `ADAPTERS` list in `registry.ts`. Each of the 11 Tier-C catalog entries
  * has a parser that turns the platform's official data export into pod RDF.
  *
  * A Tier-B entry may ALSO appear here (Garmin): when the platform's OAuth API
@@ -8,6 +9,7 @@
  * adapter complements the OAuth adapter under the same catalog id and the
  * connect page shows both paths.
  */
+import { activityFilesAdapter } from "./activity-files/file-adapter.js";
 import { amazonOrdersFileAdapter } from "./amazon-orders/file-adapter.js";
 import { appleHealthFileAdapter } from "./apple-health/file-adapter.js";
 import { bankStatementsFileAdapter } from "./bank-statements/file-adapter.js";
@@ -21,8 +23,9 @@ import { steamFileAdapter } from "./steam/file-adapter.js";
 import { uberFileAdapter } from "./uber/file-adapter.js";
 import { whatsappFileAdapter } from "./whatsapp/file-adapter.js";
 
-/** The 10 Tier-C file-import adapters plus the Tier-B hybrids (Garmin). */
+/** The 11 Tier-C file-import adapters plus the Tier-B hybrids (Garmin). */
 export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
+  activityFilesAdapter,
   netflixFileAdapter,
   amazonOrdersFileAdapter,
   uberFileAdapter,
