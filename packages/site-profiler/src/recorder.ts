@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Records every same-origin request a browser context makes, without credentials, and enforces the
 // learning rule: outside a demonstration (or the user-authorised login) no non-GET request leaves
@@ -5,12 +6,12 @@
 
 import type { BrowserContext, Request, Response } from "playwright";
 import type { Phase, RecordedRequest } from "./types.js";
-import { truncate } from "./util.js";
+import { isDangerousLink, isStatic, truncate } from "./util.js";
 
 export const BODY_LIMIT = 256 * 1024;
 
 const SENSITIVE_FIELD =
-  /pass(word)?|pwd|secret|token|csrf|xsrf|otp|cvv|cvc|card-?number|cardnumber|pin$/i;
+  /pass(word)?|pwd|secret|token|csrf|xsrf|otp|cvv|cvc|card-?number|cardnumber|form[_-]?key|pin$/i;
 const SENSITIVE_HEADER = /csrf|xsrf|token|api-?key|secret|session/i;
 const TEXT_TYPES = /text\/|json|javascript|xml|x-www-form-urlencoded/i;
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -95,6 +96,8 @@ export function sanitiseHeaders(headers: Record<string, string>): {
 
 export class Recorder {
   phase: Phase = "crawl";
+  /** Only the chosen password form may send a write during login. */
+  loginTarget: string | undefined;
   demonstration: string | undefined;
   readonly trace: RecordedRequest[] = [];
   private seq = 0;
@@ -112,7 +115,18 @@ export class Recorder {
   async attach(context: BrowserContext): Promise<void> {
     await context.route("**/*", async (route) => {
       const req = route.request();
-      if (!SAFE_METHODS.has(req.method().toUpperCase()) && !this.writesAllowed()) {
+      const unsafeGet =
+        req.method() === "GET" &&
+        ["document", "xhr", "fetch"].includes(req.resourceType()) &&
+        !isStatic(req.url(), req.resourceType()) &&
+        isDangerousLink(req.url());
+      const allowedWrite =
+        this.phase === "demonstration" ||
+        (this.phase === "login" && req.method() === "POST" && req.url() === this.loginTarget);
+      if (
+        (unsafeGet && !this.writesAllowed()) ||
+        (!SAFE_METHODS.has(req.method().toUpperCase()) && !allowedWrite)
+      ) {
         this.blocked.add(req);
         const entry = this.entries.get(req);
         if (entry) entry.blocked = true;

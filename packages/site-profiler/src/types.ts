@@ -151,6 +151,12 @@ export interface Demonstration {
 export interface ProfileOptions {
   startUrl: string;
   maxPages?: number;
+  /** Hard deadline for the complete learning run. Default 180000 ms. */
+  maxProfileMs?: number;
+  /** Per-page navigation bound (default 15000 ms). */
+  navigationTimeoutMs?: number;
+  /** Post-navigation network-idle bound (default 5000 ms). */
+  networkIdleTimeoutMs?: number;
   login?: { username: string; password: string };
   demonstrations?: Demonstration[];
   labeller?: Labeller;

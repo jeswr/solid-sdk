@@ -114,3 +114,14 @@ Execution rules:
   contract, advances accepted revisions and reports stale updates as rejected.
 - no-path returns safe missing required input names from the closest matching action candidate.
   Do not invent a name/search query from an IRI. Keep diagnostics free of URLs and binding specs.
+
+Session-protected list replay:
+- `sab:operation` may select only a known operation/flow by exact IRI or catalogue fragment;
+  explicit object classes narrow reads by extraction type. Both paths retain every gate and
+  input check. Do not resolve unspecified ties arbitrarily.
+- A query CSRF target naming one unbound whole simple path slot is session decoration. Reject
+  embedded/reserved/duplicate occurrences, approved-input collisions, dot segments and encoded
+  separators. Keep decoration after authorization and out of fingerprints. Test adversarial values.
+- Decode RFC 6570-encoded form field names once at the wire boundary. Keep query names encoded
+  through template expansion. An expired session returning an HTTP 200 HTML password form must
+  fail as no-session, including probes performed by the host login adapter.

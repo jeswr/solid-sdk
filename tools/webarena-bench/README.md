@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/webarena-bench
 
@@ -34,7 +35,7 @@ is ignored and must never be committed.
 
 The example ports come from the reference's `environments/container/config.py`: shopping
 7770, shopping_admin 7780, reddit 9999 and gitlab 8023. Edit these for the VM or use Mac
-SSH forwards binding 127.0.0.1. The admin base includes `/admin`. The executor permits
+SSH forwards binding 127.0.0.1. The admin profile starts at `/admin` (`startPath`); its environment base can stay at the origin. The executor permits
 HTTPS or loopback HTTP, so a plain HTTP VM address needs a loopback forward or HTTPS.
 The VM applications must generate links/redirects using those same accessible origins;
 forwarding a port alone does not rewrite server-generated absolute URLs.
@@ -75,15 +76,18 @@ a new output root for a repeat/model comparison.
 
 ## Profile once; demonstrations are site-generic
 
-`profile` calls `profileSite` with that site's base URL, login, page bound and verification.
+`profile` calls `profileSite` with that site's base URL (or its optional `startPath`), login,
+page bound and verification. `profileTimeoutMs` defaults to 180000 and bounds the whole profile;
+`maxPages` defaults to 40 attempted pages. `startPath` resolves on the configured origin and
+cannot leave the site. Environment URLs used by the evaluator retain `baseUrl`.
 Its crawl/probes/verification are read-only; the profiler blocks non-GET requests outside
 login and declared demonstrations. Models go to `models/<site>.ttl`, with a companion
 `<site>.profile.json` recording warnings and demonstration names/digest. Failed login or
 an undemonstrated non-login write prevents saving. No benchmark task is loaded by `profile`.
 
 Writes require **generic per-site demonstrations recorded once**, independently of task
-selection. No live recordings are bundled: this implementation environment cannot reach
-the VM. Until a recording is supplied, the learned model supports its discovered reads
+selection. No live mutation recordings are bundled. The local disposable admin fixture has been exercised
+with read-only profiling and executor acceptance. Until a recording is supplied, the learned model supports its discovered reads
 and login only. Record interactions through the normal UI, using disposable data, then
 encode the selectors/values in a JSON recording and set that site's `demonstrations` config
 path. Never derive recordings from a task intent, expected result, evaluator rule or API doc.
@@ -219,7 +223,53 @@ success measurements.
 NetworkTrace and NetworkEvent implementations against generated fixtures. It needs the
 local reference at the workspace root plus Python 3/pydantic. Its small Python loader
 resolves only the public-types/parser import cycle, avoiding package initialization of
-the unrelated evaluator stack; no parsing/evaluation algorithm is replaced. The complete
-Python evaluator could not start in this offline build environment because `jsonpath_ng`
-is absent. Full scoring and live profiling must be validated on the Mac with the pinned
-Python installation and reachable VM.
+the unrelated evaluator stack; no parsing/evaluation algorithm is replaced. Full Python scoring needs the pinned evaluator environment and reachable applications.
+It is separate from the opt-in local profiling/executor acceptance below; that acceptance
+invokes no evaluator or planner and establishes no benchmark score.
+
+## Opt-in local live acceptance (no planner)
+
+With the disposable public benchmark admin fixture at 127.0.0.1:7780, an ignored config can use:
+
+```json
+{
+  "dataset": "test/fixtures/dataset.json",
+  "modelsDir": "models",
+  "maxPages": 16,
+  "profileTimeoutMs": 180000,
+  "sites": {
+    "shopping_admin": { "baseUrl": "http://127.0.0.1:7780", "startPath": "/admin",
+      "login": { "username": "admin", "password": "admin1234" } },
+    "shopping": { "baseUrl": "http://127.0.0.1:7770", "login": null },
+    "reddit": { "baseUrl": "http://127.0.0.1:9999", "login": null },
+    "gitlab": { "baseUrl": "http://127.0.0.1:8023", "login": null }
+  }
+}
+```
+
+The dataset is unused by `profile`; the example points at a fictional fixture. Real benchmarking
+still needs the reference dataset and provisioned accounts. Run only these commands for read
+acceptance:
+
+```sh
+node tools/webarena-bench/dist/cli.js profile --site shopping_admin
+SAB_LIVE_SITE_URL=http://127.0.0.1:7780/admin \
+  SAB_LIVE_OUTPUT_DIR=/tmp/sab-live \
+  pnpm -w exec vitest run --root tools/webarena-bench test/live.test.ts
+```
+
+The test is skipped unless `SAB_LIVE_SITE_URL` is set. `SAB_LIVE_USERNAME` and
+`SAB_LIVE_PASSWORD` override the public fixture account; `SAB_LIVE_OUTPUT_DIR` optionally saves
+the learned model/profile and three Turtle observations. It signs in, profiles at most 16 pages
+under a three-minute profile deadline, requires verified signed-in list/search reads for orders,
+customers and products, checks refusal without a session, then logs in afresh through the learned
+LoginRoute. It prints RDF for customer names containing Emma, the five most recent orders with
+totals/statuses and a product-name search. Only sign-in may POST. No task intent, reference answer,
+planner CLI, mutating demonstration or evaluator is invoked. Endpoint names exist only in the
+opt-in test assertions; profiler/executor source remains site-generic.
+
+A MUTATE run first needs a recorded UI demonstration creating or editing a disposable catalogue
+item and restoring it, including the real save request, hidden anti-forgery fields and response
+identities. Restore the container snapshot after recording. Learn writes from that demonstration
+and retain per-write executor approvals; never infer save endpoints from task answers. The live
+read test does not establish mutation coverage or a benchmark score.

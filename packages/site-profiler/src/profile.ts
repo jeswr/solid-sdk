@@ -11,12 +11,14 @@ import type { Browser } from "playwright";
 import { crawl } from "./crawl.js";
 import { buildFlow, type DemoStep, runDemonstration } from "./demonstrations.js";
 import { applyExtraction, proposeHtmlExtraction, proposeJsonExtraction } from "./extraction.js";
-import { parseForms } from "./forms.js";
+import { addFilterInputs } from "./filters.js";
+import { isCsrfFieldName, parseForms } from "./forms.js";
 import { heuristicLabeller, isLoginCandidate } from "./labeller.js";
 import { type LoginObservation, performLogin, probeCandidates, refreshInfo } from "./login.js";
 import { buildOperation } from "./operations.js";
 import { Recorder } from "./recorder.js";
-import { analyseScript } from "./scripts.js";
+import { analyseScripts } from "./scripts.js";
+import { discoverSessionTokens, redactTrace } from "./session-tokens.js";
 import {
   candidateFromForm,
   candidateFromScriptCall,
@@ -32,10 +34,10 @@ import type {
   ProfileOptions,
   ProfileResult,
   RecordedRequest,
-  ScriptCall,
 } from "./types.js";
 import {
   expandTemplate,
+  isDangerousLink,
   isHtmlType,
   isJsonType,
   isStatic,
@@ -134,7 +136,29 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
   const context = await browser.newContext({ serviceWorkers: "block" });
   const recorder = new Recorder(origin);
   await recorder.attach(context);
-  try {
+  const maxProfileMs = options.maxProfileMs ?? 180_000;
+  if (
+    !Number.isSafeInteger(maxProfileMs) ||
+    maxProfileMs < 1 ||
+    !Number.isSafeInteger(options.maxPages ?? 40) ||
+    (options.maxPages ?? 40) < 1 ||
+    [options.navigationTimeoutMs ?? 15000, options.networkIdleTimeoutMs ?? 5000].some(
+      (v) => !Number.isSafeInteger(v) || v < 1,
+    )
+  ) {
+    await context.close();
+    if (!options.browser) await browser.close();
+    throw new Error("Profile time and page budgets must be positive integers");
+  }
+  context.setDefaultTimeout(Math.min(15_000, maxProfileMs));
+  context.setDefaultNavigationTimeout(
+    Math.min(options.navigationTimeoutMs ?? 15_000, maxProfileMs),
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("Profile time limit exceeded")), maxProfileMs);
+  });
+  const learn = async (): Promise<ProfileResult> => {
     // 8a. Sign in first (user-authorised), so the crawl also sees signed-in pages.
     let login: LoginObservation | undefined;
     if (options.login) {
@@ -143,30 +167,46 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     }
 
     // 1. Crawl.
-    const crawled = await crawl(context, recorder, { startUrl, maxPages: options.maxPages ?? 40 });
+    const crawled = await crawl(context, recorder, {
+      startUrl,
+      maxPages: options.maxPages ?? 40,
+      navigationTimeoutMs: options.navigationTimeoutMs ?? 15_000,
+      networkIdleTimeoutMs: options.networkIdleTimeoutMs ?? 5_000,
+      maxCrawlMs: Math.min(maxProfileMs, 120_000),
+    });
+    const tokens = discoverSessionTokens(
+      crawled.pages.map((p) => ({ url: p.finalUrl, html: p.html })),
+      await context.cookies(),
+      recorder.trace,
+    );
     warnings.push(...crawled.warnings);
 
     // 4. Scripts.
-    const scriptCalls: ScriptCall[] = [];
-    const scriptUrls = new Set<string>();
-    for (const r of recorder.trace) {
-      if (r.resourceType !== "script" || !r.bodySample || scriptUrls.has(r.url)) continue;
-      scriptUrls.add(r.url);
-      const analysis = analyseScript(r.bodySample, r.url);
-      if (analysis.error) warnings.push(`scripts: ${analysis.error}`);
-      scriptCalls.push(...analysis.calls);
-    }
-    const scriptCandidates = scriptCalls
+    const scripts = analyseScripts(recorder.trace);
+    if (scripts.skipped)
+      warnings.push(
+        `scripts: skipped ${scripts.skipped} oversized, truncated or unparseable scripts`,
+      );
+    const scriptCandidates = scripts.calls
       .map(candidateFromScriptCall)
       .filter((c): c is EndpointCandidate => c !== undefined);
 
     // Probe reads the scripts would make but the crawl never triggered (GET only).
     let knownIds = collectKnownIds(recorder.trace);
-    const seenKeys = new Set(clusterRequests(recorder.trace, origin, knownIds).map((c) => c.key));
+    const seenKeys = new Set(
+      clusterRequests(recorder.trace, origin, knownIds, tokens).map((c) => c.key),
+    );
     const prober = playwrightReplayer(context, recorder, "probe");
     const probed = new Set<string>();
     for (const c of scriptCandidates) {
-      if (c.method !== "GET" || seenKeys.has(c.key) || probed.has(c.key)) continue;
+      if (
+        probed.size >= 30 ||
+        c.method !== "GET" ||
+        isDangerousLink(c.urlTemplate) ||
+        seenKeys.has(c.key) ||
+        probed.has(c.key)
+      )
+        continue;
       probed.add(c.key);
       if (c.authScheme) {
         warnings.push(`probe: ${c.urlTemplate} needs a ${c.authScheme} token; not probed`);
@@ -208,7 +248,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
 
     // 2 + 3. Templates and forms; merge with script evidence.
     knownIds = collectKnownIds(recorder.trace);
-    const clusters = clusterRequests(recorder.trace, origin, knownIds);
+    const clusters = clusterRequests(recorder.trace, origin, knownIds, tokens);
     const formCandidates: EndpointCandidate[] = [];
     const formPages: Array<{ url: string; html: string }> = crawled.pages.map((p) => ({
       url: p.finalUrl,
@@ -230,11 +270,17 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
       );
     for (const page of formPages) {
       for (const form of parseForms(page.html, page.url)) {
-        if (new URL(form.action).origin !== origin) continue;
+        if (
+          new URL(form.action).origin !== origin ||
+          (form.method === "GET" && form.fields.every((f) => f.hidden))
+        )
+          continue;
         formCandidates.push(candidateFromForm(form, templateForPage(clusters, page.url)));
       }
     }
-    const candidates = mergeCandidates([...clusters, ...formCandidates, ...scriptCandidates]);
+    const candidates = mergeCandidates([...clusters, ...formCandidates, ...scriptCandidates]).map(
+      (c) => addFilterInputs(c, formPages),
+    );
 
     // 5 + 6. Extraction proposals and labels; decide what enters the model.
     const usedIds = new Set<string>();
@@ -242,7 +288,25 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     const opCandidate = new Map<string, EndpointCandidate>();
     const loginOps: Array<{ op: Operation; candidate: EndpointCandidate }> = [];
     const sessionCookies = login?.sessionCookies ?? [];
-    for (const c of candidates) {
+    // A JSON list with an observed search input supports both browsing and searching.
+    // The view variant drops search; its unused optional URL variable disappears under RFC 6570.
+    const readableCandidates = candidates.flatMap((c) =>
+      c.method === "GET" &&
+      c.responseKind === "json" &&
+      c.params.some((p) => /^(q|query|search|keyword|keywords|term|s|text)$/i.test(p.name)) &&
+      proposeExtraction(c)?.itemPath !== undefined
+        ? [
+            c,
+            {
+              ...c,
+              params: c.params.filter(
+                (p) => !/^(q|query|search|keyword|keywords|term|s|text)$/i.test(p.name),
+              ),
+            },
+          ]
+        : [c],
+    );
+    for (const c of readableCandidates) {
       const label: Label = await labeller.label(c);
       if (label.skip) continue;
       const demoRunIds = uniq(
@@ -281,6 +345,7 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
         continue;
       }
       const extraction = c.method === "GET" ? proposeExtraction(c) : undefined;
+      if (c.method === "GET" && c.responseKind === "json" && !extraction) continue;
       if (c.method === "GET" && !extraction && c.params.length === 0 && c.responseKind === "html")
         continue;
       const method = learnMethod(c);
@@ -372,9 +437,35 @@ export async function profileSite(options: ProfileOptions): Promise<ProfileResul
     if (loginRoutes.length) model.login = loginRoutes;
     if (!verifiedOps.some((op) => op.actionType === s("SearchAction")))
       warnings.push("no search operation learned");
-    return { model, trace: recorder.trace, warnings };
+    const tokenFields = [
+      ...crawled.pages.flatMap((p) => p.forms),
+      ...(login?.form ? [login.form] : []),
+    ].flatMap((f) =>
+      f.fields.filter((p) => p.hidden && isCsrfFieldName(p.name)).map((p) => p.value ?? ""),
+    );
+    const secrets = [
+      ...tokens.keys(),
+      ...tokenFields,
+      ...(await context.cookies().then((cs) => cs.map((c) => c.value))),
+      ...(options.login ? [options.login.password] : []),
+    ];
+    return {
+      model,
+      trace: redactTrace(recorder.trace, secrets),
+      warnings: redactTraceStrings(warnings, secrets),
+    };
+  };
+  try {
+    return await Promise.race([learn(), timeout]);
   } finally {
+    clearTimeout(timer);
     await context.close().catch(() => undefined);
     if (!options.browser) await browser.close().catch(() => undefined);
   }
+}
+
+function redactTraceStrings(values: string[], secrets: string[]): string[] {
+  return values.map((value) =>
+    secrets.filter(Boolean).reduce((out, secret) => out.split(secret).join("[redacted]"), value),
+  );
 }

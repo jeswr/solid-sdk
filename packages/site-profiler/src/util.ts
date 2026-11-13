@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Small shared helpers: URL classification, value kinds, names, and a minimal RFC 6570 expander for
 // the templates the profiler itself writes (used to replay operations during verification).
@@ -27,7 +28,8 @@ const STATIC_TYPES = new Set([
 export function isStatic(url: string, resourceType?: string): boolean {
   if (resourceType && STATIC_TYPES.has(resourceType)) return true;
   try {
-    return STATIC_EXT.test(new URL(url).pathname);
+    const path = new URL(url).pathname;
+    return STATIC_EXT.test(path) || /\/(?:static|assets)\/.*\.(?:html?|json)$/i.test(path);
   } catch {
     return false;
   }
@@ -55,8 +57,16 @@ export function normaliseUrl(href: string, base?: string): string | undefined {
 
 /** Links a crawler must never follow: they change state even though they are GETs on bad sites. */
 export function isDangerousLink(url: string, text = ""): boolean {
-  const hay = `${url} ${text}`.toLowerCase();
-  return /log-?out|sign-?out|logoff|unsubscribe|\bdelete\b|\bremove\b|\bcancel\b|destroy/.test(hay);
+  let path = url.split("?")[0] ?? url;
+  try {
+    path = decodeURIComponent(new URL(url).pathname);
+  } catch {
+    /* templates and malformed links still get classified */
+  }
+  const hay = `${path} ${text}`.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return /log-?out|sign-?out|logoff|unsubscribe|\bdelete\b|\bremove\b|\bcancel\b|destroy|\b(?:save|create|update|enable|disable|flush|refresh|reset|reindex|reorder|duplicate|send|run|execute|truncate|drop)\b/.test(
+    hay,
+  );
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

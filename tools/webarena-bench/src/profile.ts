@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -85,9 +86,13 @@ export async function profileBenchmark(config: BenchConfig, site: Site): Promise
     ? await loadDemonstrations(settings.demonstrations, site, settings.baseUrl)
     : undefined;
   const result = await profileSite({
-    startUrl: settings.baseUrl,
+    startUrl:
+      settings.startPath === undefined
+        ? settings.baseUrl
+        : new URL(settings.startPath, `${settings.baseUrl}/`).href,
     login: settings.login ?? undefined,
     maxPages: config.maxPages,
+    maxProfileMs: config.profileTimeoutMs,
     modelId: `urn:webarena-bench:model:${site}`,
     demonstrations: recorded?.demonstrations,
   });

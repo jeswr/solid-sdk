@@ -4,12 +4,14 @@
 // session exists) signed in. Sets the session requirement and provenance counters, flags reads whose
 // extraction finds nothing, and drops reads that fail both ways. Never replays a write.
 
-import type { Operation } from "@jeswr/site-model";
+import type { CsrfRule, Operation, RequestTemplate } from "@jeswr/site-model";
 import { applyExtraction } from "./extraction.js";
+import { parseForms } from "./forms.js";
+import { attr, attrValue, parseHtml, selectAll } from "./html.js";
 import type { Recorder } from "./recorder.js";
 import { matchRequest } from "./templates.js";
 import type { RecordedRequest } from "./types.js";
-import { expandTemplate } from "./util.js";
+import { expandTemplate, jsonPointer } from "./util.js";
 
 export interface ReplayResponse {
   status: number;
@@ -20,7 +22,16 @@ export interface ReplayResponse {
 
 /** Sends GET requests for verification; signed-in replays carry the profiling session. */
 export interface Replayer {
-  get(url: string, opts: { signedIn: boolean }): Promise<ReplayResponse>;
+  get(
+    url: string,
+    opts: {
+      signedIn: boolean;
+      headers?: Record<string, string>;
+      request?: RequestTemplate;
+      csrf?: CsrfRule[];
+      values?: Record<string, string>;
+    },
+  ): Promise<ReplayResponse>;
 }
 
 const ok = (r: ReplayResponse | undefined) => r !== undefined && r.status >= 200 && r.status < 300;
@@ -108,12 +119,22 @@ export async function verifyOperations(
     let attempts = op.provenance.attempts ?? 0;
     for (const tuple of replayValues) {
       url = expandTemplate(op.request.urlTemplate, tuple);
-      anon = await options.replayer.get(url, { signedIn: false }).catch(() => undefined);
+      const replayOptions = {
+        headers: op.request.headers,
+        request: op.request,
+        csrf: op.csrf,
+        values: tuple,
+      };
+      anon = await options.replayer
+        .get(url, { ...replayOptions, signedIn: false })
+        .catch(() => undefined);
       auth =
-        options.haveSession && !ok(anon)
-          ? await options.replayer.get(url, { signedIn: true }).catch(() => undefined)
+        options.haveSession && !readable(op, anon)
+          ? await options.replayer
+              .get(url, { ...replayOptions, signedIn: true })
+              .catch(() => undefined)
           : undefined;
-      good = ok(anon) ? anon : ok(auth) ? auth : undefined;
+      good = readable(op, anon) ? anon : readable(op, auth) ? auth : undefined;
       attempts++;
       if (good) break;
     }
@@ -125,7 +146,7 @@ export async function verifyOperations(
     }
     const verified: Operation = {
       ...op,
-      session: ok(anon) ? "none" : "signed-in",
+      session: readable(op, anon) ? "none" : "signed-in",
       provenance: {
         ...op.provenance,
         attempts,
@@ -153,12 +174,17 @@ export async function findProbeUrl(
 ): Promise<string | undefined> {
   for (const url of candidates) {
     const anon = await replayer.get(url, { signedIn: false }).catch(() => undefined);
-    if (!anon || ok(anon)) continue;
+    if (!anon) continue;
+    const loginPage =
+      /<form\b/i.test(anon.body) && parseForms(anon.body, url).some((f) => f.hasPassword);
     const refused =
-      (anon.status >= 300 && anon.status < 400) || anon.status === 401 || anon.status === 403;
+      loginPage ||
+      (anon.status >= 300 && anon.status < 400) ||
+      anon.status === 401 ||
+      anon.status === 403;
     if (!refused) continue;
     const auth = await replayer.get(url, { signedIn: true }).catch(() => undefined);
-    if (ok(auth)) return url;
+    if (ok(auth) && auth && !parseForms(auth.body, url).some((f) => f.hasPassword)) return url;
   }
   return undefined;
 }
@@ -170,19 +196,62 @@ export function playwrightReplayer(
   phase: "probe" | "verify",
 ): Replayer {
   return {
-    async get(url, { signedIn }) {
+    async get(url, { signedIn, headers: requestHeaders, request, csrf, values }) {
       const prev = recorder.phase;
       recorder.phase = phase;
       try {
         let res: ReplayResponse;
         if (signedIn) {
-          const r = await context.request.get(url, { maxRedirects: 0, failOnStatusCode: false });
+          const bound = { ...values };
+          const queryTokens: Array<[string, string]> = [];
+          for (const rule of csrf ?? []) {
+            if (rule.target.kind !== "query") continue;
+            const source = rule.source;
+            let token: string | undefined;
+            if (source.kind === "cookie")
+              token = (await context.cookies(url)).find((c) => c.name === source.name)?.value;
+            else {
+              const response = await context.request.get(
+                expandTemplate(source.urlTemplate, bound),
+                { maxRedirects: 0, timeout: 5000 },
+              );
+              const body = await response.text();
+              if (source.kind === "json") {
+                const v = jsonPointer(JSON.parse(body), source.pointer);
+                if (typeof v === "string") token = v;
+              } else {
+                const el = selectAll(
+                  parseHtml(body),
+                  source.kind === "meta" ? `meta[name=${attrValue(source.name)}]` : source.selector,
+                )[0];
+                if (el) token = attr(el, source.kind === "meta" ? "content" : source.attribute);
+              }
+            }
+            if (!token) throw new Error("Missing session token for replay");
+            if (request?.urlTemplate.includes(`{${rule.target.name}}`))
+              bound[rule.target.name] = token;
+            else queryTokens.push([rule.target.name, token]);
+          }
+          if (request) url = expandTemplate(request.urlTemplate, bound);
+          const decorated = new URL(url);
+          for (const [name, token] of queryTokens) decorated.searchParams.set(name, token);
+          url = decorated.href;
+          const r = await context.request.get(url, {
+            headers: requestHeaders,
+            maxRedirects: 0,
+            failOnStatusCode: false,
+            timeout: 5000,
+          });
           const headers = r.headers();
           res = { status: r.status(), body: await r.text().catch(() => "") };
           if (headers["content-type"]) res.contentType = headers["content-type"];
           if (headers.location) res.location = headers.location;
         } else {
-          const r = await fetch(url, { redirect: "manual" });
+          const r = await fetch(url, {
+            headers: requestHeaders,
+            redirect: "manual",
+            signal: AbortSignal.timeout(5000),
+          });
           res = { status: r.status, body: await r.text().catch(() => "") };
           const ct = r.headers.get("content-type");
           if (ct) res.contentType = ct;
@@ -205,4 +274,32 @@ export function playwrightReplayer(
       }
     },
   };
+}
+
+/** A login page or JSON redirect/error envelope is not a successful data read, even with HTTP 200. */
+export function readable(op: Operation, response: ReplayResponse | undefined): boolean {
+  if (!ok(response) || !response) return false;
+  if (
+    /html/i.test(response.contentType ?? "") &&
+    parseForms(response.body, "https://fixture.test/").some((f) => f.hasPassword)
+  )
+    return false;
+  if (op.extraction?.format === "json") {
+    if (response.contentType && !/json/i.test(response.contentType)) return false;
+    try {
+      const doc: unknown = JSON.parse(response.body);
+      if (
+        doc &&
+        typeof doc === "object" &&
+        !Array.isArray(doc) &&
+        Object.entries(doc).some(
+          ([k, v]) => /^(error|redirect|ajaxRedirect)$/i.test(k) && Boolean(v),
+        )
+      )
+        return false;
+    } catch {
+      return false;
+    }
+  }
+  return true;
 }

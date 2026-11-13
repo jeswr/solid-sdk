@@ -8,6 +8,7 @@
 import type { CsrfRule, LearnMethod } from "@jeswr/site-model";
 import { formCsrfRules, isCsrfFieldName } from "./forms.js";
 import { descendants, parseHtml } from "./html.js";
+import type { SessionTokens } from "./session-tokens.js";
 import type {
   CandidateParam,
   EndpointCandidate,
@@ -177,6 +178,7 @@ export function clusterRequests(
   requests: RecordedRequest[],
   siteOrigin: string,
   knownIds: ReadonlySet<string> = new Set(),
+  tokens: SessionTokens = new Map(),
 ): EndpointCandidate[] {
   const groups = new Map<string, RecordedRequest[]>();
   const segmentsOf = new Map<RecordedRequest, string[]>();
@@ -200,9 +202,22 @@ export function clusterRequests(
     });
     segmentsOf.set(r, segments);
     const shape = segments
-      .map((seg, i) => (i > 0 && seg && valueKind(seg, knownIds) !== "text" ? "{}" : seg))
+      .map((seg, i) =>
+        i > 0 && seg && tokens.has(seg)
+          ? "{session}"
+          : valueKind(seg, knownIds) !== "text"
+            ? "{}"
+            : seg,
+      )
       .join("/");
-    const key = `${method} ${shape}`;
+    // Dispatch selectors identify different resources sharing one URL; search/filter/page
+    // values remain inputs. Do not merge two namespaces into one response schema.
+    const dispatch = [...url.searchParams].filter(
+      ([k]) =>
+        /^(namespace|resource|collection|dataset)$/i.test(k) &&
+        !tokens.has(url.searchParams.get(k) ?? ""),
+    );
+    const key = `${method} ${shape}?${new URLSearchParams(dispatch.sort()).toString()}`;
     groups.set(key, [...(groups.get(key) ?? []), r]);
   }
 
@@ -213,7 +228,7 @@ export function clusterRequests(
     const segs = segmentsOf.get(first) as string[];
     const varPositions: Array<{ index: number; kind: ParamKind; prev: string }> = [];
     segs.forEach((seg, i) => {
-      if (i === 0 || !seg || valueKind(seg, knownIds) === "text") return;
+      if (i === 0 || !seg || tokens.has(seg) || valueKind(seg, knownIds) === "text") return;
       const values = samples.map((s) => segmentsOf.get(s)?.[i] ?? "");
       const prev =
         [...segs.slice(0, i)].reverse().find((x) => x && valueKind(x, knownIds) === "text") ?? "";
@@ -228,8 +243,15 @@ export function clusterRequests(
         (s.status < 300 || (method !== "GET" && s.status < 400)),
     );
     const params: CandidateParam[] = [];
+    const tokenRules: CsrfRule[] = [];
     const path = segs
       .map((seg, i) => {
+        const source = tokens.get(seg);
+        if (source) {
+          const name = `sessionPath${i}`;
+          tokenRules.push({ source, target: { kind: "query", name } });
+          return `{${name}}`;
+        }
         const name = names.get(i);
         if (!name) return encodeURIComponent(seg).replace(/%40/g, "@");
         const pos = varPositions.find((v) => v.index === i);
@@ -270,7 +292,20 @@ export function clusterRequests(
         bodyCount.set(k, (bodyCount.get(k) ?? 0) + 1);
       }
     }
+    const fixed = new URLSearchParams();
     for (const k of queryNames) {
+      const vals = samples.map((s) => new URL(s.url).searchParams.get(k));
+      const source = tokens.get(vals[0] ?? "");
+      if (source && vals.every((v) => v !== null && tokens.has(v))) {
+        tokenRules.push({ source, target: { kind: "query", name: k } });
+        continue;
+      }
+      if (/^(namespace|resource|collection|dataset)$/i.test(k) && vals[0] !== null) {
+        fixed.set(k, vals[0] as string);
+        continue;
+      }
+      // Cache-busters are transport noise rather than planner inputs.
+      if (/^_+$/.test(k)) continue;
       params.push({
         name: varName(k),
         location: "query",
@@ -290,14 +325,14 @@ export function clusterRequests(
       params.push(p);
     }
     const queryVars = params.filter((p) => p.location === "query").map((p) => p.name);
-    const urlTemplate = `${siteOrigin}${path}${queryVars.length ? `{?${queryVars.join(",")}}` : ""}`;
+    const urlTemplate = `${siteOrigin}${path}${fixed.size ? `?${fixed}` : ""}${queryVars.length ? `{${fixed.size ? "&" : "?"}${queryVars.join(",")}}` : ""}`;
     const candidate: EndpointCandidate = {
       key: templateShape(method, urlTemplate),
       method,
       urlTemplate,
       params,
       headers: staticHeaders(samples),
-      csrf: csrfFromSamples(samples),
+      csrf: [...csrfFromSamples(samples), ...tokenRules],
       sources: uniq(samples.map((s) => phaseMethod(s))),
       samples,
       responseKind: responseKind(samples),
@@ -508,10 +543,8 @@ export function mergeCandidates(candidates: EndpointCandidate[]): EndpointCandid
     if (existing.responseKind === "unknown") existing.responseKind = c.responseKind;
     // Query variables learned from other evidence join the template.
     const queryVars = existing.params.filter((p) => p.location === "query").map((p) => p.name);
-    const base = existing.urlTemplate.replace(/\{\?[^}]*\}$/, "");
-    if (!/\{&[^}]*\}$/.test(existing.urlTemplate)) {
-      existing.urlTemplate = `${base}${queryVars.length ? `{?${queryVars.join(",")}}` : ""}`;
-    }
+    const base = existing.urlTemplate.replace(/\{[?&][^}]*\}$/, "");
+    existing.urlTemplate = `${base}${queryVars.length ? `{${base.includes("?") ? "&" : "?"}${queryVars.join(",")}}` : ""}`;
   }
   return [...byKey.values()];
 }

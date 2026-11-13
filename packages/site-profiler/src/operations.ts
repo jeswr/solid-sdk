@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Turns a labelled endpoint candidate into a contract Operation: parameters mapped onto property
 // paths of the RDF action node, the request template, CSRF rules, extraction and provenance.
@@ -58,7 +59,16 @@ export function toParameter(
   } as Pick<Parameter, "name" | "location">;
   let param: Parameter;
   const example = p.examples[0];
-  if (label.actionType === sab("LoginAction") && VAULT_PARAM.test(p.name)) {
+  if (
+    label.actionType === sab("LoginAction") &&
+    (VAULT_PARAM.test(
+      decodeURIComponent(p.name)
+        .split(/[[\].]/)
+        .filter(Boolean)
+        .at(-1) ?? "",
+    ) ||
+      p.formType === "password")
+  ) {
     param = {
       ...base,
       path: [],
@@ -96,6 +106,17 @@ export function toParameter(
     // Extra query parameters (filters, limits) stay optional: RFC 6570 drops them when unset.
     const required = p.location !== "query" && p.required && !p.hidden;
     param = { ...base, path: [sab(p.name)], range: rangeFor(p), required };
+  }
+  if (
+    extraction?.format === "json" &&
+    extraction.itemPath !== undefined &&
+    p.location === "query" &&
+    !SEARCH_PARAM.test(p.name)
+  ) {
+    const decoded = decodeURIComponent(p.name);
+    if (example !== undefined) param.default = example;
+    if (/page.?size|limit|per.?page/i.test(decoded) && /^\d+$/.test(example ?? ""))
+      param.default = String(Math.min(Number(example), 25));
   }
   if (example !== undefined && example !== "[redacted]" && param.path.length)
     param.example = example;

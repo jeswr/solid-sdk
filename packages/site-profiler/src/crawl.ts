@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 1: crawl. Breadth-first over same-origin <a href> links and GET forms filled with sample
 // values, in a real browser so script-driven requests are recorded too. The recorder's guard keeps
@@ -26,6 +27,8 @@ export interface CrawlOptions {
   /** Word typed into free-text GET form fields; chosen from the start page when omitted. */
   sampleWord?: string;
   navigationTimeoutMs?: number;
+  networkIdleTimeoutMs?: number;
+  maxCrawlMs?: number;
 }
 
 export interface CrawlResult {
@@ -83,6 +86,8 @@ export async function crawl(
   const pages: PageSnapshot[] = [];
   const start = normaliseUrl(options.startUrl);
   if (!start) throw new Error(`Bad start URL: ${options.startUrl}`);
+  const deadline = Date.now() + (options.maxCrawlMs ?? 120_000);
+  let attempted = 0;
   const queue: string[] = [start];
   const seen = new Set<string>([start]);
   const formsSeen = new Set<string>();
@@ -91,16 +96,27 @@ export async function crawl(
   const prevPhase = recorder.phase;
   recorder.phase = "crawl";
   try {
-    while (queue.length && pages.length < options.maxPages) {
+    while (queue.length && attempted < options.maxPages && Date.now() < deadline) {
+      attempted++;
       const url = queue.shift() as string;
       let status: number | undefined;
       try {
         const res = await page.goto(url, {
           waitUntil: "load",
-          timeout: options.navigationTimeoutMs ?? 15_000,
+          timeout: Math.max(
+            1,
+            Math.min(options.navigationTimeoutMs ?? 15_000, deadline - Date.now()),
+          ),
         });
         status = res?.status();
-        await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => undefined);
+        await page
+          .waitForLoadState("networkidle", {
+            timeout: Math.max(
+              1,
+              Math.min(options.networkIdleTimeoutMs ?? 5_000, deadline - Date.now()),
+            ),
+          })
+          .catch(() => undefined);
       } catch (err) {
         warnings.push(`crawl: could not load ${url}: ${(err as Error).message.split("\n")[0]}`);
         continue;
@@ -125,12 +141,7 @@ export async function crawl(
         seen.add(next);
         queue.push(next);
       };
-      const links = await page.$$eval("a[href]", (els) =>
-        els.map(
-          (a) => [(a as HTMLAnchorElement).href, (a.textContent ?? "").trim()] as [string, string],
-        ),
-      );
-      for (const [href, label] of links) enqueue(href, label);
+      for (const [href, label] of navigationLinks(html)) enqueue(href, label);
       for (const form of forms) {
         if (form.method !== "GET") continue;
         const sig = `${form.action}|${form.fields.map((f) => f.name).join(",")}`;
@@ -146,6 +157,31 @@ export async function crawl(
     await page.close();
   }
   if (queue.length)
-    warnings.push(`crawl: stopped at ${options.maxPages} pages with ${queue.length} unvisited`);
+    warnings.push(
+      `crawl: stopped at ${attempted} pages with ${queue.length} unvisited${Date.now() >= deadline ? " (time limit)" : ""}`,
+    );
   return { pages, sampleWord: sampleWord ?? "test", warnings };
+}
+
+/** Hidden submenu anchors are still navigation. Prefer menu sections over individual row links. */
+export function navigationLinks(html: string): Array<[string, string]> {
+  const anchors = descendants(parseHtml(html)).filter(
+    (el) => el.name === "a" && attr(el, "href") !== undefined,
+  );
+  const inMenu = (el: (typeof anchors)[number]) => {
+    let parent = el.parent;
+    while (parent) {
+      if (
+        "name" in parent &&
+        (parent.name === "nav" || ["navigation", "menu"].includes(parent.attribs.role ?? ""))
+      )
+        return true;
+      parent = parent.parent;
+    }
+    return false;
+  };
+  return [...anchors.filter(inMenu), ...anchors.filter((el) => !inMenu(el))].map((el) => [
+    attr(el, "href") ?? "",
+    text(el),
+  ]);
 }

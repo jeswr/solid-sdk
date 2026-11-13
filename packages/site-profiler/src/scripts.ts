@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // Step 4: static script analysis. Parses same-origin JavaScript with acorn and finds the HTTP calls
 // it would make (fetch, fetch wrappers, XMLHttpRequest, axios, jQuery) whose URL starts with a string
@@ -6,7 +7,7 @@
 
 import type { CsrfRule } from "@jeswr/site-model";
 import { parse } from "acorn";
-import type { ScriptCall } from "./types.js";
+import type { RecordedRequest, ScriptCall } from "./types.js";
 import { varName } from "./util.js";
 
 interface N {
@@ -435,144 +436,185 @@ export interface ScriptAnalysis {
 }
 
 /** Analyse one script. `scriptUrl` resolves relative URLs; only calls on its origin are kept. */
+export const SCRIPT_SIZE_LIMIT = 512 * 1024;
+
 export function analyseScript(source: string, scriptUrl: string): ScriptAnalysis {
+  if (source.length > SCRIPT_SIZE_LIMIT || Buffer.byteLength(source, "utf8") > SCRIPT_SIZE_LIMIT)
+    return { calls: [], error: "script exceeds analysis size limit" };
   let program: N;
   const opts = { ecmaVersion: "latest" as const, locations: true, allowHashBang: true };
   try {
-    program = parse(source, { ...opts, sourceType: "module" }) as unknown as N;
+    program = parse(source, { ...opts, sourceType: "script" }) as unknown as N;
   } catch {
     try {
-      program = parse(source, { ...opts, sourceType: "script" }) as unknown as N;
+      program = parse(source, { ...opts, sourceType: "module" }) as unknown as N;
     } catch (err) {
       return { calls: [], error: `could not parse ${scriptUrl}: ${(err as Error).message}` };
     }
   }
-  const origin = new URL(scriptUrl).origin;
-  const env = collectEnv(program);
-  const calls: ScriptCall[] = [];
+  try {
+    const origin = new URL(scriptUrl).origin;
+    const env = collectEnv(program);
+    const calls: ScriptCall[] = [];
 
-  const add = (
-    urlNode: N | undefined,
-    shape: CallShape,
-    defaultMethod: string,
-    via: string,
-    at: N,
-  ) => {
-    const pattern = partsToPattern(evalString(urlNode, env) ?? []);
-    if (!pattern) return;
-    let abs: URL;
-    try {
-      abs = new URL(
-        pattern.replace(/[{}]/g, (c) => (c === "{" ? "%7B" : "%7D")),
+    const add = (
+      urlNode: N | undefined,
+      shape: CallShape,
+      defaultMethod: string,
+      via: string,
+      at: N,
+    ) => {
+      const pattern = partsToPattern(evalString(urlNode, env) ?? []);
+      if (!pattern) return;
+      let abs: URL;
+      try {
+        abs = new URL(
+          pattern.replace(/[{}]/g, (c) => (c === "{" ? "%7B" : "%7D")),
+          scriptUrl,
+        );
+      } catch {
+        return;
+      }
+      if (abs.origin !== origin) return;
+      const urlPattern = `${abs.origin}${decodeURI(abs.pathname)}${abs.search ? decodeURIComponent(abs.search) : ""}`;
+      const call: ScriptCall = {
         scriptUrl,
-      );
-    } catch {
-      return;
-    }
-    if (abs.origin !== origin) return;
-    const urlPattern = `${abs.origin}${decodeURI(abs.pathname)}${abs.search ? decodeURIComponent(abs.search) : ""}`;
-    const call: ScriptCall = {
-      scriptUrl,
-      method: shape.method ?? defaultMethod,
-      urlPattern,
-      headers: shape.headers,
-      csrf: shape.csrf,
-      bodyKeys: shape.bodyKeys,
-      via,
-      line: ((at.loc as { start?: { line?: number } } | undefined)?.start?.line ?? 0) as number,
-    };
-    if (shape.bodyKind) call.bodyKind = shape.bodyKind;
-    if (shape.authScheme) call.authScheme = shape.authScheme;
-    calls.push(call);
-  };
-
-  // XMLHttpRequest: x.open(method, url) plus x.setRequestHeader / x.send on the same name.
-  const xhrHeaders = new Map<string, N[]>();
-  const xhrSends = new Map<string, N>();
-  walk(program, (n) => {
-    if (n.type !== "CallExpression") return;
-    const callee = prop(n, "callee");
-    const obj = callee?.type === "MemberExpression" ? ident(prop(callee, "object")) : undefined;
-    const m = memberName(callee);
-    if (obj && m === "setRequestHeader") xhrHeaders.set(obj, [...(xhrHeaders.get(obj) ?? []), n]);
-    if (obj && m === "send" && list(n, "arguments")[0])
-      xhrSends.set(obj, list(n, "arguments")[0] as N);
-  });
-
-  walk(program, (n) => {
-    if (n.type !== "CallExpression") return;
-    const callee = prop(n, "callee");
-    const args = list(n, "arguments");
-    const target = fetchTarget(callee, env);
-    if (target) {
-      const name = ident(callee);
-      const via = name && name !== "fetch" ? `wrapper:${name}` : "fetch";
-      add(
-        args[target.url],
-        optionsShape(target.opts !== undefined ? args[target.opts] : undefined, env, origin),
-        "GET",
+        method: shape.method ?? defaultMethod,
+        urlPattern,
+        headers: shape.headers,
+        csrf: shape.csrf,
+        bodyKeys: shape.bodyKeys,
         via,
-        n,
-      );
-      return;
-    }
-    const m = memberName(callee);
-    const objNode = callee?.type === "MemberExpression" ? prop(callee, "object") : undefined;
-    const obj = ident(objNode);
-    if (m === "open" && obj) {
-      const method = stringLiteral(args[0])?.toUpperCase();
-      if (!method || !HTTP_METHODS.has(method)) return;
-      const shape: CallShape = { method, headers: {}, csrf: [], bodyKeys: [] };
-      for (const h of xhrHeaders.get(obj) ?? []) {
-        const [k, v] = list(h, "arguments");
-        const key = stringLiteral(k);
-        if (key && v) {
-          const synthetic: N = {
-            type: "ObjectExpression",
-            properties: [
-              { type: "Property", key: { type: "Literal", value: key }, value: v, computed: false },
-            ],
-          };
-          headerShape(synthetic, env, origin, shape);
+        line: ((at.loc as { start?: { line?: number } } | undefined)?.start?.line ?? 0) as number,
+      };
+      if (shape.bodyKind) call.bodyKind = shape.bodyKind;
+      if (shape.authScheme) call.authScheme = shape.authScheme;
+      calls.push(call);
+    };
+
+    // XMLHttpRequest: x.open(method, url) plus x.setRequestHeader / x.send on the same name.
+    const xhrHeaders = new Map<string, N[]>();
+    const xhrSends = new Map<string, N>();
+    walk(program, (n) => {
+      if (n.type !== "CallExpression") return;
+      const callee = prop(n, "callee");
+      const obj = callee?.type === "MemberExpression" ? ident(prop(callee, "object")) : undefined;
+      const m = memberName(callee);
+      if (obj && m === "setRequestHeader") xhrHeaders.set(obj, [...(xhrHeaders.get(obj) ?? []), n]);
+      if (obj && m === "send" && list(n, "arguments")[0])
+        xhrSends.set(obj, list(n, "arguments")[0] as N);
+    });
+
+    walk(program, (n) => {
+      if (n.type !== "CallExpression") return;
+      const callee = prop(n, "callee");
+      const args = list(n, "arguments");
+      const target = fetchTarget(callee, env);
+      if (target) {
+        const name = ident(callee);
+        const via = name && name !== "fetch" ? `wrapper:${name}` : "fetch";
+        add(
+          args[target.url],
+          optionsShape(target.opts !== undefined ? args[target.opts] : undefined, env, origin),
+          "GET",
+          via,
+          n,
+        );
+        return;
+      }
+      const m = memberName(callee);
+      const objNode = callee?.type === "MemberExpression" ? prop(callee, "object") : undefined;
+      const obj = ident(objNode);
+      if (m === "open" && obj) {
+        const method = stringLiteral(args[0])?.toUpperCase();
+        if (!method || !HTTP_METHODS.has(method)) return;
+        const shape: CallShape = { method, headers: {}, csrf: [], bodyKeys: [] };
+        for (const h of xhrHeaders.get(obj) ?? []) {
+          const [k, v] = list(h, "arguments");
+          const key = stringLiteral(k);
+          if (key && v) {
+            const synthetic: N = {
+              type: "ObjectExpression",
+              properties: [
+                {
+                  type: "Property",
+                  key: { type: "Literal", value: key },
+                  value: v,
+                  computed: false,
+                },
+              ],
+            };
+            headerShape(synthetic, env, origin, shape);
+          }
+        }
+        bodyShape(xhrSends.get(obj), env, shape);
+        add(args[1], shape, method, "xhr", n);
+        return;
+      }
+      if (obj === "axios" && m) {
+        const method = m.toUpperCase();
+        if (m === "request") {
+          const o = evalObject(args[0], env);
+          add(o?.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "axios", n);
+        } else if (["GET", "DELETE", "HEAD"].includes(method)) {
+          add(
+            args[0],
+            { ...optionsShape(args[1], env, origin, "data"), method },
+            method,
+            "axios",
+            n,
+          );
+        } else if (["POST", "PUT", "PATCH"].includes(method)) {
+          const shape = { ...optionsShape(args[2], env, origin, "data"), method };
+          bodyShape(args[1], env, shape);
+          add(args[0], shape, method, "axios", n);
+        }
+        return;
+      }
+      if (ident(callee) === "axios") {
+        const o = evalObject(args[0], env);
+        if (o)
+          add(o.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "axios", n);
+        else add(args[0], optionsShape(args[1], env, origin, "data"), "GET", "axios", n);
+        return;
+      }
+      if ((obj === "$" || obj === "jQuery") && m) {
+        if (m === "ajax") {
+          const o = evalObject(args[0], env);
+          add(o?.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "jquery", n);
+        } else if (m === "get" || m === "getJSON")
+          add(args[0], { headers: {}, csrf: [], bodyKeys: [] }, "GET", "jquery", n);
+        else if (m === "post") {
+          const shape: CallShape = { method: "POST", headers: {}, csrf: [], bodyKeys: [] };
+          bodyShape(args[1], env, shape);
+          if (shape.bodyKind === "json") shape.bodyKind = "form";
+          add(args[0], shape, "POST", "jquery", n);
         }
       }
-      bodyShape(xhrSends.get(obj), env, shape);
-      add(args[1], shape, method, "xhr", n);
-      return;
+    });
+    return { calls };
+  } catch {
+    return { calls: [], error: "could not analyse script" };
+  }
+}
+
+/** Analyze each complete external script once; callers report one summary for skipped bundles. */
+export function analyseScripts(
+  requests: readonly RecordedRequest[],
+): ScriptAnalysis & { skipped: number } {
+  const seen = new Set<string>();
+  const calls: ScriptCall[] = [];
+  let skipped = 0;
+  for (const request of requests) {
+    if (request.resourceType !== "script" || !request.bodySample || seen.has(request.url)) continue;
+    seen.add(request.url);
+    if (request.bodyTruncated) {
+      skipped++;
+      continue;
     }
-    if (obj === "axios" && m) {
-      const method = m.toUpperCase();
-      if (m === "request") {
-        const o = evalObject(args[0], env);
-        add(o?.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "axios", n);
-      } else if (["GET", "DELETE", "HEAD"].includes(method)) {
-        add(args[0], { ...optionsShape(args[1], env, origin, "data"), method }, method, "axios", n);
-      } else if (["POST", "PUT", "PATCH"].includes(method)) {
-        const shape = { ...optionsShape(args[2], env, origin, "data"), method };
-        bodyShape(args[1], env, shape);
-        add(args[0], shape, method, "axios", n);
-      }
-      return;
-    }
-    if (ident(callee) === "axios") {
-      const o = evalObject(args[0], env);
-      if (o) add(o.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "axios", n);
-      else add(args[0], optionsShape(args[1], env, origin, "data"), "GET", "axios", n);
-      return;
-    }
-    if ((obj === "$" || obj === "jQuery") && m) {
-      if (m === "ajax") {
-        const o = evalObject(args[0], env);
-        add(o?.props.get("url"), optionsShape(args[0], env, origin, "data"), "GET", "jquery", n);
-      } else if (m === "get" || m === "getJSON")
-        add(args[0], { headers: {}, csrf: [], bodyKeys: [] }, "GET", "jquery", n);
-      else if (m === "post") {
-        const shape: CallShape = { method: "POST", headers: {}, csrf: [], bodyKeys: [] };
-        bodyShape(args[1], env, shape);
-        if (shape.bodyKind === "json") shape.bodyKind = "form";
-        add(args[0], shape, "POST", "jquery", n);
-      }
-    }
-  });
-  return { calls };
+    const result = analyseScript(request.bodySample, request.url);
+    if (result.error) skipped++;
+    calls.push(...result.calls);
+  }
+  return { calls, skipped };
 }

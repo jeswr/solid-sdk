@@ -32,3 +32,23 @@ Invariants the tests keep:
 Tests use only 127.0.0.1: `@jeswr/test-shop` and small fixtures in the test files. Playwright
 launches through `launchChromium` (`SAB_CHROMIUM_PATH` overrides the browser). Run
 `pnpm --filter @jeswr/site-profiler run test`; never leave `coverage/` behind.
+
+Administrative applications:
+- Inspect the redirected start page for a password form before navigating elsewhere. Preserve
+  application base paths in fallbacks, bracketed credential wire names and path-scoped cookies.
+- Keep navigation, post-render idle and full-profile deadlines bounded. Page attempts include
+  failed navigations. Prioritize navigation-menu anchors; never click unknown action buttons.
+- Dispatch query selectors partition resources. Preserve encoded bracket names for paging,
+  sorting and filters; observed defaults belong to that resource only. Inferred filter members
+  require a witnessed filter prefix and the request's own referring page.
+- Session URL material needs both repetition and a page/cookie source. It never becomes an
+  input/example/default. The executor owns path-token decoration; shared contract types stay unchanged.
+- Script syntax/size failures produce one summary, not a warning per vendor bundle. Try script
+  before module; skip truncated source. Preserve XHR headers during verification, and never treat
+  an HTTP 200 password form or redirect/error JSON as successful data.
+- JSON unknown scalar properties use stable keyed sab IRIs; unknown text is untrusted, secrets
+  and nested objects are excluded. Order status is contextual, not inferred from product status.
+- Keep every new heuristic covered by small fixtures. `test/generic.test.ts` covers pure inference;
+  `test/generic-browser.test.ts` covers actual login/menu/idle/deadline behavior. The explicitly
+  authorized disposable live fixture is opt-in via SAB_LIVE_SITE_URL in webarena-bench; the default
+  suite remains deterministic and local. Never run a planner as part of live profiling acceptance.

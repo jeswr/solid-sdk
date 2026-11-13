@@ -31,6 +31,13 @@ export interface CompiledRequest {
   headers: Record<string, string>;
   body?: CompiledBody;
   csrf: CsrfRule[];
+  /** Local contract convention: an unbound whole path slot named by a query CSRF target. */
+  pathTokens?: {
+    template: string;
+    values: Record<string, string>;
+    origin: string;
+    names: string[];
+  };
   /** Concrete path segments, named by each template variable that contributes to them. */
   pathFields?: [string, string][];
 }
@@ -277,7 +284,27 @@ export function compileOperation(
     if (e instanceof UriTemplateError) throw new BindingError(`invalid URL template: ${e.message}`);
     throw e;
   }
-  const url = endpointUrl(request.urlTemplate, present, origin);
+  const pathTemplate = request.urlTemplate.split(/[?#]|\{[?&]/)[0] ?? "";
+  const pathVariables = templateVariables(pathTemplate);
+  const occurrences = parseTemplate(request.urlTemplate).flatMap((part) =>
+    typeof part === "string" ? [] : part.vars.map((v) => v.name),
+  );
+  const pathTokenNames = (operation.csrf ?? [])
+    .filter((r) => r.target.kind === "query" && pathVariables.includes(r.target.name))
+    .map((r) => r.target.name);
+  if (new Set(pathTokenNames).size !== pathTokenNames.length)
+    throw new BindingError("duplicate path token target");
+  const pending = { ...present };
+  for (const name of pathTokenNames) {
+    if (
+      params.has(name) ||
+      occurrences.filter((v) => v === name).length !== 1 ||
+      pathTemplate.split("/").filter((segment) => segment === `{${name}}`).length !== 1
+    )
+      throw new BindingError("path token must occupy one unbound whole segment");
+    pending[name] = `sab-pending-token-${name}`;
+  }
+  const url = endpointUrl(request.urlTemplate, pending, origin);
   for (const param of operation.inputs) {
     if (
       param.location === "query" &&
@@ -312,6 +339,13 @@ export function compileOperation(
     csrf: operation.csrf ?? [],
     pathFields: pathFields(request.urlTemplate, present, url),
   };
+  if (pathTokenNames.length)
+    compiled.pathTokens = {
+      template: request.urlTemplate,
+      values: pending,
+      origin,
+      names: pathTokenNames,
+    };
   if (request.method === "GET") return compiled;
 
   const bodyParams = operation.inputs.filter(
@@ -343,7 +377,10 @@ export function compileOperation(
     const fields =
       request.bodyTemplate !== undefined
         ? fillFormTemplate(request.bodyTemplate, present)
-        : bodyParams.map((p): [string, string] => [p.name, present[p.name] as string]);
+        : bodyParams.map((p): [string, string] => [
+            decodeURIComponent(p.name),
+            present[p.name] as string,
+          ]);
     if (contentType === "multipart/form-data") {
       compiled.body = { kind: "multipart", fields };
       delete compiled.headers["content-type"]; // fetch sets the boundary
@@ -364,7 +401,26 @@ export function applyCsrfToken(compiled: CompiledRequest, rule: CsrfRule, token:
     checkHeaderValue(target.name, token);
     compiled.headers[target.name.toLowerCase()] = token;
   } else if (target.kind === "query") {
-    appendQuery(compiled.url, target.name, token);
+    const path = compiled.pathTokens;
+    if (path?.names.includes(target.name)) {
+      // Reject route separators even when nested percent-encoded; never let a token change routing.
+      let decoded = token;
+      for (let i = 0; i < 32; i++) {
+        const next = decoded.replace(/%([0-9a-f]{2})/gi, (_m, h: string) =>
+          String.fromCharCode(Number.parseInt(h, 16)),
+        );
+        if (next === decoded) break;
+        if (i === 31) throw new BindingError("path token is excessively encoded");
+        decoded = next;
+      }
+      if (/[\\/?#]/.test(decoded) || decoded === "." || decoded === "..")
+        throw new BindingError("path token changes the modeled route");
+      path.values[target.name] = token;
+      const next = endpointUrl(path.template, path.values, path.origin);
+      // Preserve query-token decoration already applied by other rules.
+      compiled.url.pathname = next.pathname;
+      guardUrl(compiled.url.href, path.origin);
+    } else appendQuery(compiled.url, target.name, token);
   } else if (compiled.body?.kind === "json") {
     const value = compiled.body.value;
     if (value === null || typeof value !== "object" || Array.isArray(value)) {

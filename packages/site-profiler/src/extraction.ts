@@ -18,7 +18,7 @@ import {
   simpleSelector,
   text,
 } from "./html.js";
-import { jsonPointer, pointerEscape, s, tryJson, xsd } from "./util.js";
+import { jsonPointer, pointerEscape, s, sab, tryJson, xsd } from "./util.js";
 
 interface KeyRule {
   property: string;
@@ -38,7 +38,7 @@ const KEY_RULES: Array<[RegExp, KeyRule]> = [
   [/^(url|link|href|permalink|weburl)$/, { property: s("url"), datatype: "iri" }],
   [/^(image|imageurl|thumbnail|img)$/, { property: s("image"), datatype: "iri" }],
   [/^(description|summary|blurb|details)$/, { property: s("description"), untrusted: true }],
-  [/^(id|productid|itemid|uuid)$/, { property: s("identifier") }],
+  [/^(id|entityid|productid|itemid|uuid)$/, { property: s("identifier") }],
   [
     /^(stock|inventory|quantityavailable|available)$/,
     { property: s("inventoryLevel"), datatype: xsd("integer") },
@@ -51,7 +51,14 @@ const KEY_RULES: Array<[RegExp, KeyRule]> = [
   [/^(author|reviewer|username)$/, { property: s("author"), untrusted: true }],
   [/^(qty|quantity)$/, { property: s("orderQuantity"), datatype: xsd("integer") }],
   [/^(total|totalprice|grandtotal)$/, { property: s("totalPrice"), datatype: xsd("decimal") }],
-  [/^(email)$/, { property: s("email") }],
+  [/^(email|customeremail)$/, { property: s("email") }],
+  [/^(firstname|givenname)$/, { property: s("givenName") }],
+  [/^(lastname|familyname)$/, { property: s("familyName") }],
+  [/^orderstatus$/, { property: s("orderStatus") }],
+  [/^(ordernumber|incrementid)$/, { property: s("orderNumber") }],
+  [/^(createdat|datecreated)$/, { property: s("dateCreated") }],
+  [/^(updatedat|datemodified)$/, { property: s("dateModified") }],
+  [/^(ordercurrencycode)$/, { property: s("priceCurrency") }],
 ];
 
 function normKey(key: string): string {
@@ -64,9 +71,9 @@ export function mapKey(key: string, sample: unknown): KeyRule | undefined {
   const k = normKey(key);
   for (const [re, rule] of KEY_RULES) {
     if (!re.test(k)) continue;
-    if (rule.datatype === xsd("decimal") && Number.isNaN(Number(sample)))
+    if (rule.datatype === xsd("decimal") && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(String(sample)))
       return { property: rule.property };
-    if (rule.datatype === xsd("integer") && !Number.isInteger(Number(sample)))
+    if (rule.datatype === xsd("integer") && !/^[+-]?\d+$/.test(String(sample)))
       return { property: rule.property };
     return rule;
   }
@@ -83,9 +90,11 @@ function field(rule: KeyRule, path: string, attribute?: string): FieldRule {
 
 function itemTypeFor(fields: FieldRule[]): string {
   const props = new Set(fields.map((f) => f.property));
-  if (props.has(s("totalPaymentDue"))) return s("Order");
+  if (props.has(s("totalPaymentDue")) || props.has(s("totalPrice")) || props.has(s("orderNumber")))
+    return s("Order");
   if (props.has(s("price")) || props.has(s("sku"))) return s("Product");
   if (props.has(s("reviewBody"))) return s("Review");
+  if (props.has(s("email")) || props.has(s("givenName"))) return s("Person");
   return s("Thing");
 }
 
@@ -133,6 +142,28 @@ function fieldsForObject(obj: Record<string, unknown>): FieldRule[] {
     const rule = mapKey(k, v);
     if (rule && !out.some((f) => f.property === rule.property))
       out.push(field(rule, `/${pointerEscape(k)}`));
+  }
+  if (
+    out.some((f) => [s("totalPrice"), s("orderNumber")].includes(f.property)) &&
+    obj.status !== undefined
+  )
+    out.push({ property: s("orderStatus"), path: "/status" });
+  // Unknown scalar keys retain their exact JSON key as a stable, percent-encoded sab property.
+  // Arrays/objects and nulls do not become text claims; credential-like keys never become facts.
+  for (const [k, v] of Object.entries(obj)) {
+    if (
+      out.some((f) => f.path === `/${pointerEscape(k)}`) ||
+      mapKey(k, v) ||
+      v === null ||
+      typeof v === "object" ||
+      /password|secret|token|csrf|form[_-]?key/i.test(k)
+    )
+      continue;
+    out.push({
+      property: sab(encodeURIComponent(k)),
+      path: `/${pointerEscape(k)}`,
+      ...(typeof v === "string" ? { untrusted: true } : {}),
+    });
   }
   return out;
 }
