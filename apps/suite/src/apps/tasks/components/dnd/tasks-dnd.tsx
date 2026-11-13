@@ -31,7 +31,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
+import { inLane, LABEL_LANE_MESSAGE, type Swimlane } from "../../lib/board/swimlanes";
 import {
   cancelMessage,
   dropMessage,
@@ -75,7 +77,12 @@ export function isStationaryTouch(event: {
 /** Data carried by droppables; rows/cards add their container and nesting rule. */
 export type DropData =
   | { kind: "task"; url: string; container: DropContainer; allowChild: boolean }
-  | { kind: "section-start" | "section-end"; projectUrl: string; sectionId?: string | undefined }
+  | {
+      kind: "section-start" | "section-end";
+      projectUrl: string;
+      sectionId?: string | undefined;
+      lane?: Swimlane | undefined;
+    }
   | { kind: "day"; dayKey: string }
   | { kind: "project"; projectUrl: string };
 
@@ -158,6 +165,7 @@ function targetFor(
         projectUrl: data.projectUrl,
         sectionId: data.sectionId,
         at: data.kind === "section-start" ? "start" : "end",
+        lane: data.lane,
       };
     case "task": {
       const origin = getEventCoordinates(activatorEvent);
@@ -197,8 +205,8 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const { preferences } = useTasksPreferences();
   const pathname = useRoutePathname();
   // A list sorted by due date, priority or name has no manual order to drop into.
-  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
   const flat = pathname.endsWith("/board");
+  const manual = flat || (preferences.sort[pathname] ?? "manual") === "manual";
   const [store] = useState(hintStore);
   const [active, setActive] = useState<TaskView>();
   /** The drop outcome, announced once its write settles (dnd-kit's region has moved on). */
@@ -214,7 +222,21 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const showCompleted = preferences.showCompletedInProject;
   /** Reorders count the visible rows of the active task's own project; nesting checks all. */
   const planFor = (task: TaskView, project: readonly TaskView[], drop: DropTarget) =>
-    planDrop(task, drop, visibleTasks(project, showCompleted), { all: project, manual, flat });
+    planDrop(task, drop, visibleTasks(project, showCompleted), {
+      all: project,
+      manual,
+      flat,
+      groupRowsBy: flat ? preferences.boardGrouping[encodeRef(task.projectUrl)] : undefined,
+    });
+  const blocked = (task: TaskView, drop: DropTarget | undefined) => {
+    const lane =
+      drop?.kind === "section"
+        ? drop.lane
+        : drop?.kind === "task" && drop.container.kind === "section"
+          ? drop.container.lane
+          : undefined;
+    return lane?.group === "label" && !inLane(task, lane) ? LABEL_LANE_MESSAGE : undefined;
+  };
   const projectTasks = (task: TaskView) =>
     tasks.views.filter((view) => view.projectUrl === task.projectUrl);
   /** What a sorted list makes of the target: a row stands for its section. */
@@ -239,11 +261,16 @@ export function TasksDnd({ children }: { children: ReactNode }) {
     onDragOver: ({ active: item, over }) => {
       const task = taskOf(item);
       if (!task || over?.id === item.id) return undefined;
-      return overMessage(task, effective(target.current), tasks.views, projects());
+      return (
+        blocked(task, target.current) ??
+        overMessage(task, effective(target.current), tasks.views, projects())
+      );
     },
     onDragEnd: ({ active: item }) => {
       const task = taskOf(item);
       if (!task) return undefined;
+      const reason = blocked(task, target.current);
+      if (reason) return reason;
       // The outcome follows in `status` once the write settles; a rollback is never "Moved".
       return plan.current.kind === "none"
         ? dropMessage(task, plan.current, tasks.views, projects())
@@ -292,6 +319,12 @@ export function TasksDnd({ children }: { children: ReactNode }) {
             return;
           }
           const drop = target.current;
+          const reason = blocked(task, drop);
+          if (reason) {
+            plan.current = { kind: "none" };
+            setStatus(reason);
+            return;
+          }
           const next = planFor(task, projectTasks(task), drop);
           plan.current = next;
           if (next.kind === "none") return;

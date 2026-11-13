@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 /** Live-region copy for every drag phase and keyboard move (06-tasks §4.4). */
 
+import type { Swimlane } from "../board/swimlanes";
 import type { StoredProject } from "../model/store";
 import { dateFromDayKey, shortDayLabel } from "../views/days";
 import type { TaskView } from "../views/types";
@@ -11,6 +12,7 @@ export function projectNames(projects: readonly StoredProject[]): ProjectName[] 
     url: project.url,
     title: project.tracker.title ?? "",
     sections: project.tracker.sections,
+    labels: project.tracker.labels,
   }));
 }
 
@@ -32,6 +34,25 @@ const dayLabel = (dayKey: string) => shortDayLabel(dateFromDayKey(dayKey));
 
 const titleOf = (views: readonly TaskView[], match: (view: TaskView) => boolean) =>
   quoted(views.find(match)?.title ?? "a task");
+
+function laneSuffix(
+  lane: Swimlane | undefined,
+  projectUrl: string,
+  projects: readonly ProjectName[],
+): string {
+  if (!lane) return "";
+  const name =
+    lane.group === "priority"
+      ? `P${lane.value}`
+      : lane.group === "assignee"
+        ? lane.value || "Unassigned"
+        : lane.value
+          ? (projects
+              .find((project) => project.url === projectUrl)
+              ?.labels?.find((label) => label.id === lane.value)?.name ?? lane.value)
+          : "No label";
+  return ` in ${name}`;
+}
 
 export function pickupMessage(task: TaskView): string {
   return `Picked up ${quoted(task.title)}.`;
@@ -55,16 +76,17 @@ export function overMessage(
     case "day":
       return `${name} is over ${dayLabel(target.dayKey)}.`;
     case "section":
-      return `${name} is over ${sectionLabel(projects, target.projectUrl, target.sectionId)}.`;
+      return `${name} is over ${sectionLabel(projects, target.projectUrl, target.sectionId)}${laneSuffix(target.lane, target.projectUrl, projects)}.`;
     case "task": {
       if (target.container.kind === "day")
         return target.container.dayKey
           ? `${name} is over ${dayLabel(target.container.dayKey)}.`
           : `${name} is not over a drop target.`;
       const over = titleOf(views, (view) => view.url === target.url);
+      const row = laneSuffix(target.container.lane, target.container.projectUrl, projects);
       return target.placement === "child"
         ? `${name} would become a sub-task of ${over}.`
-        : `${name} is ${target.placement} ${over}.`;
+        : `${name} is ${target.placement} ${over}${row}.`;
     }
   }
 }
@@ -106,10 +128,22 @@ export function dropMessage(
           ? `Made ${name} a sub-task of ${parent}.`
           : `Moved ${name} to position ${plan.index} under ${parent}.`;
       }
-      const section = sectionLabel(projects, plan.projectUrl, plan.sectionId);
-      return manual
+      const section = `${sectionLabel(projects, plan.projectUrl, plan.sectionId)}${laneSuffix(plan.lane, plan.projectUrl, projects)}`;
+      const message = manual
         ? `Moved ${name} to ${section}, position ${plan.index}.`
         : `Moved ${name} to ${section}.`;
+      const limit = projects
+        .find((project) => project.url === plan.projectUrl)
+        ?.sections.find((section) => section.id === plan.sectionId)?.wipLimit;
+      const count =
+        views.filter(
+          (view) =>
+            view.url !== task.url &&
+            view.projectUrl === plan.projectUrl &&
+            view.sectionId === plan.sectionId &&
+            view.state === "open",
+        ).length + Number(task.state === "open");
+      return `${message}${limit !== undefined && count > limit ? " Over WIP limit" : ""}`;
     }
   }
 }

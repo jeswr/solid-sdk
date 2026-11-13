@@ -26,6 +26,7 @@ export interface Category {
   name: string;
   position?: number | undefined;
   color?: string | undefined;
+  wipLimit?: number | undefined;
 }
 /** App-local extension of the cross-app tracker; unknown workflow RDF is retained. */
 export class TaskTracker extends Tracker {
@@ -132,11 +133,13 @@ export class TaskTracker extends Tracker {
     ]
       .map((q) => {
         const item = node(q.subject.value, this.dataset);
+        const wipLimit = kind === "Section" ? this.sectionWipLimit(item.value) : undefined;
         return {
           id: item.value,
           name: item.text(`${NS.RDFS}label`) ?? "",
           position: item.number(`${SCHEMA}position`),
           color: item.text(`${SCHEMA}color`),
+          ...(wipLimit === undefined ? {} : { wipLimit }),
         };
       })
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id));
@@ -146,6 +149,25 @@ export class TaskTracker extends Tracker {
   }
   get labels() {
     return this.readCategories("Label");
+  }
+  private sectionWipLimit(id: string): number | undefined {
+    const item = node(id, this.dataset);
+    const value =
+      item.number(`${NS.TASK}wipMax`) ?? item.number("https://w3id.org/jeswr/task#wipMax");
+    return value !== undefined && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+  }
+  setSectionWipLimit(id: string, limit: number | undefined): void {
+    if (!this.sections.some((section) => section.id === id))
+      throw new TypeError("Unknown section.");
+    if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1))
+      throw new TypeError("WIP limit must be a positive integer.");
+    const section = node(id, this.dataset);
+    section.clear("https://w3id.org/jeswr/task#wipMax");
+    section.setTyped(
+      `${NS.TASK}wipMax`,
+      limit === undefined ? undefined : String(limit),
+      `${NS.XSD}nonNegativeInteger`,
+    );
   }
   /** Edit a class in place so existing task type IRIs remain stable. */
   updateSection(id: string, change: { name?: string; position?: number }): void {

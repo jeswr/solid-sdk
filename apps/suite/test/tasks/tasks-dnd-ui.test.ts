@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StoredProject } from "../../src/apps/tasks/lib/model/store";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
+import { encodeRef } from "../../src/lib/refs";
 import { act, h, mount } from "../drive-ui-dom";
 import { frameCache } from "./tasks-frame-fixtures";
 
@@ -52,7 +53,7 @@ function layout() {
   ) {
     const order = [
       ...document.querySelectorAll<HTMLElement>(
-        "[data-tsk-row], .tsk-card, .tsk-board-body, .tsk-section-header, div:has(> .tsk-add-row)",
+        "[data-tsk-row]:not(button), .tsk-card, .tsk-board-body, .tsk-section-header, div:has(> .tsk-add-row)",
       ),
     ];
     const index = order.indexOf(this);
@@ -89,6 +90,121 @@ afterEach(() => {
 });
 
 describe("keyboard drag and drop", () => {
+  it.each([
+    ["priority", "body"],
+    ["priority", "card"],
+    ["assignee", "body"],
+    ["assignee", "card"],
+  ] as const)("names the destination row when keyboard dragging onto a %s lane %s", async (group, target) => {
+    pathname = "/tasks/p/inbox/board";
+    const result = await frameCache();
+    cache = result.cache;
+    const bob = "https://bob.test/profile#me";
+    await cache.createTask(result.inbox, { title: "Moving", priority: "high" });
+    await cache.createTask(result.inbox, {
+      title: "Destination",
+      priority: "medium",
+      assignee: bob,
+    });
+    localStorage.setItem(
+      "suite.tasks.prefs",
+      JSON.stringify({ boardGrouping: { [encodeRef(result.inbox.url)]: group } }),
+    );
+    layout();
+    const { host } = await mount(h(TasksDnd, null, h(BoardView, { projectUrl: result.inbox.url })));
+    const handle = host.querySelector<HTMLElement>("[aria-label=\"Move 'Moving'\"]");
+    if (!handle) throw new Error("Missing drag handle");
+    await act(() => handle.focus());
+    await code("Space");
+    await code("ArrowUp");
+    const origin = group === "priority" ? "P1" : "Unassigned";
+    expect(liveRegion()).toBe(`'Moving' is over No section in ${origin}.`);
+    // Pass the origin card to enter the next lane's empty body, then its card.
+    await code("ArrowDown");
+    await code("ArrowDown");
+    const destination = group === "priority" ? "P2" : bob;
+    expect(liveRegion()).toBe(`'Moving' is over No section in ${destination}.`);
+    if (target === "card") {
+      await code("ArrowDown");
+      expect(liveRegion()).toBe(`'Moving' is before 'Destination' in ${destination}.`);
+    }
+    await code("Space");
+    await settle();
+    expect(dropStatus()).toBe(
+      `Moved 'Moving' to No section in ${destination}, position ${target === "card" ? 1 : 2}.`,
+    );
+    const moved = cache.getSnapshot().views.find((task) => task.title === "Moving");
+    expect(group === "priority" ? moved?.priority : moved?.assignee).toBe(
+      group === "priority" ? 2 : bob,
+    );
+  });
+
+  it.each([
+    "priority",
+    "assignee",
+    "label",
+  ] as const)("handles pointer drops across %s lanes, including soft WIP warnings and label rejection", async (group) => {
+    pathname = "/tasks/p/inbox/board";
+    const result = await frameCache();
+    cache = result.cache;
+    await cache.addSection(result.inbox, "Doing");
+    const current = cache.getSnapshot().projects[0] as StoredProject;
+    const section = current.tracker.sections[0];
+    if (!section) throw new Error("Missing section");
+    const bob = "https://bob.test/profile#me";
+    await cache.updateProject(current, (tracker) => {
+      tracker.setSectionWipLimit(section.id, 1);
+      tracker.setGroupMembers([bob]);
+      tracker.defineCategory("Label", "Red");
+    });
+    await cache.createTask(current, {
+      title: "Existing",
+      sectionId: section.id,
+      priority: "medium",
+    });
+    const moved = await cache.createTask(current, { title: "Moving" });
+    if (!moved) throw new Error("Missing task");
+    localStorage.setItem(
+      "suite.tasks.prefs",
+      JSON.stringify({ boardGrouping: { [encodeRef(current.url)]: group } }),
+    );
+    layout();
+    const { host } = await mount(h(TasksDnd, null, h(BoardView, { projectUrl: current.url })));
+    const name = group === "priority" ? "P1" : group === "assignee" ? bob : "Red";
+    const target = host.querySelector<HTMLElement>(
+      `.tsk-swimlane[aria-label="${name}"] .tsk-board-column[aria-label="Doing"] .tsk-board-body`,
+    );
+    const handle = host.querySelector<HTMLElement>("[aria-label=\"Move 'Moving'\"]");
+    if (!target || !handle) throw new Error("Missing drop target");
+    const from = handle.closest(".tsk-card")?.getBoundingClientRect().top ?? 0;
+    const to = target.getBoundingClientRect().top + 20;
+    const pointer = (type: string, y: number) =>
+      Object.assign(new MouseEvent(type, { bubbles: true, button: 0, clientX: 60, clientY: y }), {
+        isPrimary: true,
+        pointerType: "mouse",
+      });
+    result.pod.requests.length = 0;
+    await act(() => handle.dispatchEvent(pointer("pointerdown", from + 20)));
+    await act(() => document.dispatchEvent(pointer("pointermove", from + 10)));
+    await act(() => document.dispatchEvent(pointer("pointermove", to)));
+    await act(() => document.dispatchEvent(pointer("pointerup", to)));
+    await settle();
+    const saved = (await result.store.readTask(moved.url)).task;
+    if (group === "label") {
+      expect(result.pod.mutations()).toHaveLength(0);
+      expect(saved.types.has(section.id)).toBe(false);
+      expect(dropStatus()).toContain("Tasks cannot be moved between Label rows");
+    } else {
+      expect(result.pod.mutations()).toHaveLength(1);
+      expect(result.pod.mutations()[0]?.headers.get("If-Match")).toBe(moved.etag);
+      expect(saved.types.has(section.id)).toBe(true);
+      if (group === "priority") expect(saved.priority).toBe("high");
+      else expect(saved.assignee).toBe(bob);
+      expect(dropStatus()).toContain("Over WIP limit");
+      expect(host.querySelector("[data-over-wip] .tsk-count")?.textContent).toBe("2 / 1");
+    }
+  });
+
   it.each([
     "/tasks/p/inbox/board",
     "/tasks/p/inbox/board/",
