@@ -31,6 +31,7 @@ import {
 } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
+import { DEFAULT_CONNECTOR_RUN_TIMEOUT_MS } from "@jeswr/pod-connectors";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
   buildBitstringStatusListCredential,
@@ -1371,4 +1372,214 @@ it("holds its process lease through a failed watcher close and delayed executor 
   finish();
   await failed;
   expect(h.state.held()).toBe(false);
+});
+
+it("runs the connectors job once under the process lease before releasing it", async () => {
+  const h = harness();
+  const tick = vi.fn(async (signal?: AbortSignal) => {
+    expect(h.state.held()).toBe(true);
+    expect(signal?.aborted).toBe(false);
+  });
+  const connectors = { tick, run: vi.fn(), list: vi.fn() };
+  await createDaemon({ ...h.options, accounts: [], connectors }).once();
+  expect(tick).toHaveBeenCalledOnce();
+  expect(connectors.run).not.toHaveBeenCalled();
+  expect(h.state.held()).toBe(false);
+});
+it("runs the once-mode connectors pass after ingest and the outbox, bounded by the run limit", async () => {
+  vi.useFakeTimers({ now: AT });
+  const h = harness(),
+    order: string[] = [];
+  h.ingest.list.mockImplementation(async () => {
+    order.push("ingest");
+    return { items: [], next: "one" };
+  });
+  h.executor.runOutboxOnce.mockImplementation(async () => {
+    order.push("outbox");
+    return {};
+  });
+  let passSignal: AbortSignal | undefined;
+  // A connector pass that never finishes on its own (e.g. a hung provider).
+  const hung = () =>
+    vi.fn(async (signal?: AbortSignal) => {
+      order.push("connectors");
+      passSignal = signal;
+      await new Promise<void>((resolve) =>
+        signal?.addEventListener("abort", () => resolve(), { once: true }),
+      );
+    });
+  const connectors = {
+    tick: hung(),
+    run: vi.fn(),
+    list: vi.fn(),
+    runTimeoutMs: 120_000,
+  };
+  let done = false;
+  const pass = createDaemon({ ...h.options, now: Date.now, connectors })
+    .once()
+    .then(() => {
+      done = true;
+    });
+  await vi.advanceTimersByTimeAsync(0);
+  // Approved outbox items are sent before any connector traffic.
+  expect(order).toEqual(["ingest", "outbox", "connectors"]);
+  expect(h.state.held()).toBe(true);
+  await vi.advanceTimersByTimeAsync(119_000);
+  expect(done).toBe(false);
+  await vi.advanceTimersByTimeAsync(1_000);
+  await pass;
+  expect(passSignal?.aborted).toBe(true);
+  expect(h.state.held()).toBe(false);
+  // Without a job-specific limit the default run limit applies.
+  const other = harness(),
+    defaulted = { ...connectors, runTimeoutMs: undefined, tick: hung() };
+  let finished = false;
+  const second = createDaemon({ ...other.options, now: Date.now, connectors: defaulted })
+    .once()
+    .then(() => {
+      finished = true;
+    });
+  await vi.advanceTimersByTimeAsync(DEFAULT_CONNECTOR_RUN_TIMEOUT_MS - 1_000);
+  expect(finished).toBe(false);
+  await vi.advanceTimersByTimeAsync(1_000);
+  await second;
+  expect(defaulted.tick).toHaveBeenCalledOnce();
+});
+it("aborts and drains background connectors before executor drain and lease release", async () => {
+  const h = harness(),
+    controller = new AbortController(),
+    order: string[] = [];
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const connectors = {
+    tick: vi.fn(),
+    list: vi.fn(),
+    run: async (signal: AbortSignal) => {
+      started();
+      await new Promise<void>((resolve) =>
+        signal.addEventListener("abort", () => resolve(), { once: true }),
+      );
+      expect(h.state.held()).toBe(true);
+      order.push("connectors");
+    },
+  };
+  h.executor.drain.mockImplementation(async () => {
+    order.push("executor");
+  });
+  const run = createDaemon({ ...h.options, accounts: [], connectors }).run(controller.signal);
+  await ready;
+  controller.abort();
+  await run;
+  expect(order).toEqual(["connectors", "executor"]);
+  expect(h.state.held()).toBe(false);
+});
+
+it("keeps ingesting when the connectors job fails in once mode and logs only a fixed message", async () => {
+  const h = harness(),
+    log = vi.fn();
+  const connectors = {
+    tick: vi.fn(async () => {
+      throw new Error("token=secret https://private.example");
+    }),
+    run: vi.fn(),
+    list: vi.fn(),
+  };
+  await createDaemon({ ...h.options, accounts: [], connectors, log }).once();
+  expect(connectors.tick).toHaveBeenCalledOnce();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  expect(log).toHaveBeenCalledWith("Connectors pass failed");
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(/secret|private/);
+  expect(h.state.held()).toBe(false);
+});
+it("never faults the run loop when the background connectors job rejects", async () => {
+  const h = harness(),
+    controller = new AbortController(),
+    log = vi.fn();
+  const connectors = {
+    tick: vi.fn(),
+    list: vi.fn(),
+    run: vi.fn(async () => {
+      throw new Error("secret");
+    }),
+  };
+  const run = createDaemon({ ...h.options, accounts: [], connectors, log }).run(controller.signal);
+  await vi.waitFor(() => expect(log).toHaveBeenCalledWith("Connectors pass failed"));
+  await vi.waitFor(() => expect(h.executor.runOutboxOnce).toHaveBeenCalled());
+  controller.abort();
+  await expect(run).resolves.toBeUndefined();
+  expect(h.state.held()).toBe(false);
+});
+it("awp run/once --connectors asks the lazy composition to opt in and fails closed without a job", async () => {
+  const h = harness(),
+    close = vi.fn(async () => undefined);
+  const daemon = createDaemon({ ...h.options, accounts: [] });
+  const job = { list: vi.fn(), tick: vi.fn(), run: vi.fn() };
+  const composition = vi.fn(async (request: { connectors: boolean }) => ({
+    auth: {} as never,
+    daemon,
+    ...(request.connectors ? { connectors: job } : {}),
+    close,
+  }));
+  const host = createCliHost({
+    daemon: composition,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  const io = { print: vi.fn(), confirm: vi.fn(), signal: new AbortController().signal };
+  expect(await runCli(["once"], host, io)).toBe(0);
+  expect(composition).toHaveBeenLastCalledWith({ connectors: false });
+  expect(await runCli(["once", "--connectors"], host, io)).toBe(0);
+  expect(composition).toHaveBeenLastCalledWith({ connectors: true });
+  expect(await runCli(["once", "--connector"], host, io)).toBe(2);
+  expect(await runCli(["run", "--connectors", "extra"], host, io)).toBe(2);
+  composition.mockImplementationOnce(async () => ({ auth: {} as never, daemon, close }));
+  const before = h.executor.runOutboxOnce.mock.calls.length;
+  expect(await runCli(["once", "--connectors"], host, io)).toBe(1);
+  expect(h.executor.runOutboxOnce.mock.calls.length).toBe(before);
+  expect(close).toHaveBeenCalledTimes(3);
+  const composed = createCliHost({
+    daemon,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  expect(await runCli(["once", "--connectors"], composed, io)).toBe(1);
+});
+
+it("awp connectors uses a lazy composed job and closes its pod session without running the daemon", async () => {
+  const h = harness(),
+    close = vi.fn(async () => undefined),
+    list = vi.fn(async () => []);
+  const daemon = createDaemon({ ...h.options, accounts: [] });
+  const composition = vi.fn(async () => ({
+    auth: {} as never,
+    daemon,
+    connectors: { list, tick: vi.fn(), run: vi.fn() },
+    close,
+  }));
+  const host = createCliHost({
+    daemon: composition,
+    local: {} as never,
+    ledger: h.ledger,
+    accounts: vi.fn(),
+    credentials: {} as never,
+    openLoginUrl: vi.fn(),
+    launchCommand: [],
+  });
+  expect(composition).not.toHaveBeenCalled();
+  const signal = new AbortController().signal;
+  expect(await runCli(["connectors"], host, { print: vi.fn(), confirm: vi.fn(), signal })).toBe(0);
+  expect(list).toHaveBeenCalledWith(signal);
+  expect(composition).toHaveBeenCalledWith({ connectors: true });
+  expect(close).toHaveBeenCalledOnce();
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });

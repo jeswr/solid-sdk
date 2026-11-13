@@ -109,8 +109,8 @@ provides atomic fsynced cursors and proposal results, local HALT and safe status
 Retain proposal results across cursor retries and process restarts. Use a dedicated
 private credential-store directory whose parent already exists.
 
-The `awp` executable dispatches `run`, `once`, `halt`, `resume`, `status`, `accounts`,
-`login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
+The `awp` executable dispatches `run [--connectors]`, `once [--connectors]`, `halt`, `resume`,
+`status`, `accounts`, `connectors`, `login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
 `audit <artifact> [--at <instant>]`
 and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
 local state, credential helper and ledger. Prefer a lazy factory: local commands never
@@ -372,3 +372,71 @@ the executor remains responsible for authorization, approvals and transmission.
 New packages remain private per ADR-001 D5.
 
 Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test` here.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Scheduled connector job (CON-A2 / sst-q0cp)
+
+Connector sync is **opt-in and off by default**. `composeDaemon` composes the job only
+when its options include `connectors: { enabled: true }` (a `prepare`-supplied
+`connectors` job is also used only then). The `awp run --connectors` and
+`awp once --connectors` flags pass `{ connectors: true }` to the lazy composition
+factory given to `createCliHost`; the trusted preload forwards it as
+`composeDaemon({ ..., connectors: { enabled: request.connectors } })`. A flag whose
+composition returns no job, or a pre-composed daemon, fails closed. Cloud compositions
+opt in the same way. Trusted embedded hosts supply `createConnectorsJob(...)` as
+`DaemonOptions.connectors`.
+
+The job reads the owner's bounded JSON connection array at
+`<pod>/integrations/connections.json` and uses pod-connectors' existing owner-only
+`integrations/<id>/state.json`. Both require advertised in-container WAC ACL links;
+protection precedes JSON access and is installed once per long-lived store (and again
+before creating a document), not on every poll. Settings are polled with a conditional
+GET on the last ETag and re-parsed only on change; state documents are read only for
+connections that are due. A missing settings document means no connections.
+Read the [scheduler contract](../../packages/pod-connectors/README.md#scheduled-connectors-con-a2--sst-q0cp)
+for settings, `enabledAt`, health, intervals, retries, account cursors and re-enablement.
+Only opaque account ids and trusted registry adapters are accepted; settings cannot
+select code, provider configuration, transports or credentials. Invalid rows are
+skipped individually and listed as `invalid-config`.
+
+Owner UIs that re-enable a connection must write `enabled: true`, drop `status` and set
+`enabledAt` to the current ISO instant; any daemon process then clears the needs-reauth
+latch, because the value differs from the one the latch recorded (no clock comparison). The job itself never enables connections.
+
+The default `pendingVaultTokenSource` deliberately throws `NoVaultError` ("no token vault
+on this host"). It is the sst-3erb vault integration stub: each due run is skipped without
+provider traffic, without latching `needs-reauth` and without changing the owner's shared
+settings, so another host (or the owner's app) with working grants keeps syncing; the
+connection backs off in memory. A trusted host can later inject its
+vault-backed `TokenSource` (optionally with `invalidate`, called only after two
+consecutive source 401s confirm an invalid access token, only for the grant that run
+used and never when the owner's re-enable superseded the latch; it should discard only
+a token matching that grant), registry and separate
+pristine `sourceFetch`. The canonical `profileDocumentUrl` comes from the host's profile
+load; composition without it uses the configured owner's document and refuses redirects.
+
+The job is isolated from the daemon. `once` runs one connectors pass after channel ingest
+and `runOutboxOnce` (approved transmissions never wait for connectors), bounded by the
+job's run limit (`runTimeoutMs`, default 15 minutes) and wrapped in a try/catch. Each
+connector run has the same limit, and runs are claimed per account in the shared state, so
+a launchd and a cloud host sharing one pod do not import the same connection twice. `run` polls connections every 30 seconds independently of
+channel ingestion and feeds a continuous worker pool (cap two), so a long run never
+delays another connector's schedule. A failed pass logs the fixed
+`Connectors pass failed` message, never faults the daemon, and backs off on its own
+(30 s doubling to 30 min, reset after a good pass); a single connection's persistence
+failure logs `Connector run failed` and backs off only that connection. Shutdown aborts
+source/Pod I/O and drains the job before executor drain and process lease release.
+The same composition works in launchd and cloud hosts; retain the existing exclusive
+lease across all of it, including during deployment. Logs contain only fixed messages,
+never provider errors.
+
+`awp connectors` lists `connectorId account enabled|disabled health` (`-` for ids an
+invalid row could not validate). It is read-only: bounded GETs, no ACL, settings or
+state writes. `createCliHost` uses the job returned by its lazy factory (called with
+`{ connectors: true }`) and closes that pod session after listing. A host may instead
+supply an owner-authenticated `ConnectorsJob.list` callback as
+`createCliHost({ connectors, ... })` to avoid composing models. That callback owns and
+closes any temporary session. Missing composition fails closed. The CLI projects
+validated opaque ids and health only, excluding cursors, credentials and arbitrary
+exception text. No health page UI is included.

@@ -17,6 +17,7 @@ import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
 import type {
+  ConnectorRunCounts,
   ConnectorState,
   ConnectorStateOptions,
   ImportProgress,
@@ -64,6 +65,8 @@ export interface ImportReport {
   adapterId: string;
   /** Updated host-owned checkpoint; persist only in the host. */
   state?: ConnectorState;
+  /** Document changes and malformed-item skips in this attempt. */
+  counts?: ConnectorRunCounts;
   mode: ImportMode;
   written: WrittenDoc[];
   /** Distinct category ids that received data (for the success screen). */
@@ -131,6 +134,9 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     // A cancel during the final provenance write is still a cancel: never report success.
     signal?.throwIfAborted();
     const state = session.state(outcome);
+    const counts = session.counts(outcome.skipped);
+    opts.onRunCounts?.(counts);
+    signal?.throwIfAborted();
     opts.onState?.(state);
     return {
       adapterId: id,
@@ -141,6 +147,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       skipped: outcome.skipped,
       indexUrl,
       state,
+      counts: session.tracking ? counts : undefined,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available and the
