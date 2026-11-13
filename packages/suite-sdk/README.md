@@ -39,6 +39,22 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
 
+## PWA installation
+
+Import `installPrompt` and `useInstallPrompt` from `@jeswr/suite-sdk/pwa`.
+Start capture in a root provider effect with `useEffect(() => installPrompt.start(window), [])`.
+In Settings, show an Install button for `status === 'available'`, disable it while `prompting`,
+show “Use Share, then Add to Home Screen” for `ios`, and hide the row for `installed`.
+`unavailable` means no browser prompt is available. Standalone mode includes iOS and
+window controls overlay. No UI is injected by the SDK.
+
+Call `installPrompt.install()` directly from the button's click handler. It returns
+`'accepted' | 'dismissed' | null`, propagates browser errors, and consumes each browser
+prompt once. A later browser event can enable installation again after dismissal or failure.
+Capture survives Settings navigation, and root listeners are reference counted and cleaned
+up after the last provider unmounts. SSR has a stable unavailable snapshot and no browser I/O.
+`createInstallPromptStore()` creates an isolated store, accepted by `useInstallPrompt(store)`.
+
 ## Accounts (`SDK-APP-02`)
 
 ```tsx

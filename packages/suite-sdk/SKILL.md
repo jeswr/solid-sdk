@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk accounts, PWA installation, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -11,6 +11,20 @@ The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()`, SDK-APP-05's
 notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
+
+## PWA installation (`./pwa`)
+
+`installPrompt` is a shared browser install-prompt store. Call `installPrompt.start(window)`
+in a root provider effect and return its cleanup. It captures `beforeinstallprompt` before
+Settings mounts and shares one listener set across roots. `useInstallPrompt()` exposes
+`status`: `unavailable`, `available`, `prompting`, `ios` (Safari Share instructions), or
+`installed` (standalone/iOS standalone/window controls overlay, or installation accepted).
+Call `installPrompt.install()` directly from a user gesture; it returns `accepted`,
+`dismissed`, or null when no prompt is available, and propagates browser errors. Prompts
+are consumed once, including dismissal or failure. `appinstalled` and display-mode changes
+clear deferred prompts. Render install controls only in Settings; installed apps hide them.
+`createInstallPromptStore()` provides isolated stores for tests or independent roots;
+`useInstallPrompt(store)` accepts one. No listeners or browser globals are used during SSR.
 
 ## Accounts (`SDK-APP-02`)
 

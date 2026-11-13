@@ -24,6 +24,10 @@
       "types": "./dist/preferences/index.d.ts",
       "default": "./dist/preferences/index.js"
     },
+    "./pwa": {
+      "types": "./dist/pwa.d.ts",
+      "default": "./dist/pwa.js"
+    },
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"

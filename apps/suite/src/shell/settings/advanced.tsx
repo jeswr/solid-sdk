@@ -5,6 +5,7 @@ import { useCapabilities } from "@jeswr/suite-ui/sync";
 import { usePathname } from "next/navigation";
 import { CopyButton } from "../account/account-card";
 import { diagnostics } from "../lib/settings-diagnostics";
+import { InstallApp } from "./install-app";
 import { useAllPreferences, usePreferences } from "./preferences";
 
 export function AdvancedSettings() {
@@ -31,6 +32,7 @@ export function AdvancedSettings() {
         />
         Show Account IDs in lists
       </label>
+      <InstallApp />
       <section aria-labelledby="developer-settings">
         <h2 id="developer-settings">Developer</h2>
         <h3 id="current-capabilities">Current capabilities</h3>
