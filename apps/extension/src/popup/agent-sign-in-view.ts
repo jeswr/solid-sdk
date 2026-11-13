@@ -44,6 +44,17 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
         .filter((p) => p.profile === profile.value)
         .map((p) => option(p.id, p.label)) ?? []),
     );
+  // This synchronous snapshot is updated only by worker pushes; no await can precede
+  // the gesture-bound request. An armed lease must match both the latest push and view.
+  let validated: CaptureView | undefined;
+  const armed = () =>
+    !closed &&
+    !view.warning &&
+    view.phase === 'permission' &&
+    view.lease !== undefined &&
+    validated?.phase === 'permission' &&
+    validated.armedLease === view.lease &&
+    validated.lease === view.lease;
   const render = (next: CaptureView) => {
     // Cancellation is visible immediately, even while the worker awaits removal/native I/O.
     // Delayed progress or a native response cannot resurrect a terminal view for this lease.
@@ -67,7 +78,7 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
     persona.disabled = !ready;
     review.textContent =
       view.phase === 'permission' ? 'Allow cookies and review' : 'Review sign-in sharing';
-    review.disabled = !(ready && persona.value) && view.phase !== 'permission';
+    review.disabled = !(ready && persona.value) && !armed();
     confirm.disabled = view.phase !== 'confirming' || view.warning;
     preview.hidden = view.phase !== 'confirming';
     if (view.preview && !preview.hidden) {
@@ -78,7 +89,10 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
       !view.warning || !['ready', 'failed', 'cancelled', 'shared'].includes(view.phase);
     cancel.disabled = view.lease === undefined || terminalCapturePhase(view.phase);
   };
-  port.onMessage.addListener((next: CaptureView) => render(next));
+  port.onMessage.addListener((next: CaptureView) => {
+    validated = next;
+    render(next);
+  });
   port.onDisconnect.addListener(() => {
     void browser.runtime.lastError;
     closed = true;
@@ -102,9 +116,13 @@ export function mountAgentSignIn(root: HTMLElement, browser = chrome): void {
   review.addEventListener('click', () => {
     if (view.phase === 'ready' && !view.warning && persona.value) {
       send({ type: 'start', profile: profile.value, persona: persona.value });
-    } else if (view.phase === 'permission' && view.lease !== undefined) {
-      const lease = view.lease;
+    } else if (armed()) {
+      const lease = view.lease!;
       send({ type: 'requesting', lease });
+      if (!armed() || view.lease !== lease) {
+        send({ type: 'permission', lease, granted: false });
+        return;
+      }
       render({ ...view, phase: 'prompt', message: 'Waiting for cookie permission…' });
       // No await/message round trip before this API: it executes INSIDE this click gesture,
       // and only after the worker has exclusively acquired and validated the lease.

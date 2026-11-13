@@ -2,8 +2,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
+import { CAPTURE_CLEANUP_KEY } from '../src/background/agent-capture-cleanup';
 import { mountAgentSignIn } from '../src/popup/agent-sign-in-view';
-import { captureHarness, deferred, phase } from './agent-capture-fixture';
+import { captureHarness, deferred, phase, site } from './agent-capture-fixture';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -60,6 +61,178 @@ it('requests cookies synchronously in the authorized click gesture and renders w
   expect(f.text()).toBe('Sign-in shared.');
   expect(nativeTypes(f)).toEqual(['list', 'beginLogin', 'capture']);
   expect(f.h.state).toEqual(f.h.before);
+});
+it.each([
+  'withdraw access',
+  'navigate to a withheld site',
+])('disables the armed button and refuses any cookie request after %s', async (change) => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  expect(f.button('review').disabled).toBe(false);
+  f.h.native.mockClear();
+  if (change === 'withdraw access') {
+    f.h.state.origins.shift();
+    f.h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
+  } else {
+    f.h.browser.tabs.query.mockResolvedValue([
+      { id: 7, url: 'https://withheld.test/account', incognito: false },
+    ]);
+    f.h.browser.tabs.onUpdated.emit(7, { url: 'https://withheld.test/account' });
+  }
+  expect(f.button('review').disabled).toBe(true);
+  // Even a programmatically dispatched click must consult the worker snapshot.
+  f.button('review').dispatchEvent(new MouseEvent('click'));
+  await phase(f.p, 'failed');
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.text()).toContain("Chrome's extension menu");
+  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+  expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
+  expect(f.h.native).not.toHaveBeenCalled();
+  expect(f.h.browser.permissions.remove).not.toHaveBeenCalled();
+});
+it.each([
+  'tab activation',
+  'URL change',
+  'window focus',
+  'permission removal',
+  'permission addition',
+])('requires a fresh Review after %s invalidates the armed state', async (change) => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  const oldLease = f.p.view.lease;
+  if (change === 'tab activation') f.h.browser.tabs.onActivated.emit({ tabId: 7, windowId: 1 });
+  if (change === 'URL change') f.h.browser.tabs.onUpdated.emit(7, { url: `${site}/new` });
+  if (change === 'window focus') f.h.browser.windows.onFocusChanged.emit(2);
+  if (change === 'permission removal')
+    f.h.browser.permissions.onRemoved.emit({ origins: ['https://other.test:443/*'] });
+  if (change === 'permission addition')
+    f.h.browser.permissions.onAdded.emit({ origins: ['https://other.test:443/*'] });
+  expect(f.button('review').disabled).toBe(true);
+  f.button('review').dispatchEvent(new MouseEvent('click'));
+  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+  await f.choose();
+  expect(f.button('review').textContent).toBe('Review sign-in sharing');
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  expect(f.p.view.lease).not.toBe(oldLease);
+  expect(f.p.view.armedLease).toBe(f.p.view.lease);
+  f.button('cancel').click();
+});
+it('keeps the armed lease on unrelated tab updates', async () => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  f.h.browser.tabs.onUpdated.emit(8, { url: 'https://withheld.test' });
+  f.h.browser.tabs.onUpdated.emit(7, {});
+  expect(f.button('review').disabled).toBe(false);
+  f.button('review').click();
+  await phase(f.p, 'confirming');
+  f.button('cancel').click();
+});
+it.each([
+  'missing',
+  'different lease',
+])('refuses a permission view whose validated armed lease is %s', async (kind) => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  f.p.client.onMessage.emit({
+    ...f.p.view,
+    armedLease: kind === 'missing' ? undefined : f.p.view.lease! + 1,
+  });
+  expect(f.button('review').disabled).toBe(true);
+  f.button('review').dispatchEvent(new MouseEvent('click'));
+  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+  f.button('cancel').click();
+});
+it('refuses acquisition when an invalidation push arrives during the click before the request', async () => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  const send = f.p.client.postMessage.getMockImplementation()!;
+  f.p.client.postMessage.mockImplementationOnce((intent) => {
+    send(intent);
+    f.h.state.origins.shift();
+    f.h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
+  });
+  f.h.native.mockClear();
+  f.button('review').click();
+  await phase(f.p, 'failed');
+  expect(f.h.browser.permissions.request).not.toHaveBeenCalled();
+  expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
+  expect(f.h.native).not.toHaveBeenCalled();
+  await vi.waitFor(() =>
+    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+  );
+});
+it.each([
+  'withdraw access',
+  'navigate to a withheld site',
+])('removes a grant when %s arrives during the click, before any cookie read or native message', async (change) => {
+  const f = fixture();
+  f.mount();
+  await f.choose();
+  f.button('review').click();
+  await phase(f.p, 'permission');
+  f.h.native.mockClear();
+  f.h.browser.permissions.request.mockImplementationOnce(async () => {
+    if (change === 'withdraw access') {
+      f.h.state.origins.shift();
+      f.h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
+    } else {
+      f.h.browser.tabs.query.mockResolvedValue([
+        { id: 7, url: 'https://withheld.test/account', incognito: false },
+      ]);
+      f.h.browser.tabs.onUpdated.emit(7, { url: 'https://withheld.test/account' });
+    }
+    f.h.state.cookies = true;
+    f.h.browser.permissions.onAdded.emit({ permissions: ['cookies'] });
+    return true;
+  });
+  f.button('review').click();
+  expect(f.h.browser.permissions.request).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => expect(f.h.state.cookies).toBe(false));
+  await vi.waitFor(() =>
+    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+  );
+  expect(f.h.browser.permissions.remove).toHaveBeenCalled();
+  expect(f.h.browser.permissions.contains).toHaveBeenLastCalledWith({ permissions: ['cookies'] });
+  expect(f.h.browser.cookies.getAll).not.toHaveBeenCalled();
+  expect(f.h.native).not.toHaveBeenCalled();
+  expect(f.button('review').disabled).toBe(true);
+  expect(f.button('confirm').disabled).toBe(true);
+});
+it('renders the recovery warning and keeps sharing blocked after restart removal fails', async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  try {
+    f.mount();
+    await f.review();
+    f.h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
+    f.h.restart();
+    const next = f.h.popup();
+    mountAgentSignIn(f.root, next.browser);
+    await phase(next, 'failed');
+    expect(f.warning().hidden).toBe(false);
+    expect(f.warning().textContent).toContain("Chrome's extension settings");
+    expect(f.button('review').disabled).toBe(true);
+    expect(f.h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    expect(f.root.textContent).not.toContain('fixture-secret');
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it('cancel during cleanup stays terminal when permission removal completes', async () => {
   const f = fixture();

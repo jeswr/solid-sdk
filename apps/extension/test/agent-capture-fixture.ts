@@ -14,15 +14,29 @@ export function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
-function event<T>() {
-  const listeners: ((input: T) => void)[] = [];
+function event<T, Rest extends unknown[] = []>() {
+  const listeners: ((input: T, ...rest: Rest) => void)[] = [];
   return {
-    addListener: vi.fn((listener: (input: T) => void) => {
+    addListener: vi.fn((listener: (input: T, ...rest: Rest) => void) => {
       listeners.push(listener);
     }),
-    emit: (input: T) => {
-      for (const listener of listeners) listener(input);
+    emit: (input: T, ...rest: Rest) => {
+      for (const listener of listeners) listener(input, ...rest);
     },
+    clear: () => listeners.splice(0),
+  };
+}
+function storageArea() {
+  const data: Record<string, unknown> = {};
+  return {
+    data,
+    get: vi.fn(async (key: string) => ({ [key]: structuredClone(data[key]) })),
+    set: vi.fn(async (values: Record<string, unknown>) => {
+      Object.assign(data, structuredClone(values));
+    }),
+    remove: vi.fn(async (key: string) => {
+      delete data[key];
+    }),
   };
 }
 export const site = 'https://shop.test';
@@ -81,23 +95,32 @@ export function captureHarness() {
       return true;
     }),
     onAdded: event<chrome.permissions.Permissions>(),
+    onRemoved: event<chrome.permissions.Permissions>(),
   };
   const runtime = {
     id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     getURL: (path: string) => `chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/${path}`,
     onConnect: event<chrome.runtime.Port>(),
+    onStartup: event<undefined>(),
     onMessage: { addListener: vi.fn() },
     connectNative: vi.fn(() => nativePort),
     lastError: undefined,
   };
   const browser = {
     runtime,
-    tabs: { query: vi.fn(async () => [{ id: 7, url: `${site}/account`, incognito: false }]) },
+    tabs: {
+      query: vi.fn(async () => [{ id: 7, url: `${site}/account`, incognito: false }]),
+      onActivated: event<{ tabId: number; windowId: number }>(),
+      onUpdated: event<number, [{ url?: string }]>(),
+    },
+    windows: { onFocusChanged: event<number>() },
+    storage: { session: storageArea(), local: storageArea() },
     permissions,
     cookies: { getAll: vi.fn(async () => [cookie()]) },
     action: { setBadgeText: vi.fn(async (_input: { text: string }) => {}) },
   };
   installNativeVaultBridge(browser as unknown as typeof chrome);
+  const terminated: (() => void)[] = [];
   const popup = (sender = { id: runtime.id, url: runtime.getURL('popup/popup.html') }) => {
     let closed = false;
     const states: CaptureView[] = [];
@@ -128,6 +151,13 @@ export function captureHarness() {
       }),
     };
     runtime.onConnect.emit(worker as unknown as chrome.runtime.Port);
+    terminated.push(() => {
+      closed = true;
+      // Worker termination discards ports/listeners without executing worker cleanup.
+      worker.onMessage.clear();
+      worker.onDisconnect.clear();
+      client.onDisconnect.emit(undefined);
+    });
     const popupBrowser = { ...browser, runtime: { ...runtime, connect: vi.fn(() => client) } };
     return {
       client,
@@ -157,7 +187,23 @@ export function captureHarness() {
       cancel: () => client.postMessage({ type: 'cancel', lease: states.at(-1)!.lease! }),
     };
   };
-  return { browser, state, before, native, nativePort, popup };
+  const restart = () => {
+    // Restart tests use fake timers to discard the terminated worker's lease/native timers.
+    vi.clearAllTimers();
+    for (const terminate of terminated.splice(0)) terminate();
+    runtime.onConnect.clear();
+    runtime.onStartup.clear();
+    runtime.onMessage.addListener.mockClear();
+    nativePort.onMessage.clear();
+    nativePort.onDisconnect.clear();
+    permissions.onAdded.clear();
+    permissions.onRemoved.clear();
+    browser.tabs.onActivated.clear();
+    browser.tabs.onUpdated.clear();
+    browser.windows.onFocusChanged.clear();
+    installNativeVaultBridge(browser as unknown as typeof chrome);
+  };
+  return { browser, state, before, native, nativePort, popup, restart };
 }
 export type Harness = ReturnType<typeof captureHarness>;
 export type Popup = ReturnType<Harness['popup']>;

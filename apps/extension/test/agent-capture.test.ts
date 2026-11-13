@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CAPTURE_CLEANUP_KEY } from '../src/background/agent-capture-cleanup';
 import manifest from '../src/manifest.json';
 import {
   captureHarness,
@@ -29,6 +30,238 @@ function restored(h: Harness) {
   }
 }
 const types = (h: Harness) => h.native.mock.calls.map(([r]) => r.type);
+
+describe('interrupted capture recovery', () => {
+  it('persists the cleanup marker before arming the permission click', async () => {
+    const h = captureHarness();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    const written = deferred<void>();
+    const set = h.browser.storage.session.set.getMockImplementation()!;
+    h.browser.storage.session.set.mockImplementationOnce(async (value) => {
+      await written.promise;
+      await set(value);
+    });
+    a.start();
+    await vi.waitFor(() => expect(h.browser.storage.session.set).toHaveBeenCalled());
+    expect(a.view.phase).toBe('reviewing');
+    expect(a.view.armedLease).toBeUndefined();
+    expect(h.browser.permissions.request).not.toHaveBeenCalled();
+    written.resolve();
+    await phase(a, 'permission');
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toEqual({
+      leaseId: a.view.lease,
+      requestedAt: expect.any(Number),
+    });
+    expect(a.view.armedLease).toBe(a.view.lease);
+    a.cancel();
+    await vi.waitFor(() =>
+      expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined(),
+    );
+  });
+  it('never arms after authorization changes during the cleanup marker write', async () => {
+    const h = captureHarness();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    const written = deferred<void>();
+    const set = h.browser.storage.session.set.getMockImplementation()!;
+    h.browser.storage.session.set.mockImplementationOnce(async (value) => {
+      await written.promise;
+      await set(value);
+    });
+    h.native.mockClear();
+    a.start();
+    await vi.waitFor(() => expect(h.browser.storage.session.set).toHaveBeenCalled());
+    h.state.origins.shift();
+    h.browser.permissions.onRemoved.emit({ origins: [`${site}:443/*`] });
+    written.resolve();
+    await phase(a, 'failed');
+    expect(a.states.some((view) => view.armedLease !== undefined)).toBe(false);
+    expect(h.browser.permissions.request).not.toHaveBeenCalled();
+    expect(h.native).not.toHaveBeenCalled();
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+  });
+  it('refuses to arm when neither cleanup store can persist the marker', async () => {
+    const h = captureHarness();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    h.native.mockClear();
+    h.browser.storage.session.set.mockRejectedValueOnce(new Error('fixture-secret'));
+    h.browser.storage.local.set.mockRejectedValueOnce(new Error('fixture-secret'));
+    a.start();
+    await phase(a, 'failed');
+    expect(a.view.armedLease).toBeUndefined();
+    expect(h.browser.permissions.request).not.toHaveBeenCalled();
+    expect(h.native).not.toHaveBeenCalled();
+    expect(a.view.message).not.toContain('fixture-secret');
+  });
+  it('recovers a grant after worker termination with exactly one removal and verified absence', async () => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    await confirming(h);
+    expect(h.state.cookies).toBe(true);
+    h.native.mockClear();
+    h.browser.cookies.getAll.mockClear();
+    h.restart();
+    h.browser.runtime.onStartup.emit(undefined);
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    expect(h.browser.cookies.getAll).not.toHaveBeenCalled();
+    expect(types(h)).toEqual(['list']);
+    restored(h);
+  });
+  it.each([
+    'remove rejects',
+    'still present',
+    'verification rejects',
+  ])('keeps the recovery marker and popup warning when %s', async (failure) => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    await confirming(h);
+    const marker = h.browser.storage.session.data[CAPTURE_CLEANUP_KEY];
+    if (failure === 'remove rejects')
+      h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
+    if (failure === 'still present') h.browser.permissions.remove.mockResolvedValueOnce(false);
+    if (failure === 'verification rejects')
+      h.browser.permissions.remove.mockImplementationOnce(async () => {
+        h.state.cookies = false;
+        h.browser.permissions.contains.mockRejectedValueOnce(new Error('fixture-secret'));
+        return true;
+      });
+    h.native.mockClear();
+    h.restart();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'failed');
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toEqual(marker);
+    expect(a.view.warning).toBe(true);
+    expect(a.view.cleanupFailed).toBe(true);
+    expect(h.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '!' });
+    expect(h.native).not.toHaveBeenCalled();
+  });
+  it('clears a recovery failure warning when startup retry verifies an absent grant', async () => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    await confirming(h);
+    h.browser.permissions.remove.mockRejectedValueOnce(new Error('fixture-secret'));
+    h.restart();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'failed');
+    expect(a.view.cleanupFailed).toBe(true);
+    h.state.cookies = false;
+    h.browser.runtime.onStartup.emit(undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(a.view.warning).toBe(false);
+    expect(a.view.cleanupFailed).toBe(false);
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    expect(h.browser.action.setBadgeText).toHaveBeenLastCalledWith({ text: '' });
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+  });
+  it('clears a recovery marker without a grant after verifying absence', async () => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    await reviewing(h);
+    h.browser.permissions.contains.mockClear();
+    h.restart();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    expect(h.browser.permissions.remove).not.toHaveBeenCalled();
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    expect(h.browser.storage.session.remove.mock.invocationCallOrder[0]).toBeGreaterThan(
+      h.browser.permissions.contains.mock.invocationCallOrder[0],
+    );
+    restored(h);
+  });
+  it.each([
+    'missing',
+    'rejecting',
+    'unavailable',
+  ])('recovers the local fallback when session storage is %s', async (kind) => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    const session = h.browser.storage.session;
+    if (kind === 'missing')
+      Object.defineProperty(h.browser.storage, 'session', { value: undefined, configurable: true });
+    else session.set.mockRejectedValueOnce(new Error('fixture-secret'));
+    if (kind === 'unavailable') session.get.mockRejectedValue(new Error('fixture-secret'));
+    await confirming(h);
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    // Session storage may become available again on the replacement worker.
+    Object.defineProperty(h.browser.storage, 'session', { value: session, configurable: true });
+    h.restart();
+    const a = h.popup();
+    a.load();
+    await phase(a, 'ready');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(h.browser.storage.local.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    restored(h);
+  });
+  it('serializes startup recovery and a new lease through removal and verification', async () => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    await confirming(h);
+    const removed = deferred<boolean>();
+    const absent = deferred<boolean>();
+    h.browser.permissions.remove.mockImplementationOnce(async () => {
+      await removed.promise;
+      h.state.cookies = false;
+      h.browser.permissions.contains.mockImplementationOnce(() => absent.promise);
+      return true;
+    });
+    h.native.mockClear();
+    h.restart();
+    const a = h.popup();
+    a.load();
+    a.start();
+    await vi.waitFor(() => expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1));
+    expect(h.native).not.toHaveBeenCalled();
+    expect(h.browser.permissions.request).toHaveBeenCalledTimes(1);
+    removed.resolve(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(a.view).toBeUndefined();
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    absent.resolve(false);
+    await phase(a, 'permission');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toMatchObject({
+      leaseId: a.view.lease,
+    });
+    h.browser.runtime.onStartup.emit(undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(1);
+    expect(a.view.phase).toBe('permission');
+    a.cancel();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  it('retains the marker for an unresolved cancelled prompt across worker termination', async () => {
+    vi.useFakeTimers();
+    const h = captureHarness();
+    const a = await reviewing(h);
+    h.browser.permissions.request.mockImplementationOnce(() => new Promise(() => {}));
+    void a.allow();
+    await phase(a, 'prompt');
+    a.cancel();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.state.cookies).toBe(false);
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeDefined();
+    h.state.cookies = true;
+    h.restart();
+    const b = h.popup();
+    b.load();
+    await phase(b, 'ready');
+    expect(h.browser.permissions.remove).toHaveBeenCalledTimes(2);
+    expect(h.browser.storage.session.data[CAPTURE_CLEANUP_KEY]).toBeUndefined();
+    restored(h);
+  });
+});
 
 describe('worker capture lease', () => {
   it('keeps cookies optional and required host permissions unchanged', () => {
