@@ -156,10 +156,13 @@ const submission = validateSubmission({
   contact: { name: "", email: "" },
   metadata: { version: "preview", commit: "", userAgent: "test", walkthrough: [] },
 });
+const submissionId = "11111111-1111-4111-8111-111111111111";
+const otherId = "22222222-2222-4222-8222-222222222222";
 const webm = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0, 0, 0, 0, 0]);
-const receipt = () => signReceipt({ sha: "a".repeat(40), size: webm.length, ext: "webm" }, env);
+const receipt = () =>
+  signReceipt({ submissionId, sha: "a".repeat(40), size: webm.length, ext: "webm" }, env);
 const audioRequest = (bytes = webm, mime = "audio/webm", origin = "https://suite.test") =>
-  new Request("https://suite.test/api/feedback/audio", {
+  new Request(`https://suite.test/api/feedback/audio?submissionId=${submissionId}`, {
     method: "POST",
     headers: { Origin: origin, "Content-Type": mime },
     body: bytes,
@@ -172,11 +175,14 @@ it("uploads one sniffed clip and submits only rebuilt JSON and verified receipts
   const audio = await h.audio(audioRequest());
   expect(audio.status).toBe(200);
   expect(await audio.json()).toEqual(saved);
-  expect(upload.mock.calls[0]?.[0]).toEqual({ bytes: webm, ext: "webm", type: "audio/webm" });
-  const response = await h.submit(request({ record: submission, receipts: [saved] }));
+  expect(upload).toHaveBeenCalledWith(
+    { bytes: webm, ext: "webm", type: "audio/webm" },
+    submissionId,
+  );
+  const response = await h.submit(request({ submissionId, record: submission, receipts: [saved] }));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ reference: 12 });
-  expect(save).toHaveBeenCalledWith(submission, [saved]);
+  expect(save).toHaveBeenCalledWith(submission, [saved], submissionId);
 });
 it("rejects audio spoofing, body overflow and forbidden origins before storage", async () => {
   const upload = vi.fn();
@@ -194,12 +200,12 @@ it("rejects unknown or duplicate shas, missing attachments, too many receipts, e
   const save = vi.fn();
   const h = handlers({ store: { save, upload: vi.fn() }, limiter: () => undefined });
   for (const data of [
-    { record: submission, receipts: [] },
-    { record: submission, receipts: [saved, saved] },
-    { record: submission, receipts: [{ ...saved, sha: "b".repeat(40) }] },
-    { record: submission, receipts: Array(11).fill(saved) },
-    { record: { ...submission, secret: "x" }, receipts: [saved] },
-    { record: submission, receipts: [saved], secret: "x" },
+    { submissionId, record: submission, receipts: [] },
+    { submissionId, record: submission, receipts: [saved, saved] },
+    { submissionId, record: submission, receipts: [{ ...saved, sha: "b".repeat(40) }] },
+    { submissionId, record: submission, receipts: Array(11).fill(saved) },
+    { submissionId, record: { ...submission, secret: "x" }, receipts: [saved] },
+    { submissionId, record: submission, receipts: [saved], secret: "x" },
   ])
     expect((await h.submit(request(data))).status).toBe(400);
   expect(
@@ -213,14 +219,14 @@ it("rejects unknown or duplicate shas, missing attachments, too many receipts, e
       )
     ).status,
   ).toBe(415);
-  expect((await h.submit(request({ record: "x".repeat(1_000_001), receipts: [] }))).status).toBe(
-    413,
-  );
+  expect(
+    (await h.submit(request({ submissionId, record: "x".repeat(1_000_001), receipts: [] }))).status,
+  ).toBe(413);
   expect(save).not.toHaveBeenCalled();
 });
 it("returns 503 when storage is unconfigured with no repository or credentials in the response", async () => {
   const r = await handlers().submit(
-    request({ record: { ...submission, transcript: [] }, receipts: [] }),
+    request({ submissionId, record: { ...submission, transcript: [] }, receipts: [] }),
   );
   expect(r.status).toBe(503);
   expect(await r.text()).not.toContain("github.com/");
@@ -275,7 +281,7 @@ it("rechecks repository privacy for submission after an earlier upload", async (
     const uploaded = await h.audio(audioRequest());
     expect(uploaded.status).toBe(200);
     const response = await h.submit(
-      request({ record: submission, receipts: [await uploaded.json()] }),
+      request({ submissionId, record: submission, receipts: [await uploaded.json()] }),
     );
     expect(response.status).toBe(503);
     expect(transport.mock.calls.map(([, options]) => options?.method)).toEqual([
@@ -283,6 +289,66 @@ it("rechecks repository privacy for submission after an earlier upload", async (
       "POST",
       "GET",
     ]);
+  } finally {
+    transport.mockRestore();
+  }
+});
+
+it("rejects a receipt from another interview, including a tampered submission id", async () => {
+  const saved = receipt();
+  const save = vi.fn();
+  const h = handlers({ store: { save, upload: vi.fn() }, limiter: () => undefined });
+  for (const receipts of [[saved], [{ ...saved, submissionId: otherId }]]) {
+    const response = await h.submit(
+      request({ submissionId: otherId, record: submission, receipts }),
+    );
+    expect(response.status).toBe(400);
+  }
+  expect(save).not.toHaveBeenCalled();
+});
+it.each([
+  undefined,
+  "not-a-uuid",
+])("requires a UUID on uploads and submissions (%s)", async (id) => {
+  const upload = vi.fn();
+  const save = vi.fn();
+  const h = handlers({ store: { upload, save } });
+  const audio = audioRequest();
+  const url = new URL(audio.url);
+  if (id === undefined) url.searchParams.delete("submissionId");
+  else url.searchParams.set("submissionId", id);
+  expect((await h.audio(new Request(url, audio))).status).toBe(400);
+  expect(
+    (await h.submit(request({ submissionId: id, record: submission, receipts: [receipt()] })))
+      .status,
+  ).toBe(400);
+  expect(upload).not.toHaveBeenCalled();
+  expect(save).not.toHaveBeenCalled();
+});
+it("returns a friendly error with Retry-After on a GitHub limit and blocks later requests", async () => {
+  const transport = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    Response.json(
+      {},
+      {
+        status: 429,
+        headers: { "retry-after": "90" },
+      },
+    ),
+  );
+  try {
+    const h = handlers({ env: { ...env, FEEDBACK_GITHUB_REPO: "private/feedback" } });
+    for (const response of [
+      await h.audio(audioRequest()),
+      await h.submit(
+        request({ submissionId, record: { ...submission, transcript: [] }, receipts: [] }),
+      ),
+    ]) {
+      expect(response.status).toBe(503);
+      expect(Number(response.headers.get("retry-after"))).toBeGreaterThanOrEqual(89);
+      expect(response.headers.get("access-control-expose-headers")).toBe("Retry-After");
+      expect(await response.json()).toEqual({ error: expect.stringContaining("try again later") });
+    }
+    expect(transport).toHaveBeenCalledTimes(1);
   } finally {
     transport.mockRestore();
   }

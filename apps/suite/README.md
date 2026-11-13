@@ -35,17 +35,36 @@ these API requests. API route handlers are excluded from native staging and its 
 the native artifact checker rejects an exported `api/` directory.
 
 Recordings upload individually to `POST /api/feedback/audio` as soon as they stop, with
-one automatic retry and a visible saving state. The server validates the MIME and magic bytes,
-creates a Git blob in the private feedback repo, and returns `{ sha, size, ext, sig }`.
+one automatic retry (except during a storage cooldown) and a visible saving state. The server
+validates the MIME and magic bytes,
+creates a Git blob in the private feedback repo, and returns `{ submissionId, sha, size, ext, sig }`.
+The client creates a random submission UUID when the interview starts and sends it as the
+`submissionId` query parameter on every audio upload.
 The signature contains the expiry as `expiry.hmac`; HMAC-SHA256 authenticates
-`sha|size|ext|expiry` with a repository-scoped derived key. Receipts expire after two hours.
-`POST /api/feedback/submit` accepts JSON only (at most 1 MB): `{ record, receipts }`, with up
-to ten authenticated, unexpired receipts. Unknown/forged and duplicate blob SHAs are refused.
+`submissionId|sha|size|ext|expiry` with a repository-scoped derived key. Receipts expire
+after two hours.
+`POST /api/feedback/submit` accepts JSON only (at most 1 MB):
+`{ submissionId, record, receipts }`, with up to ten authenticated, unexpired receipts.
+Receipts from another submission, unknown/forged receipts and duplicate blob SHAs are refused.
 
 Submissions create one atomic Git Data API commit containing all receipt audio blobs,
 `submission.json` and `summary.md` under `feedback/<yyyy-mm-dd>/<uuid>/`, then open an issue.
+The UUID is the client's submission ID. The same commit reserves it in
+`feedback/submissions/<uuid>.json` with a digest of the record and audio and the record directory.
+Concurrent writers check this index against each branch head before committing; an ID cannot
+save different feedback (409). Identical retries make one GitHub search scoped to the feedback repository
+and the issue body's submission marker, including closed issues and excluding pull requests.
+Recovery never paginates through the repository's issue history. If the search finds no issue,
+the store resumes issue creation using the original record directory, without another record commit.
+Overlapping issue creation within one instance returns 503 until the current request finishes.
+The first submit attempt freezes the serialized record and keeps it with its submission ID and
+recording receipts in `suite.feedback.draft.v1` local storage. Retries, including after a reload,
+resend that record verbatim. Answers and contact details stay read-only until completion;
+**Start a new submission** clears the frozen draft and starts a fresh interview with a new ID.
+Completion clears the local draft. Audio files remain in the open page for download and receipt renewal.
 The store reads the private repo's default branch once and uses the current head tree as the
-base. A non-fast-forward 422 re-reads the head and retries the tree/commit/ref update up to
+base, preserving path segments in branch names such as `team/main`. A non-fast-forward 422
+re-reads the head and retries the tree/commit/ref update up to
 five times with jittered backoff, without forcing the ref or re-uploading blobs. No issue is
 opened until the ref update succeeds. Audio links use immutable commit URLs and require
 repository membership. Issue labels are `feedback`, `pathway:guided` or `pathway:quick`, and
@@ -53,9 +72,13 @@ repository membership. Issue labels are `feedback`, `pathway:guided` or `pathway
 returned to the participant. Participant Markdown and HTML are escaped and mentions neutralised;
 titles use plain text sanitisation. Full verbatim records remain in the private JSON file.
 The issue body stays under 60k characters with a closed transcript disclosure and an external
-full-record link. An issue failure may leave a committed record without an issue; retrying
-creates a new submission, so maintainers may need to deduplicate these. Abandoned uploads can
-leave unreferenced Git blobs; uploading a recording does not create an issue.
+full-record link. An issue failure may leave a committed record without an issue; participants
+can retry to recover its reference or resume creation. Recovery uses at most six GitHub calls
+(metadata, head, index, one search and up to two issue POSTs for the label fallback). Reads
+have 30-second timeouts; search and issue creation share one 30-second deadline. GitHub search
+indexing and in-memory coordination cannot guarantee exactly-once issue creation across
+instances or after an uncertain POST response. Abandoned uploads can leave unreferenced Git
+blobs; uploading a recording does not create an issue.
 
 All three POST routes require an allowed Origin, validate and rebuild inputs, and stream-read
 within body caps before parsing. The interviewer accepts at most 40 messages of 4000 characters,
@@ -70,6 +93,16 @@ continues with the plain guide while preserving its full transcript. Per visitor
 five submits per hour. IPv6 addresses share a /64 allowance. Each server instance caps 2000
 turns, 2000 audio uploads and 200 submissions per UTC day. **All these limits are per instance**;
 in-memory counters reset on restart and do not coordinate across instances.
+GitHub core responses with fewer than 50 remaining requests or a 403/429 rate limit start a cooldown.
+Uploads and new submissions check it before their first write. An admitted submission finishes
+its commit and issue creation even if a successful response starts the cooldown; an actual
+403/429 still fails without retrying. Uploads and submissions share an instance cooldown
+until the primary reset or `Retry-After` deadline (60 seconds when neither is available).
+The `x-ratelimit-resource: search` budget has its own cooldown at five or fewer requests
+remaining (out of GitHub's 30-request search limit). It skips recovery searches until reset,
+asking only the affected submissions to retry later; uploads and new submissions remain available.
+The API returns a friendly 503 with `Retry-After`; the page asks participants to try later
+and keeps their answers and audio available through **Download my feedback**.
 
 **Required deployment step: configure an Anthropic workspace spend limit before enabling the
 interviewer.** This is the account-level cap across instances. Deploy behind a proxy that
